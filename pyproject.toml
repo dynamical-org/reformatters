@@ -1,0 +1,20 @@
+[project]
+name = "reformatters"
+version = "0.1.0"
+description = "Reformat weather datasets into zarr"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "cfgrib>=0.9.14.1",
+    "requests>=2.32.3",
+    "s3fs>=2024.9.0",
+    "xarray[io]>=2024.9.0",
+]
+
+[tool.uv]
+dev-dependencies = ["mypy>=1.11.2", "ruff>=0.6.5"]
+
+[tool.ruff.lint]
+extend-select = [
+    "UP", # pyupgrade
+]
