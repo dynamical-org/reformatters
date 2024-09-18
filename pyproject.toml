@@ -12,7 +12,11 @@ dependencies = [
 ]
 
 [tool.uv]
-dev-dependencies = ["mypy>=1.11.2", "ruff>=0.6.5"]
+dev-dependencies = [
+    "mypy>=1.11.2",
+    "pre-commit>=3.8.0",
+    "ruff>=0.6.5",
+]
 
 [tool.ruff.lint]
 extend-select = [
