@@ -16,5 +16,14 @@ dev-dependencies = ["mypy>=1.11.2", "ruff>=0.6.5"]
 
 [tool.ruff.lint]
 extend-select = [
-    "UP", # pyupgrade
+    "UP",    # pyupgrade
+    "I",     # isort
+    "N",     # pep8-naming
+    "W",     # pycodestyle warning
+    "E",     # pycodestyle error
+    "ASYNC", # async
+    "S",     # security
+    "B",     # bugs
+    "C4",    # comprehensions
+    "T10",   # debugger
 ]
