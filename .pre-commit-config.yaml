@@ -7,10 +7,3 @@ repos:
       - id: ruff
       # Run the formatter.
       - id: ruff-format
-
-  # mypy - lint-like type checking
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.11.2
-    hooks:
-      - id: mypy
-        name: mypy

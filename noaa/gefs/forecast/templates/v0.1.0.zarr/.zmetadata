@@ -1,0 +1,1547 @@
+{
+    "metadata": {
+        ".zattrs": {
+            "Conventions": "CF-1.7",
+            "GRIB_centre": "kwbc",
+            "GRIB_centreDescription": "US National Weather Service - NCEP",
+            "GRIB_edition": 2,
+            "GRIB_subCentre": 2,
+            "institution": "US National Weather Service - NCEP"
+        },
+        ".zgroup": {
+            "zarr_format": 2
+        },
+        "cpofp/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "cpofp/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "cpofp",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Percent frozen precipitation",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 260035,
+            "GRIB_shortName": "cpofp",
+            "GRIB_stepType": "instant",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "surface",
+            "GRIB_units": "%",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Percent frozen precipitation",
+            "standard_name": "unknown",
+            "units": "%"
+        },
+        "d2m/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "d2m/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "d2m",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "2 metre dewpoint temperature",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 168,
+            "GRIB_shortName": "2d",
+            "GRIB_stepType": "instant",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "heightAboveGround",
+            "GRIB_units": "K",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "2 metre dewpoint temperature",
+            "standard_name": "unknown",
+            "units": "K"
+        },
+        "gh/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "gh/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "geopotential_height",
+            "GRIB_cfVarName": "gh",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Geopotential height",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 156,
+            "GRIB_shortName": "gh",
+            "GRIB_stepType": "instant",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "cloudCeiling",
+            "GRIB_units": "gpm",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Geopotential height",
+            "standard_name": "geopotential_height",
+            "units": "gpm"
+        },
+        "gust/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "gust/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "gust",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Wind speed (gust)",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 260065,
+            "GRIB_shortName": "gust",
+            "GRIB_stepType": "instant",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "surface",
+            "GRIB_units": "m s**-1",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Wind speed (gust)",
+            "standard_name": "unknown",
+            "units": "m s**-1"
+        },
+        "hlcy/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "hlcy/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "hlcy",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Storm relative helicity",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 260125,
+            "GRIB_shortName": "hlcy",
+            "GRIB_stepType": "instant",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "heightAboveGroundLayer",
+            "GRIB_units": "m**2 s**-2",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Storm relative helicity",
+            "standard_name": "unknown",
+            "units": "m**2 s**-2"
+        },
+        "init_time/.zarray": {
+            "chunks": [
+                1
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<i8",
+            "fill_value": null,
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1
+            ],
+            "zarr_format": 2
+        },
+        "init_time/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "init_time"
+            ]
+        },
+        "latitude/.zarray": {
+            "chunks": [
+                721
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f8",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                721
+            ],
+            "zarr_format": 2
+        },
+        "latitude/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "latitude"
+            ]
+        },
+        "lead_time/.zarray": {
+            "chunks": [
+                80
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<i8",
+            "fill_value": null,
+            "filters": null,
+            "order": "C",
+            "shape": [
+                80
+            ],
+            "zarr_format": 2
+        },
+        "lead_time/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "lead_time"
+            ],
+            "units": "hours"
+        },
+        "longitude/.zarray": {
+            "chunks": [
+                1440
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f8",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "longitude/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "longitude"
+            ]
+        },
+        "mslet/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "mslet/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "mslet",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "MSLP (Eta model reduction)",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 260317,
+            "GRIB_shortName": "mslet",
+            "GRIB_stepType": "instant",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "meanSea",
+            "GRIB_units": "Pa",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "MSLP (Eta model reduction)",
+            "standard_name": "unknown",
+            "units": "Pa"
+        },
+        "orog/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "orog/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "geopotential_height",
+            "GRIB_cfVarName": "orog",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Orography",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 228002,
+            "GRIB_shortName": "orog",
+            "GRIB_stepType": "instant",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "surface",
+            "GRIB_units": "m",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Orography",
+            "standard_name": "geopotential_height",
+            "units": "m"
+        },
+        "prmsl/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "prmsl/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "prmsl",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Pressure reduced to MSL",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 260074,
+            "GRIB_shortName": "prmsl",
+            "GRIB_stepType": "instant",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "meanSea",
+            "GRIB_units": "Pa",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Pressure reduced to MSL",
+            "standard_name": "unknown",
+            "units": "Pa"
+        },
+        "pwat/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "pwat/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "pwat",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Precipitable water",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 3054,
+            "GRIB_shortName": "pwat",
+            "GRIB_stepType": "instant",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "atmosphereSingleLayer",
+            "GRIB_units": "kg m**-2",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Precipitable water",
+            "standard_name": "unknown",
+            "units": "kg m**-2"
+        },
+        "r2/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "r2/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "relative_humidity",
+            "GRIB_cfVarName": "r2",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "2 metre relative humidity",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 260242,
+            "GRIB_shortName": "2r",
+            "GRIB_stepType": "instant",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "heightAboveGround",
+            "GRIB_units": "%",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "2 metre relative humidity",
+            "standard_name": "relative_humidity",
+            "units": "%"
+        },
+        "sde/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "sde/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "lwe_thickness_of_surface_snow_amount",
+            "GRIB_cfVarName": "sde",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Snow depth",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 3066,
+            "GRIB_shortName": "sde",
+            "GRIB_stepType": "instant",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "surface",
+            "GRIB_units": "m",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Snow depth",
+            "standard_name": "lwe_thickness_of_surface_snow_amount",
+            "units": "m"
+        },
+        "sdwe/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "sdwe/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "sdwe",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Water equivalent of accumulated snow depth (deprecated)",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 260056,
+            "GRIB_shortName": "sdwe",
+            "GRIB_stepType": "instant",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "surface",
+            "GRIB_units": "kg m**-2",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Water equivalent of accumulated snow depth (deprecated)",
+            "standard_name": "unknown",
+            "units": "kg m**-2"
+        },
+        "sithick/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "sithick/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "sithick",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Sea ice thickness",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 262000,
+            "GRIB_shortName": "sithick",
+            "GRIB_stepType": "instant",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "surface",
+            "GRIB_units": "m",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Sea ice thickness",
+            "standard_name": "unknown",
+            "units": "m"
+        },
+        "soilw/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "soilw/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "soilw",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Volumetric soil moisture content",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 260185,
+            "GRIB_shortName": "soilw",
+            "GRIB_stepType": "instant",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "depthBelowLandLayer",
+            "GRIB_units": "Proportion",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Volumetric soil moisture content",
+            "standard_name": "unknown",
+            "units": "Proportion"
+        },
+        "sp/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "sp/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "surface_air_pressure",
+            "GRIB_cfVarName": "sp",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Surface pressure",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 134,
+            "GRIB_shortName": "sp",
+            "GRIB_stepType": "instant",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "surface",
+            "GRIB_units": "Pa",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Surface pressure",
+            "standard_name": "surface_air_pressure",
+            "units": "Pa"
+        },
+        "st/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "st/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "st",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Soil temperature",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 228139,
+            "GRIB_shortName": "st",
+            "GRIB_stepType": "instant",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "depthBelowLandLayer",
+            "GRIB_units": "K",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Soil temperature",
+            "standard_name": "unknown",
+            "units": "K"
+        },
+        "t2m/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "t2m/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "air_temperature",
+            "GRIB_cfVarName": "t2m",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "2 metre temperature",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 167,
+            "GRIB_shortName": "2t",
+            "GRIB_stepType": "instant",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "heightAboveGround",
+            "GRIB_units": "K",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "2 metre temperature",
+            "standard_name": "air_temperature",
+            "units": "K"
+        },
+        "tmax/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "tmax/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "tmax",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Maximum temperature",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 3015,
+            "GRIB_shortName": "tmax",
+            "GRIB_stepType": "max",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "heightAboveGround",
+            "GRIB_units": "K",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Maximum temperature",
+            "standard_name": "unknown",
+            "units": "K"
+        },
+        "tmin/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "tmin/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "tmin",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Minimum temperature",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 3016,
+            "GRIB_shortName": "tmin",
+            "GRIB_stepType": "min",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "heightAboveGround",
+            "GRIB_units": "K",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Minimum temperature",
+            "standard_name": "unknown",
+            "units": "K"
+        },
+        "u10/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "u10/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "eastward_wind",
+            "GRIB_cfVarName": "u10",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "10 metre U wind component",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 165,
+            "GRIB_shortName": "10u",
+            "GRIB_stepType": "instant",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "heightAboveGround",
+            "GRIB_units": "m s**-1",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "10 metre U wind component",
+            "standard_name": "eastward_wind",
+            "units": "m s**-1"
+        },
+        "v10/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "v10/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "northward_wind",
+            "GRIB_cfVarName": "v10",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "10 metre V wind component",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 166,
+            "GRIB_shortName": "10v",
+            "GRIB_stepType": "instant",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "heightAboveGround",
+            "GRIB_units": "m s**-1",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "10 metre V wind component",
+            "standard_name": "northward_wind",
+            "units": "m s**-1"
+        },
+        "vis/.zarray": {
+            "chunks": [
+                1,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "vis/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "vis",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Visibility",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 3020,
+            "GRIB_shortName": "vis",
+            "GRIB_stepType": "instant",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "surface",
+            "GRIB_units": "m",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Visibility",
+            "standard_name": "unknown",
+            "units": "m"
+        }
+    },
+    "zarr_consolidated_format": 1
+}

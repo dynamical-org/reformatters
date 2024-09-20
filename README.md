@@ -16,7 +16,15 @@ We use
 
 ### Running locally
 
-`uv run main.py` 
+`uv run main.py --help`
+`uv run main.py noaa-gefs-forecast update-template`
+
+### Development commands
+* Add dependency: `uv add <package> [--dev]`. Use `--dev` to add a development only dependency.
+* Lint: `uv run ruff check`
+* Type check: `uv run mypy`
+* Format: `uv run ruff format`
+
 
 ## Deploying to the cloud
 

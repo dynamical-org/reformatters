@@ -6,20 +6,27 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "cfgrib>=0.9.14.1",
+    "dask>=2024.9.0",
+    "numpy>=2.1.1",
+    "pydantic>=2.9.2",
     "requests>=2.32.3",
     "s3fs>=2024.9.0",
+    "typer>=0.12.5",
     "xarray[io]>=2024.9.0",
+    "zarr>=2.18.3",
 ]
 
 [tool.uv]
 dev-dependencies = [
     "mypy>=1.11.2",
+    "pandas-stubs>=2.2.2.240909",
     "pre-commit>=3.8.0",
     "ruff>=0.6.5",
+    "types-requests>=2.32.0.20240914",
 ]
 
 [tool.ruff.lint]
-extend-select = [
+select = [
     "UP",    # pyupgrade
     "I",     # isort
     "N",     # pep8-naming
@@ -31,3 +38,18 @@ extend-select = [
     "C4",    # comprehensions
     "T10",   # debugger
 ]
+ignore = [
+    "S101",  # allow asserts
+]
+
+
+[tool.mypy]
+files = "."
+plugins = ["pydantic.mypy"]
+check_untyped_defs = true
+warn_unused_configs = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
