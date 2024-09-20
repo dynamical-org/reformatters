@@ -16,8 +16,8 @@ We use
 
 ### Running locally
 
-`uv run main.py --help`
-`uv run main.py noaa-gefs-forecast update-template`
+* `uv run main.py --help`
+* `uv run main.py noaa-gefs-forecast update-template`
 
 ### Development commands
 * Add dependency: `uv add <package> [--dev]`. Use `--dev` to add a development only dependency.
