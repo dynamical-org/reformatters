@@ -55,7 +55,7 @@ def download_and_load_source_file(
 
 
 @functools.cache
-def http_session():
+def http_session() -> requests.Session:
     session = requests.Session()
     retry = requests.adapters.Retry(
         total=5,
@@ -70,7 +70,7 @@ def http_session():
     return session
 
 
-def download(url: str, local_path: str, *, overwrite_existing: bool):
+def download(url: str, local_path: str, *, overwrite_existing: bool) -> None:
     if not overwrite_existing and os.path.isfile(local_path):
         return
 

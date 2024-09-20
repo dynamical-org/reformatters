@@ -8,11 +8,11 @@ from noaa.gefs.forecast.reformat import download_and_load_source_file
 TEMPLATE_PATH = "noaa/gefs/forecast/templates/v0.0.1.zarr"
 
 
-def get_template():
-    return xr.open_zarr(TEMPLATE_PATH)
+def get_template() -> xr.Dataset:
+    return xr.open_zarr(TEMPLATE_PATH)  # type: ignore
 
 
-def update_template():
+def update_template() -> None:
     dims = ("init_time", "lead_time", "latitude", "longitude")
     chunks = {"init_time": 1, "lead_time": 125, "latitude": 145, "longitude": 144}
     assert dims == tuple(chunks.keys())
