@@ -47,8 +47,6 @@ ignore = [
 files = "."
 plugins = ["pydantic.mypy"]
 strict = true
-check_untyped_defs = true
-warn_unused_configs = true
 
 [tool.pydantic-mypy]
 init_forbid_extra = true
