@@ -5,7 +5,7 @@ import zarr  # type: ignore
 
 from noaa.gefs.forecast.reformat import download_and_load_source_file
 
-TEMPLATE_PATH = "noaa/gefs/forecast/templates/v0.0.1.zarr"
+TEMPLATE_PATH = "noaa/gefs/forecast/templates/latest.zarr"
 
 
 def get_template() -> xr.Dataset:
