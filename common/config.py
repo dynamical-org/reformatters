@@ -12,5 +12,8 @@ class Env(str, Enum):
 class DynamicalConfig(BaseModel):
     env: Env
 
+    def is_dev(self) -> bool:
+        return self.env == Env.dev
+
 
 Config = DynamicalConfig(env=Env(os.environ.get("DYNAMICAL_ENV", "dev")))

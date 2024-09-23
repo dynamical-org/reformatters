@@ -1,6 +1,7 @@
+import pandas as pd
 import typer
 
-from noaa.gefs.forecast import template
+from noaa.gefs.forecast import reformat, template
 
 app = typer.Typer()
 
@@ -11,8 +12,8 @@ def update_template() -> None:
 
 
 @app.command()
-def launch_processing() -> None:
-    raise NotImplementedError()
+def reformat_local(init_time_end: str) -> None:
+    reformat.local_reformat(init_time_end)
 
 
 if __name__ == "__main__":

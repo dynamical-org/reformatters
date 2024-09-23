@@ -39,7 +39,9 @@ select = [
     "T10",   # debugger
 ]
 ignore = [
-    "S101",  # allow asserts
+    "S101",  # disallow asserts
+    "E501",  # line too long
+    "W293",  # black line contains whitespace
 ]
 
 
@@ -47,6 +49,7 @@ ignore = [
 files = "."
 plugins = ["pydantic.mypy"]
 strict = true
+enable_incomplete_feature = "NewGenericSyntax"
 
 [tool.pydantic-mypy]
 init_forbid_extra = true
