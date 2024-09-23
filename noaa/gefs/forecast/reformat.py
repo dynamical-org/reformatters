@@ -16,7 +16,6 @@ def local_reformat(init_time_end: DatetimeLike) -> None:
     template_ds = template.get_template(init_time_end)
     store = get_store()
     template_ds.to_zarr(store, mode=get_mode(store), compute=False)
-    # Process all chunks
     reformat_chunks(init_time_end, worker_index=0, workers_total=1)
 
 
@@ -42,16 +41,12 @@ def reformat_chunks(
 
     for init_time_i_slice in worker_init_time_i_slices:
         chunk_template_ds = template_ds.isel(init_time=init_time_i_slice)
-        print(chunk_template_ds.coords)
-        print("downloading...")
         datasets = [
             download_and_load_source_file(init_time, lead_time)
             for lead_time in pd.to_timedelta(chunk_template_ds["lead_time"])  # type: ignore
             for init_time in pd.to_datetime(chunk_template_ds["init_time"])  # type: ignore
         ]
-        print("merging...")
         ds = xr.merge(datasets)
-        print("writiing...")
         ds.to_zarr(store, region="auto")
         pass
 
