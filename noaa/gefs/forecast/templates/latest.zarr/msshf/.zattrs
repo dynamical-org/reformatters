@@ -2,8 +2,8 @@
     "GRIB_NV": 0,
     "GRIB_Nx": 1440,
     "GRIB_Ny": 721,
-    "GRIB_cfName": "geopotential_height",
-    "GRIB_cfVarName": "orog",
+    "GRIB_cfName": "unknown",
+    "GRIB_cfVarName": "msshf",
     "GRIB_dataType": "pf",
     "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
     "GRIB_gridType": "regular_ll",
@@ -17,15 +17,15 @@
     "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
     "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
     "GRIB_missingValue": 3.4028234663852886e+38,
-    "GRIB_name": "Orography",
+    "GRIB_name": "Mean surface sensible heat flux",
     "GRIB_numberOfPoints": 1038240,
-    "GRIB_paramId": 228002,
-    "GRIB_shortName": "orog",
-    "GRIB_stepType": "instant",
+    "GRIB_paramId": 235033,
+    "GRIB_shortName": "msshf",
+    "GRIB_stepType": "avg",
     "GRIB_stepUnits": 1,
     "GRIB_totalNumber": 30,
     "GRIB_typeOfLevel": "surface",
-    "GRIB_units": "m",
+    "GRIB_units": "W m**-2",
     "GRIB_uvRelativeToGrid": 0,
     "_ARRAY_DIMENSIONS": [
         "init_time",
@@ -33,7 +33,7 @@
         "latitude",
         "longitude"
     ],
-    "long_name": "Orography",
-    "standard_name": "geopotential_height",
-    "units": "m"
+    "long_name": "Mean surface sensible heat flux",
+    "standard_name": "unknown",
+    "units": "W m**-2"
 }

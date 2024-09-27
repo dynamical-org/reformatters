@@ -11,9 +11,139 @@
         ".zgroup": {
             "zarr_format": 2
         },
+        "cfrzr/.zarray": {
+            "chunks": [
+                2,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "cfrzr/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "cfrzr",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Categorical freezing rain",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 260030,
+            "GRIB_shortName": "cfrzr",
+            "GRIB_stepType": "avg",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "surface",
+            "GRIB_units": "(Code table 4.222)",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Categorical freezing rain",
+            "standard_name": "unknown",
+            "units": "(Code table 4.222)"
+        },
+        "cicep/.zarray": {
+            "chunks": [
+                2,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "cicep/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "cicep",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Categorical ice pellets",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 260031,
+            "GRIB_shortName": "cicep",
+            "GRIB_stepType": "avg",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "surface",
+            "GRIB_units": "(Code table 4.222)",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Categorical ice pellets",
+            "standard_name": "unknown",
+            "units": "(Code table 4.222)"
+        },
         "cpofp/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -76,9 +206,139 @@
             "standard_name": "unknown",
             "units": "%"
         },
+        "crain/.zarray": {
+            "chunks": [
+                2,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "crain/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "crain",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Categorical rain",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 260029,
+            "GRIB_shortName": "crain",
+            "GRIB_stepType": "avg",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "surface",
+            "GRIB_units": "(Code table 4.222)",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Categorical rain",
+            "standard_name": "unknown",
+            "units": "(Code table 4.222)"
+        },
+        "csnow/.zarray": {
+            "chunks": [
+                2,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "csnow/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "csnow",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Categorical snow",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 260032,
+            "GRIB_shortName": "csnow",
+            "GRIB_stepType": "avg",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "surface",
+            "GRIB_units": "(Code table 4.222)",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Categorical snow",
+            "standard_name": "unknown",
+            "units": "(Code table 4.222)"
+        },
         "d2m/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -141,9 +401,139 @@
             "standard_name": "unknown",
             "units": "K"
         },
+        "dlwrf/.zarray": {
+            "chunks": [
+                2,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "dlwrf/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "dlwrf",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Downward long-wave radiation flux",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 260097,
+            "GRIB_shortName": "dlwrf",
+            "GRIB_stepType": "avg",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "surface",
+            "GRIB_units": "W m**-2",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Downward long-wave radiation flux",
+            "standard_name": "unknown",
+            "units": "W m**-2"
+        },
+        "dswrf/.zarray": {
+            "chunks": [
+                2,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "dswrf/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "dswrf",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Downward short-wave radiation flux",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 260087,
+            "GRIB_shortName": "dswrf",
+            "GRIB_stepType": "avg",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "surface",
+            "GRIB_units": "W m**-2",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Downward short-wave radiation flux",
+            "standard_name": "unknown",
+            "units": "W m**-2"
+        },
         "gh/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -208,7 +598,7 @@
         },
         "gust/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -273,7 +663,7 @@
         },
         "hlcy/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -359,7 +749,9 @@
         "init_time/.zattrs": {
             "_ARRAY_DIMENSIONS": [
                 "init_time"
-            ]
+            ],
+            "calendar": "proleptic_gregorian",
+            "units": "days since 2024-01-01 00:00:00"
         },
         "latitude/.zarray": {
             "chunks": [
@@ -439,7 +831,7 @@
         },
         "mslet/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -502,9 +894,9 @@
             "standard_name": "unknown",
             "units": "Pa"
         },
-        "orog/.zarray": {
+        "mslhf/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -528,12 +920,12 @@
             ],
             "zarr_format": 2
         },
-        "orog/.zattrs": {
+        "mslhf/.zattrs": {
             "GRIB_NV": 0,
             "GRIB_Nx": 1440,
             "GRIB_Ny": 721,
-            "GRIB_cfName": "geopotential_height",
-            "GRIB_cfVarName": "orog",
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "mslhf",
             "GRIB_dataType": "pf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
@@ -547,15 +939,15 @@
             "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
             "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
             "GRIB_missingValue": 3.4028234663852886e+38,
-            "GRIB_name": "Orography",
+            "GRIB_name": "Mean surface latent heat flux",
             "GRIB_numberOfPoints": 1038240,
-            "GRIB_paramId": 228002,
-            "GRIB_shortName": "orog",
-            "GRIB_stepType": "instant",
+            "GRIB_paramId": 235034,
+            "GRIB_shortName": "mslhf",
+            "GRIB_stepType": "avg",
             "GRIB_stepUnits": 1,
             "GRIB_totalNumber": 30,
             "GRIB_typeOfLevel": "surface",
-            "GRIB_units": "m",
+            "GRIB_units": "W m**-2",
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
@@ -563,13 +955,78 @@
                 "latitude",
                 "longitude"
             ],
-            "long_name": "Orography",
-            "standard_name": "geopotential_height",
-            "units": "m"
+            "long_name": "Mean surface latent heat flux",
+            "standard_name": "unknown",
+            "units": "W m**-2"
+        },
+        "msshf/.zarray": {
+            "chunks": [
+                2,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "msshf/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "msshf",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Mean surface sensible heat flux",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 235033,
+            "GRIB_shortName": "msshf",
+            "GRIB_stepType": "avg",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "surface",
+            "GRIB_units": "W m**-2",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Mean surface sensible heat flux",
+            "standard_name": "unknown",
+            "units": "W m**-2"
         },
         "prmsl/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -634,7 +1091,7 @@
         },
         "pwat/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -699,7 +1156,7 @@
         },
         "r2/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -764,7 +1221,7 @@
         },
         "sde/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -829,7 +1286,7 @@
         },
         "sdwe/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -894,7 +1351,7 @@
         },
         "sithick/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -959,7 +1416,7 @@
         },
         "soilw/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -1024,7 +1481,7 @@
         },
         "sp/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -1089,7 +1546,7 @@
         },
         "st/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -1154,7 +1611,7 @@
         },
         "t2m/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -1217,9 +1674,74 @@
             "standard_name": "air_temperature",
             "units": "K"
         },
+        "tcc/.zarray": {
+            "chunks": [
+                2,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "tcc/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "tcc",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Total Cloud Cover",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 228164,
+            "GRIB_shortName": "tcc",
+            "GRIB_stepType": "avg",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "atmosphere",
+            "GRIB_units": "%",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Total Cloud Cover",
+            "standard_name": "unknown",
+            "units": "%"
+        },
         "tmax/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -1284,7 +1806,7 @@
         },
         "tmin/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -1347,9 +1869,74 @@
             "standard_name": "unknown",
             "units": "K"
         },
+        "tp/.zarray": {
+            "chunks": [
+                2,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "tp/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "tp",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Total Precipitation",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 228228,
+            "GRIB_shortName": "tp",
+            "GRIB_stepType": "accum",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "surface",
+            "GRIB_units": "kg m**-2",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Total Precipitation",
+            "standard_name": "unknown",
+            "units": "kg m**-2"
+        },
         "u10/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -1412,9 +1999,74 @@
             "standard_name": "eastward_wind",
             "units": "m s**-1"
         },
+        "uswrf/.zarray": {
+            "chunks": [
+                2,
+                125,
+                145,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 4,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1,
+                80,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "uswrf/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "uswrf",
+            "GRIB_dataType": "pf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Upward short-wave radiation flux",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 260088,
+            "GRIB_shortName": "uswrf",
+            "GRIB_stepType": "avg",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "surface",
+            "GRIB_units": "W m**-2",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Upward short-wave radiation flux",
+            "standard_name": "unknown",
+            "units": "W m**-2"
+        },
         "v10/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
@@ -1479,7 +2131,7 @@
         },
         "vis/.zarray": {
             "chunks": [
-                1,
+                2,
                 125,
                 145,
                 144
