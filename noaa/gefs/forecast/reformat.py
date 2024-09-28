@@ -1,4 +1,7 @@
+import os
 from collections.abc import Iterable
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from functools import partial
 from itertools import starmap
 from typing import Literal
 
@@ -7,15 +10,19 @@ import pandas as pd
 import xarray as xr
 
 from common.config import Config
+from common.download_directory import download_directory
 from common.types import DatetimeLike, StoreLike
 from noaa.gefs.forecast import template
-from noaa.gefs.forecast.read_data import download_and_load_source_file
+from noaa.gefs.forecast.read_data import download_file, read_file
 
 
 def local_reformat(init_time_end: DatetimeLike) -> None:
     template_ds = template.get_template(init_time_end)
     store = get_store()
+    print("writing meta")
     template_ds.to_zarr(store, mode=get_mode(store), compute=False)
+    # Process all chunks
+    print("starting reformat")
     reformat_chunks(init_time_end, worker_index=0, workers_total=1)
 
 
@@ -39,16 +46,33 @@ def reformat_chunks(
         chunk_i_slices(template_ds, "init_time"), worker_index, workers_total
     )
 
+    thread_executor = ThreadPoolExecutor(max_workers=os.cpu_count())
+    # TODO compile eccodes ourselves with thread safety enabled so we can use threads for reading
+    # https://confluence.ecmwf.int/display/ECC/ecCodes+installation ENABLE_ECCODES_THREADS
+    proccess_executor = ProcessPoolExecutor(max_workers=os.cpu_count())
+
     for init_time_i_slice in worker_init_time_i_slices:
         chunk_template_ds = template_ds.isel(init_time=init_time_i_slice)
-        datasets = [
-            download_and_load_source_file(init_time, lead_time)
-            for lead_time in pd.to_timedelta(chunk_template_ds["lead_time"])  # type: ignore
-            for init_time in pd.to_datetime(chunk_template_ds["init_time"])  # type: ignore
-        ]
-        ds = xr.merge(datasets)
-        ds.to_zarr(store, region="auto")
-        pass
+
+        chunk_init_times = pd.to_datetime(chunk_template_ds["init_time"].values)
+        chunk_lead_times = pd.to_timedelta(chunk_template_ds["lead_time"].values)
+
+        print("starting", chunk_init_times)
+
+        with download_directory() as dir:
+            init_time_datasets = []
+            for init_time in chunk_init_times:
+                download = partial(download_file, init_time, dir=dir)
+                file_paths = tuple(thread_executor.map(download, chunk_lead_times))
+                datasets = tuple(proccess_executor.map(read_file, file_paths))
+                init_time_ds = xr.concat(datasets, dim="lead_time", join="exact")
+                init_time_datasets.append(init_time_ds)
+
+            chunk_ds = xr.concat(init_time_datasets, dim="init_time", join="exact")
+
+            chunk_ds.chunk(-1).to_zarr(store, region="auto")
+
+        print(chunk_init_times, "processed")
 
 
 def get_worker_jobs[T](
@@ -59,9 +83,7 @@ def get_worker_jobs[T](
 
 
 def get_store() -> StoreLike:
-    if Config.is_dev():
-        return "output/noaa/gefs/forecast/dev.zarr"
-    raise NotImplementedError(f"Store not defined in env {Config.env}")
+    return "data/output/noaa/gefs/forecast/dev.zarr"
 
 
 def get_mode(store: StoreLike) -> Literal["w-", "w"]:
@@ -72,6 +94,7 @@ def get_mode(store: StoreLike) -> Literal["w-", "w"]:
 
 
 def chunk_i_slices(ds: xr.Dataset, dim: str) -> Iterable[slice]:
-    stop_idx = np.cumsum(ds.chunksizes[dim])
-    start_idx = np.insert(stop_idx, 0, 0)
-    return starmap(slice, zip(start_idx, stop_idx, strict=False))
+    """Returns the integer offset slices which correspond to each chunk along `dim` of `ds`."""
+    stop_idx = np.cumsum(ds.chunksizes[dim])  # 2, 4, 6
+    start_idx = np.insert(stop_idx, 0, 0)  # 0, 2, 4, 6
+    return starmap(slice, zip(start_idx, stop_idx, strict=False))  # (0,2), (2,4), (4,6)

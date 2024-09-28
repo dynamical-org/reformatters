@@ -1,6 +1,5 @@
 import functools
-import os
-import tempfile
+from pathlib import Path
 
 import cfgrib  # type: ignore
 import pandas as pd
@@ -11,9 +10,7 @@ from common.config import Config
 from noaa.gefs.forecast import template
 
 
-def download_and_load_source_file(
-    init_time: pd.Timestamp, lead_time: pd.Timedelta
-) -> xr.Dataset:
+def download_file(init_time: pd.Timestamp, lead_time: pd.Timedelta, dir: Path) -> Path:
     lead_time_hours = lead_time.total_seconds() / (60 * 60)
     if lead_time_hours != round(lead_time_hours):
         raise ValueError(f"Lead time {lead_time} must be a whole number of hours")
@@ -27,31 +24,31 @@ def download_and_load_source_file(
     )
     url = f"https://storage.googleapis.com/gfs-ensemble-forecast-system/{file_path}"
 
-    # cfgrib/eccodes appears to only read files from disk, download there first
-    with tempfile.NamedTemporaryFile() as file:
-        local_path = (
-            file.name if not Config.is_dev() else "/tmp/gefs-cache/" + file_path  # noqa: S108 Only allow reads from static file paths in dev
-        )
-        download(url, local_path, overwrite_existing=Config.is_dev())
+    local_path = Path(dir, file_path)
 
-        # Open the grib as N different datasets to pedantically map grib to xarray
-        datasets = cfgrib.open_datasets(local_path)
+    download(url, local_path, overwrite_existing=not Config.is_dev())
 
-        # TODO compat="minimal" is dropping 3 variables
-        ds = xr.merge(
-            datasets, compat="minimal", join="exact", combine_attrs="no_conflicts"
-        )
+    return local_path
 
-        renames = {"time": "init_time", "step": "lead_time"}
-        ds = ds.expand_dims(tuple(renames.keys())).rename(renames)
 
-        # TODO move cordinates about level height to attributes on their specific vars
-        ds = ds.drop_vars([c for c in ds.coords if c not in ds.dims])
+def read_file(path: Path) -> xr.Dataset:
+    # Open the grib as N different datasets which correctly map grib to xarray datasets
+    datasets = cfgrib.open_datasets(path)
+    datasets = [ds.chunk(-1) for ds in datasets]
 
-        # Convert longitude from [0, 360) to [-180, +180)
-        ds = ds.assign_coords(longitude=ds["longitude"] - 180)
+    # TODO compat="minimal" is dropping 3 variables
+    ds = xr.merge(
+        datasets, compat="minimal", join="exact", combine_attrs="no_conflicts"
+    )
 
-        ds.load()
+    renames = {"time": "init_time", "step": "lead_time"}
+    ds = ds.expand_dims(tuple(renames.keys())).rename(renames)
+
+    # Drop level height coords which belong on the variable and are not dataset wide
+    ds = ds.drop_vars([c for c in ds.coords if c not in ds.dims])
+
+    # Convert longitude from [0, 360) to [-180, +180)
+    ds = ds.assign_coords(longitude=ds["longitude"] - 180)
 
     return ds
 
@@ -72,11 +69,11 @@ def http_session() -> requests.Session:
     return session
 
 
-def download(url: str, local_path: str, *, overwrite_existing: bool) -> None:
-    if not overwrite_existing and os.path.isfile(local_path):
+def download(url: str, local_path: Path, *, overwrite_existing: bool) -> None:
+    if not overwrite_existing and local_path.exists():
         return
 
-    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+    local_path.parent.mkdir(parents=True, exist_ok=True)
 
     print("Downloading", url)
     with http_session().get(url, stream=True, timeout=10) as response:

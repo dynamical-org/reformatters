@@ -6,12 +6,13 @@ import xarray as xr
 import zarr  # type: ignore
 
 from common.config import Config
+from common.download_directory import download_directory
 from common.types import DatetimeLike
-from noaa.gefs.forecast.read_data import download_and_load_source_file
+from noaa.gefs.forecast.read_data import download_file, read_file
 
 TEMPLATE_PATH = "noaa/gefs/forecast/templates/latest.zarr"
 
-_INIT_TIME_START = pd.Timestamp("2024-01-01T00:00")
+_INIT_TIME_START = pd.Timestamp("2024-09-01T00:00")
 _INIT_TIME_FREQUENCY = pd.Timedelta("6h")
 _CHUNKS = {"init_time": 2, "lead_time": 125, "latitude": 145, "longitude": 144}
 
@@ -26,9 +27,6 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
 
     # Init time chunks are 1 when stored, set them to desired.
     ds = ds.chunk(init_time=_CHUNKS["init_time"])
-
-    if Config.is_dev():
-        ds = ds.isel(init_time=slice(2), lead_time=slice(3))
 
     return ds
 
@@ -58,24 +56,24 @@ def update_template() -> None:
 
     # Pull a single file to load variable names and metadata.
     # Use a lead time > 0 because not all variables are present at lead time == 0.
-    ds = download_and_load_source_file(
-        pd.Timestamp("2024-01-01T00:00"), pd.Timedelta("3h")
-    )
+    with download_directory() as dir:
+        path = download_file(pd.Timestamp("2024-01-01T00:00"), pd.Timedelta("3h"), dir)
+        ds = read_file(path)
 
-    ds = (
-        ds.chunk(-1)
-        .reindex(lead_time=coords["lead_time"])
-        .assign_coords(coords)
-        .chunk(_CHUNKS)
-    )
+        ds = (
+            ds.chunk(_CHUNKS)  # daskify for much faster, lazy reindex
+            .reindex(lead_time=coords["lead_time"])
+            .assign_coords(coords)
+            .chunk(_CHUNKS)
+        )
 
-    for var in ds.data_vars:
-        ds[var].encoding = {
-            "dtype": np.float32,
-            "chunks": [_CHUNKS[str(dim)] for dim in ds.dims],
-            "compressor": zarr.Blosc(cname="zstd", clevel=4),
-        }
-    # TODO
-    # Explicit coords encoding
-    # Improve metadata
-    ds.to_zarr(TEMPLATE_PATH, mode="w", compute=False)
+        for var in ds.data_vars:
+            ds[var].encoding = {
+                "dtype": np.float32,
+                "chunks": [_CHUNKS[str(dim)] for dim in ds.dims],
+                "compressor": zarr.Blosc(cname="zstd", clevel=4),
+            }
+        # TODO
+        # Explicit coords encoding
+        # Improve metadata
+        ds.to_zarr(TEMPLATE_PATH, mode="w", compute=False)
