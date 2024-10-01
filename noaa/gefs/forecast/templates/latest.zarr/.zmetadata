@@ -13,10 +13,11 @@
         },
         "cfrzr/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -31,7 +32,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -43,7 +45,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "cfrzr",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -68,6 +70,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -78,10 +81,11 @@
         },
         "cicep/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -96,7 +100,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -108,7 +113,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "cicep",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -133,6 +138,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -143,10 +149,11 @@
         },
         "cpofp/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -161,7 +168,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -173,7 +181,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "cpofp",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -198,6 +206,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -208,10 +217,11 @@
         },
         "crain/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -226,7 +236,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -238,7 +249,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "crain",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -263,6 +274,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -273,10 +285,11 @@
         },
         "csnow/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -291,7 +304,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -303,7 +317,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "csnow",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -328,6 +342,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -338,10 +353,11 @@
         },
         "d2m/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -356,7 +372,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -368,7 +385,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "d2m",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -393,6 +410,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -403,10 +421,11 @@
         },
         "dlwrf/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -421,7 +440,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -433,7 +453,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "dlwrf",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -458,6 +478,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -468,10 +489,11 @@
         },
         "dswrf/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -486,7 +508,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -498,7 +521,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "dswrf",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -523,6 +546,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -531,12 +555,38 @@
             "standard_name": "unknown",
             "units": "W m**-2"
         },
+        "ensemble_member/.zarray": {
+            "chunks": [
+                31
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "lz4",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<i8",
+            "fill_value": null,
+            "filters": null,
+            "order": "C",
+            "shape": [
+                31
+            ],
+            "zarr_format": 2
+        },
+        "ensemble_member/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "ensemble_member"
+            ]
+        },
         "gh/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -551,7 +601,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -563,7 +614,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "geopotential_height",
             "GRIB_cfVarName": "gh",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -588,6 +639,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -598,10 +650,11 @@
         },
         "gust/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -616,7 +669,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -628,7 +682,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "gust",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -653,6 +707,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -663,10 +718,11 @@
         },
         "hlcy/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -681,7 +737,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -693,7 +750,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "hlcy",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -718,6 +775,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -751,7 +809,7 @@
                 "init_time"
             ],
             "calendar": "proleptic_gregorian",
-            "units": "days since 2024-01-01 00:00:00"
+            "units": "days since 2024-09-01 00:00:00"
         },
         "latitude/.zarray": {
             "chunks": [
@@ -780,7 +838,7 @@
         },
         "lead_time/.zarray": {
             "chunks": [
-                80
+                81
             ],
             "compressor": {
                 "blocksize": 0,
@@ -794,7 +852,7 @@
             "filters": null,
             "order": "C",
             "shape": [
-                80
+                81
             ],
             "zarr_format": 2
         },
@@ -831,10 +889,11 @@
         },
         "mslet/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -849,7 +908,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -861,7 +921,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "mslet",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -886,6 +946,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -896,10 +957,11 @@
         },
         "mslhf/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -914,7 +976,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -926,7 +989,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "mslhf",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -951,6 +1014,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -961,10 +1025,11 @@
         },
         "msshf/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -979,7 +1044,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -991,7 +1057,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "msshf",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -1016,6 +1082,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -1026,10 +1093,11 @@
         },
         "prmsl/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -1044,7 +1112,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -1056,7 +1125,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "prmsl",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -1081,6 +1150,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -1091,10 +1161,11 @@
         },
         "pwat/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -1109,7 +1180,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -1121,7 +1193,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "pwat",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -1146,6 +1218,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -1156,10 +1229,11 @@
         },
         "r2/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -1174,7 +1248,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -1186,7 +1261,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "relative_humidity",
             "GRIB_cfVarName": "r2",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -1211,6 +1286,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -1221,10 +1297,11 @@
         },
         "sde/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -1239,7 +1316,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -1251,7 +1329,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "lwe_thickness_of_surface_snow_amount",
             "GRIB_cfVarName": "sde",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -1276,6 +1354,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -1286,10 +1365,11 @@
         },
         "sdwe/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -1304,7 +1384,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -1316,7 +1397,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "sdwe",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -1341,6 +1422,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -1351,10 +1433,11 @@
         },
         "sithick/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -1369,7 +1452,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -1381,7 +1465,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "sithick",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -1406,6 +1490,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -1416,10 +1501,11 @@
         },
         "soilw/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -1434,7 +1520,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -1446,7 +1533,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "soilw",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -1471,6 +1558,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -1481,10 +1569,11 @@
         },
         "sp/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -1499,7 +1588,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -1511,7 +1601,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "surface_air_pressure",
             "GRIB_cfVarName": "sp",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -1536,6 +1626,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -1546,10 +1637,11 @@
         },
         "st/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -1564,7 +1656,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -1576,7 +1669,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "st",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -1601,6 +1694,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -1611,10 +1705,11 @@
         },
         "t2m/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -1629,7 +1724,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -1641,7 +1737,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "air_temperature",
             "GRIB_cfVarName": "t2m",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -1666,6 +1762,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -1676,10 +1773,11 @@
         },
         "tcc/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -1694,7 +1792,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -1706,7 +1805,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "tcc",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -1731,6 +1830,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -1741,10 +1841,11 @@
         },
         "tmax/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -1759,7 +1860,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -1771,7 +1873,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "tmax",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -1796,6 +1898,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -1806,10 +1909,11 @@
         },
         "tmin/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -1824,7 +1928,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -1836,7 +1941,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "tmin",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -1861,6 +1966,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -1871,10 +1977,11 @@
         },
         "tp/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -1889,7 +1996,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -1901,7 +2009,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "tp",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -1926,6 +2034,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -1936,10 +2045,11 @@
         },
         "u10/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -1954,7 +2064,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -1966,7 +2077,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "eastward_wind",
             "GRIB_cfVarName": "u10",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -1991,6 +2102,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -2001,10 +2113,11 @@
         },
         "uswrf/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -2019,7 +2132,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -2031,7 +2145,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "uswrf",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -2056,6 +2170,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -2066,10 +2181,11 @@
         },
         "v10/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -2084,7 +2200,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -2096,7 +2213,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "northward_wind",
             "GRIB_cfVarName": "v10",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -2121,6 +2238,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"
@@ -2131,10 +2249,11 @@
         },
         "vis/.zarray": {
             "chunks": [
-                2,
+                1,
+                31,
                 125,
-                145,
-                144
+                73,
+                72
             ],
             "compressor": {
                 "blocksize": 0,
@@ -2149,7 +2268,8 @@
             "order": "C",
             "shape": [
                 1,
-                80,
+                31,
+                81,
                 721,
                 1440
             ],
@@ -2161,7 +2281,7 @@
             "GRIB_Ny": 721,
             "GRIB_cfName": "unknown",
             "GRIB_cfVarName": "vis",
-            "GRIB_dataType": "pf",
+            "GRIB_dataType": "cf",
             "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
             "GRIB_gridType": "regular_ll",
             "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -2186,6 +2306,7 @@
             "GRIB_uvRelativeToGrid": 0,
             "_ARRAY_DIMENSIONS": [
                 "init_time",
+                "ensemble_member",
                 "lead_time",
                 "latitude",
                 "longitude"

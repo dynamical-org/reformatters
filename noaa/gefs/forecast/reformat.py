@@ -47,7 +47,7 @@ def reformat_chunks(
     )
 
     thread_executor = ThreadPoolExecutor(max_workers=os.cpu_count())
-    # TODO compile eccodes ourselves with thread safety enabled so we can use threads for reading
+    # If we compile eccodes ourselves with thread safety enabled we could use threads for reading
     # https://confluence.ecmwf.int/display/ECC/ecCodes+installation ENABLE_ECCODES_THREADS
     proccess_executor = ProcessPoolExecutor(max_workers=os.cpu_count())
 
@@ -62,7 +62,7 @@ def reformat_chunks(
         with download_directory() as dir:
             init_time_datasets = []
             for init_time in chunk_init_times:
-                download = partial(download_file, init_time, dir=dir)
+                download = partial(download_file, init_time, directory=dir)
                 file_paths = tuple(thread_executor.map(download, chunk_lead_times))
                 datasets = tuple(proccess_executor.map(read_file, file_paths))
                 init_time_ds = xr.concat(datasets, dim="lead_time", join="exact")

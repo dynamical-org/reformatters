@@ -4,7 +4,7 @@
     "GRIB_Ny": 721,
     "GRIB_cfName": "unknown",
     "GRIB_cfVarName": "dlwrf",
-    "GRIB_dataType": "pf",
+    "GRIB_dataType": "cf",
     "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
     "GRIB_gridType": "regular_ll",
     "GRIB_iDirectionIncrementInDegrees": 0.25,
@@ -29,6 +29,7 @@
     "GRIB_uvRelativeToGrid": 0,
     "_ARRAY_DIMENSIONS": [
         "init_time",
+        "ensemble_member",
         "lead_time",
         "latitude",
         "longitude"

@@ -9,24 +9,38 @@ import xarray as xr
 from common.config import Config
 from noaa.gefs.forecast import template
 
+_STATISTIC_LONG_NAME = {"avg": "ensemble mean", "spr": "ensemble spread"}
 
-def download_file(init_time: pd.Timestamp, lead_time: pd.Timedelta, dir: Path) -> Path:
+
+def download_file(
+    init_time: pd.Timestamp,
+    lead_time: pd.Timedelta,
+    ensemble_member: str | int,
+    directory: Path,
+) -> Path:
     lead_time_hours = lead_time.total_seconds() / (60 * 60)
     if lead_time_hours != round(lead_time_hours):
         raise ValueError(f"Lead time {lead_time} must be a whole number of hours")
 
     init_date_str = init_time.strftime("%Y%m%d")
     init_hour_str = init_time.strftime("%H")
+    if not isinstance(ensemble_member, str):
+        # control or perterbed ensemble member
+        prefix = "c" if ensemble_member == 0 else "p"
+        ensemble_member = f"{prefix}{ensemble_member:02}"
 
     file_path = (
         f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2sp25/"
-        f"geavg.t{init_hour_str}z.pgrb2s.0p25.f{lead_time_hours:03.0f}"
+        f"ge{ensemble_member}.t{init_hour_str}z.pgrb2s.0p25.f{lead_time_hours:03.0f}"
     )
     url = f"https://storage.googleapis.com/gfs-ensemble-forecast-system/{file_path}"
+    idx_url = f"{url}.idx"
 
-    local_path = Path(dir, file_path)
+    local_path = Path(directory, file_path)
+    idx_local_path = Path(f"{local_path}.idx")
 
     download(url, local_path, overwrite_existing=not Config.is_dev())
+    download(idx_url, idx_local_path, overwrite_existing=not Config.is_dev())
 
     return local_path
 
@@ -43,6 +57,18 @@ def read_file(path: Path) -> xr.Dataset:
 
     renames = {"time": "init_time", "step": "lead_time"}
     ds = ds.expand_dims(tuple(renames.keys())).rename(renames)
+    if "number" in ds.coords:
+        ds = ds.expand_dims("number", axis=1).rename(number="ensemble_member")
+    else:
+        # Store summary statistics across ensemble members as separate variables
+        # which do not have an ensemble_member dimension. Statistic is either
+        # "avg" (ensemble mean) or "spr" (ensemble spread; max minus min)
+        statistic = path.name[: path.name.index(".")].removeprefix("ge")
+        ds = ds.rename({var: f"{var}_{statistic}" for var in ds.data_vars.keys()})
+        for data_var in ds.data_vars.values():
+            data_var.attrs["long_name"] = (
+                f"{data_var.attrs["long_name"]} ({_STATISTIC_LONG_NAME[statistic]})"
+            )
 
     # Drop level height coords which belong on the variable and are not dataset wide
     ds = ds.drop_vars([c for c in ds.coords if c not in ds.dims])

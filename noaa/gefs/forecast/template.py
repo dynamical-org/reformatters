@@ -14,7 +14,13 @@ TEMPLATE_PATH = "noaa/gefs/forecast/templates/latest.zarr"
 
 _INIT_TIME_START = pd.Timestamp("2024-09-01T00:00")
 _INIT_TIME_FREQUENCY = pd.Timedelta("6h")
-_CHUNKS = {"init_time": 2, "lead_time": 125, "latitude": 145, "longitude": 144}
+_CHUNKS = {
+    "init_time": 1,
+    "ensemble_member": 31,  # all ensemble members in one chunk
+    "lead_time": 125,  # all lead times in one chunk
+    "latitude": 73,  # 10 chunks over 721 pixels
+    "longitude": 72,  # 20 chunks over 1440 pixels
+}
 
 
 def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
@@ -40,37 +46,41 @@ def _get_init_time_coordinates(
 
 
 def update_template() -> None:
-    dims = ("init_time", "lead_time", "latitude", "longitude")
+    dims = ("init_time", "ensemble_member", "lead_time", "latitude", "longitude")
     assert dims == tuple(_CHUNKS.keys())
 
     coords = {
         "init_time": _get_init_time_coordinates(
             _INIT_TIME_START + _INIT_TIME_FREQUENCY
         ),
-        "lead_time": pd.timedelta_range("3h", "240h", freq="3h"),
+        "ensemble_member": np.arange(31),
+        "lead_time": pd.timedelta_range("0h", "240h", freq="3h"),
         # latitude descends when north is up
         "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
         "longitude": np.arange(-180, 180, 0.25),
     }
-    assert dims == tuple(coords.keys())
 
     # Pull a single file to load variable names and metadata.
     # Use a lead time > 0 because not all variables are present at lead time == 0.
-    with download_directory() as dir:
-        path = download_file(pd.Timestamp("2024-01-01T00:00"), pd.Timedelta("3h"), dir)
+    with download_directory() as directory:
+        path = download_file(
+            pd.Timestamp("2024-01-01T00:00"), pd.Timedelta("3h"), 0, directory
+        )
         ds = read_file(path)
 
         ds = (
-            ds.chunk(_CHUNKS)  # daskify for much faster, lazy reindex
-            .reindex(lead_time=coords["lead_time"])
+            ds.chunk(_CHUNKS)  # daskify for faster, lazy reindex
+            .reindex(
+                ensemble_member=coords["ensemble_member"], lead_time=coords["lead_time"]
+            )
             .assign_coords(coords)
             .chunk(_CHUNKS)
         )
 
-        for var in ds.data_vars:
-            ds[var].encoding = {
+        for var_name, data_var in ds.data_vars.items():
+            ds[var_name].encoding = {
                 "dtype": np.float32,
-                "chunks": [_CHUNKS[str(dim)] for dim in ds.dims],
+                "chunks": [_CHUNKS[str(dim)] for dim in data_var.dims],
                 "compressor": zarr.Blosc(cname="zstd", clevel=4),
             }
         # TODO
