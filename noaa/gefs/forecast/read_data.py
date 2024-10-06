@@ -14,8 +14,8 @@ _STATISTIC_LONG_NAME = {"avg": "ensemble mean", "spr": "ensemble spread"}
 
 def download_file(
     init_time: pd.Timestamp,
-    lead_time: pd.Timedelta,
     ensemble_member: str | int,
+    lead_time: pd.Timedelta,
     directory: Path,
 ) -> Path:
     lead_time_hours = lead_time.total_seconds() / (60 * 60)
@@ -83,7 +83,7 @@ def read_file(path: Path) -> xr.Dataset:
 def http_session() -> requests.Session:
     session = requests.Session()
     retry = requests.adapters.Retry(
-        total=5,
+        total=10,
         redirect=1,
         backoff_factor=0.5,
         backoff_jitter=0.5,

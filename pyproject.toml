@@ -18,6 +18,7 @@ dependencies = [
 
 [tool.uv]
 dev-dependencies = [
+    "matplotlib>=3.9.2",
     "mypy>=1.11.2",
     "pandas-stubs>=2.2.2.240909",
     "pre-commit>=3.8.0",

@@ -1,5 +1,3 @@
-import warnings
-
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -26,13 +24,14 @@ _CHUNKS = {
 def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     ds: xr.Dataset = xr.open_zarr(TEMPLATE_PATH)
 
-    # Template is stored with a single init time, expand to the full range of init times.
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")  # ignore a "performace" warning
-        ds = ds.reindex(init_time=_get_init_time_coordinates(init_time_end))
-
+    # Expand init_time dimension with complete coordinates
+    ds = ds.sel(init_time=_get_init_time_coordinates(init_time_end), method="ffill")
     # Init time chunks are 1 when stored, set them to desired.
     ds = ds.chunk(init_time=_CHUNKS["init_time"])
+
+    # Uncomment to make smaller zarr while developing
+    # if Config.is_dev():
+    #     ds = ds.isel(ensemble_member=slice(5), lead_time=slice(24))
 
     return ds
 
@@ -64,15 +63,14 @@ def update_template() -> None:
     # Use a lead time > 0 because not all variables are present at lead time == 0.
     with download_directory() as directory:
         path = download_file(
-            pd.Timestamp("2024-01-01T00:00"), pd.Timedelta("3h"), 0, directory
+            pd.Timestamp("2024-01-01T00:00"), 0, pd.Timedelta("3h"), directory
         )
         ds = read_file(path)
 
+        # Expand ensemble and lead time dimensions + set coordinates and chunking
         ds = (
-            ds.chunk(_CHUNKS)  # daskify for faster, lazy reindex
-            .reindex(
-                ensemble_member=coords["ensemble_member"], lead_time=coords["lead_time"]
-            )
+            ds.sel(ensemble_member=coords["ensemble_member"], method="nearest")
+            .sel(lead_time=coords["lead_time"], method="nearest")
             .assign_coords(coords)
             .chunk(_CHUNKS)
         )

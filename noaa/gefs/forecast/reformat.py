@@ -16,7 +16,7 @@ from noaa.gefs.forecast import template
 from noaa.gefs.forecast.read_data import download_file, read_file
 
 
-def local_reformat(init_time_end: DatetimeLike) -> None:
+def reformat_local(init_time_end: DatetimeLike) -> None:
     template_ds = template.get_template(init_time_end)
     store = get_store()
     print("writing meta")
@@ -26,7 +26,7 @@ def local_reformat(init_time_end: DatetimeLike) -> None:
     reformat_chunks(init_time_end, worker_index=0, workers_total=1)
 
 
-def kubernetes_reformat(init_time_end: DatetimeLike) -> None:
+def reformat_kubernetes(init_time_end: DatetimeLike) -> None:
     template_ds = template.get_template(init_time_end)
     store = get_store()
     template_ds.to_zarr(store, mode=get_mode(store), compute=False)
@@ -56,16 +56,33 @@ def reformat_chunks(
 
         chunk_init_times = pd.to_datetime(chunk_template_ds["init_time"].values)
         chunk_lead_times = pd.to_timedelta(chunk_template_ds["lead_time"].values)
+        chunk_ensemble_members = chunk_template_ds["ensemble_member"]
 
         print("starting", chunk_init_times)
 
         with download_directory() as dir:
             init_time_datasets = []
             for init_time in chunk_init_times:
-                download = partial(download_file, init_time, directory=dir)
-                file_paths = tuple(thread_executor.map(download, chunk_lead_times))
-                datasets = tuple(proccess_executor.map(read_file, file_paths))
-                init_time_ds = xr.concat(datasets, dim="lead_time", join="exact")
+                ensemble_member_datasets = []
+                for ensemble_member in chunk_ensemble_members:
+                    download = partial(
+                        download_file, init_time, ensemble_member, directory=dir
+                    )
+                    file_paths = tuple(thread_executor.map(download, chunk_lead_times))
+                    datasets = tuple(proccess_executor.map(read_file, file_paths))
+                    ensemble_member_ds = xr.concat(
+                        datasets, dim="lead_time", join="exact"
+                    )
+
+                    # TODO decide on complete set of variables to include
+                    if "orog" in ensemble_member_ds:
+                        ensemble_member_ds = ensemble_member_ds.drop_vars("orog")
+
+                    ensemble_member_datasets.append(ensemble_member_ds)
+
+                init_time_ds = xr.concat(
+                    ensemble_member_datasets, dim="ensemble_member", join="exact"
+                )
                 init_time_datasets.append(init_time_ds)
 
             chunk_ds = xr.concat(init_time_datasets, dim="init_time", join="exact")
