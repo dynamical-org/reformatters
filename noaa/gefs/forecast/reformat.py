@@ -2,11 +2,12 @@ import os
 from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from functools import partial
-from itertools import starmap
+from itertools import islice, starmap
 from typing import Literal
 
 import numpy as np
 import pandas as pd
+import s3fs  # type: ignore
 import xarray as xr
 
 from common.config import Config
@@ -19,10 +20,10 @@ from noaa.gefs.forecast.read_data import download_file, read_file
 def reformat_local(init_time_end: DatetimeLike) -> None:
     template_ds = template.get_template(init_time_end)
     store = get_store()
-    print("writing meta")
+    print("Writing metadata")
     template_ds.to_zarr(store, mode=get_mode(store), compute=False)
     # Process all chunks
-    print("starting reformat")
+    print("Starting reformat")
     reformat_chunks(init_time_end, worker_index=0, workers_total=1)
 
 
@@ -58,7 +59,7 @@ def reformat_chunks(
         chunk_lead_times = pd.to_timedelta(chunk_template_ds["lead_time"].values)
         chunk_ensemble_members = chunk_template_ds["ensemble_member"]
 
-        print("starting", chunk_init_times)
+        print("Starting", chunk_init_times.to_list())
 
         with download_directory() as dir:
             init_time_datasets = []
@@ -87,24 +88,38 @@ def reformat_chunks(
 
             chunk_ds = xr.concat(init_time_datasets, dim="init_time", join="exact")
 
+            print("Writing", chunk_init_times.to_list())
             chunk_ds.chunk(-1).to_zarr(store, region="auto")
-
-        print(chunk_init_times, "processed")
 
 
 def get_worker_jobs[T](
     jobs: Iterable[T], worker_index: int, workers_total: int
 ) -> Iterable[T]:
     """Returns the subset of `jobs` that worker_index should process if there are workers_total workers."""
-    return list(jobs)[worker_index::workers_total]
+    return islice(jobs, worker_index, None, workers_total)
 
 
 def get_store() -> StoreLike:
-    return "data/output/noaa/gefs/forecast/dev.zarr"
+    # return "data/output/noaa/gefs/forecast/dev.zarr"
+
+    s3fs_kwargs = {
+        "key": os.environ["AWS_ACCESS_KEY_ID"],
+        "secret": os.environ["AWS_SECRET_ACCESS_KEY"],
+    }
+    if token := os.environ.get("AWS_SESSION_TOKEN"):
+        s3fs_kwargs["token"] = token
+
+    s3 = s3fs.S3FileSystem(**s3fs_kwargs)
+
+    store: StoreLike = s3.get_mapper(
+        "s3://us-west-2.opendata.source.coop/aldenks/noaa-gefs-dev/forecast/dev.zarr"
+    )
+    return store
 
 
 def get_mode(store: StoreLike) -> Literal["w-", "w"]:
-    if isinstance(store, str) and store.endswith("dev.zarr"):
+    store_root = store if isinstance(store, str) else getattr(store, "root", "")
+    if store_root.endswith("/dev.zarr"):
         return "w"  # Allow overwritting dev store
 
     return "w-"  # Safe default - don't overwrite
