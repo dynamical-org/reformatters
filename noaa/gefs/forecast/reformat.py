@@ -10,11 +10,14 @@ import pandas as pd
 import s3fs  # type: ignore
 import xarray as xr
 
+from common import string_template
 from common.config import Config
 from common.download_directory import download_directory
 from common.types import DatetimeLike, StoreLike
 from noaa.gefs.forecast import template
 from noaa.gefs.forecast.read_data import download_file, read_file
+
+_PROCESSING_CHUNK_DIMENSION = "init_time"
 
 
 def reformat_local(init_time_end: DatetimeLike) -> None:
@@ -27,10 +30,33 @@ def reformat_local(init_time_end: DatetimeLike) -> None:
     reformat_chunks(init_time_end, worker_index=0, workers_total=1)
 
 
-def reformat_kubernetes(init_time_end: DatetimeLike) -> None:
+def reformat_kubernetes(
+    init_time_end: DatetimeLike, jobs_per_pod: int, max_parallelism: int
+) -> None:
     template_ds = template.get_template(init_time_end)
+
+    num_jobs = sum(1 for _ in chunk_i_slices(template_ds, _PROCESSING_CHUNK_DIMENSION))
+    workers_total = int(np.ceil(num_jobs / jobs_per_pod))
+    parallelism = min(workers_total, max_parallelism)
+
+    kubernetes_job = string_template.substitute(
+        "deploy/kubernetes_ingest_job.yaml",
+        {
+            # TODO read dataset id from template_ds.attrs
+            "NAME": f"{template._DATASET_ID}-{pd.Timestamp.now('UTC').strftime('%Y-%m-%dt%M-%S')}",
+            "DATASET_ID": template._DATASET_ID,
+            "INIT_TIME_END": pd.Timestamp(init_time_end).isoformat(),
+            "WORKERS_TOTAL": workers_total,
+            "PARALLELISM": parallelism,
+            "CPU": 8,
+            "MEMORY": "32G",
+        },
+    )
+    print(kubernetes_job)
     store = get_store()
+    print("Writing metadata")
     template_ds.to_zarr(store, mode=get_mode(store), compute=False)
+
     # TODO
     # build and push docker image
     # create and launch kubernetes job
@@ -44,7 +70,13 @@ def reformat_chunks(
     store = get_store()
 
     worker_init_time_i_slices = get_worker_jobs(
-        chunk_i_slices(template_ds, "init_time"), worker_index, workers_total
+        chunk_i_slices(template_ds, _PROCESSING_CHUNK_DIMENSION),
+        worker_index,
+        workers_total,
+    )
+
+    print(
+        f"This is {worker_index = }, {workers_total = }, {list(worker_init_time_i_slices)}"
     )
 
     thread_executor = ThreadPoolExecutor(max_workers=os.cpu_count())

@@ -10,6 +10,7 @@ from noaa.gefs.forecast.read_data import download_file, read_file
 
 TEMPLATE_PATH = "noaa/gefs/forecast/templates/latest.zarr"
 
+_DATASET_ID = "noaa-gefs-forecast"
 _INIT_TIME_START = pd.Timestamp("2024-09-01T00:00")
 _INIT_TIME_FREQUENCY = pd.Timedelta("6h")
 _CHUNKS = {
@@ -30,8 +31,8 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     ds = ds.chunk(init_time=_CHUNKS["init_time"])
 
     # Uncomment to make smaller zarr while developing
-    # if Config.is_dev():
-    #     ds = ds.isel(ensemble_member=slice(5), lead_time=slice(24))
+    if Config.is_dev():
+        ds = ds.isel(ensemble_member=slice(5), lead_time=slice(24))
 
     return ds
 
