@@ -1,0 +1,33 @@
+# This file is a template which is filled in and submitted by 
+# the `main.py <dataset-id> reformat-kubernetes` command. 
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: $NAME
+spec:
+  completions: $WORKERS_TOTAL
+  parallelism: $PARALLELISM
+  completionMode: Indexed
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: worker
+        image: docker.io/library/bash
+        command:
+        - python
+        - main.py
+        - $DATASET_ID
+        - reformat-chunks
+        - $INIT_TIME_END
+        - $WORKER_INDEX
+        - $WORKERS_TOTAL
+        env:
+        - name: WORKER_INDEX
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.annotations['batch.kubernetes.io/job-completion-index']
+        resources:
+          requests:
+            cpu: $CPU
+            memory: $MEMORY
