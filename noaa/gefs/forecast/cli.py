@@ -1,4 +1,5 @@
-import pandas as pd
+from typing import Annotated
+
 import typer
 
 from noaa.gefs.forecast import reformat, template
@@ -24,7 +25,11 @@ def reformat_kubernetes(
 
 
 @app.command()
-def reformat_chunks(init_time_end: str, worker_index: int, workers_total: int) -> None:
+def reformat_chunks(
+    init_time_end: str,
+    worker_index: Annotated[int, typer.Argument(envvar="WORKER_INDEX")],
+    workers_total: Annotated[int, typer.Argument(envvar="WORKERS_TOTAL")],
+) -> None:
     reformat.reformat_chunks(
         init_time_end, worker_index=worker_index, workers_total=workers_total
     )

@@ -26,13 +26,13 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     ds: xr.Dataset = xr.open_zarr(TEMPLATE_PATH)
 
     # Expand init_time dimension with complete coordinates
-    ds = ds.sel(init_time=_get_init_time_coordinates(init_time_end), method="ffill")
+    ds = ds.reindex(init_time=_get_init_time_coordinates(init_time_end))
     # Init time chunks are 1 when stored, set them to desired.
     ds = ds.chunk(init_time=_CHUNKS["init_time"])
 
     # Uncomment to make smaller zarr while developing
-    if Config.is_dev():
-        ds = ds.isel(ensemble_member=slice(5), lead_time=slice(24))
+    # if Config.is_dev():
+    #     ds = ds.isel(ensemble_member=slice(5), lead_time=slice(24))
 
     return ds
 

@@ -1,5 +1,6 @@
 import functools
 from pathlib import Path
+from typing import Any
 
 import cfgrib  # type: ignore
 import pandas as pd
@@ -39,8 +40,8 @@ def download_file(
     local_path = Path(directory, file_path)
     idx_local_path = Path(f"{local_path}.idx")
 
-    download(url, local_path, overwrite_existing=not Config.is_dev())
-    download(idx_url, idx_local_path, overwrite_existing=not Config.is_dev())
+    download_to_disk(url, local_path, overwrite_existing=not Config.is_dev())
+    download_to_disk(idx_url, idx_local_path, overwrite_existing=not Config.is_dev())
 
     return local_path
 
@@ -79,8 +80,28 @@ def read_file(path: Path) -> xr.Dataset:
     return ds
 
 
+class DefaultTimeoutHTTPAdapter(requests.adapters.HTTPAdapter):
+    def __init__(
+        self, *args: Any, default_timeout: float | tuple[float, float], **kwargs: Any
+    ):
+        self.default_timeout = default_timeout
+        super().__init__(*args, **kwargs)
+
+    def send(self, *args: Any, **kwargs: Any) -> requests.Response:
+        if kwargs.get("timeout") is None:
+            kwargs["timeout"] = self.default_timeout
+        return super().send(*args, **kwargs)
+
+
 @functools.cache
 def http_session() -> requests.Session:
+    """
+    A requests.Session tuned to maximize chance of success at the expense of latency,
+    while not waiting indefinitely for unresponsive servers.
+
+    Uses a backoff retry for 500 level responses and connection errors.
+    Applies a default connection and read timeout if one isn't specificed in the request.
+    """
     session = requests.Session()
     retry = requests.adapters.Retry(
         total=10,
@@ -89,20 +110,21 @@ def http_session() -> requests.Session:
         backoff_jitter=0.5,
         status_forcelist=(500, 502, 503, 504),
     )
-    adapter = requests.adapters.HTTPAdapter(max_retries=retry)
+    # default_timeout tuple is (connection timeout, read timeout)
+    adapter = DefaultTimeoutHTTPAdapter(default_timeout=(4, 16), max_retries=retry)
     session.mount("http://", adapter)
     session.mount("https://", adapter)
     return session
 
 
-def download(url: str, local_path: Path, *, overwrite_existing: bool) -> None:
+def download_to_disk(url: str, local_path: Path, *, overwrite_existing: bool) -> None:
     if not overwrite_existing and local_path.exists():
         return
 
     local_path.parent.mkdir(parents=True, exist_ok=True)
 
     print("Downloading", url)
-    with http_session().get(url, stream=True, timeout=10) as response:
+    with http_session().get(url, stream=True) as response:
         response.raise_for_status()
         with open(local_path, "wb") as file:
             for chunk in response.iter_content(chunk_size=None):

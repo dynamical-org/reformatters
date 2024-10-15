@@ -1,33 +1,57 @@
-# This file is a template which is filled in and submitted by 
-# the `main.py <dataset-id> reformat-kubernetes` command. 
+# This file is a template which is filled in and submitted by
+# the `main.py <dataset-id> reformat-kubernetes` command.
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: $NAME
 spec:
+  completionMode: Indexed
   completions: $WORKERS_TOTAL
   parallelism: $PARALLELISM
-  completionMode: Indexed
+  ttlSecondsAfterFinished: 604800  # 7 days
   template:
     spec:
       restartPolicy: Never
       containers:
       - name: worker
-        image: docker.io/library/bash
+        image: $IMAGE
         command:
         - python
         - main.py
-        - $DATASET_ID
+        - "$DATASET_ID"
         - reformat-chunks
-        - $INIT_TIME_END
-        - $WORKER_INDEX
-        - $WORKERS_TOTAL
+        - "$INIT_TIME_END"
         env:
         - name: WORKER_INDEX
           valueFrom:
             fieldRef:
               fieldPath: metadata.annotations['batch.kubernetes.io/job-completion-index']
+        - name: WORKERS_TOTAL
+          value: "$WORKERS_TOTAL"
+        - name: AWS_ACCESS_KEY_ID
+          value: $AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          value: $AWS_SECRET_ACCESS_KEY
+        - name: AWS_SESSION_TOKEN
+          value: $AWS_SESSION_TOKEN
         resources:
           requests:
             cpu: $CPU
             memory: $MEMORY
+        volumeMounts:
+        - mountPath: "/app/data/download"
+          name: ephemeral-download-vol
+      volumes:
+      - name: ephemeral-download-vol
+        ephemeral:
+          volumeClaimTemplate:
+            metadata:
+              labels:
+                type: ephemeral
+            spec:
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: $EPHEMERAL_STORAGE
+      securityContext:
+        fsGroup: 999  # this is the `app` group our app runs under

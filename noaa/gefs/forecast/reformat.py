@@ -1,4 +1,6 @@
 import os
+import re
+import subprocess
 from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from functools import partial
@@ -23,10 +25,12 @@ _PROCESSING_CHUNK_DIMENSION = "init_time"
 def reformat_local(init_time_end: DatetimeLike) -> None:
     template_ds = template.get_template(init_time_end)
     store = get_store()
-    print("Writing metadata")
+
+    print("Writing zarr metadata")
     template_ds.to_zarr(store, mode=get_mode(store), compute=False)
-    # Process all chunks
+
     print("Starting reformat")
+    # Process all chunks
     reformat_chunks(init_time_end, worker_index=0, workers_total=1)
 
 
@@ -35,49 +39,85 @@ def reformat_kubernetes(
 ) -> None:
     template_ds = template.get_template(init_time_end)
 
+    job_timestamp = pd.Timestamp.now("UTC").strftime("%Y-%m-%dt%M-%S")
+
+    docker_repo = os.environ["DOCKER_REPOSITORY"]
+    assert re.fullmatch(r"[0-9a-zA-Z_\.\-\/]{1,1000}", docker_repo)
+    image_tag = f"{docker_repo}:{job_timestamp}"
+
+    subprocess.run(  # noqa: S603  allow passing variable to subprocess, it's realtively sanitized above
+        [
+            "/usr/bin/docker",
+            "build",
+            "--file",
+            "deploy/Dockerfile",
+            "--tag",
+            image_tag,
+            ".",
+        ],
+        check=True,
+    )
+    subprocess.run(  # noqa: S603
+        ["/usr/bin/docker", "push", image_tag],
+        check=True,
+    )
+    print("Pushed", image_tag)
+
+    store = get_store()
+    print("Writing zarr metadata")
+    template_ds.to_zarr(store, mode=get_mode(store), compute=False)
+
     num_jobs = sum(1 for _ in chunk_i_slices(template_ds, _PROCESSING_CHUNK_DIMENSION))
     workers_total = int(np.ceil(num_jobs / jobs_per_pod))
     parallelism = min(workers_total, max_parallelism)
 
+    job_name = f"{template._DATASET_ID}-{job_timestamp}"
     kubernetes_job = string_template.substitute(
         "deploy/kubernetes_ingest_job.yaml",
         {
             # TODO read dataset id from template_ds.attrs
-            "NAME": f"{template._DATASET_ID}-{pd.Timestamp.now('UTC').strftime('%Y-%m-%dt%M-%S')}",
+            "NAME": job_name,
+            "IMAGE": image_tag,
             "DATASET_ID": template._DATASET_ID,
             "INIT_TIME_END": pd.Timestamp(init_time_end).isoformat(),
             "WORKERS_TOTAL": workers_total,
             "PARALLELISM": parallelism,
-            "CPU": 8,
-            "MEMORY": "32G",
+            "CPU": 16,
+            "MEMORY": "110Gi",
+            "EPHEMERAL_STORAGE": "200Gi",
+            "AWS_ACCESS_KEY_ID": os.environ["AWS_ACCESS_KEY_ID"],
+            "AWS_SECRET_ACCESS_KEY": os.environ["AWS_SECRET_ACCESS_KEY"],
+            "AWS_SESSION_TOKEN": os.environ["AWS_SESSION_TOKEN"],
         },
     )
-    print(kubernetes_job)
-    store = get_store()
-    print("Writing metadata")
-    template_ds.to_zarr(store, mode=get_mode(store), compute=False)
 
-    # TODO
-    # build and push docker image
-    # create and launch kubernetes job
+    subprocess.run(  # noqa: S603
+        ["/usr/bin/kubectl", "apply", "-f", "-"],
+        input=kubernetes_job,
+        text=True,
+        check=True,
+    )
+
+    print("Submitted kubernetes job", job_name)
 
 
 def reformat_chunks(
     init_time_end: DatetimeLike, *, worker_index: int, workers_total: int
 ) -> None:
     """Writes out array chunk data. Assumes the dataset metadata has already been written."""
+    assert worker_index < workers_total
     template_ds = template.get_template(init_time_end)
     store = get_store()
 
-    worker_init_time_i_slices = get_worker_jobs(
-        chunk_i_slices(template_ds, _PROCESSING_CHUNK_DIMENSION),
-        worker_index,
-        workers_total,
+    worker_init_time_i_slices = list(
+        get_worker_jobs(
+            chunk_i_slices(template_ds, _PROCESSING_CHUNK_DIMENSION),
+            worker_index,
+            workers_total,
+        )
     )
 
-    print(
-        f"This is {worker_index = }, {workers_total = }, {list(worker_init_time_i_slices)}"
-    )
+    print(f"This is {worker_index = }, {workers_total = }, {worker_init_time_i_slices}")
 
     thread_executor = ThreadPoolExecutor(max_workers=os.cpu_count())
     # If we compile eccodes ourselves with thread safety enabled we could use threads for reading
