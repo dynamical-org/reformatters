@@ -29,11 +29,15 @@ spec:
         - name: WORKERS_TOTAL
           value: "$WORKERS_TOTAL"
         - name: AWS_ACCESS_KEY_ID
-          value: $AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: source-coop-key
+              key: AWS_ACCESS_KEY_ID
         - name: AWS_SECRET_ACCESS_KEY
-          value: $AWS_SECRET_ACCESS_KEY
-        - name: AWS_SESSION_TOKEN
-          value: $AWS_SESSION_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: source-coop-key
+              key: AWS_SECRET_ACCESS_KEY
         resources:
           requests:
             cpu: $CPU
