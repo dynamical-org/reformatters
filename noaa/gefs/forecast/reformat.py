@@ -181,14 +181,7 @@ def get_worker_jobs[T](
 def get_store() -> StoreLike:
     # return "data/output/noaa/gefs/forecast/dev.zarr"
 
-    s3fs_kwargs = {
-        "key": os.environ["AWS_ACCESS_KEY_ID"],
-        "secret": os.environ["AWS_SECRET_ACCESS_KEY"],
-    }
-    if token := os.environ.get("AWS_SESSION_TOKEN"):
-        s3fs_kwargs["token"] = token
-
-    s3 = s3fs.S3FileSystem(**s3fs_kwargs)
+    s3 = s3fs.S3FileSystem()
 
     store: StoreLike = s3.get_mapper(
         "s3://us-west-2.opendata.source.coop/aldenks/noaa-gefs-dev/forecast/dev.zarr"
