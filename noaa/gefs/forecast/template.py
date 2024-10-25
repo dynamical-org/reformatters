@@ -1,3 +1,5 @@
+from collections.abc import Hashable
+
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -55,6 +57,7 @@ def update_template() -> None:
         ),
         "ensemble_member": np.arange(31),
         "lead_time": pd.timedelta_range("0h", "240h", freq="3h"),
+        # TODO pull arange arguments from GRIB attributes
         # latitude descends when north is up
         "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
         "longitude": np.arange(-180, 180, 0.25),
@@ -82,7 +85,13 @@ def update_template() -> None:
                 "chunks": [_CHUNKS[str(dim)] for dim in data_var.dims],
                 "compressor": zarr.Blosc(cname="zstd", clevel=4),
             }
+
         # TODO
         # Explicit coords encoding
         # Improve metadata
         ds.to_zarr(TEMPLATE_PATH, mode="w", compute=False)
+
+
+def chunk_args(ds: xr.Dataset) -> dict[Hashable, int]:
+    """Returns {dim: chunk_size} mapping suitable to pass to ds.chunk()"""
+    return {dim: chunk_sizes[0] for dim, chunk_sizes in ds.chunksizes.items()}

@@ -134,13 +134,13 @@ def reformat_chunks(
 
         print("Starting", chunk_init_times.to_list())
 
-        with download_directory() as dir:
+        with download_directory() as directory:
             init_time_datasets = []
             for init_time in chunk_init_times:
                 ensemble_member_datasets = []
                 for ensemble_member in chunk_ensemble_members:
                     download = partial(
-                        download_file, init_time, ensemble_member, directory=dir
+                        download_file, init_time, ensemble_member, directory=directory
                     )
                     file_paths = tuple(thread_executor.map(download, chunk_lead_times))
                     datasets = tuple(proccess_executor.map(read_file, file_paths))
@@ -161,8 +161,14 @@ def reformat_chunks(
 
             chunk_ds = xr.concat(init_time_datasets, dim="init_time", join="exact")
 
-            print("Writing", chunk_init_times.to_list())
-            chunk_ds.chunk(-1).to_zarr(store, region="auto")
+            # Write variable by variable to avoid blowing up memory usage
+            for var_key in chunk_ds.data_vars.keys():
+                init_times_str = ", ".join(
+                    chunk_ds["init_time"].dt.strftime("%Y-%m-%dT%H:%M").values
+                )
+                print(f"Writing {var_key} {init_times_str}")
+                chunks = template.chunk_args(template_ds)
+                chunk_ds[var_key].chunk(chunks).to_zarr(store, region="auto")
 
 
 def get_worker_jobs[T](
