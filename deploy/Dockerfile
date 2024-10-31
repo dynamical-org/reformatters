@@ -94,7 +94,6 @@ apt-get install -qyy \
     -o APT::Install-Suggests=false \
     python3.12 \
     libpython3.12 \
-    libeccodes0 \
 
 apt-get clean
 rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
