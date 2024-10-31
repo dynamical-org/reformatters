@@ -30,6 +30,7 @@ dev-dependencies = [
 select = [
     "UP",    # pyupgrade
     "I",     # isort
+    "F",     # pyflakes
     "N",     # pep8-naming
     "W",     # pycodestyle warning
     "E",     # pycodestyle error

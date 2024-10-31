@@ -14,7 +14,7 @@ import s3fs  # type: ignore
 import xarray as xr
 
 from common import string_template
-from common.config import Config
+from common.config import Config  # noqa:F401
 from common.download_directory import cd_into_download_directory
 from common.types import DatetimeLike, StoreLike
 from noaa.gefs.forecast import template

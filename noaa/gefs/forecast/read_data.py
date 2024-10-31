@@ -8,7 +8,6 @@ import requests
 import xarray as xr
 
 from common.config import Config
-from noaa.gefs.forecast import template
 
 _STATISTIC_LONG_NAME = {"avg": "ensemble mean", "spr": "ensemble spread"}
 
