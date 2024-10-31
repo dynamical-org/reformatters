@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from functools import partial
 from itertools import islice, starmap
+from pathlib import Path
 from typing import Literal
 
 import numpy as np
@@ -14,7 +15,7 @@ import xarray as xr
 
 from common import string_template
 from common.config import Config
-from common.download_directory import download_directory
+from common.download_directory import cd_into_download_directory
 from common.types import DatetimeLike, StoreLike
 from noaa.gefs.forecast import template
 from noaa.gefs.forecast.read_data import download_file, read_file
@@ -119,9 +120,10 @@ def reformat_chunks(
 
     print(f"This is {worker_index = }, {workers_total = }, {worker_init_time_i_slices}")
 
-    thread_executor = ThreadPoolExecutor(max_workers=os.cpu_count())
+    thread_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
     # If we compile eccodes ourselves with thread safety enabled we could use threads for reading
     # https://confluence.ecmwf.int/display/ECC/ecCodes+installation ENABLE_ECCODES_THREADS
+    # but make sure to read thread safety comment in our `read_data` function.
     proccess_executor = ProcessPoolExecutor(max_workers=os.cpu_count())
 
     for init_time_i_slice in worker_init_time_i_slices:
@@ -131,18 +133,26 @@ def reformat_chunks(
         chunk_lead_times = pd.to_timedelta(chunk_template_ds["lead_time"].values)
         chunk_ensemble_members = chunk_template_ds["ensemble_member"]
 
-        print("Starting", chunk_init_times.to_list())
+        chunk_init_times_str = ", ".join(chunk_init_times.strftime("%Y-%m-%dT%H:%M"))
+        print("Starting chunk with init times", chunk_init_times_str)
 
-        with download_directory() as directory:
+        with cd_into_download_directory() as directory:
             init_time_datasets = []
             for init_time in chunk_init_times:
                 ensemble_member_datasets = []
                 for ensemble_member in chunk_ensemble_members:
+                    print("Downloading files")
                     download = partial(
                         download_file, init_time, ensemble_member, directory=directory
                     )
                     file_paths = tuple(thread_executor.map(download, chunk_lead_times))
-                    datasets = tuple(proccess_executor.map(read_file, file_paths))
+                    file_names = [path.name for path in file_paths]
+                    print("Reading datasets")
+                    datasets = tuple(proccess_executor.map(read_file, file_names))
+
+                    print(
+                        f"Concatenating lead times for ensemble member {ensemble_member.item()} of {init_time}"
+                    )
                     ensemble_member_ds = xr.concat(
                         datasets, dim="lead_time", join="exact"
                     )
@@ -153,19 +163,20 @@ def reformat_chunks(
 
                     ensemble_member_datasets.append(ensemble_member_ds)
 
+                print("concatenating ensemble members for init time", init_time)
                 init_time_ds = xr.concat(
                     ensemble_member_datasets, dim="ensemble_member", join="exact"
                 )
                 init_time_datasets.append(init_time_ds)
 
+            print("concatenating init times in chunk", chunk_init_times_str)
             chunk_ds = xr.concat(init_time_datasets, dim="init_time", join="exact")
 
             # Write variable by variable to avoid blowing up memory usage
-            for var_key in chunk_ds.data_vars.keys():
-                init_times_str = ", ".join(
-                    chunk_ds["init_time"].dt.strftime("%Y-%m-%dT%H:%M").values
-                )
-                print(f"Writing {var_key} {init_times_str}")
+            for var_key in template_ds.data_vars.keys():
+                if var_key not in chunk_ds:
+                    continue  # TODO decide on complete set of variables to include
+                print(f"Writing {var_key} {chunk_init_times_str}")
                 chunks = template.chunk_args(template_ds)
                 chunk_ds[var_key].chunk(chunks).to_zarr(store, region="auto")
 
@@ -178,7 +189,8 @@ def get_worker_jobs[T](
 
 
 def get_store() -> StoreLike:
-    # return "data/output/noaa/gefs/forecast/dev.zarr"
+    # if Config.is_dev():
+    #     return Path("data/output/noaa/gefs/forecast/dev.zarr").absolute()
 
     s3 = s3fs.S3FileSystem()
 
@@ -189,8 +201,8 @@ def get_store() -> StoreLike:
 
 
 def get_mode(store: StoreLike) -> Literal["w-", "w"]:
-    store_root = store if isinstance(store, str) else getattr(store, "root", "")
-    if store_root.endswith("/dev.zarr"):
+    store_root = store.name if isinstance(store, Path) else getattr(store, "root", "")
+    if store_root.endswith("dev.zarr"):
         return "w"  # Allow overwritting dev store
 
     return "w-"  # Safe default - don't overwrite

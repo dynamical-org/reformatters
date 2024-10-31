@@ -35,20 +35,30 @@ def download_file(
         f"ge{ensemble_member}.t{init_hour_str}z.pgrb2s.0p25.f{lead_time_hours:03.0f}"
     )
     url = f"https://storage.googleapis.com/gfs-ensemble-forecast-system/{file_path}"
-    idx_url = f"{url}.idx"
 
-    local_path = Path(directory, file_path)
-    idx_local_path = Path(f"{local_path}.idx")
+    # Eccodes index files break unless the process working directory is the same as
+    # where the files are. To process many files in parallel, we need them all
+    # to be in the same directory so we replace / -> - in the file names to put
+    # all files in `directory`.
+    local_path = Path(directory, file_path.replace("/", "-"))
 
     download_to_disk(url, local_path, overwrite_existing=not Config.is_dev())
-    download_to_disk(idx_url, idx_local_path, overwrite_existing=not Config.is_dev())
+
+    # NOAA's grib indexes are not readible by eccodes. We may want to download them
+    # if we want to download just a selection of bands.
+    # idx_url = f"{url}.idx"
+    # idx_local_path = Path(f"{local_path}.idx")
+    # download_to_disk(idx_url, idx_local_path, overwrite_existing=not Config.is_dev())
 
     return local_path
 
 
-def read_file(path: Path) -> xr.Dataset:
+def read_file(file_name: str) -> xr.Dataset:
+    """
+    Requirement: the process current working directory must contain file_name
+    """
     # Open the grib as N different datasets which correctly map grib to xarray datasets
-    datasets = cfgrib.open_datasets(path)
+    datasets = cfgrib.open_datasets(file_name)
     datasets = [ds.chunk(-1) for ds in datasets]
 
     # TODO compat="minimal" is dropping 3 variables
@@ -64,7 +74,7 @@ def read_file(path: Path) -> xr.Dataset:
         # Store summary statistics across ensemble members as separate variables
         # which do not have an ensemble_member dimension. Statistic is either
         # "avg" (ensemble mean) or "spr" (ensemble spread; max minus min)
-        statistic = path.name[: path.name.index(".")].removeprefix("ge")
+        statistic = file_name[: file_name.index(".")].removeprefix("ge")
         ds = ds.rename({var: f"{var}_{statistic}" for var in ds.data_vars.keys()})
         for data_var in ds.data_vars.values():
             data_var.attrs["long_name"] = (

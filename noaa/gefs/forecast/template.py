@@ -5,8 +5,8 @@ import pandas as pd
 import xarray as xr
 import zarr  # type: ignore
 
-from common.config import Config
-from common.download_directory import download_directory
+from common.config import Config  # noqa:F401
+from common.download_directory import cd_into_download_directory
 from common.types import DatetimeLike
 from noaa.gefs.forecast.read_data import download_file, read_file
 
@@ -65,11 +65,11 @@ def update_template() -> None:
 
     # Pull a single file to load variable names and metadata.
     # Use a lead time > 0 because not all variables are present at lead time == 0.
-    with download_directory() as directory:
+    with cd_into_download_directory() as directory:
         path = download_file(
             pd.Timestamp("2024-01-01T00:00"), 0, pd.Timedelta("3h"), directory
         )
-        ds = read_file(path)
+        ds = read_file(path.name)
 
         # Expand ensemble and lead time dimensions + set coordinates and chunking
         ds = (
