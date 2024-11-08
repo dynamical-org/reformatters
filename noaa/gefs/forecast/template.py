@@ -34,27 +34,27 @@ _FLOAT_DEFAULT = {
     "filters": [BitRound(keepbits=8)],
     "compressor": Blosc(cname="zstd", clevel=3, shuffle=Blosc.SHUFFLE),
 }
-_CATEGORICAL_DEFAULT = {
-    "dtype": np.uint8,
+_CATEGORICAL_WITH_MISSING_DEFAULT = {
+    "dtype": np.float32,
     "chunks": _CHUNKS_ORDERED,
     "compressor": Blosc(cname="zstd", clevel=3, shuffle=Blosc.SHUFFLE),
 }
 _ENCODING = {
-    "cfrzr": _CATEGORICAL_DEFAULT,
-    "cicep": _CATEGORICAL_DEFAULT,
+    "cfrzr": _CATEGORICAL_WITH_MISSING_DEFAULT,
+    "cicep": _CATEGORICAL_WITH_MISSING_DEFAULT,
     "cpofp": _FLOAT_DEFAULT,
-    "crain": _CATEGORICAL_DEFAULT,
-    "csnow": _CATEGORICAL_DEFAULT,
+    "crain": _CATEGORICAL_WITH_MISSING_DEFAULT,
+    "csnow": _CATEGORICAL_WITH_MISSING_DEFAULT,
     "d2m": {**_FLOAT_DEFAULT, "add_offset": 273.15},
     "gh": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=9)]},
-    "gust": _FLOAT_DEFAULT,
+    "gust": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=7)]},
     "hlcy": _FLOAT_DEFAULT,
     "mslet": {**_FLOAT_DEFAULT, "add_offset": 101_000.0},
-    "mslhf": _FLOAT_DEFAULT,
-    "msshf": _FLOAT_DEFAULT,
+    "mslhf": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=7)]},
+    "msshf": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=7)]},
     "prmsl": {**_FLOAT_DEFAULT, "add_offset": 101_000.0},
     "pwat": _FLOAT_DEFAULT,
-    "r2": {**_FLOAT_DEFAULT, "add_offset": 50.0},
+    "r2": {**_FLOAT_DEFAULT, "add_offset": 50.0, "filters": [BitRound(keepbits=7)]},
     "sde": _FLOAT_DEFAULT,
     "sdlwrf": {**_FLOAT_DEFAULT, "add_offset": 300.0},
     "sdswrf": _FLOAT_DEFAULT,
@@ -69,8 +69,8 @@ _ENCODING = {
     "tmax": {**_FLOAT_DEFAULT, "add_offset": 273.15},
     "tmin": {**_FLOAT_DEFAULT, "add_offset": 273.15},
     "tp": _FLOAT_DEFAULT,
-    "u10": _FLOAT_DEFAULT,
-    "v10": _FLOAT_DEFAULT,
+    "u10": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=7)]},
+    "v10": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=7)]},
     "vis": {**_FLOAT_DEFAULT, "add_offset": 15_000.0},
 }
 
@@ -86,14 +86,6 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     # Uncomment to make smaller zarr while developing
     if Config.is_dev():
         ds = ds.isel(ensemble_member=slice(5), lead_time=slice(24))
-
-    ds["gh"].encoding = {
-        "dtype": np.float32,
-        "chunks": [_CHUNKS[str(dim)] for dim in ds["sp"].dims],
-        "filters": [BitRound(keepbits=9)],
-        "compressor": Blosc(cname="zstd", clevel=3, shuffle=Blosc.SHUFFLE),
-    }
-    ds = ds[["gh"]]
 
     return ds
 
@@ -140,13 +132,8 @@ def update_template() -> None:
             .chunk(_CHUNKS)
         )
 
-        for var_name, data_var in ds.data_vars.items():
-            ds[var_name].encoding = {
-                "dtype": np.float32,
-                "chunks": [_CHUNKS[str(dim)] for dim in data_var.dims],
-                "filters": [BitRound(keepbits=9)],
-                "compressor": Blosc(cname="zstd", clevel=3, shuffle=Blosc.SHUFFLE),
-            }
+        for var_name in ds.data_vars.keys():
+            ds[var_name].encoding = _ENCODING[var_name]
 
         # TODO
         # Explicit coords encoding
