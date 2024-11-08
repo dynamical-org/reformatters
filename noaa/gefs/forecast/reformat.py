@@ -85,10 +85,8 @@ def reformat_kubernetes(
             "WORKERS_TOTAL": workers_total,
             "PARALLELISM": parallelism,
             "CPU": 16,
-            "MEMORY": "110Gi",
-            "EPHEMERAL_STORAGE": "200Gi",
-            "AWS_ACCESS_KEY_ID": os.environ["AWS_ACCESS_KEY_ID"],
-            "AWS_SECRET_ACCESS_KEY": os.environ["AWS_SECRET_ACCESS_KEY"],
+            "MEMORY": "64G",
+            "EPHEMERAL_STORAGE": "200G",
         },
     )
 
