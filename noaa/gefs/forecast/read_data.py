@@ -132,7 +132,6 @@ def download_to_disk(url: str, local_path: Path, *, overwrite_existing: bool) ->
 
     local_path.parent.mkdir(parents=True, exist_ok=True)
 
-    print("Downloading", url)
     with http_session().get(url, stream=True) as response:
         response.raise_for_status()
         with open(local_path, "wb") as file:

@@ -84,8 +84,8 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     ds = ds.chunk(init_time=_CHUNKS["init_time"])
 
     # Uncomment to make smaller zarr while developing
-    if Config.is_dev():
-        ds = ds.isel(ensemble_member=slice(5), lead_time=slice(24))
+    # if Config.is_dev():
+    #     ds = ds.isel(ensemble_member=slice(5), lead_time=slice(24))
 
     return ds
 
