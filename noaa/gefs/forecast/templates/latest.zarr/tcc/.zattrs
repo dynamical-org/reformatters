@@ -34,6 +34,7 @@
         "latitude",
         "longitude"
     ],
+    "add_offset": 50.0,
     "long_name": "Total Cloud Cover",
     "standard_name": "unknown",
     "units": "%"

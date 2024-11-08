@@ -31,7 +31,7 @@ _CHUNKS_ORDERED = tuple(_CHUNKS[dim] for dim in _DIMS)
 _FLOAT_DEFAULT = {
     "dtype": np.float32,
     "chunks": _CHUNKS_ORDERED,
-    "filters": [BitRound(keepbits=8)],
+    "filters": [BitRound(keepbits=7)],
     "compressor": Blosc(cname="zstd", clevel=3, shuffle=Blosc.SHUFFLE),
 }
 _CATEGORICAL_WITH_MISSING_DEFAULT = {
@@ -46,15 +46,15 @@ _ENCODING = {
     "crain": _CATEGORICAL_WITH_MISSING_DEFAULT,
     "csnow": _CATEGORICAL_WITH_MISSING_DEFAULT,
     "d2m": {**_FLOAT_DEFAULT, "add_offset": 273.15},
-    "gh": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=9)]},
-    "gust": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=7)]},
+    "gh": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=8)]},
+    "gust": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
     "hlcy": _FLOAT_DEFAULT,
     "mslet": {**_FLOAT_DEFAULT, "add_offset": 101_000.0},
-    "mslhf": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=7)]},
-    "msshf": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=7)]},
+    "mslhf": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
+    "msshf": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
     "prmsl": {**_FLOAT_DEFAULT, "add_offset": 101_000.0},
     "pwat": _FLOAT_DEFAULT,
-    "r2": {**_FLOAT_DEFAULT, "add_offset": 50.0, "filters": [BitRound(keepbits=7)]},
+    "r2": {**_FLOAT_DEFAULT, "add_offset": 50.0, "filters": [BitRound(keepbits=6)]},
     "sde": _FLOAT_DEFAULT,
     "sdlwrf": {**_FLOAT_DEFAULT, "add_offset": 300.0},
     "sdswrf": _FLOAT_DEFAULT,
@@ -69,8 +69,8 @@ _ENCODING = {
     "tmax": {**_FLOAT_DEFAULT, "add_offset": 273.15},
     "tmin": {**_FLOAT_DEFAULT, "add_offset": 273.15},
     "tp": _FLOAT_DEFAULT,
-    "u10": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=7)]},
-    "v10": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=7)]},
+    "u10": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
+    "v10": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
     "vis": {**_FLOAT_DEFAULT, "add_offset": 15_000.0},
 }
 

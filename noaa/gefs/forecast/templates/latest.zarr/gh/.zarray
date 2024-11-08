@@ -8,14 +8,19 @@
     ],
     "compressor": {
         "blocksize": 0,
-        "clevel": 4,
+        "clevel": 3,
         "cname": "zstd",
         "id": "blosc",
         "shuffle": 1
     },
     "dtype": "<f4",
     "fill_value": "NaN",
-    "filters": null,
+    "filters": [
+        {
+            "id": "bitround",
+            "keepbits": 8
+        }
+    ],
     "order": "C",
     "shape": [
         1,

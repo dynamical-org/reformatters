@@ -21,7 +21,7 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
@@ -89,7 +89,7 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
@@ -157,14 +157,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -225,7 +230,7 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
@@ -293,7 +298,7 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
@@ -361,14 +366,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -415,145 +425,10 @@
                 "latitude",
                 "longitude"
             ],
+            "add_offset": 273.15,
             "long_name": "2 metre dewpoint temperature",
             "standard_name": "unknown",
             "units": "K"
-        },
-        "dlwrf/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 4,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": null,
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                81,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "dlwrf/.zattrs": {
-            "GRIB_NV": 0,
-            "GRIB_Nx": 1440,
-            "GRIB_Ny": 721,
-            "GRIB_cfName": "unknown",
-            "GRIB_cfVarName": "dlwrf",
-            "GRIB_dataType": "cf",
-            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
-            "GRIB_gridType": "regular_ll",
-            "GRIB_iDirectionIncrementInDegrees": 0.25,
-            "GRIB_iScansNegatively": 0,
-            "GRIB_jDirectionIncrementInDegrees": 0.25,
-            "GRIB_jPointsAreConsecutive": 0,
-            "GRIB_jScansPositively": 0,
-            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
-            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
-            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
-            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
-            "GRIB_missingValue": 3.4028234663852886e+38,
-            "GRIB_name": "Downward long-wave radiation flux",
-            "GRIB_numberOfPoints": 1038240,
-            "GRIB_paramId": 260097,
-            "GRIB_shortName": "dlwrf",
-            "GRIB_stepType": "avg",
-            "GRIB_stepUnits": 1,
-            "GRIB_totalNumber": 30,
-            "GRIB_typeOfLevel": "surface",
-            "GRIB_units": "W m**-2",
-            "GRIB_uvRelativeToGrid": 0,
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "long_name": "Downward long-wave radiation flux",
-            "standard_name": "unknown",
-            "units": "W m**-2"
-        },
-        "dswrf/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 4,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": null,
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                81,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "dswrf/.zattrs": {
-            "GRIB_NV": 0,
-            "GRIB_Nx": 1440,
-            "GRIB_Ny": 721,
-            "GRIB_cfName": "unknown",
-            "GRIB_cfVarName": "dswrf",
-            "GRIB_dataType": "cf",
-            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
-            "GRIB_gridType": "regular_ll",
-            "GRIB_iDirectionIncrementInDegrees": 0.25,
-            "GRIB_iScansNegatively": 0,
-            "GRIB_jDirectionIncrementInDegrees": 0.25,
-            "GRIB_jPointsAreConsecutive": 0,
-            "GRIB_jScansPositively": 0,
-            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
-            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
-            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
-            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
-            "GRIB_missingValue": 3.4028234663852886e+38,
-            "GRIB_name": "Downward short-wave radiation flux",
-            "GRIB_numberOfPoints": 1038240,
-            "GRIB_paramId": 260087,
-            "GRIB_shortName": "dswrf",
-            "GRIB_stepType": "avg",
-            "GRIB_stepUnits": 1,
-            "GRIB_totalNumber": 30,
-            "GRIB_typeOfLevel": "surface",
-            "GRIB_units": "W m**-2",
-            "GRIB_uvRelativeToGrid": 0,
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "long_name": "Downward short-wave radiation flux",
-            "standard_name": "unknown",
-            "units": "W m**-2"
         },
         "ensemble_member/.zarray": {
             "chunks": [
@@ -590,14 +465,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 8
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -658,14 +538,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 6
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -726,14 +611,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -897,14 +787,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -951,6 +846,7 @@
                 "latitude",
                 "longitude"
             ],
+            "add_offset": 101000.0,
             "long_name": "MSLP (Eta model reduction)",
             "standard_name": "unknown",
             "units": "Pa"
@@ -965,14 +861,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 6
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -1033,14 +934,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 6
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -1101,14 +1007,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -1155,6 +1066,7 @@
                 "latitude",
                 "longitude"
             ],
+            "add_offset": 101000.0,
             "long_name": "Pressure reduced to MSL",
             "standard_name": "unknown",
             "units": "Pa"
@@ -1169,14 +1081,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -1237,14 +1154,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 6
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -1291,6 +1213,7 @@
                 "latitude",
                 "longitude"
             ],
+            "add_offset": 50.0,
             "long_name": "2 metre relative humidity",
             "standard_name": "relative_humidity",
             "units": "%"
@@ -1305,14 +1228,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -1363,6 +1291,153 @@
             "standard_name": "lwe_thickness_of_surface_snow_amount",
             "units": "m"
         },
+        "sdlwrf/.zarray": {
+            "chunks": [
+                1,
+                31,
+                125,
+                73,
+                72
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 3,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
+            "order": "C",
+            "shape": [
+                1,
+                31,
+                81,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "sdlwrf/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "sdlwrf",
+            "GRIB_dataType": "cf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Surface downward long-wave radiation flux",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 260097,
+            "GRIB_shortName": "sdlwrf",
+            "GRIB_stepType": "avg",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "surface",
+            "GRIB_units": "W m**-2",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "ensemble_member",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "add_offset": 300.0,
+            "long_name": "Surface downward long-wave radiation flux",
+            "standard_name": "unknown",
+            "units": "W m**-2"
+        },
+        "sdswrf/.zarray": {
+            "chunks": [
+                1,
+                31,
+                125,
+                73,
+                72
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 3,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
+            "order": "C",
+            "shape": [
+                1,
+                31,
+                81,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "sdswrf/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "sdswrf",
+            "GRIB_dataType": "cf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Surface downward short-wave radiation flux",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 260087,
+            "GRIB_shortName": "sdswrf",
+            "GRIB_stepType": "avg",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "surface",
+            "GRIB_units": "W m**-2",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "ensemble_member",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Surface downward short-wave radiation flux",
+            "standard_name": "unknown",
+            "units": "W m**-2"
+        },
         "sdwe/.zarray": {
             "chunks": [
                 1,
@@ -1373,14 +1448,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -1441,14 +1521,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -1509,14 +1594,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -1577,14 +1667,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -1631,6 +1726,7 @@
                 "latitude",
                 "longitude"
             ],
+            "add_offset": 100000.0,
             "long_name": "Surface pressure",
             "standard_name": "surface_air_pressure",
             "units": "Pa"
@@ -1645,14 +1741,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -1699,9 +1800,83 @@
                 "latitude",
                 "longitude"
             ],
+            "add_offset": 273.15,
             "long_name": "Soil temperature",
             "standard_name": "unknown",
             "units": "K"
+        },
+        "suswrf/.zarray": {
+            "chunks": [
+                1,
+                31,
+                125,
+                73,
+                72
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 3,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
+            "order": "C",
+            "shape": [
+                1,
+                31,
+                81,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "suswrf/.zattrs": {
+            "GRIB_NV": 0,
+            "GRIB_Nx": 1440,
+            "GRIB_Ny": 721,
+            "GRIB_cfName": "unknown",
+            "GRIB_cfVarName": "suswrf",
+            "GRIB_dataType": "cf",
+            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
+            "GRIB_gridType": "regular_ll",
+            "GRIB_iDirectionIncrementInDegrees": 0.25,
+            "GRIB_iScansNegatively": 0,
+            "GRIB_jDirectionIncrementInDegrees": 0.25,
+            "GRIB_jPointsAreConsecutive": 0,
+            "GRIB_jScansPositively": 0,
+            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
+            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
+            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
+            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
+            "GRIB_missingValue": 3.4028234663852886e+38,
+            "GRIB_name": "Surface upward short-wave radiation flux",
+            "GRIB_numberOfPoints": 1038240,
+            "GRIB_paramId": 260088,
+            "GRIB_shortName": "suswrf",
+            "GRIB_stepType": "avg",
+            "GRIB_stepUnits": 1,
+            "GRIB_totalNumber": 30,
+            "GRIB_typeOfLevel": "surface",
+            "GRIB_units": "W m**-2",
+            "GRIB_uvRelativeToGrid": 0,
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "ensemble_member",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "long_name": "Surface upward short-wave radiation flux",
+            "standard_name": "unknown",
+            "units": "W m**-2"
         },
         "t2m/.zarray": {
             "chunks": [
@@ -1713,14 +1888,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -1767,6 +1947,7 @@
                 "latitude",
                 "longitude"
             ],
+            "add_offset": 273.15,
             "long_name": "2 metre temperature",
             "standard_name": "air_temperature",
             "units": "K"
@@ -1781,14 +1962,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -1835,6 +2021,7 @@
                 "latitude",
                 "longitude"
             ],
+            "add_offset": 50.0,
             "long_name": "Total Cloud Cover",
             "standard_name": "unknown",
             "units": "%"
@@ -1849,14 +2036,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -1903,6 +2095,7 @@
                 "latitude",
                 "longitude"
             ],
+            "add_offset": 273.15,
             "long_name": "Maximum temperature",
             "standard_name": "unknown",
             "units": "K"
@@ -1917,14 +2110,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -1971,6 +2169,7 @@
                 "latitude",
                 "longitude"
             ],
+            "add_offset": 273.15,
             "long_name": "Minimum temperature",
             "standard_name": "unknown",
             "units": "K"
@@ -1985,14 +2184,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -2053,14 +2257,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 6
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -2111,74 +2320,6 @@
             "standard_name": "eastward_wind",
             "units": "m s**-1"
         },
-        "uswrf/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 4,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": null,
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                81,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "uswrf/.zattrs": {
-            "GRIB_NV": 0,
-            "GRIB_Nx": 1440,
-            "GRIB_Ny": 721,
-            "GRIB_cfName": "unknown",
-            "GRIB_cfVarName": "uswrf",
-            "GRIB_dataType": "cf",
-            "GRIB_gridDefinitionDescription": "Latitude/longitude. Also called equidistant cylindrical, or Plate Carree",
-            "GRIB_gridType": "regular_ll",
-            "GRIB_iDirectionIncrementInDegrees": 0.25,
-            "GRIB_iScansNegatively": 0,
-            "GRIB_jDirectionIncrementInDegrees": 0.25,
-            "GRIB_jPointsAreConsecutive": 0,
-            "GRIB_jScansPositively": 0,
-            "GRIB_latitudeOfFirstGridPointInDegrees": 90.0,
-            "GRIB_latitudeOfLastGridPointInDegrees": -90.0,
-            "GRIB_longitudeOfFirstGridPointInDegrees": 0.0,
-            "GRIB_longitudeOfLastGridPointInDegrees": 359.75,
-            "GRIB_missingValue": 3.4028234663852886e+38,
-            "GRIB_name": "Upward short-wave radiation flux",
-            "GRIB_numberOfPoints": 1038240,
-            "GRIB_paramId": 260088,
-            "GRIB_shortName": "uswrf",
-            "GRIB_stepType": "avg",
-            "GRIB_stepUnits": 1,
-            "GRIB_totalNumber": 30,
-            "GRIB_typeOfLevel": "surface",
-            "GRIB_units": "W m**-2",
-            "GRIB_uvRelativeToGrid": 0,
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "long_name": "Upward short-wave radiation flux",
-            "standard_name": "unknown",
-            "units": "W m**-2"
-        },
         "v10/.zarray": {
             "chunks": [
                 1,
@@ -2189,14 +2330,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 6
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -2257,14 +2403,19 @@
             ],
             "compressor": {
                 "blocksize": 0,
-                "clevel": 4,
+                "clevel": 3,
                 "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<f4",
             "fill_value": "NaN",
-            "filters": null,
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
             "order": "C",
             "shape": [
                 1,
@@ -2311,6 +2462,7 @@
                 "latitude",
                 "longitude"
             ],
+            "add_offset": 15000.0,
             "long_name": "Visibility",
             "standard_name": "unknown",
             "units": "m"
