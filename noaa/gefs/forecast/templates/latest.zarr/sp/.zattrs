@@ -34,6 +34,7 @@
         "latitude",
         "longitude"
     ],
+    "add_offset": 100000.0,
     "long_name": "Surface pressure",
     "standard_name": "surface_air_pressure",
     "units": "Pa"

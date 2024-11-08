@@ -34,6 +34,7 @@
         "latitude",
         "longitude"
     ],
+    "add_offset": 15000.0,
     "long_name": "Visibility",
     "standard_name": "unknown",
     "units": "m"

@@ -34,6 +34,7 @@
         "latitude",
         "longitude"
     ],
+    "add_offset": 101000.0,
     "long_name": "Pressure reduced to MSL",
     "standard_name": "unknown",
     "units": "Pa"

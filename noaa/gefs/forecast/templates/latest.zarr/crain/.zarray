@@ -8,7 +8,7 @@
     ],
     "compressor": {
         "blocksize": 0,
-        "clevel": 4,
+        "clevel": 3,
         "cname": "zstd",
         "id": "blosc",
         "shuffle": 1

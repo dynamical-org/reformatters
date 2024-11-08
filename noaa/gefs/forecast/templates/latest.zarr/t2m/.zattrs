@@ -34,6 +34,7 @@
         "latitude",
         "longitude"
     ],
+    "add_offset": 273.15,
     "long_name": "2 metre temperature",
     "standard_name": "air_temperature",
     "units": "K"

@@ -34,6 +34,7 @@
         "latitude",
         "longitude"
     ],
+    "add_offset": 273.15,
     "long_name": "Soil temperature",
     "standard_name": "unknown",
     "units": "K"
