@@ -5,7 +5,7 @@
     "compressor": {
         "blocksize": 0,
         "clevel": 5,
-        "cname": "lz4",
+        "cname": "zstd",
         "id": "blosc",
         "shuffle": 1
     },

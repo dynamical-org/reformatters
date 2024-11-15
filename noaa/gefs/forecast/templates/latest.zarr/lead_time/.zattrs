@@ -2,5 +2,5 @@
     "_ARRAY_DIMENSIONS": [
         "lead_time"
     ],
-    "units": "hours"
+    "units": "seconds"
 }

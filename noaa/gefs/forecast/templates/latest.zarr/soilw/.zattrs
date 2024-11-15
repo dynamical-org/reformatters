@@ -34,6 +34,7 @@
         "latitude",
         "longitude"
     ],
+    "coordinates": "valid_time",
     "long_name": "Volumetric soil moisture content",
     "standard_name": "unknown",
     "units": "Proportion"

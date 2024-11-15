@@ -35,6 +35,7 @@
         "longitude"
     ],
     "add_offset": 273.15,
+    "coordinates": "valid_time",
     "long_name": "Minimum temperature",
     "standard_name": "unknown",
     "units": "K"

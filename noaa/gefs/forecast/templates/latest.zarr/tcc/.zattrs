@@ -35,6 +35,7 @@
         "longitude"
     ],
     "add_offset": 50.0,
+    "coordinates": "valid_time",
     "long_name": "Total Cloud Cover",
     "standard_name": "unknown",
     "units": "%"

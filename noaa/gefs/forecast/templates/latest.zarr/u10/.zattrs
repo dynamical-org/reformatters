@@ -34,6 +34,7 @@
         "latitude",
         "longitude"
     ],
+    "coordinates": "valid_time",
     "long_name": "10 metre U wind component",
     "standard_name": "eastward_wind",
     "units": "m s**-1"

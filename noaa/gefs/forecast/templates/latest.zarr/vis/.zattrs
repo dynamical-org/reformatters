@@ -35,6 +35,7 @@
         "longitude"
     ],
     "add_offset": 15000.0,
+    "coordinates": "valid_time",
     "long_name": "Visibility",
     "standard_name": "unknown",
     "units": "m"

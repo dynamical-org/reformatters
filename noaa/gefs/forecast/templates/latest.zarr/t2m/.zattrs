@@ -35,6 +35,7 @@
         "longitude"
     ],
     "add_offset": 273.15,
+    "coordinates": "valid_time",
     "long_name": "2 metre temperature",
     "standard_name": "air_temperature",
     "units": "K"

@@ -1,5 +1,6 @@
 {
     "chunks": [
+        1,
         81
     ],
     "compressor": {
@@ -11,9 +12,16 @@
     },
     "dtype": "<i8",
     "fill_value": null,
-    "filters": null,
+    "filters": [
+        {
+            "astype": "<i8",
+            "dtype": "<i8",
+            "id": "delta"
+        }
+    ],
     "order": "C",
     "shape": [
+        1,
         81
     ],
     "zarr_format": 2

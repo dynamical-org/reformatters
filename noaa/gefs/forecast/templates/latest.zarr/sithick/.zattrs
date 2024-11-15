@@ -34,6 +34,7 @@
         "latitude",
         "longitude"
     ],
+    "coordinates": "valid_time",
     "long_name": "Sea ice thickness",
     "standard_name": "unknown",
     "units": "m"

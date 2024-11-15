@@ -34,6 +34,7 @@
         "latitude",
         "longitude"
     ],
+    "coordinates": "valid_time",
     "long_name": "Precipitable water",
     "standard_name": "unknown",
     "units": "kg m**-2"

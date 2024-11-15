@@ -75,6 +75,7 @@
                 "latitude",
                 "longitude"
             ],
+            "coordinates": "valid_time",
             "long_name": "Categorical freezing rain",
             "standard_name": "unknown",
             "units": "(Code table 4.222)"
@@ -143,6 +144,7 @@
                 "latitude",
                 "longitude"
             ],
+            "coordinates": "valid_time",
             "long_name": "Categorical ice pellets",
             "standard_name": "unknown",
             "units": "(Code table 4.222)"
@@ -216,6 +218,7 @@
                 "latitude",
                 "longitude"
             ],
+            "coordinates": "valid_time",
             "long_name": "Percent frozen precipitation",
             "standard_name": "unknown",
             "units": "%"
@@ -284,6 +287,7 @@
                 "latitude",
                 "longitude"
             ],
+            "coordinates": "valid_time",
             "long_name": "Categorical rain",
             "standard_name": "unknown",
             "units": "(Code table 4.222)"
@@ -352,6 +356,7 @@
                 "latitude",
                 "longitude"
             ],
+            "coordinates": "valid_time",
             "long_name": "Categorical snow",
             "standard_name": "unknown",
             "units": "(Code table 4.222)"
@@ -426,6 +431,7 @@
                 "longitude"
             ],
             "add_offset": 273.15,
+            "coordinates": "valid_time",
             "long_name": "2 metre dewpoint temperature",
             "standard_name": "unknown",
             "units": "K"
@@ -441,7 +447,7 @@
                 "id": "blosc",
                 "shuffle": 1
             },
-            "dtype": "<i8",
+            "dtype": "<u2",
             "fill_value": null,
             "filters": null,
             "order": "C",
@@ -524,6 +530,7 @@
                 "latitude",
                 "longitude"
             ],
+            "coordinates": "valid_time",
             "long_name": "Geopotential height",
             "standard_name": "geopotential_height",
             "units": "gpm"
@@ -597,6 +604,7 @@
                 "latitude",
                 "longitude"
             ],
+            "coordinates": "valid_time",
             "long_name": "Wind speed (gust)",
             "standard_name": "unknown",
             "units": "m s**-1"
@@ -670,6 +678,7 @@
                 "latitude",
                 "longitude"
             ],
+            "coordinates": "valid_time",
             "long_name": "Storm relative helicity",
             "standard_name": "unknown",
             "units": "m**2 s**-2"
@@ -681,13 +690,19 @@
             "compressor": {
                 "blocksize": 0,
                 "clevel": 5,
-                "cname": "lz4",
+                "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
             "dtype": "<i8",
             "fill_value": null,
-            "filters": null,
+            "filters": [
+                {
+                    "astype": "<i8",
+                    "dtype": "<i8",
+                    "id": "delta"
+                }
+            ],
             "order": "C",
             "shape": [
                 1
@@ -699,7 +714,7 @@
                 "init_time"
             ],
             "calendar": "proleptic_gregorian",
-            "units": "days since 2024-09-01 00:00:00"
+            "units": "seconds since 1970-01-01"
         },
         "latitude/.zarray": {
             "chunks": [
@@ -708,7 +723,7 @@
             "compressor": {
                 "blocksize": 0,
                 "clevel": 5,
-                "cname": "lz4",
+                "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
@@ -733,7 +748,7 @@
             "compressor": {
                 "blocksize": 0,
                 "clevel": 5,
-                "cname": "lz4",
+                "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
@@ -750,7 +765,7 @@
             "_ARRAY_DIMENSIONS": [
                 "lead_time"
             ],
-            "units": "hours"
+            "units": "seconds"
         },
         "longitude/.zarray": {
             "chunks": [
@@ -759,7 +774,7 @@
             "compressor": {
                 "blocksize": 0,
                 "clevel": 5,
-                "cname": "lz4",
+                "cname": "zstd",
                 "id": "blosc",
                 "shuffle": 1
             },
@@ -847,6 +862,7 @@
                 "longitude"
             ],
             "add_offset": 101000.0,
+            "coordinates": "valid_time",
             "long_name": "MSLP (Eta model reduction)",
             "standard_name": "unknown",
             "units": "Pa"
@@ -920,6 +936,7 @@
                 "latitude",
                 "longitude"
             ],
+            "coordinates": "valid_time",
             "long_name": "Mean surface latent heat flux",
             "standard_name": "unknown",
             "units": "W m**-2"
@@ -993,6 +1010,7 @@
                 "latitude",
                 "longitude"
             ],
+            "coordinates": "valid_time",
             "long_name": "Mean surface sensible heat flux",
             "standard_name": "unknown",
             "units": "W m**-2"
@@ -1067,6 +1085,7 @@
                 "longitude"
             ],
             "add_offset": 101000.0,
+            "coordinates": "valid_time",
             "long_name": "Pressure reduced to MSL",
             "standard_name": "unknown",
             "units": "Pa"
@@ -1140,6 +1159,7 @@
                 "latitude",
                 "longitude"
             ],
+            "coordinates": "valid_time",
             "long_name": "Precipitable water",
             "standard_name": "unknown",
             "units": "kg m**-2"
@@ -1214,6 +1234,7 @@
                 "longitude"
             ],
             "add_offset": 50.0,
+            "coordinates": "valid_time",
             "long_name": "2 metre relative humidity",
             "standard_name": "relative_humidity",
             "units": "%"
@@ -1287,6 +1308,7 @@
                 "latitude",
                 "longitude"
             ],
+            "coordinates": "valid_time",
             "long_name": "Snow depth",
             "standard_name": "lwe_thickness_of_surface_snow_amount",
             "units": "m"
@@ -1361,6 +1383,7 @@
                 "longitude"
             ],
             "add_offset": 300.0,
+            "coordinates": "valid_time",
             "long_name": "Surface downward long-wave radiation flux",
             "standard_name": "unknown",
             "units": "W m**-2"
@@ -1434,6 +1457,7 @@
                 "latitude",
                 "longitude"
             ],
+            "coordinates": "valid_time",
             "long_name": "Surface downward short-wave radiation flux",
             "standard_name": "unknown",
             "units": "W m**-2"
@@ -1507,6 +1531,7 @@
                 "latitude",
                 "longitude"
             ],
+            "coordinates": "valid_time",
             "long_name": "Water equivalent of accumulated snow depth (deprecated)",
             "standard_name": "unknown",
             "units": "kg m**-2"
@@ -1580,6 +1605,7 @@
                 "latitude",
                 "longitude"
             ],
+            "coordinates": "valid_time",
             "long_name": "Sea ice thickness",
             "standard_name": "unknown",
             "units": "m"
@@ -1653,6 +1679,7 @@
                 "latitude",
                 "longitude"
             ],
+            "coordinates": "valid_time",
             "long_name": "Volumetric soil moisture content",
             "standard_name": "unknown",
             "units": "Proportion"
@@ -1727,6 +1754,7 @@
                 "longitude"
             ],
             "add_offset": 100000.0,
+            "coordinates": "valid_time",
             "long_name": "Surface pressure",
             "standard_name": "surface_air_pressure",
             "units": "Pa"
@@ -1801,6 +1829,7 @@
                 "longitude"
             ],
             "add_offset": 273.15,
+            "coordinates": "valid_time",
             "long_name": "Soil temperature",
             "standard_name": "unknown",
             "units": "K"
@@ -1874,6 +1903,7 @@
                 "latitude",
                 "longitude"
             ],
+            "coordinates": "valid_time",
             "long_name": "Surface upward short-wave radiation flux",
             "standard_name": "unknown",
             "units": "W m**-2"
@@ -1948,6 +1978,7 @@
                 "longitude"
             ],
             "add_offset": 273.15,
+            "coordinates": "valid_time",
             "long_name": "2 metre temperature",
             "standard_name": "air_temperature",
             "units": "K"
@@ -2022,6 +2053,7 @@
                 "longitude"
             ],
             "add_offset": 50.0,
+            "coordinates": "valid_time",
             "long_name": "Total Cloud Cover",
             "standard_name": "unknown",
             "units": "%"
@@ -2096,6 +2128,7 @@
                 "longitude"
             ],
             "add_offset": 273.15,
+            "coordinates": "valid_time",
             "long_name": "Maximum temperature",
             "standard_name": "unknown",
             "units": "K"
@@ -2170,6 +2203,7 @@
                 "longitude"
             ],
             "add_offset": 273.15,
+            "coordinates": "valid_time",
             "long_name": "Minimum temperature",
             "standard_name": "unknown",
             "units": "K"
@@ -2243,6 +2277,7 @@
                 "latitude",
                 "longitude"
             ],
+            "coordinates": "valid_time",
             "long_name": "Total Precipitation",
             "standard_name": "unknown",
             "units": "kg m**-2"
@@ -2316,6 +2351,7 @@
                 "latitude",
                 "longitude"
             ],
+            "coordinates": "valid_time",
             "long_name": "10 metre U wind component",
             "standard_name": "eastward_wind",
             "units": "m s**-1"
@@ -2389,9 +2425,46 @@
                 "latitude",
                 "longitude"
             ],
+            "coordinates": "valid_time",
             "long_name": "10 metre V wind component",
             "standard_name": "northward_wind",
             "units": "m s**-1"
+        },
+        "valid_time/.zarray": {
+            "chunks": [
+                1,
+                81
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<i8",
+            "fill_value": null,
+            "filters": [
+                {
+                    "astype": "<i8",
+                    "dtype": "<i8",
+                    "id": "delta"
+                }
+            ],
+            "order": "C",
+            "shape": [
+                1,
+                81
+            ],
+            "zarr_format": 2
+        },
+        "valid_time/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time"
+            ],
+            "calendar": "proleptic_gregorian",
+            "units": "seconds since 1970-01-01"
         },
         "vis/.zarray": {
             "chunks": [
@@ -2463,6 +2536,7 @@
                 "longitude"
             ],
             "add_offset": 15000.0,
+            "coordinates": "valid_time",
             "long_name": "Visibility",
             "standard_name": "unknown",
             "units": "m"

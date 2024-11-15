@@ -1,14 +1,15 @@
 from collections.abc import Hashable
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 import pandas as pd
 import xarray as xr
-from numcodecs import BitRound, Blosc  # type: ignore
+from numcodecs import BitRound, Blosc, Delta  # type: ignore
 
 from common.config import Config  # noqa:F401
 from common.download_directory import cd_into_download_directory
-from common.types import DatetimeLike
+from common.types import DatetimeLike, StoreLike
 from noaa.gefs.forecast.read_data import download_file, read_file
 
 TEMPLATE_PATH = "noaa/gefs/forecast/templates/latest.zarr"
@@ -40,6 +41,42 @@ _CATEGORICAL_WITH_MISSING_DEFAULT = {
     "compressor": Blosc(cname="zstd", clevel=3, shuffle=Blosc.SHUFFLE),
 }
 _ENCODING = {
+    "init_time": {
+        "dtype": np.int64,
+        "filters": [Delta(np.int64)],
+        "compressor": Blosc(cname="zstd"),
+        "calendar": "proleptic_gregorian",
+        "units": "seconds since 1970-01-01 00:00:00",
+        "chunks": -1,
+    },
+    "ensemble_member": {
+        "dtype": np.uint16,
+        "chunks": -1,
+    },
+    "lead_time": {
+        "dtype": np.int64,
+        "compressor": Blosc(cname="zstd"),
+        "units": "seconds",
+        "chunks": -1,
+    },
+    "latitude": {
+        "dtype": np.float64,
+        "compressor": Blosc(cname="zstd"),
+        "chunks": -1,
+    },
+    "longitude": {
+        "dtype": np.float64,
+        "compressor": Blosc(cname="zstd"),
+        "chunks": -1,
+    },
+    "valid_time": {
+        "dtype": np.int64,
+        "filters": [Delta(np.int64)],
+        "compressor": Blosc(cname="zstd"),
+        "calendar": "proleptic_gregorian",
+        "units": "seconds since 1970-01-01 00:00:00",
+        "chunks": [-1, -1],
+    },
     "cfrzr": _CATEGORICAL_WITH_MISSING_DEFAULT,
     "cicep": _CATEGORICAL_WITH_MISSING_DEFAULT,
     "cpofp": _FLOAT_DEFAULT,
@@ -82,6 +119,13 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     ds = ds.reindex(init_time=_get_init_time_coordinates(init_time_end))
     # Init time chunks are 1 when stored, set them to desired.
     ds = ds.chunk(init_time=_CHUNKS["init_time"])
+    # Recompute valid time after reindex
+    ds.coords["valid_time"] = ds["init_time"] + ds["lead_time"]
+
+    # Coordinates which are dask arrays are not written with
+    # to_zarr(store, compute=False) so we ensure all coordinates are loaded.
+    for coordinate in ds.coords.values():
+        assert isinstance(coordinate.data, np.ndarray)
 
     # Uncomment to make smaller zarr while developing
     # if Config.is_dev():
@@ -132,13 +176,28 @@ def update_template() -> None:
             .chunk(_CHUNKS)
         )
 
-        for var_name in ds.data_vars.keys():
-            ds[var_name].encoding = _ENCODING[var_name]
+        # Remove left over coordinates encoding for coords we don't keep
+        for data_var in ds.data_vars.values():
+            del data_var.encoding["coordinates"]
 
-        # TODO
-        # Explicit coords encoding
-        # Improve metadata
-        ds.to_zarr(template_path, mode="w", compute=False)
+        # This could be computed by users on the fly, but it compresses
+        # really well so lets make things easy for users
+        ds.coords["valid_time"] = ds["init_time"] + ds["lead_time"]
+
+        ds_keys = list(ds.keys()) + list(ds.coords.keys())
+        if len(missing_encodings := [v for v in ds_keys if v not in _ENCODING]) != 0:
+            raise ValueError(f"Missing encodings for {missing_encodings}")
+
+        write_metadata(ds, template_path, mode="w")
+
+
+def write_metadata(
+    template_ds: xr.Dataset,
+    store: StoreLike,
+    mode: Literal["w", "w-", "a", "a-", "r+", "r"],
+) -> None:
+    template_ds.to_zarr(store, mode=mode, compute=False, encoding=_ENCODING)
+    print(f"Wrote metadata to {store} with mode {mode}.")
 
 
 def chunk_args(ds: xr.Dataset) -> dict[Hashable, int]:

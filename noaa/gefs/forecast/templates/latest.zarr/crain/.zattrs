@@ -34,6 +34,7 @@
         "latitude",
         "longitude"
     ],
+    "coordinates": "valid_time",
     "long_name": "Categorical rain",
     "standard_name": "unknown",
     "units": "(Code table 4.222)"

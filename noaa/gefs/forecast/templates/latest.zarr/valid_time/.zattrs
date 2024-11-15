@@ -1,6 +1,7 @@
 {
     "_ARRAY_DIMENSIONS": [
-        "init_time"
+        "init_time",
+        "lead_time"
     ],
     "calendar": "proleptic_gregorian",
     "units": "seconds since 1970-01-01"

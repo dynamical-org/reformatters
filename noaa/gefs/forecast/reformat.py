@@ -27,8 +27,7 @@ def reformat_local(init_time_end: DatetimeLike) -> None:
     template_ds = template.get_template(init_time_end)
     store = get_store()
 
-    print("Writing zarr metadata")
-    template_ds.to_zarr(store, mode=get_mode(store), compute=False)
+    template.write_metadata(template_ds, store, get_mode(store))
 
     print("Starting reformat")
     # Process all chunks
@@ -66,7 +65,7 @@ def reformat_kubernetes(
 
     store = get_store()
     print("Writing zarr metadata")
-    template_ds.to_zarr(store, mode=get_mode(store), compute=False)
+    template.write_metadata(template_ds, store, get_mode(store))
 
     num_jobs = sum(1 for _ in chunk_i_slices(template_ds, _PROCESSING_CHUNK_DIMENSION))
     workers_total = int(np.ceil(num_jobs / jobs_per_pod))

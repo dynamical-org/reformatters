@@ -34,6 +34,7 @@
         "latitude",
         "longitude"
     ],
+    "coordinates": "valid_time",
     "long_name": "Snow depth",
     "standard_name": "lwe_thickness_of_surface_snow_amount",
     "units": "m"
