@@ -1,6 +1,7 @@
 import functools
+import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import cfgrib  # type: ignore
 import pandas as pd
@@ -15,7 +16,9 @@ _STATISTIC_LONG_NAME = {"avg": "ensemble mean", "spr": "ensemble spread"}
 def download_file(
     init_time: pd.Timestamp,
     ensemble_member: str | int,
+    source_file_kind: Literal["a", "b", "s/a"],
     lead_time: pd.Timedelta,
+    noaa_idx_data_vars: list[str],
     directory: Path,
 ) -> Path:
     lead_time_hours = lead_time.total_seconds() / (60 * 60)
@@ -29,9 +32,17 @@ def download_file(
         prefix = "c" if ensemble_member == 0 else "p"
         ensemble_member = f"{prefix}{ensemble_member:02}"
 
+    if source_file_kind == "s/a":
+        if lead_time_hours <= 240:
+            true_source_file_kind = "s"
+        else:
+            true_source_file_kind = "a"
+    else:
+        true_source_file_kind = source_file_kind
+
     file_path = (
         f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2sp25/"
-        f"ge{ensemble_member}.t{init_hour_str}z.pgrb2s.0p25.f{lead_time_hours:03.0f}"
+        f"ge{ensemble_member}.t{init_hour_str}z.pgrb2{true_source_file_kind}.0p25.f{lead_time_hours:03.0f}"
     )
     url = f"https://storage.googleapis.com/gfs-ensemble-forecast-system/{file_path}"
 
@@ -41,15 +52,27 @@ def download_file(
     # all files in `directory`.
     local_path = Path(directory, file_path.replace("/", "-"))
 
+    idx_url = f"{url}.idx"
+    idx_local_path = Path(f"{local_path}.idx")
+    download_to_disk(idx_url, idx_local_path, overwrite_existing=not Config.is_dev())
+
+    # TODO pickup here
+    parse_index_byte_ranges(idx_local_path, noaa_idx_data_vars)
+
     download_to_disk(url, local_path, overwrite_existing=not Config.is_dev())
 
-    # NOAA's grib indexes are not readible by eccodes. We may want to download them
-    # if we want to download just a selection of bands.
-    # idx_url = f"{url}.idx"
-    # idx_local_path = Path(f"{local_path}.idx")
-    # download_to_disk(idx_url, idx_local_path, overwrite_existing=not Config.is_dev())
-
     return local_path
+
+
+def parse_index_byte_ranges(
+    idx_local_path: Path, noaa_idx_data_vars: list[str]
+) -> None:
+    with open(idx_local_path) as index_file:
+        # TODO this regex doesn't handle the case when the variable is the last in the index
+        matches = re.findall(
+            r"\d+:(\d+):.+:{index_variable_str}:.+:\n\d+:(\d+)", index_file.read()
+        )
+        assert len(matches) == 1, f"Expected exactly 1 match, found {matches}"
 
 
 def read_file(file_name: str) -> xr.Dataset:

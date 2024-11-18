@@ -164,7 +164,12 @@ def update_template() -> None:
     # Use a lead time > 0 because not all variables are present at lead time == 0.
     with cd_into_download_directory() as directory:
         path = download_file(
-            pd.Timestamp("2024-01-01T00:00"), 0, pd.Timedelta("3h"), directory
+            pd.Timestamp("2024-01-01T00:00"),
+            0,
+            "s/a",
+            pd.Timedelta("3h"),
+            ["u10"],
+            directory,
         )
         ds = read_file(path.name)
 
