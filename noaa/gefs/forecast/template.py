@@ -107,8 +107,73 @@ _ENCODING = {
     "tmin": {**_FLOAT_DEFAULT, "add_offset": 273.15},
     "tp": _FLOAT_DEFAULT,
     "u10": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
+    "u100": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
     "v10": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
+    "v100": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
     "vis": {**_FLOAT_DEFAULT, "add_offset": 15_000.0},
+}
+
+# TODO: Some of the s+a should actually be s+b, check the
+# index files to see which one.
+_CUSTOM_ATTRIBUTES = {
+    "cfrzr": {
+        "noaa_file_type": "s+a",
+        "noaa_variable": "CFRZR",
+        "noaa_level": "surface",
+    },
+    "cicep": {"noaa_file_type": "s+a"},
+    "cpofp": {"noaa_file_type": "s+a"},
+    "crain": {"noaa_file_type": "s+a"},
+    "csnow": {"noaa_file_type": "s+a"},
+    "d2m": {"noaa_file_type": "s+a"},
+    "gh": {"noaa_file_type": "s+a"},
+    "gust": {"noaa_file_type": "s+a"},
+    "hlcy": {"noaa_file_type": "s+a"},
+    "mslet": {"noaa_file_type": "s+a"},
+    "mslhf": {"noaa_file_type": "s+a"},
+    "msshf": {"noaa_file_type": "s+a"},
+    "prmsl": {"noaa_file_type": "s+a"},
+    "pwat": {"noaa_file_type": "s+a"},
+    "r2": {"noaa_file_type": "s+a"},
+    "sde": {"noaa_file_type": "s+a"},
+    "sdlwrf": {"noaa_file_type": "s+a"},
+    "sdswrf": {"noaa_file_type": "s+a"},
+    "sdwe": {"noaa_file_type": "s+a"},
+    "sithick": {"noaa_file_type": "s+a"},
+    "soilw": {"noaa_file_type": "s+a"},
+    "sp": {"noaa_file_type": "s+a"},
+    "st": {"noaa_file_type": "s+a"},
+    "suswrf": {"noaa_file_type": "s+a"},
+    "t2m": {
+        "noaa_file_type": "s+a",
+        "noaa_variable": "TMP",
+        "noaa_level": "2 m above ground",
+    },
+    "tcc": {"noaa_file_type": "s+a"},
+    "tmax": {"noaa_file_type": "s+a"},
+    "tmin": {"noaa_file_type": "s+a"},
+    "tp": {"noaa_file_type": "s+a"},
+    "u10": {
+        "noaa_file_type": "s+a",
+        "noaa_variable": "UGRD",
+        "noaa_level": "10 m above ground",
+    },
+    "u100": {
+        "noaa_file_type": "b",
+        "noaa_variable": "UGRD",
+        "noaa_level": "100 m above ground",
+    },
+    "v10": {
+        "noaa_file_type": "s+a",
+        "noaa_variable": "VGRD",
+        "noaa_level": "10 m above ground",
+    },
+    "v100": {
+        "noaa_file_type": "b",
+        "noaa_variable": "VGRD",
+        "noaa_level": "100 m above ground",
+    },
+    "vis": {"noaa_file_type": "s+b", "noaa_variable": "VIS", "noaa_level": "surface"},
 }
 
 
@@ -128,8 +193,8 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
         assert isinstance(coordinate.data, np.ndarray)
 
     # Uncomment to make smaller zarr while developing
-    # if Config.is_dev():
-    #     ds = ds.isel(ensemble_member=slice(5), lead_time=slice(24))
+    if Config.is_dev():
+        ds = ds.isel(ensemble_member=slice(5), lead_time=slice(24))
 
     return ds
 
@@ -166,9 +231,9 @@ def update_template() -> None:
         path = download_file(
             pd.Timestamp("2024-01-01T00:00"),
             0,
-            "s/a",
+            "s+a",
             pd.Timedelta("3h"),
-            ["u10"],
+            [_CUSTOM_ATTRIBUTES[var] for var in ["u10"]],
             directory,
         )
         ds = read_file(path.name)
@@ -188,6 +253,10 @@ def update_template() -> None:
         # This could be computed by users on the fly, but it compresses
         # really well so lets make things easy for users
         ds.coords["valid_time"] = ds["init_time"] + ds["lead_time"]
+
+        # Add custom attributes
+        for var_name, data_var in ds.data_vars.items():
+            data_var.attrs.update(_CUSTOM_ATTRIBUTES[var_name])
 
         ds_keys = list(ds.keys()) + list(ds.coords.keys())
         if len(missing_encodings := [v for v in ds_keys if v not in _ENCODING]) != 0:

@@ -16,9 +16,9 @@ _STATISTIC_LONG_NAME = {"avg": "ensemble mean", "spr": "ensemble spread"}
 def download_file(
     init_time: pd.Timestamp,
     ensemble_member: str | int,
-    source_file_kind: Literal["a", "b", "s/a"],
+    noaa_file_kind: Literal["a", "b", "s+a", "s+b"],
     lead_time: pd.Timedelta,
-    noaa_idx_data_vars: list[str],
+    noaa_idx_data_vars: list[dict[str, str]],
     directory: Path,
 ) -> Path:
     lead_time_hours = lead_time.total_seconds() / (60 * 60)
@@ -32,17 +32,22 @@ def download_file(
         prefix = "c" if ensemble_member == 0 else "p"
         ensemble_member = f"{prefix}{ensemble_member:02}"
 
-    if source_file_kind == "s/a":
+    if noaa_file_kind == "s+a":
         if lead_time_hours <= 240:
-            true_source_file_kind = "s"
+            true_noaa_file_kind = "s"
         else:
-            true_source_file_kind = "a"
+            true_noaa_file_kind = "a"
+    elif noaa_file_kind == "s+b":
+        if lead_time_hours <= 240:
+            true_noaa_file_kind = "s"
+        else:
+            true_noaa_file_kind = "b"
     else:
-        true_source_file_kind = source_file_kind
+        true_noaa_file_kind = noaa_file_kind
 
     file_path = (
         f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2sp25/"
-        f"ge{ensemble_member}.t{init_hour_str}z.pgrb2{true_source_file_kind}.0p25.f{lead_time_hours:03.0f}"
+        f"ge{ensemble_member}.t{init_hour_str}z.pgrb2{true_noaa_file_kind}.0p25.f{lead_time_hours:03.0f}"
     )
     url = f"https://storage.googleapis.com/gfs-ensemble-forecast-system/{file_path}"
 
@@ -65,14 +70,25 @@ def download_file(
 
 
 def parse_index_byte_ranges(
-    idx_local_path: Path, noaa_idx_data_vars: list[str]
-) -> None:
+    idx_local_path: Path, noaa_idx_data_vars: list[dict[str, str]]
+) -> tuple[str, str]:
     with open(idx_local_path) as index_file:
-        # TODO this regex doesn't handle the case when the variable is the last in the index
+        index_contents = index_file.read()
+    for var_info in noaa_idx_data_vars:
+        noaa_variable = var_info["noaa_variable"]
+        noaa_level = var_info["noaa_level"]
         matches = re.findall(
-            r"\d+:(\d+):.+:{index_variable_str}:.+:\n\d+:(\d+)", index_file.read()
+            f"\\d+:(\\d+):.+:{noaa_variable}:{noaa_level}:.+(\\n\\d+:(\\d+))?",
+            index_contents,
         )
         assert len(matches) == 1, f"Expected exactly 1 match, found {matches}"
+        match = matches[0]
+        start_byte = match[0]
+        if len(match) == 3:
+            end_byte = match[2]
+        else:
+            end_byte = ""
+    return (start_byte, end_byte)
 
 
 def read_file(file_name: str) -> xr.Dataset:

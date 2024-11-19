@@ -186,8 +186,8 @@ def get_worker_jobs[T](
 
 
 def get_store() -> StoreLike:
-    # if Config.is_dev():
-    #     return Path("data/output/noaa/gefs/forecast/dev.zarr").absolute()
+    if Config.is_dev():
+        return Path("data/output/noaa/gefs/forecast/dev.zarr").absolute()
 
     s3 = s3fs.S3FileSystem()
 
