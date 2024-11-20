@@ -7,6 +7,7 @@ import cfgrib  # type: ignore
 import pandas as pd
 import requests
 import xarray as xr
+from more_itertools import chunked
 
 from common.config import Config
 
@@ -62,7 +63,14 @@ def download_file(
     download_to_disk(idx_url, idx_local_path, overwrite_existing=not Config.is_dev())
 
     # TODO pickup here
-    parse_index_byte_ranges(idx_local_path, noaa_idx_data_vars)
+    byte_range_starts, byte_range_ends = parse_index_byte_ranges(
+        idx_local_path, noaa_idx_data_vars
+    )
+    chunk_starts = chunked(byte_range_starts, 3)
+    chunk_ends = chunked(byte_range_ends, 3)
+    print(chunk_starts, chunk_ends)
+
+    # TODO use obstore get_ranges_async to download the portions of each file.
 
     download_to_disk(url, local_path, overwrite_existing=not Config.is_dev())
 
@@ -71,9 +79,11 @@ def download_file(
 
 def parse_index_byte_ranges(
     idx_local_path: Path, noaa_idx_data_vars: list[dict[str, str]]
-) -> tuple[str, str]:
+) -> tuple[list[int], list[int]]:
     with open(idx_local_path) as index_file:
         index_contents = index_file.read()
+    byte_range_starts = []
+    byte_range_ends = []
     for var_info in noaa_idx_data_vars:
         noaa_variable = var_info["noaa_variable"]
         noaa_level = var_info["noaa_level"]
@@ -83,12 +93,18 @@ def parse_index_byte_ranges(
         )
         assert len(matches) == 1, f"Expected exactly 1 match, found {matches}"
         match = matches[0]
-        start_byte = match[0]
+        start_byte = int(match[0])
         if len(match) == 3:
-            end_byte = match[2]
+            end_byte = int(match[2])
         else:
-            end_byte = ""
-    return (start_byte, end_byte)
+            # TODO run a head request to get the final value,
+            # obstore does not support omitting the end byte
+            # to go all the way to the end.
+            end_byte = -1
+
+        byte_range_starts.append(start_byte)
+        byte_range_ends.append(end_byte)
+    return byte_range_starts, byte_range_ends
 
 
 def read_file(file_name: str) -> xr.Dataset:
