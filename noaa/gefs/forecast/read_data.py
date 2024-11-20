@@ -1,7 +1,6 @@
 import functools
 import re
 from collections.abc import Sequence
-from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal
 
@@ -64,15 +63,22 @@ def download_file(
     idx_remote_path = f"{remote_path}.idx"
     idx_local_path = Path(f"{local_path}.idx")
 
+    store = http_store()
     download_to_disk(
-        idx_remote_path, idx_local_path, overwrite_existing=not Config.is_dev()
+        store, idx_remote_path, idx_local_path, overwrite_existing=not Config.is_dev()
     )
 
     byte_range_starts, byte_range_ends = parse_index_byte_ranges(
         idx_local_path, noaa_idx_data_vars
     )
 
-    download_to_disk(remote_path, local_path, overwrite_existing=not Config.is_dev())
+    download_to_disk(
+        store,
+        remote_path,
+        local_path,
+        overwrite_existing=not Config.is_dev(),
+        byte_ranges=(byte_range_starts, byte_range_ends),
+    )
 
     return local_path
 
@@ -94,7 +100,7 @@ def parse_index_byte_ranges(
         assert len(matches) == 1, f"Expected exactly 1 match, found {matches}"
         match = matches[0]
         start_byte = int(match[0])
-        if len(match) == 3:
+        if match[2] != "":
             end_byte = int(match[2])
         else:
             # TODO run a head request to get the final value,
@@ -213,23 +219,23 @@ def download_to_disk(
     path: str,
     local_path: Path,
     *,
-    byte_ranges: Sequence[tuple[int, int]] | None = None,
+    byte_ranges: tuple[Sequence[int], Sequence[int]] | None = None,
     overwrite_existing: bool,
 ) -> None:
     if not overwrite_existing and local_path.exists():
         return
 
-    headers = {}
-    if byte_ranges is not None:
-        ranges = [
-            f"{start}-{stop if stop is not None else ''}" for start, stop in byte_ranges
-        ]
-        headers = {"Range": f"bytes={','.join(ranges)}"}
-
     local_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with http_session().get(url, stream=True, headers=headers) as response:
-        response.raise_for_status()
+    if byte_ranges is not None:
+        # TODO use get_ranges_async instead
+        res = obstore.get_ranges(
+            store=store, path=path, starts=byte_ranges[0], ends=byte_ranges[1]
+        )
         with open(local_path, "wb") as file:
-            for chunk in response.iter_content(chunk_size=None):
-                file.write(chunk)
+            for chunk in res:
+                file.write(chunk.as_bytes())
+    else:
+        res = obstore.get(store, path)
+        with open(local_path, "wb") as file:
+            file.write(res.bytes())

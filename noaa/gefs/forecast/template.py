@@ -132,7 +132,11 @@ _CUSTOM_ATTRIBUTES = {
     "mslet": {"noaa_file_type": "s+a"},
     "mslhf": {"noaa_file_type": "s+a"},
     "msshf": {"noaa_file_type": "s+a"},
-    "prmsl": {"noaa_file_type": "s+a"},
+    "prmsl": {
+        "noaa_file_type": "s+a",
+        "noaa_variable": "PRMSL",
+        "noaa_level": "mean sea level",
+    },
     "pwat": {"noaa_file_type": "s+a"},
     "r2": {"noaa_file_type": "s+a"},
     "sde": {"noaa_file_type": "s+a"},
