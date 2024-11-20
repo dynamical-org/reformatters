@@ -1,17 +1,21 @@
 import functools
 import re
+from collections.abc import Sequence
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal
 
 import cfgrib  # type: ignore
+import obstore
 import pandas as pd
 import requests
 import xarray as xr
-from more_itertools import chunked
 
 from common.config import Config
 
 _STATISTIC_LONG_NAME = {"avg": "ensemble mean", "spr": "ensemble spread"}
+
+_VARIABLES_PER_CHUNK = 3
 
 
 def download_file(
@@ -46,33 +50,29 @@ def download_file(
     else:
         true_noaa_file_kind = noaa_file_kind
 
-    file_path = (
+    remote_path = (
         f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2sp25/"
         f"ge{ensemble_member}.t{init_hour_str}z.pgrb2{true_noaa_file_kind}.0p25.f{lead_time_hours:03.0f}"
     )
-    url = f"https://storage.googleapis.com/gfs-ensemble-forecast-system/{file_path}"
 
     # Eccodes index files break unless the process working directory is the same as
     # where the files are. To process many files in parallel, we need them all
     # to be in the same directory so we replace / -> - in the file names to put
     # all files in `directory`.
-    local_path = Path(directory, file_path.replace("/", "-"))
+    local_path = Path(directory, remote_path.replace("/", "-"))
 
-    idx_url = f"{url}.idx"
+    idx_remote_path = f"{remote_path}.idx"
     idx_local_path = Path(f"{local_path}.idx")
-    download_to_disk(idx_url, idx_local_path, overwrite_existing=not Config.is_dev())
 
-    # TODO pickup here
+    download_to_disk(
+        idx_remote_path, idx_local_path, overwrite_existing=not Config.is_dev()
+    )
+
     byte_range_starts, byte_range_ends = parse_index_byte_ranges(
         idx_local_path, noaa_idx_data_vars
     )
-    chunk_starts = chunked(byte_range_starts, 3)
-    chunk_ends = chunked(byte_range_ends, 3)
-    print(chunk_starts, chunk_ends)
 
-    # TODO use obstore get_ranges_async to download the portions of each file.
-
-    download_to_disk(url, local_path, overwrite_existing=not Config.is_dev())
+    download_to_disk(remote_path, local_path, overwrite_existing=not Config.is_dev())
 
     return local_path
 
@@ -100,7 +100,9 @@ def parse_index_byte_ranges(
             # TODO run a head request to get the final value,
             # obstore does not support omitting the end byte
             # to go all the way to the end.
-            end_byte = -1
+            raise NotImplementedError(
+                "special handling needed for last variable in index"
+            )
 
         byte_range_starts.append(start_byte)
         byte_range_ends.append(end_byte)
@@ -158,6 +160,31 @@ class DefaultTimeoutHTTPAdapter(requests.adapters.HTTPAdapter):
 
 
 @functools.cache
+def http_store() -> obstore.store.HTTPStore:
+    """
+    A obstore.store.HTTPStore tuned to maximize chance of success at the expense
+    of latency, while not waiting indefinitely for unresponsive servers.
+    """
+    return obstore.store.HTTPStore.from_url(
+        "https://storage.googleapis.com/gfs-ensemble-forecast-system",
+        # client_options={
+        #     "connect_timeout": "4",
+        #     "timeout": "16",
+        # },
+        # retry_config={
+        #     "max_retries": 10,
+        #     "backoff": {
+        #         "base": 2,
+        #         "init_backoff": timedelta(seconds=1),
+        #         "max_backoff": timedelta(seconds=16),
+        #     },
+        #     # A backstop, shouldn't hit this with the above backoff settings
+        #     "retry_timeout": timedelta(minutes=3),
+        # },
+    )
+
+
+@functools.cache
 def http_session() -> requests.Session:
     """
     A requests.Session tuned to maximize chance of success at the expense of latency,
@@ -181,13 +208,27 @@ def http_session() -> requests.Session:
     return session
 
 
-def download_to_disk(url: str, local_path: Path, *, overwrite_existing: bool) -> None:
+def download_to_disk(
+    store: obstore.store.HTTPStore,
+    path: str,
+    local_path: Path,
+    *,
+    byte_ranges: Sequence[tuple[int, int]] | None = None,
+    overwrite_existing: bool,
+) -> None:
     if not overwrite_existing and local_path.exists():
         return
 
+    headers = {}
+    if byte_ranges is not None:
+        ranges = [
+            f"{start}-{stop if stop is not None else ''}" for start, stop in byte_ranges
+        ]
+        headers = {"Range": f"bytes={','.join(ranges)}"}
+
     local_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with http_session().get(url, stream=True) as response:
+    with http_session().get(url, stream=True, headers=headers) as response:
         response.raise_for_status()
         with open(local_path, "wb") as file:
             for chunk in response.iter_content(chunk_size=None):
