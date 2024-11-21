@@ -28,7 +28,7 @@ def download_file(
     lead_time: pd.Timedelta,
     noaa_idx_data_vars: list[dict[str, str]],
     directory: Path,
-) -> Path:
+) -> tuple[tuple[pd.Timestamp, str | int, pd.Timedelta], Path]:
     lead_time_hours = lead_time.total_seconds() / (60 * 60)
     if lead_time_hours != round(lead_time_hours):
         raise ValueError(f"Lead time {lead_time} must be a whole number of hours")
@@ -38,8 +38,10 @@ def download_file(
     if not isinstance(ensemble_member, str):
         # control or perterbed ensemble member
         prefix = "c" if ensemble_member == 0 else "p"
-        ensemble_member = f"{prefix}{ensemble_member:02}"
+        formatted_ensemble_member = f"{prefix}{ensemble_member:02}"
 
+    # TODO: handle the variables that do not exist in the 0 lead time,
+    # but exist in later lead times.
     if noaa_file_kind == "s+a":
         if lead_time_hours <= 240:
             true_noaa_file_kind = "s"
@@ -55,7 +57,7 @@ def download_file(
 
     remote_path = (
         f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2sp25/"
-        f"ge{ensemble_member}.t{init_hour_str}z.pgrb2{true_noaa_file_kind}.0p25.f{lead_time_hours:03.0f}"
+        f"ge{formatted_ensemble_member}.t{init_hour_str}z.pgrb2{true_noaa_file_kind}.0p25.f{lead_time_hours:03.0f}"
     )
 
     store = http_store("https://storage.googleapis.com/gfs-ensemble-forecast-system")
@@ -91,7 +93,7 @@ def download_file(
         byte_ranges=(byte_range_starts, byte_range_ends),
     )
 
-    return local_path
+    return (init_time, ensemble_member, lead_time), local_path
 
 
 def parse_index_byte_ranges(
@@ -107,7 +109,9 @@ def parse_index_byte_ranges(
             f"\\d+:(\\d+):.+:{var_match_str}:.+(\\n\\d+:(\\d+))?",
             index_contents,
         )
-        assert len(matches) == 1, f"Expected exactly 1 match, found {matches}"
+        assert (
+            len(matches) == 1
+        ), f"Expected exactly 1 match, found {matches}, {var_info=}"
         match = matches[0]
         start_byte = int(match[0])
         if match[2] != "":

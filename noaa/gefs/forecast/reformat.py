@@ -5,7 +5,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from functools import partial
-from itertools import islice, starmap
+from itertools import islice, product, starmap
 from pathlib import Path
 from typing import Literal
 
@@ -164,7 +164,11 @@ def reformat_chunks(
 
     print(f"This is {worker_index = }, {workers_total = }, {worker_init_time_i_slices}")
 
-    breakpoint()
+    # TODO pass in template_ds.data_vars.keys() instead of hard-coded list
+    # used for testing
+    data_var_groups = group_data_vars_by_noaa_file_type(
+        ["u10", "t2m"], template._CUSTOM_ATTRIBUTES
+    )
 
     thread_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
     # If we compile eccodes ourselves with thread safety enabled we could use threads for reading
@@ -177,59 +181,65 @@ def reformat_chunks(
 
         chunk_init_times = pd.to_datetime(chunk_template_ds["init_time"].values)
         chunk_lead_times = pd.to_timedelta(chunk_template_ds["lead_time"].values)
-        chunk_ensemble_members = chunk_template_ds["ensemble_member"]
+        chunk_ensemble_members = chunk_template_ds["ensemble_member"].values
 
         chunk_init_times_str = ", ".join(chunk_init_times.strftime("%Y-%m-%dT%H:%M"))
         print("Starting chunk with init times", chunk_init_times_str)
 
         with cd_into_download_directory() as directory:
-            init_time_datasets = []
-            for init_time in chunk_init_times:
-                ensemble_member_datasets = []
-                for ensemble_member in chunk_ensemble_members:
-                    print("Downloading files")
-                    download = partial(
-                        download_file, init_time, ensemble_member, directory=directory
-                    )
-                    file_paths = tuple(thread_executor.map(download, chunk_lead_times))
-                    file_names = [path.name for path in file_paths]
-                    print("Reading datasets")
-                    datasets = tuple(proccess_executor.map(read_file, file_names))
-
-                    print(
-                        f"Concatenating lead times for ensemble member {ensemble_member.item()} of {init_time}"
-                    )
-                    ensemble_member_ds = xr.concat(
-                        datasets, dim="lead_time", join="exact"
-                    )
-
-                    # TODO decide on complete set of variables to include
-                    if "orog" in ensemble_member_ds:
-                        ensemble_member_ds = ensemble_member_ds.drop_vars("orog")
-
-                    ensemble_member_datasets.append(ensemble_member_ds)
-
-                print("concatenating ensemble members for init time", init_time)
-                init_time_ds = xr.concat(
-                    ensemble_member_datasets, dim="ensemble_member", join="exact"
+            for source_file_kind, data_vars in data_var_groups:
+                print("Downloading files")
+                coords_and_file_paths = thread_executor.map(
+                    lambda chunk_init_time,
+                    chunk_ensemble_member,
+                    chunk_lead_time: download_file(
+                        init_time=chunk_init_time,
+                        ensemble_member=chunk_ensemble_member,
+                        noaa_file_kind=source_file_kind,  # TODO type custom attributes dict? be less strict?
+                        lead_time=chunk_lead_time,
+                        noaa_idx_data_vars=[
+                            template._CUSTOM_ATTRIBUTES[var] for var in data_vars
+                        ],
+                        directory=directory,
+                    ),
+                    chunk_init_times,
+                    chunk_ensemble_members,
+                    chunk_lead_times,
                 )
-                init_time_datasets.append(init_time_ds)
 
-            print("concatenating init times in chunk", chunk_init_times_str)
-            chunk_ds = xr.concat(init_time_datasets, dim="init_time", join="exact")
+                # Write variable by variable to avoid blowing up memory usage
+                for data_var in data_vars:
+                    # TODO: what is the best data type to pre-fill an empty
+                    # dataset with?
+                    data_array = xr.full_like(template_ds[data_var], np.nan)
+                    # TODO: Do we need to cut this down more or can we keep the whole chunk for a given var
+                    # in memory?
+                    for coords, file_path in coords_and_file_paths:
+                        print("Reading datasets")
+                        # TODO can we pass data_var into read_file
+                        # and only read that chunk of the grib?
+                        ds = read_file(file_path.name)
+                        data_array.loc[
+                            dict(
+                                init_time=coords[0],
+                                ensemble_member=coords[1],
+                                lead_time=coords[2],
+                            )
+                        ] = ds[data_var].loc[
+                            dict(
+                                init_time=coords[0],
+                                ensemble_member=coords[1],
+                                lead_time=coords[2],
+                            )
+                        ]
+                    print(f"Writing {data_var} {chunk_init_times_str}")
+                    chunks = template.chunk_args(template_ds)
+                    breakpoint()
+                    data_array.chunk(chunks).to_zarr(store, region="auto")
 
-            # Write variable by variable to avoid blowing up memory usage
-            for var_key in template_ds.data_vars.keys():
-                if var_key not in chunk_ds:
-                    continue  # TODO decide on complete set of variables to include
-                print(f"Writing {var_key} {chunk_init_times_str}")
-                chunks = template.chunk_args(template_ds)
-                chunk_ds[var_key].chunk(chunks).to_zarr(store, region="auto")
 
-
-# TODO
 def group_data_vars_by_noaa_file_type(
-    data_vars: list[str], data_var_attributes: dict[str, dict[str, str]]
+    data_vars: Iterable[str], data_var_attributes: dict[str, dict[str, str]]
 ) -> list[tuple[str, list[str]]]:
     grouper = defaultdict(list)
     for data_var in data_vars:
@@ -243,13 +253,6 @@ def group_data_vars_by_noaa_file_type(
         )
 
     return chunks
-
-
-# [
-#     ("s+a", ["t2m", "v10"]),
-#     ("s+a", ["..", ".."]),
-#     ("b", ["..", ".."]),
-#  ]
 
 
 def get_worker_jobs[T](
