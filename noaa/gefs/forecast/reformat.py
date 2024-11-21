@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import s3fs  # type: ignore
 import xarray as xr
+from more_itertools import chunked
 
 from common import string_template
 from common.config import Config  # noqa:F401
@@ -182,8 +183,21 @@ def reformat_chunks(
 
 
 # TODO
-def group_data_vars_by_noaa_file_type() -> dict[str : list[list[str]]]:
-    # grouper = defaultdict(list)
+def group_data_vars_by_noaa_file_type(
+    data_vars: list[str], data_var_attributes: dict[str, dict[str, str]]
+) -> list[tuple[str, list[str]]]:
+    grouper = defaultdict(list)
+    for data_var in data_vars:
+        noaa_file_type = data_var_attributes[data_var]["noaa_file_type"]
+        grouper[noaa_file_type].append(data_var)
+    chunks = []
+    for file_type, data_vars in grouper.items():
+        # TODO first sort data_vars by order within the grib
+        chunks.extend(
+            [(file_type, data_vars_chunk) for data_vars_chunk in chunked(data_vars, 3)]
+        )
+
+    return chunks
 
 
 # [
