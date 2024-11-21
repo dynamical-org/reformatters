@@ -107,9 +107,9 @@ _ENCODING = {
     "tmin": {**_FLOAT_DEFAULT, "add_offset": 273.15},
     "tp": _FLOAT_DEFAULT,
     "u10": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
-    "u100": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
+    # "u100": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
     "v10": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
-    "v100": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
+    # "v100": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
     "vis": {**_FLOAT_DEFAULT, "add_offset": 15_000.0},
 }
 
@@ -237,7 +237,7 @@ def update_template() -> None:
             0,
             "s+a",
             pd.Timedelta("3h"),
-            [_CUSTOM_ATTRIBUTES[var] for var in ["u10"]],
+            [_CUSTOM_ATTRIBUTES[var] for var in ["u10", "t2m"]],
             directory,
         )
         ds = read_file(path.name)

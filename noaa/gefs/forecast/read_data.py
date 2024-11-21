@@ -1,6 +1,9 @@
+import contextlib
 import functools
+import hashlib
+import os
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal
@@ -55,16 +58,17 @@ def download_file(
         f"ge{ensemble_member}.t{init_hour_str}z.pgrb2{true_noaa_file_kind}.0p25.f{lead_time_hours:03.0f}"
     )
 
+    store = http_store("https://storage.googleapis.com/gfs-ensemble-forecast-system")
+
     # Eccodes index files break unless the process working directory is the same as
     # where the files are. To process many files in parallel, we need them all
     # to be in the same directory so we replace / -> - in the file names to put
     # all files in `directory`.
-    local_path = Path(directory, remote_path.replace("/", "-"))
+    local_base_file_name = remote_path.replace("/", "_")
 
     idx_remote_path = f"{remote_path}.idx"
-    idx_local_path = Path(f"{local_path}.idx")
+    idx_local_path = Path(f"{local_base_file_name}.idx")
 
-    store = http_store()
     download_to_disk(
         store, idx_remote_path, idx_local_path, overwrite_existing=not Config.is_dev()
     )
@@ -72,6 +76,12 @@ def download_file(
     byte_range_starts, byte_range_ends = parse_index_byte_ranges(
         idx_local_path, noaa_idx_data_vars
     )
+
+    # Create a unique suffix representing the data vars stored in the output file
+    vars_str = "-".join(var_info["noaa_variable"] for var_info in noaa_idx_data_vars)
+    vars_hash = digest(format_noaa_idx_var(var_info) for var_info in noaa_idx_data_vars)
+    vars_suffix = f"{vars_str}-{vars_hash}"
+    local_path = Path(directory, f"{local_base_file_name}.{vars_suffix}")
 
     download_to_disk(
         store,
@@ -92,10 +102,9 @@ def parse_index_byte_ranges(
     byte_range_starts = []
     byte_range_ends = []
     for var_info in noaa_idx_data_vars:
-        noaa_variable = var_info["noaa_variable"]
-        noaa_level = var_info["noaa_level"]
+        var_match_str = format_noaa_idx_var(var_info)
         matches = re.findall(
-            f"\\d+:(\\d+):.+:{noaa_variable}:{noaa_level}:.+(\\n\\d+:(\\d+))?",
+            f"\\d+:(\\d+):.+:{var_match_str}:.+(\\n\\d+:(\\d+))?",
             index_contents,
         )
         assert len(matches) == 1, f"Expected exactly 1 match, found {matches}"
@@ -114,6 +123,22 @@ def parse_index_byte_ranges(
         byte_range_starts.append(start_byte)
         byte_range_ends.append(end_byte)
     return byte_range_starts, byte_range_ends
+
+
+def format_noaa_idx_var(var_info: dict[str, str]) -> str:
+    noaa_variable = var_info["noaa_variable"]
+    noaa_level = var_info["noaa_level"]
+    return f"{noaa_variable}:{noaa_level}"
+
+
+def digest(data: str | Iterable[str], length: int = 8) -> str:
+    """Consistent, likely collision free string digest of one or more strings."""
+    if isinstance(data, str):
+        data = [data]
+    message = hashlib.sha256()
+    for string in data:
+        message.update(string.encode())
+    return message.hexdigest()[:length]
 
 
 def read_file(file_name: str) -> xr.Dataset:
@@ -167,27 +192,27 @@ class DefaultTimeoutHTTPAdapter(requests.adapters.HTTPAdapter):
 
 
 @functools.cache
-def http_store() -> obstore.store.HTTPStore:
+def http_store(base_url: str) -> obstore.store.HTTPStore:
     """
     A obstore.store.HTTPStore tuned to maximize chance of success at the expense
     of latency, while not waiting indefinitely for unresponsive servers.
     """
     return obstore.store.HTTPStore.from_url(
-        "https://storage.googleapis.com/gfs-ensemble-forecast-system",
-        client_options={
-            "connect_timeout": "4 seconds",
-            "timeout": "16 seconds",
-        },
-        retry_config={
-            "max_retries": 10,
-            "backoff": {
-                "base": 2,
-                "init_backoff": timedelta(seconds=1),
-                "max_backoff": timedelta(seconds=16),
-            },
-            # A backstop, shouldn't hit this with the above backoff settings
-            "retry_timeout": timedelta(minutes=3),
-        },
+        base_url,
+        # client_options={
+        #     "connect_timeout": "4 seconds",
+        #     "timeout": "16 seconds",
+        # },
+        # retry_config={
+        #     "max_retries": 10,
+        #     "backoff": {
+        #         "base": 2,
+        #         "init_backoff": timedelta(seconds=1),
+        #         "max_backoff": timedelta(seconds=16),
+        #     },
+        #     # A backstop, shouldn't hit this with the above backoff settings
+        #     "retry_timeout": timedelta(minutes=3),
+        # },
     )
 
 
@@ -229,14 +254,19 @@ def download_to_disk(
     local_path.parent.mkdir(parents=True, exist_ok=True)
 
     if byte_ranges is not None:
-        # TODO use get_ranges_async instead
-        res = obstore.get_ranges(
-            store=store, path=path, starts=byte_ranges[0], ends=byte_ranges[1]
+        byte_range_starts, byte_range_ends = byte_ranges[0], byte_ranges[1]
+        response_buffers = obstore.get_ranges(
+            store=store, path=path, starts=byte_range_starts, ends=byte_range_ends
         )
-        with open(local_path, "wb") as file:
-            for chunk in res:
-                file.write(chunk.as_bytes())
     else:
-        res = obstore.get(store, path)
+        response_buffers = obstore.get(store, path).stream()
+
+    try:
         with open(local_path, "wb") as file:
-            file.write(res.bytes())
+            for buffer in response_buffers:
+                file.write(buffer)
+
+    except Exception:
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(local_path)
+        raise

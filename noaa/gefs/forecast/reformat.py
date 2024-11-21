@@ -1,6 +1,7 @@
 import os
 import re
 import subprocess
+from collections import defaultdict
 from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from functools import partial
@@ -117,6 +118,8 @@ def reformat_chunks(
 
     print(f"This is {worker_index = }, {workers_total = }, {worker_init_time_i_slices}")
 
+    breakpoint()
+
     thread_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
     # If we compile eccodes ourselves with thread safety enabled we could use threads for reading
     # https://confluence.ecmwf.int/display/ECC/ecCodes+installation ENABLE_ECCODES_THREADS
@@ -176,6 +179,18 @@ def reformat_chunks(
                 print(f"Writing {var_key} {chunk_init_times_str}")
                 chunks = template.chunk_args(template_ds)
                 chunk_ds[var_key].chunk(chunks).to_zarr(store, region="auto")
+
+
+# TODO
+def group_data_vars_by_noaa_file_type() -> dict[str : list[list[str]]]:
+    # grouper = defaultdict(list)
+
+
+# [
+#     ("s+a", ["t2m", "v10"]),
+#     ("s+a", ["..", ".."]),
+#     ("b", ["..", ".."]),
+#  ]
 
 
 def get_worker_jobs[T](
