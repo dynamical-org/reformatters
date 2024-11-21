@@ -24,6 +24,51 @@ from noaa.gefs.forecast.read_data import download_file, read_file
 
 _PROCESSING_CHUNK_DIMENSION = "init_time"
 
+# TODO: where should this be?
+# TODO: swap to data var names instead of NOAA names
+GRIB_VARIABLE_ORDER = {
+    "s": [
+        "VIS",
+        "GUST",
+        "MSLET",
+        "PRES",
+        "TSOIL",
+        "SOILW",
+        "WEASD",
+        "SNOD",
+        "ICETK",
+        "TMP",
+        "DPT",
+        "RH",
+        "TMAX",
+        "TMIN",
+        "UGRD",
+        "VGRD",
+        "CPOFP",
+        "APCP",
+        "CSNOW",
+        "CICEP",
+        "CFRZR",
+        "CRAIN",
+        "LHTFL",
+        "SHTFL",
+        "CAPE",
+        "CIN",
+        "PWAT",
+        "TCDC",
+        "HGT",
+        "DSWRF",
+        "DLWRF",
+        "USWRF",
+        "ULWRF",
+        "ULWRF",
+        "HLCY",
+        "CAPE",
+        "CIN",
+        "PRMSL",
+    ]
+}
+
 
 def reformat_local(init_time_end: DatetimeLike) -> None:
     template_ds = template.get_template(init_time_end)
