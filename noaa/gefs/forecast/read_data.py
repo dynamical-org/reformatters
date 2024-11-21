@@ -1,11 +1,12 @@
 import functools
 import re
 from collections.abc import Sequence
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal
 
 import cfgrib  # type: ignore
-import obstore
+import obstore  # type: ignore
 import pandas as pd
 import requests
 import xarray as xr
@@ -173,20 +174,20 @@ def http_store() -> obstore.store.HTTPStore:
     """
     return obstore.store.HTTPStore.from_url(
         "https://storage.googleapis.com/gfs-ensemble-forecast-system",
-        # client_options={
-        #     "connect_timeout": "4",
-        #     "timeout": "16",
-        # },
-        # retry_config={
-        #     "max_retries": 10,
-        #     "backoff": {
-        #         "base": 2,
-        #         "init_backoff": timedelta(seconds=1),
-        #         "max_backoff": timedelta(seconds=16),
-        #     },
-        #     # A backstop, shouldn't hit this with the above backoff settings
-        #     "retry_timeout": timedelta(minutes=3),
-        # },
+        client_options={
+            "connect_timeout": "4 seconds",
+            "timeout": "16 seconds",
+        },
+        retry_config={
+            "max_retries": 10,
+            "backoff": {
+                "base": 2,
+                "init_backoff": timedelta(seconds=1),
+                "max_backoff": timedelta(seconds=16),
+            },
+            # A backstop, shouldn't hit this with the above backoff settings
+            "retry_timeout": timedelta(minutes=3),
+        },
     )
 
 
