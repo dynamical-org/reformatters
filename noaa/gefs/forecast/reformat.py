@@ -1,10 +1,10 @@
+import concurrent.futures
 import os
 import re
 import subprocess
 from collections import defaultdict
 from collections.abc import Iterable
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from functools import partial
+from concurrent.futures import ThreadPoolExecutor
 from itertools import islice, product, starmap
 from pathlib import Path
 from typing import Literal
@@ -16,6 +16,7 @@ import xarray as xr
 from more_itertools import chunked
 
 from common import string_template
+from common.combined_future import CombinedFuture
 from common.config import Config  # noqa:F401
 from common.download_directory import cd_into_download_directory
 from common.types import DatetimeLike, StoreLike
@@ -170,11 +171,13 @@ def reformat_chunks(
         ["u10", "t2m"], template._CUSTOM_ATTRIBUTES
     )
 
-    thread_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
-    # If we compile eccodes ourselves with thread safety enabled we could use threads for reading
-    # https://confluence.ecmwf.int/display/ECC/ecCodes+installation ENABLE_ECCODES_THREADS
-    # but make sure to read thread safety comment in our `read_data` function.
-    proccess_executor = ProcessPoolExecutor(max_workers=os.cpu_count())
+    io_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
+    cpu_executor = ThreadPoolExecutor(max_workers=os.cpu_count())
+
+    # # If we compile eccodes ourselves with thread safety enabled we could use threads for reading
+    # # https://confluence.ecmwf.int/display/ECC/ecCodes+installation ENABLE_ECCODES_THREADS
+    # # but make sure to read thread safety comment in our `read_data` function.
+    # proccess_executor = ProcessPoolExecutor(max_workers=os.cpu_count())
 
     for init_time_i_slice in worker_init_time_i_slices:
         chunk_template_ds = template_ds.isel(init_time=init_time_i_slice)
@@ -182,57 +185,54 @@ def reformat_chunks(
         chunk_init_times = pd.to_datetime(chunk_template_ds["init_time"].values)
         chunk_lead_times = pd.to_timedelta(chunk_template_ds["lead_time"].values)
         chunk_ensemble_members = chunk_template_ds["ensemble_member"].values
-        chunk_coords = product(
-            chunk_init_times, chunk_lead_times, chunk_ensemble_members
-        )
+        chunk_coords = [
+            {
+                "init_time": init_time,
+                "ensemble_member": ensemble_member,
+                "lead_time": lead_time,
+            }
+            for init_time, ensemble_member, lead_time in product(
+                chunk_init_times, chunk_ensemble_members, chunk_lead_times
+            )
+        ]
 
         chunk_init_times_str = ", ".join(chunk_init_times.strftime("%Y-%m-%dT%H:%M"))
         print("Starting chunk with init times", chunk_init_times_str)
 
         with cd_into_download_directory() as directory:
+            var_group_download_futures = {}
             for source_file_kind, data_vars in data_var_groups:
-                print("Downloading files")
-                coords_and_file_paths = list(
-                    thread_executor.map(
-                        lambda chunk_coord: download_file(
-                            init_time=chunk_coord[0],
-                            ensemble_member=chunk_coord[2],
-                            noaa_file_kind=source_file_kind,  # TODO fix type warning
-                            lead_time=chunk_coord[1],
-                            noaa_idx_data_vars=[
-                                template._CUSTOM_ATTRIBUTES[var] for var in data_vars
-                            ],
-                            directory=directory,
-                        ),
-                        chunk_coords,
+                download_futures = [
+                    io_executor.submit(
+                        download_file,
+                        **chunk_coord,
+                        noaa_file_kind=source_file_kind,
+                        noaa_idx_data_vars=[
+                            template._CUSTOM_ATTRIBUTES[var] for var in data_vars
+                        ],
+                        directory=directory,
                     )
-                )
+                    for chunk_coord in chunk_coords
+                ]
+                var_group_download_futures[CombinedFuture(download_futures)] = data_vars
+
+            for future in concurrent.futures.as_completed(var_group_download_futures):
+                data_vars = var_group_download_futures[future]
 
                 # Write variable by variable to avoid blowing up memory usage
                 for data_var in data_vars:
-                    data_array = xr.full_like(template_ds[data_var], np.nan)
+                    data_array = xr.full_like(chunk_template_ds[data_var], np.nan)
+                    # valid_time is a coordinate and already written with different chunks
+                    data_array = data_array.drop_vars("valid_time")
                     # TODO parallelize some of these reads
                     for coords, file_path in coords_and_file_paths:
                         print("Reading datasets")
                         # TODO can we pass data_var into read_file
                         # and only read that chunk of the grib?
                         ds = read_file(file_path.name)
-                        data_array.loc[
-                            {
-                                "init_time": coords[0],
-                                "ensemble_member": coords[1],
-                                "lead_time": coords[2],
-                            }
-                        ] = ds[data_var].loc[
-                            {
-                                "init_time": coords[0],
-                                "ensemble_member": coords[1],
-                                "lead_time": coords[2],
-                            }
-                        ]
+                        data_array.loc[coords] = ds[data_var].loc[coords]
                     print(f"Writing {data_var} {chunk_init_times_str}")
-                    chunks = template.chunk_args(template_ds)
-                    breakpoint()
+                    chunks = template.chunk_args(chunk_template_ds)
                     data_array.chunk(chunks).to_zarr(store, region="auto")
 
 
