@@ -182,6 +182,9 @@ def reformat_chunks(
         chunk_init_times = pd.to_datetime(chunk_template_ds["init_time"].values)
         chunk_lead_times = pd.to_timedelta(chunk_template_ds["lead_time"].values)
         chunk_ensemble_members = chunk_template_ds["ensemble_member"].values
+        chunk_coords = product(
+            chunk_init_times, chunk_lead_times, chunk_ensemble_members
+        )
 
         chunk_init_times_str = ", ".join(chunk_init_times.strftime("%Y-%m-%dT%H:%M"))
         print("Starting chunk with init times", chunk_init_times_str)
@@ -189,48 +192,43 @@ def reformat_chunks(
         with cd_into_download_directory() as directory:
             for source_file_kind, data_vars in data_var_groups:
                 print("Downloading files")
-                coords_and_file_paths = thread_executor.map(
-                    lambda chunk_init_time,
-                    chunk_ensemble_member,
-                    chunk_lead_time: download_file(
-                        init_time=chunk_init_time,
-                        ensemble_member=chunk_ensemble_member,
-                        noaa_file_kind=source_file_kind,  # TODO type custom attributes dict? be less strict?
-                        lead_time=chunk_lead_time,
-                        noaa_idx_data_vars=[
-                            template._CUSTOM_ATTRIBUTES[var] for var in data_vars
-                        ],
-                        directory=directory,
-                    ),
-                    chunk_init_times,
-                    chunk_ensemble_members,
-                    chunk_lead_times,
+                coords_and_file_paths = list(
+                    thread_executor.map(
+                        lambda chunk_coord: download_file(
+                            init_time=chunk_coord[0],
+                            ensemble_member=chunk_coord[2],
+                            noaa_file_kind=source_file_kind,  # TODO fix type warning
+                            lead_time=chunk_coord[1],
+                            noaa_idx_data_vars=[
+                                template._CUSTOM_ATTRIBUTES[var] for var in data_vars
+                            ],
+                            directory=directory,
+                        ),
+                        chunk_coords,
+                    )
                 )
 
                 # Write variable by variable to avoid blowing up memory usage
                 for data_var in data_vars:
-                    # TODO: what is the best data type to pre-fill an empty
-                    # dataset with?
                     data_array = xr.full_like(template_ds[data_var], np.nan)
-                    # TODO: Do we need to cut this down more or can we keep the whole chunk for a given var
-                    # in memory?
+                    # TODO parallelize some of these reads
                     for coords, file_path in coords_and_file_paths:
                         print("Reading datasets")
                         # TODO can we pass data_var into read_file
                         # and only read that chunk of the grib?
                         ds = read_file(file_path.name)
                         data_array.loc[
-                            dict(
-                                init_time=coords[0],
-                                ensemble_member=coords[1],
-                                lead_time=coords[2],
-                            )
+                            {
+                                "init_time": coords[0],
+                                "ensemble_member": coords[1],
+                                "lead_time": coords[2],
+                            }
                         ] = ds[data_var].loc[
-                            dict(
-                                init_time=coords[0],
-                                ensemble_member=coords[1],
-                                lead_time=coords[2],
-                            )
+                            {
+                                "init_time": coords[0],
+                                "ensemble_member": coords[1],
+                                "lead_time": coords[2],
+                            }
                         ]
                     print(f"Writing {data_var} {chunk_init_times_str}")
                     chunks = template.chunk_args(template_ds)
