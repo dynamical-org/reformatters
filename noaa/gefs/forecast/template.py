@@ -168,6 +168,7 @@ _CUSTOM_ATTRIBUTES = {
         "noaa_file_type": "s+a",
         "noaa_variable": "UGRD",
         "noaa_level": "10 m above ground",
+        "noaa_level_long": '10[m] HTGL="Specified height level above ground"',
     },
     "u100": {
         "noaa_file_type": "b",
@@ -265,6 +266,7 @@ def update_template() -> None:
         # really well so lets make things easy for users
         ds.coords["valid_time"] = ds["init_time"] + ds["lead_time"]
 
+        # TODO correct temperature units from K -> C
         # Add custom attributes
         for var_name, data_var in ds.data_vars.items():
             data_var.attrs.update(_CUSTOM_ATTRIBUTES[var_name])

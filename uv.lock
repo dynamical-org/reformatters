@@ -1137,29 +1137,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pyproj"
-version = "3.7.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "certifi" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/47/c2/0572c8e31aebf0270f15f3368adebd10fc473de9f09567a0743a3bc41c8d/pyproj-3.7.0.tar.gz", hash = "sha256:bf658f4aaf815d9d03c8121650b6f0b8067265c36e31bc6660b98ef144d81813", size = 225577 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/bd/19/be806b711e9ebfb80411c653054157db128fffdd7f8493e3064136c8d880/pyproj-3.7.0-cp312-cp312-macosx_12_0_x86_64.whl", hash = "sha256:8cbec92bdd6e9933ca08795c12717d1384e9b51cf4b1acf0d753db255a75c51e", size = 6261400 },
-    { url = "https://files.pythonhosted.org/packages/99/3b/8497995e8cae0049d013679c6a7ac6c57b816d590c733a388748dafe5af5/pyproj-3.7.0-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:8c4a8e4d3ba76c3adac3c087544cf92f7f9a19ea34946904a13fca48cc1c0106", size = 4637848 },
-    { url = "https://files.pythonhosted.org/packages/ea/f7/2a5b46d6f8da913d58d44942ab06ca4803b5424b73259b15344cf90040f6/pyproj-3.7.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:82624fb42aa31f6b1a860fbc0316babd07fd712642bc31022df4e9b4056bf463", size = 6324856 },
-    { url = "https://files.pythonhosted.org/packages/36/83/c257771077bcf9da20d0e97abc834f9037c219986cc76d40183903a30464/pyproj-3.7.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:34e1bbb3f89c68d4a6835c40b2da8b27680eec60e8cc7cdb08c09bcc725b2b62", size = 9525831 },
-    { url = "https://files.pythonhosted.org/packages/d6/50/a635de79def69fe03cdef3a4bd3bec780c30987bce3a15dd7099afb2506f/pyproj-3.7.0-cp312-cp312-win32.whl", hash = "sha256:952515d5592167ad4436b355485f82acebed2a49b46722159e4584b75a763dd3", size = 5811864 },
-    { url = "https://files.pythonhosted.org/packages/a1/8b/96bc8c8f3eca4eb7fa3758fde0b755d1df30a19f494376e3ee8de1ef4e79/pyproj-3.7.0-cp312-cp312-win_amd64.whl", hash = "sha256:0692f806224e8ed82fe4acfa57268ff444fdaf9f330689f24c0d96e59480cce1", size = 6224720 },
-    { url = "https://files.pythonhosted.org/packages/bf/da/a17c452bea1ff4cd58d6dc573055b9c8fb6af114b7d2c694782aec770865/pyproj-3.7.0-cp313-cp313-macosx_12_0_x86_64.whl", hash = "sha256:94e8b903a9e83448fd2379c49dec3e8cd83c9ed36f54354e68b601cef56d5426", size = 6254898 },
-    { url = "https://files.pythonhosted.org/packages/c2/31/ab07b389f2caa527c95ab2ea1940d28879bd2a19e67b2529cb3e94648d26/pyproj-3.7.0-cp313-cp313-macosx_14_0_arm64.whl", hash = "sha256:64cb5c17d6f6305a8b978a40f95560c87c5b363fcac40632337955664437875a", size = 4628612 },
-    { url = "https://files.pythonhosted.org/packages/1d/24/def3ded6529db3e3d8351ad73481730249ab57d8d876d502f86d7958ce06/pyproj-3.7.0-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:2c54e9bdda7ab9c4a5af50f9d6e6ee7704e05fafd504896b96ed1208c7aea098", size = 6315895 },
-    { url = "https://files.pythonhosted.org/packages/dd/14/07314f78302105d199fb25e73376d723efe9c2ef3906463aae209913a6d3/pyproj-3.7.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:24fa4e9e0abba875f9524808410cc520067eaf38fd5549ed0ef7c43ac39923c9", size = 9466144 },
-    { url = "https://files.pythonhosted.org/packages/00/f2/2a116920db3496e3ff3c94d7d8d15da41374f35cfe1b9e79682eca500a61/pyproj-3.7.0-cp313-cp313-win32.whl", hash = "sha256:b9e8353fc3c79dc14d1f5ac758a1a6e4eee04102c3c0b138670f121f5ac52eb4", size = 5807180 },
-    { url = "https://files.pythonhosted.org/packages/f8/33/3c8c6302717096b54aa14ccbb271045ba04629e21cbf348f2f2dc94f69b4/pyproj-3.7.0-cp313-cp313-win_amd64.whl", hash = "sha256:10a8dc6ec61af97c89ff032647d743f8dc023645773da42ef43f7ae1125b3509", size = 6218036 },
-]
-
-[[package]]
 name = "pyqt6"
 version = "6.7.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1286,8 +1263,8 @@ dependencies = [
     { name = "numpy" },
     { name = "obstore" },
     { name = "pydantic" },
+    { name = "rasterio" },
     { name = "requests" },
-    { name = "rioxarray" },
     { name = "s3fs" },
     { name = "typer" },
     { name = "xarray", extra = ["io"] },
@@ -1314,8 +1291,8 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.1.1" },
     { name = "obstore", specifier = ">=0.3.0b7" },
     { name = "pydantic", specifier = ">=2.9.2" },
+    { name = "rasterio", specifier = ">=1.4.2" },
     { name = "requests", specifier = ">=2.32.3" },
-    { name = "rioxarray", specifier = ">=0.18.1" },
     { name = "s3fs", specifier = ">=2024.9.0" },
     { name = "typer", specifier = ">=0.12.5" },
     { name = "xarray", extras = ["io"], specifier = ">=2024.9.0" },
@@ -1359,22 +1336,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ab/3a/0316b28d0761c6734d6bc14e770d85506c986c85ffb239e688eeaab2c2bc/rich-13.9.4.tar.gz", hash = "sha256:439594978a49a09530cff7ebc4b5c7103ef57baf48d5ea3184f21d9a2befa098", size = 223149 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/19/71/39c7c0d87f8d4e6c020a393182060eaefeeae6c01dab6a84ec346f2567df/rich-13.9.4-py3-none-any.whl", hash = "sha256:6049d5e6ec054bf2779ab3358186963bac2ea89175919d699e378b99738c2a90", size = 242424 },
-]
-
-[[package]]
-name = "rioxarray"
-version = "0.18.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-    { name = "packaging" },
-    { name = "pyproj" },
-    { name = "rasterio" },
-    { name = "xarray" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/f5/05/5c2b0bafe275aacdecb72aef5bd333e65b34c4acecd468a66eedc3e8fb1a/rioxarray-0.18.1.tar.gz", hash = "sha256:62bdef2a1ae8ac1de8cd3e809bfe3c8c5d09d1edc873ef9b1f373d37cf8da02b", size = 54407 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/aa/b7/a881b08bb24ae15bd3644b313244d89b0eb50d88dbda577ce72e5e3e4be4/rioxarray-0.18.1-py3-none-any.whl", hash = "sha256:64cc571807204afc1ffaf5f9a0a2640dccb1e2edd602d952a3c65153b6645540", size = 61881 },
 ]
 
 [[package]]

@@ -4,7 +4,6 @@ import hashlib
 import os
 import re
 from collections.abc import Iterable, Sequence
-from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal
 
@@ -12,8 +11,8 @@ import cfgrib  # type: ignore
 import numpy as np
 import obstore  # type: ignore
 import pandas as pd
+import rasterio  # type: ignore
 import requests
-import rioxarray
 import xarray as xr
 
 from common.config import Config
@@ -190,7 +189,7 @@ def read_file(file_name: str) -> xr.Dataset:
     return ds
 
 
-def read_file_rasterio(
+def read_file_riorasterio(
     file_name: str, custom_attributes: dict[str, dict[str, str]]
 ) -> xr.Dataset:
     xds = xr.open_dataset(
@@ -215,11 +214,34 @@ def read_file_rasterio(
     lead_time = xds[list(xds.data_vars)[0]].GRIB_FORECAST_SECONDS / (60 * 60)
     init_time = np.datetime64(xds[list(xds.data_vars)[0]].GRIB_REF_TIME, "s")
     # TODO expand_dims to include lead_time and init_time (stored as GRIB_FORECAST_SECONDS and GRIB_REF_TIME in attrs)
-    xds.expand_dims({"init_time": [init_time], "lead_time": [lead_time]})
+    xds = xds.expand_dims({"init_time": [init_time], "lead_time": [lead_time]})
     # TODO how do we get the ensemble member?
     # worst case scenario we get it out of the filename but that's less than ideal.
-    breakpoint()
     return xds
+
+
+def read_into(out: xr.DataArray, path: os.PathLike[str]) -> None:
+    return out
+
+
+def read_rasterio(
+    path: os.PathLike[str], grib_element: str, grib_description: str
+) -> np.ndarray[tuple[int, int], np.dtype[np.float32]]:
+    with rasterio.open(path) as reader:
+        matching_bands = [
+            rasterio_band_i
+            for band_i in range(reader.count)
+            if reader.tags(rasterio_band_i := band_i + 1)["GRIB_ELEMENT"]
+            == grib_element
+            and reader.descriptions[band_i] == grib_description
+        ]
+
+        assert (
+            len(matching_bands) == 1
+        ), f"Expected exactly 1 matching band, found {matching_bands}. {grib_element=}, {grib_description=}, {path=}"
+        rasterio_band_index = matching_bands[0]
+
+        return reader.read(rasterio_band_index, out_dtype=np.float32)  # type: ignore
 
 
 class DefaultTimeoutHTTPAdapter(requests.adapters.HTTPAdapter):
