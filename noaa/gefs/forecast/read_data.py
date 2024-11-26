@@ -9,14 +9,22 @@ from pathlib import Path
 from typing import Any, Literal
 
 import cfgrib  # type: ignore
+import numpy as np
 import obstore  # type: ignore
 import pandas as pd
 import requests
+import rioxarray
 import xarray as xr
 
 from common.config import Config
 
 _STATISTIC_LONG_NAME = {"avg": "ensemble mean", "spr": "ensemble spread"}
+# The level names needed to grab the right bands from the index
+# are different from the ones in the grib itself.
+IDX_LEVELS_TO_GRIB_LONG_NAMES = {
+    "2 m above ground": '2[m] HTGL="Specified height level above ground"',
+    "10 m above ground": '10[m] HTGL="Specified height level above ground"',
+}
 
 _VARIABLES_PER_CHUNK = 3
 
@@ -180,6 +188,38 @@ def read_file(file_name: str) -> xr.Dataset:
     ds = ds.assign_coords(longitude=ds["longitude"] - 180)
 
     return ds
+
+
+def read_file_rasterio(
+    file_name: str, custom_attributes: dict[str, dict[str, str]]
+) -> xr.Dataset:
+    xds = xr.open_dataset(
+        file_name,
+        engine="rasterio",
+        backend_kwargs={"band_as_variable": True},
+    )
+    var_renames = {}
+    for var_name, da in xds.items():
+        friendly_name = next(
+            k
+            for k, v in custom_attributes.items()
+            if (
+                v["noaa_variable"] == da.GRIB_ELEMENT
+                and IDX_LEVELS_TO_GRIB_LONG_NAMES[v["noaa_level"]] == da.long_name
+            )
+        )
+        # TODO clean up unhelpful attrs
+        var_renames[var_name] = friendly_name
+
+    xds = xds.rename(var_renames)
+    lead_time = xds[list(xds.data_vars)[0]].GRIB_FORECAST_SECONDS / (60 * 60)
+    init_time = np.datetime64(xds[list(xds.data_vars)[0]].GRIB_REF_TIME, "s")
+    # TODO expand_dims to include lead_time and init_time (stored as GRIB_FORECAST_SECONDS and GRIB_REF_TIME in attrs)
+    xds.expand_dims({"init_time": [init_time], "lead_time": [lead_time]})
+    # TODO how do we get the ensemble member?
+    # worst case scenario we get it out of the filename but that's less than ideal.
+    breakpoint()
+    return xds
 
 
 class DefaultTimeoutHTTPAdapter(requests.adapters.HTTPAdapter):

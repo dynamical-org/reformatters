@@ -225,6 +225,7 @@ def reformat_chunks(
                     # valid_time is a coordinate and already written with different chunks
                     data_array = data_array.drop_vars("valid_time")
                     # TODO parallelize some of these reads
+                    breakpoint()
                     for coords, file_path in coords_and_file_paths:
                         print("Reading datasets")
                         # TODO can we pass data_var into read_file

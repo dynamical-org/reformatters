@@ -113,6 +113,13 @@ _ENCODING = {
     "vis": {**_FLOAT_DEFAULT, "add_offset": 15_000.0},
 }
 
+# The level names needed to grab the right bands from the index
+# are different from the ones in the grib itself.
+IDX_LEVELS_TO_GRIB_SHORT_NAMES = {
+    "2 m above ground": '2[m] HTGL="Specified height level above ground"',
+    "10 m above ground": '10[m] HTGL="Specified height level above ground"',
+}
+
 # TODO: Some of the s+a should actually be s+b, check the
 # index files to see which one.
 _CUSTOM_ATTRIBUTES = {
