@@ -10,7 +10,7 @@ from numcodecs import BitRound, Blosc, Delta  # type: ignore
 from common.config import Config  # noqa:F401
 from common.download_directory import cd_into_download_directory
 from common.types import DatetimeLike, StoreLike
-from noaa.gefs.forecast.read_data import download_file, read_file
+from noaa.gefs.forecast.read_data import download_file
 
 TEMPLATE_PATH = "noaa/gefs/forecast/templates/latest.zarr"
 
@@ -125,8 +125,8 @@ IDX_LEVELS_TO_GRIB_SHORT_NAMES = {
 _CUSTOM_ATTRIBUTES = {
     "cfrzr": {
         "noaa_file_type": "s+a",
-        "noaa_variable": "CFRZR",
-        "noaa_level": "surface",
+        "grib_element": "CFRZR",
+        "index_level": "surface",
     },
     "cicep": {"noaa_file_type": "s+a"},
     "cpofp": {"noaa_file_type": "s+a"},
@@ -141,8 +141,8 @@ _CUSTOM_ATTRIBUTES = {
     "msshf": {"noaa_file_type": "s+a"},
     "prmsl": {
         "noaa_file_type": "s+a",
-        "noaa_variable": "PRMSL",
-        "noaa_level": "mean sea level",
+        "grib_element": "PRMSL",
+        "index_level": "mean sea level",
     },
     "pwat": {"noaa_file_type": "s+a"},
     "r2": {"noaa_file_type": "s+a"},
@@ -157,8 +157,9 @@ _CUSTOM_ATTRIBUTES = {
     "suswrf": {"noaa_file_type": "s+a"},
     "t2m": {
         "noaa_file_type": "s+a",
-        "noaa_variable": "TMP",
-        "noaa_level": "2 m above ground",
+        "index_level": "2 m above ground",
+        "grib_element": "TMP",
+        "grib_description": '2[m] HTGL="Specified height level above ground"',
     },
     "tcc": {"noaa_file_type": "s+a"},
     "tmax": {"noaa_file_type": "s+a"},
@@ -166,26 +167,26 @@ _CUSTOM_ATTRIBUTES = {
     "tp": {"noaa_file_type": "s+a"},
     "u10": {
         "noaa_file_type": "s+a",
-        "noaa_variable": "UGRD",
-        "noaa_level": "10 m above ground",
-        "noaa_level_long": '10[m] HTGL="Specified height level above ground"',
+        "index_level": "10 m above ground",
+        "grib_element": "UGRD",
+        "grib_description": '10[m] HTGL="Specified height level above ground"',
     },
     "u100": {
         "noaa_file_type": "b",
-        "noaa_variable": "UGRD",
-        "noaa_level": "100 m above ground",
+        "grib_element": "UGRD",
+        "index_level": "100 m above ground",
     },
     "v10": {
         "noaa_file_type": "s+a",
-        "noaa_variable": "VGRD",
-        "noaa_level": "10 m above ground",
+        "grib_element": "VGRD",
+        "index_level": "10 m above ground",
     },
     "v100": {
         "noaa_file_type": "b",
-        "noaa_variable": "VGRD",
-        "noaa_level": "100 m above ground",
+        "grib_element": "VGRD",
+        "index_level": "100 m above ground",
     },
-    "vis": {"noaa_file_type": "s+b", "noaa_variable": "VIS", "noaa_level": "surface"},
+    "vis": {"noaa_file_type": "s+b", "grib_element": "VIS", "index_level": "surface"},
 }
 
 

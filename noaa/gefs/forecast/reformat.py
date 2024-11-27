@@ -2,10 +2,12 @@ import concurrent.futures
 import os
 import re
 import subprocess
-from collections import defaultdict
+import time
+from collections import defaultdict, deque
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
-from itertools import islice, product, starmap
+from functools import partial
+from itertools import batched, islice, product, starmap
 from pathlib import Path
 from typing import Literal
 
@@ -13,62 +15,20 @@ import numpy as np
 import pandas as pd
 import s3fs  # type: ignore
 import xarray as xr
-from more_itertools import chunked
 
 from common import string_template
-from common.combined_future import CombinedFuture
 from common.config import Config  # noqa:F401
 from common.download_directory import cd_into_download_directory
 from common.types import DatetimeLike, StoreLike
 from noaa.gefs.forecast import template
-from noaa.gefs.forecast.read_data import download_file, read_file
+from noaa.gefs.forecast.read_data import (
+    NoaaFileType,
+    SourceFileCoords,
+    download_file,
+    read_into,
+)
 
 _PROCESSING_CHUNK_DIMENSION = "init_time"
-
-# TODO: where should this be?
-# TODO: swap to data var names instead of NOAA names
-GRIB_VARIABLE_ORDER = {
-    "s": [
-        "VIS",
-        "GUST",
-        "MSLET",
-        "PRES",
-        "TSOIL",
-        "SOILW",
-        "WEASD",
-        "SNOD",
-        "ICETK",
-        "TMP",
-        "DPT",
-        "RH",
-        "TMAX",
-        "TMIN",
-        "UGRD",
-        "VGRD",
-        "CPOFP",
-        "APCP",
-        "CSNOW",
-        "CICEP",
-        "CFRZR",
-        "CRAIN",
-        "LHTFL",
-        "SHTFL",
-        "CAPE",
-        "CIN",
-        "PWAT",
-        "TCDC",
-        "HGT",
-        "DSWRF",
-        "DLWRF",
-        "USWRF",
-        "ULWRF",
-        "ULWRF",
-        "HLCY",
-        "CAPE",
-        "CIN",
-        "PRMSL",
-    ]
-}
 
 
 def reformat_local(init_time_end: DatetimeLike) -> None:
@@ -78,8 +38,9 @@ def reformat_local(init_time_end: DatetimeLike) -> None:
     template.write_metadata(template_ds, store, get_mode(store))
 
     print("Starting reformat")
-    # Process all chunks
+    # Process all chunks by setting worker_index=0 and worker_total=1
     reformat_chunks(init_time_end, worker_index=0, workers_total=1)
+    print("Done writing to", store)
 
 
 def reformat_kubernetes(
@@ -106,8 +67,7 @@ def reformat_kubernetes(
         check=True,
     )
     subprocess.run(  # noqa: S603
-        ["/usr/bin/docker", "push", image_tag],
-        check=True,
+        ["/usr/bin/docker", "push", image_tag], check=True
     )
     print("Pushed", image_tag)
 
@@ -171,6 +131,7 @@ def reformat_chunks(
         ["u10", "t2m"], template._CUSTOM_ATTRIBUTES
     )
 
+    wait_executor = ThreadPoolExecutor(max_workers=256)
     io_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
     cpu_executor = ThreadPoolExecutor(max_workers=os.cpu_count())
 
@@ -185,7 +146,7 @@ def reformat_chunks(
         chunk_init_times = pd.to_datetime(chunk_template_ds["init_time"].values)
         chunk_lead_times = pd.to_timedelta(chunk_template_ds["lead_time"].values)
         chunk_ensemble_members = chunk_template_ds["ensemble_member"].values
-        chunk_coords = [
+        chunk_coords: list[SourceFileCoords] = [
             {
                 "init_time": init_time,
                 "ensemble_member": ensemble_member,
@@ -200,46 +161,75 @@ def reformat_chunks(
         print("Starting chunk with init times", chunk_init_times_str)
 
         with cd_into_download_directory() as directory:
-            var_group_download_futures = {}
-            for source_file_kind, data_vars in data_var_groups:
-                download_futures = [
-                    io_executor.submit(
-                        download_file,
-                        **chunk_coord,
-                        noaa_file_kind=source_file_kind,
-                        noaa_idx_data_vars=[
-                            template._CUSTOM_ATTRIBUTES[var] for var in data_vars
-                        ],
-                        directory=directory,
+            download_var_group_futures = {}
+            for noaa_file_type, data_vars in data_var_groups:
+                download_var_group_futures[
+                    wait_executor.submit(
+                        download_var_group_files,
+                        data_vars,
+                        chunk_coords,
+                        noaa_file_type,
+                        directory,
+                        io_executor,
                     )
-                    for chunk_coord in chunk_coords
-                ]
-                var_group_download_futures[CombinedFuture(download_futures)] = data_vars
+                ] = data_vars
+                # TODO: this necessary? allow all the previous groups files to be submitted so a group is more likely to finish together and reading can begin
+                time.sleep(0.1)
 
-            for future in concurrent.futures.as_completed(var_group_download_futures):
-                data_vars = var_group_download_futures[future]
+            for future in concurrent.futures.as_completed(download_var_group_futures):
+                if (e := future.exception()) is not None:
+                    raise e
+
+                coords_and_paths = future.result()
+                data_vars = download_var_group_futures[future]
 
                 # Write variable by variable to avoid blowing up memory usage
                 for data_var in data_vars:
                     data_array = xr.full_like(chunk_template_ds[data_var], np.nan)
+                    data_array.load()  # preallocate backing numpy arrays (for performance?)
                     # valid_time is a coordinate and already written with different chunks
                     data_array = data_array.drop_vars("valid_time")
-                    # TODO parallelize some of these reads
-                    breakpoint()
-                    for coords, file_path in coords_and_file_paths:
-                        print("Reading datasets")
-                        # TODO can we pass data_var into read_file
-                        # and only read that chunk of the grib?
-                        ds = read_file(file_path.name)
-                        data_array.loc[coords] = ds[data_var].loc[coords]
+                    print("reading...")
+                    consume(
+                        cpu_executor.map(
+                            partial(
+                                read_into,
+                                data_array,
+                                internal_attrs=template._CUSTOM_ATTRIBUTES,
+                            ),
+                            *zip(*coords_and_paths, strict=True),
+                        )
+                    )
+
+                    assert np.isfinite(data_array).any()
                     print(f"Writing {data_var} {chunk_init_times_str}")
                     chunks = template.chunk_args(chunk_template_ds)
                     data_array.chunk(chunks).to_zarr(store, region="auto")
 
 
+def download_var_group_files(
+    data_vars: list[str],
+    chunk_coords: Iterable[SourceFileCoords],
+    noaa_file_type: NoaaFileType,
+    directory: Path,
+    io_executor: ThreadPoolExecutor,
+) -> list[tuple[SourceFileCoords, Path]]:
+    idx_data_vars = [template._CUSTOM_ATTRIBUTES[var] for var in data_vars]
+    local_paths = io_executor.map(
+        lambda coord: download_file(
+            **coord,
+            noaa_file_type=noaa_file_type,
+            directory=directory,
+            noaa_idx_data_vars=idx_data_vars,
+        ),
+        chunk_coords,
+    )
+    return list(zip(chunk_coords, local_paths, strict=True))
+
+
 def group_data_vars_by_noaa_file_type(
     data_vars: Iterable[str], data_var_attributes: dict[str, dict[str, str]]
-) -> list[tuple[str, list[str]]]:
+) -> list[tuple[NoaaFileType, list[str]]]:
     grouper = defaultdict(list)
     for data_var in data_vars:
         noaa_file_type = data_var_attributes[data_var]["noaa_file_type"]
@@ -248,7 +238,7 @@ def group_data_vars_by_noaa_file_type(
     for file_type, data_vars in grouper.items():
         # TODO first sort data_vars by order within the grib
         chunks.extend(
-            [(file_type, data_vars_chunk) for data_vars_chunk in chunked(data_vars, 3)]
+            [(file_type, data_vars_chunk) for data_vars_chunk in batched(data_vars, 3)]
         )
 
     return chunks
@@ -286,3 +276,12 @@ def chunk_i_slices(ds: xr.Dataset, dim: str) -> Iterable[slice]:
     stop_idx = np.cumsum(ds.chunksizes[dim])  # 2, 4, 6
     start_idx = np.insert(stop_idx, 0, 0)  # 0, 2, 4, 6
     return starmap(slice, zip(start_idx, stop_idx, strict=False))  # (0,2), (2,4), (4,6)
+
+
+def consume[T](iterator: Iterable[T], n: int | None = None) -> None:
+    "Advance the iterator n-steps ahead. If n is None, consume entirely."
+    # Use functions that consume iterators at C speed.
+    if n is None:
+        deque(iterator, maxlen=0)
+    else:
+        next(islice(iterator, n, n), None)

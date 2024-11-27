@@ -3,9 +3,9 @@ import functools
 import hashlib
 import os
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Hashable, Iterable, Sequence
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 import cfgrib  # type: ignore
 import numpy as np
@@ -27,15 +27,23 @@ IDX_LEVELS_TO_GRIB_LONG_NAMES = {
 
 _VARIABLES_PER_CHUNK = 3
 
+type NoaaFileType = Literal["a", "b", "s+a", "s+b"]
+
+
+class SourceFileCoords(TypedDict):
+    init_time: pd.Timestamp
+    ensemble_member: int
+    lead_time: pd.Timedelta
+
 
 def download_file(
     init_time: pd.Timestamp,
-    ensemble_member: str | int,
-    noaa_file_kind: Literal["a", "b", "s+a", "s+b"],
+    ensemble_member: int,
     lead_time: pd.Timedelta,
+    noaa_file_type: NoaaFileType,
     noaa_idx_data_vars: list[dict[str, str]],
     directory: Path,
-) -> tuple[tuple[pd.Timestamp, str | int, pd.Timedelta], Path]:
+) -> Path:
     lead_time_hours = lead_time.total_seconds() / (60 * 60)
     if lead_time_hours != round(lead_time_hours):
         raise ValueError(f"Lead time {lead_time} must be a whole number of hours")
@@ -49,22 +57,22 @@ def download_file(
 
     # TODO: handle the variables that do not exist in the 0 lead time,
     # but exist in later lead times.
-    if noaa_file_kind == "s+a":
+    if noaa_file_type == "s+a":
         if lead_time_hours <= 240:
-            true_noaa_file_kind = "s"
+            true_noaa_file_type = "s"
         else:
-            true_noaa_file_kind = "a"
-    elif noaa_file_kind == "s+b":
+            true_noaa_file_type = "a"
+    elif noaa_file_type == "s+b":
         if lead_time_hours <= 240:
-            true_noaa_file_kind = "s"
+            true_noaa_file_type = "s"
         else:
-            true_noaa_file_kind = "b"
+            true_noaa_file_type = "b"
     else:
-        true_noaa_file_kind = noaa_file_kind
+        true_noaa_file_type = noaa_file_type
 
     remote_path = (
         f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2sp25/"
-        f"ge{formatted_ensemble_member}.t{init_hour_str}z.pgrb2{true_noaa_file_kind}.0p25.f{lead_time_hours:03.0f}"
+        f"ge{formatted_ensemble_member}.t{init_hour_str}z.pgrb2{true_noaa_file_type}.0p25.f{lead_time_hours:03.0f}"
     )
 
     store = http_store("https://storage.googleapis.com/gfs-ensemble-forecast-system")
@@ -87,10 +95,12 @@ def download_file(
     )
 
     # Create a unique suffix representing the data vars stored in the output file
-    vars_str = "-".join(var_info["noaa_variable"] for var_info in noaa_idx_data_vars)
+    vars_str = "-".join(var_info["grib_element"] for var_info in noaa_idx_data_vars)
     vars_hash = digest(format_noaa_idx_var(var_info) for var_info in noaa_idx_data_vars)
     vars_suffix = f"{vars_str}-{vars_hash}"
     local_path = Path(directory, f"{local_base_file_name}.{vars_suffix}")
+
+    print("Downloading", noaa_file_type, vars_suffix)
 
     download_to_disk(
         store,
@@ -100,7 +110,7 @@ def download_file(
         byte_ranges=(byte_range_starts, byte_range_ends),
     )
 
-    return (init_time, ensemble_member, lead_time), local_path
+    return local_path
 
 
 def parse_index_byte_ranges(
@@ -137,9 +147,9 @@ def parse_index_byte_ranges(
 
 
 def format_noaa_idx_var(var_info: dict[str, str]) -> str:
-    noaa_variable = var_info["noaa_variable"]
-    noaa_level = var_info["noaa_level"]
-    return f"{noaa_variable}:{noaa_level}"
+    grib_element = var_info["grib_element"]
+    index_level = var_info["index_level"]
+    return f"{grib_element}:{index_level}"
 
 
 def digest(data: str | Iterable[str], length: int = 8) -> str:
@@ -152,76 +162,53 @@ def digest(data: str | Iterable[str], length: int = 8) -> str:
     return message.hexdigest()[:length]
 
 
-def read_file(file_name: str) -> xr.Dataset:
-    """
-    Requirement: the process current working directory must contain file_name
-    """
-    # Open the grib as N different datasets which correctly map grib to xarray datasets
-    datasets = cfgrib.open_datasets(file_name)
-    datasets = [ds.chunk(-1) for ds in datasets]
+# def read_file(file_name: str) -> xr.Dataset:
+#     """
+#     Requirement: the process current working directory must contain file_name
+#     """
+#     # Open the grib as N different datasets which correctly map grib to xarray datasets
+#     datasets = cfgrib.open_datasets(file_name)
+#     datasets = [ds.chunk(-1) for ds in datasets]
 
-    # TODO compat="minimal" is dropping 3 variables
-    ds = xr.merge(
-        datasets, compat="minimal", join="exact", combine_attrs="no_conflicts"
-    )
+#     # TODO compat="minimal" is dropping 3 variables
+#     ds = xr.merge(
+#         datasets, compat="minimal", join="exact", combine_attrs="no_conflicts"
+#     )
 
-    renames = {"time": "init_time", "step": "lead_time"}
-    ds = ds.expand_dims(tuple(renames.keys())).rename(renames)
-    if "number" in ds.coords:
-        ds = ds.expand_dims("number", axis=1).rename(number="ensemble_member")
-    else:
-        # Store summary statistics across ensemble members as separate variables
-        # which do not have an ensemble_member dimension. Statistic is either
-        # "avg" (ensemble mean) or "spr" (ensemble spread; max minus min)
-        statistic = file_name[: file_name.index(".")].removeprefix("ge")
-        ds = ds.rename({var: f"{var}_{statistic}" for var in ds.data_vars.keys()})
-        for data_var in ds.data_vars.values():
-            data_var.attrs["long_name"] = (
-                f"{data_var.attrs["long_name"]} ({_STATISTIC_LONG_NAME[statistic]})"
-            )
+#     renames = {"time": "init_time", "step": "lead_time"}
+#     ds = ds.expand_dims(tuple(renames.keys())).rename(renames)
+#     if "number" in ds.coords:
+#         ds = ds.expand_dims("number", axis=1).rename(number="ensemble_member")
+#     else:
+#         # Store summary statistics across ensemble members as separate variables
+#         # which do not have an ensemble_member dimension. Statistic is either
+#         # "avg" (ensemble mean) or "spr" (ensemble spread; max minus min)
+#         statistic = file_name[: file_name.index(".")].removeprefix("ge")
+#         ds = ds.rename({var: f"{var}_{statistic}" for var in ds.data_vars.keys()})
+#         for data_var in ds.data_vars.values():
+#             data_var.attrs["long_name"] = (
+#                 f"{data_var.attrs["long_name"]} ({_STATISTIC_LONG_NAME[statistic]})"
+#             )
 
-    # Drop level height coords which belong on the variable and are not dataset wide
-    ds = ds.drop_vars([c for c in ds.coords if c not in ds.dims])
+#     # Drop level height coords which belong on the variable and are not dataset wide
+#     ds = ds.drop_vars([c for c in ds.coords if c not in ds.dims])
 
-    # Convert longitude from [0, 360) to [-180, +180)
-    ds = ds.assign_coords(longitude=ds["longitude"] - 180)
+#     # Convert longitude from [0, 360) to [-180, +180)
+#     ds = ds.assign_coords(longitude=ds["longitude"] - 180)
 
-    return ds
-
-
-def read_file_riorasterio(
-    file_name: str, custom_attributes: dict[str, dict[str, str]]
-) -> xr.Dataset:
-    xds = xr.open_dataset(
-        file_name,
-        engine="rasterio",
-        backend_kwargs={"band_as_variable": True},
-    )
-    var_renames = {}
-    for var_name, da in xds.items():
-        friendly_name = next(
-            k
-            for k, v in custom_attributes.items()
-            if (
-                v["noaa_variable"] == da.GRIB_ELEMENT
-                and IDX_LEVELS_TO_GRIB_LONG_NAMES[v["noaa_level"]] == da.long_name
-            )
-        )
-        # TODO clean up unhelpful attrs
-        var_renames[var_name] = friendly_name
-
-    xds = xds.rename(var_renames)
-    lead_time = xds[list(xds.data_vars)[0]].GRIB_FORECAST_SECONDS / (60 * 60)
-    init_time = np.datetime64(xds[list(xds.data_vars)[0]].GRIB_REF_TIME, "s")
-    # TODO expand_dims to include lead_time and init_time (stored as GRIB_FORECAST_SECONDS and GRIB_REF_TIME in attrs)
-    xds = xds.expand_dims({"init_time": [init_time], "lead_time": [lead_time]})
-    # TODO how do we get the ensemble member?
-    # worst case scenario we get it out of the filename but that's less than ideal.
-    return xds
+#     return ds
 
 
-def read_into(out: xr.DataArray, path: os.PathLike[str]) -> None:
-    return out
+def read_into(
+    out: xr.DataArray,
+    coords: SourceFileCoords,
+    path: os.PathLike[str],
+    internal_attrs: dict[Hashable, Any],
+) -> None:
+    var_attrs = internal_attrs[out.name]
+    grib_element = var_attrs["grib_element"]
+    grib_description = var_attrs["grib_description"]
+    out.loc[coords] = read_rasterio(path, grib_element, grib_description)
 
 
 def read_rasterio(
@@ -231,14 +218,12 @@ def read_rasterio(
         matching_bands = [
             rasterio_band_i
             for band_i in range(reader.count)
-            if reader.tags(rasterio_band_i := band_i + 1)["GRIB_ELEMENT"]
+            if reader.descriptions[band_i] == grib_description
+            and reader.tags(rasterio_band_i := band_i + 1)["GRIB_ELEMENT"]
             == grib_element
-            and reader.descriptions[band_i] == grib_description
         ]
 
-        assert (
-            len(matching_bands) == 1
-        ), f"Expected exactly 1 matching band, found {matching_bands}. {grib_element=}, {grib_description=}, {path=}"
+        assert len(matching_bands) == 1, f"Expected exactly 1 matching band, found {matching_bands}. {grib_element=}, {grib_description=}, {path=}"  # fmt: skip
         rasterio_band_index = matching_bands[0]
 
         return reader.read(rasterio_band_index, out_dtype=np.float32)  # type: ignore
