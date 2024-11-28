@@ -79,8 +79,7 @@ def reformat_kubernetes(
     workers_total = int(np.ceil(num_jobs / jobs_per_pod))
     parallelism = min(workers_total, max_parallelism)
 
-    # TODO read dataset id from template_ds.attrs
-    dataset_id = template._DATASET_ID
+    dataset_id = template_ds.attrs["dataset_id"]
     job_name = f"{dataset_id}-{job_timestamp}"
     kubernetes_job = string_template.substitute(
         "deploy/kubernetes_ingest_job.yaml",

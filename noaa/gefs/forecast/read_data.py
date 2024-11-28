@@ -5,9 +5,8 @@ import os
 import re
 from collections.abc import Hashable, Iterable, Sequence
 from pathlib import Path
-from typing import Any, Literal, TypedDict
+from typing import Any, TypedDict
 
-import cfgrib  # type: ignore
 import numpy as np
 import obstore  # type: ignore
 import pandas as pd
@@ -16,6 +15,8 @@ import requests
 import xarray as xr
 
 from common.config import Config
+
+from .config_models import NoaaFileType
 
 _STATISTIC_LONG_NAME = {"avg": "ensemble mean", "spr": "ensemble spread"}
 # The level names needed to grab the right bands from the index
@@ -26,8 +27,6 @@ IDX_LEVELS_TO_GRIB_LONG_NAMES = {
 }
 
 _VARIABLES_PER_CHUNK = 3
-
-type NoaaFileType = Literal["a", "b", "s+a", "s+b"]
 
 
 class SourceFileCoords(TypedDict):
