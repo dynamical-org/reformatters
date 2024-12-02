@@ -105,14 +105,6 @@ COORDINATES: tuple[Coordinate, ...] = (
         ),
     ),
     Coordinate(
-        name="longitude",
-        encoding=Encoding(
-            dtype="float64",
-            compressor=Blosc(cname="zstd"),
-            chunks=-1,
-        ),
-    ),
-    Coordinate(
         name="valid_time",
         encoding=Encoding(
             dtype="int64",
@@ -145,7 +137,9 @@ DATA_VARIABLES: tuple[DataVar, ...] = (
     ),
     DataVar(
         name="u10",
-        encoding={**ENCODING_FLOAT32_DEFAULT, "filters": [BitRound(keepbits=6)]},
+        encoding=ENCODING_FLOAT32_DEFAULT.model_copy(
+            update={"filters": [BitRound(keepbits=6)]}
+        ),
         attrs=DataVarAttrs(
             long_name="10 metre U wind component",
             standard_name="eastward_wind",
@@ -161,7 +155,9 @@ DATA_VARIABLES: tuple[DataVar, ...] = (
     ),
     DataVar(
         name="u100",
-        encoding={**ENCODING_FLOAT32_DEFAULT, "filters": [BitRound(keepbits=6)]},
+        encoding=ENCODING_FLOAT32_DEFAULT.model_copy(
+            update={"filters": [BitRound(keepbits=6)]}
+        ),
         attrs=DataVarAttrs(
             long_name="100 metre U wind component",
             standard_name="eastward_wind",

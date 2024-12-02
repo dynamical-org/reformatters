@@ -1,5 +1,5 @@
 from collections.abc import Hashable, Sequence
-from typing import Any, Literal, NotRequired, TypedDict
+from typing import Any, Literal, Optional, TypedDict
 
 import numcodecs  # type: ignore
 import pydantic
@@ -33,10 +33,10 @@ class InternalAttrs(FrozenBaseModel):
     noaa_file_type: NoaaFileType
 
 
-class Encoding(FrozenTypedDict):
-    __pydantic_config__: NotRequired[pydantic.ConfigDict] = pydantic.ConfigDict(  # type: ignore
-        extra="forbid",
+class Encoding(FrozenBaseModel):
+    model_config: Optional[pydantic.ConfigDict] = pydantic.ConfigDict(  # type: ignore
         arbitrary_types_allowed=True,  # allow numcodecs.abc.Codec values
+        frozen=True,
     )
 
     # Could be any np.typing.DTypeLike but that type is loose and allows any string.
@@ -44,16 +44,16 @@ class Encoding(FrozenTypedDict):
     dtype: Literal["float32", "float64", "uint16", "int64", "bool"]
     chunks: tuple[int, ...] | int
 
-    filters: NotRequired[Sequence[numcodecs.abc.Codec]]
-    compressor: NotRequired[numcodecs.abc.Codec]
+    filters: Optional[Sequence[numcodecs.abc.Codec]] = None
+    compressor: Optional[numcodecs.abc.Codec] = None
 
-    calendar: NotRequired[Literal["proleptic_gregorian"]]  # For timestamps only
+    calendar: Literal["proleptic_gregorian"] | None = None  # For timestamps only
     # The _encoded_ units, for timestamps and timedeltas only
     # Decoded units for all variables are in DataVarAttrs
-    units: NotRequired[Literal["seconds", "seconds since 1970-01-01 00:00:00"]]
+    units: Literal["seconds", "seconds since 1970-01-01 00:00:00"] | None = None
 
-    add_offset: NotRequired[float]
-    scale_factor: NotRequired[float]
+    add_offset: Optional[float] = None
+    scale_factor: Optional[float] = None
 
 
 class Coordinate(FrozenBaseModel):
