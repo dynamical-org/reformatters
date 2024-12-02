@@ -1,4 +1,4 @@
-from typing import Any, Literal, get_args
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -10,8 +10,10 @@ from .config_models import Coordinate, DataVar, DataVarAttrs, Encoding, Internal
 
 DATASET_ID = "noaa-gefs-forecast"
 
-type Dim = Literal["init_time", "ensemble_member", "lead_time", "latitude", "longitude"]
-DIMS = get_args(Dim)
+# Silly to define this twice, but typing.get_args() doesn't guarantee the return order,
+# type parameters can't be constants and the order in DIMS is important so here we are.
+type Dim =        Literal["init_time", "ensemble_member", "lead_time", "latitude", "longitude"]  # fmt: off
+DIMS: tuple[Dim, ... ] = ("init_time", "ensemble_member", "lead_time", "latitude", "longitude")  # fmt: off
 
 INIT_TIME_START = pd.Timestamp("2024-09-01T00:00")
 INIT_TIME_FREQUENCY = pd.Timedelta("6h")
