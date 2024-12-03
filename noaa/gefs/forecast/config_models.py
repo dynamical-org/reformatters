@@ -44,6 +44,7 @@ class InternalAttrs(FrozenBaseModel):
     grib_description: str
     grib_index_level: str
     noaa_file_type: NoaaFileType
+    index_order: int
 
 
 class Encoding(pydantic.BaseModel):

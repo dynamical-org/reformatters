@@ -21,6 +21,7 @@ from common.config import Config  # noqa:F401
 from common.download_directory import cd_into_download_directory
 from common.types import DatetimeLike, StoreLike
 from noaa.gefs.forecast import template
+from noaa.gefs.forecast.config_models import DataVar
 from noaa.gefs.forecast.read_data import (
     NoaaFileType,
     SourceFileCoords,
@@ -124,11 +125,7 @@ def reformat_chunks(
 
     print(f"This is {worker_index = }, {workers_total = }, {worker_init_time_i_slices}")
 
-    # TODO pass in template_ds.data_vars.keys() instead of hard-coded list
-    # used for testing
-    data_var_groups = group_data_vars_by_noaa_file_type(
-        ["u10", "t2m"], template._CUSTOM_ATTRIBUTES
-    )
+    data_var_groups = group_data_vars_by_noaa_file_type(template.DATA_VARIABLES)
 
     wait_executor = ThreadPoolExecutor(max_workers=256)
     io_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
@@ -227,17 +224,23 @@ def download_var_group_files(
 
 
 def group_data_vars_by_noaa_file_type(
-    data_vars: Iterable[str], data_var_attributes: dict[str, dict[str, str]]
-) -> list[tuple[NoaaFileType, list[str]]]:
+    data_vars: tuple[DataVar, ...],
+) -> list[tuple[NoaaFileType, list[DataVar]]]:
     grouper = defaultdict(list)
     for data_var in data_vars:
-        noaa_file_type = data_var_attributes[data_var]["noaa_file_type"]
+        noaa_file_type = data_var.internal_attrs.noaa_file_type
         grouper[noaa_file_type].append(data_var)
     chunks = []
-    for file_type, data_vars in grouper.items():
+    for file_type, idx_data_vars in grouper.items():
         # TODO first sort data_vars by order within the grib
+        idx_data_vars = sorted(
+            idx_data_vars, key=lambda data_var: data_var.internal_attrs.index_order
+        )
         chunks.extend(
-            [(file_type, data_vars_chunk) for data_vars_chunk in batched(data_vars, 3)]
+            [
+                (file_type, data_vars_chunk)
+                for data_vars_chunk in batched(idx_data_vars, 3)
+            ]
         )
 
     return chunks

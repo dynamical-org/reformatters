@@ -146,6 +146,7 @@ DATA_VARIABLES: tuple[DataVar, ...] = (
             grib_description='2[m] HTGL="Specified height level above ground"',
             grib_index_level="2 m above ground",
             noaa_file_type="s+a",
+            index_order=10,
         ),
     ),
     DataVar(
@@ -162,6 +163,7 @@ DATA_VARIABLES: tuple[DataVar, ...] = (
             grib_description='10[m] HTGL="Specified height level above ground"',
             grib_index_level="10 m above ground",
             noaa_file_type="s+a",
+            index_order=15,
         ),
     ),
     DataVar(
@@ -178,6 +180,7 @@ DATA_VARIABLES: tuple[DataVar, ...] = (
             grib_description='100[m] HTGL="Specified height level above ground"',
             grib_index_level="100 m above ground",
             noaa_file_type="b",
+            index_order=357,
         ),
     ),
 )
