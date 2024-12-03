@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import Literal
+from typing import Any, Literal, TypeVar
 
 import numcodecs  # type: ignore
 import pydantic
@@ -9,9 +9,27 @@ import pydantic
 # but `s` stops after forecast lead time 240h at which point the variable is still in `a` or `b`.
 type NoaaFileType = Literal["a", "b", "s+a", "s+b"]
 
+B = TypeVar("B", bound=pydantic.BaseModel)
+
+
+def replace(obj: B, **kwargs: Any) -> B:
+    """Replace properties of pydantic model instances."""
+    # From https://github.com/pydantic/pydantic/discussions/3352#discussioncomment-10531773
+    # pydantic's model_copy(update=...) does not validate updates, this function does.
+    return type(obj).model_validate(obj.model_dump() | kwargs)
+
 
 class FrozenBaseModel(pydantic.BaseModel):
-    model_config = pydantic.ConfigDict(frozen=True)
+    model_config = pydantic.ConfigDict(
+        frozen=True, strict=True, revalidate_instances="always"
+    )
+
+
+class DatasetAttributes(FrozenBaseModel):
+    dataset_id: str
+    name: str
+    description: str
+    attribution: str
 
 
 class DataVarAttrs(FrozenBaseModel):
@@ -32,6 +50,8 @@ class Encoding(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(
         arbitrary_types_allowed=True,  # allow numcodecs.abc.Codec values
         frozen=True,
+        strict=True,
+        revalidate_instances="always",
     )
 
     # Could be any np.typing.DTypeLike but that type is loose and allows any string.

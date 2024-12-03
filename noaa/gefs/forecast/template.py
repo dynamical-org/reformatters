@@ -2,23 +2,24 @@ from collections.abc import Hashable
 from pathlib import Path
 from typing import Literal
 
+import dask
+import dask.array
 import numpy as np
-import pandas as pd
 import xarray as xr
 
 from common.config import Config  # noqa:F401
-from common.download_directory import cd_into_download_directory
 from common.types import DatetimeLike, StoreLike
-from noaa.gefs.forecast.read_data import download_file
 
 from .template_config import (
     CHUNKS,
+    CHUNKS_ORDERED,
     COORDINATES,
     DATA_VARIABLES,
+    DATASET_ATTRIBUTES,
+    DIMS,
     ENCODING,
-    Dim,
     get_init_time_coordinates,
-    get_template_coordinates,
+    get_template_dimension_coordinates,
 )
 
 TEMPLATE_PATH = "noaa/gefs/forecast/templates/latest.zarr"
@@ -47,48 +48,39 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
 
 
 def update_template() -> None:
-    coords = get_template_coordinates()
-
     # Resolve to absolue path before changing directories
     template_path = Path(TEMPLATE_PATH).absolute()
 
-    # Pull a single file to load variable names and metadata.
-    # Use a lead time > 0 because not all variables are present at lead time == 0.
-    with cd_into_download_directory() as directory:
-        path = download_file(
-            pd.Timestamp("2024-01-01T00:00"),
-            0,
-            "s+a",
-            pd.Timedelta("3h"),
-            [_CUSTOM_ATTRIBUTES[var] for var in ["u10", "t2m"]],
-            directory,
+    coords = get_template_dimension_coordinates()
+
+    data_vars = {
+        var_config.name: (
+            DIMS,
+            dask.array.full(  # type: ignore
+                shape=tuple(len(coords[dim]) for dim in DIMS),
+                fill_value=np.nan,
+                dtype=var_config.encoding.dtype,
+                chunks=CHUNKS_ORDERED,
+            ),
         )
-        ds = read_file(path.name)
+        for var_config in DATA_VARIABLES
+    }
 
-        # Expand ensemble and lead time dimensions + set coordinates and chunking
-        ds = (
-            ds.sel(ensemble_member=coords["ensemble_member"], method="nearest")
-            .sel(lead_time=coords["lead_time"], method="nearest")
-            .assign_coords(coords)
-            .chunk(CHUNKS)
-        )
+    ds = xr.Dataset(data_vars, coords, DATASET_ATTRIBUTES.model_dump())
 
-        # Remove left over coordinates encoding for coords we don't keep
-        for data_var in ds.data_vars.values():
-            del data_var.encoding["coordinates"]
+    # This could be computed by users on the fly, but it compresses
+    # really well so lets make things easy for users
+    ds.coords["valid_time"] = ds["init_time"] + ds["lead_time"]
 
-        # This could be computed by users on the fly, but it compresses
-        # really well so lets make things easy for users
-        ds.coords["valid_time"] = ds["init_time"] + ds["lead_time"]
+    for var_config in DATA_VARIABLES:
+        data_var = ds[var_config.name]
+        data_var.attrs = var_config.attrs.model_dump()
+        data_var.encoding = ENCODING[var_config.name]
 
-        # TODO
-        # correct temperature units from K -> C
-        # Add custom attributes
-        # Add add dataset wide attributes (dataset_id)
-        # for var_name, data_var in ds.data_vars.items():
-        #     data_var.attrs.update(_CUSTOM_ATTRIBUTES[var_name])
+    for coord_config in COORDINATES:
+        ds.coords[coord_config.name].encoding = ENCODING[coord_config.name]
 
-        write_metadata(ds, template_path, mode="w")
+    write_metadata(ds, template_path, mode="w")
 
 
 def write_metadata(

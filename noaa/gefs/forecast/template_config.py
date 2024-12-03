@@ -6,12 +6,25 @@ from numcodecs import BitRound, Blosc, Delta  # type: ignore
 
 from common.types import DatetimeLike
 
-from .config_models import Coordinate, DataVar, DataVarAttrs, Encoding, InternalAttrs
+from .config_models import (
+    Coordinate,
+    DatasetAttributes,
+    DataVar,
+    DataVarAttrs,
+    Encoding,
+    InternalAttrs,
+    replace,
+)
 
-DATASET_ID = "noaa-gefs-forecast"
+DATASET_ATTRIBUTES = DatasetAttributes(
+    dataset_id="noaa-gefs-forecast",
+    name="NOAA GEFS forecast",
+    description="Weather forecasts from the Global Ensemble Forecast System (GEFS) operated by NOAA NWS NCEP.",
+    attribution="NOAA NWS NCEP GEFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
+)
 
-# Silly to define this twice, but typing.get_args() doesn't guarantee the return order,
-# type parameters can't be constants and the order in DIMS is important so here we are.
+# Silly to list dims twice, but typing.get_args() doesn't guarantee the return order,
+# the order in DIMS is important, and type parameters can't be constants.
 type Dim =        Literal["init_time", "ensemble_member", "lead_time", "latitude", "longitude"]  # fmt: off
 DIMS: tuple[Dim, ... ] = ("init_time", "ensemble_member", "lead_time", "latitude", "longitude")  # fmt: off
 
@@ -19,7 +32,7 @@ INIT_TIME_START = pd.Timestamp("2024-09-01T00:00")
 INIT_TIME_FREQUENCY = pd.Timedelta("6h")
 
 
-def get_template_coordinates() -> dict[Dim, Any]:
+def get_template_dimension_coordinates() -> dict[Dim, Any]:
     return {
         "init_time": get_init_time_coordinates(INIT_TIME_START + INIT_TIME_FREQUENCY),
         "ensemble_member": np.arange(31),
@@ -137,9 +150,7 @@ DATA_VARIABLES: tuple[DataVar, ...] = (
     ),
     DataVar(
         name="u10",
-        encoding=ENCODING_FLOAT32_DEFAULT.model_copy(
-            update={"filters": [BitRound(keepbits=6)]}
-        ),
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
             long_name="10 metre U wind component",
             standard_name="eastward_wind",
@@ -155,9 +166,7 @@ DATA_VARIABLES: tuple[DataVar, ...] = (
     ),
     DataVar(
         name="u100",
-        encoding=ENCODING_FLOAT32_DEFAULT.model_copy(
-            update={"filters": [BitRound(keepbits=6)]}
-        ),
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
             long_name="100 metre U wind component",
             standard_name="eastward_wind",
@@ -173,9 +182,16 @@ DATA_VARIABLES: tuple[DataVar, ...] = (
     ),
 )
 
-ENCODING: dict[str, Encoding] = {
-    **{coord.name: coord.encoding for coord in COORDINATES},
-    **{var.name: var.encoding for var in DATA_VARIABLES},
+# Encoding in the form xarray/zarr needs it: dict values, with keys that don't have values excluded
+ENCODING: dict[str, dict[str, Any]] = {
+    **{
+        coord.name: coord.encoding.model_dump(exclude_none=True)
+        for coord in COORDINATES
+    },
+    **{
+        data_var.name: data_var.encoding.model_dump(exclude_none=True)
+        for data_var in DATA_VARIABLES
+    },
 }
 assert len(ENCODING) == len(COORDINATES) + len(DATA_VARIABLES)
 
