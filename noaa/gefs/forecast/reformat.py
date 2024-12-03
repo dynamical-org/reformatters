@@ -4,7 +4,7 @@ import re
 import subprocess
 import time
 from collections import defaultdict, deque
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from itertools import batched, islice, product, starmap
@@ -20,7 +20,7 @@ from common import string_template
 from common.config import Config  # noqa:F401
 from common.download_directory import cd_into_download_directory
 from common.types import DatetimeLike, StoreLike
-from noaa.gefs.forecast import template
+from noaa.gefs.forecast import template, template_config
 from noaa.gefs.forecast.config_models import DataVar
 from noaa.gefs.forecast.read_data import (
     NoaaFileType,
@@ -125,7 +125,7 @@ def reformat_chunks(
 
     print(f"This is {worker_index = }, {workers_total = }, {worker_init_time_i_slices}")
 
-    data_var_groups = group_data_vars_by_noaa_file_type(template.DATA_VARIABLES)
+    data_var_groups = group_data_vars_by_noaa_file_type(template_config.DATA_VARIABLES)
 
     wait_executor = ThreadPoolExecutor(max_workers=256)
     io_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
@@ -204,13 +204,12 @@ def reformat_chunks(
 
 
 def download_var_group_files(
-    data_vars: list[str],
+    idx_data_vars: list[DataVar],
     chunk_coords: Iterable[SourceFileCoords],
     noaa_file_type: NoaaFileType,
     directory: Path,
     io_executor: ThreadPoolExecutor,
 ) -> list[tuple[SourceFileCoords, Path]]:
-    idx_data_vars = [template._CUSTOM_ATTRIBUTES[var] for var in data_vars]
     local_paths = io_executor.map(
         lambda coord: download_file(
             **coord,
@@ -224,7 +223,7 @@ def download_var_group_files(
 
 
 def group_data_vars_by_noaa_file_type(
-    data_vars: tuple[DataVar, ...],
+    data_vars: Sequence[DataVar],
 ) -> list[tuple[NoaaFileType, list[DataVar]]]:
     grouper = defaultdict(list)
     for data_var in data_vars:

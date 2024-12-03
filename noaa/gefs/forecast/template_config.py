@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Any, Literal
 
 import numpy as np
@@ -131,7 +132,7 @@ COORDINATES: tuple[Coordinate, ...] = (
 )
 
 
-DATA_VARIABLES: tuple[DataVar, ...] = (
+DATA_VARIABLES: Sequence[DataVar] = (
     DataVar(
         name="t2m",
         encoding=ENCODING_FLOAT32_DEFAULT,

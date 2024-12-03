@@ -16,7 +16,7 @@ import xarray as xr
 
 from common.config import Config
 
-from .config_models import NoaaFileType
+from .config_models import DataVar, NoaaFileType
 
 _STATISTIC_LONG_NAME = {"avg": "ensemble mean", "spr": "ensemble spread"}
 # The level names needed to grab the right bands from the index
@@ -40,7 +40,7 @@ def download_file(
     ensemble_member: int,
     lead_time: pd.Timedelta,
     noaa_file_type: NoaaFileType,
-    noaa_idx_data_vars: list[dict[str, str]],
+    noaa_idx_data_vars: list[DataVar],
     directory: Path,
 ) -> Path:
     lead_time_hours = lead_time.total_seconds() / (60 * 60)
@@ -94,7 +94,9 @@ def download_file(
     )
 
     # Create a unique suffix representing the data vars stored in the output file
-    vars_str = "-".join(var_info["grib_element"] for var_info in noaa_idx_data_vars)
+    vars_str = "-".join(
+        var_info.internal_attrs.grib_element for var_info in noaa_idx_data_vars
+    )
     vars_hash = digest(format_noaa_idx_var(var_info) for var_info in noaa_idx_data_vars)
     vars_suffix = f"{vars_str}-{vars_hash}"
     local_path = Path(directory, f"{local_base_file_name}.{vars_suffix}")
@@ -113,7 +115,7 @@ def download_file(
 
 
 def parse_index_byte_ranges(
-    idx_local_path: Path, noaa_idx_data_vars: list[dict[str, str]]
+    idx_local_path: Path, noaa_idx_data_vars: list[DataVar]
 ) -> tuple[list[int], list[int]]:
     with open(idx_local_path) as index_file:
         index_contents = index_file.read()
@@ -145,10 +147,8 @@ def parse_index_byte_ranges(
     return byte_range_starts, byte_range_ends
 
 
-def format_noaa_idx_var(var_info: dict[str, str]) -> str:
-    grib_element = var_info["grib_element"]
-    index_level = var_info["index_level"]
-    return f"{grib_element}:{index_level}"
+def format_noaa_idx_var(var_info: DataVar) -> str:
+    return f"{var_info.internal_attrs.grib_element}:{var_info.internal_attrs.grib_index_level}"
 
 
 def digest(data: str | Iterable[str], length: int = 8) -> str:
