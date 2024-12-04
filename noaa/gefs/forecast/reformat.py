@@ -224,7 +224,7 @@ def download_var_group_files(
 
 def group_data_vars_by_noaa_file_type(
     data_vars: Sequence[DataVar],
-) -> list[tuple[NoaaFileType, list[DataVar]]]:
+) -> list[tuple[NoaaFileType, tuple[DataVar, ...]]]:
     grouper = defaultdict(list)
     for data_var in data_vars:
         noaa_file_type = data_var.internal_attrs.noaa_file_type
