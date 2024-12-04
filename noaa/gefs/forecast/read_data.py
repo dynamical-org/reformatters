@@ -148,7 +148,9 @@ def parse_index_byte_ranges(
 
 
 def format_noaa_idx_var(var_info: DataVar) -> str:
-    return f"{var_info.internal_attrs.grib_element}:{var_info.internal_attrs.grib_index_level}"
+    return re.escape(
+        f"{var_info.internal_attrs.grib_element}:{var_info.internal_attrs.grib_index_level}"
+    )
 
 
 def digest(data: str | Iterable[str], length: int = 8) -> str:
