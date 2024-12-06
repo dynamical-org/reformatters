@@ -1,10 +1,13 @@
+import concurrent.futures
 import os
 import re
 import subprocess
-from collections.abc import Iterable
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+import time
+from collections import defaultdict, deque
+from collections.abc import Iterable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from itertools import islice, starmap
+from itertools import batched, islice, product, starmap
 from pathlib import Path
 from typing import Literal
 
@@ -17,8 +20,14 @@ from common import string_template
 from common.config import Config  # noqa:F401
 from common.download_directory import cd_into_download_directory
 from common.types import DatetimeLike, StoreLike
-from noaa.gefs.forecast import template
-from noaa.gefs.forecast.read_data import download_file, read_file
+from noaa.gefs.forecast import template, template_config
+from noaa.gefs.forecast.config_models import DataVar
+from noaa.gefs.forecast.read_data import (
+    NoaaFileType,
+    SourceFileCoords,
+    download_file,
+    read_into,
+)
 
 _PROCESSING_CHUNK_DIMENSION = "init_time"
 
@@ -30,8 +39,9 @@ def reformat_local(init_time_end: DatetimeLike) -> None:
     template.write_metadata(template_ds, store, get_mode(store))
 
     print("Starting reformat")
-    # Process all chunks
+    # Process all chunks by setting worker_index=0 and worker_total=1
     reformat_chunks(init_time_end, worker_index=0, workers_total=1)
+    print("Done writing to", store)
 
 
 def reformat_kubernetes(
@@ -58,8 +68,7 @@ def reformat_kubernetes(
         check=True,
     )
     subprocess.run(  # noqa: S603
-        ["/usr/bin/docker", "push", image_tag],
-        check=True,
+        ["/usr/bin/docker", "push", image_tag], check=True
     )
     print("Pushed", image_tag)
 
@@ -71,8 +80,7 @@ def reformat_kubernetes(
     workers_total = int(np.ceil(num_jobs / jobs_per_pod))
     parallelism = min(workers_total, max_parallelism)
 
-    # TODO read dataset id from template_ds.attrs
-    dataset_id = template._DATASET_ID
+    dataset_id = template_ds.attrs["dataset_id"]
     job_name = f"{dataset_id}-{job_timestamp}"
     kubernetes_job = string_template.substitute(
         "deploy/kubernetes_ingest_job.yaml",
@@ -117,65 +125,124 @@ def reformat_chunks(
 
     print(f"This is {worker_index = }, {workers_total = }, {worker_init_time_i_slices}")
 
-    thread_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
-    # If we compile eccodes ourselves with thread safety enabled we could use threads for reading
-    # https://confluence.ecmwf.int/display/ECC/ecCodes+installation ENABLE_ECCODES_THREADS
-    # but make sure to read thread safety comment in our `read_data` function.
-    proccess_executor = ProcessPoolExecutor(max_workers=os.cpu_count())
+    data_var_groups = group_data_vars_by_noaa_file_type(template_config.DATA_VARIABLES)
+
+    wait_executor = ThreadPoolExecutor(max_workers=256)
+    io_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
+    cpu_executor = ThreadPoolExecutor(max_workers=os.cpu_count())
+
+    # # If we compile eccodes ourselves with thread safety enabled we could use threads for reading
+    # # https://confluence.ecmwf.int/display/ECC/ecCodes+installation ENABLE_ECCODES_THREADS
+    # # but make sure to read thread safety comment in our `read_data` function.
+    # proccess_executor = ProcessPoolExecutor(max_workers=os.cpu_count())
 
     for init_time_i_slice in worker_init_time_i_slices:
         chunk_template_ds = template_ds.isel(init_time=init_time_i_slice)
 
         chunk_init_times = pd.to_datetime(chunk_template_ds["init_time"].values)
         chunk_lead_times = pd.to_timedelta(chunk_template_ds["lead_time"].values)
-        chunk_ensemble_members = chunk_template_ds["ensemble_member"]
+        chunk_ensemble_members = chunk_template_ds["ensemble_member"].values
+        chunk_coords: list[SourceFileCoords] = [
+            {
+                "init_time": init_time,
+                "ensemble_member": ensemble_member,
+                "lead_time": lead_time,
+            }
+            for init_time, ensemble_member, lead_time in product(
+                chunk_init_times, chunk_ensemble_members, chunk_lead_times
+            )
+        ]
 
         chunk_init_times_str = ", ".join(chunk_init_times.strftime("%Y-%m-%dT%H:%M"))
         print("Starting chunk with init times", chunk_init_times_str)
 
         with cd_into_download_directory() as directory:
-            init_time_datasets = []
-            for init_time in chunk_init_times:
-                ensemble_member_datasets = []
-                for ensemble_member in chunk_ensemble_members:
-                    print("Downloading files")
-                    download = partial(
-                        download_file, init_time, ensemble_member, directory=directory
+            download_var_group_futures = {}
+            for noaa_file_type, data_vars in data_var_groups:
+                download_var_group_futures[
+                    wait_executor.submit(
+                        download_var_group_files,
+                        data_vars,
+                        chunk_coords,
+                        noaa_file_type,
+                        directory,
+                        io_executor,
                     )
-                    file_paths = tuple(thread_executor.map(download, chunk_lead_times))
-                    file_names = [path.name for path in file_paths]
-                    print("Reading datasets")
-                    datasets = tuple(proccess_executor.map(read_file, file_names))
+                ] = data_vars
+                # TODO: this necessary? allow all the previous groups files to be submitted so a group is more likely to finish together and reading can begin
+                time.sleep(0.1)
 
-                    print(
-                        f"Concatenating lead times for ensemble member {ensemble_member.item()} of {init_time}"
+            for future in concurrent.futures.as_completed(download_var_group_futures):
+                if (e := future.exception()) is not None:
+                    raise e
+
+                coords_and_paths = future.result()
+                data_vars = download_var_group_futures[future]
+
+                # Write variable by variable to avoid blowing up memory usage
+                for data_var in data_vars:
+                    data_array = xr.full_like(chunk_template_ds[data_var], np.nan)
+                    data_array.load()  # preallocate backing numpy arrays (for performance?)
+                    # valid_time is a coordinate and already written with different chunks
+                    data_array = data_array.drop_vars("valid_time")
+                    print("reading...")
+                    consume(
+                        cpu_executor.map(
+                            partial(
+                                read_into,
+                                data_array,
+                                internal_attrs=template._CUSTOM_ATTRIBUTES,
+                            ),
+                            *zip(*coords_and_paths, strict=True),
+                        )
                     )
-                    ensemble_member_ds = xr.concat(
-                        datasets, dim="lead_time", join="exact"
-                    )
 
-                    # TODO decide on complete set of variables to include
-                    if "orog" in ensemble_member_ds:
-                        ensemble_member_ds = ensemble_member_ds.drop_vars("orog")
+                    assert np.isfinite(data_array).any()
+                    print(f"Writing {data_var} {chunk_init_times_str}")
+                    chunks = template.chunk_args(chunk_template_ds)
+                    data_array.chunk(chunks).to_zarr(store, region="auto")
 
-                    ensemble_member_datasets.append(ensemble_member_ds)
 
-                print("concatenating ensemble members for init time", init_time)
-                init_time_ds = xr.concat(
-                    ensemble_member_datasets, dim="ensemble_member", join="exact"
-                )
-                init_time_datasets.append(init_time_ds)
+def download_var_group_files(
+    idx_data_vars: list[DataVar],
+    chunk_coords: Iterable[SourceFileCoords],
+    noaa_file_type: NoaaFileType,
+    directory: Path,
+    io_executor: ThreadPoolExecutor,
+) -> list[tuple[SourceFileCoords, Path]]:
+    local_paths = io_executor.map(
+        lambda coord: download_file(
+            **coord,
+            noaa_file_type=noaa_file_type,
+            directory=directory,
+            noaa_idx_data_vars=idx_data_vars,
+        ),
+        chunk_coords,
+    )
+    return list(zip(chunk_coords, local_paths, strict=True))
 
-            print("concatenating init times in chunk", chunk_init_times_str)
-            chunk_ds = xr.concat(init_time_datasets, dim="init_time", join="exact")
 
-            # Write variable by variable to avoid blowing up memory usage
-            for var_key in template_ds.data_vars.keys():
-                if var_key not in chunk_ds:
-                    continue  # TODO decide on complete set of variables to include
-                print(f"Writing {var_key} {chunk_init_times_str}")
-                chunks = template.chunk_args(template_ds)
-                chunk_ds[var_key].chunk(chunks).to_zarr(store, region="auto")
+def group_data_vars_by_noaa_file_type(
+    data_vars: Sequence[DataVar],
+) -> list[tuple[NoaaFileType, list[DataVar]]]:
+    grouper = defaultdict(list)
+    for data_var in data_vars:
+        noaa_file_type = data_var.internal_attrs.noaa_file_type
+        grouper[noaa_file_type].append(data_var)
+    chunks = []
+    for file_type, idx_data_vars in grouper.items():
+        # TODO first sort data_vars by order within the grib
+        idx_data_vars = sorted(
+            idx_data_vars, key=lambda data_var: data_var.internal_attrs.index_order
+        )
+        chunks.extend(
+            [
+                (file_type, data_vars_chunk)
+                for data_vars_chunk in batched(idx_data_vars, 3)
+            ]
+        )
+
+    return chunks
 
 
 def get_worker_jobs[T](
@@ -186,8 +253,8 @@ def get_worker_jobs[T](
 
 
 def get_store() -> StoreLike:
-    # if Config.is_dev():
-    #     return Path("data/output/noaa/gefs/forecast/dev.zarr").absolute()
+    if Config.is_dev():
+        return Path("data/output/noaa/gefs/forecast/dev.zarr").absolute()
 
     s3 = s3fs.S3FileSystem()
 
@@ -210,3 +277,12 @@ def chunk_i_slices(ds: xr.Dataset, dim: str) -> Iterable[slice]:
     stop_idx = np.cumsum(ds.chunksizes[dim])  # 2, 4, 6
     start_idx = np.insert(stop_idx, 0, 0)  # 0, 2, 4, 6
     return starmap(slice, zip(start_idx, stop_idx, strict=False))  # (0,2), (2,4), (4,6)
+
+
+def consume[T](iterator: Iterable[T], n: int | None = None) -> None:
+    "Advance the iterator n-steps ahead. If n is None, consume entirely."
+    # Use functions that consume iterators at C speed.
+    if n is None:
+        deque(iterator, maxlen=0)
+    else:
+        next(islice(iterator, n, n), None)
