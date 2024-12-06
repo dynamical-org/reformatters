@@ -245,6 +245,7 @@ def read_rasterio(
         assert len(matching_bands) == 1, f"Expected exactly 1 matching band, found {matching_bands}. {grib_element=}, {grib_description=}, {path=}"  # fmt: skip
         rasterio_band_index = matching_bands[0]
 
+        # TODO: resample b and a (their resolution is lower than s)
         return reader.read(rasterio_band_index, out_dtype=np.float32)  # type: ignore
 
 
