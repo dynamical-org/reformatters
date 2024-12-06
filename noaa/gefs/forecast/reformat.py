@@ -1,6 +1,7 @@
 import concurrent.futures
 import os
 import re
+import shutil
 import subprocess
 import time
 from collections import defaultdict, deque
@@ -30,6 +31,57 @@ from noaa.gefs.forecast.read_data import (
 )
 
 _PROCESSING_CHUNK_DIMENSION = "init_time"
+
+
+def reformat_operational() -> None:
+    final_store = get_store()
+    tmp_store = get_local_tmp_store()
+    # Get the dataset, check what data is already present
+    ds = xr.open_dataset(final_store)
+    # TODO base this not only on presence of init_time,
+    # but also forecast_length/expected_forecast_length
+    # coordinates:
+    # https://app.asana.com/0/1207641655330818/1201550874443598/f
+    start = ds.init_time.max()
+    init_time_end = "2024-09-01T18:00"  # pd.Timestamp.utcnow().tz_localize(None)
+    template_ds = template.get_template(init_time_end)
+
+    new_init_times = template_ds.init_time.loc[template_ds.init_time > start]
+    new_init_time_indices = template_ds.get_index("init_time").get_indexer(
+        new_init_times
+    )  # type: ignore
+    i_slices = list(
+        starmap(
+            slice,
+            zip(
+                new_init_time_indices,
+                list(new_init_time_indices[1:]) + [None],
+                strict=False,
+            ),
+        )
+    )
+    template.write_metadata(template_ds, tmp_store, get_mode(final_store))
+    # TODO: Maybe operational doesn't need to fan out? We expect it to only digest
+    # a small amount of data.
+    reformat_init_time_i_slices(i_slices, template_ds, tmp_store)
+
+    for data_var in ds.data_vars:
+        source_path = tmp_store / str(data_var)
+        # Only the new files will exist for tmp_store.
+        files_to_copy = os.listdir(source_path)
+        # TODO this only works locally
+        dest_path = final_store / str(data_var)
+        [shutil.copy2(source_path / file, dest_path / file) for file in files_to_copy]
+
+    template.write_metadata(template_ds, final_store, get_mode(final_store))
+
+    breakpoint()
+
+    # add the new chunks
+
+    # add the metadata
+
+    breakpoint()
 
 
 def reformat_local(init_time_end: DatetimeLike) -> None:
@@ -124,7 +176,12 @@ def reformat_chunks(
     )
 
     print(f"This is {worker_index = }, {workers_total = }, {worker_init_time_i_slices}")
+    reformat_init_time_i_slices(worker_init_time_i_slices, template_ds, store)
 
+
+def reformat_init_time_i_slices(
+    init_time_i_slices: list[slice], template_ds: xr.Dataset, store: StoreLike
+) -> None:
     data_var_groups = group_data_vars_by_noaa_file_type(template_config.DATA_VARIABLES)
 
     wait_executor = ThreadPoolExecutor(max_workers=256)
@@ -136,7 +193,7 @@ def reformat_chunks(
     # # but make sure to read thread safety comment in our `read_data` function.
     # proccess_executor = ProcessPoolExecutor(max_workers=os.cpu_count())
 
-    for init_time_i_slice in worker_init_time_i_slices:
+    for init_time_i_slice in init_time_i_slices:
         chunk_template_ds = template_ds.isel(init_time=init_time_i_slice)
 
         chunk_init_times = pd.to_datetime(chunk_template_ds["init_time"].values)
@@ -181,7 +238,7 @@ def reformat_chunks(
 
                 # Write variable by variable to avoid blowing up memory usage
                 for data_var in data_vars:
-                    data_array = xr.full_like(chunk_template_ds[data_var], np.nan)
+                    data_array = xr.full_like(chunk_template_ds[data_var.name], np.nan)
                     data_array.load()  # preallocate backing numpy arrays (for performance?)
                     # valid_time is a coordinate and already written with different chunks
                     data_array = data_array.drop_vars("valid_time")
@@ -191,7 +248,7 @@ def reformat_chunks(
                             partial(
                                 read_into,
                                 data_array,
-                                internal_attrs=template._CUSTOM_ATTRIBUTES,
+                                data_var=data_var,
                             ),
                             *zip(*coords_and_paths, strict=True),
                         )
@@ -233,7 +290,7 @@ def group_data_vars_by_noaa_file_type(
     for file_type, idx_data_vars in grouper.items():
         # TODO first sort data_vars by order within the grib
         idx_data_vars = sorted(
-            idx_data_vars, key=lambda data_var: data_var.internal_attrs.index_order
+            idx_data_vars, key=lambda data_var: data_var.internal_attrs.index_position
         )
         chunks.extend(
             [
@@ -262,6 +319,10 @@ def get_store() -> StoreLike:
         "s3://us-west-2.opendata.source.coop/aldenks/noaa-gefs-dev/forecast/dev.zarr"
     )
     return store
+
+
+def get_local_tmp_store() -> Path:
+    return Path("data/output/noaa/gefs/forecast/tmp.zarr").absolute()
 
 
 def get_mode(store: StoreLike) -> Literal["w-", "w"]:

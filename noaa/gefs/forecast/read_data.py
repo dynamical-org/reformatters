@@ -35,6 +35,13 @@ class SourceFileCoords(TypedDict):
     lead_time: pd.Timedelta
 
 
+resolutions = {
+    "s": "25",
+    "a": "50",
+    "b": "50",
+}
+
+
 def download_file(
     init_time: pd.Timestamp,
     ensemble_member: int,
@@ -70,8 +77,8 @@ def download_file(
         true_noaa_file_type = noaa_file_type
 
     remote_path = (
-        f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2sp25/"
-        f"ge{formatted_ensemble_member}.t{init_hour_str}z.pgrb2{true_noaa_file_type}.0p25.f{lead_time_hours:03.0f}"
+        f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2{true_noaa_file_type}p{resolutions[true_noaa_file_type].strip("0")}/"
+        f"ge{formatted_ensemble_member}.t{init_hour_str}z.pgrb2{true_noaa_file_type}.0p{resolutions[true_noaa_file_type]}.f{lead_time_hours:03.0f}"
     )
 
     store = http_store("https://storage.googleapis.com/gfs-ensemble-forecast-system")
@@ -204,12 +211,13 @@ def read_into(
     out: xr.DataArray,
     coords: SourceFileCoords,
     path: os.PathLike[str],
-    internal_attrs: dict[Hashable, Any],
+    data_var: DataVar,
 ) -> None:
-    var_attrs = internal_attrs[out.name]
-    grib_element = var_attrs["grib_element"]
-    grib_description = var_attrs["grib_description"]
-    out.loc[coords] = read_rasterio(path, grib_element, grib_description)
+    out.loc[coords] = read_rasterio(
+        path,
+        data_var.internal_attrs.grib_element,
+        data_var.internal_attrs.grib_description,
+    )
 
 
 def read_rasterio(
@@ -227,6 +235,7 @@ def read_rasterio(
         assert len(matching_bands) == 1, f"Expected exactly 1 matching band, found {matching_bands}. {grib_element=}, {grib_description=}, {path=}"  # fmt: skip
         rasterio_band_index = matching_bands[0]
 
+        # TODO: resample b and a (their resolution is lower than s)
         return reader.read(rasterio_band_index, out_dtype=np.float32)  # type: ignore
 
 
