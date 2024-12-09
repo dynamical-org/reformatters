@@ -5,7 +5,7 @@ import subprocess
 import time
 from collections import defaultdict, deque
 from collections.abc import Iterable, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from functools import partial
 from itertools import batched, islice, product, starmap
 from pathlib import Path
@@ -157,7 +157,9 @@ def reformat_chunks(
         print("Starting chunk with init times", chunk_init_times_str)
 
         with cd_into_download_directory() as directory:
-            download_var_group_futures = {}
+            download_var_group_futures: dict[
+                Future[list[tuple[SourceFileCoords, Path]]], tuple[DataVar, ...]
+            ] = {}
             for noaa_file_type, data_vars in data_var_groups:
                 download_var_group_futures[
                     wait_executor.submit(
@@ -169,7 +171,7 @@ def reformat_chunks(
                         io_executor,
                     )
                 ] = data_vars
-                # TODO: this necessary? allow all the previous groups files to be submitted so a group is more likely to finish together and reading can begin
+                # TODO: this necessary? allow all of this group's downloads to be submitted to io_executor so a group is more likely to finish together and reading can begin
                 time.sleep(0.1)
 
             for future in concurrent.futures.as_completed(download_var_group_futures):
@@ -191,7 +193,8 @@ def reformat_chunks(
                             partial(
                                 read_into,
                                 data_array,
-                                internal_attrs=template._CUSTOM_ATTRIBUTES,
+                                grib_element=data_var.internal_attrs.grib_element,
+                                grib_description=data_var.internal_attrs.grib_description,
                             ),
                             *zip(*coords_and_paths, strict=True),
                         )
@@ -204,7 +207,7 @@ def reformat_chunks(
 
 
 def download_var_group_files(
-    idx_data_vars: list[DataVar],
+    idx_data_vars: Iterable[DataVar],
     chunk_coords: Iterable[SourceFileCoords],
     noaa_file_type: NoaaFileType,
     directory: Path,

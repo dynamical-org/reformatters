@@ -3,7 +3,7 @@ import functools
 import hashlib
 import os
 import re
-from collections.abc import Hashable, Iterable, Sequence
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -41,7 +41,7 @@ def download_file(
     ensemble_member: int,
     lead_time: pd.Timedelta,
     noaa_file_type: NoaaFileType,
-    noaa_idx_data_vars: list[DataVar],
+    noaa_idx_data_vars: Iterable[DataVar],
     directory: Path,
 ) -> Path:
     lead_time_hours = lead_time.total_seconds() / (60 * 60)
@@ -116,7 +116,7 @@ def download_file(
 
 
 def parse_index_byte_ranges(
-    idx_local_path: Path, noaa_idx_data_vars: list[DataVar]
+    idx_local_path: Path, noaa_idx_data_vars: Iterable[DataVar]
 ) -> tuple[list[int], list[int]]:
     with open(idx_local_path) as index_file:
         index_contents = index_file.read()
@@ -203,11 +203,9 @@ def read_into(
     out: xr.DataArray,
     coords: SourceFileCoords,
     path: os.PathLike[str],
-    internal_attrs: dict[Hashable, Any],
+    grib_element: str,
+    grib_description: str,
 ) -> None:
-    var_attrs = internal_attrs[out.name]
-    grib_element = var_attrs["grib_element"]
-    grib_description = var_attrs["grib_description"]
     out.loc[coords] = read_rasterio(path, grib_element, grib_description)
 
 
