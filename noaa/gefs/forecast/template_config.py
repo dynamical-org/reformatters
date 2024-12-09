@@ -74,7 +74,7 @@ ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT = Encoding(
     compressor=Blosc(cname="zstd", clevel=3, shuffle=Blosc.SHUFFLE),
 )
 
-COORDINATES: tuple[Coordinate, ...] = (
+COORDINATES: Sequence[Coordinate] = (
     Coordinate(
         name="init_time",
         encoding=Encoding(

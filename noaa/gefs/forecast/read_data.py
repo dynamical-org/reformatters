@@ -16,7 +16,8 @@ import xarray as xr
 
 from common.config import Config
 
-from .config_models import DataVar, NoaaFileType
+from .config_models import DataVar
+from .config_models import NoaaFileType as NoaaFileType
 
 _STATISTIC_LONG_NAME = {"avg": "ensemble mean", "spr": "ensemble spread"}
 # The level names needed to grab the right bands from the index
@@ -122,7 +123,7 @@ def parse_index_byte_ranges(
     byte_range_starts = []
     byte_range_ends = []
     for var_info in noaa_idx_data_vars:
-        var_match_str = format_noaa_idx_var(var_info)
+        var_match_str = re.escape(format_noaa_idx_var(var_info))
         matches = re.findall(
             f"\\d+:(\\d+):.+:{var_match_str}:.+(\\n\\d+:(\\d+))?",
             index_contents,
@@ -148,9 +149,7 @@ def parse_index_byte_ranges(
 
 
 def format_noaa_idx_var(var_info: DataVar) -> str:
-    return re.escape(
-        f"{var_info.internal_attrs.grib_element}:{var_info.internal_attrs.grib_index_level}"
-    )
+    return f"{var_info.internal_attrs.grib_element}:{var_info.internal_attrs.grib_index_level}"
 
 
 def digest(data: str | Iterable[str], length: int = 8) -> str:
