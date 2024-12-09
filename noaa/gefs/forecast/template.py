@@ -74,7 +74,7 @@ def update_template() -> None:
 
     for var_config in DATA_VARIABLES:
         data_var = ds[var_config.name]
-        data_var.attrs = var_config.attrs.model_dump()
+        data_var.attrs = var_config.attrs.model_dump(exclude_none=True)
         data_var.encoding = ENCODING[var_config.name]
 
     for coord_config in COORDINATES:

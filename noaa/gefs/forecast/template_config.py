@@ -694,7 +694,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         attrs=DataVarAttrs(
             short_name="hlcy",
             long_name="Storm relative helicity",
-            units="J/kg",
+            units="m^2/s^2",
             step_type="instant",
         ),
         internal_attrs=InternalAttrs(
