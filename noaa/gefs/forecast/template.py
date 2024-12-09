@@ -17,7 +17,6 @@ from .template_config import (
     DATA_VARIABLES,
     DATASET_ATTRIBUTES,
     DIMS,
-    ENCODING,
     get_init_time_coordinates,
     get_template_dimension_coordinates,
 )
@@ -42,7 +41,7 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
 
     # Uncomment to make smaller zarr while developing
     if Config.is_dev():
-        ds = ds.isel(ensemble_member=slice(5), lead_time=slice(24))
+        ds = ds[["u10", "tp"]].isel(ensemble_member=slice(3), lead_time=slice(12))
 
     return ds
 
@@ -75,10 +74,12 @@ def update_template() -> None:
     for var_config in DATA_VARIABLES:
         data_var = ds[var_config.name]
         data_var.attrs = var_config.attrs.model_dump(exclude_none=True)
-        data_var.encoding = ENCODING[var_config.name]
+        data_var.encoding = var_config.encoding.model_dump(exclude_none=True)
 
     for coord_config in COORDINATES:
-        ds.coords[coord_config.name].encoding = ENCODING[coord_config.name]
+        ds.coords[coord_config.name].encoding = coord_config.encoding.model_dump(
+            exclude_none=True
+        )
 
     write_metadata(ds, template_path, mode="w")
 
@@ -88,7 +89,7 @@ def write_metadata(
     store: StoreLike,
     mode: Literal["w", "w-", "a", "a-", "r+", "r"],
 ) -> None:
-    template_ds.to_zarr(store, mode=mode, compute=False, encoding=ENCODING)
+    template_ds.to_zarr(store, mode=mode, compute=False)
     print(f"Wrote metadata to {store} with mode {mode}.")
 
 

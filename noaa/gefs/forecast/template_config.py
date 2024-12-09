@@ -694,7 +694,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         attrs=DataVarAttrs(
             short_name="hlcy",
             long_name="Storm relative helicity",
-            units="m^2/s^2",
+            units="m^2/s^2",  # TODO triple check our values really are in these units, gdal reports J/kg (equivalent?)
             step_type="instant",
         ),
         internal_attrs=InternalAttrs(
@@ -723,16 +723,3 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
 )
-
-# Encoding in the form xarray/zarr needs it: dict values, with keys that don't have values excluded
-ENCODING: dict[str, dict[str, Any]] = {
-    **{
-        coord.name: coord.encoding.model_dump(exclude_none=True)
-        for coord in COORDINATES
-    },
-    **{
-        data_var.name: data_var.encoding.model_dump(exclude_none=True)
-        for data_var in DATA_VARIABLES
-    },
-}
-assert len(ENCODING) == len(COORDINATES) + len(DATA_VARIABLES)

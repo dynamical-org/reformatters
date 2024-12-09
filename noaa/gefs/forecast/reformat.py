@@ -183,7 +183,7 @@ def reformat_chunks(
 
                 # Write variable by variable to avoid blowing up memory usage
                 for data_var in data_vars:
-                    data_array = xr.full_like(chunk_template_ds[data_var], np.nan)
+                    data_array = xr.full_like(chunk_template_ds[data_var.name], np.nan)
                     data_array.load()  # preallocate backing numpy arrays (for performance?)
                     # valid_time is a coordinate and already written with different chunks
                     data_array = data_array.drop_vars("valid_time")
@@ -201,7 +201,7 @@ def reformat_chunks(
                     )
 
                     assert np.isfinite(data_array).any()
-                    print(f"Writing {data_var} {chunk_init_times_str}")
+                    print(f"Writing {data_var.name} {chunk_init_times_str}")
                     chunks = template.chunk_args(chunk_template_ds)
                     data_array.chunk(chunks).to_zarr(store, region="auto")
 
@@ -226,7 +226,7 @@ def download_var_group_files(
 
 
 def group_data_vars_by_noaa_file_type(
-    data_vars: Sequence[DataVar],
+    data_vars: Sequence[DataVar], group_size: int = 4
 ) -> list[tuple[NoaaFileType, tuple[DataVar, ...]]]:
     grouper = defaultdict(list)
     for data_var in data_vars:
@@ -241,7 +241,7 @@ def group_data_vars_by_noaa_file_type(
         chunks.extend(
             [
                 (file_type, data_vars_chunk)
-                for data_vars_chunk in batched(idx_data_vars, 3)
+                for data_vars_chunk in batched(idx_data_vars, group_size)
             ]
         )
 
