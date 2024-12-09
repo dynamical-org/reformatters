@@ -42,8 +42,10 @@ def reformat_operational() -> None:
     # coordinates:
     # https://app.asana.com/0/1207641655330818/1201550874443598/f
     start = ds.init_time.max()
-    init_time_end = "2024-09-01T18:00"  # pd.Timestamp.utcnow().tz_localize(None)
+    init_time_end = pd.Timestamp.utcnow().tz_localize(None)
     template_ds = template.get_template(init_time_end)
+    # TODO this is just limiting for testing
+    template_ds = template_ds.isel(init_time=slice(0, len(ds.init_time) + 1))
 
     new_init_times = template_ds.init_time.loc[template_ds.init_time > start]
     new_init_time_indices = template_ds.get_index("init_time").get_indexer(
@@ -64,23 +66,16 @@ def reformat_operational() -> None:
     # a small amount of data.
     reformat_init_time_i_slices(i_slices, template_ds, tmp_store)
 
+    # TODO: pipeline this so that it can start moving slices over as soon as they are available.
     for data_var in ds.data_vars:
         source_path = tmp_store / str(data_var)
         # Only the new files will exist for tmp_store.
         files_to_copy = os.listdir(source_path)
-        # TODO this only works locally
+        # TODO this only works locally. Use obstore for cloud storage version.
         dest_path = final_store / str(data_var)
         [shutil.copy2(source_path / file, dest_path / file) for file in files_to_copy]
 
     template.write_metadata(template_ds, final_store, get_mode(final_store))
-
-    breakpoint()
-
-    # add the new chunks
-
-    # add the metadata
-
-    breakpoint()
 
 
 def reformat_local(init_time_end: DatetimeLike) -> None:
