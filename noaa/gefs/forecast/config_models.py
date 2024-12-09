@@ -34,9 +34,10 @@ class DatasetAttributes(FrozenBaseModel):
 
 class DataVarAttrs(FrozenBaseModel):
     long_name: str
-    standard_name: str
+    short_name: str
+    standard_name: str | None = None
     units: str
-    step_type: Literal["instant", "accum"]
+    step_type: Literal["instant", "accum", "avg", "min", "max"]
 
 
 class InternalAttrs(FrozenBaseModel):
@@ -44,7 +45,7 @@ class InternalAttrs(FrozenBaseModel):
     grib_description: str
     grib_index_level: str
     noaa_file_type: NoaaFileType
-    index_order: int
+    index_position: int
 
 
 class Encoding(pydantic.BaseModel):
