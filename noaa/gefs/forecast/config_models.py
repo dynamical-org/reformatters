@@ -37,7 +37,7 @@ class DataVarAttrs(FrozenBaseModel):
     short_name: str
     standard_name: str | None = None
     units: str
-    step_type: Literal["instant", "accum"]
+    step_type: Literal["instant", "accum", "avg", "min", "max"]
 
 
 class InternalAttrs(FrozenBaseModel):

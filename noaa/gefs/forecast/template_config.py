@@ -134,26 +134,8 @@ COORDINATES: tuple[Coordinate, ...] = (
 
 DATA_VARIABLES: Sequence[DataVar] = (
     DataVar(
-        name="u100",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
-        attrs=DataVarAttrs(
-            short_name="u100",
-            long_name="100 metre U wind component",
-            standard_name="eastward_wind",
-            units="m s**-1",
-            step_type="instant",
-        ),
-        internal_attrs=InternalAttrs(
-            grib_element="UGRD",
-            grib_description='100[m] HTGL="Specified height level above ground"',
-            grib_index_level="100 m above ground",
-            noaa_file_type="b",
-            index_position=357,
-        ),
-    ),
-    DataVar(
         name="vis",
-        encoding=None,
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=15_000.0),
         attrs=DataVarAttrs(
             short_name="vis",
             long_name="Visibility",
@@ -170,7 +152,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="gust",
-        encoding=None,
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
             short_name="gust",
             long_name="Wind speed (gust)",
@@ -187,7 +169,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="mslet",
-        encoding=None,
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=101_000.0),
         attrs=DataVarAttrs(
             short_name="mslet",
             long_name="MSLP (Eta model reduction)",
@@ -204,7 +186,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="sp",
-        encoding=None,
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=100_000.0),
         attrs=DataVarAttrs(
             short_name="sp",
             long_name="Surface pressure",
@@ -222,7 +204,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="st",
-        encoding=None,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="st",
             long_name="Soil temperature",
@@ -239,7 +221,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="soilw",
-        encoding=None,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="soilw",
             long_name="Volumetric soil moisture content",
@@ -256,7 +238,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="sdwe",
-        encoding=None,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="sdwe",
             long_name="Water equivalent of accumulated snow depth (deprecated)",
@@ -273,7 +255,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="sde",
-        encoding=None,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="sde",
             long_name="Snow depth",
@@ -291,7 +273,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="sithick",
-        encoding=None,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="sithick",
             long_name="Sea ice thickness",
@@ -308,7 +290,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="t2m",
-        encoding=None,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="t2m",
             long_name="2 metre temperature",
@@ -326,7 +308,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="d2m",
-        encoding=None,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="d2m",
             long_name="2 metre dewpoint temperature",
@@ -343,7 +325,9 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="r2",
-        encoding=None,
+        encoding=replace(
+            ENCODING_FLOAT32_DEFAULT, add_offset=50.0, filters=[BitRound(keepbits=6)]
+        ),
         attrs=DataVarAttrs(
             short_name="r2",
             long_name="2 metre relative humidity",
@@ -361,7 +345,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="tmax",
-        encoding=None,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="tmax",
             long_name="Maximum temperature",
@@ -378,7 +362,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="tmin",
-        encoding=None,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="tmin",
             long_name="Minimum temperature",
@@ -395,7 +379,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="u10",
-        encoding=None,
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
             short_name="u10",
             long_name="10 metre U wind component",
@@ -413,7 +397,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="v10",
-        encoding=None,
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
             short_name="v10",
             long_name="10 metre V wind component",
@@ -430,8 +414,44 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
+        name="u100",
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
+        attrs=DataVarAttrs(
+            short_name="u100",
+            long_name="100 metre U wind component",
+            standard_name="eastward_wind",
+            units="m/s",
+            step_type="instant",
+        ),
+        internal_attrs=InternalAttrs(
+            grib_element="UGRD",
+            grib_description='100[m] HTGL="Specified height level above ground"',
+            grib_index_level="100 m above ground",
+            noaa_file_type="b",
+            index_position=357,
+        ),
+    ),
+    DataVar(
+        name="v100",
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
+        attrs=DataVarAttrs(
+            short_name="v100",
+            long_name="100 metre V wind component",
+            units="m/s",
+            step_type="instant",
+            standard_name="northward_wind",
+        ),
+        internal_attrs=InternalAttrs(
+            grib_element="VGRD",
+            grib_description='100[m] HTGL="Specified height level above ground"',
+            grib_index_level="100 m above ground",
+            noaa_file_type="b",
+            index_position=358,
+        ),
+    ),
+    DataVar(
         name="cpofp",
-        encoding=None,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="cpofp",
             long_name="Percent frozen precipitation",
@@ -448,7 +468,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="tp",
-        encoding=None,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="tp",
             long_name="Total Precipitation",
@@ -465,7 +485,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="csnow",
-        encoding=None,
+        encoding=ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT,
         attrs=DataVarAttrs(
             short_name="csnow",
             long_name="Categorical snow",
@@ -482,7 +502,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="cicep",
-        encoding=None,
+        encoding=ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT,
         attrs=DataVarAttrs(
             short_name="cicep",
             long_name="Categorical ice pellets",
@@ -499,7 +519,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="cfrzr",
-        encoding=None,
+        encoding=ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT,
         attrs=DataVarAttrs(
             short_name="cfrzr",
             long_name="Categorical freezing rain",
@@ -516,7 +536,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="crain",
-        encoding=None,
+        encoding=ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT,
         attrs=DataVarAttrs(
             short_name="crain",
             long_name="Categorical rain",
@@ -533,7 +553,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="mslhf",
-        encoding=None,
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
             short_name="mslhf",
             long_name="Mean surface latent heat flux",
@@ -550,7 +570,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="msshf",
-        encoding=None,
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
             short_name="msshf",
             long_name="Mean surface sensible heat flux",
@@ -567,7 +587,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="pwat",
-        encoding=None,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="pwat",
             long_name="Precipitable water",
@@ -584,7 +604,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="tcc",
-        encoding=None,
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=50.0),
         attrs=DataVarAttrs(
             short_name="tcc",
             long_name="Total Cloud Cover",
@@ -601,7 +621,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="gh",
-        encoding=None,
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=8)]),
         attrs=DataVarAttrs(
             short_name="gh",
             long_name="Geopotential height",
@@ -619,7 +639,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="sdswrf",
-        encoding=None,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="sdswrf",
             long_name="Surface downward short-wave radiation flux",
@@ -636,7 +656,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="sdlwrf",
-        encoding=None,
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=300.0),
         attrs=DataVarAttrs(
             short_name="sdlwrf",
             long_name="Surface downward long-wave radiation flux",
@@ -653,7 +673,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="suswrf",
-        encoding=None,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="suswrf",
             long_name="Surface upward short-wave radiation flux",
@@ -670,7 +690,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="hlcy",
-        encoding=None,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="hlcy",
             long_name="Storm relative helicity",
@@ -687,7 +707,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
     ),
     DataVar(
         name="prmsl",
-        encoding=None,
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=101_000.0),
         attrs=DataVarAttrs(
             short_name="prmsl",
             long_name="Pressure reduced to MSL",
@@ -716,151 +736,3 @@ ENCODING: dict[str, dict[str, Any]] = {
     },
 }
 assert len(ENCODING) == len(COORDINATES) + len(DATA_VARIABLES)
-
-# _ENCODING = {
-#     "init_time": {
-#         "dtype": np.int64,
-#         "filters": [Delta(np.int64)],
-#         "compressor": Blosc(cname="zstd"),
-#         "calendar": "proleptic_gregorian",
-#         "units": "seconds since 1970-01-01 00:00:00",
-#         "chunks": -1,
-#     },
-#     "ensemble_member": {
-#         "dtype": np.uint16,
-#         "chunks": -1,
-#     },
-#     "lead_time": {
-#         "dtype": np.int64,
-#         "compressor": Blosc(cname="zstd"),
-#         "units": "seconds",
-#         "chunks": -1,
-#     },
-#     "latitude": {
-#         "dtype": np.float64,
-#         "compressor": Blosc(cname="zstd"),
-#         "chunks": -1,
-#     },
-#     "longitude": {
-#         "dtype": np.float64,
-#         "compressor": Blosc(cname="zstd"),
-#         "chunks": -1,
-#     },
-#     "valid_time": {
-#         "dtype": np.int64,
-#         "filters": [Delta(np.int64)],
-#         "compressor": Blosc(cname="zstd"),
-#         "calendar": "proleptic_gregorian",
-#         "units": "seconds since 1970-01-01 00:00:00",
-#         "chunks": [-1, -1],
-#     },
-#     "cfrzr": _CATEGORICAL_WITH_MISSING_DEFAULT,
-#     "cicep": _CATEGORICAL_WITH_MISSING_DEFAULT,
-#     "cpofp": _FLOAT_DEFAULT,
-#     "crain": _CATEGORICAL_WITH_MISSING_DEFAULT,
-#     "csnow": _CATEGORICAL_WITH_MISSING_DEFAULT,
-#     "d2m": {**_FLOAT_DEFAULT, "add_offset": 273.15},
-#     "gh": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=8)]},
-#     "gust": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
-#     "hlcy": _FLOAT_DEFAULT,
-#     "mslet": {**_FLOAT_DEFAULT, "add_offset": 101_000.0},
-#     "mslhf": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
-#     "msshf": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
-#     "prmsl": {**_FLOAT_DEFAULT, "add_offset": 101_000.0},
-#     "pwat": _FLOAT_DEFAULT,
-#     "r2": {**_FLOAT_DEFAULT, "add_offset": 50.0, "filters": [BitRound(keepbits=6)]},
-#     "sde": _FLOAT_DEFAULT,
-#     "sdlwrf": {**_FLOAT_DEFAULT, "add_offset": 300.0},
-#     "sdswrf": _FLOAT_DEFAULT,
-#     "sdwe": _FLOAT_DEFAULT,
-#     "sithick": _FLOAT_DEFAULT,
-#     "soilw": _FLOAT_DEFAULT,
-#     "sp": {**_FLOAT_DEFAULT, "add_offset": 100_000.0},
-#     "st": {**_FLOAT_DEFAULT, "add_offset": 273.15},
-#     "suswrf": _FLOAT_DEFAULT,
-#     # "t2m": {**_FLOAT_DEFAULT, "add_offset": 273.15},
-#     "t2m": Encoding(
-#         dtype=np.float32,
-#         chunks=_CHUNKS_ORDERED,
-#         filters=[BitRound(keepbits=7)],
-#         compressor=Blosc(cname="zstd", clevel=3, shuffle=Blosc.SHUFFLE),
-#     ),
-#     "tcc": {**_FLOAT_DEFAULT, "add_offset": 50.0},
-#     "tmax": {**_FLOAT_DEFAULT, "add_offset": 273.15},
-#     "tmin": {**_FLOAT_DEFAULT, "add_offset": 273.15},
-#     "tp": _FLOAT_DEFAULT,
-#     "u10": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
-#     # "u100": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
-#     "v10": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
-#     # "v100": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
-#     "vis": {**_FLOAT_DEFAULT, "add_offset": 15_000.0},
-# }
-
-# # TODO: Some of the s+a should actually be s+b, check the
-# # index files to see which one.
-# _CUSTOM_ATTRIBUTES = {
-#     "cfrzr": {
-#         "noaa_file_type": "s+a",
-#         "grib_element": "CFRZR",
-#         "index_level": "surface",
-#     },
-#     "cicep": {"noaa_file_type": "s+a"},
-#     "cpofp": {"noaa_file_type": "s+a"},
-#     "crain": {"noaa_file_type": "s+a"},
-#     "csnow": {"noaa_file_type": "s+a"},
-#     "d2m": {"noaa_file_type": "s+a"},
-#     "gh": {"noaa_file_type": "s+a"},
-#     "gust": {"noaa_file_type": "s+a"},
-#     "hlcy": {"noaa_file_type": "s+a"},
-#     "mslet": {"noaa_file_type": "s+a"},
-#     "mslhf": {"noaa_file_type": "s+a"},
-#     "msshf": {"noaa_file_type": "s+a"},
-#     "prmsl": {
-#         "noaa_file_type": "s+a",
-#         "grib_element": "PRMSL",
-#         "index_level": "mean sea level",
-#     },
-#     "pwat": {"noaa_file_type": "s+a"},
-#     "r2": {"noaa_file_type": "s+a"},
-#     "sde": {"noaa_file_type": "s+a"},
-#     "sdlwrf": {"noaa_file_type": "s+a"},
-#     "sdswrf": {"noaa_file_type": "s+a"},
-#     "sdwe": {"noaa_file_type": "s+a"},
-#     "sithick": {"noaa_file_type": "s+a"},
-#     "soilw": {"noaa_file_type": "s+a"},
-#     "sp": {"noaa_file_type": "s+a"},
-#     "st": {"noaa_file_type": "s+a"},
-#     "suswrf": {"noaa_file_type": "s+a"},
-#     "t2m": {
-#         "noaa_file_type": "s+a",
-#         "index_level": "2 m above ground",
-#         "grib_element": "TMP",
-#         "grib_description": '2[m] HTGL="Specified height level above ground"',
-#     },
-#     "tcc": {"noaa_file_type": "s+a"},
-#     "tmax": {"noaa_file_type": "s+a"},
-#     "tmin": {"noaa_file_type": "s+a"},
-#     "tp": {"noaa_file_type": "s+a"},
-#     "u10": {
-#         "noaa_file_type": "s+a",
-#         "index_level": "10 m above ground",
-#         "grib_element": "UGRD",
-#         "grib_description": '10[m] HTGL="Specified height level above ground"',
-#     },
-#     "u100": {
-#         "noaa_file_type": "b",
-#         "grib_element": "UGRD",
-#         "index_level": "100 m above ground",
-#     },
-#     "v10": {
-#         "noaa_file_type": "s+a",
-#         "grib_element": "VGRD",
-#         "index_level": "10 m above ground",
-#     },
-#     "v100": {
-#         "noaa_file_type": "b",
-#         "grib_element": "VGRD",
-#         "index_level": "100 m above ground",
-#     },
-#     "vis": {"noaa_file_type": "s+b", "grib_element": "VIS", "index_level": "surface"},
-# }
