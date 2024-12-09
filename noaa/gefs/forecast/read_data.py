@@ -94,7 +94,7 @@ def download_file(
         idx_local_path, noaa_idx_data_vars
     )
 
-    # Create a unique suffix representing the data vars stored in the output file
+    # Create a unique, human debuggable suffix representing the data vars stored in the output file
     vars_str = "-".join(
         var_info.internal_attrs.grib_element for var_info in noaa_idx_data_vars
     )

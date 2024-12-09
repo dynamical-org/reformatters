@@ -4,7 +4,7 @@ import re
 import subprocess
 import time
 from collections import defaultdict, deque
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
 from functools import partial
 from itertools import batched, islice, product, starmap
@@ -20,7 +20,7 @@ from common import string_template
 from common.config import Config  # noqa:F401
 from common.download_directory import cd_into_download_directory
 from common.types import DatetimeLike, StoreLike
-from noaa.gefs.forecast import template, template_config
+from noaa.gefs.forecast import template
 from noaa.gefs.forecast.config_models import DataVar
 from noaa.gefs.forecast.read_data import (
     NoaaFileType,
@@ -125,7 +125,9 @@ def reformat_chunks(
 
     print(f"This is {worker_index = }, {workers_total = }, {worker_init_time_i_slices}")
 
-    data_var_groups = group_data_vars_by_noaa_file_type(template_config.DATA_VARIABLES)
+    data_var_groups = group_data_vars_by_noaa_file_type(
+        [d for d in template.DATA_VARIABLES if d.name in template_ds]
+    )
 
     wait_executor = ThreadPoolExecutor(max_workers=256)
     io_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
@@ -226,7 +228,7 @@ def download_var_group_files(
 
 
 def group_data_vars_by_noaa_file_type(
-    data_vars: Sequence[DataVar], group_size: int = 4
+    data_vars: Iterable[DataVar], group_size: int = 4
 ) -> list[tuple[NoaaFileType, tuple[DataVar, ...]]]:
     grouper = defaultdict(list)
     for data_var in data_vars:
@@ -234,7 +236,6 @@ def group_data_vars_by_noaa_file_type(
         grouper[noaa_file_type].append(data_var)
     chunks = []
     for file_type, idx_data_vars in grouper.items():
-        # TODO first sort data_vars by order within the grib
         idx_data_vars = sorted(
             idx_data_vars, key=lambda data_var: data_var.internal_attrs.index_position
         )
