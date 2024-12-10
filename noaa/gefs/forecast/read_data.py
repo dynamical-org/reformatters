@@ -55,8 +55,14 @@ def download_file(
         prefix = "c" if ensemble_member == 0 else "p"
         formatted_ensemble_member = f"{prefix}{ensemble_member:02}"
 
-    # TODO: handle the variables that do not exist in the 0 lead time,
-    # but exist in later lead times.
+    # Accumulated values don't exist in the 0-hour forecast.
+    if lead_time_hours == 0:
+        noaa_idx_data_vars = [
+            data_var
+            for data_var in noaa_idx_data_vars
+            if data_var.attrs.step_type != "accum"
+        ]
+
     if noaa_file_type == "s+a":
         if lead_time_hours <= 240:
             true_noaa_file_type = "s"
@@ -116,7 +122,8 @@ def download_file(
 
 
 def parse_index_byte_ranges(
-    idx_local_path: Path, noaa_idx_data_vars: Iterable[DataVar]
+    idx_local_path: Path,
+    noaa_idx_data_vars: Iterable[DataVar],
 ) -> tuple[list[int], list[int]]:
     with open(idx_local_path) as index_file:
         index_contents = index_file.read()
@@ -203,10 +210,20 @@ def read_into(
     out: xr.DataArray,
     coords: SourceFileCoords,
     path: os.PathLike[str],
-    grib_element: str,
-    grib_description: str,
+    data_var: DataVar,
 ) -> None:
-    out.loc[coords] = read_rasterio(path, grib_element, grib_description)
+    grib_element = data_var.internal_attrs.grib_element
+    if data_var.internal_attrs.include_lead_time_suffix:
+        lead_hours = coords["lead_time"].total_seconds() / (60 * 60)
+        if lead_hours % 6 == 0:
+            grib_element += "06"
+        else:
+            grib_element += "03"
+    out.loc[coords] = read_rasterio(
+        path,
+        grib_element,
+        data_var.internal_attrs.grib_description,
+    )
 
 
 def read_rasterio(

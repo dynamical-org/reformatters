@@ -185,6 +185,15 @@ def reformat_chunks(
 
                 # Write variable by variable to avoid blowing up memory usage
                 for data_var in data_vars:
+                    # Skip reading the 0-hour for accumulated values
+                    if data_var.attrs.step_type == "accum":
+                        var_coords_and_paths = [
+                            coords_and_path
+                            for coords_and_path in coords_and_paths
+                            if coords_and_path[0]["lead_time"] > pd.Timedelta(hours=0)
+                        ]
+                    else:
+                        var_coords_and_paths = coords_and_paths
                     data_array = xr.full_like(chunk_template_ds[data_var.name], np.nan)
                     data_array.load()  # preallocate backing numpy arrays (for performance?)
                     # valid_time is a coordinate and already written with different chunks
@@ -195,10 +204,9 @@ def reformat_chunks(
                             partial(
                                 read_into,
                                 data_array,
-                                grib_element=data_var.internal_attrs.grib_element,
-                                grib_description=data_var.internal_attrs.grib_description,
+                                data_var=data_var,
                             ),
-                            *zip(*coords_and_paths, strict=True),
+                            *zip(*var_coords_and_paths, strict=True),
                         )
                     )
 

@@ -46,6 +46,7 @@ class InternalAttrs(FrozenBaseModel):
     grib_index_level: str
     noaa_file_type: NoaaFileType
     index_position: int
+    include_lead_time_suffix: bool = False
 
 
 class Encoding(pydantic.BaseModel):

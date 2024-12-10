@@ -476,11 +476,12 @@ DATA_VARIABLES: Sequence[DataVar] = (
             step_type="accum",
         ),
         internal_attrs=InternalAttrs(
-            grib_element="APCP03",
+            grib_element="APCP",
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
             noaa_file_type="s+a",
             index_position=18,
+            include_lead_time_suffix=True,
         ),
     ),
     DataVar(
