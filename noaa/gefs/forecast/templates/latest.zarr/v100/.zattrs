@@ -7,8 +7,9 @@
         "longitude"
     ],
     "coordinates": "valid_time",
-    "long_name": "Categorical snow",
-    "short_name": "csnow",
-    "step_type": "avg",
-    "units": "0=no; 1=yes"
+    "long_name": "100 metre V wind component",
+    "short_name": "v100",
+    "standard_name": "northward_wind",
+    "step_type": "instant",
+    "units": "m/s"
 }

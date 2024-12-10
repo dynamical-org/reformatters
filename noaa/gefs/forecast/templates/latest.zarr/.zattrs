@@ -1,8 +1,6 @@
 {
-    "Conventions": "CF-1.7",
-    "GRIB_centre": "kwbc",
-    "GRIB_centreDescription": "US National Weather Service - NCEP",
-    "GRIB_edition": 2,
-    "GRIB_subCentre": 2,
-    "institution": "US National Weather Service - NCEP"
+    "attribution": "NOAA NWS NCEP GEFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
+    "dataset_id": "noaa-gefs-forecast",
+    "description": "Weather forecasts from the Global Ensemble Forecast System (GEFS) operated by NOAA NWS NCEP.",
+    "name": "NOAA GEFS forecast"
 }
