@@ -19,15 +19,11 @@ from common.config import Config
 from .config_models import DataVar
 from .config_models import NoaaFileType as NoaaFileType
 
-_STATISTIC_LONG_NAME = {"avg": "ensemble mean", "spr": "ensemble spread"}
-# The level names needed to grab the right bands from the index
-# are different from the ones in the grib itself.
-IDX_LEVELS_TO_GRIB_LONG_NAMES = {
-    "2 m above ground": '2[m] HTGL="Specified height level above ground"',
-    "10 m above ground": '10[m] HTGL="Specified height level above ground"',
+FILE_RESOLUTIONS = {
+    "s": "0p25",
+    "a": "0p50",
+    "b": "0p50",
 }
-
-_VARIABLES_PER_CHUNK = 3
 
 
 class SourceFileCoords(TypedDict):
@@ -77,8 +73,8 @@ def download_file(
         true_noaa_file_type = noaa_file_type
 
     remote_path = (
-        f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2sp25/"
-        f"ge{formatted_ensemble_member}.t{init_hour_str}z.pgrb2{true_noaa_file_type}.0p25.f{lead_time_hours:03.0f}"
+        f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2{true_noaa_file_type}{FILE_RESOLUTIONS[true_noaa_file_type].strip("0")}/"
+        f"ge{formatted_ensemble_member}.t{init_hour_str}z.pgrb2{true_noaa_file_type}.{FILE_RESOLUTIONS[true_noaa_file_type]}.f{lead_time_hours:03.0f}"
     )
 
     store = http_store("https://storage.googleapis.com/gfs-ensemble-forecast-system")
@@ -217,8 +213,11 @@ def read_into(
         lead_hours = coords["lead_time"].total_seconds() / (60 * 60)
         if lead_hours % 6 == 0:
             grib_element += "06"
-        else:
+        elif lead_hours % 6 == 3:
             grib_element += "03"
+        else:
+            raise AssertionError(f"Unexpected lead time hours: {lead_hours}")
+
     out.loc[coords] = read_rasterio(
         path,
         grib_element,
