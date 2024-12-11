@@ -15,6 +15,7 @@ import requests
 import xarray as xr
 
 from common.config import Config
+from common.types import Array2D
 
 from .config_models import DataVar
 from .config_models import NoaaFileType as NoaaFileType
@@ -110,7 +111,7 @@ def download_file(
     vars_suffix = f"{vars_str}-{vars_hash}"
     local_path = Path(directory, f"{local_base_file_name}.{vars_suffix}")
 
-    print("Downloading", noaa_file_type, vars_suffix)
+    print("Downloading", true_noaa_file_type, vars_suffix)
 
     download_to_disk(
         store,
@@ -229,14 +230,14 @@ def read_into(
         grib_element,
         data_var.internal_attrs.grib_description,
     )
-    out[coords] = maybe_resample_and_roll_longitude(raw_data, coords, data_var)
+    out.loc[coords] = maybe_resample_and_roll_longitude(raw_data, coords, data_var)
 
 
 def maybe_resample_and_roll_longitude(
-    raw_data: np.ndarray[tuple[int, int], np.dtype[np.float32]],
+    raw_data: Array2D[np.float32],
     coords: SourceFileCoords,
     data_var: DataVar,
-) -> np.ndarray[tuple[int, int], np.dtype[np.float32]]:
+) -> Array2D[np.float32]:
     # determine if a, b or s
     noaa_file_type = get_noaa_file_type_for_lead_time(
         coords["lead_time"], data_var.internal_attrs.noaa_file_type
@@ -250,12 +251,13 @@ def maybe_resample_and_roll_longitude(
         # resample and roll
         lat_ix = lat_ix.repeat(2)[:-1]
         lon_ix = lon_ix.repeat(2)
-    return raw_data[np.ix_(lat_ix, lon_ix)]
+
+    return raw_data[np.ix_(lat_ix, lon_ix)]  # type: ignore
 
 
 def read_rasterio(
     path: os.PathLike[str], grib_element: str, grib_description: str
-) -> np.ndarray[tuple[int, int], np.dtype[np.float32]]:
+) -> Array2D[np.float32]:
     with rasterio.open(path) as reader:
         matching_bands = [
             rasterio_band_i
@@ -268,9 +270,7 @@ def read_rasterio(
         assert len(matching_bands) == 1, f"Expected exactly 1 matching band, found {matching_bands}. {grib_element=}, {grib_description=}, {path=}"  # fmt: skip
         rasterio_band_index = matching_bands[0]
 
-        raw_data = reader.read(rasterio_band_index, out_dtype=np.float32)  # type: ignore
-        breakpoint()
-        return raw_data
+        return reader.read(rasterio_band_index, out_dtype=np.float32)  # type: ignore
 
 
 class DefaultTimeoutHTTPAdapter(requests.adapters.HTTPAdapter):

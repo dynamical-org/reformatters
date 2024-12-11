@@ -30,14 +30,14 @@ type Dim =        Literal["init_time", "ensemble_member", "lead_time", "latitude
 DIMS: tuple[Dim, ... ] = ("init_time", "ensemble_member", "lead_time", "latitude", "longitude")  # fmt: off
 
 INIT_TIME_START = pd.Timestamp("2024-09-01T00:00")
-INIT_TIME_FREQUENCY = pd.Timedelta("6h")
+INIT_TIME_FREQUENCY = pd.Timedelta("24h")
 
 
 def get_template_dimension_coordinates() -> dict[Dim, Any]:
     return {
         "init_time": get_init_time_coordinates(INIT_TIME_START + INIT_TIME_FREQUENCY),
         "ensemble_member": np.arange(31),
-        "lead_time": pd.timedelta_range("0h", "240h", freq="3h"),
+        "lead_time": pd.timedelta_range("0h", "840h", freq="3h"),
         # latitude descends when north is up
         "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
         "longitude": np.arange(-180, 180, 0.25),
