@@ -5,7 +5,7 @@ import os
 import re
 from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 import numpy as np
 import obstore  # type: ignore
@@ -30,6 +30,23 @@ class SourceFileCoords(TypedDict):
     init_time: pd.Timestamp
     ensemble_member: int
     lead_time: pd.Timedelta
+
+
+def get_noaa_file_type_for_lead_time(
+    lead_time: pd.Timedelta, noaa_file_type: NoaaFileType
+) -> Literal["a", "b", "s"]:
+    if noaa_file_type == "s+a":
+        if lead_time <= pd.Timedelta(hours=240):
+            return "s"
+        else:
+            return "a"
+    elif noaa_file_type == "s+b":
+        if lead_time <= pd.Timedelta(hours=240):
+            return "s"
+        else:
+            return "b"
+    else:
+        return noaa_file_type
 
 
 def download_file(
@@ -59,18 +76,7 @@ def download_file(
             if data_var.attrs.step_type != "accum"
         ]
 
-    if noaa_file_type == "s+a":
-        if lead_time_hours <= 240:
-            true_noaa_file_type = "s"
-        else:
-            true_noaa_file_type = "a"
-    elif noaa_file_type == "s+b":
-        if lead_time_hours <= 240:
-            true_noaa_file_type = "s"
-        else:
-            true_noaa_file_type = "b"
-    else:
-        true_noaa_file_type = noaa_file_type
+    true_noaa_file_type = get_noaa_file_type_for_lead_time(lead_time, noaa_file_type)
 
     remote_path = (
         f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2{true_noaa_file_type}{FILE_RESOLUTIONS[true_noaa_file_type].strip("0")}/"
@@ -218,11 +224,33 @@ def read_into(
         else:
             raise AssertionError(f"Unexpected lead time hours: {lead_hours}")
 
-    out.loc[coords] = read_rasterio(
+    raw_data = read_rasterio(
         path,
         grib_element,
         data_var.internal_attrs.grib_description,
     )
+    out[coords] = maybe_resample_and_roll_longitude(raw_data, coords, data_var)
+
+
+def maybe_resample_and_roll_longitude(
+    raw_data: np.ndarray[tuple[int, int], np.dtype[np.float32]],
+    coords: SourceFileCoords,
+    data_var: DataVar,
+) -> np.ndarray[tuple[int, int], np.dtype[np.float32]]:
+    # determine if a, b or s
+    noaa_file_type = get_noaa_file_type_for_lead_time(
+        coords["lead_time"], data_var.internal_attrs.noaa_file_type
+    )
+    len_lat, len_lon = raw_data.shape
+    lat_ix = np.arange(len_lat)
+    lon_ix = np.concatenate(
+        [np.arange(len_lon // 2, len_lon), np.arange(0, len_lon // 2)]
+    )
+    if noaa_file_type in ["a", "b"]:
+        # resample and roll
+        lat_ix = lat_ix.repeat(2)[:-1]
+        lon_ix = lon_ix.repeat(2)
+    return raw_data[np.ix_(lat_ix, lon_ix)]
 
 
 def read_rasterio(
@@ -240,7 +268,9 @@ def read_rasterio(
         assert len(matching_bands) == 1, f"Expected exactly 1 matching band, found {matching_bands}. {grib_element=}, {grib_description=}, {path=}"  # fmt: skip
         rasterio_band_index = matching_bands[0]
 
-        return reader.read(rasterio_band_index, out_dtype=np.float32)  # type: ignore
+        raw_data = reader.read(rasterio_band_index, out_dtype=np.float32)  # type: ignore
+        breakpoint()
+        return raw_data
 
 
 class DefaultTimeoutHTTPAdapter(requests.adapters.HTTPAdapter):

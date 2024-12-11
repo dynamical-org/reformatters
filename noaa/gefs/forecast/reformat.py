@@ -131,7 +131,7 @@ def reformat_chunks(
 
     wait_executor = ThreadPoolExecutor(max_workers=256)
     io_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
-    cpu_executor = ThreadPoolExecutor(max_workers=os.cpu_count())
+    cpu_executor = ThreadPoolExecutor(1)  # max_workers=os.cpu_count())
 
     # # If we compile eccodes ourselves with thread safety enabled we could use threads for reading
     # # https://confluence.ecmwf.int/display/ECC/ecCodes+installation ENABLE_ECCODES_THREADS

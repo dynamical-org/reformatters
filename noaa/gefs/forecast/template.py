@@ -46,9 +46,7 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
 
     # Uncomment to make smaller zarr while developing
     if Config.is_dev():
-        ds = ds[["u10", "v10", "t2m", "tp"]].isel(
-            ensemble_member=slice(3), lead_time=slice(12)
-        )
+        ds = ds[["u100", "v100"]].isel(ensemble_member=slice(3), lead_time=slice(12))
 
     return ds
 
