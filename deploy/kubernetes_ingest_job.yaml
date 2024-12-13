@@ -64,3 +64,6 @@ spec:
                   storage: $EPHEMERAL_STORAGE
       securityContext:
         fsGroup: 999  # this is the `app` group our app runs under
+      nodeSelector:
+        cloud.google.com/gke-spot: "true"
+      terminationGracePeriodSeconds: 5

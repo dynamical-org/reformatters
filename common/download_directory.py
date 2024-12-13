@@ -6,6 +6,7 @@ from pathlib import Path
 
 @contextmanager
 def cd_into_download_directory() -> Iterator[Path]:
+    # TODO: since we removed cfgrib we can pull out most of this nonsense
     """
     Changes current working directory into and yields a temporary directory,
     except in development mode when a consistent cache path is yielded to avoid re-downloading files.

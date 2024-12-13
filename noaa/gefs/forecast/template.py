@@ -45,12 +45,25 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
         assert isinstance(coordinate.data, np.ndarray)
 
     # Uncomment to make smaller zarr while developing
-    if Config.is_dev():
-        ds = (
-            ds[["u100", "t2m"]]
-            .isel(ensemble_member=slice(3))
-            .sel(lead_time=["3h", "180h", "840h"])
-        )
+    # if Config.is_dev():
+    #     ds = ds[["u100", "v100", "u10", "v10", "t2m", "tp"]].sel(
+    #         ensemble_member=slice(3), lead_time=["0h", "3h", "90h", "240h", "840h"]
+    #     )
+    ds = ds[
+        [
+            # "u100",
+            # "v100",
+            # "u10",
+            # "v10",
+            "t2m",
+            "tp",
+            # "sdswrf",
+            # "gh",
+            # "tcc",
+            # "pwat",
+            # "r2",
+        ]
+    ]
 
     return ds
 

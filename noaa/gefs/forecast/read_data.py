@@ -39,7 +39,7 @@ def download_file(
     noaa_file_type: NoaaFileType,
     noaa_idx_data_vars: Iterable[DataVar],
     directory: Path,
-) -> tuple[SourceFileCoords, Path]:
+) -> tuple[SourceFileCoords, Path | None]:
     init_time = coords["init_time"]
     ensemble_member = coords["ensemble_member"]
     lead_time = coords["lead_time"]
@@ -81,34 +81,42 @@ def download_file(
     idx_remote_path = f"{remote_path}.idx"
     idx_local_path = Path(f"{local_base_file_name}.idx")
 
-    download_to_disk(
-        store, idx_remote_path, idx_local_path, overwrite_existing=not Config.is_dev()
-    )
+    try:
+        download_to_disk(
+            store,
+            idx_remote_path,
+            idx_local_path,
+            overwrite_existing=not Config.is_dev(),
+        )
 
-    byte_range_starts, byte_range_ends = parse_index_byte_ranges(
-        idx_local_path, noaa_idx_data_vars
-    )
+        byte_range_starts, byte_range_ends = parse_index_byte_ranges(
+            idx_local_path, noaa_idx_data_vars
+        )
 
-    # Create a unique, human debuggable suffix representing the data vars stored in the output file
-    vars_str = "-".join(
-        var_info.internal_attrs.grib_element for var_info in noaa_idx_data_vars
-    )
-    vars_hash = digest(format_noaa_idx_var(var_info) for var_info in noaa_idx_data_vars)
-    vars_suffix = f"{vars_str}-{vars_hash}"
-    local_path = Path(directory, f"{local_base_file_name}.{vars_suffix}")
+        # Create a unique, human debuggable suffix representing the data vars stored in the output file
+        vars_str = "-".join(
+            var_info.internal_attrs.grib_element for var_info in noaa_idx_data_vars
+        )
+        vars_hash = digest(
+            format_noaa_idx_var(var_info) for var_info in noaa_idx_data_vars
+        )
+        vars_suffix = f"{vars_str}-{vars_hash}"
+        local_path = Path(directory, f"{local_base_file_name}.{vars_suffix}")
 
-    # print("Downloading", remote_path.split("/")[-1], vars_suffix)
-    print(".", end="", flush=True)
+        # print("Downloading", remote_path.split("/")[-1], vars_suffix)
 
-    download_to_disk(
-        store,
-        remote_path,
-        local_path,
-        overwrite_existing=not Config.is_dev(),
-        byte_ranges=(byte_range_starts, byte_range_ends),
-    )
+        download_to_disk(
+            store,
+            remote_path,
+            local_path,
+            overwrite_existing=not Config.is_dev(),
+            byte_ranges=(byte_range_starts, byte_range_ends),
+        )
 
-    return coords, local_path
+        return coords, local_path
+
+    except Exception:
+        return coords, None
 
 
 def get_noaa_file_type_for_lead_time(
@@ -179,9 +187,12 @@ def digest(data: str | Iterable[str], length: int = 8) -> str:
 def read_into(
     out: xr.DataArray,
     coords: SourceFileCoords,
-    path: os.PathLike[str],
+    path: os.PathLike[str] | None,
     data_var: DataVar,
 ) -> None:
+    if path is None:
+        return  # in rare case file is missing there's nothing to do
+
     grib_element = data_var.internal_attrs.grib_element
     if data_var.internal_attrs.include_lead_time_suffix:
         lead_hours = coords["lead_time"].total_seconds() / (60 * 60)

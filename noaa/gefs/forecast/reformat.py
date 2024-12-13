@@ -92,8 +92,8 @@ def reformat_kubernetes(
             "WORKERS_TOTAL": workers_total,
             "PARALLELISM": parallelism,
             "CPU": 16,
-            "MEMORY": "108G",
-            "EPHEMERAL_STORAGE": "200G",
+            "MEMORY": "80G",
+            "EPHEMERAL_STORAGE": "60G",
         },
     )
 
@@ -131,7 +131,7 @@ def reformat_chunks(
 
     wait_executor = ThreadPoolExecutor(max_workers=2)
     io_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
-    cpu_executor = ThreadPoolExecutor(1)  # max_workers=os.cpu_count())
+    cpu_executor = ThreadPoolExecutor(max_workers=int((os.cpu_count() or 1) * 3))
 
     # # If we compile eccodes ourselves with thread safety enabled we could use threads for reading
     # # https://confluence.ecmwf.int/display/ECC/ecCodes+installation ENABLE_ECCODES_THREADS
@@ -160,7 +160,7 @@ def reformat_chunks(
 
         with cd_into_download_directory() as directory:
             download_var_group_futures: dict[
-                Future[list[tuple[SourceFileCoords, Path]]], tuple[DataVar, ...]
+                Future[list[tuple[SourceFileCoords, Path | None]]], tuple[DataVar, ...]
             ] = {}
             for noaa_file_type, data_vars in data_var_groups:
                 download_var_group_futures[
@@ -176,17 +176,16 @@ def reformat_chunks(
                 # TODO: this necessary? allow all of this group's downloads to be submitted to io_executor so a group is more likely to finish together and reading can begin
                 time.sleep(1)
 
-            print("Starting as_completed")
             for future in concurrent.futures.as_completed(download_var_group_futures):
                 if (e := future.exception()) is not None:
                     raise e
 
                 coords_and_paths = future.result()
                 data_vars = download_var_group_futures[future]
-                print("completed download for ", [d.name for d in data_vars])
 
                 # Write variable by variable to avoid blowing up memory usage
                 for data_var in data_vars:
+                    print("Reading", data_var.name)
                     # Skip reading the 0-hour for accumulated values
                     if data_var.attrs.step_type == "accum":
                         var_coords_and_paths = [
@@ -199,9 +198,7 @@ def reformat_chunks(
                     data_array = xr.full_like(chunk_template_ds[data_var.name], np.nan)
                     # valid_time is a coordinate and already written with different chunks
                     data_array = data_array.drop_vars("valid_time")
-                    print("============ Allocating for ", data_var.name)
                     data_array.load()  # preallocate backing numpy arrays (for performance?)
-                    print("reading...")
                     consume(
                         cpu_executor.map(
                             partial(
@@ -213,7 +210,6 @@ def reformat_chunks(
                         )
                     )
 
-                    assert np.isfinite(data_array).any()
                     print(f"Writing {data_var.name} {chunk_init_times_str}")
                     chunks = template.chunk_args(chunk_template_ds)
                     data_array.chunk(chunks).to_zarr(store, region="auto")
@@ -225,7 +221,7 @@ def download_var_group_files(
     noaa_file_type: NoaaFileType,
     directory: Path,
     io_executor: ThreadPoolExecutor,
-) -> list[tuple[SourceFileCoords, Path]]:
+) -> list[tuple[SourceFileCoords, Path | None]]:
     done, not_done = concurrent.futures.wait(
         [
             io_executor.submit(
@@ -238,10 +234,13 @@ def download_var_group_files(
             for coord in chunk_coords
         ]
     )
-    if len(not_done) > 0:
-        raise RuntimeError(f"Downloads failed {len(not_done)}")
+    assert len(not_done) == 0
 
-    print("completed download for ", [d.name for d in idx_data_vars])
+    for future in done:
+        if (e := future.exception()) is not None:
+            raise e
+
+    print("Completed download for", [d.name for d in idx_data_vars])
     return [f.result() for f in done]
 
 
