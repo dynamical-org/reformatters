@@ -92,7 +92,7 @@ def reformat_kubernetes(
             "WORKERS_TOTAL": workers_total,
             "PARALLELISM": parallelism,
             "CPU": 16,
-            "MEMORY": "64G",
+            "MEMORY": "108G",
             "EPHEMERAL_STORAGE": "200G",
         },
     )
@@ -129,7 +129,7 @@ def reformat_chunks(
         [d for d in template.DATA_VARIABLES if d.name in template_ds]
     )
 
-    wait_executor = ThreadPoolExecutor(max_workers=256)
+    wait_executor = ThreadPoolExecutor(max_workers=2)
     io_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
     cpu_executor = ThreadPoolExecutor(1)  # max_workers=os.cpu_count())
 
@@ -174,14 +174,16 @@ def reformat_chunks(
                     )
                 ] = data_vars
                 # TODO: this necessary? allow all of this group's downloads to be submitted to io_executor so a group is more likely to finish together and reading can begin
-                time.sleep(0.1)
+                time.sleep(1)
 
+            print("Starting as_completed")
             for future in concurrent.futures.as_completed(download_var_group_futures):
                 if (e := future.exception()) is not None:
                     raise e
 
                 coords_and_paths = future.result()
                 data_vars = download_var_group_futures[future]
+                print("completed download for ", [d.name for d in data_vars])
 
                 # Write variable by variable to avoid blowing up memory usage
                 for data_var in data_vars:
@@ -195,9 +197,10 @@ def reformat_chunks(
                     else:
                         var_coords_and_paths = coords_and_paths
                     data_array = xr.full_like(chunk_template_ds[data_var.name], np.nan)
-                    data_array.load()  # preallocate backing numpy arrays (for performance?)
                     # valid_time is a coordinate and already written with different chunks
                     data_array = data_array.drop_vars("valid_time")
+                    print("============ Allocating for ", data_var.name)
+                    data_array.load()  # preallocate backing numpy arrays (for performance?)
                     print("reading...")
                     consume(
                         cpu_executor.map(
@@ -223,16 +226,23 @@ def download_var_group_files(
     directory: Path,
     io_executor: ThreadPoolExecutor,
 ) -> list[tuple[SourceFileCoords, Path]]:
-    local_paths = io_executor.map(
-        lambda coord: download_file(
-            **coord,
-            noaa_file_type=noaa_file_type,
-            directory=directory,
-            noaa_idx_data_vars=idx_data_vars,
-        ),
-        chunk_coords,
+    done, not_done = concurrent.futures.wait(
+        [
+            io_executor.submit(
+                download_file,
+                coord,
+                noaa_file_type=noaa_file_type,
+                directory=directory,
+                noaa_idx_data_vars=idx_data_vars,
+            )
+            for coord in chunk_coords
+        ]
     )
-    return list(zip(chunk_coords, local_paths, strict=True))
+    if len(not_done) > 0:
+        raise RuntimeError(f"Downloads failed {len(not_done)}")
+
+    print("completed download for ", [d.name for d in idx_data_vars])
+    return [f.result() for f in done]
 
 
 def group_data_vars_by_noaa_file_type(
@@ -265,8 +275,8 @@ def get_worker_jobs[T](
 
 
 def get_store() -> StoreLike:
-    # if Config.is_dev():
-    #     return Path("data/output/noaa/gefs/forecast/dev.zarr").absolute()
+    if Config.is_dev():
+        return Path("data/output/noaa/gefs/forecast/dev.zarr").absolute()
 
     s3 = s3fs.S3FileSystem()
 

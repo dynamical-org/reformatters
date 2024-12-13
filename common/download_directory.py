@@ -1,10 +1,7 @@
 import os
-import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-
-from common.config import Config
 
 
 @contextmanager
@@ -17,15 +14,13 @@ def cd_into_download_directory() -> Iterator[Path]:
     the process' current working direcory is the same as the location of the grib files it's reading.
     """
     previous_directory = os.getcwd()
-    if Config.is_dev():
-        directory = Path("data/download/").absolute()
-        directory.mkdir(parents=True, exist_ok=True)
-        os.chdir(directory)
-        yield directory
-        os.chdir(previous_directory)
-    else:
-        with tempfile.TemporaryDirectory() as directory_str:
-            directory = Path(directory_str)
-            os.chdir(directory)
-            yield directory
-            os.chdir(previous_directory)
+    directory = Path("data/download/").absolute()
+    directory.mkdir(parents=True, exist_ok=True)
+    os.chdir(directory)
+    yield directory
+    os.chdir(previous_directory)
+    # with tempfile.TemporaryDirectory() as directory_str:
+    #     directory = Path(directory_str)
+    #     os.chdir(directory)
+    #     yield directory
+    #     os.chdir(previous_directory)

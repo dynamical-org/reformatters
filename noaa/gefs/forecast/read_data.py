@@ -4,6 +4,7 @@ import hashlib
 import os
 import re
 from collections.abc import Iterable, Sequence
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal, TypedDict
 
@@ -33,31 +34,16 @@ class SourceFileCoords(TypedDict):
     lead_time: pd.Timedelta
 
 
-def get_noaa_file_type_for_lead_time(
-    lead_time: pd.Timedelta, noaa_file_type: NoaaFileType
-) -> Literal["a", "b", "s"]:
-    if noaa_file_type == "s+a":
-        if lead_time <= pd.Timedelta(hours=240):
-            return "s"
-        else:
-            return "a"
-    elif noaa_file_type == "s+b":
-        if lead_time <= pd.Timedelta(hours=240):
-            return "s"
-        else:
-            return "b"
-    else:
-        return noaa_file_type
-
-
 def download_file(
-    init_time: pd.Timestamp,
-    ensemble_member: int,
-    lead_time: pd.Timedelta,
+    coords: SourceFileCoords,
     noaa_file_type: NoaaFileType,
     noaa_idx_data_vars: Iterable[DataVar],
     directory: Path,
-) -> Path:
+) -> tuple[SourceFileCoords, Path]:
+    init_time = coords["init_time"]
+    ensemble_member = coords["ensemble_member"]
+    lead_time = coords["lead_time"]
+
     lead_time_hours = lead_time.total_seconds() / (60 * 60)
     if lead_time_hours != round(lead_time_hours):
         raise ValueError(f"Lead time {lead_time} must be a whole number of hours")
@@ -111,7 +97,8 @@ def download_file(
     vars_suffix = f"{vars_str}-{vars_hash}"
     local_path = Path(directory, f"{local_base_file_name}.{vars_suffix}")
 
-    print("Downloading", true_noaa_file_type, vars_suffix)
+    # print("Downloading", remote_path.split("/")[-1], vars_suffix)
+    print(".", end="", flush=True)
 
     download_to_disk(
         store,
@@ -121,7 +108,24 @@ def download_file(
         byte_ranges=(byte_range_starts, byte_range_ends),
     )
 
-    return local_path
+    return coords, local_path
+
+
+def get_noaa_file_type_for_lead_time(
+    lead_time: pd.Timedelta, noaa_file_type: NoaaFileType
+) -> Literal["a", "b", "s"]:
+    if noaa_file_type == "s+a":
+        if lead_time <= pd.Timedelta(hours=240):
+            return "s"
+        else:
+            return "a"
+    elif noaa_file_type == "s+b":
+        if lead_time <= pd.Timedelta(hours=240):
+            return "s"
+        else:
+            return "b"
+    else:
+        return noaa_file_type
 
 
 def parse_index_byte_ranges(
@@ -172,43 +176,6 @@ def digest(data: str | Iterable[str], length: int = 8) -> str:
     return message.hexdigest()[:length]
 
 
-# def read_file(file_name: str) -> xr.Dataset:
-#     """
-#     Requirement: the process current working directory must contain file_name
-#     """
-#     # Open the grib as N different datasets which correctly map grib to xarray datasets
-#     datasets = cfgrib.open_datasets(file_name)
-#     datasets = [ds.chunk(-1) for ds in datasets]
-
-#     # TODO compat="minimal" is dropping 3 variables
-#     ds = xr.merge(
-#         datasets, compat="minimal", join="exact", combine_attrs="no_conflicts"
-#     )
-
-#     renames = {"time": "init_time", "step": "lead_time"}
-#     ds = ds.expand_dims(tuple(renames.keys())).rename(renames)
-#     if "number" in ds.coords:
-#         ds = ds.expand_dims("number", axis=1).rename(number="ensemble_member")
-#     else:
-#         # Store summary statistics across ensemble members as separate variables
-#         # which do not have an ensemble_member dimension. Statistic is either
-#         # "avg" (ensemble mean) or "spr" (ensemble spread; max minus min)
-#         statistic = file_name[: file_name.index(".")].removeprefix("ge")
-#         ds = ds.rename({var: f"{var}_{statistic}" for var in ds.data_vars.keys()})
-#         for data_var in ds.data_vars.values():
-#             data_var.attrs["long_name"] = (
-#                 f"{data_var.attrs["long_name"]} ({_STATISTIC_LONG_NAME[statistic]})"
-#             )
-
-#     # Drop level height coords which belong on the variable and are not dataset wide
-#     ds = ds.drop_vars([c for c in ds.coords if c not in ds.dims])
-
-#     # Convert longitude from [0, 360) to [-180, +180)
-#     ds = ds.assign_coords(longitude=ds["longitude"] - 180)
-
-#     return ds
-
-
 def read_into(
     out: xr.DataArray,
     coords: SourceFileCoords,
@@ -238,17 +205,17 @@ def maybe_resample_and_roll_longitude(
     coords: SourceFileCoords,
     data_var: DataVar,
 ) -> Array2D[np.float32]:
-    # determine if a, b or s
-    noaa_file_type = get_noaa_file_type_for_lead_time(
-        coords["lead_time"], data_var.internal_attrs.noaa_file_type
-    )
     len_lat, len_lon = raw_data.shape
     lat_ix = np.arange(len_lat)
     lon_ix = np.concatenate(
         [np.arange(len_lon // 2, len_lon), np.arange(0, len_lon // 2)]
     )
+    noaa_file_type = get_noaa_file_type_for_lead_time(
+        coords["lead_time"], data_var.internal_attrs.noaa_file_type
+    )
     if noaa_file_type in ["a", "b"]:
-        # resample and roll
+        # Duplicate 1 pixel into 4 to go from 361x720 (a and b file resolution) to 721x1440 (s file resolution)
+        # TODO figure out least worst translation from 361 -> 721 pixels
         lat_ix = lat_ix.repeat(2)[:-1]
         lon_ix = lon_ix.repeat(2)
 
@@ -294,45 +261,21 @@ def http_store(base_url: str) -> obstore.store.HTTPStore:
     """
     return obstore.store.HTTPStore.from_url(
         base_url,
-        # client_options={
-        #     "connect_timeout": "4 seconds",
-        #     "timeout": "16 seconds",
-        # },
-        # retry_config={
-        #     "max_retries": 10,
-        #     "backoff": {
-        #         "base": 2,
-        #         "init_backoff": timedelta(seconds=1),
-        #         "max_backoff": timedelta(seconds=16),
-        #     },
-        #     # A backstop, shouldn't hit this with the above backoff settings
-        #     "retry_timeout": timedelta(minutes=3),
-        # },
+        client_options={
+            "connect_timeout": "4 seconds",
+            "timeout": "16 seconds",
+        },
+        retry_config={
+            "max_retries": 16,
+            "backoff": {
+                "base": 2,
+                "init_backoff": timedelta(seconds=1),
+                "max_backoff": timedelta(seconds=16),
+            },
+            # A backstop, shouldn't hit this with the above backoff settings
+            "retry_timeout": timedelta(minutes=5),
+        },
     )
-
-
-@functools.cache
-def http_session() -> requests.Session:
-    """
-    A requests.Session tuned to maximize chance of success at the expense of latency,
-    while not waiting indefinitely for unresponsive servers.
-
-    Uses a backoff retry for 500 level responses and connection errors.
-    Applies a default connection and read timeout if one isn't specificed in the request.
-    """
-    session = requests.Session()
-    retry = requests.adapters.Retry(
-        total=10,
-        redirect=1,
-        backoff_factor=0.5,
-        backoff_jitter=0.5,
-        status_forcelist=(500, 502, 503, 504),
-    )
-    # default_timeout tuple is (connection timeout, read timeout)
-    adapter = DefaultTimeoutHTTPAdapter(default_timeout=(4, 16), max_retries=retry)
-    session.mount("http://", adapter)
-    session.mount("https://", adapter)
-    return session
 
 
 def download_to_disk(

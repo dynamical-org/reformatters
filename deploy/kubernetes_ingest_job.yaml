@@ -22,6 +22,8 @@ spec:
         - reformat-chunks
         - "$INIT_TIME_END"
         env:
+        - name: DYNAMICAL_ENV
+          value: prod
         - name: WORKER_INDEX
           valueFrom:
             fieldRef:
@@ -40,6 +42,9 @@ spec:
               key: AWS_SECRET_ACCESS_KEY
         resources:
           requests:
+            cpu: $CPU
+            memory: $MEMORY
+          limits:
             cpu: $CPU
             memory: $MEMORY
         volumeMounts:
