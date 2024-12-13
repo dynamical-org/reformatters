@@ -2,7 +2,6 @@ import concurrent.futures
 import os
 import re
 import subprocess
-import time
 from collections import defaultdict, deque
 from collections.abc import Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -173,8 +172,6 @@ def reformat_chunks(
                         io_executor,
                     )
                 ] = data_vars
-                # TODO: this necessary? allow all of this group's downloads to be submitted to io_executor so a group is more likely to finish together and reading can begin
-                time.sleep(1)
 
             for future in concurrent.futures.as_completed(download_var_group_futures):
                 if (e := future.exception()) is not None:
