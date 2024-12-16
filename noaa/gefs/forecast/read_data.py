@@ -208,29 +208,26 @@ def read_into(
         grib_element,
         data_var.internal_attrs.grib_description,
     )
-    out.loc[coords] = maybe_resample_and_roll_longitude(raw_data, coords, data_var)
+    out.loc[coords] = maybe_resample(raw_data, coords, data_var)
 
 
-def maybe_resample_and_roll_longitude(
+def maybe_resample(
     raw_data: Array2D[np.float32],
     coords: SourceFileCoords,
     data_var: DataVar,
 ) -> Array2D[np.float32]:
-    len_lat, len_lon = raw_data.shape
-    lat_ix = np.arange(len_lat)
-    lon_ix = np.concatenate(
-        [np.arange(len_lon // 2, len_lon), np.arange(0, len_lon // 2)]
-    )
     noaa_file_type = get_noaa_file_type_for_lead_time(
         coords["lead_time"], data_var.internal_attrs.noaa_file_type
     )
     if noaa_file_type in ["a", "b"]:
         # Duplicate 1 pixel into 4 to go from 361x720 (a and b file resolution) to 721x1440 (s file resolution)
         # TODO figure out least worst translation from 361 -> 721 pixels
-        lat_ix = lat_ix.repeat(2)[:-1]
-        lon_ix = lon_ix.repeat(2)
+        len_lat, len_lon = raw_data.shape
+        lat_ix = np.arange(len_lat).repeat(2)[:-1]
+        lon_ix = np.arange(len_lon).repeat(2)
+        return raw_data[np.ix_(lat_ix, lon_ix)]  # type: ignore
 
-    return raw_data[np.ix_(lat_ix, lon_ix)]  # type: ignore
+    return raw_data
 
 
 def read_rasterio(
