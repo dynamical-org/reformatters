@@ -2,125 +2,42 @@ from collections.abc import Hashable
 from pathlib import Path
 from typing import Literal
 
+import dask
+import dask.array
 import numpy as np
-import pandas as pd
 import xarray as xr
-from numcodecs import BitRound, Blosc, Delta  # type: ignore
 
 from common.config import Config  # noqa:F401
-from common.download_directory import cd_into_download_directory
 from common.types import DatetimeLike, StoreLike
-from noaa.gefs.forecast.read_data import download_file, read_file
+
+from .template_config import (
+    CHUNKS,
+    CHUNKS_ORDERED,
+    COORDINATES,
+    DATASET_ATTRIBUTES,
+    DIMS,
+    get_init_time_coordinates,
+    get_template_dimension_coordinates,
+)
+from .template_config import (
+    DATA_VARIABLES as DATA_VARIABLES,
+)
 
 TEMPLATE_PATH = "noaa/gefs/forecast/templates/latest.zarr"
-
-_DATASET_ID = "noaa-gefs-forecast"
-_INIT_TIME_START = pd.Timestamp("2024-09-01T00:00")
-_INIT_TIME_FREQUENCY = pd.Timedelta("6h")
-_DIMS = ("init_time", "ensemble_member", "lead_time", "latitude", "longitude")
-_CHUNKS = {
-    "init_time": 1,
-    "ensemble_member": 31,  # all ensemble members in one chunk
-    "lead_time": 125,  # all lead times in one chunk
-    "latitude": 73,  # 10 chunks over 721 pixels
-    "longitude": 72,  # 20 chunks over 1440 pixels
-}
-_CHUNKS_ORDERED = tuple(_CHUNKS[dim] for dim in _DIMS)
-
-# Use this with an additional add_offset: <median> option
-# to minimize loss from binary rounding
-_FLOAT_DEFAULT = {
-    "dtype": np.float32,
-    "chunks": _CHUNKS_ORDERED,
-    "filters": [BitRound(keepbits=7)],
-    "compressor": Blosc(cname="zstd", clevel=3, shuffle=Blosc.SHUFFLE),
-}
-_CATEGORICAL_WITH_MISSING_DEFAULT = {
-    "dtype": np.float32,
-    "chunks": _CHUNKS_ORDERED,
-    "compressor": Blosc(cname="zstd", clevel=3, shuffle=Blosc.SHUFFLE),
-}
-_ENCODING = {
-    "init_time": {
-        "dtype": np.int64,
-        "filters": [Delta(np.int64)],
-        "compressor": Blosc(cname="zstd"),
-        "calendar": "proleptic_gregorian",
-        "units": "seconds since 1970-01-01 00:00:00",
-        "chunks": -1,
-    },
-    "ensemble_member": {
-        "dtype": np.uint16,
-        "chunks": -1,
-    },
-    "lead_time": {
-        "dtype": np.int64,
-        "compressor": Blosc(cname="zstd"),
-        "units": "seconds",
-        "chunks": -1,
-    },
-    "latitude": {
-        "dtype": np.float64,
-        "compressor": Blosc(cname="zstd"),
-        "chunks": -1,
-    },
-    "longitude": {
-        "dtype": np.float64,
-        "compressor": Blosc(cname="zstd"),
-        "chunks": -1,
-    },
-    "valid_time": {
-        "dtype": np.int64,
-        "filters": [Delta(np.int64)],
-        "compressor": Blosc(cname="zstd"),
-        "calendar": "proleptic_gregorian",
-        "units": "seconds since 1970-01-01 00:00:00",
-        "chunks": [-1, -1],
-    },
-    "cfrzr": _CATEGORICAL_WITH_MISSING_DEFAULT,
-    "cicep": _CATEGORICAL_WITH_MISSING_DEFAULT,
-    "cpofp": _FLOAT_DEFAULT,
-    "crain": _CATEGORICAL_WITH_MISSING_DEFAULT,
-    "csnow": _CATEGORICAL_WITH_MISSING_DEFAULT,
-    "d2m": {**_FLOAT_DEFAULT, "add_offset": 273.15},
-    "gh": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=8)]},
-    "gust": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
-    "hlcy": _FLOAT_DEFAULT,
-    "mslet": {**_FLOAT_DEFAULT, "add_offset": 101_000.0},
-    "mslhf": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
-    "msshf": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
-    "prmsl": {**_FLOAT_DEFAULT, "add_offset": 101_000.0},
-    "pwat": _FLOAT_DEFAULT,
-    "r2": {**_FLOAT_DEFAULT, "add_offset": 50.0, "filters": [BitRound(keepbits=6)]},
-    "sde": _FLOAT_DEFAULT,
-    "sdlwrf": {**_FLOAT_DEFAULT, "add_offset": 300.0},
-    "sdswrf": _FLOAT_DEFAULT,
-    "sdwe": _FLOAT_DEFAULT,
-    "sithick": _FLOAT_DEFAULT,
-    "soilw": _FLOAT_DEFAULT,
-    "sp": {**_FLOAT_DEFAULT, "add_offset": 100_000.0},
-    "st": {**_FLOAT_DEFAULT, "add_offset": 273.15},
-    "suswrf": _FLOAT_DEFAULT,
-    "t2m": {**_FLOAT_DEFAULT, "add_offset": 273.15},
-    "tcc": {**_FLOAT_DEFAULT, "add_offset": 50.0},
-    "tmax": {**_FLOAT_DEFAULT, "add_offset": 273.15},
-    "tmin": {**_FLOAT_DEFAULT, "add_offset": 273.15},
-    "tp": _FLOAT_DEFAULT,
-    "u10": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
-    "v10": {**_FLOAT_DEFAULT, "filters": [BitRound(keepbits=6)]},
-    "vis": {**_FLOAT_DEFAULT, "add_offset": 15_000.0},
-}
 
 
 def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     ds: xr.Dataset = xr.open_zarr(TEMPLATE_PATH)
 
     # Expand init_time dimension with complete coordinates
-    ds = ds.reindex(init_time=_get_init_time_coordinates(init_time_end))
+    ds = ds.reindex(init_time=get_init_time_coordinates(init_time_end))
     # Init time chunks are 1 when stored, set them to desired.
-    ds = ds.chunk(init_time=_CHUNKS["init_time"])
+    ds = ds.chunk(init_time=CHUNKS["init_time"])
     # Recompute valid time after reindex
+    template_valid_time = ds["valid_time"]
     ds.coords["valid_time"] = ds["init_time"] + ds["lead_time"]
+    ds["valid_time"].encoding = template_valid_time.encoding
+    ds["valid_time"].attrs = template_valid_time.attrs
 
     # Coordinates which are dask arrays are not written with
     # to_zarr(store, compute=False) so we ensure all coordinates are loaded.
@@ -129,66 +46,51 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
 
     # Uncomment to make smaller zarr while developing
     # if Config.is_dev():
-    #     ds = ds.isel(ensemble_member=slice(5), lead_time=slice(24))
+    #     ds = ds[["u100", "v100", "u10", "v10", "t2m", "tp"]].sel(
+    #         ensemble_member=slice(3),
+    #         lead_time=["0h", "3h", "90h", "240h", "243h", "840h"],
+    #     )
+    # ds = ds[["u100", "v100", "u10", "v10", "t2m", "tp", "sdswrf", "gh", "tcc", "pwat", "r2", ]]
 
     return ds
 
 
-def _get_init_time_coordinates(
-    init_time_end: DatetimeLike,
-) -> pd.DatetimeIndex:
-    return pd.date_range(
-        _INIT_TIME_START, init_time_end, freq=_INIT_TIME_FREQUENCY, inclusive="left"
-    )
-
-
 def update_template() -> None:
-    assert _DIMS == tuple(_CHUNKS.keys())
-
-    coords = {
-        "init_time": _get_init_time_coordinates(
-            _INIT_TIME_START + _INIT_TIME_FREQUENCY
-        ),
-        "ensemble_member": np.arange(31),
-        "lead_time": pd.timedelta_range("0h", "240h", freq="3h"),
-        # TODO pull arange arguments from GRIB attributes
-        # latitude descends when north is up
-        "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
-        "longitude": np.arange(-180, 180, 0.25),
-    }
-
     # Resolve to absolue path before changing directories
     template_path = Path(TEMPLATE_PATH).absolute()
 
-    # Pull a single file to load variable names and metadata.
-    # Use a lead time > 0 because not all variables are present at lead time == 0.
-    with cd_into_download_directory() as directory:
-        path = download_file(
-            pd.Timestamp("2024-01-01T00:00"), 0, pd.Timedelta("3h"), directory
+    coords = get_template_dimension_coordinates()
+
+    data_vars = {
+        var_config.name: (
+            DIMS,
+            dask.array.full(  # type: ignore
+                shape=tuple(len(coords[dim]) for dim in DIMS),
+                fill_value=np.nan,
+                dtype=var_config.encoding.dtype,
+                chunks=CHUNKS_ORDERED,
+            ),
         )
-        ds = read_file(path.name)
+        for var_config in DATA_VARIABLES
+    }
 
-        # Expand ensemble and lead time dimensions + set coordinates and chunking
-        ds = (
-            ds.sel(ensemble_member=coords["ensemble_member"], method="nearest")
-            .sel(lead_time=coords["lead_time"], method="nearest")
-            .assign_coords(coords)
-            .chunk(_CHUNKS)
+    ds = xr.Dataset(data_vars, coords, DATASET_ATTRIBUTES.model_dump())
+
+    # This could be computed by users on the fly, but it compresses
+    # really well so lets make things easy for users
+    ds.coords["valid_time"] = ds["init_time"] + ds["lead_time"]
+
+    for var_config in DATA_VARIABLES:
+        data_var = ds[var_config.name]
+        data_var.attrs = var_config.attrs.model_dump(exclude_none=True)
+        data_var.encoding = var_config.encoding.model_dump(exclude_none=True)
+
+    for coord_config in COORDINATES:
+        ds.coords[coord_config.name].encoding = coord_config.encoding.model_dump(
+            exclude_none=True
         )
 
-        # Remove left over coordinates encoding for coords we don't keep
-        for data_var in ds.data_vars.values():
-            del data_var.encoding["coordinates"]
-
-        # This could be computed by users on the fly, but it compresses
-        # really well so lets make things easy for users
-        ds.coords["valid_time"] = ds["init_time"] + ds["lead_time"]
-
-        ds_keys = list(ds.keys()) + list(ds.coords.keys())
-        if len(missing_encodings := [v for v in ds_keys if v not in _ENCODING]) != 0:
-            raise ValueError(f"Missing encodings for {missing_encodings}")
-
-        write_metadata(ds, template_path, mode="w")
+    write_metadata(ds, template_path, mode="w")
 
 
 def write_metadata(
@@ -196,7 +98,7 @@ def write_metadata(
     store: StoreLike,
     mode: Literal["w", "w-", "a", "a-", "r+", "r"],
 ) -> None:
-    template_ds.to_zarr(store, mode=mode, compute=False, encoding=_ENCODING)
+    template_ds.to_zarr(store, mode=mode, compute=False)
     print(f"Wrote metadata to {store} with mode {mode}.")
 
 

@@ -9,7 +9,9 @@ dependencies = [
     "dask>=2024.9.0",
     "numcodecs>=0.13.1",
     "numpy>=2.1.1",
-    "pydantic>=2.9.2",
+    "obstore>=0.3.0b8",
+    "pydantic>=2.10.2",
+    "rasterio>=1.4.2",
     "requests>=2.32.3",
     "s3fs>=2024.9.0",
     "typer>=0.12.5",
@@ -51,7 +53,7 @@ ignore = [
 
 [tool.mypy]
 files = "."
-plugins = ["pydantic.mypy"]
+plugins = ["pydantic.mypy", "numpy.typing.mypy_plugin"]
 strict = true
 enable_incomplete_feature = "NewGenericSyntax"
 

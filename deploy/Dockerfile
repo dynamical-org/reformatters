@@ -86,11 +86,9 @@ STOPSIGNAL SIGINT
 
 # Note how the runtime dependencies differ from build-time ones.
 # Notably, there is no uv either!
-# libeccodes is required by cfgrib for grib reading
 RUN <<EOT
 apt-get update -qy
 apt-get install -qyy \
-    -o APT::Install-Recommends=false \
     -o APT::Install-Suggests=false \
     python3.12 \
     libpython3.12 \

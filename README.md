@@ -18,7 +18,7 @@ We use
 
 * `uv run main.py --help`
 * `uv run main.py noaa-gefs-forecast update-template`
-* `uv run main.py noaa-gefs-forecast reformat-local 2024-01-02T00:00`
+* `uv run main.py noaa-gefs-forecast reformat-local 2024-09-02T00:00`
 
 ### Development commands
 * Add dependency: `uv add <package> [--dev]`. Use `--dev` to add a development only dependency.
