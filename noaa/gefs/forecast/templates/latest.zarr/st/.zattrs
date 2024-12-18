@@ -6,7 +6,7 @@
         "latitude",
         "longitude"
     ],
-    "coordinates": "valid_time",
+    "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
     "long_name": "Soil temperature",
     "short_name": "st",
     "step_type": "instant",

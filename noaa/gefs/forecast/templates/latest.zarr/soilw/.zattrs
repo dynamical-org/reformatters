@@ -6,7 +6,7 @@
         "latitude",
         "longitude"
     ],
-    "coordinates": "valid_time",
+    "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
     "long_name": "Volumetric soil moisture content",
     "short_name": "soilw",
     "step_type": "instant",

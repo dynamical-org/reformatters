@@ -7,7 +7,7 @@
         "longitude"
     ],
     "add_offset": 50.0,
-    "coordinates": "valid_time",
+    "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
     "long_name": "2 metre relative humidity",
     "short_name": "r2",
     "standard_name": "relative_humidity",

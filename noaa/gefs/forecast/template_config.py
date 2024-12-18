@@ -131,6 +131,24 @@ COORDINATES: Sequence[Coordinate] = (
             chunks=(-1, -1),
         ),
     ),
+    Coordinate(
+        name="ingested_forecast_length",
+        encoding=Encoding(
+            dtype="int64",
+            compressor=Blosc(cname="zstd"),
+            units="seconds",
+            chunks=-1,
+        ),
+    ),
+    Coordinate(
+        name="expected_forecast_length",
+        encoding=Encoding(
+            dtype="int64",
+            compressor=Blosc(cname="zstd"),
+            units="seconds",
+            chunks=-1,
+        ),
+    ),
 )
 
 

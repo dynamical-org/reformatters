@@ -7,7 +7,7 @@
         "longitude"
     ],
     "add_offset": 100000.0,
-    "coordinates": "valid_time",
+    "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
     "long_name": "Surface pressure",
     "short_name": "sp",
     "standard_name": "surface_air_pressure",
