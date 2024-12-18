@@ -6,7 +6,7 @@
         "latitude",
         "longitude"
     ],
-    "coordinates": "valid_time",
+    "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
     "long_name": "Maximum temperature",
     "short_name": "tmax",
     "step_type": "max",
