@@ -7,7 +7,7 @@
         "longitude"
     ],
     "add_offset": 101000.0,
-    "coordinates": "valid_time",
+    "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
     "long_name": "MSLP (Eta model reduction)",
     "short_name": "mslet",
     "step_type": "instant",

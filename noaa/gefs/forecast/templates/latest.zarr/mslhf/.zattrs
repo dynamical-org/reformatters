@@ -6,7 +6,7 @@
         "latitude",
         "longitude"
     ],
-    "coordinates": "valid_time",
+    "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
     "long_name": "Mean surface latent heat flux",
     "short_name": "mslhf",
     "step_type": "avg",

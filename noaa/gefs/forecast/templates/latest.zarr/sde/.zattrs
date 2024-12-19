@@ -6,7 +6,7 @@
         "latitude",
         "longitude"
     ],
-    "coordinates": "valid_time",
+    "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
     "long_name": "Snow depth",
     "short_name": "sde",
     "standard_name": "lwe_thickness_of_surface_snow_amount",

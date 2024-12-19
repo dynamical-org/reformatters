@@ -7,7 +7,7 @@
         "longitude"
     ],
     "add_offset": 15000.0,
-    "coordinates": "valid_time",
+    "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
     "long_name": "Visibility",
     "short_name": "vis",
     "step_type": "instant",
