@@ -64,7 +64,8 @@ def reformat_operational() -> None:
     template.write_metadata(template_ds, tmp_store, get_mode(final_store))
     # TODO: Maybe operational doesn't need to fan out? We expect it to only digest
     # a small amount of data.
-    reformat_init_time_i_slices(i_slices, template_ds, tmp_store)
+    lead_times = reformat_init_time_i_slices(i_slices, template_ds, tmp_store)
+    breakpoint()
 
     # TODO: pipeline this so that it can start moving slices over as soon as they are available.
     for data_var in ds.data_vars:
@@ -175,26 +176,28 @@ def reformat_chunks(
 
 def reformat_init_time_i_slices(
     init_time_i_slices: list[slice], template_ds: xr.Dataset, store: StoreLike
-) -> None:
+) -> dict[slice, pd.Timedelta]:
     data_var_groups = group_data_vars_by_noaa_file_type(
-        [d for d in template.DATA_VARIABLES if d.name in template_ds]
+        [d for d in template.DATA_VARIABLES if d.name in ["t2m", "u10"]]
     )
 
     wait_executor = ThreadPoolExecutor(max_workers=2)
     io_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
-    cpu_executor = ThreadPoolExecutor(max_workers=int((os.cpu_count() or 1) * 3))
+    cpu_executor = ThreadPoolExecutor(max_workers=1)  # int((os.cpu_count() or 1) * 3))
 
     # # If we compile eccodes ourselves with thread safety enabled we could use threads for reading
     # # https://confluence.ecmwf.int/display/ECC/ecCodes+installation ENABLE_ECCODES_THREADS
     # # but make sure to read thread safety comment in our `read_data` function.
     # proccess_executor = ProcessPoolExecutor(max_workers=os.cpu_count())
 
+    max_ingested_lead_times: dict[slice, pd.Timedelta] = {}
+
     for init_time_i_slice in init_time_i_slices:
         chunk_template_ds = template_ds.isel(init_time=init_time_i_slice)
 
         chunk_init_times = pd.to_datetime(chunk_template_ds["init_time"].values)
-        chunk_lead_times = pd.to_timedelta(chunk_template_ds["lead_time"].values)
-        chunk_ensemble_members = chunk_template_ds["ensemble_member"].values
+        chunk_lead_times = pd.to_timedelta(chunk_template_ds["lead_time"].values[:1])
+        chunk_ensemble_members = chunk_template_ds["ensemble_member"].values[:1]
         chunk_coords: list[SourceFileCoords] = [
             {
                 "init_time": init_time,
@@ -232,6 +235,22 @@ def reformat_init_time_i_slices(
                 coords_and_paths = future.result()
                 data_vars = download_var_group_futures[future]
 
+                max_ingested_lead_time = max(
+                    filter(
+                        lambda coord_and_path: coord_and_path[1] is not None,
+                        coords_and_paths,
+                    ),
+                    key=lambda coord_and_path: coord_and_path[0]["lead_time"],
+                )[0]["lead_time"]
+
+                max_ingested_lead_times[init_time_i_slice] = min(
+                    max_ingested_lead_times.get(
+                        init_time_i_slice,
+                        chunk_template_ds.expected_forecast_length.values[0],
+                    ),
+                    max_ingested_lead_time,
+                )
+
                 # Write variable by variable to avoid blowing up memory usage
                 for data_var in data_vars:
                     print("Reading", data_var.name)
@@ -258,10 +277,12 @@ def reformat_init_time_i_slices(
                             *zip(*var_coords_and_paths, strict=True),
                         )
                     )
+                    breakpoint()
 
                     print(f"Writing {data_var.name} {chunk_init_times_str}")
                     chunks = template.chunk_args(chunk_template_ds)
                     data_array.chunk(chunks).to_zarr(store, region="auto")
+    return max_ingested_lead_times
 
 
 def download_var_group_files(
