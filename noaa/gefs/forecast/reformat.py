@@ -45,7 +45,9 @@ def reformat_operational() -> None:
     init_time_end = pd.Timestamp.utcnow().tz_localize(None)
     template_ds = template.get_template(init_time_end)
     # TODO this is just limiting for testing
-    template_ds = template_ds.isel(init_time=slice(0, len(ds.init_time) + 1))
+    template_ds = template_ds.isel(
+        init_time=slice(0, len(ds.init_time) + 1), ensemble_member=slice(0, 5)
+    )[["u10", "t2m"]]
 
     new_init_times = template_ds.init_time.loc[template_ds.init_time > start]
     new_init_time_indices = template_ds.get_index("init_time").get_indexer(
@@ -62,10 +64,13 @@ def reformat_operational() -> None:
         )
     )
     template.write_metadata(template_ds, tmp_store, get_mode(final_store))
-    # TODO: Maybe operational doesn't need to fan out? We expect it to only digest
-    # a small amount of data.
-    lead_times = reformat_init_time_i_slices(i_slices, template_ds, tmp_store)
-    breakpoint()
+    max_lead_times_for_init_times = reformat_init_time_i_slices(
+        i_slices, template_ds, tmp_store
+    )
+    for init_time, max_lead_time in max_lead_times_for_init_times.items():
+        template_ds["ingested_forecast_length"].loc[{"init_time": init_time}] = (
+            max_lead_time
+        )
 
     # TODO: pipeline this so that it can start moving slices over as soon as they are available.
     for data_var in ds.data_vars:
@@ -176,7 +181,7 @@ def reformat_chunks(
 
 def reformat_init_time_i_slices(
     init_time_i_slices: list[slice], template_ds: xr.Dataset, store: StoreLike
-) -> dict[slice, pd.Timedelta]:
+) -> dict[pd.Timestamp, pd.Timedelta]:
     data_var_groups = group_data_vars_by_noaa_file_type(
         [d for d in template.DATA_VARIABLES if d.name in ["t2m", "u10"]]
     )
@@ -190,14 +195,14 @@ def reformat_init_time_i_slices(
     # # but make sure to read thread safety comment in our `read_data` function.
     # proccess_executor = ProcessPoolExecutor(max_workers=os.cpu_count())
 
-    max_ingested_lead_times: dict[slice, pd.Timedelta] = {}
+    max_ingested_lead_times: dict[pd.Timestamp, pd.Timedelta] = {}
 
     for init_time_i_slice in init_time_i_slices:
         chunk_template_ds = template_ds.isel(init_time=init_time_i_slice)
 
         chunk_init_times = pd.to_datetime(chunk_template_ds["init_time"].values)
-        chunk_lead_times = pd.to_timedelta(chunk_template_ds["lead_time"].values[:1])
-        chunk_ensemble_members = chunk_template_ds["ensemble_member"].values[:1]
+        chunk_lead_times = pd.to_timedelta(chunk_template_ds["lead_time"].values)
+        chunk_ensemble_members = chunk_template_ds["ensemble_member"].values
         chunk_coords: list[SourceFileCoords] = [
             {
                 "init_time": init_time,
@@ -243,9 +248,9 @@ def reformat_init_time_i_slices(
                     key=lambda coord_and_path: coord_and_path[0]["lead_time"],
                 )[0]["lead_time"]
 
-                max_ingested_lead_times[init_time_i_slice] = min(
+                max_ingested_lead_times[chunk_init_times[0]] = min(
                     max_ingested_lead_times.get(
-                        init_time_i_slice,
+                        chunk_init_times[0],
                         chunk_template_ds.expected_forecast_length.values[0],
                     ),
                     max_ingested_lead_time,
@@ -277,7 +282,6 @@ def reformat_init_time_i_slices(
                             *zip(*var_coords_and_paths, strict=True),
                         )
                     )
-                    breakpoint()
 
                     print(f"Writing {data_var.name} {chunk_init_times_str}")
                     chunks = template.chunk_args(chunk_template_ds)
