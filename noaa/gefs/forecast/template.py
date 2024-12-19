@@ -27,10 +27,10 @@ from .template_config import (
 TEMPLATE_PATH = "noaa/gefs/forecast/templates/latest.zarr"
 
 INIT_TIME_HOURS_TO_FORECAST_LENGTHS = {
-    0: np.timedelta64(840, "h"),
-    6: np.timedelta64(384, "h"),
-    12: np.timedelta64(384, "h"),
-    18: np.timedelta64(384, "h"),
+    0: pd.Timedelta(hours=840),
+    6: pd.Timedelta(hours=384),
+    12: pd.Timedelta(hours=384),
+    18: pd.Timedelta(hours=384),
 }
 
 
@@ -57,6 +57,7 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
         ],
     )
     ds["expected_forecast_length"].encoding = template_expected_forecast_length.encoding
+    ds["expected_forecast_length"].attrs = template_expected_forecast_length.attrs
 
     # Coordinates which are dask arrays are not written with
     # to_zarr(store, compute=False) so we ensure all coordinates are loaded.
@@ -110,7 +111,7 @@ def update_template() -> None:
                 [
                     INIT_TIME_HOURS_TO_FORECAST_LENGTHS[
                         pd.Timestamp(ds.init_time.values[0]).hour
-                    ].astype("timedelta64[ns]")
+                    ]
                 ],
             ),
         }
