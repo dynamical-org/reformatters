@@ -42,6 +42,18 @@ We use
 1. Setup a kubernetes cluster and configure kubectl to point to your cluster. eg `gcloud container clusters get-credentials <cluster-name> --region <region> --project <project>`
 1. Create a kubectl secret containing your Source Coop S3 credentials `kubectl create secret generic source-coop-key --from-literal='AWS_ACCESS_KEY_ID=XXX' --from-literal='AWS_SECRET_ACCESS_KEY=XXX'`
 
+### WIP Setup instructions for accessing the new AWS cluster
+
+1. Install the [aws cli](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html).
+1. Get invited to create an AWS Account and an IAM User by someone in the org; accept the email invites to set up your AWS account & IAM user.
+1. Navigate to the IAM portal (should auto-redirect upon accepting the IAM invite). Underneath your account in the dropdown, click on "access keys".
+1. Run `aws configure sso` in your terminal. Copy-paste the SSO Start URL & SSO Region from the IAM access keys page, and then follow the SSO url that is output in your terminal to auth your account in the browser. 
+
+Scratch notes on how to invite people, since it's surprisingly convoluted:
+- invite people to a new AWS account [via this page](https://us-east-1.console.aws.amazon.com/organizations/v2/home/accounts).
+- IAM Users can be created [here](https://us-east-1.console.aws.amazon.com/singlesignon/home?region=us-east-1#!/instances/7223601ab3bfa0c6/users)
+- Then from within the IAM Portal, [assign the account to the IAM User](https://us-east-1.console.aws.amazon.com/singlesignon/organization/home?region=us-east-1#/instances/7223601ab3bfa0c6/accounts/add-users). Official docs are [here](https://docs.aws.amazon.com/singlesignon/latest/userguide/assignusers.html). At the end of that flow, you can choose to give that account/user the Admin Access role, or a less permissive role of your choosing. 
+- **note**: when scaling this to more users, we probably want to use IAM roles instead of individual IAM users. [See suggestion in the docs here](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html).
 
 ### Development commands
 1. `uv run main.py noaa-gefs-forecast reformat-kubernetes <INIT_TIME_END> [--jobs-per-pod <int>] [--max-parallelism <int>]`
