@@ -9,7 +9,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from functools import partial
 from itertools import batched, islice, product, starmap
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Generator, Literal, Tuple
 
 import numpy as np
 import pandas as pd
@@ -63,25 +63,40 @@ def reformat_operational() -> None:
             ),
         )
     )
+    # TODO: should this be on the same ThreadPoolExecutor as the downloads?
+    upload_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
     template.write_metadata(template_ds, tmp_store, get_mode(final_store))
-    max_lead_times_for_init_times = reformat_init_time_i_slices(
+    futures = []
+    for data_var, init_time, max_lead_time in reformat_init_time_i_slices(
         i_slices, template_ds, tmp_store
-    )
-    for init_time, max_lead_time in max_lead_times_for_init_times.items():
+    ):
         template_ds["ingested_forecast_length"].loc[{"init_time": init_time}] = (
             max_lead_time
         )
+        futures.extend(
+            [
+                upload_executor.submit(fn)
+                for fn in copy_data_var(data_var, tmp_store, final_store)
+            ]
+        )
 
-    # TODO: pipeline this so that it can start moving slices over as soon as they are available.
-    for data_var in ds.data_vars:
-        source_path = tmp_store / str(data_var)
-        # Only the new files will exist for tmp_store.
-        files_to_copy = os.listdir(source_path)
-        # TODO this only works locally. Use obstore for cloud storage version.
-        dest_path = final_store / str(data_var)
-        [shutil.copy2(source_path / file, dest_path / file) for file in files_to_copy]
+    concurrent.futures.wait(futures, return_when="ALL_COMPLETED")
 
     template.write_metadata(template_ds, final_store, get_mode(final_store))
+
+
+def copy_data_var(
+    data_var: DataVar, tmp_store: StoreLike, final_store: StoreLike
+) -> list[Callable]:
+    source_path = tmp_store / str(data_var.name)
+    # Only the new files will exist for tmp_store.
+    files_to_copy = os.listdir(source_path)
+    # TODO this only works locally. Use obstore for cloud storage version.
+    dest_path = final_store / str(data_var.name)
+    return [
+        lambda: shutil.copy2(source_path / file, dest_path / file)
+        for file in files_to_copy
+    ]
 
 
 def reformat_local(init_time_end: DatetimeLike) -> None:
@@ -181,7 +196,7 @@ def reformat_chunks(
 
 def reformat_init_time_i_slices(
     init_time_i_slices: list[slice], template_ds: xr.Dataset, store: StoreLike
-) -> dict[pd.Timestamp, pd.Timedelta]:
+) -> Generator[tuple[DataVar, pd.Timestamp, pd.Timedelta], None, None]:
     data_var_groups = group_data_vars_by_noaa_file_type(
         [d for d in template.DATA_VARIABLES if d.name in ["t2m", "u10"]]
     )
@@ -194,8 +209,6 @@ def reformat_init_time_i_slices(
     # # https://confluence.ecmwf.int/display/ECC/ecCodes+installation ENABLE_ECCODES_THREADS
     # # but make sure to read thread safety comment in our `read_data` function.
     # proccess_executor = ProcessPoolExecutor(max_workers=os.cpu_count())
-
-    max_ingested_lead_times: dict[pd.Timestamp, pd.Timedelta] = {}
 
     for init_time_i_slice in init_time_i_slices:
         chunk_template_ds = template_ds.isel(init_time=init_time_i_slice)
@@ -248,14 +261,6 @@ def reformat_init_time_i_slices(
                     key=lambda coord_and_path: coord_and_path[0]["lead_time"],
                 )[0]["lead_time"]
 
-                max_ingested_lead_times[chunk_init_times[0]] = min(
-                    max_ingested_lead_times.get(
-                        chunk_init_times[0],
-                        chunk_template_ds.expected_forecast_length.values[0],
-                    ),
-                    max_ingested_lead_time,
-                )
-
                 # Write variable by variable to avoid blowing up memory usage
                 for data_var in data_vars:
                     print("Reading", data_var.name)
@@ -270,7 +275,13 @@ def reformat_init_time_i_slices(
                         var_coords_and_paths = coords_and_paths
                     data_array = xr.full_like(chunk_template_ds[data_var.name], np.nan)
                     # valid_time is a coordinate and already written with different chunks
-                    data_array = data_array.drop_vars("valid_time")
+                    data_array = data_array.drop_vars(
+                        [
+                            "valid_time",
+                            "ingested_forecast_length",
+                            "expected_forecast_length",
+                        ]
+                    )
                     data_array.load()  # preallocate backing numpy arrays (for performance?)
                     consume(
                         cpu_executor.map(
@@ -286,7 +297,7 @@ def reformat_init_time_i_slices(
                     print(f"Writing {data_var.name} {chunk_init_times_str}")
                     chunks = template.chunk_args(chunk_template_ds)
                     data_array.chunk(chunks).to_zarr(store, region="auto")
-    return max_ingested_lead_times
+                    yield (data_var, chunk_init_times[0], max_ingested_lead_time)
 
 
 def download_var_group_files(
