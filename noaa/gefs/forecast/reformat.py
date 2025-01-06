@@ -11,6 +11,7 @@ from itertools import batched, islice, product, starmap
 from pathlib import Path
 from typing import Callable, Generator, Literal, Tuple
 
+import fsspec
 import numpy as np
 import pandas as pd
 import s3fs  # type: ignore
@@ -36,7 +37,7 @@ def reformat_operational() -> None:
     final_store = get_store()
     tmp_store = get_local_tmp_store()
     # Get the dataset, check what data is already present
-    ds = xr.open_dataset(final_store)
+    ds = xr.open_dataset(final_store, engine="zarr")
     # TODO base this not only on presence of init_time,
     # but also forecast_length/expected_forecast_length
     # coordinates:
@@ -45,9 +46,9 @@ def reformat_operational() -> None:
     init_time_end = pd.Timestamp.utcnow().tz_localize(None)
     template_ds = template.get_template(init_time_end)
     # TODO this is just limiting for testing
-    template_ds = template_ds.isel(
-        init_time=slice(0, len(ds.init_time) + 1), ensemble_member=slice(0, 5)
-    )[["u10", "t2m"]]
+    template_ds = template_ds.isel(init_time=slice(0, len(ds.init_time) + 1))[
+        ["u10", "t2m"]
+    ]
 
     new_init_times = template_ds.init_time.loc[template_ds.init_time > start]
     new_init_time_indices = template_ds.get_index("init_time").get_indexer(
@@ -86,16 +87,15 @@ def reformat_operational() -> None:
 
 
 def copy_data_var(
-    data_var: DataVar, tmp_store: StoreLike, final_store: StoreLike
+    data_var: DataVar, tmp_store: Path, final_store: fsspec.FSMap
 ) -> list[Callable]:
     source_path = tmp_store / str(data_var.name)
     # Only the new files will exist for tmp_store.
-    files_to_copy = os.listdir(source_path)
-    # TODO this only works locally. Use obstore for cloud storage version.
-    dest_path = final_store / str(data_var.name)
+    files_to_copy = [source_path / blob_name for blob_name in os.listdir(source_path)]
     return [
-        lambda: shutil.copy2(source_path / file, dest_path / file)
-        for file in files_to_copy
+        lambda: final_store.fs.cp(
+            files_to_copy, final_store.root + f"/{data_var.name}/"
+        )
     ]
 
 
@@ -191,7 +191,7 @@ def reformat_chunks(
     )
 
     print(f"This is {worker_index = }, {workers_total = }, {worker_init_time_i_slices}")
-    reformat_init_time_i_slices(worker_init_time_i_slices, template_ds, store)
+    list(reformat_init_time_i_slices(worker_init_time_i_slices, template_ds, store))
 
 
 def reformat_init_time_i_slices(
@@ -358,9 +358,12 @@ def get_worker_jobs[T](
     return islice(jobs, worker_index, None, workers_total)
 
 
-def get_store() -> StoreLike:
+def get_store() -> fsspec.FSMap:
     if Config.is_dev():
-        return Path("data/output/noaa/gefs/forecast/dev.zarr").absolute()
+        local_store: StoreLike = fsspec.get_mapper(
+            "data/output/noaa/gefs/forecast/dev.zarr"
+        )
+        return local_store
 
     s3 = s3fs.S3FileSystem()
 
