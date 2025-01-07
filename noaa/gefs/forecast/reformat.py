@@ -230,13 +230,18 @@ def reformat_chunks(
 def reformat_init_time_i_slices(
     init_time_i_slices: list[slice], template_ds: xr.Dataset, store: StoreLike
 ) -> Generator[tuple[DataVar, pd.Timestamp, pd.Timedelta], None, None]:
+    """
+    Helper function to reformat the chunk data.
+    Yields the data variable/init time combinations and their corresponding maximum
+    ingested lead time as it processes.
+    """
     data_var_groups = group_data_vars_by_noaa_file_type(
-        [d for d in template.DATA_VARIABLES if d.name in ["t2m", "u10"]]
+        [d for d in template.DATA_VARIABLES if d.name in template_ds]
     )
 
     wait_executor = ThreadPoolExecutor(max_workers=2)
     io_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
-    cpu_executor = ThreadPoolExecutor(max_workers=1)  # int((os.cpu_count() or 1) * 3))
+    cpu_executor = ThreadPoolExecutor(max_workers=int((os.cpu_count() or 1) * 3))
 
     # # If we compile eccodes ourselves with thread safety enabled we could use threads for reading
     # # https://confluence.ecmwf.int/display/ECC/ecCodes+installation ENABLE_ECCODES_THREADS
@@ -394,7 +399,6 @@ def get_worker_jobs[T](
 def get_store() -> fsspec.FSMap:
     if Config.is_dev():
         local_store: StoreLike = fsspec.get_mapper(
-            # "gs://test-dynamical-storage/noaa/gefs/forecast/dev.zarr"
             "data/output/noaa/gefs/forecast/dev.zarr"
         )
         return local_store
