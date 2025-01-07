@@ -1,15 +1,14 @@
 import concurrent.futures
 import os
 import re
-import shutil
 import subprocess
 from collections import defaultdict, deque
-from collections.abc import Iterable
+from collections.abc import Callable, Generator, Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
 from functools import partial
 from itertools import batched, islice, product, starmap
 from pathlib import Path
-from typing import Callable, Generator, Literal, Tuple
+from typing import Literal
 
 import fsspec
 import numpy as np
@@ -37,24 +36,20 @@ def reformat_operational() -> None:
     final_store = get_store()
     tmp_store = get_local_tmp_store()
     # Get the dataset, check what data is already present
-    ds = xr.open_dataset(final_store, engine="zarr")
-    # TODO base this not only on presence of init_time,
-    # but also forecast_length/expected_forecast_length
-    # coordinates:
-    # https://app.asana.com/0/1207641655330818/1201550874443598/f
-    start = ds.init_time.max()
+    ds = xr.open_dataset(final_store, engine="zarr")  # type: ignore
+    last_existing_init_time = ds.init_time.max()
     init_time_end = pd.Timestamp.utcnow().tz_localize(None)
     template_ds = template.get_template(init_time_end)
-    # TODO this is just limiting for testing
-    template_ds = template_ds.isel(init_time=slice(0, len(ds.init_time) + 1))[
-        ["u10", "t2m"]
+    # Uncomment this line for local testing to scope down the number of init times
+    # you will process.
+    # template_ds = template_ds.isel(init_time=slice(0, len(ds.init_time) + 1))
+    new_init_times = template_ds.init_time.loc[
+        template_ds.init_time > last_existing_init_time
     ]
-
-    new_init_times = template_ds.init_time.loc[template_ds.init_time > start]
     new_init_time_indices = template_ds.get_index("init_time").get_indexer(
         new_init_times
     )  # type: ignore
-    i_slices = list(
+    new_init_time_i_slices = list(
         starmap(
             slice,
             zip(
@@ -64,12 +59,32 @@ def reformat_operational() -> None:
             ),
         )
     )
+    # In addition to new dates, reprocess old dates whose forecasts weren't
+    # previously fully written.
+    # On long forecasts, NOAA may fill in the first 10 days first, then publish
+    # an additional 25 days after a delay.
+    recent_incomplete_init_times = get_recent_init_times_for_reprocessing(ds)
+    recent_incomplete_init_times_indices = template_ds.get_index(
+        "init_time"
+    ).get_indexer(recent_incomplete_init_times)  # type: ignore
+    recent_incomplete_init_time_i_slices = list(
+        starmap(
+            slice,
+            zip(
+                recent_incomplete_init_times_indices,
+                [x + 1 for x in recent_incomplete_init_times_indices],
+                strict=False,
+            ),
+        )
+    )
     # TODO: should this be on the same ThreadPoolExecutor as the downloads?
     upload_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
     template.write_metadata(template_ds, tmp_store, get_mode(final_store))
     futures = []
     for data_var, init_time, max_lead_time in reformat_init_time_i_slices(
-        i_slices, template_ds, tmp_store
+        recent_incomplete_init_time_i_slices + new_init_time_i_slices,
+        template_ds,
+        tmp_store,
     ):
         template_ds["ingested_forecast_length"].loc[{"init_time": init_time}] = (
             max_lead_time
@@ -84,6 +99,24 @@ def reformat_operational() -> None:
     concurrent.futures.wait(futures, return_when="ALL_COMPLETED")
 
     template.write_metadata(template_ds, final_store, get_mode(final_store))
+
+
+def get_recent_init_times_for_reprocessing(ds: xr.Dataset) -> list[np.datetime64]:
+    max_init_time = ds.init_time.max().values
+    # Get the last week of data
+    recent_init_times = ds.init_time.where(
+        ds.init_time > max_init_time - np.timedelta64(7, "D"), drop=True
+    )
+    # Get the recent init_times where we have only partially completed
+    # the ingest.
+    recent_incomplete_init_times = recent_init_times.where(
+        recent_init_times.ingested_forecast_length
+        < recent_init_times.expected_forecast_length
+    )
+    if len(recent_incomplete_init_times) > 0:
+        return recent_incomplete_init_times.min().values  # type: ignore
+
+    return max_init_time  # type: ignore
 
 
 def copy_data_var(
@@ -361,6 +394,7 @@ def get_worker_jobs[T](
 def get_store() -> fsspec.FSMap:
     if Config.is_dev():
         local_store: StoreLike = fsspec.get_mapper(
+            # "gs://test-dynamical-storage/noaa/gefs/forecast/dev.zarr"
             "data/output/noaa/gefs/forecast/dev.zarr"
         )
         return local_store
