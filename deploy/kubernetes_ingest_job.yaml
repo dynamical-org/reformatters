@@ -48,10 +48,10 @@ spec:
             cpu: $CPU
             memory: $MEMORY
         volumeMounts:
-        - mountPath: "/app/data/download"
-          name: ephemeral-download-vol
+        - mountPath: "/app/data"
+          name: ephemeral-vol
       volumes:
-      - name: ephemeral-download-vol
+      - name: ephemeral-vol
         ephemeral:
           volumeClaimTemplate:
             metadata:

@@ -5,10 +5,11 @@ import subprocess
 from collections import defaultdict, deque
 from collections.abc import Callable, Generator, Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
-from functools import partial
+from functools import cache, partial
 from itertools import batched, groupby, islice, product, starmap
 from pathlib import Path
 from typing import Literal
+from uuid import uuid4
 
 import fsspec
 import numpy as np
@@ -42,7 +43,11 @@ def reformat_operational() -> None:
     template_ds = template.get_template(init_time_end)
     # Uncomment this line for local testing to scope down the number of init times
     # you will process.
-    template_ds = template_ds.isel(init_time=slice(0, len(ds.init_time) + 1))
+    # template_ds = template_ds.isel(init_time=slice(0, len(ds.init_time) + 2))
+    # We make some assumptions about what is safe to parallelize and how to
+    # write the data based on the init_time dimension having a chunk size of one.
+    # If this changes we will need to refactor.
+    assert all(size == 1 for size in ds.chunksizes[_PROCESSING_CHUNK_DIMENSION])
     new_init_times = template_ds.init_time.loc[
         template_ds.init_time > last_existing_init_time
     ]
@@ -90,9 +95,12 @@ def reformat_operational() -> None:
             template_ds["ingested_forecast_length"].loc[{"init_time": init_time}] = (
                 max_lead_time
             )
+            # TODO: this only works because we know that chunks are size 1 in the
+            # init_time dimension.
+            chunk_index = template_ds.get_index("init_time").get_loc(init_time)
             futures.append(
                 upload_executor.submit(
-                    copy_data_var(data_var, init_time, tmp_store, final_store)
+                    copy_data_var(data_var, chunk_index, tmp_store, final_store)
                 )
             )
 
@@ -118,13 +126,11 @@ def get_recent_init_times_for_reprocessing(ds: xr.Dataset) -> Array1D[np.datetim
 
 def copy_data_var(
     data_var: DataVar,
-    init_time: pd.Timestamp,
+    chunk_index: int,
     tmp_store: Path,
     final_store: fsspec.FSMap,
 ) -> Callable:
-    source_path = tmp_store / str(data_var.name)
-    # Only the new files will exist for tmp_store.
-    files_to_copy = [source_path / blob_name for blob_name in os.listdir(source_path)]
+    files_to_copy = list(tmp_store.glob(f"{data_var.name}/{chunk_index}.*.*.*.*"))
     return lambda: final_store.fs.cp(
         files_to_copy, final_store.root + f"/{data_var.name}/"
     )
@@ -424,8 +430,9 @@ def get_store() -> fsspec.FSMap:
     return store
 
 
+@cache
 def get_local_tmp_store() -> Path:
-    return Path("data/output/noaa/gefs/forecast/tmp.zarr").absolute()
+    return Path(f"data/tmp/tmp-{uuid4()}.zarr").absolute()
 
 
 def get_mode(store: StoreLike) -> Literal["w-", "w"]:
