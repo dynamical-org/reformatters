@@ -33,7 +33,7 @@ from noaa.gefs.forecast.read_data import (
 _PROCESSING_CHUNK_DIMENSION = "init_time"
 
 
-def reformat_operational() -> None:
+def reformat_operational_update() -> None:
     final_store = get_store()
     tmp_store = get_local_tmp_store()
     # Get the dataset, check what data is already present
@@ -331,12 +331,13 @@ def reformat_init_time_i_slices(
                     else:
                         var_coords_and_paths = coords_and_paths
                     data_array = xr.full_like(chunk_template_ds[data_var.name], np.nan)
-                    # valid_time is a coordinate and already written with different chunks
+                    # Drop all non-dimension coordinates.
+                    # They are already written with different chunks.
                     data_array = data_array.drop_vars(
                         [
-                            "valid_time",
-                            "ingested_forecast_length",
-                            "expected_forecast_length",
+                            coord
+                            for coord in data_array.coords
+                            if coord not in data_array.dims
                         ]
                     )
                     data_array.load()  # preallocate backing numpy arrays (for performance?)
