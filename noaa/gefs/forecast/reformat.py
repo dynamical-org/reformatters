@@ -6,7 +6,7 @@ from collections import defaultdict, deque
 from collections.abc import Callable, Generator, Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
 from functools import partial
-from itertools import batched, islice, product, starmap
+from itertools import batched, groupby, islice, product, starmap
 from pathlib import Path
 from typing import Literal
 
@@ -19,7 +19,7 @@ import xarray as xr
 from common import string_template
 from common.config import Config  # noqa:F401
 from common.download_directory import cd_into_download_directory
-from common.types import DatetimeLike, StoreLike
+from common.types import Array1D, DatetimeLike, StoreLike
 from noaa.gefs.forecast import template
 from noaa.gefs.forecast.config_models import DataVar
 from noaa.gefs.forecast.read_data import (
@@ -36,13 +36,13 @@ def reformat_operational() -> None:
     final_store = get_store()
     tmp_store = get_local_tmp_store()
     # Get the dataset, check what data is already present
-    ds = xr.open_dataset(final_store, engine="zarr")  # type: ignore
+    ds = xr.open_zarr(final_store)
     last_existing_init_time = ds.init_time.max()
     init_time_end = pd.Timestamp.utcnow().tz_localize(None)
     template_ds = template.get_template(init_time_end)
     # Uncomment this line for local testing to scope down the number of init times
     # you will process.
-    # template_ds = template_ds.isel(init_time=slice(0, len(ds.init_time) + 1))
+    template_ds = template_ds.isel(init_time=slice(0, len(ds.init_time) + 1))
     new_init_times = template_ds.init_time.loc[
         template_ds.init_time > last_existing_init_time
     ]
@@ -81,27 +81,27 @@ def reformat_operational() -> None:
     upload_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
     template.write_metadata(template_ds, tmp_store, get_mode(final_store))
     futures = []
-    for data_var, init_time, max_lead_time in reformat_init_time_i_slices(
+    for data_var, max_lead_times in reformat_init_time_i_slices(
         recent_incomplete_init_time_i_slices + new_init_time_i_slices,
         template_ds,
         tmp_store,
     ):
-        template_ds["ingested_forecast_length"].loc[{"init_time": init_time}] = (
-            max_lead_time
-        )
-        futures.extend(
-            [
-                upload_executor.submit(fn)
-                for fn in copy_data_var(data_var, tmp_store, final_store)
-            ]
-        )
+        for init_time, max_lead_time in max_lead_times.items():
+            template_ds["ingested_forecast_length"].loc[{"init_time": init_time}] = (
+                max_lead_time
+            )
+            futures.append(
+                upload_executor.submit(
+                    copy_data_var(data_var, init_time, tmp_store, final_store)
+                )
+            )
 
     concurrent.futures.wait(futures, return_when="ALL_COMPLETED")
 
     template.write_metadata(template_ds, final_store, get_mode(final_store))
 
 
-def get_recent_init_times_for_reprocessing(ds: xr.Dataset) -> list[np.datetime64]:
+def get_recent_init_times_for_reprocessing(ds: xr.Dataset) -> Array1D[np.datetime64]:
     max_init_time = ds.init_time.max().values
     # Get the last week of data
     recent_init_times = ds.init_time.where(
@@ -112,24 +112,22 @@ def get_recent_init_times_for_reprocessing(ds: xr.Dataset) -> list[np.datetime64
     recent_incomplete_init_times = recent_init_times.where(
         recent_init_times.ingested_forecast_length
         < recent_init_times.expected_forecast_length
-    )
-    if len(recent_incomplete_init_times) > 0:
-        return recent_incomplete_init_times.min().values  # type: ignore
-
-    return max_init_time  # type: ignore
+    ).values
+    return recent_incomplete_init_times[~np.isnat(recent_incomplete_init_times)]  # type: ignore
 
 
 def copy_data_var(
-    data_var: DataVar, tmp_store: Path, final_store: fsspec.FSMap
-) -> list[Callable]:
+    data_var: DataVar,
+    init_time: pd.Timestamp,
+    tmp_store: Path,
+    final_store: fsspec.FSMap,
+) -> Callable:
     source_path = tmp_store / str(data_var.name)
     # Only the new files will exist for tmp_store.
     files_to_copy = [source_path / blob_name for blob_name in os.listdir(source_path)]
-    return [
-        lambda: final_store.fs.cp(
-            files_to_copy, final_store.root + f"/{data_var.name}/"
-        )
-    ]
+    return lambda: final_store.fs.cp(
+        files_to_copy, final_store.root + f"/{data_var.name}/"
+    )
 
 
 def reformat_local(init_time_end: DatetimeLike) -> None:
@@ -224,12 +222,12 @@ def reformat_chunks(
     )
 
     print(f"This is {worker_index = }, {workers_total = }, {worker_init_time_i_slices}")
-    list(reformat_init_time_i_slices(worker_init_time_i_slices, template_ds, store))
+    consume(reformat_init_time_i_slices(worker_init_time_i_slices, template_ds, store))
 
 
 def reformat_init_time_i_slices(
     init_time_i_slices: list[slice], template_ds: xr.Dataset, store: StoreLike
-) -> Generator[tuple[DataVar, pd.Timestamp, pd.Timedelta], None, None]:
+) -> Generator[tuple[DataVar, dict[pd.Timestamp, pd.Timedelta]], None, None]:
     """
     Helper function to reformat the chunk data.
     Yields the data variable/init time combinations and their corresponding maximum
@@ -291,6 +289,21 @@ def reformat_init_time_i_slices(
                 coords_and_paths = future.result()
                 data_vars = download_var_group_futures[future]
 
+                # TODO: refactor to not assume there is only one init time
+                #  in this chunk.
+                max_lead_times: dict[pd.Timestamp, pd.Timedelta] = {}
+                for init_time, init_time_coords_and_paths in groupby(
+                    coords_and_paths, key=lambda v: v[0]["init_time"]
+                ):
+                    max_ingested_lead_time = max(
+                        filter(
+                            lambda coord_and_path: coord_and_path[1] is not None,
+                            init_time_coords_and_paths,
+                        ),
+                        key=lambda coord_and_path: coord_and_path[0]["lead_time"],
+                    )[0]["lead_time"]
+                    max_lead_times[init_time] = max_ingested_lead_time
+
                 max_ingested_lead_time = max(
                     filter(
                         lambda coord_and_path: coord_and_path[1] is not None,
@@ -335,7 +348,7 @@ def reformat_init_time_i_slices(
                     print(f"Writing {data_var.name} {chunk_init_times_str}")
                     chunks = template.chunk_args(chunk_template_ds)
                     data_array.chunk(chunks).to_zarr(store, region="auto")
-                    yield (data_var, chunk_init_times[0], max_ingested_lead_time)
+                    yield (data_var, max_lead_times)
 
 
 def download_var_group_files(
