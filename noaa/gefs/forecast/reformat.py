@@ -72,7 +72,7 @@ def reformat_kubernetes(
     print("Pushed", image_tag)
 
     store = get_store()
-    print("Writing zarr metadata")
+    print("Writing zarr metadata to ", store)
     template.write_metadata(template_ds, store, get_mode(store))
 
     num_jobs = sum(1 for _ in chunk_i_slices(template_ds, _PROCESSING_CHUNK_DIMENSION))
@@ -274,10 +274,13 @@ def get_store() -> StoreLike:
     if Config.is_dev():
         return Path("data/output/noaa/gefs/forecast/dev.zarr").absolute()
 
-    s3 = s3fs.S3FileSystem()
+    s3 = s3fs.S3FileSystem(
+        key=os.environ["SOURCE_COOP_AWS_ACCESS_KEY_ID"],
+        secret=os.environ["SOURCE_COOP_AWS_SECRET_ACCESS_KEY"],
+    )
 
     store: StoreLike = s3.get_mapper(
-        "s3://us-west-2.opendata.source.coop/aldenks/noaa-gefs-dev/forecast/dev.zarr"
+        "s3://us-west-2.opendata.source.coop/aldenks/noaa-gefs-dev/forecast/aws0-dev.zarr"
     )
     return store
 

@@ -30,12 +30,12 @@ spec:
               fieldPath: metadata.annotations['batch.kubernetes.io/job-completion-index']
         - name: WORKERS_TOTAL
           value: "$WORKERS_TOTAL"
-        - name: AWS_ACCESS_KEY_ID
+        - name: SOURCE_COOP_AWS_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:
               name: source-coop-key
               key: AWS_ACCESS_KEY_ID
-        - name: AWS_SECRET_ACCESS_KEY
+        - name: SOURCE_COOP_AWS_SECRET_ACCESS_KEY
           valueFrom:
             secretKeyRef:
               name: source-coop-key
@@ -64,6 +64,7 @@ spec:
                   storage: $EPHEMERAL_STORAGE
       securityContext:
         fsGroup: 999  # this is the `app` group our app runs under
-      nodeSelector:
-        cloud.google.com/gke-spot: "true"
+      # nodeSelector:
+      #   eks.amazonaws.com/capacityType: SPOT
+      #   # cloud.google.com/gke-spot: "true"
       terminationGracePeriodSeconds: 5
