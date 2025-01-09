@@ -104,6 +104,9 @@ def reformat_operational_update() -> None:
             )
 
     concurrent.futures.wait(futures, return_when="ALL_COMPLETED")
+    template_ds.ingested_forecast_length.loc[{"init_time": ds.init_time.values}] = (
+        ds.ingested_forecast_length
+    )
 
     template.write_metadata(template_ds, final_store, get_mode(final_store))
 
@@ -113,17 +116,14 @@ def get_recent_init_times_for_reprocessing(ds: xr.Dataset) -> Array1D[np.datetim
     # Get the last week of data
     recent_init_times = ds.init_time.where(
         ds.init_time > max_init_time - np.timedelta64(7, "D"), drop=True
-    )
+    ).load()
     # Get the recent init_times where we have only partially completed
     # the ingest.
-    return (
-        recent_init_times.where(
-            recent_init_times.ingested_forecast_length
-            < recent_init_times.expected_forecast_length
-        )
-        .dropna(dim="init_time")
-        .values
-    )  # type: ignore
+    return recent_init_times.where(
+        recent_init_times.ingested_forecast_length
+        < recent_init_times.expected_forecast_length,
+        drop=True,
+    ).init_time.values  # type: ignore
 
 
 def copy_data_var(
@@ -297,8 +297,6 @@ def reformat_init_time_i_slices(
                 coords_and_paths = future.result()
                 data_vars = download_var_group_futures[future]
 
-                # TODO: refactor to not assume there is only one init time
-                #  in this chunk.
                 max_lead_times: dict[pd.Timestamp, pd.Timedelta] = {}
                 for init_time, init_time_coords_and_paths in groupby(
                     coords_and_paths, key=lambda v: v[0]["init_time"]
@@ -309,16 +307,9 @@ def reformat_init_time_i_slices(
                             init_time_coords_and_paths,
                         ),
                         key=lambda coord_and_path: coord_and_path[0]["lead_time"],
+                        default=({"lead_time": pd.Timedelta("NaT")},),
                     )[0]["lead_time"]
                     max_lead_times[init_time] = max_ingested_lead_time
-
-                max_ingested_lead_time = max(
-                    filter(
-                        lambda coord_and_path: coord_and_path[1] is not None,
-                        coords_and_paths,
-                    ),
-                    key=lambda coord_and_path: coord_and_path[0]["lead_time"],
-                )[0]["lead_time"]
 
                 # Write variable by variable to avoid blowing up memory usage
                 for data_var in data_vars:
