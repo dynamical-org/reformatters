@@ -154,7 +154,7 @@ COORDINATES: Sequence[Coordinate] = (
 
 DATA_VARIABLES: Sequence[DataVar] = (
     DataVar(
-        name="vis",
+        name="visibility_surface",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=15_000.0),
         attrs=DataVarAttrs(
             short_name="vis",
@@ -171,7 +171,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="gust",
+        name="wind_gust_surface",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
             short_name="gust",
@@ -188,7 +188,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="mslet",
+        name="pressure_mean_sea_level",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=101_000.0),
         attrs=DataVarAttrs(
             short_name="mslet",
@@ -205,7 +205,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="sp",
+        name="pressure_surface",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=100_000.0),
         attrs=DataVarAttrs(
             short_name="sp",
@@ -223,7 +223,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="st",
+        name="soil_temperature_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="st",
@@ -240,7 +240,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="soilw",
+        name="soil_moisture_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="soilw",
@@ -257,7 +257,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="sdwe",
+        name="snow_water_equivalent_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="sdwe",
@@ -274,7 +274,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="sde",
+        name="snow_depth_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="sde",
@@ -292,7 +292,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="sithick",
+        name="sea_ice_thickness_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="sithick",
@@ -309,7 +309,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="t2m",
+        name="temperature_2m",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="t2m",
@@ -327,7 +327,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="d2m",
+        name="dew_point_2m",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="d2m",
@@ -344,7 +344,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="r2",
+        name="relative_humidity_2m",
         encoding=replace(
             ENCODING_FLOAT32_DEFAULT, add_offset=50.0, filters=[BitRound(keepbits=6)]
         ),
@@ -364,7 +364,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="tmax",
+        name="maximum_temperature_2m",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="tmax",
@@ -381,7 +381,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="tmin",
+        name="minimum_temperature_2m",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="tmin",
@@ -398,7 +398,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="u10",
+        name="wind_u_10m",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
             short_name="u10",
@@ -416,7 +416,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="v10",
+        name="wind_v_10m",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
             short_name="v10",
@@ -434,7 +434,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="u100",
+        name="wind_u_100m",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
             short_name="u100",
@@ -452,7 +452,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="v100",
+        name="wind_v_100m",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
             short_name="v100",
@@ -470,7 +470,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="cpofp",
+        name="percent_frozen_precipitation_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="cpofp",
@@ -487,7 +487,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="tp",
+        name="precipitation_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="tp",
@@ -505,7 +505,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="csnow",
+        name="categorical_snow_surface",
         encoding=ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT,
         attrs=DataVarAttrs(
             short_name="csnow",
@@ -522,7 +522,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="cicep",
+        name="categorical_ice_pellets_surface",
         encoding=ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT,
         attrs=DataVarAttrs(
             short_name="cicep",
@@ -539,7 +539,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="cfrzr",
+        name="categorical_freezing_rain_surface",
         encoding=ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT,
         attrs=DataVarAttrs(
             short_name="cfrzr",
@@ -556,7 +556,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="crain",
+        name="categorical_rain_surface",
         encoding=ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT,
         attrs=DataVarAttrs(
             short_name="crain",
@@ -573,7 +573,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="mslhf",
+        name="mean_latent_heat_flux_surface",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
             short_name="mslhf",
@@ -590,7 +590,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="msshf",
+        name="mean_sensible_heat_flux_surface",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
             short_name="msshf",
@@ -607,7 +607,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="pwat",
+        name="precipitable_water_atmosphere",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="pwat",
@@ -624,7 +624,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="tcc",
+        name="total_cloud_cover_atmosphere",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=50.0),
         attrs=DataVarAttrs(
             short_name="tcc",
@@ -641,7 +641,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="gh",
+        name="geopotential_height_cloud_ceiling",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=8)]),
         attrs=DataVarAttrs(
             short_name="gh",
@@ -659,7 +659,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="sdswrf",
+        name="downward_short_wave_radiation_flux_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="sdswrf",
@@ -676,7 +676,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="sdlwrf",
+        name="downward_long_wave_radiation_flux_surface",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=300.0),
         attrs=DataVarAttrs(
             short_name="sdlwrf",
@@ -693,7 +693,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="suswrf",
+        name="upward_short_wave_radiation_flux_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="suswrf",
@@ -710,7 +710,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="hlcy",
+        name="storm_relative_helicity_3000-0m",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="hlcy",
@@ -727,7 +727,7 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
     DataVar(
-        name="prmsl",
+        name="pressure_reduced_to_mean_sea_level",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=101_000.0),
         attrs=DataVarAttrs(
             short_name="prmsl",
