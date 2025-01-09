@@ -82,7 +82,6 @@ def reformat_operational_update() -> None:
             ),
         )
     )
-    # TODO: should this be on the same ThreadPoolExecutor as the downloads?
     upload_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
     template.write_metadata(template_ds, tmp_store, get_mode(final_store))
     futures = []
@@ -95,7 +94,7 @@ def reformat_operational_update() -> None:
             template_ds["ingested_forecast_length"].loc[{"init_time": init_time}] = (
                 max_lead_time
             )
-            # TODO: this only works because we know that chunks are size 1 in the
+            # This only works because we know that chunks are size 1 in the
             # init_time dimension.
             chunk_index = template_ds.get_index("init_time").get_loc(init_time)
             futures.append(
@@ -117,11 +116,14 @@ def get_recent_init_times_for_reprocessing(ds: xr.Dataset) -> Array1D[np.datetim
     )
     # Get the recent init_times where we have only partially completed
     # the ingest.
-    recent_incomplete_init_times = recent_init_times.where(
-        recent_init_times.ingested_forecast_length
-        < recent_init_times.expected_forecast_length
-    ).values
-    return recent_incomplete_init_times[~np.isnat(recent_incomplete_init_times)]  # type: ignore
+    return (
+        recent_init_times.where(
+            recent_init_times.ingested_forecast_length
+            < recent_init_times.expected_forecast_length
+        )
+        .dropna(dim="init_time")
+        .values
+    )  # type: ignore
 
 
 def copy_data_var(
