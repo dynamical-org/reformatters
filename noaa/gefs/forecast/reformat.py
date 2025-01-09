@@ -41,6 +41,9 @@ def reformat_operational_update() -> None:
     last_existing_init_time = ds.init_time.max()
     init_time_end = pd.Timestamp.utcnow().tz_localize(None)
     template_ds = template.get_template(init_time_end)
+    template_ds.ingested_forecast_length.loc[{"init_time": ds.init_time.values}] = (
+        ds.ingested_forecast_length
+    )
     # Uncomment this line for local testing to scope down the number of init times
     # you will process.
     # template_ds = template_ds.isel(init_time=slice(0, len(ds.init_time) + 2))
@@ -104,9 +107,6 @@ def reformat_operational_update() -> None:
             )
 
     concurrent.futures.wait(futures, return_when="ALL_COMPLETED")
-    template_ds.ingested_forecast_length.loc[{"init_time": ds.init_time.values}] = (
-        ds.ingested_forecast_length
-    )
 
     template.write_metadata(template_ds, final_store, get_mode(final_store))
 
@@ -119,11 +119,14 @@ def get_recent_init_times_for_reprocessing(ds: xr.Dataset) -> Array1D[np.datetim
     ).load()
     # Get the recent init_times where we have only partially completed
     # the ingest.
-    return recent_init_times.where(
-        recent_init_times.ingested_forecast_length
-        < recent_init_times.expected_forecast_length,
+    return recent_init_times.where(  # type: ignore
+        (recent_init_times.ingested_forecast_length.isnull())
+        | (
+            recent_init_times.ingested_forecast_length
+            < recent_init_times.expected_forecast_length
+        ),
         drop=True,
-    ).init_time.values  # type: ignore
+    ).init_time.values
 
 
 def copy_data_var(
