@@ -35,5 +35,10 @@ def reformat_chunks(
     )
 
 
+@app.command()
+def reformat_operational_update() -> None:
+    reformat.reformat_operational_update()
+
+
 if __name__ == "__main__":
     app()

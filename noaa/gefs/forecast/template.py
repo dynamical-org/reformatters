@@ -71,7 +71,7 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     # if Config.is_dev():
     #     ds = ds[["u100", "v100", "u10", "v10", "t2m", "tp"]].sel(
     #         ensemble_member=slice(3),
-    #         lead_time=["0h", "3h", "90h", "240h", "243h", "840h"],
+    #         lead_time=["0h", "3h", "90h", "240h", "840h"],
     #     )
     # ds = ds[["u100", "v100", "u10", "v10", "t2m", "tp", "sdswrf", "gh", "tcc", "pwat", "r2", ]]
 
