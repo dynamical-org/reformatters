@@ -1,0 +1,15 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "init_time",
+        "ensemble_member",
+        "lead_time",
+        "latitude",
+        "longitude"
+    ],
+    "add_offset": 300.0,
+    "coordinates": "valid_time",
+    "long_name": "Surface downward long-wave radiation flux",
+    "short_name": "sdlwrf",
+    "step_type": "avg",
+    "units": "W/(m^2)"
+}

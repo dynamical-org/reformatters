@@ -29,7 +29,7 @@ DATASET_ATTRIBUTES = DatasetAttributes(
 type Dim =        Literal["init_time", "ensemble_member", "lead_time", "latitude", "longitude"]  # fmt: off
 DIMS: tuple[Dim, ... ] = ("init_time", "ensemble_member", "lead_time", "latitude", "longitude")  # fmt: off
 
-INIT_TIME_START = pd.Timestamp("2024-09-01T00:00")
+INIT_TIME_START = pd.Timestamp("2025-01-01T00:00")
 INIT_TIME_FREQUENCY = pd.Timedelta("24h")
 
 
@@ -131,79 +131,79 @@ COORDINATES: Sequence[Coordinate] = (
             chunks=(-1, -1),
         ),
     ),
-    Coordinate(
-        name="ingested_forecast_length",
-        encoding=Encoding(
-            dtype="int64",
-            compressor=Blosc(cname="zstd"),
-            units="seconds",
-            chunks=-1,
-        ),
-    ),
-    Coordinate(
-        name="expected_forecast_length",
-        encoding=Encoding(
-            dtype="int64",
-            compressor=Blosc(cname="zstd"),
-            units="seconds",
-            chunks=-1,
-        ),
-    ),
+    # Coordinate(
+    #     name="ingested_forecast_length",
+    #     encoding=Encoding(
+    #         dtype="int64",
+    #         compressor=Blosc(cname="zstd"),
+    #         units="seconds",
+    #         chunks=-1,
+    #     ),
+    # ),
+    # Coordinate(
+    #     name="expected_forecast_length",
+    #     encoding=Encoding(
+    #         dtype="int64",
+    #         compressor=Blosc(cname="zstd"),
+    #         units="seconds",
+    #         chunks=-1,
+    #     ),
+    # ),
 )
 
 
 DATA_VARIABLES: Sequence[DataVar] = (
-    DataVar(
-        name="visibility_surface",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=15_000.0),
-        attrs=DataVarAttrs(
-            short_name="vis",
-            long_name="Visibility",
-            units="m",
-            step_type="instant",
-        ),
-        internal_attrs=InternalAttrs(
-            grib_element="VIS",
-            grib_description='0[-] SFC="Ground or water surface"',
-            grib_index_level="surface",
-            noaa_file_type="s+b",
-            index_position=1,
-        ),
-    ),
-    DataVar(
-        name="wind_gust_surface",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
-        attrs=DataVarAttrs(
-            short_name="gust",
-            long_name="Wind speed (gust)",
-            units="m/s",
-            step_type="instant",
-        ),
-        internal_attrs=InternalAttrs(
-            grib_element="GUST",
-            grib_description='0[-] SFC="Ground or water surface"',
-            grib_index_level="surface",
-            noaa_file_type="s+b",
-            index_position=2,
-        ),
-    ),
-    DataVar(
-        name="pressure_mean_sea_level",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=101_000.0),
-        attrs=DataVarAttrs(
-            short_name="mslet",
-            long_name="MSLP (Eta model reduction)",
-            units="Pa",
-            step_type="instant",
-        ),
-        internal_attrs=InternalAttrs(
-            grib_element="MSLET",
-            grib_description='0[-] MSL="Mean sea level"',
-            grib_index_level="mean sea level",
-            noaa_file_type="s+b",
-            index_position=3,
-        ),
-    ),
+    # DataVar(
+    #     name="visibility_surface",
+    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=15_000.0),
+    #     attrs=DataVarAttrs(
+    #         short_name="vis",
+    #         long_name="Visibility",
+    #         units="m",
+    #         step_type="instant",
+    #     ),
+    #     internal_attrs=InternalAttrs(
+    #         grib_element="VIS",
+    #         grib_description='0[-] SFC="Ground or water surface"',
+    #         grib_index_level="surface",
+    #         noaa_file_type="s+b",
+    #         index_position=1,
+    #     ),
+    # ),
+    # DataVar(
+    #     name="wind_gust_surface",
+    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
+    #     attrs=DataVarAttrs(
+    #         short_name="gust",
+    #         long_name="Wind speed (gust)",
+    #         units="m/s",
+    #         step_type="instant",
+    #     ),
+    #     internal_attrs=InternalAttrs(
+    #         grib_element="GUST",
+    #         grib_description='0[-] SFC="Ground or water surface"',
+    #         grib_index_level="surface",
+    #         noaa_file_type="s+b",
+    #         index_position=2,
+    #     ),
+    # ),
+    # DataVar(
+    #     name="pressure_mean_sea_level",
+    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=101_000.0),
+    #     attrs=DataVarAttrs(
+    #         short_name="mslet",
+    #         long_name="MSLP (Eta model reduction)",
+    #         units="Pa",
+    #         step_type="instant",
+    #     ),
+    #     internal_attrs=InternalAttrs(
+    #         grib_element="MSLET",
+    #         grib_description='0[-] MSL="Mean sea level"',
+    #         grib_index_level="mean sea level",
+    #         noaa_file_type="s+b",
+    #         index_position=3,
+    #     ),
+    # ),
     DataVar(
         name="pressure_surface",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=100_000.0),
@@ -222,92 +222,92 @@ DATA_VARIABLES: Sequence[DataVar] = (
             index_position=4,
         ),
     ),
-    DataVar(
-        name="soil_temperature_surface",
-        encoding=ENCODING_FLOAT32_DEFAULT,
-        attrs=DataVarAttrs(
-            short_name="st",
-            long_name="Soil temperature",
-            units="C",
-            step_type="instant",
-        ),
-        internal_attrs=InternalAttrs(
-            grib_element="TSOIL",
-            grib_description='0-0.1[m] DBLL="Depth below land surface"',
-            grib_index_level="0-0.1 m below ground",
-            noaa_file_type="s+a",
-            index_position=5,
-        ),
-    ),
-    DataVar(
-        name="soil_moisture_surface",
-        encoding=ENCODING_FLOAT32_DEFAULT,
-        attrs=DataVarAttrs(
-            short_name="soilw",
-            long_name="Volumetric soil moisture content",
-            units="Fraction",
-            step_type="instant",
-        ),
-        internal_attrs=InternalAttrs(
-            grib_element="SOILW",
-            grib_description='0-0.1[m] DBLL="Depth below land surface"',
-            grib_index_level="0-0.1 m below ground",
-            noaa_file_type="s+a",
-            index_position=6,
-        ),
-    ),
-    DataVar(
-        name="snow_water_equivalent_surface",
-        encoding=ENCODING_FLOAT32_DEFAULT,
-        attrs=DataVarAttrs(
-            short_name="sdwe",
-            long_name="Water equivalent of accumulated snow depth (deprecated)",
-            units="kg/(m^2)",
-            step_type="instant",
-        ),
-        internal_attrs=InternalAttrs(
-            grib_element="WEASD",
-            grib_description='0[-] SFC="Ground or water surface"',
-            grib_index_level="surface",
-            noaa_file_type="s+a",
-            index_position=7,
-        ),
-    ),
-    DataVar(
-        name="snow_depth_surface",
-        encoding=ENCODING_FLOAT32_DEFAULT,
-        attrs=DataVarAttrs(
-            short_name="sde",
-            long_name="Snow depth",
-            units="m",
-            step_type="instant",
-            standard_name="lwe_thickness_of_surface_snow_amount",
-        ),
-        internal_attrs=InternalAttrs(
-            grib_element="SNOD",
-            grib_description='0[-] SFC="Ground or water surface"',
-            grib_index_level="surface",
-            noaa_file_type="s+a",
-            index_position=8,
-        ),
-    ),
-    DataVar(
-        name="sea_ice_thickness_surface",
-        encoding=ENCODING_FLOAT32_DEFAULT,
-        attrs=DataVarAttrs(
-            short_name="sithick",
-            long_name="Sea ice thickness",
-            units="m",
-            step_type="instant",
-        ),
-        internal_attrs=InternalAttrs(
-            grib_element="ICETK",
-            grib_description='0[-] SFC="Ground or water surface"',
-            grib_index_level="surface",
-            noaa_file_type="s+a",
-            index_position=9,
-        ),
-    ),
+    # DataVar(
+    #     name="soil_temperature_surface",
+    #     encoding=ENCODING_FLOAT32_DEFAULT,
+    #     attrs=DataVarAttrs(
+    #         short_name="st",
+    #         long_name="Soil temperature",
+    #         units="C",
+    #         step_type="instant",
+    #     ),
+    #     internal_attrs=InternalAttrs(
+    #         grib_element="TSOIL",
+    #         grib_description='0-0.1[m] DBLL="Depth below land surface"',
+    #         grib_index_level="0-0.1 m below ground",
+    #         noaa_file_type="s+a",
+    #         index_position=5,
+    #     ),
+    # ),
+    # DataVar(
+    #     name="soil_moisture_surface",
+    #     encoding=ENCODING_FLOAT32_DEFAULT,
+    #     attrs=DataVarAttrs(
+    #         short_name="soilw",
+    #         long_name="Volumetric soil moisture content",
+    #         units="Fraction",
+    #         step_type="instant",
+    #     ),
+    #     internal_attrs=InternalAttrs(
+    #         grib_element="SOILW",
+    #         grib_description='0-0.1[m] DBLL="Depth below land surface"',
+    #         grib_index_level="0-0.1 m below ground",
+    #         noaa_file_type="s+a",
+    #         index_position=6,
+    #     ),
+    # ),
+    # DataVar(
+    #     name="snow_water_equivalent_surface",
+    #     encoding=ENCODING_FLOAT32_DEFAULT,
+    #     attrs=DataVarAttrs(
+    #         short_name="sdwe",
+    #         long_name="Water equivalent of accumulated snow depth (deprecated)",
+    #         units="kg/(m^2)",
+    #         step_type="instant",
+    #     ),
+    #     internal_attrs=InternalAttrs(
+    #         grib_element="WEASD",
+    #         grib_description='0[-] SFC="Ground or water surface"',
+    #         grib_index_level="surface",
+    #         noaa_file_type="s+a",
+    #         index_position=7,
+    #     ),
+    # ),
+    # DataVar(
+    #     name="snow_depth_surface",
+    #     encoding=ENCODING_FLOAT32_DEFAULT,
+    #     attrs=DataVarAttrs(
+    #         short_name="sde",
+    #         long_name="Snow depth",
+    #         units="m",
+    #         step_type="instant",
+    #         standard_name="lwe_thickness_of_surface_snow_amount",
+    #     ),
+    #     internal_attrs=InternalAttrs(
+    #         grib_element="SNOD",
+    #         grib_description='0[-] SFC="Ground or water surface"',
+    #         grib_index_level="surface",
+    #         noaa_file_type="s+a",
+    #         index_position=8,
+    #     ),
+    # ),
+    # DataVar(
+    #     name="sea_ice_thickness_surface",
+    #     encoding=ENCODING_FLOAT32_DEFAULT,
+    #     attrs=DataVarAttrs(
+    #         short_name="sithick",
+    #         long_name="Sea ice thickness",
+    #         units="m",
+    #         step_type="instant",
+    #     ),
+    #     internal_attrs=InternalAttrs(
+    #         grib_element="ICETK",
+    #         grib_description='0[-] SFC="Ground or water surface"',
+    #         grib_index_level="surface",
+    #         noaa_file_type="s+a",
+    #         index_position=9,
+    #     ),
+    # ),
     DataVar(
         name="temperature_2m",
         encoding=ENCODING_FLOAT32_DEFAULT,
@@ -326,23 +326,23 @@ DATA_VARIABLES: Sequence[DataVar] = (
             index_position=10,
         ),
     ),
-    DataVar(
-        name="dew_point_2m",
-        encoding=ENCODING_FLOAT32_DEFAULT,
-        attrs=DataVarAttrs(
-            short_name="d2m",
-            long_name="2 metre dewpoint temperature",
-            units="C",
-            step_type="instant",
-        ),
-        internal_attrs=InternalAttrs(
-            grib_element="DPT",
-            grib_description='2[m] HTGL="Specified height level above ground"',
-            grib_index_level="2 m above ground",
-            noaa_file_type="s+b",
-            index_position=11,
-        ),
-    ),
+    # DataVar(
+    #     name="dew_point_2m",
+    #     encoding=ENCODING_FLOAT32_DEFAULT,
+    #     attrs=DataVarAttrs(
+    #         short_name="d2m",
+    #         long_name="2 metre dewpoint temperature",
+    #         units="C",
+    #         step_type="instant",
+    #     ),
+    #     internal_attrs=InternalAttrs(
+    #         grib_element="DPT",
+    #         grib_description='2[m] HTGL="Specified height level above ground"',
+    #         grib_index_level="2 m above ground",
+    #         noaa_file_type="s+b",
+    #         index_position=11,
+    #     ),
+    # ),
     DataVar(
         name="relative_humidity_2m",
         encoding=replace(
@@ -363,40 +363,40 @@ DATA_VARIABLES: Sequence[DataVar] = (
             index_position=12,
         ),
     ),
-    DataVar(
-        name="maximum_temperature_2m",
-        encoding=ENCODING_FLOAT32_DEFAULT,
-        attrs=DataVarAttrs(
-            short_name="tmax",
-            long_name="Maximum temperature",
-            units="C",
-            step_type="max",
-        ),
-        internal_attrs=InternalAttrs(
-            grib_element="TMAX",
-            grib_description='2[m] HTGL="Specified height level above ground"',
-            grib_index_level="2 m above ground",
-            noaa_file_type="s+a",
-            index_position=13,
-        ),
-    ),
-    DataVar(
-        name="minimum_temperature_2m",
-        encoding=ENCODING_FLOAT32_DEFAULT,
-        attrs=DataVarAttrs(
-            short_name="tmin",
-            long_name="Minimum temperature",
-            units="C",
-            step_type="min",
-        ),
-        internal_attrs=InternalAttrs(
-            grib_element="TMIN",
-            grib_description='2[m] HTGL="Specified height level above ground"',
-            grib_index_level="2 m above ground",
-            noaa_file_type="s+a",
-            index_position=14,
-        ),
-    ),
+    # DataVar(
+    #     name="maximum_temperature_2m",
+    #     encoding=ENCODING_FLOAT32_DEFAULT,
+    #     attrs=DataVarAttrs(
+    #         short_name="tmax",
+    #         long_name="Maximum temperature",
+    #         units="C",
+    #         step_type="max",
+    #     ),
+    #     internal_attrs=InternalAttrs(
+    #         grib_element="TMAX",
+    #         grib_description='2[m] HTGL="Specified height level above ground"',
+    #         grib_index_level="2 m above ground",
+    #         noaa_file_type="s+a",
+    #         index_position=13,
+    #     ),
+    # ),
+    # DataVar(
+    #     name="minimum_temperature_2m",
+    #     encoding=ENCODING_FLOAT32_DEFAULT,
+    #     attrs=DataVarAttrs(
+    #         short_name="tmin",
+    #         long_name="Minimum temperature",
+    #         units="C",
+    #         step_type="min",
+    #     ),
+    #     internal_attrs=InternalAttrs(
+    #         grib_element="TMIN",
+    #         grib_description='2[m] HTGL="Specified height level above ground"',
+    #         grib_index_level="2 m above ground",
+    #         noaa_file_type="s+a",
+    #         index_position=14,
+    #     ),
+    # ),
     DataVar(
         name="wind_u_10m",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
@@ -572,40 +572,40 @@ DATA_VARIABLES: Sequence[DataVar] = (
             index_position=22,
         ),
     ),
-    DataVar(
-        name="mean_latent_heat_flux_surface",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
-        attrs=DataVarAttrs(
-            short_name="mslhf",
-            long_name="Mean surface latent heat flux",
-            units="W/(m^2)",
-            step_type="avg",
-        ),
-        internal_attrs=InternalAttrs(
-            grib_element="LHTFL",
-            grib_description='0[-] SFC="Ground or water surface"',
-            grib_index_level="surface",
-            noaa_file_type="s+a",
-            index_position=23,
-        ),
-    ),
-    DataVar(
-        name="mean_sensible_heat_flux_surface",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
-        attrs=DataVarAttrs(
-            short_name="msshf",
-            long_name="Mean surface sensible heat flux",
-            units="W/(m^2)",
-            step_type="avg",
-        ),
-        internal_attrs=InternalAttrs(
-            grib_element="SHTFL",
-            grib_description='0[-] SFC="Ground or water surface"',
-            grib_index_level="surface",
-            noaa_file_type="s+a",
-            index_position=24,
-        ),
-    ),
+    # DataVar(
+    #     name="mean_latent_heat_flux_surface",
+    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
+    #     attrs=DataVarAttrs(
+    #         short_name="mslhf",
+    #         long_name="Mean surface latent heat flux",
+    #         units="W/(m^2)",
+    #         step_type="avg",
+    #     ),
+    #     internal_attrs=InternalAttrs(
+    #         grib_element="LHTFL",
+    #         grib_description='0[-] SFC="Ground or water surface"',
+    #         grib_index_level="surface",
+    #         noaa_file_type="s+a",
+    #         index_position=23,
+    #     ),
+    # ),
+    # DataVar(
+    #     name="mean_sensible_heat_flux_surface",
+    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
+    #     attrs=DataVarAttrs(
+    #         short_name="msshf",
+    #         long_name="Mean surface sensible heat flux",
+    #         units="W/(m^2)",
+    #         step_type="avg",
+    #     ),
+    #     internal_attrs=InternalAttrs(
+    #         grib_element="SHTFL",
+    #         grib_description='0[-] SFC="Ground or water surface"',
+    #         grib_index_level="surface",
+    #         noaa_file_type="s+a",
+    #         index_position=24,
+    #     ),
+    # ),
     DataVar(
         name="precipitable_water_atmosphere",
         encoding=ENCODING_FLOAT32_DEFAULT,
@@ -692,40 +692,40 @@ DATA_VARIABLES: Sequence[DataVar] = (
             index_position=31,
         ),
     ),
-    DataVar(
-        name="upward_short_wave_radiation_flux_surface",
-        encoding=ENCODING_FLOAT32_DEFAULT,
-        attrs=DataVarAttrs(
-            short_name="suswrf",
-            long_name="Surface upward short-wave radiation flux",
-            units="W/(m^2)",
-            step_type="avg",
-        ),
-        internal_attrs=InternalAttrs(
-            grib_element="USWRF",
-            grib_description='0[-] SFC="Ground or water surface"',
-            grib_index_level="surface",
-            noaa_file_type="s+a",
-            index_position=32,
-        ),
-    ),
-    DataVar(
-        name="storm_relative_helicity_3000-0m",
-        encoding=ENCODING_FLOAT32_DEFAULT,
-        attrs=DataVarAttrs(
-            short_name="hlcy",
-            long_name="Storm relative helicity",
-            units="m^2/s^2",  # TODO triple check our values really are in these units, gdal reports J/kg (equivalent?)
-            step_type="instant",
-        ),
-        internal_attrs=InternalAttrs(
-            grib_element="HLCY",
-            grib_description='3000-0[m] HTGL="Specified height level above ground"',
-            grib_index_level="3000-0 m above ground",
-            noaa_file_type="s+b",
-            index_position=35,
-        ),
-    ),
+    # DataVar(
+    #     name="upward_short_wave_radiation_flux_surface",
+    #     encoding=ENCODING_FLOAT32_DEFAULT,
+    #     attrs=DataVarAttrs(
+    #         short_name="suswrf",
+    #         long_name="Surface upward short-wave radiation flux",
+    #         units="W/(m^2)",
+    #         step_type="avg",
+    #     ),
+    #     internal_attrs=InternalAttrs(
+    #         grib_element="USWRF",
+    #         grib_description='0[-] SFC="Ground or water surface"',
+    #         grib_index_level="surface",
+    #         noaa_file_type="s+a",
+    #         index_position=32,
+    #     ),
+    # ),
+    # DataVar(
+    #     name="storm_relative_helicity_3000-0m",
+    #     encoding=ENCODING_FLOAT32_DEFAULT,
+    #     attrs=DataVarAttrs(
+    #         short_name="hlcy",
+    #         long_name="Storm relative helicity",
+    #         units="m^2/s^2",  # TODO triple check our values really are in these units, gdal reports J/kg (equivalent?)
+    #         step_type="instant",
+    #     ),
+    #     internal_attrs=InternalAttrs(
+    #         grib_element="HLCY",
+    #         grib_description='3000-0[m] HTGL="Specified height level above ground"',
+    #         grib_index_level="3000-0 m above ground",
+    #         noaa_file_type="s+b",
+    #         index_position=35,
+    #     ),
+    # ),
     DataVar(
         name="pressure_reduced_to_mean_sea_level",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=101_000.0),

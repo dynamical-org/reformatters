@@ -1,0 +1,15 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "init_time",
+        "ensemble_member",
+        "lead_time",
+        "latitude",
+        "longitude"
+    ],
+    "coordinates": "valid_time",
+    "long_name": "10 metre V wind component",
+    "short_name": "v10",
+    "standard_name": "northward_wind",
+    "step_type": "instant",
+    "units": "m/s"
+}

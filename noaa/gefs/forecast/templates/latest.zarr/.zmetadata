@@ -9,7 +9,7 @@
         ".zgroup": {
             "zarr_format": 2
         },
-        "cfrzr/.zarray": {
+        "categorical_freezing_rain_surface/.zarray": {
             "chunks": [
                 1,
                 31,
@@ -37,7 +37,7 @@
             ],
             "zarr_format": 2
         },
-        "cfrzr/.zattrs": {
+        "categorical_freezing_rain_surface/.zattrs": {
             "_ARRAY_DIMENSIONS": [
                 "init_time",
                 "ensemble_member",
@@ -45,13 +45,13 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
+            "coordinates": "valid_time",
             "long_name": "Categorical freezing rain",
             "short_name": "cfrzr",
             "step_type": "avg",
             "units": "0=no; 1=yes"
         },
-        "cicep/.zarray": {
+        "categorical_ice_pellets_surface/.zarray": {
             "chunks": [
                 1,
                 31,
@@ -79,7 +79,7 @@
             ],
             "zarr_format": 2
         },
-        "cicep/.zattrs": {
+        "categorical_ice_pellets_surface/.zattrs": {
             "_ARRAY_DIMENSIONS": [
                 "init_time",
                 "ensemble_member",
@@ -87,60 +87,13 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
+            "coordinates": "valid_time",
             "long_name": "Categorical ice pellets",
             "short_name": "cicep",
             "step_type": "avg",
             "units": "0=no; 1=yes"
         },
-        "cpofp/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 7
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "cpofp/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "Percent frozen precipitation",
-            "short_name": "cpofp",
-            "step_type": "instant",
-            "units": "%"
-        },
-        "crain/.zarray": {
+        "categorical_rain_surface/.zarray": {
             "chunks": [
                 1,
                 31,
@@ -168,7 +121,7 @@
             ],
             "zarr_format": 2
         },
-        "crain/.zattrs": {
+        "categorical_rain_surface/.zattrs": {
             "_ARRAY_DIMENSIONS": [
                 "init_time",
                 "ensemble_member",
@@ -176,13 +129,13 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
+            "coordinates": "valid_time",
             "long_name": "Categorical rain",
             "short_name": "crain",
             "step_type": "avg",
             "units": "0=no; 1=yes"
         },
-        "csnow/.zarray": {
+        "categorical_snow_surface/.zarray": {
             "chunks": [
                 1,
                 31,
@@ -210,7 +163,7 @@
             ],
             "zarr_format": 2
         },
-        "csnow/.zattrs": {
+        "categorical_snow_surface/.zattrs": {
             "_ARRAY_DIMENSIONS": [
                 "init_time",
                 "ensemble_member",
@@ -218,13 +171,13 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
+            "coordinates": "valid_time",
             "long_name": "Categorical snow",
             "short_name": "csnow",
             "step_type": "avg",
             "units": "0=no; 1=yes"
         },
-        "d2m/.zarray": {
+        "downward_long_wave_radiation_flux_surface/.zarray": {
             "chunks": [
                 1,
                 31,
@@ -257,7 +210,7 @@
             ],
             "zarr_format": 2
         },
-        "d2m/.zattrs": {
+        "downward_long_wave_radiation_flux_surface/.zattrs": {
             "_ARRAY_DIMENSIONS": [
                 "init_time",
                 "ensemble_member",
@@ -265,11 +218,59 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "2 metre dewpoint temperature",
-            "short_name": "d2m",
-            "step_type": "instant",
-            "units": "C"
+            "add_offset": 300.0,
+            "coordinates": "valid_time",
+            "long_name": "Surface downward long-wave radiation flux",
+            "short_name": "sdlwrf",
+            "step_type": "avg",
+            "units": "W/(m^2)"
+        },
+        "downward_short_wave_radiation_flux_surface/.zarray": {
+            "chunks": [
+                1,
+                31,
+                125,
+                73,
+                72
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 3,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
+            "order": "C",
+            "shape": [
+                1,
+                31,
+                181,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "downward_short_wave_radiation_flux_surface/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "ensemble_member",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "coordinates": "valid_time",
+            "long_name": "Surface downward short-wave radiation flux",
+            "short_name": "sdswrf",
+            "step_type": "avg",
+            "units": "W/(m^2)"
         },
         "ensemble_member/.zarray": {
             "chunks": [
@@ -296,33 +297,7 @@
                 "ensemble_member"
             ]
         },
-        "expected_forecast_length/.zarray": {
-            "chunks": [
-                1
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 5,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<i8",
-            "fill_value": null,
-            "filters": null,
-            "order": "C",
-            "shape": [
-                1
-            ],
-            "zarr_format": 2
-        },
-        "expected_forecast_length/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time"
-            ],
-            "units": "seconds"
-        },
-        "gh/.zarray": {
+        "geopotential_height_cloud_ceiling/.zarray": {
             "chunks": [
                 1,
                 31,
@@ -355,7 +330,7 @@
             ],
             "zarr_format": 2
         },
-        "gh/.zattrs": {
+        "geopotential_height_cloud_ceiling/.zattrs": {
             "_ARRAY_DIMENSIONS": [
                 "init_time",
                 "ensemble_member",
@@ -363,132 +338,12 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
+            "coordinates": "valid_time",
             "long_name": "Geopotential height",
             "short_name": "gh",
             "standard_name": "geopotential_height",
             "step_type": "instant",
             "units": "gpm"
-        },
-        "gust/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 6
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "gust/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "Wind speed (gust)",
-            "short_name": "gust",
-            "step_type": "instant",
-            "units": "m/s"
-        },
-        "hlcy/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 7
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "hlcy/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "Storm relative helicity",
-            "short_name": "hlcy",
-            "step_type": "instant",
-            "units": "m^2/s^2"
-        },
-        "ingested_forecast_length/.zarray": {
-            "chunks": [
-                1
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 5,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<i8",
-            "fill_value": null,
-            "filters": null,
-            "order": "C",
-            "shape": [
-                1
-            ],
-            "zarr_format": 2
-        },
-        "ingested_forecast_length/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time"
-            ],
-            "units": "seconds"
         },
         "init_time/.zarray": {
             "chunks": [
@@ -599,7 +454,7 @@
                 "longitude"
             ]
         },
-        "mslet/.zarray": {
+        "percent_frozen_precipitation_surface/.zarray": {
             "chunks": [
                 1,
                 31,
@@ -632,7 +487,7 @@
             ],
             "zarr_format": 2
         },
-        "mslet/.zattrs": {
+        "percent_frozen_precipitation_surface/.zattrs": {
             "_ARRAY_DIMENSIONS": [
                 "init_time",
                 "ensemble_member",
@@ -640,108 +495,13 @@
                 "latitude",
                 "longitude"
             ],
-            "add_offset": 101000.0,
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "MSLP (Eta model reduction)",
-            "short_name": "mslet",
+            "coordinates": "valid_time",
+            "long_name": "Percent frozen precipitation",
+            "short_name": "cpofp",
             "step_type": "instant",
-            "units": "Pa"
+            "units": "%"
         },
-        "mslhf/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 6
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "mslhf/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "Mean surface latent heat flux",
-            "short_name": "mslhf",
-            "step_type": "avg",
-            "units": "W/(m^2)"
-        },
-        "msshf/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 6
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "msshf/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "Mean surface sensible heat flux",
-            "short_name": "msshf",
-            "step_type": "avg",
-            "units": "W/(m^2)"
-        },
-        "prmsl/.zarray": {
+        "precipitable_water_atmosphere/.zarray": {
             "chunks": [
                 1,
                 31,
@@ -774,7 +534,7 @@
             ],
             "zarr_format": 2
         },
-        "prmsl/.zattrs": {
+        "precipitable_water_atmosphere/.zattrs": {
             "_ARRAY_DIMENSIONS": [
                 "init_time",
                 "ensemble_member",
@@ -782,110 +542,13 @@
                 "latitude",
                 "longitude"
             ],
-            "add_offset": 101000.0,
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "Pressure reduced to MSL",
-            "short_name": "prmsl",
-            "step_type": "instant",
-            "units": "Pa"
-        },
-        "pwat/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 7
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "pwat/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
+            "coordinates": "valid_time",
             "long_name": "Precipitable water",
             "short_name": "pwat",
             "step_type": "instant",
             "units": "kg/(m^2)"
         },
-        "r2/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 6
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "r2/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "add_offset": 50.0,
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "2 metre relative humidity",
-            "short_name": "r2",
-            "standard_name": "relative_humidity",
-            "step_type": "instant",
-            "units": "%"
-        },
-        "sde/.zarray": {
+        "precipitation_surface/.zarray": {
             "chunks": [
                 1,
                 31,
@@ -918,7 +581,7 @@
             ],
             "zarr_format": 2
         },
-        "sde/.zattrs": {
+        "precipitation_surface/.zattrs": {
             "_ARRAY_DIMENSIONS": [
                 "init_time",
                 "ensemble_member",
@@ -926,156 +589,13 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "Snow depth",
-            "short_name": "sde",
-            "standard_name": "lwe_thickness_of_surface_snow_amount",
-            "step_type": "instant",
-            "units": "m"
-        },
-        "sdlwrf/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 7
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "sdlwrf/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "add_offset": 300.0,
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "Surface downward long-wave radiation flux",
-            "short_name": "sdlwrf",
-            "step_type": "avg",
-            "units": "W/(m^2)"
-        },
-        "sdswrf/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 7
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "sdswrf/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "Surface downward short-wave radiation flux",
-            "short_name": "sdswrf",
-            "step_type": "avg",
-            "units": "W/(m^2)"
-        },
-        "sdwe/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 7
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "sdwe/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "Water equivalent of accumulated snow depth (deprecated)",
-            "short_name": "sdwe",
-            "step_type": "instant",
+            "coordinates": "valid_time",
+            "long_name": "Total Precipitation",
+            "short_name": "tp",
+            "step_type": "accum",
             "units": "kg/(m^2)"
         },
-        "sithick/.zarray": {
+        "pressure_reduced_to_mean_sea_level/.zarray": {
             "chunks": [
                 1,
                 31,
@@ -1108,7 +628,7 @@
             ],
             "zarr_format": 2
         },
-        "sithick/.zattrs": {
+        "pressure_reduced_to_mean_sea_level/.zattrs": {
             "_ARRAY_DIMENSIONS": [
                 "init_time",
                 "ensemble_member",
@@ -1116,13 +636,14 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "Sea ice thickness",
-            "short_name": "sithick",
+            "add_offset": 101000.0,
+            "coordinates": "valid_time",
+            "long_name": "Pressure reduced to MSL",
+            "short_name": "prmsl",
             "step_type": "instant",
-            "units": "m"
+            "units": "Pa"
         },
-        "soilw/.zarray": {
+        "pressure_surface/.zarray": {
             "chunks": [
                 1,
                 31,
@@ -1155,54 +676,7 @@
             ],
             "zarr_format": 2
         },
-        "soilw/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "Volumetric soil moisture content",
-            "short_name": "soilw",
-            "step_type": "instant",
-            "units": "Fraction"
-        },
-        "sp/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 7
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "sp/.zattrs": {
+        "pressure_surface/.zattrs": {
             "_ARRAY_DIMENSIONS": [
                 "init_time",
                 "ensemble_member",
@@ -1211,14 +685,14 @@
                 "longitude"
             ],
             "add_offset": 100000.0,
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
+            "coordinates": "valid_time",
             "long_name": "Surface pressure",
             "short_name": "sp",
             "standard_name": "surface_air_pressure",
             "step_type": "instant",
             "units": "Pa"
         },
-        "st/.zarray": {
+        "relative_humidity_2m/.zarray": {
             "chunks": [
                 1,
                 31,
@@ -1238,7 +712,7 @@
             "filters": [
                 {
                     "id": "bitround",
-                    "keepbits": 7
+                    "keepbits": 6
                 }
             ],
             "order": "C",
@@ -1251,149 +725,7 @@
             ],
             "zarr_format": 2
         },
-        "st/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "Soil temperature",
-            "short_name": "st",
-            "step_type": "instant",
-            "units": "C"
-        },
-        "suswrf/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 7
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "suswrf/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "Surface upward short-wave radiation flux",
-            "short_name": "suswrf",
-            "step_type": "avg",
-            "units": "W/(m^2)"
-        },
-        "t2m/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 7
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "t2m/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "2 metre temperature",
-            "short_name": "t2m",
-            "standard_name": "air_temperature",
-            "step_type": "instant",
-            "units": "C"
-        },
-        "tcc/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 7
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "tcc/.zattrs": {
+        "relative_humidity_2m/.zattrs": {
             "_ARRAY_DIMENSIONS": [
                 "init_time",
                 "ensemble_member",
@@ -1402,344 +734,108 @@
                 "longitude"
             ],
             "add_offset": 50.0,
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
+            "coordinates": "valid_time",
+            "long_name": "2 metre relative humidity",
+            "short_name": "r2",
+            "standard_name": "relative_humidity",
+            "step_type": "instant",
+            "units": "%"
+        },
+        "temperature_2m/.zarray": {
+            "chunks": [
+                1,
+                31,
+                125,
+                73,
+                72
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 3,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
+            "order": "C",
+            "shape": [
+                1,
+                31,
+                181,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "temperature_2m/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "ensemble_member",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "coordinates": "valid_time",
+            "long_name": "2 metre temperature",
+            "short_name": "t2m",
+            "standard_name": "air_temperature",
+            "step_type": "instant",
+            "units": "C"
+        },
+        "total_cloud_cover_atmosphere/.zarray": {
+            "chunks": [
+                1,
+                31,
+                125,
+                73,
+                72
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 3,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
+            "order": "C",
+            "shape": [
+                1,
+                31,
+                181,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "total_cloud_cover_atmosphere/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "ensemble_member",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "add_offset": 50.0,
+            "coordinates": "valid_time",
             "long_name": "Total Cloud Cover",
             "short_name": "tcc",
             "step_type": "avg",
             "units": "%"
-        },
-        "tmax/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 7
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "tmax/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "Maximum temperature",
-            "short_name": "tmax",
-            "step_type": "max",
-            "units": "C"
-        },
-        "tmin/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 7
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "tmin/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "Minimum temperature",
-            "short_name": "tmin",
-            "step_type": "min",
-            "units": "C"
-        },
-        "tp/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 7
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "tp/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "Total Precipitation",
-            "short_name": "tp",
-            "step_type": "accum",
-            "units": "kg/(m^2)"
-        },
-        "u10/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 6
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "u10/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "10 metre U wind component",
-            "short_name": "u10",
-            "standard_name": "eastward_wind",
-            "step_type": "instant",
-            "units": "m/s"
-        },
-        "u100/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 6
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "u100/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "100 metre U wind component",
-            "short_name": "u100",
-            "standard_name": "eastward_wind",
-            "step_type": "instant",
-            "units": "m/s"
-        },
-        "v10/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 6
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "v10/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "10 metre V wind component",
-            "short_name": "v10",
-            "standard_name": "northward_wind",
-            "step_type": "instant",
-            "units": "m/s"
-        },
-        "v100/.zarray": {
-            "chunks": [
-                1,
-                31,
-                125,
-                73,
-                72
-            ],
-            "compressor": {
-                "blocksize": 0,
-                "clevel": 3,
-                "cname": "zstd",
-                "id": "blosc",
-                "shuffle": 1
-            },
-            "dtype": "<f4",
-            "fill_value": "NaN",
-            "filters": [
-                {
-                    "id": "bitround",
-                    "keepbits": 6
-                }
-            ],
-            "order": "C",
-            "shape": [
-                1,
-                31,
-                181,
-                721,
-                1440
-            ],
-            "zarr_format": 2
-        },
-        "v100/.zattrs": {
-            "_ARRAY_DIMENSIONS": [
-                "init_time",
-                "ensemble_member",
-                "lead_time",
-                "latitude",
-                "longitude"
-            ],
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "100 metre V wind component",
-            "short_name": "v100",
-            "standard_name": "northward_wind",
-            "step_type": "instant",
-            "units": "m/s"
         },
         "valid_time/.zarray": {
             "chunks": [
@@ -1777,7 +873,7 @@
             "calendar": "proleptic_gregorian",
             "units": "seconds since 1970-01-01"
         },
-        "vis/.zarray": {
+        "wind_u_100m/.zarray": {
             "chunks": [
                 1,
                 31,
@@ -1797,7 +893,7 @@
             "filters": [
                 {
                     "id": "bitround",
-                    "keepbits": 7
+                    "keepbits": 6
                 }
             ],
             "order": "C",
@@ -1810,7 +906,7 @@
             ],
             "zarr_format": 2
         },
-        "vis/.zattrs": {
+        "wind_u_100m/.zattrs": {
             "_ARRAY_DIMENSIONS": [
                 "init_time",
                 "ensemble_member",
@@ -1818,12 +914,156 @@
                 "latitude",
                 "longitude"
             ],
-            "add_offset": 15000.0,
-            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
-            "long_name": "Visibility",
-            "short_name": "vis",
+            "coordinates": "valid_time",
+            "long_name": "100 metre U wind component",
+            "short_name": "u100",
+            "standard_name": "eastward_wind",
             "step_type": "instant",
-            "units": "m"
+            "units": "m/s"
+        },
+        "wind_u_10m/.zarray": {
+            "chunks": [
+                1,
+                31,
+                125,
+                73,
+                72
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 3,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 6
+                }
+            ],
+            "order": "C",
+            "shape": [
+                1,
+                31,
+                181,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "wind_u_10m/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "ensemble_member",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "coordinates": "valid_time",
+            "long_name": "10 metre U wind component",
+            "short_name": "u10",
+            "standard_name": "eastward_wind",
+            "step_type": "instant",
+            "units": "m/s"
+        },
+        "wind_v_100m/.zarray": {
+            "chunks": [
+                1,
+                31,
+                125,
+                73,
+                72
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 3,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 6
+                }
+            ],
+            "order": "C",
+            "shape": [
+                1,
+                31,
+                181,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "wind_v_100m/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "ensemble_member",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "coordinates": "valid_time",
+            "long_name": "100 metre V wind component",
+            "short_name": "v100",
+            "standard_name": "northward_wind",
+            "step_type": "instant",
+            "units": "m/s"
+        },
+        "wind_v_10m/.zarray": {
+            "chunks": [
+                1,
+                31,
+                125,
+                73,
+                72
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 3,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 6
+                }
+            ],
+            "order": "C",
+            "shape": [
+                1,
+                31,
+                181,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "wind_v_10m/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "ensemble_member",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "coordinates": "valid_time",
+            "long_name": "10 metre V wind component",
+            "short_name": "v10",
+            "standard_name": "northward_wind",
+            "step_type": "instant",
+            "units": "m/s"
         }
     },
     "zarr_consolidated_format": 1
