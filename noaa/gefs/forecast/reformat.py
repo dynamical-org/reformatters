@@ -38,6 +38,8 @@ def reformat_operational_update() -> None:
     tmp_store = get_local_tmp_store()
     # Get the dataset, check what data is already present
     ds = xr.open_zarr(final_store)
+    for coord in ds.coords.values():
+        coord.load()
     last_existing_init_time = ds.init_time.max()
     init_time_end = pd.Timestamp.utcnow().tz_localize(None)
     template_ds = template.get_template(init_time_end)
@@ -112,10 +114,10 @@ def reformat_operational_update() -> None:
 
 
 def get_recent_init_times_for_reprocessing(ds: xr.Dataset) -> Array1D[np.datetime64]:
-    max_init_time = ds.init_time.max().values
-    # Get the last week of data
+    # Get the last few days of data
     recent_init_times = ds.init_time.where(
-        ds.init_time > max_init_time - np.timedelta64(7, "D"), drop=True
+        ds.init_time > pd.Timestamp.utcnow().tz_localize(None) - np.timedelta64(4, "D"),
+        drop=True,
     ).load()
     # Get the recent init_times where we have only partially completed
     # the ingest.
@@ -134,11 +136,17 @@ def copy_data_var(
     chunk_index: int,
     tmp_store: Path,
     final_store: fsspec.FSMap,
-) -> Callable:
+) -> Callable[[], None]:
     files_to_copy = list(tmp_store.glob(f"{data_var.name}/{chunk_index}.*.*.*.*"))
-    return lambda: final_store.fs.cp(
-        files_to_copy, final_store.root + f"/{data_var.name}/"
-    )
+
+    def mv_files() -> None:
+        print(f"Copying data var chunks to cloud storage for {data_var.name}.")
+        final_store.fs.cp(files_to_copy, final_store.root + f"/{data_var.name}")
+        # Delete data to conserve space.
+        for file in files_to_copy:
+            file.unlink()
+
+    return mv_files
 
 
 def reformat_local(init_time_end: DatetimeLike) -> None:
@@ -352,6 +360,10 @@ def reformat_init_time_i_slices(
                     chunks = template.chunk_args(chunk_template_ds)
                     data_array.chunk(chunks).to_zarr(store, region="auto")
                     yield (data_var, max_lead_times)
+                # Reclaim space once done.
+                for coord_and_path in coords_and_paths:
+                    if coord_and_path[1] is not None:
+                        coord_and_path[1].unlink()
 
 
 def download_var_group_files(

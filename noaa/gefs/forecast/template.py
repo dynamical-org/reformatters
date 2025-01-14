@@ -5,6 +5,7 @@ from typing import Literal
 import dask
 import dask.array
 import numpy as np
+import pandas as pd
 import xarray as xr
 
 from common.config import Config  # noqa:F401
@@ -25,6 +26,13 @@ from .template_config import (
 
 TEMPLATE_PATH = "noaa/gefs/forecast/templates/latest.zarr"
 
+INIT_TIME_HOURS_TO_FORECAST_LENGTHS = {
+    0: pd.Timedelta(hours=840),
+    6: pd.Timedelta(hours=384),
+    12: pd.Timedelta(hours=384),
+    18: pd.Timedelta(hours=384),
+}
+
 
 def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     ds: xr.Dataset = xr.open_zarr(TEMPLATE_PATH)
@@ -39,10 +47,24 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     ds["valid_time"].encoding = template_valid_time.encoding
     ds["valid_time"].attrs = template_valid_time.attrs
 
+    # Fill in expected_forecast_lengths based on init_time
+    template_expected_forecast_length = ds["expected_forecast_length"]
+    ds.coords["expected_forecast_length"] = (
+        "init_time",
+        [
+            INIT_TIME_HOURS_TO_FORECAST_LENGTHS[pd.Timestamp(init_time).hour]
+            for init_time in ds.init_time.values
+        ],
+    )
+    ds["expected_forecast_length"].encoding = template_expected_forecast_length.encoding
+    ds["expected_forecast_length"].attrs = template_expected_forecast_length.attrs
     # Coordinates which are dask arrays are not written with
     # to_zarr(store, compute=False) so we ensure all coordinates are loaded.
     for coordinate in ds.coords.values():
-        assert isinstance(coordinate.data, np.ndarray)
+        coordinate.load()
+        assert isinstance(
+            coordinate.data, np.ndarray
+        ), f"Expected {coordinate.name} to be np.ndarray, but was {type(coordinate.data)}"
 
     # Uncomment to make smaller zarr while developing
     # if Config.is_dev():
@@ -79,6 +101,20 @@ def update_template() -> None:
     # This could be computed by users on the fly, but it compresses
     # really well so lets make things easy for users
     ds.coords["valid_time"] = ds["init_time"] + ds["lead_time"]
+
+    ds = ds.assign_coords(
+        {
+            "ingested_forecast_length": ("init_time", [np.timedelta64("NaT", "ns")]),
+            "expected_forecast_length": (
+                "init_time",
+                [
+                    INIT_TIME_HOURS_TO_FORECAST_LENGTHS[
+                        pd.Timestamp(ds.init_time.values[0]).hour
+                    ]
+                ],
+            ),
+        }
+    )
 
     for var_config in DATA_VARIABLES:
         data_var = ds[var_config.name]
