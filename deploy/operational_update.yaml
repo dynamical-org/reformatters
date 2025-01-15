@@ -1,5 +1,3 @@
-
-# Once this is validated we can turn this into a cron job
 apiVersion: batch/v1
 kind: CronJob
 metadata:
