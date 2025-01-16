@@ -385,9 +385,9 @@ def reformat_init_time_i_slices(
                     data_array.chunk(chunks).to_zarr(store, region="auto")
                     yield (data_var, max_lead_times)
                 # Reclaim space once done.
-                for coord_and_path in coords_and_paths:
-                    if coord_and_path[1] is not None:
-                        coord_and_path[1].unlink()
+                for _, filepath in coords_and_paths:
+                    if filepath is not None:
+                        filepath.unlink()
 
 
 def download_var_group_files(
