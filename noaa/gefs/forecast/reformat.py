@@ -38,6 +38,8 @@ def reformat_operational_update() -> None:
     tmp_store = get_local_tmp_store()
     # Get the dataset, check what data is already present
     ds = xr.open_zarr(final_store)
+    for coord in ds.coords.values():
+        coord.load()
     last_existing_init_time = ds.init_time.max()
     init_time_end = pd.Timestamp.utcnow().tz_localize(None)
     template_ds = template.get_template(init_time_end)
@@ -108,14 +110,15 @@ def reformat_operational_update() -> None:
 
     concurrent.futures.wait(futures, return_when="ALL_COMPLETED")
 
-    template.write_metadata(template_ds, final_store, get_mode(final_store))
+    template.write_metadata(template_ds, tmp_store, get_mode(final_store))
+    copy_zarr_metadata(template_ds, tmp_store, final_store)
 
 
 def get_recent_init_times_for_reprocessing(ds: xr.Dataset) -> Array1D[np.datetime64]:
-    max_init_time = ds.init_time.max().values
-    # Get the last week of data
+    # Get the last few days of data
     recent_init_times = ds.init_time.where(
-        ds.init_time > max_init_time - np.timedelta64(7, "D"), drop=True
+        ds.init_time > pd.Timestamp.utcnow().tz_localize(None) - np.timedelta64(4, "D"),
+        drop=True,
     ).load()
     # Get the recent init_times where we have only partially completed
     # the ingest.
@@ -134,11 +137,40 @@ def copy_data_var(
     chunk_index: int,
     tmp_store: Path,
     final_store: fsspec.FSMap,
-) -> Callable:
+) -> Callable[[], None]:
     files_to_copy = list(tmp_store.glob(f"{data_var.name}/{chunk_index}.*.*.*.*"))
-    return lambda: final_store.fs.cp(
-        files_to_copy, final_store.root + f"/{data_var.name}/"
-    )
+
+    def mv_files() -> None:
+        print(
+            f"Copying data var chunks to final store ({final_store.root}) for {data_var.name}."
+        )
+        try:
+            fs = final_store.fs
+            fs.auto_mkdir = True
+            fs.put(
+                files_to_copy, final_store.root + f"/{data_var.name}/", auto_mkdir=True
+            )
+            # Delete data to conserve space.
+            for file in files_to_copy:
+                file.unlink()
+        except Exception as e:
+            print(e)
+
+    return mv_files
+
+
+def copy_zarr_metadata(
+    template_ds: xr.Dataset, tmp_store: Path, final_store: fsspec.FSMap
+) -> None:
+    print(f"Copying metadata to final store ({final_store.root}) from {tmp_store}")
+    # zattrs, zarray, zgroup and zmetadata
+    metadata_files = set(tmp_store.glob("**/.z*"))
+    # Coordinates
+    for coord in template_ds.coords:
+        metadata_files.update(set(tmp_store.glob(f"{coord}/*")))
+    for file in metadata_files:
+        relative = file.relative_to(tmp_store)
+        final_store.fs.put_file(file, f"{final_store.root}/{relative}")
 
 
 def reformat_local(init_time_end: DatetimeLike) -> None:
@@ -352,6 +384,10 @@ def reformat_init_time_i_slices(
                     chunks = template.chunk_args(chunk_template_ds)
                     data_array.chunk(chunks).to_zarr(store, region="auto")
                     yield (data_var, max_lead_times)
+                # Reclaim space once done.
+                for _, filepath in coords_and_paths:
+                    if filepath is not None:
+                        filepath.unlink()
 
 
 def download_var_group_files(
@@ -419,7 +455,7 @@ def get_store() -> fsspec.FSMap:
         )
         return local_store
 
-    s3 = s3fs.S3FileSystem()
+    s3 = s3fs.S3FileSystem(anon=False)
 
     store: StoreLike = s3.get_mapper(
         "s3://us-west-2.opendata.source.coop/aldenks/noaa-gefs-dev/forecast/dev.zarr"
