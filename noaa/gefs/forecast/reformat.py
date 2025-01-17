@@ -458,7 +458,7 @@ def get_store() -> fsspec.FSMap:
     s3 = s3fs.S3FileSystem(anon=False)
 
     store: StoreLike = s3.get_mapper(
-        "s3://us-west-2.opendata.source.coop/aldenks/noaa-gefs-dev/forecast/dev.zarr"
+        "s3://us-west-2.opendata.source.coop/dynamical/noaa-gefs-forecast/v0.0.1.zarr"
     )
     return store
 

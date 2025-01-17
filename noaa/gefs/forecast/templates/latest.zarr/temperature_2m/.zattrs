@@ -1,0 +1,15 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "init_time",
+        "ensemble_member",
+        "lead_time",
+        "latitude",
+        "longitude"
+    ],
+    "coordinates": "valid_time",
+    "long_name": "2 metre temperature",
+    "short_name": "t2m",
+    "standard_name": "air_temperature",
+    "step_type": "instant",
+    "units": "C"
+}
