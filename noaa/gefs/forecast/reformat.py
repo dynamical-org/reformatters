@@ -233,7 +233,7 @@ def reformat_kubernetes(
             "WORKERS_TOTAL": workers_total,
             "PARALLELISM": parallelism,
             "CPU": 16,
-            "MEMORY": "80G",
+            "MEMORY": "64G",
             "EPHEMERAL_STORAGE": "60G",
         },
     )

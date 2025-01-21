@@ -66,5 +66,7 @@ spec:
         fsGroup: 999  # this is the `app` group our app runs under
       # nodeSelector:
       #   eks.amazonaws.com/capacityType: SPOT
+      nodeSelector:
+        eks.amazonaws.com/compute-type: auto
       #   # cloud.google.com/gke-spot: "true"
       terminationGracePeriodSeconds: 5

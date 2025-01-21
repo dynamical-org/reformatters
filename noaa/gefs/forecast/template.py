@@ -58,13 +58,26 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     )
     ds["expected_forecast_length"].encoding = template_expected_forecast_length.encoding
     ds["expected_forecast_length"].attrs = template_expected_forecast_length.attrs
+
+    # Fill in expected_forecast_lengths based on init_time
+    template_expected_forecast_length = ds["expected_forecast_length"]
+    ds.coords["expected_forecast_length"] = (
+        "init_time",
+        [
+            INIT_TIME_HOURS_TO_FORECAST_LENGTHS[pd.Timestamp(init_time).hour]
+            for init_time in ds.init_time.values
+        ],
+    )
+    ds["expected_forecast_length"].encoding = template_expected_forecast_length.encoding
+    ds["expected_forecast_length"].attrs = template_expected_forecast_length.attrs
+
     # Coordinates which are dask arrays are not written with
     # to_zarr(store, compute=False) so we ensure all coordinates are loaded.
     for coordinate in ds.coords.values():
         coordinate.load()
-        assert isinstance(
-            coordinate.data, np.ndarray
-        ), f"Expected {coordinate.name} to be np.ndarray, but was {type(coordinate.data)}"
+        assert isinstance(coordinate.data, np.ndarray), (
+            f"Expected {coordinate.name} to be np.ndarray, but was {type(coordinate.data)}"
+        )
 
     # Uncomment to make smaller zarr while developing
     # if Config.is_dev():
