@@ -68,5 +68,6 @@ spec:
       #   eks.amazonaws.com/capacityType: SPOT
       nodeSelector:
         eks.amazonaws.com/compute-type: auto
+        kubernetes.io/arch: amd64
       #   # cloud.google.com/gke-spot: "true"
       terminationGracePeriodSeconds: 5
