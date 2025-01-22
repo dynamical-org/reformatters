@@ -45,7 +45,7 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "valid_time",
+            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
             "long_name": "Categorical freezing rain",
             "short_name": "cfrzr",
             "step_type": "avg",
@@ -87,7 +87,7 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "valid_time",
+            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
             "long_name": "Categorical ice pellets",
             "short_name": "cicep",
             "step_type": "avg",
@@ -129,7 +129,7 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "valid_time",
+            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
             "long_name": "Categorical rain",
             "short_name": "crain",
             "step_type": "avg",
@@ -171,7 +171,7 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "valid_time",
+            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
             "long_name": "Categorical snow",
             "short_name": "csnow",
             "step_type": "avg",
@@ -219,7 +219,7 @@
                 "longitude"
             ],
             "add_offset": 300.0,
-            "coordinates": "valid_time",
+            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
             "long_name": "Surface downward long-wave radiation flux",
             "short_name": "sdlwrf",
             "step_type": "avg",
@@ -266,7 +266,7 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "valid_time",
+            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
             "long_name": "Surface downward short-wave radiation flux",
             "short_name": "sdswrf",
             "step_type": "avg",
@@ -296,6 +296,32 @@
             "_ARRAY_DIMENSIONS": [
                 "ensemble_member"
             ]
+        },
+        "expected_forecast_length/.zarray": {
+            "chunks": [
+                1
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<i8",
+            "fill_value": null,
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1
+            ],
+            "zarr_format": 2
+        },
+        "expected_forecast_length/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "init_time"
+            ],
+            "units": "seconds"
         },
         "geopotential_height_cloud_ceiling/.zarray": {
             "chunks": [
@@ -338,12 +364,38 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "valid_time",
+            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
             "long_name": "Geopotential height",
             "short_name": "gh",
             "standard_name": "geopotential_height",
             "step_type": "instant",
             "units": "gpm"
+        },
+        "ingested_forecast_length/.zarray": {
+            "chunks": [
+                1
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 5,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<i8",
+            "fill_value": null,
+            "filters": null,
+            "order": "C",
+            "shape": [
+                1
+            ],
+            "zarr_format": 2
+        },
+        "ingested_forecast_length/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "init_time"
+            ],
+            "units": "seconds"
         },
         "init_time/.zarray": {
             "chunks": [
@@ -495,7 +547,7 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "valid_time",
+            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
             "long_name": "Percent frozen precipitation",
             "short_name": "cpofp",
             "step_type": "instant",
@@ -542,7 +594,7 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "valid_time",
+            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
             "long_name": "Precipitable water",
             "short_name": "pwat",
             "step_type": "instant",
@@ -589,7 +641,7 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "valid_time",
+            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
             "long_name": "Total Precipitation",
             "short_name": "tp",
             "step_type": "accum",
@@ -637,7 +689,7 @@
                 "longitude"
             ],
             "add_offset": 101000.0,
-            "coordinates": "valid_time",
+            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
             "long_name": "Pressure reduced to MSL",
             "short_name": "prmsl",
             "step_type": "instant",
@@ -685,7 +737,7 @@
                 "longitude"
             ],
             "add_offset": 100000.0,
-            "coordinates": "valid_time",
+            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
             "long_name": "Surface pressure",
             "short_name": "sp",
             "standard_name": "surface_air_pressure",
@@ -734,7 +786,7 @@
                 "longitude"
             ],
             "add_offset": 50.0,
-            "coordinates": "valid_time",
+            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
             "long_name": "2 metre relative humidity",
             "short_name": "r2",
             "standard_name": "relative_humidity",
@@ -782,7 +834,7 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "valid_time",
+            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
             "long_name": "2 metre temperature",
             "short_name": "t2m",
             "standard_name": "air_temperature",
@@ -831,7 +883,7 @@
                 "longitude"
             ],
             "add_offset": 50.0,
-            "coordinates": "valid_time",
+            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
             "long_name": "Total Cloud Cover",
             "short_name": "tcc",
             "step_type": "avg",
@@ -914,7 +966,7 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "valid_time",
+            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
             "long_name": "100 metre U wind component",
             "short_name": "u100",
             "standard_name": "eastward_wind",
@@ -962,7 +1014,7 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "valid_time",
+            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
             "long_name": "10 metre U wind component",
             "short_name": "u10",
             "standard_name": "eastward_wind",
@@ -1010,7 +1062,7 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "valid_time",
+            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
             "long_name": "100 metre V wind component",
             "short_name": "v100",
             "standard_name": "northward_wind",
@@ -1058,7 +1110,7 @@
                 "latitude",
                 "longitude"
             ],
-            "coordinates": "valid_time",
+            "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
             "long_name": "10 metre V wind component",
             "short_name": "v10",
             "standard_name": "northward_wind",
