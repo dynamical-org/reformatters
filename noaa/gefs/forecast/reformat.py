@@ -232,8 +232,8 @@ def reformat_kubernetes(
             "INIT_TIME_END": pd.Timestamp(init_time_end).isoformat(),
             "WORKERS_TOTAL": workers_total,
             "PARALLELISM": parallelism,
-            "CPU": 16,
-            "MEMORY": "64G",
+            "CPU": 12,
+            "MEMORY": "100G",
             "EPHEMERAL_STORAGE": "60G",
         },
     )
