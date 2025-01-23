@@ -2,5 +2,9 @@
     "_ARRAY_DIMENSIONS": [
         "init_time"
     ],
+    "statistics_approximate": {
+        "max": "35 days 00:00:00",
+        "min": "0 days 00:00:00"
+    },
     "units": "seconds"
 }

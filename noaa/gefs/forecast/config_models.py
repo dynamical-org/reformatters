@@ -4,6 +4,8 @@ from typing import Any, Literal, TypeVar
 import numcodecs  # type: ignore
 import pydantic
 
+from common.types import TimedeltaUnits, TimestampUnits
+
 # We pull data from 3 types of source files: `a`, `b` and `s`.
 # Selected variables are available in `s` at higher resolution (0.25 vs 0.5 deg)
 # but `s` stops after forecast lead time 240h at which point the variable is still in `a` or `b`.
@@ -30,6 +32,15 @@ class DatasetAttributes(FrozenBaseModel):
     name: str
     description: str
     attribution: str
+    spatial_domain: str
+    spatial_resolution: str
+    time_domain: str
+    time_resolution: str
+
+
+class StatisticsApproximate(FrozenBaseModel):
+    min: str | int | float
+    max: str | int | float
 
 
 class DataVarAttrs(FrozenBaseModel):
@@ -47,6 +58,11 @@ class InternalAttrs(FrozenBaseModel):
     noaa_file_type: NoaaFileType
     index_position: int
     include_lead_time_suffix: bool = False
+
+
+class CoordinateAttrs(FrozenBaseModel):
+    units: TimestampUnits | TimedeltaUnits | str
+    statistics_approximate: StatisticsApproximate
 
 
 class Encoding(pydantic.BaseModel):
@@ -68,7 +84,7 @@ class Encoding(pydantic.BaseModel):
     calendar: Literal["proleptic_gregorian"] | None = None  # For timestamps only
     # The _encoded_ units, for timestamps and timedeltas only
     # Decoded units for all variables are in DataVarAttrs
-    units: Literal["seconds", "seconds since 1970-01-01 00:00:00"] | None = None
+    units: TimestampUnits | TimedeltaUnits | None = None
 
     add_offset: float | None = None
     scale_factor: float | None = None
@@ -77,6 +93,7 @@ class Encoding(pydantic.BaseModel):
 class Coordinate(FrozenBaseModel):
     name: str
     encoding: Encoding
+    attrs: CoordinateAttrs
 
 
 class DataVar(FrozenBaseModel):

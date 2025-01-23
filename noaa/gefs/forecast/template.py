@@ -131,9 +131,13 @@ def update_template() -> None:
         data_var.encoding = var_config.encoding.model_dump(exclude_none=True)
 
     for coord_config in COORDINATES:
-        ds.coords[coord_config.name].encoding = coord_config.encoding.model_dump(
-            exclude_none=True
-        )
+        coord = ds.coords[coord_config.name]
+        coord.encoding = coord_config.encoding.model_dump(exclude_none=True)
+        coord.attrs = {
+            k: v
+            for k, v in coord_config.attrs.model_dump(exclude_none=True).items()
+            if k not in coord.encoding
+        }
 
     write_metadata(ds, template_path, mode="w")
 

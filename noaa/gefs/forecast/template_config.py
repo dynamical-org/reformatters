@@ -9,11 +9,13 @@ from common.types import DatetimeLike
 
 from .config_models import (
     Coordinate,
+    CoordinateAttrs,
     DatasetAttributes,
     DataVar,
     DataVarAttrs,
     Encoding,
     InternalAttrs,
+    StatisticsApproximate,
     replace,
 )
 
@@ -22,6 +24,10 @@ DATASET_ATTRIBUTES = DatasetAttributes(
     name="NOAA GEFS forecast",
     description="Weather forecasts from the Global Ensemble Forecast System (GEFS) operated by NOAA NWS NCEP.",
     attribution="NOAA NWS NCEP GEFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
+    spatial_domain="Global",
+    spatial_resolution="0-240 hours: 0.25 degrees (~20km), 243-840 hours: 0.5 degrees (~40km)",
+    time_domain="Forecasts 2024-01-01 00:00:00 UTC to Present, 0-35 day lead time",
+    time_resolution="3 hour forecast step, forecast initialized every 24 hours",
 )
 
 # Silly to list dims twice, but typing.get_args() doesn't guarantee the return order,
@@ -76,6 +82,8 @@ ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT = Encoding(
     compressor=Blosc(cname="zstd", clevel=3, shuffle=Blosc.SHUFFLE),
 )
 
+_dim_coords = get_template_dimension_coordinates()
+
 COORDINATES: Sequence[Coordinate] = (
     Coordinate(
         name="init_time",
@@ -87,12 +95,25 @@ COORDINATES: Sequence[Coordinate] = (
             units="seconds since 1970-01-01 00:00:00",
             chunks=-1,
         ),
+        attrs=CoordinateAttrs(
+            units="seconds since 1970-01-01 00:00:00",
+            statistics_approximate=StatisticsApproximate(
+                min=INIT_TIME_START.isoformat(), max="Present"
+            ),
+        ),
     ),
     Coordinate(
         name="ensemble_member",
         encoding=Encoding(
             dtype="uint16",
             chunks=-1,
+        ),
+        attrs=CoordinateAttrs(
+            units="realization",
+            statistics_approximate=StatisticsApproximate(
+                min=int(_dim_coords["ensemble_member"].min()),
+                max=int(_dim_coords["ensemble_member"].max()),
+            ),
         ),
     ),
     Coordinate(
@@ -103,6 +124,13 @@ COORDINATES: Sequence[Coordinate] = (
             units="seconds",
             chunks=-1,
         ),
+        attrs=CoordinateAttrs(
+            units="seconds",
+            statistics_approximate=StatisticsApproximate(
+                min=str(_dim_coords["lead_time"].min()),
+                max=str(_dim_coords["lead_time"].max()),
+            ),
+        ),
     ),
     Coordinate(
         name="latitude",
@@ -111,6 +139,13 @@ COORDINATES: Sequence[Coordinate] = (
             compressor=Blosc(cname="zstd"),
             chunks=-1,
         ),
+        attrs=CoordinateAttrs(
+            units="degrees_north",
+            statistics_approximate=StatisticsApproximate(
+                min=_dim_coords["latitude"].min(),
+                max=_dim_coords["latitude"].max(),
+            ),
+        ),
     ),
     Coordinate(
         name="longitude",
@@ -118,6 +153,13 @@ COORDINATES: Sequence[Coordinate] = (
             dtype="float64",
             compressor=Blosc(cname="zstd"),
             chunks=-1,
+        ),
+        attrs=CoordinateAttrs(
+            units="degrees_south",
+            statistics_approximate=StatisticsApproximate(
+                min=_dim_coords["longitude"].min(),
+                max=_dim_coords["longitude"].max(),
+            ),
         ),
     ),
     Coordinate(
@@ -130,6 +172,12 @@ COORDINATES: Sequence[Coordinate] = (
             units="seconds since 1970-01-01 00:00:00",
             chunks=(-1, -1),
         ),
+        attrs=CoordinateAttrs(
+            units="seconds since 1970-01-01 00:00:00",
+            statistics_approximate=StatisticsApproximate(
+                min=INIT_TIME_START.isoformat(), max="Present + 35 days"
+            ),
+        ),
     ),
     Coordinate(
         name="ingested_forecast_length",
@@ -139,6 +187,13 @@ COORDINATES: Sequence[Coordinate] = (
             units="seconds",
             chunks=-1,
         ),
+        attrs=CoordinateAttrs(
+            units="seconds",
+            statistics_approximate=StatisticsApproximate(
+                min=str(_dim_coords["lead_time"].min()),
+                max=str(_dim_coords["lead_time"].max()),
+            ),
+        ),
     ),
     Coordinate(
         name="expected_forecast_length",
@@ -147,6 +202,13 @@ COORDINATES: Sequence[Coordinate] = (
             compressor=Blosc(cname="zstd"),
             units="seconds",
             chunks=-1,
+        ),
+        attrs=CoordinateAttrs(
+            units="seconds",
+            statistics_approximate=StatisticsApproximate(
+                min=str(_dim_coords["lead_time"].min()),
+                max=str(_dim_coords["lead_time"].max()),
+            ),
         ),
     ),
 )

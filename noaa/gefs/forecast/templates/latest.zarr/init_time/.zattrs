@@ -3,5 +3,9 @@
         "init_time"
     ],
     "calendar": "proleptic_gregorian",
+    "statistics_approximate": {
+        "max": "Present",
+        "min": "2025-01-01T00:00:00"
+    },
     "units": "seconds since 1970-01-01"
 }

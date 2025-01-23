@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-import fsspec
+import fsspec  # type: ignore
 import numpy as np
 import pandas as pd
 import s3fs  # type: ignore
@@ -101,7 +101,7 @@ def reformat_operational_update() -> None:
             )
             # This only works because we know that chunks are size 1 in the
             # init_time dimension.
-            chunk_index = template_ds.get_index("init_time").get_loc(init_time)
+            chunk_index: int = template_ds.get_index("init_time").get_loc(init_time)  # type: ignore
             futures.append(
                 upload_executor.submit(
                     copy_data_var(data_var, chunk_index, tmp_store, final_store)
@@ -458,7 +458,7 @@ def get_store() -> fsspec.FSMap:
     s3 = s3fs.S3FileSystem(anon=False)
 
     store: StoreLike = s3.get_mapper(
-        "s3://us-west-2.opendata.source.coop/dynamical/noaa-gefs-forecast/v0.0.1.zarr"
+        "s3://us-west-2.opendata.source.coop/dynamical/noaa-gefs-forecast/v0.1.0.zarr"
     )
     return store
 

@@ -2,5 +2,9 @@
     "attribution": "NOAA NWS NCEP GEFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
     "dataset_id": "noaa-gefs-forecast",
     "description": "Weather forecasts from the Global Ensemble Forecast System (GEFS) operated by NOAA NWS NCEP.",
-    "name": "NOAA GEFS forecast"
+    "name": "NOAA GEFS forecast",
+    "spatial_domain": "Global",
+    "spatial_resolution": "0-240 hours: 0.25 degrees (~20km), 243-840 hours: 0.5 degrees (~40km)",
+    "time_domain": "Forecasts 2024-01-01 00:00:00 UTC to Present, 0-35 day lead time",
+    "time_resolution": "3 hour forecast step, forecast initialized every 24 hours"
 }

@@ -4,7 +4,11 @@
             "attribution": "NOAA NWS NCEP GEFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
             "dataset_id": "noaa-gefs-forecast",
             "description": "Weather forecasts from the Global Ensemble Forecast System (GEFS) operated by NOAA NWS NCEP.",
-            "name": "NOAA GEFS forecast"
+            "name": "NOAA GEFS forecast",
+            "spatial_domain": "Global",
+            "spatial_resolution": "0-240 hours: 0.25 degrees (~20km), 243-840 hours: 0.5 degrees (~40km)",
+            "time_domain": "Forecasts 2024-01-01 00:00:00 UTC to Present, 0-35 day lead time",
+            "time_resolution": "3 hour forecast step, forecast initialized every 24 hours"
         },
         ".zgroup": {
             "zarr_format": 2
@@ -295,7 +299,12 @@
         "ensemble_member/.zattrs": {
             "_ARRAY_DIMENSIONS": [
                 "ensemble_member"
-            ]
+            ],
+            "statistics_approximate": {
+                "max": 30,
+                "min": 0
+            },
+            "units": "realization"
         },
         "expected_forecast_length/.zarray": {
             "chunks": [
@@ -321,6 +330,10 @@
             "_ARRAY_DIMENSIONS": [
                 "init_time"
             ],
+            "statistics_approximate": {
+                "max": "35 days 00:00:00",
+                "min": "0 days 00:00:00"
+            },
             "units": "seconds"
         },
         "geopotential_height_cloud_ceiling/.zarray": {
@@ -395,6 +408,10 @@
             "_ARRAY_DIMENSIONS": [
                 "init_time"
             ],
+            "statistics_approximate": {
+                "max": "35 days 00:00:00",
+                "min": "0 days 00:00:00"
+            },
             "units": "seconds"
         },
         "init_time/.zarray": {
@@ -428,6 +445,10 @@
                 "init_time"
             ],
             "calendar": "proleptic_gregorian",
+            "statistics_approximate": {
+                "max": "Present",
+                "min": "2025-01-01T00:00:00"
+            },
             "units": "seconds since 1970-01-01"
         },
         "latitude/.zarray": {
@@ -453,7 +474,12 @@
         "latitude/.zattrs": {
             "_ARRAY_DIMENSIONS": [
                 "latitude"
-            ]
+            ],
+            "statistics_approximate": {
+                "max": 90.0,
+                "min": -90.0
+            },
+            "units": "degrees_north"
         },
         "lead_time/.zarray": {
             "chunks": [
@@ -479,6 +505,10 @@
             "_ARRAY_DIMENSIONS": [
                 "lead_time"
             ],
+            "statistics_approximate": {
+                "max": "35 days 00:00:00",
+                "min": "0 days 00:00:00"
+            },
             "units": "seconds"
         },
         "longitude/.zarray": {
@@ -504,7 +534,12 @@
         "longitude/.zattrs": {
             "_ARRAY_DIMENSIONS": [
                 "longitude"
-            ]
+            ],
+            "statistics_approximate": {
+                "max": 179.75,
+                "min": -180.0
+            },
+            "units": "degrees_south"
         },
         "percent_frozen_precipitation_surface/.zarray": {
             "chunks": [
@@ -923,6 +958,10 @@
                 "lead_time"
             ],
             "calendar": "proleptic_gregorian",
+            "statistics_approximate": {
+                "max": "Present + 35 days",
+                "min": "2025-01-01T00:00:00"
+            },
             "units": "seconds since 1970-01-01"
         },
         "wind_u_100m/.zarray": {

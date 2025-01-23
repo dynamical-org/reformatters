@@ -1,5 +1,10 @@
 {
     "_ARRAY_DIMENSIONS": [
         "latitude"
-    ]
+    ],
+    "statistics_approximate": {
+        "max": 90.0,
+        "min": -90.0
+    },
+    "units": "degrees_north"
 }
