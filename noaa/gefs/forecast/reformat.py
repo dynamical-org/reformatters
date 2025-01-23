@@ -214,7 +214,7 @@ def reformat_kubernetes(
     print("Pushed", image_tag)
 
     store = get_store()
-    print("Writing zarr metadata")
+    print("Writing zarr metadata to ", store)
     template.write_metadata(template_ds, store, get_mode(store))
 
     num_jobs = sum(1 for _ in chunk_i_slices(template_ds, _PROCESSING_CHUNK_DIMENSION))
@@ -232,8 +232,8 @@ def reformat_kubernetes(
             "INIT_TIME_END": pd.Timestamp(init_time_end).isoformat(),
             "WORKERS_TOTAL": workers_total,
             "PARALLELISM": parallelism,
-            "CPU": 16,
-            "MEMORY": "80G",
+            "CPU": 12,
+            "MEMORY": "100G",
             "EPHEMERAL_STORAGE": "60G",
         },
     )
@@ -455,8 +455,10 @@ def get_store() -> fsspec.FSMap:
         )
         return local_store
 
-    s3 = s3fs.S3FileSystem(anon=False)
-
+    s3 = s3fs.S3FileSystem(
+        key=os.environ["SOURCE_COOP_AWS_ACCESS_KEY_ID"],
+        secret=os.environ["SOURCE_COOP_AWS_SECRET_ACCESS_KEY"],
+    )
     store: StoreLike = s3.get_mapper(
         "s3://us-west-2.opendata.source.coop/dynamical/noaa-gefs-forecast/v0.1.0.zarr"
     )

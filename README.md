@@ -32,7 +32,7 @@ We use
 To reformat a large archive we parallelize work across multiple cloud servers.
 
 We use
-* `docker` to containerize the code
+* `docker` to package the code and dependencies
 * `kubernetes` indexed jobs to run work in parallel
 
 ### Setup
