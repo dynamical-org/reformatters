@@ -1,5 +1,10 @@
 {
     "_ARRAY_DIMENSIONS": [
         "ensemble_member"
-    ]
+    ],
+    "statistics_approximate": {
+        "max": 30,
+        "min": 0
+    },
+    "units": "realization"
 }
