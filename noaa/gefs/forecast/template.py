@@ -11,6 +11,7 @@ import xarray as xr
 from common.config import Config  # noqa:F401
 from common.types import DatetimeLike, StoreLike
 
+from .config_models import Coordinate, DataVar
 from .template_config import (
     CHUNKS,
     CHUNKS_ORDERED,
@@ -26,13 +27,6 @@ from .template_config import (
 
 TEMPLATE_PATH = "noaa/gefs/forecast/templates/latest.zarr"
 
-INIT_TIME_HOURS_TO_FORECAST_LENGTHS = {
-    0: pd.Timedelta(hours=840),
-    6: pd.Timedelta(hours=384),
-    12: pd.Timedelta(hours=384),
-    18: pd.Timedelta(hours=384),
-}
-
 
 def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     ds: xr.Dataset = xr.open_zarr(TEMPLATE_PATH)
@@ -41,45 +35,15 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     ds = ds.reindex(init_time=get_init_time_coordinates(init_time_end))
     # Init time chunks are 1 when stored, set them to desired.
     ds = ds.chunk(init_time=CHUNKS["init_time"])
-    # Recompute valid time after reindex
-    template_valid_time = ds["valid_time"]
-    ds.coords["valid_time"] = ds["init_time"] + ds["lead_time"]
-    ds["valid_time"].encoding = template_valid_time.encoding
-    ds["valid_time"].attrs = template_valid_time.attrs
+    # Recompute derived coordinates after reindex
+    ds = add_derived_coordinates(ds)
 
-    # Fill in expected_forecast_lengths based on init_time
-    template_expected_forecast_length = ds["expected_forecast_length"]
-    ds.coords["expected_forecast_length"] = (
-        "init_time",
-        [
-            INIT_TIME_HOURS_TO_FORECAST_LENGTHS[pd.Timestamp(init_time).hour]
-            for init_time in ds.init_time.values
-        ],
-    )
-    ds["expected_forecast_length"].encoding = template_expected_forecast_length.encoding
-    ds["expected_forecast_length"].attrs = template_expected_forecast_length.attrs
-
-    # Fill in expected_forecast_lengths based on init_time
-    template_expected_forecast_length = ds["expected_forecast_length"]
-    ds.coords["expected_forecast_length"] = (
-        "init_time",
-        [
-            INIT_TIME_HOURS_TO_FORECAST_LENGTHS[pd.Timestamp(init_time).hour]
-            for init_time in ds.init_time.values
-        ],
-    )
-    ds["expected_forecast_length"].encoding = template_expected_forecast_length.encoding
-    ds["expected_forecast_length"].attrs = template_expected_forecast_length.attrs
-
-    # Coordinates which are dask arrays are not written with
-    # to_zarr(store, compute=False) so we ensure all coordinates are loaded.
+    # Coordinates which are dask arrays are not written with .to_zarr(store, compute=False)
+    # We want to write all coords when writing metadata, so ensure they are loaded as numpy arrays.
     for coordinate in ds.coords.values():
         coordinate.load()
-        assert isinstance(coordinate.data, np.ndarray), (
-            f"Expected {coordinate.name} to be np.ndarray, but was {type(coordinate.data)}"
-        )
 
-    # Uncomment to make smaller zarr while developing
+    # Uncomment to make smaller dataset while developing
     # if Config.is_dev():
     #     ds = ds[
     #         [
@@ -94,7 +58,6 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     #         ensemble_member=slice(3),
     #         lead_time=["0h", "3h", "90h", "240h", "840h"],
     #     )
-    # ds = ds[["u100", "v100", "u10", "v10", "t2m", "tp", "sdswrf", "gh", "tcc", "pwat", "r2", ]]
 
     return ds
 
@@ -120,39 +83,65 @@ def update_template() -> None:
 
     ds = xr.Dataset(data_vars, coords, DATASET_ATTRIBUTES.model_dump())
 
-    # This could be computed by users on the fly, but it compresses
-    # really well so lets make things easy for users
-    ds.coords["valid_time"] = ds["init_time"] + ds["lead_time"]
+    # Skip copying metadata (encoding and attributes) because the
+    # coordinates don't already exist on ds. Encoding and attributes
+    # will be added from the COORDINATES configs below.
+    ds = add_derived_coordinates(ds, copy_metadata=False)
 
-    ds = ds.assign_coords(
-        {
-            "ingested_forecast_length": ("init_time", [np.timedelta64("NaT", "ns")]),
-            "expected_forecast_length": (
-                "init_time",
-                [
-                    INIT_TIME_HOURS_TO_FORECAST_LENGTHS[
-                        pd.Timestamp(ds.init_time.values[0]).hour
-                    ]
-                ],
-            ),
-        }
-    )
-
+    assert {d.name for d in DATA_VARIABLES} == set(ds.data_vars)
     for var_config in DATA_VARIABLES:
-        data_var = ds[var_config.name]
-        data_var.attrs = var_config.attrs.model_dump(exclude_none=True)
-        data_var.encoding = var_config.encoding.model_dump(exclude_none=True)
+        assign_var_metadata(ds[var_config.name], var_config)
 
+    assert {c.name for c in COORDINATES} == set(ds.coords)
     for coord_config in COORDINATES:
-        coord = ds.coords[coord_config.name]
-        coord.encoding = coord_config.encoding.model_dump(exclude_none=True)
-        coord.attrs = {
-            k: v
-            for k, v in coord_config.attrs.model_dump(exclude_none=True).items()
-            if k not in coord.encoding
-        }
+        assign_var_metadata(ds.coords[coord_config.name], coord_config)
 
     write_metadata(ds, template_path, mode="w")
+
+
+def add_derived_coordinates(ds: xr.Dataset, copy_metadata: bool = True) -> xr.Dataset:
+    new_coords = {
+        "ingested_forecast_length": (
+            "init_time",
+            np.full(ds["init_time"].size, np.timedelta64("NaT", "ns")),
+        ),
+        "expected_forecast_length": (
+            "init_time",
+            np.where(
+                ds["init_time"].dt.hour == 0,
+                pd.Timedelta(hours=840),
+                pd.Timedelta(hours=384),
+            ),  # type: ignore
+        ),
+        "valid_time": ds["init_time"] + ds["lead_time"],
+    }
+
+    new_ds = ds.assign_coords(new_coords)
+
+    if copy_metadata:
+        for coord_name in new_coords.keys():
+            new_ds[coord_name].attrs = ds[coord_name].attrs
+            new_ds[coord_name].encoding = ds[coord_name].encoding
+
+    return new_ds
+
+
+def assign_var_metadata(
+    var: xr.DataArray, var_config: DataVar | Coordinate
+) -> xr.DataArray:
+    var.encoding = var_config.encoding.model_dump(exclude_none=True)
+
+    # Encoding time data requires a `units` key in `encoding`.
+    # Ensure the value matches units value in the usual `attributes` location.
+    if var_config.encoding.units is not None and var_config.attrs.units is not None:
+        assert var_config.encoding.units == var_config.attrs.units
+
+    var.attrs = {
+        k: v
+        for k, v in var_config.attrs.model_dump(exclude_none=True).items()
+        if k != "units" or "units" not in var.encoding
+    }
+    return var
 
 
 def write_metadata(

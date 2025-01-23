@@ -60,6 +60,8 @@ def get_init_time_coordinates(
     )
 
 
+INIT_TIME_COORDINATE_CHUNK_SIZE = int(pd.Timedelta(days=365 * 15) / INIT_TIME_FREQUENCY)
+
 CHUNKS: dict[Dim, int] = {
     "init_time": 1,  # one forecast per chunk
     "ensemble_member": 31,  # all ensemble members in one chunk
@@ -93,7 +95,7 @@ COORDINATES: Sequence[Coordinate] = (
             compressor=Blosc(cname="zstd"),
             calendar="proleptic_gregorian",
             units="seconds since 1970-01-01 00:00:00",
-            chunks=-1,
+            chunks=INIT_TIME_COORDINATE_CHUNK_SIZE,
         ),
         attrs=CoordinateAttrs(
             units="seconds since 1970-01-01 00:00:00",
@@ -170,7 +172,7 @@ COORDINATES: Sequence[Coordinate] = (
             compressor=Blosc(cname="zstd"),
             calendar="proleptic_gregorian",
             units="seconds since 1970-01-01 00:00:00",
-            chunks=(-1, -1),
+            chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE, -1),
         ),
         attrs=CoordinateAttrs(
             units="seconds since 1970-01-01 00:00:00",
@@ -185,7 +187,7 @@ COORDINATES: Sequence[Coordinate] = (
             dtype="int64",
             compressor=Blosc(cname="zstd"),
             units="seconds",
-            chunks=-1,
+            chunks=INIT_TIME_COORDINATE_CHUNK_SIZE,
         ),
         attrs=CoordinateAttrs(
             units="seconds",
@@ -201,7 +203,7 @@ COORDINATES: Sequence[Coordinate] = (
             dtype="int64",
             compressor=Blosc(cname="zstd"),
             units="seconds",
-            chunks=-1,
+            chunks=INIT_TIME_COORDINATE_CHUNK_SIZE,
         ),
         attrs=CoordinateAttrs(
             units="seconds",
