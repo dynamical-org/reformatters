@@ -35,7 +35,7 @@ DATASET_ATTRIBUTES = DatasetAttributes(
 type Dim =        Literal["init_time", "ensemble_member", "lead_time", "latitude", "longitude"]  # fmt: off
 DIMS: tuple[Dim, ... ] = ("init_time", "ensemble_member", "lead_time", "latitude", "longitude")  # fmt: off
 
-INIT_TIME_START = pd.Timestamp("2025-01-01T00:00")
+INIT_TIME_START = pd.Timestamp("2024-01-01T00:00")
 INIT_TIME_FREQUENCY = pd.Timedelta("24h")
 
 

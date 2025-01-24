@@ -449,11 +449,11 @@ def get_worker_jobs[T](
 
 
 def get_store() -> fsspec.FSMap:
-    if Config.is_dev():
-        local_store: StoreLike = fsspec.get_mapper(
-            "data/output/noaa/gefs/forecast/dev.zarr"
-        )
-        return local_store
+    # if Config.is_dev():
+    #     local_store: StoreLike = fsspec.get_mapper(
+    #         "data/output/noaa/gefs/forecast/dev.zarr"
+    #     )
+    #     return local_store
 
     s3 = s3fs.S3FileSystem(
         key=os.environ["SOURCE_COOP_AWS_ACCESS_KEY_ID"],
@@ -472,7 +472,7 @@ def get_local_tmp_store() -> Path:
 
 def get_mode(store: StoreLike) -> Literal["w-", "w"]:
     store_root = store.name if isinstance(store, Path) else getattr(store, "root", "")
-    if store_root.endswith("dev.zarr"):
+    if store_root.endswith("dev.zarr") or ("v0." in store_root):
         return "w"  # Allow overwritting dev store
 
     return "w-"  # Safe default - don't overwrite
