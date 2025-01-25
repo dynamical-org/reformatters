@@ -60,8 +60,6 @@ def get_init_time_coordinates(
     )
 
 
-INIT_TIME_COORDINATE_CHUNK_SIZE = int(pd.Timedelta(days=365 * 15) / INIT_TIME_FREQUENCY)
-
 CHUNKS: dict[Dim, int] = {
     "init_time": 1,  # one forecast per chunk
     "ensemble_member": 31,  # all ensemble members in one chunk
@@ -71,6 +69,16 @@ CHUNKS: dict[Dim, int] = {
 }
 assert DIMS == tuple(CHUNKS.keys())
 CHUNKS_ORDERED = tuple(CHUNKS[dim] for dim in DIMS)
+
+# The init time dimension is our append dimension during updates.
+# We also want coordinates to be in a single array for dataset open speed.
+# By fixing the chunk size for coordinates along the append dimension to
+# something much larger than we will be really using, the array is always
+# a fixed underlying chunk size and values in it can be safely updated
+# prior to metadata document updates that increase the reported array size.
+# This is a zarr format hack to allow expanding an array safely and requires
+# that new array values are written strictly before new metadata is written.
+INIT_TIME_COORDINATE_CHUNK_SIZE = int(pd.Timedelta(days=365 * 15) / INIT_TIME_FREQUENCY)
 
 ENCODING_FLOAT32_DEFAULT = Encoding(
     dtype="float32",
