@@ -1,0 +1,16 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "init_time",
+        "lead_time",
+        "latitude",
+        "longitude"
+    ],
+    "add_offset": 100000.0,
+    "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
+    "ensemble_statistic": "avg",
+    "long_name": "Surface pressure",
+    "short_name": "sp",
+    "standard_name": "surface_air_pressure",
+    "step_type": "instant",
+    "units": "Pa"
+}

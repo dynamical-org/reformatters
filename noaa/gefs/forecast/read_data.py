@@ -5,6 +5,7 @@ import os
 import re
 from collections.abc import Iterable, Sequence
 from datetime import timedelta
+from itertools import product
 from pathlib import Path
 from typing import Any, Literal, TypedDict
 
@@ -18,7 +19,7 @@ import xarray as xr
 from common.config import Config
 from common.types import Array2D
 
-from .config_models import DataVar
+from .config_models import DataVar, EnsembleStatistic
 from .config_models import NoaaFileType as NoaaFileType
 
 FILE_RESOLUTIONS = {
@@ -28,10 +29,24 @@ FILE_RESOLUTIONS = {
 }
 
 
-class SourceFileCoords(TypedDict):
+class EnsembleSourceFileCoords(TypedDict):
     init_time: pd.Timestamp
     ensemble_member: int
     lead_time: pd.Timedelta
+
+
+class StatisticSourceFileCoords(TypedDict):
+    init_time: pd.Timestamp
+    statistic: EnsembleStatistic
+    lead_time: pd.Timedelta
+
+
+type SourceFileCoords = EnsembleSourceFileCoords | StatisticSourceFileCoords
+
+
+class ChunkCoordinates(TypedDict):
+    ensemble: Iterable[EnsembleSourceFileCoords]
+    statistic: Iterable[StatisticSourceFileCoords]
 
 
 def download_file(
@@ -41,7 +56,6 @@ def download_file(
     directory: Path,
 ) -> tuple[SourceFileCoords, Path | None]:
     init_time = coords["init_time"]
-    ensemble_member = coords["ensemble_member"]
     lead_time = coords["lead_time"]
 
     lead_time_hours = lead_time.total_seconds() / (60 * 60)
@@ -50,10 +64,15 @@ def download_file(
 
     init_date_str = init_time.strftime("%Y%m%d")
     init_hour_str = init_time.strftime("%H")
-    if not isinstance(ensemble_member, str):
-        # control or perterbed ensemble member
+
+    if isinstance(ensemble_member := coords.get("ensemble_member"), int | np.integer):
+        # control (c) or perterbed (p) ensemble member
         prefix = "c" if ensemble_member == 0 else "p"
-        formatted_ensemble_member = f"{prefix}{ensemble_member:02}"
+        ensemble_or_statistic_str = f"{prefix}{ensemble_member:02}"
+    elif isinstance(statistic := coords.get("statistic"), str):
+        ensemble_or_statistic_str = statistic
+    else:
+        raise ValueError(f"coords must be ensemble or statistic coord, found {coords}.")
 
     # Accumulated values don't exist in the 0-hour forecast.
     if lead_time_hours == 0:
@@ -67,7 +86,7 @@ def download_file(
 
     remote_path = (
         f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2{true_noaa_file_type}{FILE_RESOLUTIONS[true_noaa_file_type].strip("0")}/"
-        f"ge{formatted_ensemble_member}.t{init_hour_str}z.pgrb2{true_noaa_file_type}.{FILE_RESOLUTIONS[true_noaa_file_type]}.f{lead_time_hours:03.0f}"
+        f"ge{ensemble_or_statistic_str}.t{init_hour_str}z.pgrb2{true_noaa_file_type}.{FILE_RESOLUTIONS[true_noaa_file_type]}.f{lead_time_hours:03.0f}"
     )
 
     store = http_store("https://storage.googleapis.com/gfs-ensemble-forecast-system")
@@ -81,6 +100,14 @@ def download_file(
     idx_remote_path = f"{remote_path}.idx"
     idx_local_path = Path(f"{local_base_file_name}.idx")
 
+    # Create a unique, human debuggable suffix representing the data vars stored in the output file
+    vars_str = "-".join(
+        var_info.internal_attrs.grib_element for var_info in noaa_idx_data_vars
+    )
+    vars_hash = digest(format_noaa_idx_var(var_info) for var_info in noaa_idx_data_vars)
+    vars_suffix = f"{vars_str}-{vars_hash}"
+    local_path = Path(directory, f"{local_base_file_name}.{vars_suffix}")
+
     try:
         download_to_disk(
             store,
@@ -92,16 +119,6 @@ def download_file(
         byte_range_starts, byte_range_ends = parse_index_byte_ranges(
             idx_local_path, noaa_idx_data_vars
         )
-
-        # Create a unique, human debuggable suffix representing the data vars stored in the output file
-        vars_str = "-".join(
-            var_info.internal_attrs.grib_element for var_info in noaa_idx_data_vars
-        )
-        vars_hash = digest(
-            format_noaa_idx_var(var_info) for var_info in noaa_idx_data_vars
-        )
-        vars_suffix = f"{vars_str}-{vars_hash}"
-        local_path = Path(directory, f"{local_base_file_name}.{vars_suffix}")
 
         # print("Downloading", remote_path.split("/")[-1], vars_suffix)
 
@@ -115,7 +132,8 @@ def download_file(
 
         return coords, local_path
 
-    except Exception:
+    except Exception as e:
+        print("Download failed", vars_str, e)
         return coords, None
 
 
@@ -134,6 +152,39 @@ def get_noaa_file_type_for_lead_time(
             return "b"
     else:
         return noaa_file_type
+
+
+def generate_chunk_coordinates(
+    chunk_init_times: Iterable[pd.Timestamp],
+    chunk_ensemble_members: Iterable[int],
+    chunk_lead_times: Iterable[pd.Timedelta],
+    statistics: Iterable[EnsembleStatistic],
+) -> ChunkCoordinates:
+    chunk_coords_ensemble: list[EnsembleSourceFileCoords] = [
+        {
+            "init_time": init_time,
+            "ensemble_member": ensemble_member,
+            "lead_time": lead_time,
+        }
+        for init_time, ensemble_member, lead_time in product(
+            chunk_init_times, chunk_ensemble_members, chunk_lead_times
+        )
+    ]
+
+    chunk_coords_statistic: list[StatisticSourceFileCoords] = [
+        {
+            "init_time": init_time,
+            "statistic": statistic,
+            "lead_time": lead_time,
+        }
+        for init_time, statistic, lead_time in product(
+            chunk_init_times, statistics, chunk_lead_times
+        )
+    ]
+    return {
+        "ensemble": chunk_coords_ensemble,
+        "statistic": chunk_coords_statistic,
+    }
 
 
 def parse_index_byte_ranges(
@@ -203,12 +254,24 @@ def read_into(
         else:
             raise AssertionError(f"Unexpected lead time hours: {lead_hours}")
 
-    raw_data = read_rasterio(
-        path,
-        grib_element,
-        data_var.internal_attrs.grib_description,
-    )
-    out.loc[coords] = maybe_resample(raw_data, coords, data_var)
+    # The statistic "dimension" is flattened into the variable names (eg. temperature_2m_avg),
+    # so remove the statistic coordinate from coords used to index into xarray Dataset/DataArray.
+    if "statistic" in coords:
+        ds_coords = {k: v for k, v in coords.items() if k != "statistic"}
+    else:
+        ds_coords = dict(coords)
+
+    try:
+        raw_data = read_rasterio(
+            path,
+            grib_element,
+            data_var.internal_attrs.grib_description,
+        )
+    except Exception as e:
+        print("Read failed", coords, e)
+        return
+
+    out.loc[ds_coords] = maybe_resample(raw_data, coords, data_var)
 
 
 def maybe_resample(

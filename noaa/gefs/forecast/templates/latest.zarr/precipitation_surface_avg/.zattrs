@@ -1,0 +1,14 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "init_time",
+        "lead_time",
+        "latitude",
+        "longitude"
+    ],
+    "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
+    "ensemble_statistic": "avg",
+    "long_name": "Total Precipitation",
+    "short_name": "tp",
+    "step_type": "accum",
+    "units": "kg/(m^2)"
+}

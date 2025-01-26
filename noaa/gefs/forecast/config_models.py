@@ -43,12 +43,16 @@ class StatisticsApproximate(FrozenBaseModel):
     max: str | int | float
 
 
+type EnsembleStatistic = Literal["avg"]  # "spr" (spread) is also available
+
+
 class DataVarAttrs(FrozenBaseModel):
     long_name: str
     short_name: str
     standard_name: str | None = None
     units: str
     step_type: Literal["instant", "accum", "avg", "min", "max"]
+    ensemble_statistic: EnsembleStatistic | None = None
 
 
 class InternalAttrs(FrozenBaseModel):

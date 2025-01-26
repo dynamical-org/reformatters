@@ -1,0 +1,14 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "init_time",
+        "lead_time",
+        "latitude",
+        "longitude"
+    ],
+    "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
+    "ensemble_statistic": "avg",
+    "long_name": "Surface downward short-wave radiation flux",
+    "short_name": "sdswrf",
+    "step_type": "avg",
+    "units": "W/(m^2)"
+}

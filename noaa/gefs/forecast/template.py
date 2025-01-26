@@ -1,6 +1,6 @@
 from collections.abc import Hashable
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import dask
 import dask.array
@@ -13,11 +13,15 @@ from common.types import DatetimeLike, StoreLike
 
 from .config_models import Coordinate, DataVar
 from .template_config import (
-    CHUNKS,
-    CHUNKS_ORDERED,
     COORDINATES,
     DATASET_ATTRIBUTES,
-    DIMS,
+    ENSEMBLE_VAR_CHUNKS,
+    ENSEMBLE_VAR_CHUNKS_ORDERED,
+    ENSEMBLE_VAR_DIMS,
+    STATISTIC_VAR_CHUNKS,
+    STATISTIC_VAR_CHUNKS_ORDERED,
+    STATISTIC_VAR_DIMS,
+    Dim,
     get_init_time_coordinates,
     get_template_dimension_coordinates,
 )
@@ -34,7 +38,8 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     # Expand init_time dimension with complete coordinates
     ds = ds.reindex(init_time=get_init_time_coordinates(init_time_end))
     # Init time chunks are 1 when stored, set them to desired.
-    ds = ds.chunk(init_time=CHUNKS["init_time"])
+    assert ENSEMBLE_VAR_CHUNKS["init_time"] == STATISTIC_VAR_CHUNKS["init_time"]
+    ds = ds.chunk(init_time=ENSEMBLE_VAR_CHUNKS["init_time"])
     # Recompute derived coordinates after reindex
     ds = add_derived_coordinates(ds)
 
@@ -48,11 +53,13 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     #     ds = ds[
     #         [
     #             "wind_u_100m",
-    #             "wind_v_100m",
     #             "wind_u_10m",
-    #             "wind_v_10m",
+    #             "wind_u_10m_avg",
     #             "temperature_2m",
+    #             "temperature_2m_avg",
     #             "precipitation_surface",
+    #             "precipitation_surface_avg",
+    #             "percent_frozen_precipitation_surface",
     #         ]
     #     ].sel(
     #         ensemble_member=slice(3),
@@ -69,15 +76,7 @@ def update_template() -> None:
     coords = get_template_dimension_coordinates()
 
     data_vars = {
-        var_config.name: (
-            DIMS,
-            dask.array.full(  # type: ignore
-                shape=tuple(len(coords[dim]) for dim in DIMS),
-                fill_value=np.nan,
-                dtype=var_config.encoding.dtype,
-                chunks=CHUNKS_ORDERED,
-            ),
-        )
+        var_config.name: construct_data_variable(var_config, coords)
         for var_config in DATA_VARIABLES
     }
 
@@ -144,6 +143,28 @@ def assign_var_metadata(
     return var
 
 
+def construct_data_variable(
+    var_config: DataVar, coords: dict[Dim, Any]
+) -> tuple[tuple[Dim, ...], dask.array.Array]:  # type: ignore[name-defined]
+    if var_config.attrs.ensemble_statistic is None:
+        dims = ENSEMBLE_VAR_DIMS
+        chunks = ENSEMBLE_VAR_CHUNKS_ORDERED
+    else:
+        dims = STATISTIC_VAR_DIMS
+        chunks = STATISTIC_VAR_CHUNKS_ORDERED
+
+    shape = tuple(len(coords[dim]) for dim in dims)
+
+    array = dask.array.full(  # type: ignore
+        shape=shape,
+        fill_value=np.nan,
+        dtype=var_config.encoding.dtype,
+        chunks=chunks,
+    )
+
+    return dims, array
+
+
 def write_metadata(
     template_ds: xr.Dataset,
     store: StoreLike,
@@ -153,6 +174,6 @@ def write_metadata(
     print(f"Wrote metadata to {store} with mode {mode}.")
 
 
-def chunk_args(ds: xr.Dataset) -> dict[Hashable, int]:
+def chunk_args(da: xr.DataArray) -> dict[Hashable, int]:
     """Returns {dim: chunk_size} mapping suitable to pass to ds.chunk()"""
-    return {dim: chunk_sizes[0] for dim, chunk_sizes in ds.chunksizes.items()}
+    return {dim: chunk_sizes[0] for dim, chunk_sizes in da.chunksizes.items()}

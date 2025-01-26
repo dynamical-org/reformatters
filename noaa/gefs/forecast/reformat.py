@@ -6,7 +6,7 @@ from collections import defaultdict, deque
 from collections.abc import Callable, Generator, Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
 from functools import cache, partial
-from itertools import batched, groupby, islice, product, starmap
+from itertools import batched, groupby, islice, pairwise, starmap
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
@@ -22,11 +22,12 @@ from common.config import Config  # noqa:F401
 from common.download_directory import cd_into_download_directory
 from common.types import Array1D, DatetimeLike, StoreLike
 from noaa.gefs.forecast import template
-from noaa.gefs.forecast.config_models import DataVar
+from noaa.gefs.forecast.config_models import DataVar, EnsembleStatistic
 from noaa.gefs.forecast.read_data import (
     NoaaFileType,
     SourceFileCoords,
     download_file,
+    generate_chunk_coordinates,
     read_into,
 )
 
@@ -279,6 +280,11 @@ def reformat_init_time_i_slices(
     data_var_groups = group_data_vars_by_noaa_file_type(
         [d for d in template.DATA_VARIABLES if d.name in template_ds]
     )
+    ensemble_statistics: set[EnsembleStatistic] = {
+        statistic
+        for var in template_ds.data_vars.values()
+        if (statistic := var.attrs.get("ensemble_statistic")) is not None
+    }
 
     wait_executor = ThreadPoolExecutor(max_workers=2)
     io_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
@@ -295,25 +301,29 @@ def reformat_init_time_i_slices(
         chunk_init_times = pd.to_datetime(chunk_template_ds["init_time"].values)
         chunk_lead_times = pd.to_timedelta(chunk_template_ds["lead_time"].values)
         chunk_ensemble_members = chunk_template_ds["ensemble_member"].values
-        chunk_coords: list[SourceFileCoords] = [
-            {
-                "init_time": init_time,
-                "ensemble_member": ensemble_member,
-                "lead_time": lead_time,
-            }
-            for init_time, ensemble_member, lead_time in product(
-                chunk_init_times, chunk_ensemble_members, chunk_lead_times
-            )
-        ]
+
+        chunk_coords_by_type = generate_chunk_coordinates(
+            chunk_init_times,
+            chunk_ensemble_members,
+            chunk_lead_times,
+            ensemble_statistics,
+        )
 
         chunk_init_times_str = ", ".join(chunk_init_times.strftime("%Y-%m-%dT%H:%M"))
         print("Starting chunk with init times", chunk_init_times_str)
 
         with cd_into_download_directory() as directory:
             download_var_group_futures: dict[
-                Future[list[tuple[SourceFileCoords, Path | None]]], tuple[DataVar, ...]
+                Future[list[tuple[SourceFileCoords, Path | None]]],
+                tuple[DataVar, ...],
             ] = {}
-            for noaa_file_type, data_vars in data_var_groups:
+            for noaa_file_type, ensemble_statistic, data_vars in data_var_groups:
+                chunk_coords: Iterable[SourceFileCoords]
+                if ensemble_statistic is None:
+                    chunk_coords = chunk_coords_by_type["ensemble"]
+                else:
+                    chunk_coords = chunk_coords_by_type["statistic"]
+
                 download_var_group_futures[
                     wait_executor.submit(
                         download_var_group_files,
@@ -336,15 +346,14 @@ def reformat_init_time_i_slices(
                 for init_time, init_time_coords_and_paths in groupby(
                     coords_and_paths, key=lambda v: v[0]["init_time"]
                 ):
-                    max_ingested_lead_time = max(
-                        filter(
-                            lambda coord_and_path: coord_and_path[1] is not None,
-                            init_time_coords_and_paths,
-                        ),
-                        key=lambda coord_and_path: coord_and_path[0]["lead_time"],
-                        default=({"lead_time": pd.Timedelta("NaT")},),
-                    )[0]["lead_time"]
-                    max_lead_times[init_time] = max_ingested_lead_time
+                    ingested_lead_times = [
+                        coord["lead_time"]
+                        for coord, path in init_time_coords_and_paths
+                        if path is not None
+                    ]
+                    max_lead_times[init_time] = max(
+                        ingested_lead_times, default=pd.Timedelta("NaT")
+                    )
 
                 # Write variable by variable to avoid blowing up memory usage
                 for data_var in data_vars:
@@ -381,7 +390,7 @@ def reformat_init_time_i_slices(
                     )
 
                     print(f"Writing {data_var.name} {chunk_init_times_str}")
-                    chunks = template.chunk_args(chunk_template_ds)
+                    chunks = template.chunk_args(chunk_template_ds[data_var.name])
                     data_array.chunk(chunks).to_zarr(store, region="auto")
                     yield (data_var, max_lead_times)
                 # Reclaim space once done.
@@ -421,19 +430,19 @@ def download_var_group_files(
 
 def group_data_vars_by_noaa_file_type(
     data_vars: Iterable[DataVar], group_size: int = 4
-) -> list[tuple[NoaaFileType, tuple[DataVar, ...]]]:
+) -> list[tuple[NoaaFileType, EnsembleStatistic | None, tuple[DataVar, ...]]]:
     grouper = defaultdict(list)
     for data_var in data_vars:
         noaa_file_type = data_var.internal_attrs.noaa_file_type
-        grouper[noaa_file_type].append(data_var)
+        grouper[(noaa_file_type, data_var.attrs.ensemble_statistic)].append(data_var)
     chunks = []
-    for file_type, idx_data_vars in grouper.items():
+    for (file_type, ensemble_statistic), idx_data_vars in grouper.items():
         idx_data_vars = sorted(
             idx_data_vars, key=lambda data_var: data_var.internal_attrs.index_position
         )
         chunks.extend(
             [
-                (file_type, data_vars_chunk)
+                (file_type, ensemble_statistic, data_vars_chunk)
                 for data_vars_chunk in batched(idx_data_vars, group_size)
             ]
         )
@@ -480,9 +489,14 @@ def get_mode(store: StoreLike) -> Literal["w-", "w"]:
 
 def chunk_i_slices(ds: xr.Dataset, dim: str) -> Iterable[slice]:
     """Returns the integer offset slices which correspond to each chunk along `dim` of `ds`."""
-    stop_idx = np.cumsum(ds.chunksizes[dim])  # 2, 4, 6
-    start_idx = np.insert(stop_idx, 0, 0)  # 0, 2, 4, 6
-    return starmap(slice, zip(start_idx, stop_idx, strict=False))  # (0,2), (2,4), (4,6)
+    vars_dim_chunk_sizes = {var.chunksizes[dim] for var in ds.data_vars.values()}
+    assert (
+        len(vars_dim_chunk_sizes) == 1
+    ), f"Inconsistent chunk sizes among data variables along update dimension ({dim}): {vars_dim_chunk_sizes}"
+    dim_chunk_sizes = next(iter(vars_dim_chunk_sizes))  # eg. 2, 2, 2
+    stop_idx = np.cumsum(dim_chunk_sizes)  # eg.    2, 4, 6
+    start_idx = np.insert(stop_idx, 0, 0)  # eg. 0, 2, 4, 6
+    return starmap(slice, pairwise(start_idx))  # eg. slice(0,2), slice(2,4), slice(4,6)
 
 
 def consume[T](iterator: Iterable[T], n: int | None = None) -> None:
