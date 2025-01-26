@@ -71,13 +71,14 @@ assert DIMS == tuple(CHUNKS.keys())
 CHUNKS_ORDERED = tuple(CHUNKS[dim] for dim in DIMS)
 
 # The init time dimension is our append dimension during updates.
-# We also want coordinates to be in a single array for dataset open speed.
+# We also want coordinates to be in a single chunk for dataset open speed.
 # By fixing the chunk size for coordinates along the append dimension to
-# something much larger than we will be really using, the array is always
+# something much larger than we will really use, the array is always
 # a fixed underlying chunk size and values in it can be safely updated
 # prior to metadata document updates that increase the reported array size.
 # This is a zarr format hack to allow expanding an array safely and requires
-# that new array values are written strictly before new metadata is written.
+# that new array values are written strictly before new metadata is written
+# (doing this correctly is a key benefit of icechunk).
 INIT_TIME_COORDINATE_CHUNK_SIZE = int(pd.Timedelta(days=365 * 15) / INIT_TIME_FREQUENCY)
 
 ENCODING_FLOAT32_DEFAULT = Encoding(
