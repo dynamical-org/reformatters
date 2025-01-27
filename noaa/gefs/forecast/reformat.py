@@ -358,8 +358,8 @@ def reformat_init_time_i_slices(
                 # Write variable by variable to avoid blowing up memory usage
                 for data_var in data_vars:
                     print("Reading", data_var.name)
-                    # Skip reading the 0-hour for accumulated values
-                    if data_var.attrs.step_type == "accum":
+                    # Skip reading the 0-hour for accumulated or last N hours avg values
+                    if data_var.attrs.step_type in ("accum", "avg"):
                         var_coords_and_paths = [
                             coords_and_path
                             for coords_and_path in coords_and_paths
