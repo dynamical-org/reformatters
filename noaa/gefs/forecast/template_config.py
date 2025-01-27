@@ -32,8 +32,9 @@ DATASET_ATTRIBUTES = DatasetAttributes(
 
 # Silly to list dims twice, but typing.get_args() doesn't guarantee the return order,
 # the order in DIMS is important, and type parameters can't be constants.
-type Dim =        Literal["init_time", "ensemble_member", "lead_time", "latitude", "longitude"]  # fmt: off
-DIMS: tuple[Dim, ... ] = ("init_time", "ensemble_member", "lead_time", "latitude", "longitude")  # fmt: off
+type Dim =                     Literal["init_time", "ensemble_member", "lead_time", "latitude", "longitude"]  # fmt: off
+ENSEMBLE_VAR_DIMS: tuple[Dim, ... ] = ("init_time", "ensemble_member", "lead_time", "latitude", "longitude")  # fmt: off
+STATISTIC_VAR_DIMS: tuple[Dim, ...] = ("init_time",                    "lead_time", "latitude", "longitude")  # fmt: off
 
 INIT_TIME_START = pd.Timestamp("2025-01-01T00:00")
 INIT_TIME_FREQUENCY = pd.Timedelta("24h")
@@ -60,15 +61,27 @@ def get_init_time_coordinates(
     )
 
 
-CHUNKS: dict[Dim, int] = {
+ENSEMBLE_VAR_CHUNKS: dict[Dim, int] = {
     "init_time": 1,  # one forecast per chunk
     "ensemble_member": 31,  # all ensemble members in one chunk
-    "lead_time": 125,  # all lead times in one chunk
+    "lead_time": 181,  # all lead times in one chunk
     "latitude": 73,  # 10 chunks over 721 pixels
     "longitude": 72,  # 20 chunks over 1440 pixels
 }
-assert DIMS == tuple(CHUNKS.keys())
-CHUNKS_ORDERED = tuple(CHUNKS[dim] for dim in DIMS)
+STATISTIC_VAR_CHUNKS: dict[Dim, int] = {
+    "init_time": 1,  # one forecast per chunk
+    "lead_time": 181,  # all lead times in one chunk
+    # Use 4x larger spatial chunks for ensemble statistic vars because they don't have ensemble dimension
+    "latitude": (73 * 2),  # 5 chunks over 721 pixels
+    "longitude": (72 * 2),  # 10 chunks over 1440 pixels
+}
+assert ENSEMBLE_VAR_DIMS == tuple(ENSEMBLE_VAR_CHUNKS.keys())
+ENSEMBLE_VAR_CHUNKS_ORDERED = tuple(
+    ENSEMBLE_VAR_CHUNKS[dim] for dim in ENSEMBLE_VAR_DIMS
+)
+STATISTIC_VAR_CHUNKS_ORDERED = tuple(
+    STATISTIC_VAR_CHUNKS[dim] for dim in STATISTIC_VAR_DIMS
+)
 
 # The init time dimension is our append dimension during updates.
 # We also want coordinates to be in a single chunk for dataset open speed.
@@ -83,13 +96,13 @@ INIT_TIME_COORDINATE_CHUNK_SIZE = int(pd.Timedelta(days=365 * 15) / INIT_TIME_FR
 
 ENCODING_FLOAT32_DEFAULT = Encoding(
     dtype="float32",
-    chunks=CHUNKS_ORDERED,
+    chunks=ENSEMBLE_VAR_CHUNKS_ORDERED,
     filters=[BitRound(keepbits=7)],
     compressor=Blosc(cname="zstd", clevel=3, shuffle=Blosc.SHUFFLE),
 )
 ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT = Encoding(
     dtype="float32",
-    chunks=CHUNKS_ORDERED,
+    chunks=ENSEMBLE_VAR_CHUNKS_ORDERED,
     compressor=Blosc(cname="zstd", clevel=3, shuffle=Blosc.SHUFFLE),
 )
 
@@ -225,7 +238,7 @@ COORDINATES: Sequence[Coordinate] = (
 )
 
 
-DATA_VARIABLES: Sequence[DataVar] = (
+_DATA_VARIABLES = (
     # DataVar(
     #     name="visibility_surface",
     #     encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=15_000.0),
@@ -817,3 +830,18 @@ DATA_VARIABLES: Sequence[DataVar] = (
         ),
     ),
 )
+_STATISTIC_DATA_VARIABLES = tuple(
+    replace(
+        var,
+        name=f"{var.name}_{ensemble_statistic}",
+        attrs=replace(var.attrs, ensemble_statistic=ensemble_statistic),
+        encoding=replace(var.encoding, chunks=STATISTIC_VAR_CHUNKS_ORDERED),
+    )
+    for var in _DATA_VARIABLES
+    for ensemble_statistic in ["avg"]
+    # Precomputed ensemble statistic files are not available for "b" files.
+    # Should we compute the statistics ourselves?
+    if var.internal_attrs.noaa_file_type not in ("b", "s+b")
+)
+
+DATA_VARIABLES: Sequence[DataVar] = _DATA_VARIABLES + _STATISTIC_DATA_VARIABLES
