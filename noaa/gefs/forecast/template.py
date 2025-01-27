@@ -80,7 +80,7 @@ def update_template() -> None:
         for var_config in DATA_VARIABLES
     }
 
-    ds = xr.Dataset(data_vars, coords, DATASET_ATTRIBUTES.model_dump())
+    ds = xr.Dataset(data_vars, coords, DATASET_ATTRIBUTES.model_dump(exclude_none=True))
 
     # Skip copying metadata (encoding and attributes) because the
     # coordinates don't already exist on ds. Encoding and attributes

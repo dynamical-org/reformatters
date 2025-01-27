@@ -19,6 +19,9 @@ from .config_models import (
     replace,
 )
 
+INIT_TIME_START = pd.Timestamp("2025-01-01T00:00")
+INIT_TIME_FREQUENCY = pd.Timedelta("24h")
+
 DATASET_ATTRIBUTES = DatasetAttributes(
     dataset_id="noaa-gefs-forecast",
     name="NOAA GEFS forecast",
@@ -26,8 +29,10 @@ DATASET_ATTRIBUTES = DatasetAttributes(
     attribution="NOAA NWS NCEP GEFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
     spatial_domain="Global",
     spatial_resolution="0-240 hours: 0.25 degrees (~20km), 243-840 hours: 0.5 degrees (~40km)",
-    time_domain="Forecasts 2024-01-01 00:00:00 UTC to Present, 0-35 day lead time",
-    time_resolution="3 hour forecast step, forecast initialized every 24 hours",
+    time_domain=f"Forecasts initialized {INIT_TIME_START} UTC to Present",
+    time_resolution="Forecasts initialized every 24 hours.",
+    forecast_domain="Forecast lead time 0-840 hours (0-35 days) ahead",
+    forecast_resolution="Forecast step 0-240 hours: 3 hourly, 243-840 hours: 6 hourly",
 )
 
 # Silly to list dims twice, but typing.get_args() doesn't guarantee the return order,
@@ -35,9 +40,6 @@ DATASET_ATTRIBUTES = DatasetAttributes(
 type Dim =                     Literal["init_time", "ensemble_member", "lead_time", "latitude", "longitude"]  # fmt: off
 ENSEMBLE_VAR_DIMS: tuple[Dim, ... ] = ("init_time", "ensemble_member", "lead_time", "latitude", "longitude")  # fmt: off
 STATISTIC_VAR_DIMS: tuple[Dim, ...] = ("init_time",                    "lead_time", "latitude", "longitude")  # fmt: off
-
-INIT_TIME_START = pd.Timestamp("2025-01-01T00:00")
-INIT_TIME_FREQUENCY = pd.Timedelta("24h")
 
 
 def get_template_dimension_coordinates() -> dict[Dim, Any]:
