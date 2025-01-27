@@ -74,12 +74,12 @@ def download_file(
     else:
         raise ValueError(f"coords must be ensemble or statistic coord, found {coords}.")
 
-    # Accumulated values don't exist in the 0-hour forecast.
+    # Accumulated and last N hour avg values don't exist in the 0-hour forecast.
     if lead_time_hours == 0:
         noaa_idx_data_vars = [
             data_var
             for data_var in noaa_idx_data_vars
-            if data_var.attrs.step_type != "accum"
+            if data_var.attrs.step_type not in ("accum", "avg")
         ]
 
     true_noaa_file_type = get_noaa_file_type_for_lead_time(lead_time, noaa_file_type)
