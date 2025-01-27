@@ -308,7 +308,7 @@
         },
         "expected_forecast_length/.zarray": {
             "chunks": [
-                1
+                5475
             ],
             "compressor": {
                 "blocksize": 0,
@@ -386,7 +386,7 @@
         },
         "ingested_forecast_length/.zarray": {
             "chunks": [
-                1
+                5475
             ],
             "compressor": {
                 "blocksize": 0,
@@ -416,7 +416,7 @@
         },
         "init_time/.zarray": {
             "chunks": [
-                1
+                5475
             ],
             "compressor": {
                 "blocksize": 0,
@@ -926,7 +926,7 @@
         },
         "valid_time/.zarray": {
             "chunks": [
-                1,
+                5475,
                 181
             ],
             "compressor": {

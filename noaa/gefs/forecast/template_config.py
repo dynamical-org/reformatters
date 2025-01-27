@@ -70,6 +70,17 @@ CHUNKS: dict[Dim, int] = {
 assert DIMS == tuple(CHUNKS.keys())
 CHUNKS_ORDERED = tuple(CHUNKS[dim] for dim in DIMS)
 
+# The init time dimension is our append dimension during updates.
+# We also want coordinates to be in a single chunk for dataset open speed.
+# By fixing the chunk size for coordinates along the append dimension to
+# something much larger than we will really use, the array is always
+# a fixed underlying chunk size and values in it can be safely updated
+# prior to metadata document updates that increase the reported array size.
+# This is a zarr format hack to allow expanding an array safely and requires
+# that new array values are written strictly before new metadata is written
+# (doing this correctly is a key benefit of icechunk).
+INIT_TIME_COORDINATE_CHUNK_SIZE = int(pd.Timedelta(days=365 * 15) / INIT_TIME_FREQUENCY)
+
 ENCODING_FLOAT32_DEFAULT = Encoding(
     dtype="float32",
     chunks=CHUNKS_ORDERED,
@@ -93,7 +104,7 @@ COORDINATES: Sequence[Coordinate] = (
             compressor=Blosc(cname="zstd"),
             calendar="proleptic_gregorian",
             units="seconds since 1970-01-01 00:00:00",
-            chunks=-1,
+            chunks=INIT_TIME_COORDINATE_CHUNK_SIZE,
         ),
         attrs=CoordinateAttrs(
             units="seconds since 1970-01-01 00:00:00",
@@ -170,7 +181,7 @@ COORDINATES: Sequence[Coordinate] = (
             compressor=Blosc(cname="zstd"),
             calendar="proleptic_gregorian",
             units="seconds since 1970-01-01 00:00:00",
-            chunks=(-1, -1),
+            chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE, -1),
         ),
         attrs=CoordinateAttrs(
             units="seconds since 1970-01-01 00:00:00",
@@ -185,7 +196,7 @@ COORDINATES: Sequence[Coordinate] = (
             dtype="int64",
             compressor=Blosc(cname="zstd"),
             units="seconds",
-            chunks=-1,
+            chunks=INIT_TIME_COORDINATE_CHUNK_SIZE,
         ),
         attrs=CoordinateAttrs(
             units="seconds",
@@ -201,7 +212,7 @@ COORDINATES: Sequence[Coordinate] = (
             dtype="int64",
             compressor=Blosc(cname="zstd"),
             units="seconds",
-            chunks=-1,
+            chunks=INIT_TIME_COORDINATE_CHUNK_SIZE,
         ),
         attrs=CoordinateAttrs(
             units="seconds",
