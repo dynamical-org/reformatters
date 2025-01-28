@@ -209,12 +209,16 @@ def parse_index_byte_ranges(
         if match[2] != "":
             end_byte = int(match[2])
         else:
-            # TODO run a head request to get the final value,
             # obstore does not support omitting the end byte
-            # to go all the way to the end.
-            raise NotImplementedError(
-                "special handling needed for last variable in index"
-            )
+            # to go all the way to the end of the file, but if
+            # you give a value off the end of the file you get
+            # the rest of the bytes in the file and no more.
+            # So we add a big number, but not too big because
+            # it has to fit in a usize in rust object store,
+            # and hope this code is never adapted to pull
+            # individual grib messages > 10 GiB.
+            # GEFS messages are ~0.5MB.
+            end_byte = start_byte + (10 * (2**30))  # 10 GiB
 
         byte_range_starts.append(start_byte)
         byte_range_ends.append(end_byte)
