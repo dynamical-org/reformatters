@@ -5,7 +5,6 @@ from typing import Any, Literal
 import dask
 import dask.array
 import numpy as np
-import pandas as pd
 import xarray as xr
 
 from common.config import Config  # noqa:F401
@@ -18,6 +17,7 @@ from .template_config import (
     ENSEMBLE_VAR_CHUNKS,
     ENSEMBLE_VAR_CHUNKS_ORDERED,
     ENSEMBLE_VAR_DIMS,
+    EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR,
     STATISTIC_VAR_CHUNKS,
     STATISTIC_VAR_CHUNKS_ORDERED,
     STATISTIC_VAR_DIMS,
@@ -106,11 +106,7 @@ def add_derived_coordinates(ds: xr.Dataset, copy_metadata: bool = True) -> xr.Da
         ),
         "expected_forecast_length": (
             "init_time",
-            np.where(
-                ds["init_time"].dt.hour == 0,
-                pd.Timedelta(hours=840),
-                pd.Timedelta(hours=384),
-            ),  # type: ignore
+            EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR.loc[ds["init_time"].dt.hour],
         ),
         "valid_time": ds["init_time"] + ds["lead_time"],
     }

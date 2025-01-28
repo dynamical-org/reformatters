@@ -108,6 +108,16 @@ ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT = Encoding(
     compressor=Blosc(cname="zstd", clevel=3, shuffle=Blosc.SHUFFLE),
 )
 
+# 00 UTC forecasts have a 35 day lead time, the rest go out 16 days.
+EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR = pd.Series(
+    {
+        0: pd.Timedelta(hours=840),
+        6: pd.Timedelta(hours=384),
+        12: pd.Timedelta(hours=384),
+        18: pd.Timedelta(hours=384),
+    }
+)
+
 _dim_coords = get_template_dimension_coordinates()
 
 COORDINATES: Sequence[Coordinate] = (
