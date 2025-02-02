@@ -21,7 +21,7 @@ from common import string_template
 from common.config import Config  # noqa:F401
 from common.download_directory import cd_into_download_directory
 from common.types import Array1D, DatetimeLike, StoreLike
-from noaa.gefs.forecast import template
+from noaa.gefs.forecast import template, template_config
 from noaa.gefs.forecast.config_models import DataVar, EnsembleStatistic
 from noaa.gefs.forecast.read_data import (
     NoaaFileType,
@@ -53,7 +53,14 @@ def reformat_operational_update() -> None:
     # We make some assumptions about what is safe to parallelize and how to
     # write the data based on the init_time dimension having a chunk size of one.
     # If this changes we will need to refactor.
-    assert all(size == 1 for size in ds.chunksizes[_PROCESSING_CHUNK_DIMENSION])
+    ensemble_vars = [var.name for var in template_config._DATA_VARIABLES]
+    stat_vars = [var.name for var in template_config._STATISTIC_DATA_VARIABLES]
+    assert all(
+        size == 1 for size in ds[ensemble_vars].chunksizes[_PROCESSING_CHUNK_DIMENSION]
+    )
+    assert all(
+        size == 1 for size in ds[stat_vars].chunksizes[_PROCESSING_CHUNK_DIMENSION]
+    )
     new_init_times = template_ds.init_time.loc[
         template_ds.init_time > last_existing_init_time
     ]
@@ -89,7 +96,7 @@ def reformat_operational_update() -> None:
         )
     )
     upload_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
-    template.write_metadata(template_ds, tmp_store, get_mode(final_store))
+    template.write_metadata(template_ds, tmp_store, "w")
     futures = []
     for data_var, max_lead_times in reformat_init_time_i_slices(
         recent_incomplete_init_time_i_slices + new_init_time_i_slices,
@@ -111,7 +118,7 @@ def reformat_operational_update() -> None:
 
     concurrent.futures.wait(futures, return_when="ALL_COMPLETED")
 
-    template.write_metadata(template_ds, tmp_store, get_mode(final_store))
+    template.write_metadata(template_ds, tmp_store, "w")
     copy_zarr_metadata(template_ds, tmp_store, final_store)
 
 
@@ -139,7 +146,7 @@ def copy_data_var(
     tmp_store: Path,
     final_store: fsspec.FSMap,
 ) -> Callable[[], None]:
-    files_to_copy = list(tmp_store.glob(f"{data_var.name}/{chunk_index}.*.*.*.*"))
+    files_to_copy = list(tmp_store.glob(f"{data_var.name}/{chunk_index}.*.*.*"))
 
     def mv_files() -> None:
         print(
@@ -234,7 +241,7 @@ def reformat_kubernetes(
             "WORKERS_TOTAL": workers_total,
             "PARALLELISM": parallelism,
             "CPU": 12,
-            "MEMORY": "100G",
+            "MEMORY": "120G",
             "EPHEMERAL_STORAGE": "60G",
         },
     )
@@ -490,9 +497,9 @@ def get_mode(store: StoreLike) -> Literal["w-", "w"]:
 def chunk_i_slices(ds: xr.Dataset, dim: str) -> Iterable[slice]:
     """Returns the integer offset slices which correspond to each chunk along `dim` of `ds`."""
     vars_dim_chunk_sizes = {var.chunksizes[dim] for var in ds.data_vars.values()}
-    assert (
-        len(vars_dim_chunk_sizes) == 1
-    ), f"Inconsistent chunk sizes among data variables along update dimension ({dim}): {vars_dim_chunk_sizes}"
+    assert len(vars_dim_chunk_sizes) == 1, (
+        f"Inconsistent chunk sizes among data variables along update dimension ({dim}): {vars_dim_chunk_sizes}"
+    )
     dim_chunk_sizes = next(iter(vars_dim_chunk_sizes))  # eg. 2, 2, 2
     stop_idx = np.cumsum(dim_chunk_sizes)  # eg.    2, 4, 6
     start_idx = np.insert(stop_idx, 0, 0)  # eg. 0, 2, 4, 6
