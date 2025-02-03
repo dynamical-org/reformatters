@@ -101,8 +101,11 @@ def update_template() -> None:
 def add_derived_coordinates(ds: xr.Dataset, copy_metadata: bool = True) -> xr.Dataset:
     new_coords = {
         "ingested_forecast_length": (
-            "init_time",
-            np.full(ds["init_time"].size, np.timedelta64("NaT", "ns")),
+            ["init_time", "ensemble_member"],
+            np.full(
+                (ds["init_time"].size, ds["ensemble_member"].size),
+                np.timedelta64("NaT", "ns"),
+            ),
         ),
         "expected_forecast_length": (
             "init_time",
