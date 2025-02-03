@@ -1,4 +1,4 @@
-from collections.abc import Hashable
+from collections.abc import Hashable, Sized
 from pathlib import Path
 from typing import Any, Literal
 
@@ -14,11 +14,9 @@ from .config_models import Coordinate, DataVar
 from .template_config import (
     COORDINATES,
     DATASET_ATTRIBUTES,
-    ENSEMBLE_VAR_CHUNKS,
     ENSEMBLE_VAR_CHUNKS_ORDERED,
     ENSEMBLE_VAR_DIMS,
     EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR,
-    STATISTIC_VAR_CHUNKS,
     STATISTIC_VAR_CHUNKS_ORDERED,
     STATISTIC_VAR_DIMS,
     Dim,
@@ -36,12 +34,9 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     ds: xr.Dataset = xr.open_zarr(TEMPLATE_PATH)
 
     # Expand init_time dimension with complete coordinates
-    ds = ds.reindex(init_time=get_init_time_coordinates(init_time_end))
-    # Init time chunks are 1 when stored, set them to desired.
-    assert ENSEMBLE_VAR_CHUNKS["init_time"] == STATISTIC_VAR_CHUNKS["init_time"]
-    ds = ds.chunk(init_time=ENSEMBLE_VAR_CHUNKS["init_time"])
-    # Recompute derived coordinates after reindex
-    ds = add_derived_coordinates(ds)
+    ds = empty_copy_with_reindex(
+        ds, "init_time", get_init_time_coordinates(init_time_end)
+    )
 
     # Coordinates which are dask arrays are not written with .to_zarr(store, compute=False)
     # We want to write all coords when writing metadata, so ensure they are loaded as numpy arrays.
@@ -161,10 +156,41 @@ def construct_data_variable(
     return dims, array
 
 
+def empty_copy_with_reindex(
+    template_ds: xr.Dataset, dim: Dim, new_coords: Sized
+) -> xr.Dataset:
+    # Skip coords where one of the dims is `dim`, those need to
+    # either be provided as new_coords or derived afterwards.
+    coords: dict[Hashable, Sized] = {
+        v: c for v, c in template_ds.coords.items() if dim not in c.dims
+    }
+    coords = {dim: new_coords, **coords}
+
+    ds = xr.Dataset({}, coords, template_ds.attrs.copy())
+
+    ds = add_derived_coordinates(ds, copy_metadata=False)
+
+    for coord_name, template_coord in template_ds.coords.items():
+        ds[coord_name].attrs = template_coord.attrs.copy()
+        ds[coord_name].encoding = template_coord.encoding.copy()
+
+    for var_name, var in template_ds.data_vars.items():
+        empty_array = dask.array.empty(  # type:ignore[attr-defined]
+            shape=[ds.sizes[dim] for dim in var.dims],
+            dtype=var.dtype,
+            chunks=var.encoding["chunks"],
+        )
+        ds[var_name] = (var.dims, empty_array)
+        ds[var_name].attrs = var.attrs.copy()
+        ds[var_name].encoding = var.encoding.copy()
+
+    return ds
+
+
 def write_metadata(
     template_ds: xr.Dataset,
     store: StoreLike,
-    mode: Literal["w", "w-", "a", "a-", "r+", "r"],
+    mode: Literal["w", "w-"],
 ) -> None:
     template_ds.to_zarr(store, mode=mode, compute=False)
     print(f"Wrote metadata to {store} with mode {mode}.")

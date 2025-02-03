@@ -218,7 +218,7 @@ def parse_index_byte_ranges(
             # and hope this code is never adapted to pull
             # individual grib messages > 10 GiB.
             # GEFS messages are ~0.5MB.
-            end_byte = start_byte + (10 * (2**30))  # 10 GiB
+            end_byte = start_byte + (10 * (2**30))  # +10 GiB
 
         byte_range_starts.append(start_byte)
         byte_range_ends.append(end_byte)

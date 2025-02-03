@@ -186,6 +186,7 @@ def reformat_local(init_time_end: DatetimeLike) -> None:
     template_ds = template.get_template(init_time_end)
     store = get_store()
 
+    print("Writing metadata")
     template.write_metadata(template_ds, store, get_mode(store))
 
     print("Starting reformat")
