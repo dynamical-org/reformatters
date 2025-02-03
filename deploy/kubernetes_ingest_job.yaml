@@ -65,8 +65,8 @@ spec:
       securityContext:
         fsGroup: 999  # this is the `app` group our app runs under
       nodeSelector:
-        # eks.amazonaws.com/compute-type: auto
-        # karpenter.sh/capacity-type: spot
-        cloud.google.com/gke-spot: "true"
+        eks.amazonaws.com/compute-type: auto
+        karpenter.sh/capacity-type: spot
+        #cloud.google.com/gke-spot: "true"
         kubernetes.io/arch: amd64
       terminationGracePeriodSeconds: 5

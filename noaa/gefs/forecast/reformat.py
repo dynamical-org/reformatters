@@ -53,7 +53,10 @@ def reformat_operational_update() -> None:
     # We make some assumptions about what is safe to parallelize and how to
     # write the data based on the init_time dimension having a chunk size of one.
     # If this changes we will need to refactor.
-    assert all(size == 1 for size in ds.chunksizes[_PROCESSING_CHUNK_DIMENSION])
+    all(
+        all(1 == val for val in da.chunksizes[_PROCESSING_CHUNK_DIMENSION])
+        for da in ds.data_vars.values()
+    )
     new_init_times = template_ds.init_time.loc[
         template_ds.init_time > last_existing_init_time
     ]
@@ -89,7 +92,7 @@ def reformat_operational_update() -> None:
         )
     )
     upload_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
-    template.write_metadata(template_ds, tmp_store, get_mode(final_store))
+    template.write_metadata(template_ds, tmp_store, get_mode(tmp_store))
     futures = []
     for data_var, max_lead_times in reformat_init_time_i_slices(
         recent_incomplete_init_time_i_slices + new_init_time_i_slices,
@@ -111,7 +114,7 @@ def reformat_operational_update() -> None:
 
     concurrent.futures.wait(futures, return_when="ALL_COMPLETED")
 
-    template.write_metadata(template_ds, tmp_store, get_mode(final_store))
+    template.write_metadata(template_ds, tmp_store, get_mode(tmp_store))
     copy_zarr_metadata(template_ds, tmp_store, final_store)
 
 
@@ -139,7 +142,9 @@ def copy_data_var(
     tmp_store: Path,
     final_store: fsspec.FSMap,
 ) -> Callable[[], None]:
-    files_to_copy = list(tmp_store.glob(f"{data_var.name}/{chunk_index}.*.*.*.*"))
+    files_to_copy = list(
+        tmp_store.glob(f"{data_var.name}/{chunk_index}.*.*.*")
+    )  # matches any chunk with 4 or more dimensions
 
     def mv_files() -> None:
         print(
@@ -164,11 +169,14 @@ def copy_zarr_metadata(
     template_ds: xr.Dataset, tmp_store: Path, final_store: fsspec.FSMap
 ) -> None:
     print(f"Copying metadata to final store ({final_store.root}) from {tmp_store}")
-    # zattrs, zarray, zgroup and zmetadata
-    metadata_files = set(tmp_store.glob("**/.z*"))
+    metadata_files = []
     # Coordinates
     for coord in template_ds.coords:
-        metadata_files.update(set(tmp_store.glob(f"{coord}/*")))
+        metadata_files.extend(list(tmp_store.glob(f"{coord}/*")))
+    # zattrs, zarray, zgroup and zmetadata
+    metadata_files.extend(list(tmp_store.glob("**/.z*")))
+    # deduplicate
+    metadata_files = list(dict.fromkeys(metadata_files))
     for file in metadata_files:
         relative = file.relative_to(tmp_store)
         final_store.fs.put_file(file, f"{final_store.root}/{relative}")
@@ -234,7 +242,7 @@ def reformat_kubernetes(
             "WORKERS_TOTAL": workers_total,
             "PARALLELISM": parallelism,
             "CPU": 12,
-            "MEMORY": "100G",
+            "MEMORY": "120G",
             "EPHEMERAL_STORAGE": "60G",
         },
     )
@@ -476,12 +484,12 @@ def get_store() -> fsspec.FSMap:
 
 @cache
 def get_local_tmp_store() -> Path:
-    return Path(f"data/tmp/tmp-{uuid4()}.zarr").absolute()
+    return Path(f"data/tmp/{uuid4()}-tmp.zarr").absolute()
 
 
 def get_mode(store: StoreLike) -> Literal["w-", "w"]:
     store_root = store.name if isinstance(store, Path) else getattr(store, "root", "")
-    if store_root.endswith("dev.zarr"):
+    if store_root.endswith("dev.zarr") or store_root.endswith("-tmp.zarr"):
         return "w"  # Allow overwritting dev store
 
     return "w-"  # Safe default - don't overwrite
