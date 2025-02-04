@@ -213,6 +213,12 @@ def reformat_kubernetes(
     assert re.fullmatch(r"[0-9a-zA-Z_\.\-\/]{1,1000}", docker_repo)
     image_tag = f"{docker_repo}:{job_timestamp}"
 
+    # Make sure we have permission to create a job before we go through
+    # all the work of building and pushing an image.
+    can_create_k8s_jobs = subprocess.run(  # noqa: S603
+        ["/usr/bin/kubectl", "auth", "can-i", "create", "jobs"], stdout=subprocess.PIPE
+    )
+    assert can_create_k8s_jobs.stdout == b"yes\n"
     subprocess.run(  # noqa: S603  allow passing variable to subprocess, it's realtively sanitized above
         [
             "/usr/bin/docker",
