@@ -1,4 +1,5 @@
 import concurrent.futures
+import logging
 import os
 import re
 import subprocess
@@ -32,6 +33,10 @@ from noaa.gefs.forecast.read_data import (
 )
 
 _PROCESSING_CHUNK_DIMENSION = "init_time"
+
+logging.basicConfig()
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def reformat_operational_update() -> None:
@@ -147,7 +152,7 @@ def copy_data_var(
     )  # matches any chunk with 4 or more dimensions
 
     def mv_files() -> None:
-        print(
+        logger.info(
             f"Copying data var chunks to final store ({final_store.root}) for {data_var.name}."
         )
         try:
@@ -160,7 +165,7 @@ def copy_data_var(
             for file in files_to_copy:
                 file.unlink()
         except Exception as e:
-            print(e)
+            logger.warning(e)
 
     return mv_files
 
@@ -168,7 +173,9 @@ def copy_data_var(
 def copy_zarr_metadata(
     template_ds: xr.Dataset, tmp_store: Path, final_store: fsspec.FSMap
 ) -> None:
-    print(f"Copying metadata to final store ({final_store.root}) from {tmp_store}")
+    logger.info(
+        f"Copying metadata to final store ({final_store.root}) from {tmp_store}"
+    )
     metadata_files = []
     # Coordinates
     for coord in template_ds.coords:
@@ -186,13 +193,13 @@ def reformat_local(init_time_end: DatetimeLike) -> None:
     template_ds = template.get_template(init_time_end)
     store = get_store()
 
-    print("Writing metadata")
+    logger.info("Writing metadata")
     template.write_metadata(template_ds, store, get_mode(store))
 
-    print("Starting reformat")
+    logger.info("Starting reformat")
     # Process all chunks by setting worker_index=0 and worker_total=1
     reformat_chunks(init_time_end, worker_index=0, workers_total=1)
-    print("Done writing to", store)
+    logger.info("Done writing to", store)
 
 
 def reformat_kubernetes(
@@ -221,10 +228,10 @@ def reformat_kubernetes(
     subprocess.run(  # noqa: S603
         ["/usr/bin/docker", "push", image_tag], check=True
     )
-    print("Pushed", image_tag)
+    logger.info(f"Pushed {image_tag}")
 
     store = get_store()
-    print("Writing zarr metadata to ", store)
+    logger.info(f"Writing zarr metadata to {store}")
     template.write_metadata(template_ds, store, get_mode(store))
 
     num_jobs = sum(1 for _ in chunk_i_slices(template_ds, _PROCESSING_CHUNK_DIMENSION))
@@ -255,7 +262,7 @@ def reformat_kubernetes(
         check=True,
     )
 
-    print("Submitted kubernetes job", job_name)
+    logger.info(f"Submitted kubernetes job {job_name}")
 
 
 def reformat_chunks(
@@ -266,6 +273,7 @@ def reformat_chunks(
     template_ds = template.get_template(init_time_end)
     store = get_store()
 
+    logger.info("Getting i slices")
     worker_init_time_i_slices = list(
         get_worker_jobs(
             chunk_i_slices(template_ds, _PROCESSING_CHUNK_DIMENSION),
@@ -274,7 +282,9 @@ def reformat_chunks(
         )
     )
 
-    print(f"This is {worker_index = }, {workers_total = }, {worker_init_time_i_slices}")
+    logger.info(
+        f"This is {worker_index = }, {workers_total = }, {worker_init_time_i_slices}"
+    )
     consume(reformat_init_time_i_slices(worker_init_time_i_slices, template_ds, store))
 
 
@@ -319,7 +329,7 @@ def reformat_init_time_i_slices(
         )
 
         chunk_init_times_str = ", ".join(chunk_init_times.strftime("%Y-%m-%dT%H:%M"))
-        print("Starting chunk with init times", chunk_init_times_str)
+        logger.info(f"Starting chunk with init times {chunk_init_times_str}")
 
         with cd_into_download_directory() as directory:
             download_var_group_futures: dict[
@@ -366,7 +376,7 @@ def reformat_init_time_i_slices(
 
                 # Write variable by variable to avoid blowing up memory usage
                 for data_var in data_vars:
-                    print("Reading", data_var.name)
+                    logger.info(f"Reading {data_var.name}")
                     # Skip reading the 0-hour for accumulated or last N hours avg values
                     if data_var.attrs.step_type in ("accum", "avg"):
                         var_coords_and_paths = [
@@ -398,7 +408,7 @@ def reformat_init_time_i_slices(
                         )
                     )
 
-                    print(f"Writing {data_var.name} {chunk_init_times_str}")
+                    logger.info(f"Writing {data_var.name} {chunk_init_times_str}")
                     (
                         data_array.chunk(
                             template_ds[data_var.name].encoding["preferred_chunks"]
@@ -438,7 +448,7 @@ def download_var_group_files(
         if (e := future.exception()) is not None:
             raise e
 
-    print("Completed download for", [d.name for d in idx_data_vars])
+    logger.info(f"Completed download for {[d.name for d in idx_data_vars]}")
     return [f.result() for f in done]
 
 

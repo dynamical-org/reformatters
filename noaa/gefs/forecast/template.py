@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Sized
 from pathlib import Path
 from typing import Any, Literal
@@ -29,15 +30,21 @@ from .template_config import (
 
 TEMPLATE_PATH = "noaa/gefs/forecast/templates/latest.zarr"
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
 
 def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
+    logger.info("Getting template")
     ds: xr.Dataset = xr.open_zarr(TEMPLATE_PATH)
 
+    logger.info("Creating empty copy with init time dimension")
     # Expand init_time dimension with complete coordinates
     ds = empty_copy_with_reindex(
         ds, "init_time", get_init_time_coordinates(init_time_end)
     )
 
+    logger.info("Loading coordinates")
     # Coordinates which are dask arrays are not written with .to_zarr(store, compute=False)
     # We want to write all coords when writing metadata, so ensure they are loaded as numpy arrays.
     for coordinate in ds.coords.values():
@@ -192,4 +199,4 @@ def write_metadata(
     mode: Literal["w", "w-"],
 ) -> None:
     template_ds.to_zarr(store, mode=mode, compute=False)
-    print(f"Wrote metadata to {store} with mode {mode}.")
+    logger.info(f"Wrote metadata to {store} with mode {mode}.")
