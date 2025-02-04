@@ -391,8 +391,11 @@ def reformat_init_time_i_slices(
                     )
 
                     print(f"Writing {data_var.name} {chunk_init_times_str}")
-                    chunks = template.chunk_args(chunk_template_ds[data_var.name])
-                    data_array.chunk(chunks).to_zarr(store, region="auto")
+                    (
+                        data_array.chunk(
+                            data_array.encoding["preferred_chunks"]
+                        ).to_zarr(store, region="auto")
+                    )
                     yield (data_var, max_lead_times)
                     del data_array
 
