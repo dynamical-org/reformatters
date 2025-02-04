@@ -7,6 +7,6 @@
     "name": "NOAA GEFS forecast",
     "spatial_domain": "Global",
     "spatial_resolution": "0-240 hours: 0.25 degrees (~20km), 243-840 hours: 0.5 degrees (~40km)",
-    "time_domain": "Forecasts initialized 2025-01-01 00:00:00 UTC to Present",
+    "time_domain": "Forecasts initialized 2024-01-01 00:00:00 UTC to Present",
     "time_resolution": "Forecasts initialized every 24 hours."
 }

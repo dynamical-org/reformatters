@@ -19,7 +19,7 @@ from .config_models import (
     replace,
 )
 
-INIT_TIME_START = pd.Timestamp("2025-01-01T00:00")
+INIT_TIME_START = pd.Timestamp("2024-01-01T00:00")
 INIT_TIME_FREQUENCY = pd.Timedelta("24h")
 
 DATASET_ATTRIBUTES = DatasetAttributes(
