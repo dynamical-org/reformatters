@@ -45,7 +45,6 @@ spec:
             cpu: $CPU
             memory: $MEMORY
           limits:
-            cpu: $CPU
             memory: $MEMORY
         volumeMounts:
         - mountPath: "/app/data"
