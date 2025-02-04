@@ -510,7 +510,7 @@ def get_store() -> fsspec.FSMap:
         secret=os.environ["SOURCE_COOP_AWS_SECRET_ACCESS_KEY"],
     )
     store: StoreLike = s3.get_mapper(
-        "s3://us-west-2.opendata.source.coop/dynamical/noaa-gefs-forecast/v0.1.1.zarr"
+        "s3://us-west-2.opendata.source.coop/dynamical/noaa-gefs-forecast/v0.1.0.zarr"
     )
     return store
 
