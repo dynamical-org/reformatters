@@ -70,3 +70,11 @@ spec:
         #cloud.google.com/gke-spot: "true"
         kubernetes.io/arch: amd64
       terminationGracePeriodSeconds: 5
+  podFailurePolicy:
+    rules:
+    - action: Ignore
+      onPodConditions:
+      - type: DisruptionTarget
+    - action: FailJob
+      onPodConditions:
+      - type: ConfigIssue
