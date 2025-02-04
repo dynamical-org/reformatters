@@ -1,4 +1,4 @@
-from collections.abc import Hashable, Sized
+from collections.abc import Sized
 from pathlib import Path
 from typing import Any, Literal
 
@@ -47,9 +47,9 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     # if Config.is_dev():
     #     ds = ds[
     #         [
-    #             "wind_u_100m",
     #             "wind_u_10m",
     #             "wind_u_10m_avg",
+    #             "wind_u_100m",
     #             "temperature_2m",
     #             "temperature_2m_avg",
     #             "precipitation_surface",
@@ -193,8 +193,3 @@ def write_metadata(
 ) -> None:
     template_ds.to_zarr(store, mode=mode, compute=False)
     print(f"Wrote metadata to {store} with mode {mode}.")
-
-
-def chunk_args(da: xr.DataArray) -> dict[Hashable, int]:
-    """Returns {dim: chunk_size} mapping suitable to pass to ds.chunk()"""
-    return {dim: chunk_sizes[0] for dim, chunk_sizes in da.chunksizes.items()}
