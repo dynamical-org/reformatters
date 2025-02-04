@@ -401,7 +401,7 @@ def reformat_init_time_i_slices(
                     print(f"Writing {data_var.name} {chunk_init_times_str}")
                     (
                         data_array.chunk(
-                            data_array.encoding["preferred_chunks"]
+                            template_ds[data_var.name].encoding["preferred_chunks"]
                         ).to_zarr(store, region="auto")
                     )
                     yield (data_var, max_lead_times)
