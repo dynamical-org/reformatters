@@ -191,7 +191,7 @@ COORDINATES: Sequence[Coordinate] = (
             chunks=-1,
         ),
         attrs=CoordinateAttrs(
-            units="degrees_south",
+            units="degrees_east",
             statistics_approximate=StatisticsApproximate(
                 min=_dim_coords["longitude"].min(),
                 max=_dim_coords["longitude"].max(),
