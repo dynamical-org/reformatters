@@ -394,6 +394,8 @@ def reformat_init_time_i_slices(
                     chunks = template.chunk_args(chunk_template_ds[data_var.name])
                     data_array.chunk(chunks).to_zarr(store, region="auto")
                     yield (data_var, max_lead_times)
+                    del data_array
+
                 # Reclaim space once done.
                 for _, filepath in coords_and_paths:
                     if filepath is not None:
