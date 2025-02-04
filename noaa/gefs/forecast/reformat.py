@@ -9,7 +9,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from functools import cache, partial
 from itertools import batched, groupby, islice, pairwise, starmap
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from uuid import uuid4
 
 import fsspec  # type: ignore
@@ -295,10 +295,14 @@ def reformat_chunks(
     consume(reformat_init_time_i_slices(worker_init_time_i_slices, template_ds, store))
 
 
+# Integer ensemble member or an ensemble statistic
+type EnsOrStat = int | np.integer[Any] | str
+
+
 def reformat_init_time_i_slices(
     init_time_i_slices: list[slice], template_ds: xr.Dataset, store: StoreLike
 ) -> Generator[
-    tuple[DataVar, dict[tuple[pd.Timestamp, int | str], pd.Timedelta]], None, None
+    tuple[DataVar, dict[tuple[pd.Timestamp, EnsOrStat], pd.Timedelta]], None, None
 ]:
     """
     Helper function to reformat the chunk data.
@@ -370,15 +374,22 @@ def reformat_init_time_i_slices(
                 coords_and_paths = future.result()
                 data_vars = download_var_group_futures[future]
 
-                def groupbykey(v: tuple[SourceFileCoords, Path | None]):
-                    init_time_portion = v[0]["init_time"]
-                    if "ensemble_member" in v[0]:
-                        ensemble_portion = v[0]["ensemble_member"]
-                    else:
-                        ensemble_portion = v[0]["statistic"]
-                    return (init_time_portion, ensemble_portion)
+                def groupbykey(
+                    v: tuple[SourceFileCoords, Path | None],
+                ) -> tuple[pd.Timestamp, EnsOrStat]:
+                    coords, _ = v
 
-                max_lead_times: dict[tuple[pd.Timestamp, int | str], pd.Timedelta] = {}
+                    ensemble_portion: EnsOrStat
+                    if isinstance(
+                        ensemble_member := coords.get("ensemble_member"),
+                        int | np.integer,
+                    ):
+                        ensemble_portion = ensemble_member
+                    elif isinstance(statistic := coords.get("statistic"), str):
+                        ensemble_portion = statistic
+                    return (coords["init_time"], ensemble_portion)
+
+                max_lead_times: dict[tuple[pd.Timestamp, EnsOrStat], pd.Timedelta] = {}
                 for (init_time, ensemble_member), init_time_coords_and_paths in groupby(
                     sorted(coords_and_paths, key=groupbykey), key=groupbykey
                 ):
