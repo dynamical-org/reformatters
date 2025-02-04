@@ -160,10 +160,8 @@ def empty_copy_with_reindex(
     template_ds: xr.Dataset, dim: Dim, new_coords: Sized
 ) -> xr.Dataset:
     # Skip coords where one of the dims is `dim`, those need to
-    # either be provided as new_coords or derived afterwards.
-    coords: dict[Hashable, Sized] = {
-        v: c for v, c in template_ds.coords.items() if dim not in c.dims
-    }
+    # either be provided as `new_coords` or derived afterwards.
+    coords = {v: c for v, c in template_ds.coords.items() if dim not in c.dims}
     coords = {dim: new_coords, **coords}
 
     ds = xr.Dataset({}, coords, template_ds.attrs.copy())
@@ -175,12 +173,13 @@ def empty_copy_with_reindex(
         ds[coord_name].encoding = template_coord.encoding.copy()
 
     for var_name, var in template_ds.data_vars.items():
-        empty_array = dask.array.empty(  # type:ignore[attr-defined]
+        nan_array = dask.array.full(  # type:ignore[no-untyped-call,attr-defined]
+            fill_value=np.nan,
             shape=[ds.sizes[dim] for dim in var.dims],
             dtype=var.dtype,
             chunks=var.encoding["chunks"],
         )
-        ds[var_name] = (var.dims, empty_array)
+        ds[var_name] = (var.dims, nan_array)
         ds[var_name].attrs = var.attrs.copy()
         ds[var_name].encoding = var.encoding.copy()
 
