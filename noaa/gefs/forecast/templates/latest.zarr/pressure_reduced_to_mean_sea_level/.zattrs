@@ -7,7 +7,7 @@
         "longitude"
     ],
     "add_offset": 101000.0,
-    "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
+    "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "long_name": "Pressure reduced to MSL",
     "short_name": "prmsl",
     "step_type": "instant",

@@ -1,6 +1,7 @@
 {
     "_ARRAY_DIMENSIONS": [
-        "init_time"
+        "init_time",
+        "ensemble_member"
     ],
     "statistics_approximate": {
         "max": "35 days 00:00:00",

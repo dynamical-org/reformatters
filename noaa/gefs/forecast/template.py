@@ -6,6 +6,7 @@ from typing import Any, Literal
 import dask
 import dask.array
 import numpy as np
+import rioxarray  # noqa: F401  Adds .rio accessor to datasets
 import xarray as xr
 
 from common.config import Config  # noqa:F401
@@ -89,12 +90,19 @@ def update_template() -> None:
     # will be added from the COORDINATES configs below.
     ds = add_derived_coordinates(ds, copy_metadata=False)
 
+    # Add coordinate reference system for out of the box rioxarray support
+    ds = ds.rio.write_crs("EPSG:4326")
+
     assert {d.name for d in DATA_VARIABLES} == set(ds.data_vars)
     for var_config in DATA_VARIABLES:
         assign_var_metadata(ds[var_config.name], var_config)
 
     assert {c.name for c in COORDINATES} == set(ds.coords)
     for coord_config in COORDINATES:
+        # Don't overwrite -- retain the attributes that .rio.write_crs adds
+        if coord_config.name == "spatial_ref":
+            continue
+
         assign_var_metadata(ds.coords[coord_config.name], coord_config)
 
     write_metadata(ds, template_path, mode="w")

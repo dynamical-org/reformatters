@@ -6,5 +6,5 @@
         "max": 179.75,
         "min": -180.0
     },
-    "units": "degrees_south"
+    "units": "degrees_east"
 }

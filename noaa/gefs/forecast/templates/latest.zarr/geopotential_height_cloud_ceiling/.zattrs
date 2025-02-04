@@ -6,7 +6,7 @@
         "latitude",
         "longitude"
     ],
-    "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
+    "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "long_name": "Geopotential height",
     "short_name": "gh",
     "standard_name": "geopotential_height",

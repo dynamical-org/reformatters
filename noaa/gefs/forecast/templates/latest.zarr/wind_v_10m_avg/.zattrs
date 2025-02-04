@@ -5,7 +5,7 @@
         "latitude",
         "longitude"
     ],
-    "coordinates": "expected_forecast_length ingested_forecast_length valid_time",
+    "coordinates": "expected_forecast_length spatial_ref valid_time",
     "ensemble_statistic": "avg",
     "long_name": "10 metre V wind component",
     "short_name": "v10",

@@ -221,7 +221,7 @@ COORDINATES: Sequence[Coordinate] = (
             dtype="int64",
             compressor=Blosc(cname="zstd"),
             units="seconds",
-            chunks=INIT_TIME_COORDINATE_CHUNK_SIZE,
+            chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE, -1),
         ),
         attrs=CoordinateAttrs(
             units="seconds",
@@ -244,6 +244,20 @@ COORDINATES: Sequence[Coordinate] = (
             statistics_approximate=StatisticsApproximate(
                 min=str(_dim_coords["lead_time"].min()),
                 max=str(_dim_coords["lead_time"].max()),
+            ),
+        ),
+    ),
+    Coordinate(
+        name="spatial_ref",
+        encoding=Encoding(
+            dtype="int64",
+            chunks=-1,
+        ),
+        attrs=CoordinateAttrs(
+            units="unitless",
+            statistics_approximate=StatisticsApproximate(
+                min=0,
+                max=0,
             ),
         ),
     ),
