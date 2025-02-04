@@ -59,3 +59,12 @@ spec:
           nodeSelector:
             cloud.google.com/gke-spot: "true"
           terminationGracePeriodSeconds: 5
+      
+      podFailurePolicy:
+        rules:
+        - action: Ignore
+          onPodConditions:
+          - type: DisruptionTarget
+        - action: FailJob
+          onPodConditions:
+          - type: ConfigIssue
