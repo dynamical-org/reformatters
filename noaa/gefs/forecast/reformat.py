@@ -104,10 +104,11 @@ def reformat_operational_update() -> None:
         template_ds,
         tmp_store,
     ):
-        for init_time, max_lead_time in max_lead_times.items():
-            template_ds["ingested_forecast_length"].loc[{"init_time": init_time}] = (
-                max_lead_time
-            )
+        for (init_time, ensemble_member), max_lead_time in max_lead_times.items():
+            if np.issubdtype(type(ensemble_member), np.integer):
+                template_ds["ingested_forecast_length"].loc[
+                    {"init_time": init_time, "ensemble_member": ensemble_member}
+                ] = max_lead_time
             # This only works because we know that chunks are size 1 in the
             # init_time dimension.
             chunk_index: int = template_ds.get_index("init_time").get_loc(init_time)  # type: ignore
@@ -129,12 +130,18 @@ def get_recent_init_times_for_reprocessing(ds: xr.Dataset) -> Array1D[np.datetim
         ds.init_time > pd.Timestamp.utcnow().tz_localize(None) - np.timedelta64(4, "D"),
         drop=True,
     ).load()
+    # Ingested forecast length is along init time and ensemble member.
+    # We care if any of the ensemble members for this init time
+    # are not fully ingested.
+    recent_init_times["reduced_ingested_forecast_length"] = (
+        ds.ingested_forecast_length.min(dim="ensemble_member")
+    )
     # Get the recent init_times where we have only partially completed
     # the ingest.
     return recent_init_times.where(  # type: ignore
-        (recent_init_times.ingested_forecast_length.isnull())
+        (recent_init_times.reduced_ingested_forecast_length.isnull())
         | (
-            recent_init_times.ingested_forecast_length
+            recent_init_times.reduced_ingested_forecast_length
             < recent_init_times.expected_forecast_length
         ),
         drop=True,
@@ -290,7 +297,9 @@ def reformat_chunks(
 
 def reformat_init_time_i_slices(
     init_time_i_slices: list[slice], template_ds: xr.Dataset, store: StoreLike
-) -> Generator[tuple[DataVar, dict[pd.Timestamp, pd.Timedelta]], None, None]:
+) -> Generator[
+    tuple[DataVar, dict[tuple[pd.Timestamp, int | str], pd.Timedelta]], None, None
+]:
     """
     Helper function to reformat the chunk data.
     Yields the data variable/init time combinations and their corresponding maximum
@@ -361,16 +370,24 @@ def reformat_init_time_i_slices(
                 coords_and_paths = future.result()
                 data_vars = download_var_group_futures[future]
 
-                max_lead_times: dict[pd.Timestamp, pd.Timedelta] = {}
-                for init_time, init_time_coords_and_paths in groupby(
-                    coords_and_paths, key=lambda v: v[0]["init_time"]
+                def groupbykey(v: tuple[SourceFileCoords, Path | None]):
+                    init_time_portion = v[0]["init_time"]
+                    if "ensemble_member" in v[0]:
+                        ensemble_portion = v[0]["ensemble_member"]
+                    else:
+                        ensemble_portion = v[0]["statistic"]
+                    return (init_time_portion, ensemble_portion)
+
+                max_lead_times: dict[tuple[pd.Timestamp, int | str], pd.Timedelta] = {}
+                for (init_time, ensemble_member), init_time_coords_and_paths in groupby(
+                    sorted(coords_and_paths, key=groupbykey), key=groupbykey
                 ):
                     ingested_lead_times = [
                         coord["lead_time"]
                         for coord, path in init_time_coords_and_paths
                         if path is not None
                     ]
-                    max_lead_times[init_time] = max(
+                    max_lead_times[(init_time, ensemble_member)] = max(
                         ingested_lead_times, default=pd.Timedelta("NaT")
                     )
 
