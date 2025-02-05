@@ -44,8 +44,6 @@ spec:
           requests:
             cpu: $CPU
             memory: $MEMORY
-          limits:
-            memory: $MEMORY
         volumeMounts:
         - mountPath: "/app/data"
           name: ephemeral-vol

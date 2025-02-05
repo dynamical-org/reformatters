@@ -256,8 +256,8 @@ def reformat_kubernetes(
             "INIT_TIME_END": pd.Timestamp(init_time_end).isoformat(),
             "WORKERS_TOTAL": workers_total,
             "PARALLELISM": parallelism,
-            "CPU": 12,
-            "MEMORY": "80G",
+            "CPU": 6,
+            "MEMORY": "40G",
             "EPHEMERAL_STORAGE": "60G",
         },
     )
@@ -320,7 +320,7 @@ def reformat_init_time_i_slices(
 
     wait_executor = ThreadPoolExecutor(max_workers=2)
     io_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
-    cpu_executor = ThreadPoolExecutor(max_workers=int(os.cpu_count() or 1))
+    cpu_executor = ThreadPoolExecutor(max_workers=int((os.cpu_count() or 1) * 1.5))
 
     # # If we compile eccodes ourselves with thread safety enabled we could use threads for reading
     # # https://confluence.ecmwf.int/display/ECC/ecCodes+installation ENABLE_ECCODES_THREADS
