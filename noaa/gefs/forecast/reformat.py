@@ -1,4 +1,5 @@
 import concurrent.futures
+import gc
 import logging
 import os
 import re
@@ -438,7 +439,9 @@ def reformat_init_time_i_slices(
                         ).to_zarr(store, region="auto")
                     )
                     yield (data_var, max_lead_times)
+
                     del data_array
+                    gc.collect()
 
                 # Reclaim space once done.
                 for _, filepath in coords_and_paths:
