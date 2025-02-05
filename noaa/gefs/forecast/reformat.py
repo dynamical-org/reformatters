@@ -322,11 +322,6 @@ def reformat_init_time_i_slices(
     io_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
     cpu_executor = ThreadPoolExecutor(max_workers=int((os.cpu_count() or 1) * 1.5))
 
-    # # If we compile eccodes ourselves with thread safety enabled we could use threads for reading
-    # # https://confluence.ecmwf.int/display/ECC/ecCodes+installation ENABLE_ECCODES_THREADS
-    # # but make sure to read thread safety comment in our `read_data` function.
-    # proccess_executor = ProcessPoolExecutor(max_workers=os.cpu_count())
-
     for init_time_i_slice in init_time_i_slices:
         chunk_template_ds = template_ds.isel(init_time=init_time_i_slice)
 
