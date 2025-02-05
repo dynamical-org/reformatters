@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Literal, TypedDict
 
 import numpy as np
-import obstore  # type: ignore
+import obstore
 import pandas as pd
 import rasterio  # type: ignore
 import requests
@@ -366,6 +366,7 @@ def download_to_disk(
 
     local_path.parent.mkdir(parents=True, exist_ok=True)
 
+    response_buffers: obstore.BytesStream | list[obstore.Bytes]
     if byte_ranges is not None:
         byte_range_starts, byte_range_ends = byte_ranges[0], byte_ranges[1]
         response_buffers = obstore.get_ranges(
