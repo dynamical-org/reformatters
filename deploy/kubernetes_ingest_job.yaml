@@ -8,6 +8,8 @@ spec:
   completionMode: Indexed
   completions: $WORKERS_TOTAL
   parallelism: $PARALLELISM
+  backoffLimitPerIndex: 4
+  maxFailedIndexes: 3
   ttlSecondsAfterFinished: 604800  # 7 days
   template:
     spec:
