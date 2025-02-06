@@ -40,5 +40,10 @@ def reformat_operational_update() -> None:
     reformat.reformat_operational_update()
 
 
+@app.command()
+def deploy_operational_updates() -> None:
+    reformat.deploy_operational_updates()
+
+
 if __name__ == "__main__":
     app()

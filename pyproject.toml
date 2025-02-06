@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "cfgrib>=0.9.14.1",
     "dask>=2024.9.0",
+    "kubernetes>=32.0.0",
     "numcodecs>=0.13.1",
     "numpy>=2.1.1",
     "obstore>=0.3.0",
@@ -15,6 +16,7 @@ dependencies = [
     "requests>=2.32.3",
     "rioxarray>=0.18.2",
     "s3fs>=2024.9.0",
+    "sentry-sdk>=2.20.0",
     "typer>=0.12.5",
     "xarray[io]>=2024.9.0",
     "zarr>=2.18.3",

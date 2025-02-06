@@ -7,6 +7,7 @@ import subprocess
 from collections import defaultdict, deque
 from collections.abc import Callable, Generator, Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
+from datetime import timedelta
 from functools import cache, partial
 from itertools import batched, groupby, islice, pairwise, starmap
 from pathlib import Path
@@ -14,16 +15,18 @@ from typing import Any, Literal
 from uuid import uuid4
 
 import fsspec  # type: ignore
+import kubernetes  # type:ignore
 import numpy as np
 import pandas as pd
 import s3fs  # type: ignore
+import sentry_sdk
 import xarray as xr
 
-from common import string_template
 from common.config import Config  # noqa:F401
 from common.download_directory import cd_into_download_directory
+from common.kubernetes import ReformatCronJob, ReformatJob
 from common.types import Array1D, DatetimeLike, StoreLike
-from noaa.gefs.forecast import template
+from noaa.gefs.forecast import template, template_config
 from noaa.gefs.forecast.config_models import DataVar, EnsembleStatistic
 from noaa.gefs.forecast.read_data import (
     NoaaFileType,
@@ -34,12 +37,32 @@ from noaa.gefs.forecast.read_data import (
 )
 
 _PROCESSING_CHUNK_DIMENSION = "init_time"
+_CRON_SCHEDULE = "0 7 * * *"  # At 7:00 every day.
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
+@sentry_sdk.monitor(
+    monitor_slug=f"{template_config.DATASET_ID}-reformat-operational-update",
+    monitor_config={
+        "schedule": {"type": "crontab", "value": _CRON_SCHEDULE},
+        "timezone": "UTC",
+        # If an expected check-in doesn't come in `checkin_margin`
+        # minutes, it'll be considered missed
+        "checkin_margin": 10,
+        # The check-in is allowed to run for `max_runtime` minutes
+        # before it's considered failed
+        "max_runtime": int(timedelta(hours=12).total_seconds()),
+        # It'll take `failure_issue_threshold` consecutive failed
+        # check-ins to create an issue
+        "failure_issue_threshold": 1,
+        # It'll take `recovery_threshold` OK check-ins to resolve
+        # an issue
+        "recovery_threshold": 1,
+    },
+)
 def reformat_operational_update() -> None:
     final_store = get_store()
     tmp_store = get_local_tmp_store()
@@ -268,29 +291,79 @@ def reformat_kubernetes(
 
     dataset_id = template_ds.attrs["dataset_id"]
     job_name = f"{dataset_id}-{job_timestamp}"
-    kubernetes_job = string_template.substitute(
-        "deploy/kubernetes_ingest_job.yaml",
-        {
-            "NAME": job_name,
-            "IMAGE": image_tag,
-            "DATASET_ID": dataset_id,
-            "INIT_TIME_END": pd.Timestamp(init_time_end).isoformat(),
-            "WORKERS_TOTAL": workers_total,
-            "PARALLELISM": parallelism,
-            "CPU": 6,
-            "MEMORY": "40G",
-            "EPHEMERAL_STORAGE": "60G",
-        },
-    )
 
-    subprocess.run(  # noqa: S603
-        ["/usr/bin/kubectl", "apply", "-f", "-"],
-        input=kubernetes_job,
-        text=True,
-        check=True,
+    kubernetes_job = ReformatJob(
+        image=image_tag,
+        dataset_id=dataset_id,
+        workers_total=workers_total,
+        parallelism=parallelism,
+        cpu="14",  # fits on 16 core nodes
+        memory="58G",  # fits in 64GB nodes
+        ephemeral_storage="150G",
+        command=[
+            "reformat-chunks",
+            pd.Timestamp(init_time_end).isoformat(),
+        ],
+    )
+    kubernetes.config.load_kube_config()
+    batch_v1 = kubernetes.client.BatchV1Api()
+    batch_v1.create_namespaced_job(
+        namespace="default",
+        body=kubernetes.client.V1Job(**kubernetes_job.get_kubernetes_job()),
     )
 
     logger.info(f"Submitted kubernetes job {job_name}")
+
+
+def deploy_operational_updates() -> None:
+    job_timestamp = pd.Timestamp.now("UTC").strftime("%Y-%m-%dt%M-%S")
+
+    docker_repo = os.environ["DOCKER_REPOSITORY"]
+    assert re.fullmatch(r"[0-9a-zA-Z_\.\-\/]{1,1000}", docker_repo)
+    image_tag = f"{docker_repo}:{job_timestamp}"
+
+    subprocess.run(  # noqa: S603  allow passing variable to subprocess, it's realtively sanitized above
+        [
+            "/usr/bin/docker",
+            "build",
+            "--file",
+            "deploy/Dockerfile",
+            "--tag",
+            image_tag,
+            ".",
+        ],
+        check=True,
+    )
+    subprocess.run(  # noqa: S603
+        ["/usr/bin/docker", "push", image_tag], check=True
+    )
+    logger.info(f"Pushed {image_tag}")
+
+    workers_total = 20
+    parallelism = min(workers_total, 10)
+
+    dataset_id = template_config.DATASET_ID
+
+    kubernetes_job = ReformatCronJob(
+        name=f"{dataset_id}-operational-update",
+        schedule=_CRON_SCHEDULE,
+        image=image_tag,
+        dataset_id=dataset_id,
+        workers_total=workers_total,
+        parallelism=parallelism,
+        cpu="6",
+        memory="40G",
+        ephemeral_storage="60G",
+        command=[
+            "reformat_operational_update",
+        ],
+    )
+    kubernetes.config.load_kube_config()
+    batch_v1 = kubernetes.client.BatchV1Api()
+    batch_v1.create_namespaced_cron_job(
+        namespace="default",
+        body=kubernetes.client.V1CronJob(**kubernetes_job.get_kubernetes_job()),
+    )
 
 
 def reformat_chunks(
@@ -528,15 +601,15 @@ def get_worker_jobs[T](
 
 
 def get_store() -> fsspec.FSMap:
-    if Config.is_dev():
+    if Config.is_dev:
         local_store: StoreLike = fsspec.get_mapper(
             "data/output/noaa/gefs/forecast/dev.zarr"
         )
         return local_store
 
     s3 = s3fs.S3FileSystem(
-        key=os.environ["SOURCE_COOP_AWS_ACCESS_KEY_ID"],
-        secret=os.environ["SOURCE_COOP_AWS_SECRET_ACCESS_KEY"],
+        key=Config.source_coop.aws_access_key_id,
+        secret=Config.source_coop.aws_secret_access_key,
     )
     store: StoreLike = s3.get_mapper(
         "s3://us-west-2.opendata.source.coop/dynamical/noaa-gefs-forecast/v0.1.0.zarr"

@@ -22,8 +22,10 @@ from .config_models import (
 INIT_TIME_START = pd.Timestamp("2024-01-01T00:00")
 INIT_TIME_FREQUENCY = pd.Timedelta("24h")
 
+DATASET_ID = "noaa-gefs-forecast"
+
 DATASET_ATTRIBUTES = DatasetAttributes(
-    dataset_id="noaa-gefs-forecast",
+    dataset_id=DATASET_ID,
     name="NOAA GEFS forecast",
     description="Weather forecasts from the Global Ensemble Forecast System (GEFS) operated by NOAA NWS NCEP.",
     attribution="NOAA NWS NCEP GEFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",

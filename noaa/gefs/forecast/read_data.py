@@ -113,7 +113,7 @@ def download_file(
             store,
             idx_remote_path,
             idx_local_path,
-            overwrite_existing=not Config.is_dev(),
+            overwrite_existing=not Config.is_dev,
         )
 
         byte_range_starts, byte_range_ends = parse_index_byte_ranges(
@@ -126,7 +126,7 @@ def download_file(
             store,
             remote_path,
             local_path,
-            overwrite_existing=not Config.is_dev(),
+            overwrite_existing=not Config.is_dev,
             byte_ranges=(byte_range_starts, byte_range_ends),
         )
 
