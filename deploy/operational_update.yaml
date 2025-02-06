@@ -34,11 +34,8 @@ spec:
                   key: AWS_SECRET_ACCESS_KEY
             resources:
               requests:
-                cpu: 16
-                memory: "100G"
-              limits:
-                cpu: 16
-                memory: "100G"
+                cpu: 14 # fit on 16 cpu
+                memory: "58G" # fit in 64GB node
             volumeMounts:
             - mountPath: "/app/data"
               name: ephemeral-vol
@@ -53,11 +50,14 @@ spec:
                   accessModes: ["ReadWriteOnce"]
                   resources:
                     requests:
-                      storage: "500G"
+                      storage: "150G"
           securityContext:
             fsGroup: 999  # this is the `app` group our app runs under
           nodeSelector:
-            cloud.google.com/gke-spot: "true"
+            eks.amazonaws.com/compute-type: auto
+            karpenter.sh/capacity-type: spot
+            kubernetes.io/arch: amd64
+            #cloud.google.com/gke-spot: "true"
           terminationGracePeriodSeconds: 5
       
       podFailurePolicy:
