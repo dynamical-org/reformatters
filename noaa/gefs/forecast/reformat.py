@@ -98,31 +98,48 @@ def reformat_operational_update() -> None:
         )
     )
     upload_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
-    template.write_metadata(template_ds, tmp_store, get_mode(tmp_store))
-    futures = []
-    for data_var, max_lead_times in reformat_init_time_i_slices(
-        recent_incomplete_init_time_i_slices + new_init_time_i_slices,
-        template_ds,
-        tmp_store,
+
+    for init_time_i_slice in (
+        recent_incomplete_init_time_i_slices + new_init_time_i_slices
     ):
-        for (init_time, ensemble_member), max_lead_time in max_lead_times.items():
-            if np.issubdtype(type(ensemble_member), np.integer):
-                template_ds["ingested_forecast_length"].loc[
-                    {"init_time": init_time, "ensemble_member": ensemble_member}
-                ] = max_lead_time
+        truncated_template_ds = template_ds.isel(
+            init_time=slice(0, init_time_i_slice.stop)
+        )
+        # Write through this i_slice
+        template.write_metadata(
+            truncated_template_ds,
+            tmp_store,
+            get_mode(tmp_store),
+        )
+        futures = []
+        for data_var, max_lead_times in reformat_init_time_i_slices(
+            [init_time_i_slice],
+            template_ds,
+            tmp_store,
+        ):
             # This only works because we know that chunks are size 1 in the
             # init_time dimension.
-            chunk_index: int = template_ds.get_index("init_time").get_loc(init_time)  # type: ignore
             futures.append(
                 upload_executor.submit(
-                    copy_data_var(data_var, chunk_index, tmp_store, final_store)
+                    copy_data_var(
+                        data_var, init_time_i_slice.start, tmp_store, final_store
+                    )
                 )
             )
+            for (init_time, ensemble_member), max_lead_time in max_lead_times.items():
+                if np.issubdtype(type(ensemble_member), np.integer):
+                    truncated_template_ds["ingested_forecast_length"].loc[
+                        {"init_time": init_time, "ensemble_member": ensemble_member}
+                    ] = max_lead_time
 
-    concurrent.futures.wait(futures, return_when="ALL_COMPLETED")
+        concurrent.futures.wait(futures, return_when="ALL_COMPLETED")
 
-    template.write_metadata(template_ds, tmp_store, get_mode(tmp_store))
-    copy_zarr_metadata(template_ds, tmp_store, final_store)
+        template.write_metadata(
+            truncated_template_ds.isel(init_time=slice(0, init_time_i_slice.stop)),
+            tmp_store,
+            get_mode(tmp_store),
+        )
+        copy_zarr_metadata(truncated_template_ds, tmp_store, final_store)
 
 
 def get_recent_init_times_for_reprocessing(ds: xr.Dataset) -> Array1D[np.datetime64]:
@@ -169,11 +186,14 @@ def copy_data_var(
             fs.put(
                 files_to_copy, final_store.root + f"/{data_var.name}/", auto_mkdir=True
             )
+        except Exception as e:
+            logger.warning(f"Failed to upload chunk: {e}")
+        try:
             # Delete data to conserve space.
             for file in files_to_copy:
                 file.unlink()
         except Exception as e:
-            logger.warning(e)
+            logger.warning(f"Failed to delete chunk after upload: {e}")
 
     return mv_files
 
