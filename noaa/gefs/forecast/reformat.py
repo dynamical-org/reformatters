@@ -309,7 +309,7 @@ def reformat_kubernetes(
     batch_v1 = kubernetes.client.BatchV1Api()
     batch_v1.create_namespaced_job(
         namespace="default",
-        body=kubernetes.client.V1Job(**kubernetes_job.get_kubernetes_job()),
+        body=kubernetes.client.V1Job(**kubernetes_job.as_kubernetes_object()),
     )
 
     logger.info(f"Submitted kubernetes job {job_name}")
@@ -339,20 +339,17 @@ def deploy_operational_updates() -> None:
     )
     logger.info(f"Pushed {image_tag}")
 
-    workers_total = 20
-    parallelism = min(workers_total, 10)
-
     dataset_id = template_config.DATASET_ID
 
-    kubernetes_job = ReformatCronJob(
+    cron_job = ReformatCronJob(
         name=f"{dataset_id}-operational-update",
         schedule=_CRON_SCHEDULE,
         image=image_tag,
         dataset_id=dataset_id,
-        workers_total=workers_total,
-        parallelism=parallelism,
-        cpu="6",
-        memory="40G",
+        workers_total=1,
+        parallelism=1,
+        cpu="6",  # fit on 8 vCPU node
+        memory="56G",  # fit on 64GB node
         ephemeral_storage="60G",
         command=[
             "reformat_operational_update",
@@ -360,10 +357,24 @@ def deploy_operational_updates() -> None:
     )
     kubernetes.config.load_kube_config()
     batch_v1 = kubernetes.client.BatchV1Api()
-    batch_v1.create_namespaced_cron_job(
-        namespace="default",
-        body=kubernetes.client.V1CronJob(**kubernetes_job.get_kubernetes_job()),
-    )
+    try:
+        # Try to replace the existing cronjob
+        batch_v1.replace_namespaced_cron_job(
+            name=cron_job.name,
+            namespace="default",
+            body=kubernetes.client.V1CronJob(**cron_job.as_kubernetes_object()),
+        )
+        logger.info(f"Updated existing cronjob {cron_job.name}")
+    except kubernetes.client.exceptions.ApiException as e:
+        if e.status == 404:
+            # CronJob doesn't exist, create it
+            batch_v1.create_namespaced_cron_job(
+                namespace="default",
+                body=kubernetes.client.V1CronJob(**cron_job.as_kubernetes_object()),
+            )
+            logger.info(f"Created new cronjob {cron_job.name}")
+        else:
+            raise
 
 
 def reformat_chunks(

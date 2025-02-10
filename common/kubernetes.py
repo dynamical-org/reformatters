@@ -21,7 +21,7 @@ class ReformatJob(pydantic.BaseModel):
     def job_name(self) -> str:
         return f"{self.dataset_id}-{'-'.join(self.command)}"
 
-    def get_kubernetes_job(self) -> dict[str, Any]:
+    def as_kubernetes_object(self) -> dict[str, Any]:
         return {
             "apiVersion": "batch/v1",
             "kind": "Job",
@@ -150,14 +150,15 @@ class ReformatCronJob(ReformatJob):
     ttl: timedelta = timedelta(hours=12)
     command: list[str] = ["reformat_operational_update"]
 
-    def get_kubernetes_job(self) -> dict[str, Any]:
-        job_spec = super().get_kubernetes_job()["spec"]
+    def as_kubernetes_object(self) -> dict[str, Any]:
+        job_spec = super().as_kubernetes_object()["spec"]
         return {
             "apiVersion": "batch/v1",
             "kind": "CronJob",
             "metadata": {"name": self.name},
             "spec": {
                 "schedule": self.schedule,
+                "concurrencyPolicy": "Replace",
                 "jobTemplate": job_spec,
             },
         }
