@@ -1,5 +1,6 @@
 import concurrent.futures
 import gc
+import json
 import logging
 import os
 import re
@@ -15,7 +16,6 @@ from typing import Any, Literal
 from uuid import uuid4
 
 import fsspec  # type: ignore
-import kubernetes  # type:ignore
 import numpy as np
 import pandas as pd
 import s3fs  # type: ignore
@@ -258,7 +258,7 @@ def reformat_kubernetes(
 ) -> None:
     template_ds = template.get_template(init_time_end)
 
-    job_timestamp = pd.Timestamp.now("UTC").strftime("%Y-%m-%dt%M-%S")
+    job_timestamp = pd.Timestamp.now("UTC").strftime("%Y-%m-%dT%H-%M-%SZ")
 
     docker_repo = os.environ["DOCKER_REPOSITORY"]
     assert re.fullmatch(r"[0-9a-zA-Z_\.\-\/]{1,1000}", docker_repo)
@@ -282,7 +282,7 @@ def reformat_kubernetes(
     logger.info(f"Pushed {image_tag}")
 
     store = get_store()
-    logger.info(f"Writing zarr metadata to {store}")
+    logger.info(f"Writing zarr metadata to {store.root}")
     template.write_metadata(template_ds, store, get_mode(store))
 
     num_jobs = sum(1 for _ in chunk_i_slices(template_ds, _PROCESSING_CHUNK_DIMENSION))
@@ -297,26 +297,26 @@ def reformat_kubernetes(
         dataset_id=dataset_id,
         workers_total=workers_total,
         parallelism=parallelism,
-        cpu="14",  # fits on 16 core nodes
-        memory="58G",  # fits in 64GB nodes
-        ephemeral_storage="150G",
+        cpu="6",  # fit on 8 vCPU node
+        memory="60G",  # fit on 64GB node
+        ephemeral_storage="60G",
         command=[
             "reformat-chunks",
             pd.Timestamp(init_time_end).isoformat(),
         ],
     )
-    kubernetes.config.load_kube_config()
-    batch_v1 = kubernetes.client.BatchV1Api()
-    batch_v1.create_namespaced_job(
-        namespace="default",
-        body=kubernetes.client.V1Job(**kubernetes_job.as_kubernetes_object()),
+    subprocess.run(  # noqa: S603
+        ["/usr/bin/kubectl", "apply", "-f", "-"],
+        input=json.dumps(kubernetes_job.as_kubernetes_object()),
+        text=True,
+        check=True,
     )
 
     logger.info(f"Submitted kubernetes job {job_name}")
 
 
 def deploy_operational_updates() -> None:
-    job_timestamp = pd.Timestamp.now("UTC").strftime("%Y-%m-%dt%M-%S")
+    job_timestamp = pd.Timestamp.now("UTC").strftime("%Y-%m-%dT%H-%M-%SZ")
 
     docker_repo = os.environ["DOCKER_REPOSITORY"]
     assert re.fullmatch(r"[0-9a-zA-Z_\.\-\/]{1,1000}", docker_repo)
@@ -349,32 +349,18 @@ def deploy_operational_updates() -> None:
         workers_total=1,
         parallelism=1,
         cpu="6",  # fit on 8 vCPU node
-        memory="56G",  # fit on 64GB node
-        ephemeral_storage="60G",
+        memory="60G",  # fit on 64GB node
+        ephemeral_storage="150G",
         command=[
             "reformat_operational_update",
         ],
     )
-    kubernetes.config.load_kube_config()
-    batch_v1 = kubernetes.client.BatchV1Api()
-    try:
-        # Try to replace the existing cronjob
-        batch_v1.replace_namespaced_cron_job(
-            name=cron_job.name,
-            namespace="default",
-            body=kubernetes.client.V1CronJob(**cron_job.as_kubernetes_object()),
-        )
-        logger.info(f"Updated existing cronjob {cron_job.name}")
-    except kubernetes.client.exceptions.ApiException as e:
-        if e.status == 404:
-            # CronJob doesn't exist, create it
-            batch_v1.create_namespaced_cron_job(
-                namespace="default",
-                body=kubernetes.client.V1CronJob(**cron_job.as_kubernetes_object()),
-            )
-            logger.info(f"Created new cronjob {cron_job.name}")
-        else:
-            raise
+    subprocess.run(  # noqa: S603
+        ["/usr/bin/kubectl", "apply", "-f", "-"],
+        input=json.dumps(cron_job.as_kubernetes_object()),
+        text=True,
+        check=True,
+    )
 
 
 def reformat_chunks(

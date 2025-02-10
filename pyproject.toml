@@ -7,7 +7,6 @@ requires-python = ">=3.12"
 dependencies = [
     "cfgrib>=0.9.14.1",
     "dask>=2024.9.0",
-    "kubernetes>=32.0.0",
     "numcodecs>=0.13.1",
     "numpy>=2.1.1",
     "obstore>=0.3.0",

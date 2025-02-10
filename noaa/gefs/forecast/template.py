@@ -207,4 +207,4 @@ def write_metadata(
     mode: Literal["w", "w-"],
 ) -> None:
     template_ds.to_zarr(store, mode=mode, compute=False)
-    logger.info(f"Wrote metadata to {store} with mode {mode}.")
+    logger.info(f"Wrote metadata to {store.root} with mode {mode}.")

@@ -19,7 +19,7 @@ class ReformatJob(pydantic.BaseModel):
 
     @property
     def job_name(self) -> str:
-        return f"{self.dataset_id}-{'-'.join(self.command)}"
+        return f"{self.dataset_id}-{'-'.join(self.command).replace(':', '-')}".lower()
 
     def as_kubernetes_object(self) -> dict[str, Any]:
         return {
@@ -29,9 +29,9 @@ class ReformatJob(pydantic.BaseModel):
             "spec": {
                 "backoffLimitPerIndex": 4,
                 "completionMode": "Indexed",
-                "completions": f"{self.workers_total}",
+                "completions": self.workers_total,
                 "maxFailedIndexes": 3,
-                "parallelism": f"{self.parallelism}",
+                "parallelism": self.parallelism,
                 "podFailurePolicy": {
                     "rules": [
                         {
