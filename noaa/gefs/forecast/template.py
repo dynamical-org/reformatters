@@ -49,7 +49,7 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
         coordinate.load()
 
     # Uncomment to make smaller dataset while developing
-    # if Config.is_dev():
+    # if Config.is_dev:
     #     ds = ds[
     #         [
     #             "wind_u_10m",
@@ -207,4 +207,4 @@ def write_metadata(
     mode: Literal["w", "w-"],
 ) -> None:
     template_ds.to_zarr(store, mode=mode, compute=False)
-    logger.info(f"Wrote metadata to {store} with mode {mode}.")
+    logger.info(f"Wrote metadata to {store.root} with mode {mode}.")

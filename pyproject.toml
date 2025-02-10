@@ -15,6 +15,7 @@ dependencies = [
     "requests>=2.32.3",
     "rioxarray>=0.18.2",
     "s3fs>=2024.9.0",
+    "sentry-sdk>=2.20.0",
     "typer>=0.12.5",
     "xarray[io]>=2024.9.0",
     "zarr>=2.18.3",
