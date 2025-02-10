@@ -7,7 +7,7 @@ from common.config import Config
 if Config.is_sentry_enabled:
     sentry_sdk.init(
         dsn=Config.sentry_dsn,
-        environment=Config.env,
+        environment=Config.env.value,
     )
 
 

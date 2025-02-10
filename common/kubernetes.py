@@ -30,17 +30,21 @@ class ReformatJob(pydantic.BaseModel):
                 "backoffLimitPerIndex": 4,
                 "completionMode": "Indexed",
                 "completions": self.workers_total,
-                "maxFailedIndexes": 3,
+                "maxFailedIndexes": min(3, self.workers_total),
                 "parallelism": self.parallelism,
                 "podFailurePolicy": {
                     "rules": [
                         {
                             "action": "Ignore",
-                            "onPodConditions": [{"type": "DisruptionTarget"}],
+                            "onPodConditions": [
+                                {"type": "DisruptionTarget", "status": "True"}
+                            ],
                         },
                         {
                             "action": "FailJob",
-                            "onPodConditions": [{"type": "ConfigIssue"}],
+                            "onPodConditions": [
+                                {"type": "ConfigIssue", "status": "True"}
+                            ],
                         },
                     ]
                 },
@@ -159,6 +163,6 @@ class ReformatCronJob(ReformatJob):
             "spec": {
                 "schedule": self.schedule,
                 "concurrencyPolicy": "Replace",
-                "jobTemplate": job_spec,
+                "jobTemplate": {"spec": job_spec},
             },
         }

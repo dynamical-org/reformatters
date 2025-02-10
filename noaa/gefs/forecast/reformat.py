@@ -37,7 +37,7 @@ from noaa.gefs.forecast.read_data import (
 )
 
 _PROCESSING_CHUNK_DIMENSION = "init_time"
-_CRON_SCHEDULE = "0 7 * * *"  # At 7:00 every day.
+_CRON_SCHEDULE = "0 7 * * *"  # At 7:00 UTC every day.
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -352,7 +352,7 @@ def deploy_operational_updates() -> None:
         memory="60G",  # fit on 64GB node
         ephemeral_storage="150G",
         command=[
-            "reformat_operational_update",
+            "reformat-operational-update",
         ],
     )
     subprocess.run(  # noqa: S603
