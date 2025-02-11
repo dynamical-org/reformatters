@@ -8,7 +8,6 @@ import subprocess
 from collections import defaultdict, deque
 from collections.abc import Callable, Generator, Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
-from datetime import timedelta
 from functools import cache, partial
 from itertools import batched, groupby, islice, pairwise, starmap
 from pathlib import Path
@@ -54,7 +53,7 @@ logger.setLevel(logging.INFO)
         "checkin_margin": 10,
         # The check-in is allowed to run for `max_runtime` minutes
         # before it's considered failed
-        "max_runtime": int(timedelta(hours=12).total_seconds()),
+        "max_runtime": 120,  # minutes
         # It'll take `failure_issue_threshold` consecutive failed
         # check-ins to create an issue
         "failure_issue_threshold": 1,
