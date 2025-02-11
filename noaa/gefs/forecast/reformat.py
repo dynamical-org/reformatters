@@ -24,7 +24,7 @@ import xarray as xr
 from common import validation
 from common.config import Config  # noqa:F401
 from common.download_directory import cd_into_download_directory
-from common.kubernetes import ReformatCronJob, ReformatJob
+from common.kubernetes import ReformatCronJob, ReformatJob, ValidationCronJob
 from common.types import Array1D, DatetimeLike, StoreLike
 from noaa.gefs.forecast import template, template_config
 from noaa.gefs.forecast.config_models import DataVar, EnsembleStatistic
@@ -38,7 +38,7 @@ from noaa.gefs.forecast.read_data import (
 
 _PROCESSING_CHUNK_DIMENSION = "init_time"
 _CRON_SCHEDULE = "0 7 * * *"  # At 7:00 UTC every day.
-
+_VALIDATION_CRON_SCHEDULE = "0 10 * * *"  # At 10:00 UTC every day.
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -341,23 +341,33 @@ def deploy_operational_updates() -> None:
 
     dataset_id = template_config.DATASET_ID
 
-    cron_job = ReformatCronJob(
+    operational_update_cron_job = ReformatCronJob(
         name=f"{dataset_id}-operational-update",
         schedule=_CRON_SCHEDULE,
         image=image_tag,
         dataset_id=dataset_id,
-        workers_total=1,
-        parallelism=1,
         cpu="6",  # fit on 8 vCPU node
         memory="60G",  # fit on 64GB node
         ephemeral_storage="150G",
-        command=[
-            "reformat-operational-update",
-        ],
+    )
+    validation_cron_job = ValidationCronJob(
+        name=f"{dataset_id}-validation",
+        schedule=_VALIDATION_CRON_SCHEDULE,
+        image=image_tag,
+        dataset_id=dataset_id,
+        cpu="6",  # fit on 8 vCPU node
+        memory="60G",  # fit on 64GB node
+        ephemeral_storage="10G",
+    )
+
+    k8s_resources_str = (
+        json.dumps(operational_update_cron_job.as_kubernetes_object())
+        + "\n-----\n"
+        + json.dumps(validation_cron_job.as_kubernetes_object())
     )
     subprocess.run(  # noqa: S603
         ["/usr/bin/kubectl", "apply", "-f", "-"],
-        input=json.dumps(cron_job.as_kubernetes_object()),
+        input=k8s_resources_str,
         text=True,
         check=True,
     )
@@ -651,7 +661,7 @@ def consume[T](iterator: Iterable[T], n: int | None = None) -> None:
 def check_recent_nans(
     ds: xr.Dataset, n_samples: int = 100, max_nan_percentage: float = 70
 ) -> validation.ValidationResult:
-    """Check for NaN values in the most recent day of data. Fails if more than `max_nan_percentage` of sampled data is NaN."""
+    """Check for NaN values in the most recent day of data. Fails if more than 70% of sampled data is NaN."""
     # Get most recent init time
     latest_init = ds.init_time.max()
 
@@ -672,7 +682,7 @@ def check_recent_nans(
 
     problem_vars = []
     for var_name, da in sample_ds.data_vars.items():
-        nan_percentage = (np.isnan(da.values).sum() / da.size) * 100
+        nan_percentage = da.isnull().mean().compute() * 100
         if nan_percentage > max_nan_percentage:
             problem_vars.append((var_name, nan_percentage))
 
@@ -685,9 +695,28 @@ def check_recent_nans(
 
     return validation.ValidationResult(
         passed=True,
-        message="All variables have acceptable NaN percentages (<70%) in sampled locations of latest data",
+        message=f"All variables have acceptable NaN percentages (<{max_nan_percentage}%) in sampled locations of latest data",
     )
 
 
+@sentry_sdk.monitor(
+    monitor_slug=f"{template_config.DATASET_ID}-validation",
+    monitor_config={
+        "schedule": {"type": "crontab", "value": _VALIDATION_CRON_SCHEDULE},
+        "timezone": "UTC",
+        # If an expected check-in doesn't come in `checkin_margin`
+        # minutes, it'll be considered missed
+        "checkin_margin": 10,
+        # The check-in is allowed to run for `max_runtime` minutes
+        # before it's considered failed
+        "max_runtime": 120,
+        # It'll take `failure_issue_threshold` consecutive failed
+        # check-ins to create an issue
+        "failure_issue_threshold": 1,
+        # It'll take `recovery_threshold` OK check-ins to resolve
+        # an issue
+        "recovery_threshold": 1,
+    },
+)
 def validate_zarr(zarr_path: str | Path) -> None:
     validation.validate_zarr(zarr_path, validators=(check_recent_nans,))
