@@ -7,3 +7,13 @@ repos:
       - id: ruff
       # Run the formatter.
       - id: ruff-format
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: "uv run mypy"
+        language: system
+        types: [python]
+        # use require_serial so that script
+        # is only called once per commit
+        require_serial: true
