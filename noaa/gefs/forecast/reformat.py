@@ -21,6 +21,7 @@ import s3fs  # type: ignore
 import sentry_sdk
 import xarray as xr
 
+from common import validation
 from common.config import Config  # noqa:F401
 from common.download_directory import cd_into_download_directory
 from common.kubernetes import ReformatCronJob, ReformatJob
@@ -645,3 +646,48 @@ def consume[T](iterator: Iterable[T], n: int | None = None) -> None:
         deque(iterator, maxlen=0)
     else:
         next(islice(iterator, n, n), None)
+
+
+def check_recent_nans(
+    ds: xr.Dataset, n_samples: int = 100, max_nan_percentage: float = 70
+) -> validation.ValidationResult:
+    """Check for NaN values in the most recent day of data. Fails if more than `max_nan_percentage` of sampled data is NaN."""
+    # Get most recent init time
+    latest_init = ds.init_time.max()
+
+    # Sample a subset of locations and lead times to check
+    sample_coords = {}
+
+    dims = {
+        dim: size for dim, size in ds.sizes.items() if dim in ["latitude", "longitude"]
+    }
+
+    # Randomly sample indices for each dimension
+    for dim, size in dims.items():
+        sample_idx = np.random.choice(size, min(n_samples, size), replace=False)
+        sample_coords[dim] = sample_idx
+
+    # First select all coordinates and load the data once
+    sample_ds = ds.sel(init_time=latest_init).isel(sample_coords)
+
+    problem_vars = []
+    for var_name, da in sample_ds.data_vars.items():
+        nan_percentage = (np.isnan(da.values).sum() / da.size) * 100
+        if nan_percentage > max_nan_percentage:
+            problem_vars.append((var_name, nan_percentage))
+
+    if problem_vars:
+        message = "Excessive NaN values found:\n"
+        for var, pct in problem_vars:
+            message += f"- {var}: {pct:.1f}% NaN\n"
+        message += f"For init_time {latest_init} in sampled locations"
+        return validation.ValidationResult(passed=False, message=message)
+
+    return validation.ValidationResult(
+        passed=True,
+        message="All variables have acceptable NaN percentages (<70%) in sampled locations of latest data",
+    )
+
+
+def validate_zarr(zarr_path: str | Path) -> None:
+    validation.validate_zarr(zarr_path, validators=(check_recent_nans,))
