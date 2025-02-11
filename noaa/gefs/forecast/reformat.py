@@ -8,6 +8,7 @@ import subprocess
 from collections import defaultdict, deque
 from collections.abc import Callable, Generator, Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
+from datetime import timedelta
 from functools import cache, partial
 from itertools import batched, groupby, islice, pairwise, starmap
 from pathlib import Path
@@ -658,12 +659,25 @@ def consume[T](iterator: Iterable[T], n: int | None = None) -> None:
         next(islice(iterator, n, n), None)
 
 
+def check_current_data(ds: xr.Dataset) -> validation.ValidationResult:
+    """Check for data in the most recent day. Fails if no data is found."""
+    now = pd.Timestamp.now()
+    latest_init_time_ds = ds.sel(init_time=slice(now - timedelta(days=1), None))
+    if latest_init_time_ds.sizes["init_time"] == 0:
+        return validation.ValidationResult(
+            passed=False, message="No data found for the latest day"
+        )
+
+    return validation.ValidationResult(
+        passed=True,
+        message="Data found for the latest day",
+    )
+
+
 def check_recent_nans(
     ds: xr.Dataset, n_samples: int = 100, max_nan_percentage: float = 70
 ) -> validation.ValidationResult:
     """Check for NaN values in the most recent day of data. Fails if more than 70% of sampled data is NaN."""
-    # Get most recent init time
-    latest_init = ds.init_time.max()
 
     # Sample a subset of locations and lead times to check
     sample_coords = {}
@@ -678,7 +692,10 @@ def check_recent_nans(
         sample_coords[dim] = sample_idx
 
     # First select all coordinates and load the data once
-    sample_ds = ds.sel(init_time=latest_init).isel(sample_coords)
+    now = pd.Timestamp.now()
+    sample_ds = ds.sel(
+        init_time=slice(now - timedelta(days=1), None), lead_time=0
+    ).isel(sample_coords)
 
     problem_vars = []
     for var_name, da in sample_ds.data_vars.items():
@@ -690,7 +707,6 @@ def check_recent_nans(
         message = "Excessive NaN values found:\n"
         for var, pct in problem_vars:
             message += f"- {var}: {pct:.1f}% NaN\n"
-        message += f"For init_time {latest_init} in sampled locations"
         return validation.ValidationResult(passed=False, message=message)
 
     return validation.ValidationResult(
@@ -719,4 +735,10 @@ def check_recent_nans(
     },
 )
 def validate_zarr(zarr_path: str | Path) -> None:
-    validation.validate_zarr(zarr_path, validators=(check_recent_nans,))
+    validation.validate_zarr(
+        zarr_path,
+        validators=(
+            check_current_data,
+            check_recent_nans,
+        ),
+    )
