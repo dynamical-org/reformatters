@@ -38,7 +38,7 @@ from noaa.gefs.forecast.read_data import (
 )
 
 _PROCESSING_CHUNK_DIMENSION = "init_time"
-_CRON_SCHEDULE = "0 7 * * *"  # At 7:00 UTC every day.
+_OPERATIONAL_CRON_SCHEDULE = "0 7 * * *"  # At 7:00 UTC every day.
 _VALIDATION_CRON_SCHEDULE = "0 10 * * *"  # At 10:00 UTC every day.
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -48,20 +48,8 @@ logger.setLevel(logging.INFO)
 @sentry_sdk.monitor(
     monitor_slug=f"{template_config.DATASET_ID}-reformat-operational-update",
     monitor_config={
-        "schedule": {"type": "crontab", "value": _CRON_SCHEDULE},
+        "schedule": {"type": "crontab", "value": _OPERATIONAL_CRON_SCHEDULE},
         "timezone": "UTC",
-        # If an expected check-in doesn't come in `checkin_margin`
-        # minutes, it'll be considered missed
-        "checkin_margin": 10,
-        # The check-in is allowed to run for `max_runtime` minutes
-        # before it's considered failed
-        "max_runtime": 120,  # minutes
-        # It'll take `failure_issue_threshold` consecutive failed
-        # check-ins to create an issue
-        "failure_issue_threshold": 1,
-        # It'll take `recovery_threshold` OK check-ins to resolve
-        # an issue
-        "recovery_threshold": 1,
     },
 )
 def reformat_operational_update() -> None:
@@ -344,7 +332,7 @@ def deploy_operational_updates() -> None:
 
     operational_update_cron_job = ReformatCronJob(
         name=f"{dataset_id}-operational-update",
-        schedule=_CRON_SCHEDULE,
+        schedule=_OPERATIONAL_CRON_SCHEDULE,
         image=image_tag,
         dataset_id=dataset_id,
         cpu="6",  # fit on 8 vCPU node
@@ -675,27 +663,21 @@ def check_current_data(ds: xr.Dataset) -> validation.ValidationResult:
 
 
 def check_recent_nans(
-    ds: xr.Dataset, n_samples: int = 100, max_nan_percentage: float = 70
+    ds: xr.Dataset, max_nan_percentage: float = 30
 ) -> validation.ValidationResult:
     """Check for NaN values in the most recent day of data. Fails if more than 70% of sampled data is NaN."""
 
-    # Sample a subset of locations and lead times to check
-    sample_coords = {}
-
-    dims = {
-        dim: size for dim, size in ds.sizes.items() if dim in ["latitude", "longitude"]
-    }
-
-    # Randomly sample indices for each dimension
-    for dim, size in dims.items():
-        sample_idx = np.random.choice(size, min(n_samples, size), replace=False)
-        sample_coords[dim] = sample_idx
-
-    # First select all coordinates and load the data once
     now = pd.Timestamp.now()
+    # We want to show that the latest init time has valid data going out up to 10 days (we may not have forecasts
+    # past that, depending on the ensemble member and init time). To avoid needing to load a rediculous amount of data
+    # we'll choose a random lead_time within that range.
+    lead_time_day = np.random.randint(0, 10)  # [0, 10) since we add 1 below
     sample_ds = ds.sel(
-        init_time=slice(now - timedelta(days=1), None), lead_time=0
-    ).isel(sample_coords)
+        init_time=slice(now - timedelta(days=1), None),
+        lead_time=slice(
+            pd.Timedelta(days=lead_time_day), pd.Timedelta(days=lead_time_day + 1)
+        ),
+    )
 
     problem_vars = []
     for var_name, da in sample_ds.data_vars.items():
@@ -720,21 +702,10 @@ def check_recent_nans(
     monitor_config={
         "schedule": {"type": "crontab", "value": _VALIDATION_CRON_SCHEDULE},
         "timezone": "UTC",
-        # If an expected check-in doesn't come in `checkin_margin`
-        # minutes, it'll be considered missed
-        "checkin_margin": 10,
-        # The check-in is allowed to run for `max_runtime` minutes
-        # before it's considered failed
-        "max_runtime": 120,
-        # It'll take `failure_issue_threshold` consecutive failed
-        # check-ins to create an issue
-        "failure_issue_threshold": 1,
-        # It'll take `recovery_threshold` OK check-ins to resolve
-        # an issue
-        "recovery_threshold": 1,
     },
 )
-def validate_zarr(zarr_path: str | Path) -> None:
+def validate_zarr() -> None:
+    zarr_path = get_store()
     validation.validate_zarr(
         zarr_path,
         validators=(

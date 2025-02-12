@@ -46,10 +46,8 @@ def deploy_operational_updates() -> None:
 
 
 @app.command()
-def validate_zarr(
-    zarr_path: str = "https://data.dynamical.org/noaa/gefs/forecast/latest.zarr",
-) -> None:
-    reformat.validate_zarr(zarr_path)
+def validate_zarr() -> None:
+    reformat.validate_zarr()
 
 
 if __name__ == "__main__":

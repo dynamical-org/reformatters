@@ -1,10 +1,11 @@
 import logging
 from collections.abc import Sequence
-from pathlib import Path
 from typing import Protocol
 
 import pydantic
 import xarray as xr
+
+from common.types import StoreLike
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ class DataValidator(Protocol):
     def __call__(self, ds: xr.Dataset) -> ValidationResult: ...
 
 
-def validate_zarr(zarr_path: str | Path, validators: Sequence[DataValidator]) -> None:
+def validate_zarr(store: StoreLike, validators: Sequence[DataValidator]) -> None:
     """
     Validate a zarr dataset by running a series of quality checks.
 
@@ -35,10 +36,10 @@ def validate_zarr(zarr_path: str | Path, validators: Sequence[DataValidator]) ->
     Raises:
         ValueError: If any validation checks fail
     """
-    logger.info(f"Validating zarr at {zarr_path}")
+    logger.info(f"Validating zarr {store}")
 
     # Open dataset
-    ds = xr.open_zarr(zarr_path)
+    ds = xr.open_zarr(store, chunks=None)
 
     # Run all validators
     failed_validations = []
