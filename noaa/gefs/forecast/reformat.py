@@ -24,7 +24,7 @@ import xarray as xr
 from common import docker, validation
 from common.config import Config  # noqa:F401
 from common.download_directory import cd_into_download_directory
-from common.kubernetes import ReformatCronJob, ReformatJob, ValidationCronJob
+from common.kubernetes import Job, ReformatCronJob, ValidationCronJob
 from common.types import Array1D, DatetimeLike, StoreLike
 from noaa.gefs.forecast import template, template_config
 from noaa.gefs.forecast.config_models import DataVar, EnsembleStatistic
@@ -257,7 +257,7 @@ def reformat_kubernetes(
 
     dataset_id = template_ds.attrs["dataset_id"]
 
-    kubernetes_job = ReformatJob(
+    kubernetes_job = Job(
         image=image_tag,
         dataset_id=dataset_id,
         workers_total=workers_total,
@@ -280,7 +280,7 @@ def reformat_kubernetes(
     logger.info(f"Submitted kubernetes job {kubernetes_job.job_name}")
 
 
-def operational_kubernetes_resources(image_tag: str) -> list[ReformatJob]:
+def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
     dataset_id = template_config.DATASET_ID
 
     operational_update_cron_job = ReformatCronJob(
@@ -299,7 +299,6 @@ def operational_kubernetes_resources(image_tag: str) -> list[ReformatJob]:
         dataset_id=dataset_id,
         cpu="6",  # fit on 8 vCPU node
         memory="60G",  # fit on 64GB node
-        ephemeral_storage="10G",
     )
 
     return [operational_update_cron_job, validation_cron_job]

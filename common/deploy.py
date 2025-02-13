@@ -1,5 +1,6 @@
 import json
 import subprocess
+from collections.abc import Iterable
 from typing import Protocol
 
 from common import docker, kubernetes
@@ -9,7 +10,7 @@ from noaa.gefs.forecast.reformat import (
 
 
 class OperationalKubernetesResources(Protocol):
-    def __call__(self, image_tag: str) -> list[kubernetes.ReformatJob]: ...
+    def __call__(self, image_tag: str) -> Iterable[kubernetes.Job]: ...
 
 
 OPERATIONAL_RESOURCE_FNS: tuple[OperationalKubernetesResources] = (
@@ -22,7 +23,7 @@ def deploy_operational_updates(
 ) -> None:
     image_tag = docker.build_and_push_image()
 
-    reformat_jobs: list[kubernetes.ReformatJob] = []
+    reformat_jobs: list[kubernetes.Job] = []
     for fn in fns:
         reformat_jobs.extend(fn(image_tag))
 
