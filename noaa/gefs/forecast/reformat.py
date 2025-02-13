@@ -3,7 +3,6 @@ import gc
 import json
 import logging
 import os
-import re
 import subprocess
 from collections import defaultdict, deque
 from collections.abc import Callable, Generator, Iterable
@@ -22,7 +21,7 @@ import s3fs  # type: ignore
 import sentry_sdk
 import xarray as xr
 
-from common import validation
+from common import docker, validation
 from common.config import Config  # noqa:F401
 from common.download_directory import cd_into_download_directory
 from common.kubernetes import ReformatCronJob, ReformatJob, ValidationCronJob
@@ -245,31 +244,9 @@ def reformat_local(init_time_end: DatetimeLike) -> None:
 def reformat_kubernetes(
     init_time_end: DatetimeLike, jobs_per_pod: int, max_parallelism: int
 ) -> None:
+    image_tag = docker.build_and_push_image()
+
     template_ds = template.get_template(init_time_end)
-
-    job_timestamp = pd.Timestamp.now("UTC").strftime("%Y-%m-%dT%H-%M-%SZ")
-
-    docker_repo = os.environ["DOCKER_REPOSITORY"]
-    assert re.fullmatch(r"[0-9a-zA-Z_\.\-\/]{1,1000}", docker_repo)
-    image_tag = f"{docker_repo}:{job_timestamp}"
-
-    subprocess.run(  # noqa: S603  allow passing variable to subprocess, it's realtively sanitized above
-        [
-            "/usr/bin/docker",
-            "build",
-            "--file",
-            "deploy/Dockerfile",
-            "--tag",
-            image_tag,
-            ".",
-        ],
-        check=True,
-    )
-    subprocess.run(  # noqa: S603
-        ["/usr/bin/docker", "push", image_tag], check=True
-    )
-    logger.info(f"Pushed {image_tag}")
-
     store = get_store()
     logger.info(f"Writing zarr metadata to {store.root}")
     template.write_metadata(template_ds, store, get_mode(store))
@@ -279,7 +256,6 @@ def reformat_kubernetes(
     parallelism = min(workers_total, max_parallelism)
 
     dataset_id = template_ds.attrs["dataset_id"]
-    job_name = f"{dataset_id}-{job_timestamp}"
 
     kubernetes_job = ReformatJob(
         image=image_tag,
@@ -301,33 +277,10 @@ def reformat_kubernetes(
         check=True,
     )
 
-    logger.info(f"Submitted kubernetes job {job_name}")
+    logger.info(f"Submitted kubernetes job {kubernetes_job.job_name}")
 
 
-def deploy_operational_updates() -> None:
-    job_timestamp = pd.Timestamp.now("UTC").strftime("%Y-%m-%dT%H-%M-%SZ")
-
-    docker_repo = os.environ["DOCKER_REPOSITORY"]
-    assert re.fullmatch(r"[0-9a-zA-Z_\.\-\/]{1,1000}", docker_repo)
-    image_tag = f"{docker_repo}:{job_timestamp}"
-
-    subprocess.run(  # noqa: S603  allow passing variable to subprocess, it's realtively sanitized above
-        [
-            "/usr/bin/docker",
-            "build",
-            "--file",
-            "deploy/Dockerfile",
-            "--tag",
-            image_tag,
-            ".",
-        ],
-        check=True,
-    )
-    subprocess.run(  # noqa: S603
-        ["/usr/bin/docker", "push", image_tag], check=True
-    )
-    logger.info(f"Pushed {image_tag}")
-
+def operational_kubernetes_resources(image_tag: str) -> list[ReformatJob]:
     dataset_id = template_config.DATASET_ID
 
     operational_update_cron_job = ReformatCronJob(
@@ -349,17 +302,7 @@ def deploy_operational_updates() -> None:
         ephemeral_storage="10G",
     )
 
-    k8s_resources_str = (
-        json.dumps(operational_update_cron_job.as_kubernetes_object())
-        + "\n-----\n"
-        + json.dumps(validation_cron_job.as_kubernetes_object())
-    )
-    subprocess.run(  # noqa: S603
-        ["/usr/bin/kubectl", "apply", "-f", "-"],
-        input=k8s_resources_str,
-        text=True,
-        check=True,
-    )
+    return [operational_update_cron_job, validation_cron_job]
 
 
 def reformat_chunks(
