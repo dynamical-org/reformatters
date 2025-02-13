@@ -27,16 +27,17 @@ def deploy_operational_updates(
     for fn in fns:
         reformat_jobs.extend(fn(image_tag))
 
-    k8s_resources_str = "\n-----\n".join(
-        [
-            json.dumps(reformat_job.as_kubernetes_object())
-            for reformat_job in reformat_jobs
-        ]
-    )
+    k8s_resource_list = {
+        "apiVersion": "v1",
+        "kind": "List",
+        "items": [
+            reformat_job.as_kubernetes_object() for reformat_job in reformat_jobs
+        ],
+    }
 
     subprocess.run(  # noqa: S603
         ["/usr/bin/kubectl", "apply", "-f", "-"],
-        input=k8s_resources_str,
+        input=json.dumps(k8s_resource_list),
         text=True,
         check=True,
     )
