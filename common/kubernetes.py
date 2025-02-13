@@ -152,7 +152,9 @@ class ReformatCronJob(ReformatJob):
     name: str
     schedule: str
     ttl: timedelta = timedelta(hours=12)
-    command: list[str] = ["reformat_operational_update"]
+    command: list[str] = ["reformat-operational-update"]
+    workers_total: int = 1
+    parallelism: int = 1
 
     def as_kubernetes_object(self) -> dict[str, Any]:
         job_spec = super().as_kubernetes_object()["spec"]
@@ -166,3 +168,9 @@ class ReformatCronJob(ReformatJob):
                 "jobTemplate": {"spec": job_spec},
             },
         }
+
+
+class ValidationCronJob(ReformatCronJob):
+    command: list[str] = ["validate-zarr"]
+    workers_total: int = 1
+    parallelism: int = 1
