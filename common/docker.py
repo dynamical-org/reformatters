@@ -21,6 +21,7 @@ def build_and_push_image() -> str:
         [
             "/usr/bin/docker",
             "buildx",
+            "build",
             "--push",
             "--file",
             "deploy/Dockerfile",
