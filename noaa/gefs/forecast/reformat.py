@@ -39,7 +39,7 @@ from noaa.gefs.forecast.read_data import (
 
 _PROCESSING_CHUNK_DIMENSION = "init_time"
 _OPERATIONAL_CRON_SCHEDULE = "0 7 * * *"  # At 7:00 UTC every day.
-_VALIDATION_CRON_SCHEDULE = "0 10 * * *"  # At 10:00 UTC every day.
+_VALIDATION_CRON_SCHEDULE = "0 9 * * *"  # At 9:00 UTC every day.
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
