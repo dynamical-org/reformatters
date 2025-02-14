@@ -48,9 +48,21 @@ jobs:
         with:
           version: 'latest'
 
+      - name: Debug AWS Identity
+        run: aws sts get-caller-identity
+
+      - name: Test EKS Access
+        run: aws eks describe-cluster --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }} --debug
+
       - name: Update kubeconfig
         run: |
           aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
+
+      - name: Show kubeconfig
+        run: cat ~/.kube/config
+
+      - name: Check kubectl
+        run: kubectl get pods
 
       - name: Deploy
         env:
