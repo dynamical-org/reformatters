@@ -1,20 +1,21 @@
+from collections.abc import Iterable
 from datetime import timedelta
-from typing import Any
+from typing import Annotated, Any
 
 import pydantic
 
 
-class ReformatJob(pydantic.BaseModel):
+class Job(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
-    command: list[str] = pydantic.Field(min_length=1)
-    image: str
-    dataset_id: str
-    cpu: str
-    memory: str
-    ephemeral_storage: str
-    workers_total: int
-    parallelism: int
+    command: Annotated[Iterable[str], pydantic.Field(min_length=1)]
+    image: Annotated[str, pydantic.Field(min_length=1)]
+    dataset_id: Annotated[str, pydantic.Field(min_length=1)]
+    cpu: Annotated[str, pydantic.Field(min_length=1)]
+    memory: Annotated[str, pydantic.Field(min_length=1)]
+    ephemeral_storage: Annotated[str, pydantic.Field(min_length=1)] = "10G"
+    workers_total: Annotated[int, pydantic.Field(ge=1)]
+    parallelism: Annotated[int, pydantic.Field(ge=1)]
     ttl: timedelta = timedelta(days=7)
 
     @property
@@ -148,13 +149,10 @@ class ReformatJob(pydantic.BaseModel):
         }
 
 
-class ReformatCronJob(ReformatJob):
-    name: str
-    schedule: str
+class CronJob(Job):
+    name: Annotated[str, pydantic.Field(min_length=1)]
+    schedule: Annotated[str, pydantic.Field(min_length=1)]
     ttl: timedelta = timedelta(hours=12)
-    command: list[str] = ["reformat-operational-update"]
-    workers_total: int = 1
-    parallelism: int = 1
 
     def as_kubernetes_object(self) -> dict[str, Any]:
         job_spec = super().as_kubernetes_object()["spec"]
@@ -170,7 +168,14 @@ class ReformatCronJob(ReformatJob):
         }
 
 
-class ValidationCronJob(ReformatCronJob):
-    command: list[str] = ["validate-zarr"]
+class ReformatCronJob(CronJob):
+    command: Iterable[str] = ["reformat-operational-update"]
+    # Operational updates expect a single worker
+    workers_total: int = 1
+    parallelism: int = 1
+
+
+class ValidationCronJob(CronJob):
+    command: Iterable[str] = ["validate-zarr"]
     workers_total: int = 1
     parallelism: int = 1

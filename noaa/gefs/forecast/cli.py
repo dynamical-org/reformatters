@@ -41,11 +41,6 @@ def reformat_operational_update() -> None:
 
 
 @app.command()
-def deploy_operational_updates() -> None:
-    reformat.deploy_operational_updates()
-
-
-@app.command()
 def validate_zarr() -> None:
     reformat.validate_zarr()
 
