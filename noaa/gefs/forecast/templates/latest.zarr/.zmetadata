@@ -797,6 +797,190 @@
             },
             "units": "degrees_east"
         },
+        "maximum_temperature_2m/.zarray": {
+            "chunks": [
+                1,
+                31,
+                181,
+                73,
+                72
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 3,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
+            "order": "C",
+            "shape": [
+                1,
+                31,
+                181,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "maximum_temperature_2m/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "ensemble_member",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
+            "long_name": "Maximum temperature",
+            "short_name": "tmax",
+            "step_type": "max",
+            "units": "C"
+        },
+        "maximum_temperature_2m_avg/.zarray": {
+            "chunks": [
+                1,
+                181,
+                146,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 3,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
+            "order": "C",
+            "shape": [
+                1,
+                181,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "maximum_temperature_2m_avg/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "coordinates": "expected_forecast_length spatial_ref valid_time",
+            "ensemble_statistic": "avg",
+            "long_name": "Maximum temperature",
+            "short_name": "tmax",
+            "step_type": "max",
+            "units": "C"
+        },
+        "minimum_temperature_2m/.zarray": {
+            "chunks": [
+                1,
+                31,
+                181,
+                73,
+                72
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 3,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
+            "order": "C",
+            "shape": [
+                1,
+                31,
+                181,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "minimum_temperature_2m/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "ensemble_member",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
+            "long_name": "Minimum temperature",
+            "short_name": "tmin",
+            "step_type": "min",
+            "units": "C"
+        },
+        "minimum_temperature_2m_avg/.zarray": {
+            "chunks": [
+                1,
+                181,
+                146,
+                144
+            ],
+            "compressor": {
+                "blocksize": 0,
+                "clevel": 3,
+                "cname": "zstd",
+                "id": "blosc",
+                "shuffle": 1
+            },
+            "dtype": "<f4",
+            "fill_value": "NaN",
+            "filters": [
+                {
+                    "id": "bitround",
+                    "keepbits": 7
+                }
+            ],
+            "order": "C",
+            "shape": [
+                1,
+                181,
+                721,
+                1440
+            ],
+            "zarr_format": 2
+        },
+        "minimum_temperature_2m_avg/.zattrs": {
+            "_ARRAY_DIMENSIONS": [
+                "init_time",
+                "lead_time",
+                "latitude",
+                "longitude"
+            ],
+            "coordinates": "expected_forecast_length spatial_ref valid_time",
+            "ensemble_statistic": "avg",
+            "long_name": "Minimum temperature",
+            "short_name": "tmin",
+            "step_type": "min",
+            "units": "C"
+        },
         "percent_frozen_precipitation_surface/.zarray": {
             "chunks": [
                 1,
