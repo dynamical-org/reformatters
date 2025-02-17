@@ -5,19 +5,17 @@ import numpy as np
 import pandas as pd
 from numcodecs import BitRound, Blosc, Delta  # type: ignore
 
-from common.types import DatetimeLike
-
-from .config_models import (
+from common.config_models import (
     Coordinate,
     CoordinateAttrs,
     DatasetAttributes,
-    DataVar,
     DataVarAttrs,
     Encoding,
-    InternalAttrs,
     StatisticsApproximate,
     replace,
 )
+from common.types import DatetimeLike
+from noaa.gefs.gefs_config_models import GEFSDataVar, GEFSInternalAttrs
 
 INIT_TIME_START = pd.Timestamp("2024-01-01T00:00")
 INIT_TIME_FREQUENCY = pd.Timedelta("24h")
@@ -267,7 +265,7 @@ COORDINATES: Sequence[Coordinate] = (
 
 
 _DATA_VARIABLES = (
-    # DataVar(
+    # GEFSDataVar(
     #     name="visibility_surface",
     #     encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=15_000.0),
     #     attrs=DataVarAttrs(
@@ -280,11 +278,11 @@ _DATA_VARIABLES = (
     #         grib_element="VIS",
     #         grib_description='0[-] SFC="Ground or water surface"',
     #         grib_index_level="surface",
-    #         noaa_file_type="s+b",
+    #         gefs_file_type="s+b",
     #         index_position=1,
     #     ),
     # ),
-    # DataVar(
+    # GEFSDataVar(
     #     name="wind_gust_surface",
     #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
     #     attrs=DataVarAttrs(
@@ -297,11 +295,11 @@ _DATA_VARIABLES = (
     #         grib_element="GUST",
     #         grib_description='0[-] SFC="Ground or water surface"',
     #         grib_index_level="surface",
-    #         noaa_file_type="s+b",
+    #         gefs_file_type="s+b",
     #         index_position=2,
     #     ),
     # ),
-    # DataVar(
+    # GEFSDataVar(
     #     name="pressure_mean_sea_level",
     #     encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=101_000.0),
     #     attrs=DataVarAttrs(
@@ -314,11 +312,11 @@ _DATA_VARIABLES = (
     #         grib_element="MSLET",
     #         grib_description='0[-] MSL="Mean sea level"',
     #         grib_index_level="mean sea level",
-    #         noaa_file_type="s+b",
+    #         gefs_file_type="s+b",
     #         index_position=3,
     #     ),
     # ),
-    DataVar(
+    GEFSDataVar(
         name="pressure_surface",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=100_000.0),
         attrs=DataVarAttrs(
@@ -328,15 +326,15 @@ _DATA_VARIABLES = (
             step_type="instant",
             standard_name="surface_air_pressure",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="PRES",
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
-            noaa_file_type="s+a",
+            gefs_file_type="s+a",
             index_position=4,
         ),
     ),
-    # DataVar(
+    # GEFSDataVar(
     #     name="soil_temperature_surface",
     #     encoding=ENCODING_FLOAT32_DEFAULT,
     #     attrs=DataVarAttrs(
@@ -349,11 +347,11 @@ _DATA_VARIABLES = (
     #         grib_element="TSOIL",
     #         grib_description='0-0.1[m] DBLL="Depth below land surface"',
     #         grib_index_level="0-0.1 m below ground",
-    #         noaa_file_type="s+a",
+    #         gefs_file_type="s+a",
     #         index_position=5,
     #     ),
     # ),
-    # DataVar(
+    # GEFSDataVar(
     #     name="soil_moisture_surface",
     #     encoding=ENCODING_FLOAT32_DEFAULT,
     #     attrs=DataVarAttrs(
@@ -366,11 +364,11 @@ _DATA_VARIABLES = (
     #         grib_element="SOILW",
     #         grib_description='0-0.1[m] DBLL="Depth below land surface"',
     #         grib_index_level="0-0.1 m below ground",
-    #         noaa_file_type="s+a",
+    #         gefs_file_type="s+a",
     #         index_position=6,
     #     ),
     # ),
-    # DataVar(
+    # GEFSDataVar(
     #     name="snow_water_equivalent_surface",
     #     encoding=ENCODING_FLOAT32_DEFAULT,
     #     attrs=DataVarAttrs(
@@ -383,11 +381,11 @@ _DATA_VARIABLES = (
     #         grib_element="WEASD",
     #         grib_description='0[-] SFC="Ground or water surface"',
     #         grib_index_level="surface",
-    #         noaa_file_type="s+a",
+    #         gefs_file_type="s+a",
     #         index_position=7,
     #     ),
     # ),
-    # DataVar(
+    # GEFSDataVar(
     #     name="snow_depth_surface",
     #     encoding=ENCODING_FLOAT32_DEFAULT,
     #     attrs=DataVarAttrs(
@@ -401,11 +399,11 @@ _DATA_VARIABLES = (
     #         grib_element="SNOD",
     #         grib_description='0[-] SFC="Ground or water surface"',
     #         grib_index_level="surface",
-    #         noaa_file_type="s+a",
+    #         gefs_file_type="s+a",
     #         index_position=8,
     #     ),
     # ),
-    # DataVar(
+    # GEFSDataVar(
     #     name="sea_ice_thickness_surface",
     #     encoding=ENCODING_FLOAT32_DEFAULT,
     #     attrs=DataVarAttrs(
@@ -418,11 +416,11 @@ _DATA_VARIABLES = (
     #         grib_element="ICETK",
     #         grib_description='0[-] SFC="Ground or water surface"',
     #         grib_index_level="surface",
-    #         noaa_file_type="s+a",
+    #         gefs_file_type="s+a",
     #         index_position=9,
     #     ),
     # ),
-    DataVar(
+    GEFSDataVar(
         name="temperature_2m",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -432,15 +430,15 @@ _DATA_VARIABLES = (
             step_type="instant",
             standard_name="air_temperature",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="TMP",
             grib_description='2[m] HTGL="Specified height level above ground"',
             grib_index_level="2 m above ground",
-            noaa_file_type="s+a",
+            gefs_file_type="s+a",
             index_position=10,
         ),
     ),
-    # DataVar(
+    # GEFSDataVar(
     #     name="dew_point_2m",
     #     encoding=ENCODING_FLOAT32_DEFAULT,
     #     attrs=DataVarAttrs(
@@ -453,11 +451,11 @@ _DATA_VARIABLES = (
     #         grib_element="DPT",
     #         grib_description='2[m] HTGL="Specified height level above ground"',
     #         grib_index_level="2 m above ground",
-    #         noaa_file_type="s+b",
+    #         gefs_file_type="s+b",
     #         index_position=11,
     #     ),
     # ),
-    DataVar(
+    GEFSDataVar(
         name="relative_humidity_2m",
         encoding=replace(
             ENCODING_FLOAT32_DEFAULT, add_offset=50.0, filters=[BitRound(keepbits=6)]
@@ -469,15 +467,15 @@ _DATA_VARIABLES = (
             step_type="instant",
             standard_name="relative_humidity",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="RH",
             grib_description='2[m] HTGL="Specified height level above ground"',
             grib_index_level="2 m above ground",
-            noaa_file_type="s+a",
+            gefs_file_type="s+a",
             index_position=12,
         ),
     ),
-    DataVar(
+    GEFSDataVar(
         name="maximum_temperature_2m",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -486,15 +484,15 @@ _DATA_VARIABLES = (
             units="C",
             step_type="max",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="TMAX",
             grib_description='2[m] HTGL="Specified height level above ground"',
             grib_index_level="2 m above ground",
-            noaa_file_type="s+a",
+            gefs_file_type="s+a",
             index_position=13,
         ),
     ),
-    DataVar(
+    GEFSDataVar(
         name="minimum_temperature_2m",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -503,15 +501,15 @@ _DATA_VARIABLES = (
             units="C",
             step_type="min",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="TMIN",
             grib_description='2[m] HTGL="Specified height level above ground"',
             grib_index_level="2 m above ground",
-            noaa_file_type="s+a",
+            gefs_file_type="s+a",
             index_position=14,
         ),
     ),
-    DataVar(
+    GEFSDataVar(
         name="wind_u_10m",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
@@ -521,15 +519,15 @@ _DATA_VARIABLES = (
             step_type="instant",
             standard_name="eastward_wind",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="UGRD",
             grib_description='10[m] HTGL="Specified height level above ground"',
             grib_index_level="10 m above ground",
-            noaa_file_type="s+a",
+            gefs_file_type="s+a",
             index_position=15,
         ),
     ),
-    DataVar(
+    GEFSDataVar(
         name="wind_v_10m",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
@@ -539,15 +537,15 @@ _DATA_VARIABLES = (
             step_type="instant",
             standard_name="northward_wind",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="VGRD",
             grib_description='10[m] HTGL="Specified height level above ground"',
             grib_index_level="10 m above ground",
-            noaa_file_type="s+a",
+            gefs_file_type="s+a",
             index_position=16,
         ),
     ),
-    DataVar(
+    GEFSDataVar(
         name="wind_u_100m",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
@@ -557,15 +555,15 @@ _DATA_VARIABLES = (
             units="m/s",
             step_type="instant",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="UGRD",
             grib_description='100[m] HTGL="Specified height level above ground"',
             grib_index_level="100 m above ground",
-            noaa_file_type="b",
+            gefs_file_type="b",
             index_position=357,
         ),
     ),
-    DataVar(
+    GEFSDataVar(
         name="wind_v_100m",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
@@ -575,15 +573,15 @@ _DATA_VARIABLES = (
             step_type="instant",
             standard_name="northward_wind",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="VGRD",
             grib_description='100[m] HTGL="Specified height level above ground"',
             grib_index_level="100 m above ground",
-            noaa_file_type="b",
+            gefs_file_type="b",
             index_position=358,
         ),
     ),
-    DataVar(
+    GEFSDataVar(
         name="percent_frozen_precipitation_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -592,15 +590,15 @@ _DATA_VARIABLES = (
             units="%",
             step_type="instant",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="CPOFP",
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
-            noaa_file_type="s+b",
+            gefs_file_type="s+b",
             index_position=17,
         ),
     ),
-    DataVar(
+    GEFSDataVar(
         name="precipitation_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -609,16 +607,16 @@ _DATA_VARIABLES = (
             units="kg/(m^2)",
             step_type="accum",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="APCP",
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
-            noaa_file_type="s+a",
+            gefs_file_type="s+a",
             index_position=18,
             include_lead_time_suffix=True,
         ),
     ),
-    DataVar(
+    GEFSDataVar(
         name="categorical_snow_surface",
         encoding=ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT,
         attrs=DataVarAttrs(
@@ -627,15 +625,15 @@ _DATA_VARIABLES = (
             units="0=no; 1=yes",
             step_type="avg",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="CSNOW",
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
-            noaa_file_type="s+a",
+            gefs_file_type="s+a",
             index_position=19,
         ),
     ),
-    DataVar(
+    GEFSDataVar(
         name="categorical_ice_pellets_surface",
         encoding=ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT,
         attrs=DataVarAttrs(
@@ -644,15 +642,15 @@ _DATA_VARIABLES = (
             units="0=no; 1=yes",
             step_type="avg",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="CICEP",
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
-            noaa_file_type="s+a",
+            gefs_file_type="s+a",
             index_position=20,
         ),
     ),
-    DataVar(
+    GEFSDataVar(
         name="categorical_freezing_rain_surface",
         encoding=ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT,
         attrs=DataVarAttrs(
@@ -661,15 +659,15 @@ _DATA_VARIABLES = (
             units="0=no; 1=yes",
             step_type="avg",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="CFRZR",
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
-            noaa_file_type="s+a",
+            gefs_file_type="s+a",
             index_position=21,
         ),
     ),
-    DataVar(
+    GEFSDataVar(
         name="categorical_rain_surface",
         encoding=ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT,
         attrs=DataVarAttrs(
@@ -678,15 +676,15 @@ _DATA_VARIABLES = (
             units="0=no; 1=yes",
             step_type="avg",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="CRAIN",
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
-            noaa_file_type="s+a",
+            gefs_file_type="s+a",
             index_position=22,
         ),
     ),
-    # DataVar(
+    # GEFSDataVar(
     #     name="mean_latent_heat_flux_surface",
     #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
     #     attrs=DataVarAttrs(
@@ -699,11 +697,11 @@ _DATA_VARIABLES = (
     #         grib_element="LHTFL",
     #         grib_description='0[-] SFC="Ground or water surface"',
     #         grib_index_level="surface",
-    #         noaa_file_type="s+a",
+    #         gefs_file_type="s+a",
     #         index_position=23,
     #     ),
     # ),
-    # DataVar(
+    # GEFSDataVar(
     #     name="mean_sensible_heat_flux_surface",
     #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
     #     attrs=DataVarAttrs(
@@ -716,11 +714,11 @@ _DATA_VARIABLES = (
     #         grib_element="SHTFL",
     #         grib_description='0[-] SFC="Ground or water surface"',
     #         grib_index_level="surface",
-    #         noaa_file_type="s+a",
+    #         gefs_file_type="s+a",
     #         index_position=24,
     #     ),
     # ),
-    DataVar(
+    GEFSDataVar(
         name="precipitable_water_atmosphere",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -729,15 +727,15 @@ _DATA_VARIABLES = (
             units="kg/(m^2)",
             step_type="instant",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="PWAT",
             grib_description='0[-] EATM="Entire atmosphere (considered as a single layer)"',
             grib_index_level="entire atmosphere (considered as a single layer)",
-            noaa_file_type="s+a",
+            gefs_file_type="s+a",
             index_position=27,
         ),
     ),
-    DataVar(
+    GEFSDataVar(
         name="total_cloud_cover_atmosphere",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=50.0),
         attrs=DataVarAttrs(
@@ -746,15 +744,15 @@ _DATA_VARIABLES = (
             units="%",
             step_type="avg",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="TCDC",
             grib_description='0[-] EATM="Entire Atmosphere"',
             grib_index_level="entire atmosphere",
-            noaa_file_type="s+a",
+            gefs_file_type="s+a",
             index_position=28,
         ),
     ),
-    DataVar(
+    GEFSDataVar(
         name="geopotential_height_cloud_ceiling",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=8)]),
         attrs=DataVarAttrs(
@@ -764,15 +762,15 @@ _DATA_VARIABLES = (
             step_type="instant",
             standard_name="geopotential_height",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="HGT",
             grib_description='0[-] CEIL="Cloud ceiling"',
             grib_index_level="cloud ceiling",
-            noaa_file_type="s+b",
+            gefs_file_type="s+b",
             index_position=29,
         ),
     ),
-    DataVar(
+    GEFSDataVar(
         name="downward_short_wave_radiation_flux_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -781,15 +779,15 @@ _DATA_VARIABLES = (
             units="W/(m^2)",
             step_type="avg",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="DSWRF",
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
-            noaa_file_type="s+a",
+            gefs_file_type="s+a",
             index_position=30,
         ),
     ),
-    DataVar(
+    GEFSDataVar(
         name="downward_long_wave_radiation_flux_surface",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=300.0),
         attrs=DataVarAttrs(
@@ -798,15 +796,15 @@ _DATA_VARIABLES = (
             units="W/(m^2)",
             step_type="avg",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="DLWRF",
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
-            noaa_file_type="s+a",
+            gefs_file_type="s+a",
             index_position=31,
         ),
     ),
-    # DataVar(
+    # GEFSDataVar(
     #     name="upward_short_wave_radiation_flux_surface",
     #     encoding=ENCODING_FLOAT32_DEFAULT,
     #     attrs=DataVarAttrs(
@@ -819,11 +817,11 @@ _DATA_VARIABLES = (
     #         grib_element="USWRF",
     #         grib_description='0[-] SFC="Ground or water surface"',
     #         grib_index_level="surface",
-    #         noaa_file_type="s+a",
+    #         gefs_file_type="s+a",
     #         index_position=32,
     #     ),
     # ),
-    # DataVar(
+    # GEFSDataVar(
     #     name="storm_relative_helicity_3000-0m",
     #     encoding=ENCODING_FLOAT32_DEFAULT,
     #     attrs=DataVarAttrs(
@@ -836,11 +834,11 @@ _DATA_VARIABLES = (
     #         grib_element="HLCY",
     #         grib_description='3000-0[m] HTGL="Specified height level above ground"',
     #         grib_index_level="3000-0 m above ground",
-    #         noaa_file_type="s+b",
+    #         gefs_file_type="s+b",
     #         index_position=35,
     #     ),
     # ),
-    DataVar(
+    GEFSDataVar(
         name="pressure_reduced_to_mean_sea_level",
         encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=101_000.0),
         attrs=DataVarAttrs(
@@ -849,11 +847,11 @@ _DATA_VARIABLES = (
             units="Pa",
             step_type="instant",
         ),
-        internal_attrs=InternalAttrs(
+        internal_attrs=GEFSInternalAttrs(
             grib_element="PRMSL",
             grib_description='0[-] MSL="Mean sea level"',
             grib_index_level="mean sea level",
-            noaa_file_type="s+a",
+            gefs_file_type="s+a",
             index_position=38,
         ),
     ),
@@ -869,7 +867,7 @@ _STATISTIC_DATA_VARIABLES = tuple(
     for ensemble_statistic in ["avg"]
     # Precomputed ensemble statistic files are not available for "b" files.
     # Should we compute the statistics ourselves?
-    if var.internal_attrs.noaa_file_type not in ("b", "s+b")
+    if var.internal_attrs.gefs_file_type not in ("b", "s+b")
 )
 
-DATA_VARIABLES: Sequence[DataVar] = _DATA_VARIABLES + _STATISTIC_DATA_VARIABLES
+DATA_VARIABLES: Sequence[GEFSDataVar] = _DATA_VARIABLES + _STATISTIC_DATA_VARIABLES
