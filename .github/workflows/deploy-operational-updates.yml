@@ -1,7 +1,13 @@
 name: Deploy Operational Updates
+
 on:
   push:
     branches: [ main ]
+
+# Prevent concurrent runs since this is deploying to the K8S cluster
+concurrency: 
+  group: "deploy"
+  cancel-in-progress: false
 
 permissions:
   id-token: write
