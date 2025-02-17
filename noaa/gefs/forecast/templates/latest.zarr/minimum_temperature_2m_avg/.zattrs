@@ -1,0 +1,14 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "init_time",
+        "lead_time",
+        "latitude",
+        "longitude"
+    ],
+    "coordinates": "expected_forecast_length spatial_ref valid_time",
+    "ensemble_statistic": "avg",
+    "long_name": "Minimum temperature",
+    "short_name": "tmin",
+    "step_type": "min",
+    "units": "C"
+}

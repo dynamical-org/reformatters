@@ -291,6 +291,7 @@ def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
         cpu="6",  # fit on 8 vCPU node
         memory="60G",  # fit on 64GB node
         ephemeral_storage="150G",
+        suspend=True,  # TODO remove after reprocessing the archive to roll out a new variable
     )
     validation_cron_job = ValidationCronJob(
         name=f"{dataset_id}-validation",
@@ -299,6 +300,7 @@ def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
         dataset_id=dataset_id,
         cpu="6",  # fit on 8 vCPU node
         memory="60G",  # fit on 64GB node
+        suspend=True,  # TODO remove after reprocessing the archive to roll out a new variable
     )
 
     return [operational_update_cron_job, validation_cron_job]
