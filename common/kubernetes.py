@@ -153,6 +153,7 @@ class CronJob(Job):
     name: Annotated[str, pydantic.Field(min_length=1)]
     schedule: Annotated[str, pydantic.Field(min_length=1)]
     ttl: timedelta = timedelta(hours=12)
+    suspend: bool = False
 
     def as_kubernetes_object(self) -> dict[str, Any]:
         job_spec = super().as_kubernetes_object()["spec"]
@@ -162,6 +163,7 @@ class CronJob(Job):
             "metadata": {"name": self.name},
             "spec": {
                 "schedule": self.schedule,
+                "suspend": self.suspend,
                 "concurrencyPolicy": "Replace",
                 "jobTemplate": {"spec": job_spec},
             },
