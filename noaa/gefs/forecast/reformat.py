@@ -23,13 +23,13 @@ import xarray as xr
 
 from common import docker, validation
 from common.config import Config  # noqa:F401
+from common.config_models import EnsembleStatistic
 from common.download_directory import cd_into_download_directory
 from common.kubernetes import Job, ReformatCronJob, ValidationCronJob
 from common.types import Array1D, DatetimeLike, StoreLike
 from noaa.gefs.forecast import template, template_config
-from noaa.gefs.forecast.config_models import DataVar, EnsembleStatistic
-from noaa.gefs.forecast.read_data import (
-    NoaaFileType,
+from noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
+from noaa.gefs.read_data import (
     SourceFileCoords,
     download_file,
     generate_chunk_coordinates,
@@ -178,7 +178,7 @@ def get_recent_init_times_for_reprocessing(ds: xr.Dataset) -> Array1D[np.datetim
 
 
 def copy_data_var(
-    data_var: DataVar,
+    data_var: GEFSDataVar,
     chunk_index: int,
     tmp_store: Path,
     final_store: fsspec.FSMap,
@@ -334,14 +334,14 @@ type EnsOrStat = int | np.integer[Any] | str
 def reformat_init_time_i_slices(
     init_time_i_slices: list[slice], template_ds: xr.Dataset, store: StoreLike
 ) -> Generator[
-    tuple[DataVar, dict[tuple[pd.Timestamp, EnsOrStat], pd.Timedelta]], None, None
+    tuple[GEFSDataVar, dict[tuple[pd.Timestamp, EnsOrStat], pd.Timedelta]], None, None
 ]:
     """
     Helper function to reformat the chunk data.
     Yields the data variable/init time combinations and their corresponding maximum
     ingested lead time as it processes.
     """
-    data_var_groups = group_data_vars_by_noaa_file_type(
+    data_var_groups = group_data_vars_by_gefs_file_type(
         [d for d in template.DATA_VARIABLES if d.name in template_ds]
     )
     ensemble_statistics: set[EnsembleStatistic] = {
@@ -379,9 +379,9 @@ def reformat_init_time_i_slices(
             with cd_into_download_directory() as directory:
                 download_var_group_futures: dict[
                     Future[list[tuple[SourceFileCoords, Path | None]]],
-                    tuple[DataVar, ...],
+                    tuple[GEFSDataVar, ...],
                 ] = {}
-                for noaa_file_type, ensemble_statistic, data_vars in data_var_groups:
+                for gefs_file_type, ensemble_statistic, data_vars in data_var_groups:
                     chunk_coords: Iterable[SourceFileCoords]
                     if ensemble_statistic is None:
                         chunk_coords = chunk_coords_by_type["ensemble"]
@@ -393,7 +393,7 @@ def reformat_init_time_i_slices(
                             download_var_group_files,
                             data_vars,
                             chunk_coords,
-                            noaa_file_type,
+                            gefs_file_type,
                             directory,
                             io_executor,
                         )
@@ -496,9 +496,9 @@ def reformat_init_time_i_slices(
 
 
 def download_var_group_files(
-    idx_data_vars: Iterable[DataVar],
+    idx_data_vars: Iterable[GEFSDataVar],
     chunk_coords: Iterable[SourceFileCoords],
-    noaa_file_type: NoaaFileType,
+    gefs_file_type: GEFSFileType,
     directory: Path,
     io_executor: ThreadPoolExecutor,
 ) -> list[tuple[SourceFileCoords, Path | None]]:
@@ -507,9 +507,9 @@ def download_var_group_files(
             io_executor.submit(
                 download_file,
                 coord,
-                noaa_file_type=noaa_file_type,
+                gefs_file_type=gefs_file_type,
                 directory=directory,
-                noaa_idx_data_vars=idx_data_vars,
+                gefs_idx_data_vars=idx_data_vars,
             )
             for coord in chunk_coords
         ]
@@ -524,13 +524,13 @@ def download_var_group_files(
     return [f.result() for f in done]
 
 
-def group_data_vars_by_noaa_file_type(
-    data_vars: Iterable[DataVar], group_size: int = 4
-) -> list[tuple[NoaaFileType, EnsembleStatistic | None, tuple[DataVar, ...]]]:
+def group_data_vars_by_gefs_file_type(
+    data_vars: Iterable[GEFSDataVar], group_size: int = 4
+) -> list[tuple[GEFSFileType, EnsembleStatistic | None, tuple[GEFSDataVar, ...]]]:
     grouper = defaultdict(list)
     for data_var in data_vars:
-        noaa_file_type = data_var.internal_attrs.noaa_file_type
-        grouper[(noaa_file_type, data_var.attrs.ensemble_statistic)].append(data_var)
+        gefs_file_type = data_var.internal_attrs.gefs_file_type
+        grouper[(gefs_file_type, data_var.attrs.ensemble_statistic)].append(data_var)
     chunks = []
     for (file_type, ensemble_statistic), idx_data_vars in grouper.items():
         idx_data_vars = sorted(

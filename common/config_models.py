@@ -1,15 +1,10 @@
 from collections.abc import Sequence
-from typing import Any, Literal, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 
 import numcodecs  # type: ignore
 import pydantic
 
 from common.types import TimedeltaUnits, TimestampUnits
-
-# We pull data from 3 types of source files: `a`, `b` and `s`.
-# Selected variables are available in `s` at higher resolution (0.25 vs 0.5 deg)
-# but `s` stops after forecast lead time 240h at which point the variable is still in `a` or `b`.
-type NoaaFileType = Literal["a", "b", "s+a", "s+b"]
 
 B = TypeVar("B", bound=pydantic.BaseModel)
 
@@ -57,15 +52,6 @@ class DataVarAttrs(FrozenBaseModel):
     ensemble_statistic: EnsembleStatistic | None = None
 
 
-class InternalAttrs(FrozenBaseModel):
-    grib_element: str
-    grib_description: str
-    grib_index_level: str
-    noaa_file_type: NoaaFileType
-    index_position: int
-    include_lead_time_suffix: bool = False
-
-
 class CoordinateAttrs(FrozenBaseModel):
     units: TimestampUnits | TimedeltaUnits | str
     statistics_approximate: StatisticsApproximate
@@ -102,8 +88,11 @@ class Coordinate(FrozenBaseModel):
     attrs: CoordinateAttrs
 
 
-class DataVar(FrozenBaseModel):
+INTERNAL_ATTRS = TypeVar("INTERNAL_ATTRS", bound=pydantic.BaseModel)
+
+
+class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS]):
     name: str
     encoding: Encoding
     attrs: DataVarAttrs
-    internal_attrs: InternalAttrs
+    internal_attrs: INTERNAL_ATTRS

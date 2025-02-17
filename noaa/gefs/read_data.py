@@ -17,10 +17,9 @@ import requests
 import xarray as xr
 
 from common.config import Config
+from common.config_models import EnsembleStatistic
 from common.types import Array2D
-
-from .config_models import DataVar, EnsembleStatistic
-from .config_models import NoaaFileType as NoaaFileType
+from noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
 
 FILE_RESOLUTIONS = {
     "s": "0p25",
@@ -51,8 +50,8 @@ class ChunkCoordinates(TypedDict):
 
 def download_file(
     coords: SourceFileCoords,
-    noaa_file_type: NoaaFileType,
-    noaa_idx_data_vars: Iterable[DataVar],
+    gefs_file_type: GEFSFileType,
+    gefs_idx_data_vars: Iterable[GEFSDataVar],
     directory: Path,
 ) -> tuple[SourceFileCoords, Path | None]:
     init_time = coords["init_time"]
@@ -76,17 +75,17 @@ def download_file(
 
     # Accumulated and last N hour avg values don't exist in the 0-hour forecast.
     if lead_time_hours == 0:
-        noaa_idx_data_vars = [
+        gefs_idx_data_vars = [
             data_var
-            for data_var in noaa_idx_data_vars
+            for data_var in gefs_idx_data_vars
             if data_var.attrs.step_type not in ("accum", "avg")
         ]
 
-    true_noaa_file_type = get_noaa_file_type_for_lead_time(lead_time, noaa_file_type)
+    true_gefs_file_type = get_gefs_file_type_for_lead_time(lead_time, gefs_file_type)
 
     remote_path = (
-        f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2{true_noaa_file_type}{FILE_RESOLUTIONS[true_noaa_file_type].strip("0")}/"
-        f"ge{ensemble_or_statistic_str}.t{init_hour_str}z.pgrb2{true_noaa_file_type}.{FILE_RESOLUTIONS[true_noaa_file_type]}.f{lead_time_hours:03.0f}"
+        f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2{true_gefs_file_type}{FILE_RESOLUTIONS[true_gefs_file_type].strip("0")}/"
+        f"ge{ensemble_or_statistic_str}.t{init_hour_str}z.pgrb2{true_gefs_file_type}.{FILE_RESOLUTIONS[true_gefs_file_type]}.f{lead_time_hours:03.0f}"
     )
 
     store = http_store("https://storage.googleapis.com/gfs-ensemble-forecast-system")
@@ -102,9 +101,9 @@ def download_file(
 
     # Create a unique, human debuggable suffix representing the data vars stored in the output file
     vars_str = "-".join(
-        var_info.internal_attrs.grib_element for var_info in noaa_idx_data_vars
+        var_info.internal_attrs.grib_element for var_info in gefs_idx_data_vars
     )
-    vars_hash = digest(format_noaa_idx_var(var_info) for var_info in noaa_idx_data_vars)
+    vars_hash = digest(format_gefs_idx_var(var_info) for var_info in gefs_idx_data_vars)
     vars_suffix = f"{vars_str}-{vars_hash}"
     local_path = Path(directory, f"{local_base_file_name}.{vars_suffix}")
 
@@ -117,7 +116,7 @@ def download_file(
         )
 
         byte_range_starts, byte_range_ends = parse_index_byte_ranges(
-            idx_local_path, noaa_idx_data_vars
+            idx_local_path, gefs_idx_data_vars
         )
 
         # print("Downloading", remote_path.split("/")[-1], vars_suffix)
@@ -137,21 +136,21 @@ def download_file(
         return coords, None
 
 
-def get_noaa_file_type_for_lead_time(
-    lead_time: pd.Timedelta, noaa_file_type: NoaaFileType
+def get_gefs_file_type_for_lead_time(
+    lead_time: pd.Timedelta, gefs_file_type: GEFSFileType
 ) -> Literal["a", "b", "s"]:
-    if noaa_file_type == "s+a":
+    if gefs_file_type == "s+a":
         if lead_time <= pd.Timedelta(hours=240):
             return "s"
         else:
             return "a"
-    elif noaa_file_type == "s+b":
+    elif gefs_file_type == "s+b":
         if lead_time <= pd.Timedelta(hours=240):
             return "s"
         else:
             return "b"
     else:
-        return noaa_file_type
+        return gefs_file_type
 
 
 def generate_chunk_coordinates(
@@ -189,14 +188,14 @@ def generate_chunk_coordinates(
 
 def parse_index_byte_ranges(
     idx_local_path: Path,
-    noaa_idx_data_vars: Iterable[DataVar],
+    gefs_idx_data_vars: Iterable[GEFSDataVar],
 ) -> tuple[list[int], list[int]]:
     with open(idx_local_path) as index_file:
         index_contents = index_file.read()
     byte_range_starts = []
     byte_range_ends = []
-    for var_info in noaa_idx_data_vars:
-        var_match_str = re.escape(format_noaa_idx_var(var_info))
+    for var_info in gefs_idx_data_vars:
+        var_match_str = re.escape(format_gefs_idx_var(var_info))
         matches = re.findall(
             f"\\d+:(\\d+):.+:{var_match_str}:.+(\\n\\d+:(\\d+))?",
             index_contents,
@@ -225,7 +224,7 @@ def parse_index_byte_ranges(
     return byte_range_starts, byte_range_ends
 
 
-def format_noaa_idx_var(var_info: DataVar) -> str:
+def format_gefs_idx_var(var_info: GEFSDataVar) -> str:
     return f"{var_info.internal_attrs.grib_element}:{var_info.internal_attrs.grib_index_level}"
 
 
@@ -243,7 +242,7 @@ def read_into(
     out: xr.DataArray,
     coords: SourceFileCoords,
     path: os.PathLike[str] | None,
-    data_var: DataVar,
+    data_var: GEFSDataVar,
 ) -> None:
     if path is None:
         return  # in rare case file is missing there's nothing to do
@@ -281,12 +280,12 @@ def read_into(
 def maybe_resample(
     raw_data: Array2D[np.float32],
     coords: SourceFileCoords,
-    data_var: DataVar,
+    data_var: GEFSDataVar,
 ) -> Array2D[np.float32]:
-    noaa_file_type = get_noaa_file_type_for_lead_time(
-        coords["lead_time"], data_var.internal_attrs.noaa_file_type
+    gefs_file_type = get_gefs_file_type_for_lead_time(
+        coords["lead_time"], data_var.internal_attrs.gefs_file_type
     )
-    if noaa_file_type in ["a", "b"]:
+    if gefs_file_type in ["a", "b"]:
         # Duplicate 1 pixel into 4 to go from 361x720 (a and b file resolution) to 721x1440 (s file resolution)
         # TODO figure out least worst translation from 361 -> 721 pixels
         len_lat, len_lon = raw_data.shape

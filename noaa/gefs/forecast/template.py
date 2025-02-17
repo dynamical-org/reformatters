@@ -10,9 +10,10 @@ import rioxarray  # noqa: F401  Adds .rio accessor to datasets
 import xarray as xr
 
 from common.config import Config  # noqa:F401
+from common.config_models import Coordinate
 from common.types import DatetimeLike, StoreLike
+from noaa.gefs.gefs_config_models import GEFSDataVar
 
-from .config_models import Coordinate, DataVar
 from .template_config import (
     COORDINATES,
     DATASET_ATTRIBUTES,
@@ -132,7 +133,7 @@ def add_derived_coordinates(ds: xr.Dataset, copy_metadata: bool = True) -> xr.Da
 
 
 def assign_var_metadata(
-    var: xr.DataArray, var_config: DataVar | Coordinate
+    var: xr.DataArray, var_config: GEFSDataVar | Coordinate
 ) -> xr.DataArray:
     var.encoding = var_config.encoding.model_dump(exclude_none=True)
 
@@ -150,7 +151,7 @@ def assign_var_metadata(
 
 
 def construct_data_variable(
-    var_config: DataVar, coords: dict[Dim, Any]
+    var_config: GEFSDataVar, coords: dict[Dim, Any]
 ) -> tuple[tuple[Dim, ...], dask.array.Array]:  # type: ignore[name-defined]
     if var_config.attrs.ensemble_statistic is None:
         dims = ENSEMBLE_VAR_DIMS
