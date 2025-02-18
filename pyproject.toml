@@ -5,11 +5,10 @@ description = "Reformat weather datasets into zarr"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "cfgrib>=0.9.14.1",
     "dask>=2024.9.0",
     "numcodecs>=0.13.1",
     "numpy>=2.1.1",
-    "obstore>=0.3.0",
+    "obstore>=0.4.0",
     "pydantic>=2.10.2",
     "rasterio>=1.4.2",
     "requests>=2.32.3",
@@ -17,8 +16,8 @@ dependencies = [
     "s3fs>=2024.9.0",
     "sentry-sdk>=2.20.0",
     "typer>=0.12.5",
-    "xarray[io]>=2024.9.0",
-    "zarr>=2.18.3",
+    "xarray>=2025.1.2",
+    "zarr>=3.0.3",
 ]
 
 [tool.uv]
@@ -28,7 +27,7 @@ dev-dependencies = [
     "pandas-stubs>=2.2.2.240909",
     "pre-commit>=3.8.0",
     "pyqt6>=6.7.1",
-    "ruff>=0.6.5",
+    "ruff==0.9.6",
     "types-requests>=2.32.0.20240914",
 ]
 

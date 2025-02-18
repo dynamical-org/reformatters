@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import subprocess
+import warnings
 from collections import defaultdict
 from collections.abc import Generator, Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -16,6 +17,7 @@ import numpy as np
 import pandas as pd
 import sentry_sdk
 import xarray as xr
+import zarr
 
 from common import docker, validation
 from common.config import Config  # noqa:F401
@@ -23,7 +25,7 @@ from common.config_models import EnsembleStatistic
 from common.download_directory import cd_into_download_directory
 from common.iterating import chunk_i_slices, consume
 from common.kubernetes import Job, ReformatCronJob, ValidationCronJob
-from common.types import Array1D, DatetimeLike, StoreLike
+from common.types import Array1D, DatetimeLike
 from common.zarr import (
     copy_data_var,
     copy_zarr_metadata,
@@ -77,7 +79,7 @@ def reformat_operational_update() -> None:
     final_store = get_store()
     tmp_store = get_local_tmp_store()
     # Get the dataset, check what data is already present
-    ds = xr.open_zarr(final_store)
+    ds = xr.open_zarr(final_store, decode_timedelta=True)
     for coord in ds.coords.values():
         coord.load()
     last_existing_init_time = ds.init_time.max()
@@ -86,9 +88,10 @@ def reformat_operational_update() -> None:
     template_ds.ingested_forecast_length.loc[{"init_time": ds.init_time.values}] = (
         ds.ingested_forecast_length
     )
+
     # Uncomment this line for local testing to scope down the number of init times
-    # you will process.
     # template_ds = template_ds.isel(init_time=slice(0, len(ds.init_time) + 2))
+
     # We make some assumptions about what is safe to parallelize and how to
     # write the data based on the init_time dimension having a chunk size of one.
     # If this changes we will need to refactor.
@@ -138,25 +141,27 @@ def reformat_operational_update() -> None:
         truncated_template_ds = template_ds.isel(
             init_time=slice(0, init_time_i_slice.stop)
         )
-        # Write through this i_slice
+        # Write through this i_slice. Metadata is required for to_zarr's region="auto" option.
         template.write_metadata(
             truncated_template_ds,
             tmp_store,
             get_mode(tmp_store),
         )
-        futures = []
+        data_var_upload_futures = []
         for data_var, max_lead_times in reformat_init_time_i_slices(
             [init_time_i_slice],
             template_ds,
             tmp_store,
         ):
-            # This only works because we know that chunks are size 1 in the
-            # init_time dimension.
-            futures.append(
+            # Writing a chunk without merging in existing data works because
+            # the init_time dimension chunk size is 1.
+            data_var_upload_futures.append(
                 upload_executor.submit(
-                    copy_data_var(
-                        data_var, init_time_i_slice.start, tmp_store, final_store
-                    )
+                    copy_data_var,
+                    data_var.name,
+                    init_time_i_slice.start,
+                    tmp_store,
+                    final_store,
                 )
             )
             for (init_time, ensemble_member), max_lead_time in max_lead_times.items():
@@ -165,13 +170,18 @@ def reformat_operational_update() -> None:
                         {"init_time": init_time, "ensemble_member": ensemble_member}
                     ] = max_lead_time
 
-        concurrent.futures.wait(futures, return_when="ALL_COMPLETED")
+        concurrent.futures.wait(data_var_upload_futures, return_when="FIRST_EXCEPTION")
+        for future in data_var_upload_futures:
+            if (e := future.exception()) is not None:
+                raise e
 
+        # Write metadata again to update the ingested_forecast_length
         template.write_metadata(
-            truncated_template_ds.isel(init_time=slice(0, init_time_i_slice.stop)),
+            truncated_template_ds,
             tmp_store,
             get_mode(tmp_store),
         )
+        # Write the metadata last, the data must be written first
         copy_zarr_metadata(truncated_template_ds, tmp_store, final_store)
 
 
@@ -209,7 +219,7 @@ def reformat_local(init_time_end: DatetimeLike) -> None:
     logger.info("Starting reformat")
     # Process all chunks by setting worker_index=0 and worker_total=1
     reformat_chunks(init_time_end, worker_index=0, workers_total=1)
-    logger.info("Done writing to", store)
+    logger.info(f"Done writing to {store}")
 
 
 def reformat_kubernetes(
@@ -219,7 +229,7 @@ def reformat_kubernetes(
 
     template_ds = template.get_template(init_time_end)
     store = get_store()
-    logger.info(f"Writing zarr metadata to {store.root}")
+    logger.info(f"Writing zarr metadata to {store.path}")
     template.write_metadata(template_ds, store, get_mode(store))
 
     num_jobs = sum(1 for _ in chunk_i_slices(template_ds, _PROCESSING_CHUNK_DIMENSION))
@@ -283,7 +293,6 @@ def reformat_chunks(
     template_ds = template.get_template(init_time_end)
     store = get_store()
 
-    logger.info("Getting i slices")
     worker_init_time_i_slices = list(
         get_worker_jobs(
             chunk_i_slices(template_ds, _PROCESSING_CHUNK_DIMENSION),
@@ -303,7 +312,9 @@ type EnsOrStat = int | np.integer[Any] | str
 
 
 def reformat_init_time_i_slices(
-    init_time_i_slices: list[slice], template_ds: xr.Dataset, store: StoreLike
+    init_time_i_slices: list[slice],
+    template_ds: xr.Dataset,
+    store: zarr.storage.FsspecStore | Path,
 ) -> Generator[
     tuple[GEFSDataVar, dict[tuple[pd.Timestamp, EnsOrStat], pd.Timedelta]], None, None
 ]:
@@ -450,11 +461,18 @@ def reformat_init_time_i_slices(
                         )
 
                         logger.info(f"Writing {data_var.name} {chunk_init_times_str}")
-                        (
-                            data_array.chunk(
-                                template_ds[data_var.name].encoding["preferred_chunks"]
-                            ).to_zarr(store, region="auto")
+                        data_array = data_array.chunk(
+                            template_ds[data_var.name].encoding["preferred_chunks"]
                         )
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings(
+                                "ignore",
+                                message="In a future version of xarray decode_timedelta will default to False rather than None.",
+                                category=FutureWarning,
+                            )
+                            ## Write to zarr ##
+                            data_array.to_zarr(store, region="auto")  # type: ignore[call-overload]
+
                         yield (data_var, max_lead_times)
 
                         del data_array

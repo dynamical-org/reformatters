@@ -84,7 +84,7 @@ def download_file(
     true_gefs_file_type = get_gefs_file_type_for_lead_time(lead_time, gefs_file_type)
 
     remote_path = (
-        f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2{true_gefs_file_type}{FILE_RESOLUTIONS[true_gefs_file_type].strip("0")}/"
+        f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2{true_gefs_file_type}{FILE_RESOLUTIONS[true_gefs_file_type].strip('0')}/"
         f"ge{ensemble_or_statistic_str}.t{init_hour_str}z.pgrb2{true_gefs_file_type}.{FILE_RESOLUTIONS[true_gefs_file_type]}.f{lead_time_hours:03.0f}"
     )
 
@@ -200,9 +200,9 @@ def parse_index_byte_ranges(
             f"\\d+:(\\d+):.+:{var_match_str}:.+(\\n\\d+:(\\d+))?",
             index_contents,
         )
-        assert (
-            len(matches) == 1
-        ), f"Expected exactly 1 match, found {matches}, {var_info=}"
+        assert len(matches) == 1, (
+            f"Expected exactly 1 match, found {matches}, {var_info=}"
+        )
         match = matches[0]
         start_byte = int(match[0])
         if match[2] != "":
