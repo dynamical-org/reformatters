@@ -3,7 +3,7 @@ from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
-from numcodecs import BitRound, Blosc, Delta  # type: ignore
+from numcodecs.zarr3 import BitRound, Blosc, Delta  # type: ignore
 
 from common.config_models import (
     Coordinate,
@@ -96,16 +96,28 @@ STATISTIC_VAR_CHUNKS_ORDERED = tuple(
 # (doing this correctly is a key benefit of icechunk).
 INIT_TIME_COORDINATE_CHUNK_SIZE = int(pd.Timedelta(days=365 * 15) / INIT_TIME_FREQUENCY)
 
+
+BLOSC_ZSTD_LEVEL3_SHUFFLE = Blosc(
+    cname="zstd",
+    clevel=3,
+    shuffle="shuffle",
+)
+BIT_ROUND_FILTER_6 = BitRound(keepbits=6)
+BIT_ROUND_FILTER_7 = BitRound(keepbits=7)
+BIT_ROUND_FILTER_8 = BitRound(keepbits=8)
+
 ENCODING_FLOAT32_DEFAULT = Encoding(
     dtype="float32",
+    fill_value=np.nan,
     chunks=ENSEMBLE_VAR_CHUNKS_ORDERED,
-    filters=[BitRound(keepbits=7)],
-    compressor=Blosc(cname="zstd", clevel=3, shuffle=Blosc.SHUFFLE),
+    filters=[BIT_ROUND_FILTER_7],
+    compressors=[BLOSC_ZSTD_LEVEL3_SHUFFLE],
 )
 ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT = Encoding(
     dtype="float32",
+    fill_value=np.nan,
     chunks=ENSEMBLE_VAR_CHUNKS_ORDERED,
-    compressor=Blosc(cname="zstd", clevel=3, shuffle=Blosc.SHUFFLE),
+    compressors=[BLOSC_ZSTD_LEVEL3_SHUFFLE],
 )
 
 # 00 UTC forecasts have a 35 day lead time, the rest go out 16 days.
@@ -125,8 +137,9 @@ COORDINATES: Sequence[Coordinate] = (
         name="init_time",
         encoding=Encoding(
             dtype="int64",
-            filters=[Delta("int64")],
-            compressor=Blosc(cname="zstd"),
+            fill_value=0,
+            filters=[Delta(dtype="int64")],
+            compressors=[BLOSC_ZSTD_LEVEL3_SHUFFLE],
             calendar="proleptic_gregorian",
             units="seconds since 1970-01-01 00:00:00",
             chunks=INIT_TIME_COORDINATE_CHUNK_SIZE,
@@ -142,7 +155,8 @@ COORDINATES: Sequence[Coordinate] = (
         name="ensemble_member",
         encoding=Encoding(
             dtype="uint16",
-            chunks=-1,
+            fill_value=-1,
+            chunks=len(_dim_coords["ensemble_member"]),
         ),
         attrs=CoordinateAttrs(
             units="realization",
@@ -156,9 +170,10 @@ COORDINATES: Sequence[Coordinate] = (
         name="lead_time",
         encoding=Encoding(
             dtype="int64",
-            compressor=Blosc(cname="zstd"),
+            fill_value=-1,
+            compressors=[BLOSC_ZSTD_LEVEL3_SHUFFLE],
             units="seconds",
-            chunks=-1,
+            chunks=len(_dim_coords["lead_time"]),
         ),
         attrs=CoordinateAttrs(
             units="seconds",
@@ -172,8 +187,9 @@ COORDINATES: Sequence[Coordinate] = (
         name="latitude",
         encoding=Encoding(
             dtype="float64",
-            compressor=Blosc(cname="zstd"),
-            chunks=-1,
+            fill_value=np.nan,
+            compressors=[BLOSC_ZSTD_LEVEL3_SHUFFLE],
+            chunks=len(_dim_coords["latitude"]),
         ),
         attrs=CoordinateAttrs(
             units="degrees_north",
@@ -187,8 +203,9 @@ COORDINATES: Sequence[Coordinate] = (
         name="longitude",
         encoding=Encoding(
             dtype="float64",
-            compressor=Blosc(cname="zstd"),
-            chunks=-1,
+            fill_value=np.nan,
+            compressors=[BLOSC_ZSTD_LEVEL3_SHUFFLE],
+            chunks=len(_dim_coords["longitude"]),
         ),
         attrs=CoordinateAttrs(
             units="degrees_east",
@@ -202,11 +219,12 @@ COORDINATES: Sequence[Coordinate] = (
         name="valid_time",
         encoding=Encoding(
             dtype="int64",
-            filters=[Delta("int64")],
-            compressor=Blosc(cname="zstd"),
+            fill_value=0,
+            filters=[Delta(dtype="int64")],
+            compressors=[BLOSC_ZSTD_LEVEL3_SHUFFLE],
             calendar="proleptic_gregorian",
             units="seconds since 1970-01-01 00:00:00",
-            chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE, -1),
+            chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
         ),
         attrs=CoordinateAttrs(
             units="seconds since 1970-01-01 00:00:00",
@@ -219,9 +237,10 @@ COORDINATES: Sequence[Coordinate] = (
         name="ingested_forecast_length",
         encoding=Encoding(
             dtype="int64",
-            compressor=Blosc(cname="zstd"),
+            fill_value=-1,
+            compressors=[BLOSC_ZSTD_LEVEL3_SHUFFLE],
             units="seconds",
-            chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE, -1),
+            chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
         ),
         attrs=CoordinateAttrs(
             units="seconds",
@@ -235,7 +254,8 @@ COORDINATES: Sequence[Coordinate] = (
         name="expected_forecast_length",
         encoding=Encoding(
             dtype="int64",
-            compressor=Blosc(cname="zstd"),
+            fill_value=-1,
+            compressors=[BLOSC_ZSTD_LEVEL3_SHUFFLE],
             units="seconds",
             chunks=INIT_TIME_COORDINATE_CHUNK_SIZE,
         ),
@@ -251,7 +271,8 @@ COORDINATES: Sequence[Coordinate] = (
         name="spatial_ref",
         encoding=Encoding(
             dtype="int64",
-            chunks=-1,
+            fill_value=0,
+            chunks=1,  # Scalar coordinate
         ),
         attrs=CoordinateAttrs(
             units="unitless",
@@ -284,7 +305,7 @@ _DATA_VARIABLES = (
     # ),
     # GEFSDataVar(
     #     name="wind_gust_surface",
-    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
+    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BIT_ROUND_FILTER_6]),
     #     attrs=DataVarAttrs(
     #         short_name="gust",
     #         long_name="Wind speed (gust)",
@@ -458,7 +479,7 @@ _DATA_VARIABLES = (
     GEFSDataVar(
         name="relative_humidity_2m",
         encoding=replace(
-            ENCODING_FLOAT32_DEFAULT, add_offset=50.0, filters=[BitRound(keepbits=6)]
+            ENCODING_FLOAT32_DEFAULT, add_offset=50.0, filters=[BIT_ROUND_FILTER_6]
         ),
         attrs=DataVarAttrs(
             short_name="r2",
@@ -511,7 +532,7 @@ _DATA_VARIABLES = (
     ),
     GEFSDataVar(
         name="wind_u_10m",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BIT_ROUND_FILTER_6]),
         attrs=DataVarAttrs(
             short_name="u10",
             long_name="10 metre U wind component",
@@ -529,7 +550,7 @@ _DATA_VARIABLES = (
     ),
     GEFSDataVar(
         name="wind_v_10m",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BIT_ROUND_FILTER_6]),
         attrs=DataVarAttrs(
             short_name="v10",
             long_name="10 metre V wind component",
@@ -547,7 +568,7 @@ _DATA_VARIABLES = (
     ),
     GEFSDataVar(
         name="wind_u_100m",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BIT_ROUND_FILTER_6]),
         attrs=DataVarAttrs(
             short_name="u100",
             long_name="100 metre U wind component",
@@ -565,7 +586,7 @@ _DATA_VARIABLES = (
     ),
     GEFSDataVar(
         name="wind_v_100m",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BIT_ROUND_FILTER_6]),
         attrs=DataVarAttrs(
             short_name="v100",
             long_name="100 metre V wind component",
@@ -686,7 +707,7 @@ _DATA_VARIABLES = (
     ),
     # GEFSDataVar(
     #     name="mean_latent_heat_flux_surface",
-    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
+    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BIT_ROUND_FILTER_6]),
     #     attrs=DataVarAttrs(
     #         short_name="mslhf",
     #         long_name="Mean surface latent heat flux",
@@ -703,7 +724,7 @@ _DATA_VARIABLES = (
     # ),
     # GEFSDataVar(
     #     name="mean_sensible_heat_flux_surface",
-    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
+    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BIT_ROUND_FILTER_6]),
     #     attrs=DataVarAttrs(
     #         short_name="msshf",
     #         long_name="Mean surface sensible heat flux",
@@ -754,7 +775,7 @@ _DATA_VARIABLES = (
     ),
     GEFSDataVar(
         name="geopotential_height_cloud_ceiling",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=8)]),
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BIT_ROUND_FILTER_8]),
         attrs=DataVarAttrs(
             short_name="gh",
             long_name="Geopotential height",

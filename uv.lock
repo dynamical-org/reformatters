@@ -1232,7 +1232,7 @@ requires-dist = [
     { name = "sentry-sdk", specifier = ">=2.20.0" },
     { name = "typer", specifier = ">=0.12.5" },
     { name = "xarray", specifier = ">=2025.1.2" },
-    { name = "zarr", specifier = ">=3.0.2" },
+    { name = "zarr", specifier = ">=3.0.3" },
 ]
 
 [package.metadata.requires-dev]

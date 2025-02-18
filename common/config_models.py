@@ -1,8 +1,8 @@
 from collections.abc import Sequence
 from typing import Any, Generic, Literal, TypeVar
 
-import numcodecs  # type: ignore
 import pydantic
+from zarr.abc.codec import Codec
 
 from common.types import TimedeltaUnits, TimestampUnits
 
@@ -70,8 +70,10 @@ class Encoding(pydantic.BaseModel):
     dtype: Literal["float32", "float64", "uint16", "int64", "bool"]
     chunks: tuple[int, ...] | int
 
-    filters: Sequence[numcodecs.abc.Codec] | None = None
-    compressor: numcodecs.abc.Codec | None = None
+    fill_value: float | int | bool
+
+    filters: Sequence[Codec | dict[str, Any]] | None = None
+    compressors: Sequence[Codec | dict[str, Any]] | None = None
 
     calendar: Literal["proleptic_gregorian"] | None = None  # For timestamps only
     # The _encoded_ units, for timestamps and timedeltas only
