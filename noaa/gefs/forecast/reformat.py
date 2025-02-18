@@ -4,20 +4,16 @@ import json
 import logging
 import os
 import subprocess
-from collections import defaultdict, deque
-from collections.abc import Callable, Generator, Iterable
+from collections import defaultdict
+from collections.abc import Generator, Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
-from datetime import timedelta
-from functools import cache, partial
-from itertools import batched, groupby, islice, pairwise, starmap
+from functools import partial
+from itertools import batched, groupby, islice, starmap
 from pathlib import Path
-from typing import Any, Literal
-from uuid import uuid4
+from typing import Any
 
-import fsspec  # type: ignore
 import numpy as np
 import pandas as pd
-import s3fs  # type: ignore
 import sentry_sdk
 import xarray as xr
 
@@ -25,8 +21,16 @@ from common import docker, validation
 from common.config import Config  # noqa:F401
 from common.config_models import EnsembleStatistic
 from common.download_directory import cd_into_download_directory
+from common.iterating import chunk_i_slices, consume
 from common.kubernetes import Job, ReformatCronJob, ValidationCronJob
 from common.types import Array1D, DatetimeLike, StoreLike
+from common.zarr import (
+    copy_data_var,
+    copy_zarr_metadata,
+    get_local_tmp_store,
+    get_mode,
+    get_store,
+)
 from noaa.gefs.forecast import template, template_config
 from noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
 from noaa.gefs.read_data import (
@@ -42,6 +46,24 @@ _VALIDATION_CRON_SCHEDULE = "0 9 * * *"  # At 9:00 UTC every day.
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+@sentry_sdk.monitor(
+    monitor_slug=f"{template_config.DATASET_ID}-validation",
+    monitor_config={
+        "schedule": {"type": "crontab", "value": _VALIDATION_CRON_SCHEDULE},
+        "timezone": "UTC",
+    },
+)
+def validate_zarr() -> None:
+    zarr_path = get_store()
+    validation.validate_zarr(
+        zarr_path,
+        validators=(
+            validation.check_forecast_current_data,
+            validation.check_forecast_recent_nans,
+        ),
+    )
 
 
 @sentry_sdk.monitor(
@@ -175,57 +197,6 @@ def get_recent_init_times_for_reprocessing(ds: xr.Dataset) -> Array1D[np.datetim
         ),
         drop=True,
     ).init_time.values
-
-
-def copy_data_var(
-    data_var: GEFSDataVar,
-    chunk_index: int,
-    tmp_store: Path,
-    final_store: fsspec.FSMap,
-) -> Callable[[], None]:
-    files_to_copy = list(
-        tmp_store.glob(f"{data_var.name}/{chunk_index}.*.*.*")
-    )  # matches any chunk with 4 or more dimensions
-
-    def mv_files() -> None:
-        logger.info(
-            f"Copying data var chunks to final store ({final_store.root}) for {data_var.name}."
-        )
-        try:
-            fs = final_store.fs
-            fs.auto_mkdir = True
-            fs.put(
-                files_to_copy, final_store.root + f"/{data_var.name}/", auto_mkdir=True
-            )
-        except Exception:
-            logger.exception("Failed to upload chunk")
-        try:
-            # Delete data to conserve space.
-            for file in files_to_copy:
-                file.unlink()
-        except Exception as e:
-            logger.warning(f"Failed to delete chunk after upload: {e}")
-
-    return mv_files
-
-
-def copy_zarr_metadata(
-    template_ds: xr.Dataset, tmp_store: Path, final_store: fsspec.FSMap
-) -> None:
-    logger.info(
-        f"Copying metadata to final store ({final_store.root}) from {tmp_store}"
-    )
-    metadata_files = []
-    # Coordinates
-    for coord in template_ds.coords:
-        metadata_files.extend(list(tmp_store.glob(f"{coord}/*")))
-    # zattrs, zarray, zgroup and zmetadata
-    metadata_files.extend(list(tmp_store.glob("**/.z*")))
-    # deduplicate
-    metadata_files = list(dict.fromkeys(metadata_files))
-    for file in metadata_files:
-        relative = file.relative_to(tmp_store)
-        final_store.fs.put_file(file, f"{final_store.root}/{relative}")
 
 
 def reformat_local(init_time_end: DatetimeLike) -> None:
@@ -551,122 +522,3 @@ def get_worker_jobs[T](
 ) -> Iterable[T]:
     """Returns the subset of `jobs` that worker_index should process if there are workers_total workers."""
     return islice(jobs, worker_index, None, workers_total)
-
-
-def get_store() -> fsspec.FSMap:
-    if Config.is_dev:
-        local_store: StoreLike = fsspec.get_mapper(
-            "data/output/noaa/gefs/forecast/dev.zarr"
-        )
-        return local_store
-
-    s3 = s3fs.S3FileSystem(
-        key=Config.source_coop.aws_access_key_id,
-        secret=Config.source_coop.aws_secret_access_key,
-    )
-    store: StoreLike = s3.get_mapper(
-        "s3://us-west-2.opendata.source.coop/dynamical/noaa-gefs-forecast/v0.1.0.zarr"
-    )
-    return store
-
-
-@cache
-def get_local_tmp_store() -> Path:
-    return Path(f"data/tmp/{uuid4()}-tmp.zarr").absolute()
-
-
-def get_mode(store: StoreLike) -> Literal["w-", "w"]:
-    store_root = store.name if isinstance(store, Path) else getattr(store, "root", "")
-    if store_root.endswith("dev.zarr") or store_root.endswith("-tmp.zarr"):
-        return "w"  # Allow overwritting dev store
-
-    return "w-"  # Safe default - don't overwrite
-
-
-def chunk_i_slices(ds: xr.Dataset, dim: str) -> Iterable[slice]:
-    """Returns the integer offset slices which correspond to each chunk along `dim` of `ds`."""
-    vars_dim_chunk_sizes = {var.chunksizes[dim] for var in ds.data_vars.values()}
-    assert (
-        len(vars_dim_chunk_sizes) == 1
-    ), f"Inconsistent chunk sizes among data variables along update dimension ({dim}): {vars_dim_chunk_sizes}"
-    dim_chunk_sizes = next(iter(vars_dim_chunk_sizes))  # eg. 2, 2, 2
-    stop_idx = np.cumsum(dim_chunk_sizes)  # eg.    2, 4, 6
-    start_idx = np.insert(stop_idx, 0, 0)  # eg. 0, 2, 4, 6
-    return starmap(slice, pairwise(start_idx))  # eg. slice(0,2), slice(2,4), slice(4,6)
-
-
-def consume[T](iterator: Iterable[T], n: int | None = None) -> None:
-    "Advance the iterator n-steps ahead. If n is None, consume entirely."
-    # Use functions that consume iterators at C speed.
-    if n is None:
-        deque(iterator, maxlen=0)
-    else:
-        next(islice(iterator, n, n), None)
-
-
-def check_current_data(ds: xr.Dataset) -> validation.ValidationResult:
-    """Check for data in the most recent day. Fails if no data is found."""
-    now = pd.Timestamp.now()
-    latest_init_time_ds = ds.sel(init_time=slice(now - timedelta(days=1), None))
-    if latest_init_time_ds.sizes["init_time"] == 0:
-        return validation.ValidationResult(
-            passed=False, message="No data found for the latest day"
-        )
-
-    return validation.ValidationResult(
-        passed=True,
-        message="Data found for the latest day",
-    )
-
-
-def check_recent_nans(
-    ds: xr.Dataset, max_nan_percentage: float = 30
-) -> validation.ValidationResult:
-    """Check for NaN values in the most recent day of data. Fails if more than 70% of sampled data is NaN."""
-
-    now = pd.Timestamp.now()
-    # We want to show that the latest init time has valid data going out up to 10 days (we may not have forecasts
-    # past that, depending on the ensemble member and init time). To avoid needing to load a rediculous amount of data
-    # we'll choose a random lead_time within that range.
-    lead_time_day = np.random.randint(0, 10)  # [0, 10) since we add 1 below
-    sample_ds = ds.sel(
-        init_time=slice(now - timedelta(days=1), None),
-        lead_time=slice(
-            pd.Timedelta(days=lead_time_day), pd.Timedelta(days=lead_time_day + 1)
-        ),
-    )
-
-    problem_vars = []
-    for var_name, da in sample_ds.data_vars.items():
-        nan_percentage = da.isnull().mean().compute() * 100
-        if nan_percentage > max_nan_percentage:
-            problem_vars.append((var_name, nan_percentage))
-
-    if problem_vars:
-        message = "Excessive NaN values found:\n"
-        for var, pct in problem_vars:
-            message += f"- {var}: {pct:.1f}% NaN\n"
-        return validation.ValidationResult(passed=False, message=message)
-
-    return validation.ValidationResult(
-        passed=True,
-        message=f"All variables have acceptable NaN percentages (<{max_nan_percentage}%) in sampled locations of latest data",
-    )
-
-
-@sentry_sdk.monitor(
-    monitor_slug=f"{template_config.DATASET_ID}-validation",
-    monitor_config={
-        "schedule": {"type": "crontab", "value": _VALIDATION_CRON_SCHEDULE},
-        "timezone": "UTC",
-    },
-)
-def validate_zarr() -> None:
-    zarr_path = get_store()
-    validation.validate_zarr(
-        zarr_path,
-        validators=(
-            check_current_data,
-            check_recent_nans,
-        ),
-    )
