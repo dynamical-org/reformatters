@@ -1,4 +1,5 @@
 import logging
+import warnings
 from collections.abc import Sized
 from pathlib import Path
 from typing import Any, Literal
@@ -207,5 +208,11 @@ def write_metadata(
     store: StoreLike,
     mode: Literal["w", "w-"],
 ) -> None:
-    template_ds.to_zarr(store, mode=mode, compute=False)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Consolidated metadata is currently not part in the Zarr format 3 specification",
+            category=UserWarning,
+        )
+        template_ds.to_zarr(store, mode=mode, compute=False)
     logger.info(f"Wrote metadata to {store} with mode {mode}.")
