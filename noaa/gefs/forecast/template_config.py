@@ -1,3 +1,4 @@
+import warnings
 from collections.abc import Sequence
 from typing import Any, Literal
 
@@ -16,6 +17,12 @@ from common.config_models import (
 )
 from common.types import DatetimeLike
 from noaa.gefs.gefs_config_models import GEFSDataVar, GEFSInternalAttrs
+
+warnings.filterwarnings(
+    "ignore",
+    message="Numcodecs codecs are not in the Zarr version 3 specification",
+    module="numcodecs.zarr3",
+)
 
 INIT_TIME_START = pd.Timestamp("2024-01-01T00:00")
 INIT_TIME_FREQUENCY = pd.Timedelta("24h")
@@ -100,17 +107,14 @@ INIT_TIME_COORDINATE_CHUNK_SIZE = int(pd.Timedelta(days=365 * 15) / INIT_TIME_FR
 BLOSC_ZSTD_LEVEL3_SHUFFLE = Blosc(
     cname="zstd",
     clevel=3,
-    shuffle="shuffle",
+    shuffle=1,  # byte shuffle https://numcodecs.readthedocs.io/en/stable/compression/blosc.html
 )
-BIT_ROUND_FILTER_6 = BitRound(keepbits=6)
-BIT_ROUND_FILTER_7 = BitRound(keepbits=7)
-BIT_ROUND_FILTER_8 = BitRound(keepbits=8)
 
 ENCODING_FLOAT32_DEFAULT = Encoding(
     dtype="float32",
     fill_value=np.nan,
     chunks=ENSEMBLE_VAR_CHUNKS_ORDERED,
-    filters=[BIT_ROUND_FILTER_7],
+    filters=[BitRound(keepbits=7)],
     compressors=[BLOSC_ZSTD_LEVEL3_SHUFFLE],
 )
 ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT = Encoding(
@@ -305,7 +309,7 @@ _DATA_VARIABLES = (
     # ),
     # GEFSDataVar(
     #     name="wind_gust_surface",
-    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BIT_ROUND_FILTER_6]),
+    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
     #     attrs=DataVarAttrs(
     #         short_name="gust",
     #         long_name="Wind speed (gust)",
@@ -479,7 +483,7 @@ _DATA_VARIABLES = (
     GEFSDataVar(
         name="relative_humidity_2m",
         encoding=replace(
-            ENCODING_FLOAT32_DEFAULT, add_offset=50.0, filters=[BIT_ROUND_FILTER_6]
+            ENCODING_FLOAT32_DEFAULT, add_offset=50.0, filters=[BitRound(keepbits=6)]
         ),
         attrs=DataVarAttrs(
             short_name="r2",
@@ -532,7 +536,7 @@ _DATA_VARIABLES = (
     ),
     GEFSDataVar(
         name="wind_u_10m",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BIT_ROUND_FILTER_6]),
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
             short_name="u10",
             long_name="10 metre U wind component",
@@ -550,7 +554,7 @@ _DATA_VARIABLES = (
     ),
     GEFSDataVar(
         name="wind_v_10m",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BIT_ROUND_FILTER_6]),
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
             short_name="v10",
             long_name="10 metre V wind component",
@@ -568,7 +572,7 @@ _DATA_VARIABLES = (
     ),
     GEFSDataVar(
         name="wind_u_100m",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BIT_ROUND_FILTER_6]),
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
             short_name="u100",
             long_name="100 metre U wind component",
@@ -586,7 +590,7 @@ _DATA_VARIABLES = (
     ),
     GEFSDataVar(
         name="wind_v_100m",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BIT_ROUND_FILTER_6]),
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
         attrs=DataVarAttrs(
             short_name="v100",
             long_name="100 metre V wind component",
@@ -707,7 +711,7 @@ _DATA_VARIABLES = (
     ),
     # GEFSDataVar(
     #     name="mean_latent_heat_flux_surface",
-    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BIT_ROUND_FILTER_6]),
+    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
     #     attrs=DataVarAttrs(
     #         short_name="mslhf",
     #         long_name="Mean surface latent heat flux",
@@ -724,7 +728,7 @@ _DATA_VARIABLES = (
     # ),
     # GEFSDataVar(
     #     name="mean_sensible_heat_flux_surface",
-    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BIT_ROUND_FILTER_6]),
+    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
     #     attrs=DataVarAttrs(
     #         short_name="msshf",
     #         long_name="Mean surface sensible heat flux",
@@ -775,7 +779,7 @@ _DATA_VARIABLES = (
     ),
     GEFSDataVar(
         name="geopotential_height_cloud_ceiling",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BIT_ROUND_FILTER_8]),
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=8)]),
         attrs=DataVarAttrs(
             short_name="gh",
             long_name="Geopotential height",
@@ -877,6 +881,7 @@ _DATA_VARIABLES = (
         ),
     ),
 )
+
 _STATISTIC_DATA_VARIABLES = tuple(
     replace(
         var,
