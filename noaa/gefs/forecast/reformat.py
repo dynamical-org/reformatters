@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
+import fsspec  # type: ignore
 import numpy as np
 import pandas as pd
 import sentry_sdk
@@ -64,9 +65,10 @@ def reformat_operational_update() -> None:
     template_ds.ingested_forecast_length.loc[{"init_time": ds.init_time.values}] = (
         ds.ingested_forecast_length
     )
+
     # Uncomment this line for local testing to scope down the number of init times
-    # you will process.
     # template_ds = template_ds.isel(init_time=slice(0, len(ds.init_time) + 2))
+
     # We make some assumptions about what is safe to parallelize and how to
     # write the data based on the init_time dimension having a chunk size of one.
     # If this changes we will need to refactor.
@@ -197,12 +199,14 @@ def copy_data_var(
     )
     fs = final_store.fs
     fs.auto_mkdir = True
-    fs.put(
-        f"{tmp_store / relative_dir}/",
-        f"{final_store.fs.root}/{relative_dir}",
-        recursive=True,
-        auto_mkdir=True,
-    )
+
+    # We want to support local and s3fs filesystems. fsspec local filesystem is sync,
+    # but our s3fs from zarr.storage.FsspecStore is async and here we work around it.
+    # The AsyncFileSystem wrapper on LocalFilesystem raises NotImplementedError when _put is called.
+    source = f"{tmp_store / relative_dir}/"
+    dest = f"{final_store.path}/{relative_dir}"
+    _copy_to_store("put", source, dest, fs, recursive=True, auto_mkdir=True)
+
     try:
         # Delete data to conserve disk space.
         for file in tmp_store.glob(f"{relative_dir}**/*"):
@@ -228,9 +232,11 @@ def copy_zarr_metadata(
     metadata_files.append(tmp_store / "zarr.json")
     metadata_files.extend(tmp_store.glob("*/zarr.json"))
 
+    # This could be partially parallelized BUT make sure to write the coords before the metadata.
     for file in metadata_files:
         relative = file.relative_to(tmp_store)
-        final_store.fs.put_file(file, f"{final_store.fs.root}/{relative}")
+        dest = f"{final_store.path}/{relative}"
+        _copy_to_store("put_file", file, dest, final_store.fs)
 
 
 def reformat_local(init_time_end: DatetimeLike) -> None:
@@ -574,7 +580,7 @@ def get_store() -> zarr.storage.FsspecStore:
         # )
         # Instead make a zarr LocalStore and attach an fsspec filesystem to it.
         # Technically that filesystem should be an AsyncFileSystem to match
-        # zarr.storage.FsspecStore but it's ok it isn't in our case.
+        # zarr.storage.FsspecStore but AsyncFileSystem does not support _put.
         local_path = Path("data/output/noaa/gefs/forecast/dev.zarr").absolute()
 
         store = zarr.storage.LocalStore(local_path)
@@ -583,7 +589,7 @@ def get_store() -> zarr.storage.FsspecStore:
 
         fs = LocalFileSystem(auto_mkdir=True)
         store.fs = fs  # type: ignore[attr-defined]
-        store.fs.root = str(local_path)  # type: ignore[attr-defined]
+        store.path = str(local_path)  # type: ignore[attr-defined]
 
         # We are duck typing this LocalStore into a FsspecStore
         return store  # type: ignore[return-value]
@@ -707,3 +713,24 @@ def validate_zarr() -> None:
             check_recent_nans,
         ),
     )
+
+
+def _copy_to_store(
+    method: Literal["put", "put_file"],
+    source: str | Path,
+    dest: str,
+    dest_fs: fsspec.AbstractFileSystem,
+    **kwargs: bool,
+) -> None:
+    """
+    Copy a file or directory to the store's filesystem.
+
+    This function handles both local and s3fs filesystems. The fsspec local filesystem is sync,
+    but s3fs from zarr.storage.FsspecStore is async, so we need to handle both cases.
+    The AsyncFileSystem wrapper on LocalFilesystem raises NotImplementedError when _put is called.
+    """
+    if hasattr(dest_fs, "_put"):
+        # Zarr's FsspecStore creates async fsspec filesystems, so use their sync method
+        zarr.core.sync.sync(getattr(dest_fs, "_" + method)(source, dest, **kwargs))
+    else:
+        getattr(dest_fs, method)(source, dest, **kwargs)

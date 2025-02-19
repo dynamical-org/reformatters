@@ -66,7 +66,12 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     #         ]
     #     ].sel(
     #         ensemble_member=slice(2),
-    #         lead_time=["0h", "3h", "240h", "840h"],
+    #         lead_time=[
+    #             "0h",
+    #             "3h",
+    #             "240h",
+    #             "840h",
+    #         ],
     #     )
 
     return ds
