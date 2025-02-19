@@ -9,10 +9,11 @@ import dask.array
 import numpy as np
 import rioxarray  # noqa: F401  Adds .rio accessor to datasets
 import xarray as xr
+import zarr
 
 from common.config import Config  # noqa:F401
 from common.config_models import Coordinate
-from common.types import DatetimeLike, StoreLike
+from common.types import DatetimeLike
 from noaa.gefs.gefs_config_models import GEFSDataVar
 
 from .template_config import (
@@ -38,7 +39,7 @@ logger.setLevel(logging.INFO)
 
 
 def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
-    ds: xr.Dataset = xr.open_zarr(TEMPLATE_PATH)
+    ds: xr.Dataset = xr.open_zarr(TEMPLATE_PATH, decode_timedelta=True)
 
     # Expand init_time dimension with complete coordinates
     ds = empty_copy_with_reindex(
@@ -64,8 +65,8 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     #             "percent_frozen_precipitation_surface",
     #         ]
     #     ].sel(
-    #         ensemble_member=slice(3),
-    #         lead_time=["0h", "3h", "90h", "240h", "840h"],
+    #         ensemble_member=slice(2),
+    #         lead_time=["0h", "3h", "240h", "840h"],
     #     )
 
     return ds
@@ -205,7 +206,7 @@ def empty_copy_with_reindex(
 
 def write_metadata(
     template_ds: xr.Dataset,
-    store: StoreLike,
+    store: zarr.storage.FsspecStore | Path,
     mode: Literal["w", "w-"],
 ) -> None:
     with warnings.catch_warnings():
@@ -214,5 +215,5 @@ def write_metadata(
             message="Consolidated metadata is currently not part in the Zarr format 3 specification",
             category=UserWarning,
         )
-        template_ds.to_zarr(store, mode=mode, compute=False)
+        template_ds.to_zarr(store, mode=mode, compute=False)  # type: ignore[call-overload]
     logger.info(f"Wrote metadata to {store} with mode {mode}.")

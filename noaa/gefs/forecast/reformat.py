@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import subprocess
+import warnings
 from collections import defaultdict, deque
 from collections.abc import Callable, Generator, Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -14,19 +15,18 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
-import fsspec  # type: ignore
 import numpy as np
 import pandas as pd
-import s3fs  # type: ignore
 import sentry_sdk
 import xarray as xr
+import zarr
 
 from common import docker, validation
 from common.config import Config  # noqa:F401
 from common.config_models import EnsembleStatistic
 from common.download_directory import cd_into_download_directory
 from common.kubernetes import Job, ReformatCronJob, ValidationCronJob
-from common.types import Array1D, DatetimeLike, StoreLike
+from common.types import Array1D, DatetimeLike
 from noaa.gefs.forecast import template, template_config
 from noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
 from noaa.gefs.read_data import (
@@ -181,7 +181,7 @@ def copy_data_var(
     data_var: GEFSDataVar,
     chunk_index: int,
     tmp_store: Path,
-    final_store: fsspec.FSMap,
+    final_store: zarr.storage.FsspecStore,
 ) -> Callable[[], None]:
     files_to_copy = list(
         tmp_store.glob(f"{data_var.name}/{chunk_index}.*.*.*")
@@ -189,13 +189,13 @@ def copy_data_var(
 
     def mv_files() -> None:
         logger.info(
-            f"Copying data var chunks to final store ({final_store.root}) for {data_var.name}."
+            f"Copying data var chunks to final store ({final_store.path}) for {data_var.name}."
         )
         try:
             fs = final_store.fs
             fs.auto_mkdir = True
             fs.put(
-                files_to_copy, final_store.root + f"/{data_var.name}/", auto_mkdir=True
+                files_to_copy, final_store.path + f"/{data_var.name}/", auto_mkdir=True
             )
         except Exception:
             logger.exception("Failed to upload chunk")
@@ -210,22 +210,19 @@ def copy_data_var(
 
 
 def copy_zarr_metadata(
-    template_ds: xr.Dataset, tmp_store: Path, final_store: fsspec.FSMap
+    template_ds: xr.Dataset, tmp_store: Path, final_store: zarr.storage.FsspecStore
 ) -> None:
-    logger.info(
-        f"Copying metadata to final store ({final_store.root}) from {tmp_store}"
-    )
-    metadata_files = []
+    logger.info(f"Copying metadata to final store ({final_store}) from {tmp_store}")
+    metadata_files = [tmp_store / "zarr.json"]
+    metadata_files.extend(tmp_store.glob("*/zarr.json"))
+
     # Coordinates
     for coord in template_ds.coords:
-        metadata_files.extend(list(tmp_store.glob(f"{coord}/*")))
-    # zattrs, zarray, zgroup and zmetadata
-    metadata_files.extend(list(tmp_store.glob("**/.z*")))
-    # deduplicate
-    metadata_files = list(dict.fromkeys(metadata_files))
-    for file in metadata_files:
+        metadata_files.extend(tmp_store.glob(f"{coord}/c/*"))
+
+    for file in set(metadata_files):
         relative = file.relative_to(tmp_store)
-        final_store.fs.put_file(file, f"{final_store.root}/{relative}")
+        final_store.fs.put_file(file, f"{final_store.fs.root}/{relative}")
 
 
 def reformat_local(init_time_end: DatetimeLike) -> None:
@@ -238,7 +235,7 @@ def reformat_local(init_time_end: DatetimeLike) -> None:
     logger.info("Starting reformat")
     # Process all chunks by setting worker_index=0 and worker_total=1
     reformat_chunks(init_time_end, worker_index=0, workers_total=1)
-    logger.info("Done writing to", store)
+    logger.info(f"Done writing to {store}")
 
 
 def reformat_kubernetes(
@@ -248,7 +245,7 @@ def reformat_kubernetes(
 
     template_ds = template.get_template(init_time_end)
     store = get_store()
-    logger.info(f"Writing zarr metadata to {store.root}")
+    logger.info(f"Writing zarr metadata to {store.path}")
     template.write_metadata(template_ds, store, get_mode(store))
 
     num_jobs = sum(1 for _ in chunk_i_slices(template_ds, _PROCESSING_CHUNK_DIMENSION))
@@ -312,7 +309,6 @@ def reformat_chunks(
     template_ds = template.get_template(init_time_end)
     store = get_store()
 
-    logger.info("Getting i slices")
     worker_init_time_i_slices = list(
         get_worker_jobs(
             chunk_i_slices(template_ds, _PROCESSING_CHUNK_DIMENSION),
@@ -332,7 +328,9 @@ type EnsOrStat = int | np.integer[Any] | str
 
 
 def reformat_init_time_i_slices(
-    init_time_i_slices: list[slice], template_ds: xr.Dataset, store: StoreLike
+    init_time_i_slices: list[slice],
+    template_ds: xr.Dataset,
+    store: zarr.storage.FsspecStore | Path,
 ) -> Generator[
     tuple[GEFSDataVar, dict[tuple[pd.Timestamp, EnsOrStat], pd.Timedelta]], None, None
 ]:
@@ -479,11 +477,18 @@ def reformat_init_time_i_slices(
                         )
 
                         logger.info(f"Writing {data_var.name} {chunk_init_times_str}")
-                        (
-                            data_array.chunk(
-                                template_ds[data_var.name].encoding["preferred_chunks"]
-                            ).to_zarr(store, region="auto")
+                        data_array = data_array.chunk(
+                            template_ds[data_var.name].encoding["preferred_chunks"]
                         )
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings(
+                                "ignore",
+                                message="In a future version of xarray decode_timedelta will default to False rather than None.",
+                                category=FutureWarning,
+                            )
+                            ## Write to zarr ##
+                            data_array.to_zarr(store, region="auto")  # type: ignore[call-overload]
+
                         yield (data_var, max_lead_times)
 
                         del data_array
@@ -553,21 +558,19 @@ def get_worker_jobs[T](
     return islice(jobs, worker_index, None, workers_total)
 
 
-def get_store() -> fsspec.FSMap:
+def get_store() -> zarr.storage.FsspecStore:
     if Config.is_dev:
-        local_store: StoreLike = fsspec.get_mapper(
-            "data/output/noaa/gefs/forecast/dev.zarr"
+        return zarr.storage.FsspecStore.from_url(
+            f"file://{Path('data/output/noaa/gefs/forecast/dev.zarr').absolute()}"
         )
-        return local_store
 
-    s3 = s3fs.S3FileSystem(
-        key=Config.source_coop.aws_access_key_id,
-        secret=Config.source_coop.aws_secret_access_key,
+    return zarr.storage.FsspecStore.from_url(
+        "s3://us-west-2.opendata.source.coop/dynamical/noaa-gefs-forecast/v0.1.0.zarr",
+        storage_options={
+            "key": Config.source_coop.aws_access_key_id,
+            "secret": Config.source_coop.aws_secret_access_key,
+        },
     )
-    store: StoreLike = s3.get_mapper(
-        "s3://us-west-2.opendata.source.coop/dynamical/noaa-gefs-forecast/v0.1.0.zarr"
-    )
-    return store
 
 
 @cache
@@ -575,9 +578,10 @@ def get_local_tmp_store() -> Path:
     return Path(f"data/tmp/{uuid4()}-tmp.zarr").absolute()
 
 
-def get_mode(store: StoreLike) -> Literal["w-", "w"]:
-    store_root = store.name if isinstance(store, Path) else getattr(store, "root", "")
-    if store_root.endswith("dev.zarr") or store_root.endswith("-tmp.zarr"):
+def get_mode(store: zarr.storage.FsspecStore | Path) -> Literal["w-", "w"]:
+    path_str = store.name if isinstance(store, Path) else store.path
+
+    if path_str.endswith("dev.zarr") or path_str.endswith("-tmp.zarr"):
         return "w"  # Allow overwritting dev store
 
     return "w-"  # Safe default - don't overwrite
