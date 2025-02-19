@@ -4,7 +4,8 @@ from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
-from numcodecs.zarr3 import BitRound, Blosc, Delta  # type: ignore
+import zarr
+from numcodecs.zarr3 import BitRound  # type: ignore
 
 from common.config_models import (
     Coordinate,
@@ -104,24 +105,32 @@ STATISTIC_VAR_CHUNKS_ORDERED = tuple(
 INIT_TIME_COORDINATE_CHUNK_SIZE = int(pd.Timedelta(days=365 * 15) / INIT_TIME_FREQUENCY)
 
 
-BLOSC_ZSTD_LEVEL3_SHUFFLE = Blosc(
+BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE = zarr.codecs.BloscCodec(
+    typesize=4,
     cname="zstd",
     clevel=3,
-    shuffle=1,  # byte shuffle https://numcodecs.readthedocs.io/en/stable/compression/blosc.html
-)
+    shuffle="shuffle",  # byte shuffle
+).to_dict()
+
+BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE = zarr.codecs.BloscCodec(
+    typesize=8,
+    cname="zstd",
+    clevel=3,
+    shuffle="shuffle",  # byte shuffle
+).to_dict()
 
 ENCODING_FLOAT32_DEFAULT = Encoding(
     dtype="float32",
     fill_value=np.nan,
     chunks=ENSEMBLE_VAR_CHUNKS_ORDERED,
     filters=[BitRound(keepbits=7)],
-    compressors=[BLOSC_ZSTD_LEVEL3_SHUFFLE],
+    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
 )
 ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT = Encoding(
     dtype="float32",
     fill_value=np.nan,
     chunks=ENSEMBLE_VAR_CHUNKS_ORDERED,
-    compressors=[BLOSC_ZSTD_LEVEL3_SHUFFLE],
+    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
 )
 
 # 00 UTC forecasts have a 35 day lead time, the rest go out 16 days.
@@ -142,8 +151,8 @@ COORDINATES: Sequence[Coordinate] = (
         encoding=Encoding(
             dtype="int64",
             fill_value=0,
-            filters=[Delta(dtype="int64")],
-            compressors=[BLOSC_ZSTD_LEVEL3_SHUFFLE],
+            # filters=[Delta(dtype="int64")],
+            compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             calendar="proleptic_gregorian",
             units="seconds since 1970-01-01 00:00:00",
             chunks=INIT_TIME_COORDINATE_CHUNK_SIZE,
@@ -175,7 +184,7 @@ COORDINATES: Sequence[Coordinate] = (
         encoding=Encoding(
             dtype="int64",
             fill_value=-1,
-            compressors=[BLOSC_ZSTD_LEVEL3_SHUFFLE],
+            compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             units="seconds",
             chunks=len(_dim_coords["lead_time"]),
         ),
@@ -192,7 +201,7 @@ COORDINATES: Sequence[Coordinate] = (
         encoding=Encoding(
             dtype="float64",
             fill_value=np.nan,
-            compressors=[BLOSC_ZSTD_LEVEL3_SHUFFLE],
+            compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             chunks=len(_dim_coords["latitude"]),
         ),
         attrs=CoordinateAttrs(
@@ -208,7 +217,7 @@ COORDINATES: Sequence[Coordinate] = (
         encoding=Encoding(
             dtype="float64",
             fill_value=np.nan,
-            compressors=[BLOSC_ZSTD_LEVEL3_SHUFFLE],
+            compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             chunks=len(_dim_coords["longitude"]),
         ),
         attrs=CoordinateAttrs(
@@ -224,8 +233,8 @@ COORDINATES: Sequence[Coordinate] = (
         encoding=Encoding(
             dtype="int64",
             fill_value=0,
-            filters=[Delta(dtype="int64")],
-            compressors=[BLOSC_ZSTD_LEVEL3_SHUFFLE],
+            # filters=[Delta(dtype="int64")],
+            compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             calendar="proleptic_gregorian",
             units="seconds since 1970-01-01 00:00:00",
             chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
@@ -242,7 +251,7 @@ COORDINATES: Sequence[Coordinate] = (
         encoding=Encoding(
             dtype="int64",
             fill_value=-1,
-            compressors=[BLOSC_ZSTD_LEVEL3_SHUFFLE],
+            compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             units="seconds",
             chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
         ),
@@ -259,7 +268,7 @@ COORDINATES: Sequence[Coordinate] = (
         encoding=Encoding(
             dtype="int64",
             fill_value=-1,
-            compressors=[BLOSC_ZSTD_LEVEL3_SHUFFLE],
+            compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             units="seconds",
             chunks=INIT_TIME_COORDINATE_CHUNK_SIZE,
         ),

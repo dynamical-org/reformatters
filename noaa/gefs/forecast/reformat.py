@@ -6,7 +6,7 @@ import os
 import subprocess
 import warnings
 from collections import defaultdict, deque
-from collections.abc import Callable, Generator, Iterable
+from collections.abc import Generator, Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import timedelta
 from functools import cache, partial
@@ -55,7 +55,7 @@ def reformat_operational_update() -> None:
     final_store = get_store()
     tmp_store = get_local_tmp_store()
     # Get the dataset, check what data is already present
-    ds = xr.open_zarr(final_store)
+    ds = xr.open_zarr(final_store, decode_timedelta=True)
     for coord in ds.coords.values():
         coord.load()
     last_existing_init_time = ds.init_time.max()
@@ -116,25 +116,27 @@ def reformat_operational_update() -> None:
         truncated_template_ds = template_ds.isel(
             init_time=slice(0, init_time_i_slice.stop)
         )
-        # Write through this i_slice
+        # Write through this i_slice. Metadata is required for to_zarr's region="auto" option.
         template.write_metadata(
             truncated_template_ds,
             tmp_store,
             get_mode(tmp_store),
         )
-        futures = []
+        data_var_upload_futures = []
         for data_var, max_lead_times in reformat_init_time_i_slices(
             [init_time_i_slice],
             template_ds,
             tmp_store,
         ):
-            # This only works because we know that chunks are size 1 in the
-            # init_time dimension.
-            futures.append(
+            # Writing a chunk without merging in existing data works because
+            # the init_time dimension chunk size is 1.
+            data_var_upload_futures.append(
                 upload_executor.submit(
-                    copy_data_var(
-                        data_var, init_time_i_slice.start, tmp_store, final_store
-                    )
+                    copy_data_var,
+                    data_var,
+                    init_time_i_slice.start,
+                    tmp_store,
+                    final_store,
                 )
             )
             for (init_time, ensemble_member), max_lead_time in max_lead_times.items():
@@ -143,13 +145,18 @@ def reformat_operational_update() -> None:
                         {"init_time": init_time, "ensemble_member": ensemble_member}
                     ] = max_lead_time
 
-        concurrent.futures.wait(futures, return_when="ALL_COMPLETED")
+        concurrent.futures.wait(data_var_upload_futures, return_when="FIRST_EXCEPTION")
+        for future in data_var_upload_futures:
+            if (e := future.exception()) is not None:
+                raise e
 
+        # Write metadata again to update the ingested_forecast_length
         template.write_metadata(
-            truncated_template_ds.isel(init_time=slice(0, init_time_i_slice.stop)),
+            truncated_template_ds,
             tmp_store,
             get_mode(tmp_store),
         )
+        # Write the metadata last, the data must be written first
         copy_zarr_metadata(truncated_template_ds, tmp_store, final_store)
 
 
@@ -182,45 +189,46 @@ def copy_data_var(
     chunk_index: int,
     tmp_store: Path,
     final_store: zarr.storage.FsspecStore,
-) -> Callable[[], None]:
-    files_to_copy = list(
-        tmp_store.glob(f"{data_var.name}/{chunk_index}.*.*.*")
-    )  # matches any chunk with 4 or more dimensions
+) -> None:
+    relative_dir = f"{data_var.name}/c/{chunk_index}/"
 
-    def mv_files() -> None:
-        logger.info(
-            f"Copying data var chunks to final store ({final_store.path}) for {data_var.name}."
-        )
-        try:
-            fs = final_store.fs
-            fs.auto_mkdir = True
-            fs.put(
-                files_to_copy, final_store.path + f"/{data_var.name}/", auto_mkdir=True
-            )
-        except Exception:
-            logger.exception("Failed to upload chunk")
-        try:
-            # Delete data to conserve space.
-            for file in files_to_copy:
+    logger.info(
+        f"Copying data var chunks to final store ({final_store}) for {relative_dir}."
+    )
+    fs = final_store.fs
+    fs.auto_mkdir = True
+    fs.put(
+        f"{tmp_store / relative_dir}/",
+        f"{final_store.fs.root}/{relative_dir}",
+        recursive=True,
+        auto_mkdir=True,
+    )
+    try:
+        # Delete data to conserve disk space.
+        for file in tmp_store.glob(f"{relative_dir}**/*"):
+            if file.is_file():
                 file.unlink()
-        except Exception as e:
-            logger.warning(f"Failed to delete chunk after upload: {e}")
-
-    return mv_files
+    except Exception as e:
+        logger.warning(f"Failed to delete chunk after upload: {e}")
 
 
 def copy_zarr_metadata(
     template_ds: xr.Dataset, tmp_store: Path, final_store: zarr.storage.FsspecStore
 ) -> None:
     logger.info(f"Copying metadata to final store ({final_store}) from {tmp_store}")
-    metadata_files = [tmp_store / "zarr.json"]
+
+    metadata_files: list[Path] = []
+
+    # The coordinate label arrays must be copied before the metadata.
+    for coord in template_ds.coords:
+        metadata_files.extend(
+            f for f in tmp_store.glob(f"{coord}/c/**/*") if f.is_file()
+        )
+
+    metadata_files.append(tmp_store / "zarr.json")
     metadata_files.extend(tmp_store.glob("*/zarr.json"))
 
-    # Coordinates
-    for coord in template_ds.coords:
-        metadata_files.extend(tmp_store.glob(f"{coord}/c/*"))
-
-    for file in set(metadata_files):
+    for file in metadata_files:
         relative = file.relative_to(tmp_store)
         final_store.fs.put_file(file, f"{final_store.fs.root}/{relative}")
 
@@ -566,16 +574,16 @@ def get_store() -> zarr.storage.FsspecStore:
         # )
         # Instead make a zarr LocalStore and attach an fsspec filesystem to it.
         # Technically that filesystem should be an AsyncFileSystem to match
-        # zarr.storage.FsspecStore but that's ok in our case.
+        # zarr.storage.FsspecStore but it's ok it isn't in our case.
         local_path = Path("data/output/noaa/gefs/forecast/dev.zarr").absolute()
 
         store = zarr.storage.LocalStore(local_path)
 
-        from fsspec.implementations.dirfs import DirFileSystem  # type: ignore
         from fsspec.implementations.local import LocalFileSystem  # type: ignore
 
-        fs = DirFileSystem(path=local_path, fs=LocalFileSystem(auto_mkdir=True))
+        fs = LocalFileSystem(auto_mkdir=True)
         store.fs = fs  # type: ignore[attr-defined]
+        store.fs.root = str(local_path)  # type: ignore[attr-defined]
 
         # We are duck typing this LocalStore into a FsspecStore
         return store  # type: ignore[return-value]

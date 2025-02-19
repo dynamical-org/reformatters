@@ -86,10 +86,7 @@ class Encoding(pydantic.BaseModel):
         Sequence[dict[str, Any]] | None,
         pydantic.BeforeValidator(codecs_to_dicts),
     ] = None
-    compressors: Annotated[
-        Sequence[dict[str, Any]] | None,
-        pydantic.BeforeValidator(codecs_to_dicts),
-    ] = None
+    compressors: Sequence[dict[str, Any]] | None = None
 
     calendar: Literal["proleptic_gregorian"] | None = None  # For timestamps only
     # The _encoded_ units, for timestamps and timedeltas only
