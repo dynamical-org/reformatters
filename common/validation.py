@@ -4,8 +4,7 @@ from typing import Protocol
 
 import pydantic
 import xarray as xr
-
-from common.types import StoreLike
+import zarr
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -25,7 +24,9 @@ class DataValidator(Protocol):
     def __call__(self, ds: xr.Dataset) -> ValidationResult: ...
 
 
-def validate_zarr(store: StoreLike, validators: Sequence[DataValidator]) -> None:
+def validate_zarr(
+    store: zarr.storage.FsspecStore, validators: Sequence[DataValidator]
+) -> None:
     """
     Validate a zarr dataset by running a series of quality checks.
 
