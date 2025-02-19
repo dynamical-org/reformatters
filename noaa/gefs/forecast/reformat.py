@@ -560,9 +560,25 @@ def get_worker_jobs[T](
 
 def get_store() -> zarr.storage.FsspecStore:
     if Config.is_dev:
-        return zarr.storage.FsspecStore.from_url(
-            f"file://{Path('data/output/noaa/gefs/forecast/dev.zarr').absolute()}"
-        )
+        # This should work, but it gives FileNotFoundError when it should be creating a new zarr.
+        # return zarr.storage.FsspecStore.from_url(
+        #     "file://data/output/noaa/gefs/forecast/dev.zarr"
+        # )
+        # Instead make a zarr LocalStore and attach an fsspec filesystem to it.
+        # Technically that filesystem should be an AsyncFileSystem to match
+        # zarr.storage.FsspecStore but that's ok in our case.
+        local_path = Path("data/output/noaa/gefs/forecast/dev.zarr").absolute()
+
+        store = zarr.storage.LocalStore(local_path)
+
+        from fsspec.implementations.dirfs import DirFileSystem  # type: ignore
+        from fsspec.implementations.local import LocalFileSystem  # type: ignore
+
+        fs = DirFileSystem(path=local_path, fs=LocalFileSystem(auto_mkdir=True))
+        store.fs = fs  # type: ignore[attr-defined]
+
+        # We are duck typing this LocalStore into a FsspecStore
+        return store  # type: ignore[return-value]
 
     return zarr.storage.FsspecStore.from_url(
         "s3://us-west-2.opendata.source.coop/dynamical/noaa-gefs-forecast/v0.1.0.zarr",
@@ -578,8 +594,17 @@ def get_local_tmp_store() -> Path:
     return Path(f"data/tmp/{uuid4()}-tmp.zarr").absolute()
 
 
-def get_mode(store: zarr.storage.FsspecStore | Path) -> Literal["w-", "w"]:
-    path_str = store.name if isinstance(store, Path) else store.path
+def get_mode(
+    store: zarr.storage.FsspecStore | zarr.storage.LocalStore | Path,
+) -> Literal["w-", "w"]:
+    if isinstance(store, zarr.storage.FsspecStore):
+        path_str = store.path
+    elif isinstance(store, zarr.storage.LocalStore):
+        path_str = store.root.name
+    elif isinstance(store, Path):
+        path_str = store.name
+    else:
+        raise ValueError(f"Unexpected store type: {type(store)}")
 
     if path_str.endswith("dev.zarr") or path_str.endswith("-tmp.zarr"):
         return "w"  # Allow overwritting dev store
@@ -590,9 +615,9 @@ def get_mode(store: zarr.storage.FsspecStore | Path) -> Literal["w-", "w"]:
 def chunk_i_slices(ds: xr.Dataset, dim: str) -> Iterable[slice]:
     """Returns the integer offset slices which correspond to each chunk along `dim` of `ds`."""
     vars_dim_chunk_sizes = {var.chunksizes[dim] for var in ds.data_vars.values()}
-    assert (
-        len(vars_dim_chunk_sizes) == 1
-    ), f"Inconsistent chunk sizes among data variables along update dimension ({dim}): {vars_dim_chunk_sizes}"
+    assert len(vars_dim_chunk_sizes) == 1, (
+        f"Inconsistent chunk sizes among data variables along update dimension ({dim}): {vars_dim_chunk_sizes}"
+    )
     dim_chunk_sizes = next(iter(vars_dim_chunk_sizes))  # eg. 2, 2, 2
     stop_idx = np.cumsum(dim_chunk_sizes)  # eg.    2, 4, 6
     start_idx = np.insert(stop_idx, 0, 0)  # eg. 0, 2, 4, 6

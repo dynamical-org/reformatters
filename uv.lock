@@ -1242,7 +1242,7 @@ dev = [
     { name = "pandas-stubs", specifier = ">=2.2.2.240909" },
     { name = "pre-commit", specifier = ">=3.8.0" },
     { name = "pyqt6", specifier = ">=6.7.1" },
-    { name = "ruff", specifier = ">=0.6.5" },
+    { name = "ruff", specifier = "==0.9.6" },
     { name = "types-requests", specifier = ">=2.32.0.20240914" },
 ]
 
