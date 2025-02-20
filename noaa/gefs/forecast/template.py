@@ -220,12 +220,12 @@ def empty_copy_with_reindex(
 
 def write_metadata(
     template_ds: xr.Dataset,
-    store: zarr.storage.FsspecStore | Path,
+    store: zarr.storage.StoreLike,
     mode: Literal["w", "w-"],
 ) -> None:
     with warnings.catch_warnings():
         # Unconsolidated metadata is also written so adding
-        # consolidated metadata doesn't impact interoperability.
+        # consolidated metadata is unlikely to impact interoperability.
         warnings.filterwarnings(
             "ignore",
             message="Consolidated metadata is currently not part in the Zarr format 3 specification",

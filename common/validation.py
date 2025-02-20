@@ -28,7 +28,7 @@ class DataValidator(Protocol):
 
 
 def validate_zarr(
-    store: zarr.storage.FsspecStore, validators: Sequence[DataValidator]
+    store: zarr.storage.StoreLike, validators: Sequence[DataValidator]
 ) -> None:
     """
     Validate a zarr dataset by running a series of quality checks.

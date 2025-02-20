@@ -1,4 +1,3 @@
-import warnings
 from collections.abc import Sequence
 from typing import Any, Literal
 
@@ -19,17 +18,11 @@ from common.config_models import (
 from common.types import DatetimeLike
 from noaa.gefs.gefs_config_models import GEFSDataVar, GEFSInternalAttrs
 
-warnings.filterwarnings(
-    "ignore",
-    message="Numcodecs codecs are not in the Zarr version 3 specification",
-    module="numcodecs.zarr3",
-)
+DATASET_ID = "noaa-gefs-forecast"
+DATASET_VERSION = "0.1.0"
 
 INIT_TIME_START = pd.Timestamp("2024-01-01T00:00")
 INIT_TIME_FREQUENCY = pd.Timedelta("24h")
-
-DATASET_ID = "noaa-gefs-forecast"
-DATASET_VERSION = "0.1.0"
 
 DATASET_ATTRIBUTES = DatasetAttributes(
     dataset_id=DATASET_ID,
@@ -153,7 +146,6 @@ COORDINATES: Sequence[Coordinate] = (
         encoding=Encoding(
             dtype="int64",
             fill_value=0,
-            # filters=[Delta(dtype="int64")],
             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             calendar="proleptic_gregorian",
             units="seconds since 1970-01-01 00:00:00",
@@ -235,7 +227,6 @@ COORDINATES: Sequence[Coordinate] = (
         encoding=Encoding(
             dtype="int64",
             fill_value=0,
-            # filters=[Delta(dtype="int64")],
             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             calendar="proleptic_gregorian",
             units="seconds since 1970-01-01 00:00:00",

@@ -37,7 +37,7 @@ def get_zarr_store(dataset_id: str, version: str) -> zarr.storage.FsspecStore:
         store.fs = fs  # type: ignore[attr-defined]
         store.path = str(local_path)  # type: ignore[attr-defined]
 
-        # We are duck typing this LocalStore into a FsspecStore
+        # We are duck typing this LocalStore as a FsspecStore
         return store  # type: ignore[return-value]
 
     return zarr.storage.FsspecStore.from_url(
@@ -135,9 +135,10 @@ def _copy_to_store(
     """
     Copy a file or directory to the store's filesystem.
 
-    This function handles both local and s3fs filesystems. The fsspec local filesystem is sync,
-    but s3fs from zarr.storage.FsspecStore is async, so we need to handle both cases.
-    The AsyncFileSystem wrapper on LocalFilesystem raises NotImplementedError when _put is called.
+    This function handles both sync and async filesystems. The fsspec local filesystem is sync,
+    but the fsspec store from zarr.storage.FsspecStore is async, so we need to handle both cases.
+    (The AsyncFileSystem wrapper on LocalFilesystem raises NotImplementedError when _put is called
+    so we can't just use that.)
     """
     if hasattr(dest_fs, "_put"):
         # Zarr's FsspecStore creates async fsspec filesystems, so use their sync method
