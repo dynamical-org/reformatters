@@ -1,3 +1,4 @@
+import json
 import logging
 import warnings
 from collections.abc import Sized
@@ -41,7 +42,7 @@ from .template_config import (
     DATASET_VERSION as DATASET_VERSION,
 )
 
-TEMPLATE_PATH = "noaa/gefs/forecast/templates/latest.zarr"
+TEMPLATE_PATH = Path(__file__).parent / "templates" / "latest.zarr"
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -87,9 +88,6 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
 
 
 def update_template() -> None:
-    # Resolve to absolue path before changing directories
-    template_path = Path(TEMPLATE_PATH).absolute()
-
     coords = get_template_dimension_coordinates()
 
     data_vars = {
@@ -119,7 +117,7 @@ def update_template() -> None:
 
         assign_var_metadata(ds.coords[coord_config.name], coord_config)
 
-    write_metadata(ds, template_path, mode="w")
+    write_metadata(ds, TEMPLATE_PATH, mode="w")
 
 
 def add_derived_coordinates(ds: xr.Dataset, copy_metadata: bool = True) -> xr.Dataset:
@@ -233,3 +231,22 @@ def write_metadata(
         )
         template_ds.to_zarr(store, mode=mode, compute=False)  # type: ignore[call-overload]
     logger.info(f"Wrote metadata to {store} with mode {mode}.")
+
+    if isinstance(store, Path):
+        sort_consolidated_metadata(store / "zarr.json")
+
+
+def sort_consolidated_metadata(zarr_json_path: Path) -> None:
+    """
+    Sort the variable and coordinates in the consolidated metadata
+    so template diffs are easier to read.
+    """
+    with open(zarr_json_path) as f:
+        zarr_json = json.load(f)
+
+    zarr_json["consolidated_metadata"]["metadata"] = dict(
+        sorted(zarr_json["consolidated_metadata"]["metadata"].items())
+    )
+
+    with open(zarr_json_path, "w") as f:
+        json.dump(zarr_json, f, indent=2)
