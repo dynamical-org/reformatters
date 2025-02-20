@@ -3,8 +3,8 @@ import subprocess
 from collections.abc import Iterable
 from typing import Protocol
 
-from common import docker, kubernetes
-from noaa.gefs.forecast.reformat import (
+from reformatters.common import docker, kubernetes
+from reformatters.noaa.gefs.forecast.reformat import (
     operational_kubernetes_resources as noaa_gefs_forecast_operational_kubernetes_resources,
 )
 

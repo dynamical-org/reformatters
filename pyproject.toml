@@ -4,6 +4,8 @@ version = "0.1.0"
 description = "Reformat weather datasets into zarr"
 readme = "README.md"
 requires-python = ">=3.12"
+
+
 dependencies = [
     "dask>=2024.9.0",
     "numcodecs>=0.13.1",
@@ -20,6 +22,9 @@ dependencies = [
     "zarr>=3.0.3",
 ]
 
+[project.scripts]
+main = "reformatters.__main__:app"
+
 [tool.uv]
 dev-dependencies = [
     "matplotlib>=3.9.2",
@@ -27,6 +32,7 @@ dev-dependencies = [
     "pandas-stubs>=2.2.2.240909",
     "pre-commit>=3.8.0",
     "pyqt6>=6.7.1",
+    "pytest>=8.3.4",
     "ruff==0.9.6",
     "types-requests>=2.32.0.20240914",
 ]
@@ -62,3 +68,6 @@ enable_incomplete_feature = "NewGenericSyntax"
 init_forbid_extra = true
 init_typed = true
 warn_required_dynamic_aliases = true
+
+[tool.setuptools.package-data]
+reformatters = ["common/py.typed"]

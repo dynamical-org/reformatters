@@ -23,11 +23,17 @@ jobs:
         with:
           python-version-file: ".python-version"
 
-      - name: Install the project
-        run: uv sync --all-extras --dev 
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Install this project
+        run: "uv pip install -e ."
 
       - name: Run Ruff
         run: uv run ruff check 
 
       - name: Run Mypy
         run: uv run mypy 
+
+      - name: Run Pytest
+        run: uv run pytest

@@ -2,9 +2,9 @@ import sentry_sdk
 import typer
 from sentry_sdk.integrations.typer import TyperIntegration
 
-import noaa.gefs.forecast.cli as noaa_gefs_forecast
-from common import deploy
-from common.config import Config
+import reformatters.noaa.gefs.forecast.cli as noaa_gefs_forecast
+from reformatters.common import deploy
+from reformatters.common.config import Config
 
 if Config.is_sentry_enabled:
     sentry_sdk.init(
