@@ -49,6 +49,10 @@ class DynamicalConfig(pydantic.BaseModel):
         return self.env == Env.dev
 
     @property
+    def is_prod(self) -> bool:
+        return self.env == Env.prod
+
+    @property
     def is_sentry_enabled(self) -> bool:
         return self.sentry_dsn is not None
 

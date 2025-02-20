@@ -15,7 +15,10 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def get_store() -> zarr.storage.FsspecStore:
+def get_zarr_store(dataset_id: str, version: str) -> zarr.storage.FsspecStore:
+    if not Config.is_prod:
+        version = "dev"
+
     if Config.is_dev:
         # This should work, but it gives FileNotFoundError when it should be creating a new zarr.
         # return zarr.storage.FsspecStore.from_url(
@@ -24,7 +27,7 @@ def get_store() -> zarr.storage.FsspecStore:
         # Instead make a zarr LocalStore and attach an fsspec filesystem to it.
         # Technically that filesystem should be an AsyncFileSystem to match
         # zarr.storage.FsspecStore but AsyncFileSystem does not support _put.
-        local_path = Path("data/output/noaa/gefs/forecast/dev.zarr").absolute()
+        local_path = Path(f"data/output/{dataset_id}/v{version}.zarr").absolute()
 
         store = zarr.storage.LocalStore(local_path)
 
@@ -38,7 +41,7 @@ def get_store() -> zarr.storage.FsspecStore:
         return store  # type: ignore[return-value]
 
     return zarr.storage.FsspecStore.from_url(
-        "s3://us-west-2.opendata.source.coop/dynamical/noaa-gefs-forecast/v0.1.0.zarr",
+        f"s3://us-west-2.opendata.source.coop/dynamical/{dataset_id}/v{version}.zarr",
         storage_options={
             "key": Config.source_coop.aws_access_key_id,
             "secret": Config.source_coop.aws_secret_access_key,

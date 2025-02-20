@@ -12,9 +12,8 @@ import xarray as xr
 import zarr
 
 from common.config import Config  # noqa:F401
-from common.config_models import Coordinate
+from common.config_models import Coordinate, DataVar
 from common.types import DatetimeLike
-from noaa.gefs.gefs_config_models import GEFSDataVar
 
 from .template_config import (
     COORDINATES,
@@ -28,8 +27,18 @@ from .template_config import (
     get_init_time_coordinates,
     get_template_dimension_coordinates,
 )
+
+# Explicitly re-export the DATA_VARIABLES, DATASET_ID, and DATASET_VERSION
+# which are part of the template module's public interface along with
+# get_template and update_template.
 from .template_config import (
     DATA_VARIABLES as DATA_VARIABLES,
+)
+from .template_config import (
+    DATASET_ID as DATASET_ID,
+)
+from .template_config import (
+    DATASET_VERSION as DATASET_VERSION,
 )
 
 TEMPLATE_PATH = "noaa/gefs/forecast/templates/latest.zarr"
@@ -140,7 +149,7 @@ def add_derived_coordinates(ds: xr.Dataset, copy_metadata: bool = True) -> xr.Da
 
 
 def assign_var_metadata(
-    var: xr.DataArray, var_config: GEFSDataVar | Coordinate
+    var: xr.DataArray, var_config: DataVar[Any] | Coordinate
 ) -> xr.DataArray:
     var.encoding = var_config.encoding.model_dump(exclude_none=True)
 
@@ -158,7 +167,7 @@ def assign_var_metadata(
 
 
 def construct_data_variable(
-    var_config: GEFSDataVar, coords: dict[Dim, Any]
+    var_config: DataVar[Any], coords: dict[Dim, Any]
 ) -> tuple[tuple[Dim, ...], dask.array.Array]:  # type: ignore[name-defined]
     if var_config.attrs.ensemble_statistic is None:
         dims = ENSEMBLE_VAR_DIMS

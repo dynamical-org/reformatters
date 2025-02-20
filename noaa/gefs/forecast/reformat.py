@@ -9,7 +9,7 @@ from collections import defaultdict
 from collections.abc import Generator, Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
 from functools import partial
-from itertools import batched, groupby, islice, starmap
+from itertools import batched, groupby, starmap
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +23,7 @@ from common import docker, validation
 from common.config import Config  # noqa:F401
 from common.config_models import EnsembleStatistic
 from common.download_directory import cd_into_download_directory
-from common.iterating import chunk_i_slices, consume
+from common.iterating import chunk_i_slices, consume, get_worker_jobs
 from common.kubernetes import Job, ReformatCronJob, ValidationCronJob
 from common.types import Array1D, DatetimeLike
 from common.zarr import (
@@ -31,9 +31,9 @@ from common.zarr import (
     copy_zarr_metadata,
     get_local_tmp_store,
     get_mode,
-    get_store,
+    get_zarr_store,
 )
-from noaa.gefs.forecast import template, template_config
+from noaa.gefs.forecast import template
 from noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
 from noaa.gefs.read_data import (
     SourceFileCoords,
@@ -51,16 +51,15 @@ logger.setLevel(logging.INFO)
 
 
 @sentry_sdk.monitor(
-    monitor_slug=f"{template_config.DATASET_ID}-validation",
+    monitor_slug=f"{template.DATASET_ID}-validation",
     monitor_config={
         "schedule": {"type": "crontab", "value": _VALIDATION_CRON_SCHEDULE},
         "timezone": "UTC",
     },
 )
 def validate_zarr() -> None:
-    zarr_path = get_store()
     validation.validate_zarr(
-        zarr_path,
+        get_store(),
         validators=(
             validation.check_forecast_current_data,
             validation.check_forecast_recent_nans,
@@ -69,7 +68,7 @@ def validate_zarr() -> None:
 
 
 @sentry_sdk.monitor(
-    monitor_slug=f"{template_config.DATASET_ID}-reformat-operational-update",
+    monitor_slug=f"{template.DATASET_ID}-reformat-operational-update",
     monitor_config={
         "schedule": {"type": "crontab", "value": _OPERATIONAL_CRON_SCHEDULE},
         "timezone": "UTC",
@@ -262,22 +261,20 @@ def reformat_kubernetes(
 
 
 def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
-    dataset_id = template_config.DATASET_ID
-
     operational_update_cron_job = ReformatCronJob(
-        name=f"{dataset_id}-operational-update",
+        name=f"{template.DATASET_ID}-operational-update",
         schedule=_OPERATIONAL_CRON_SCHEDULE,
         image=image_tag,
-        dataset_id=dataset_id,
+        dataset_id=template.DATASET_ID,
         cpu="6",  # fit on 8 vCPU node
         memory="60G",  # fit on 64GB node
         ephemeral_storage="150G",
     )
     validation_cron_job = ValidationCronJob(
-        name=f"{dataset_id}-validation",
+        name=f"{template.DATASET_ID}-validation",
         schedule=_VALIDATION_CRON_SCHEDULE,
         image=image_tag,
-        dataset_id=dataset_id,
+        dataset_id=template.DATASET_ID,
         cpu="6",  # fit on 8 vCPU node
         memory="60G",  # fit on 64GB node
     )
@@ -319,7 +316,7 @@ def reformat_init_time_i_slices(
     tuple[GEFSDataVar, dict[tuple[pd.Timestamp, EnsOrStat], pd.Timedelta]], None, None
 ]:
     """
-    Helper function to reformat the chunk data.
+    Do the chunk data reformatting work - download files, read into memory, write to zarr.
     Yields the data variable/init time combinations and their corresponding maximum
     ingested lead time as it processes.
     """
@@ -440,7 +437,7 @@ def reformat_init_time_i_slices(
                             chunk_template_ds[data_var.name], np.nan
                         )
                         # Drop all non-dimension coordinates.
-                        # They are already written with different chunks.
+                        # They are already written by write_metadata.
                         data_array = data_array.drop_vars(
                             [
                                 coord
@@ -516,6 +513,16 @@ def download_var_group_files(
 def group_data_vars_by_gefs_file_type(
     data_vars: Iterable[GEFSDataVar], group_size: int = 4
 ) -> list[tuple[GEFSFileType, EnsembleStatistic | None, tuple[GEFSDataVar, ...]]]:
+    """
+    Group data variables by the things which determine which source file they come from:
+    1. their GEFS file type (a, b, or s) and
+    2. their ensemble statistic if present or None if they are an ensemble trace.
+
+    Then, within each group, chunk them into groups of size `group_size`. We download
+    all variables in a group together which can reduce the number of tiny requests if
+    they are nearby in the source grib file. By breaking groups into `group_size`, we
+    allow reading/writing to begin before we've downloaded _all_ variables from a file.
+    """
     grouper = defaultdict(list)
     for data_var in data_vars:
         gefs_file_type = data_var.internal_attrs.gefs_file_type
@@ -535,8 +542,5 @@ def group_data_vars_by_gefs_file_type(
     return chunks
 
 
-def get_worker_jobs[T](
-    jobs: Iterable[T], worker_index: int, workers_total: int
-) -> Iterable[T]:
-    """Returns the subset of `jobs` that worker_index should process if there are workers_total workers."""
-    return islice(jobs, worker_index, None, workers_total)
+def get_store() -> zarr.storage.FsspecStore:
+    return get_zarr_store(template.DATASET_ID, template.DATASET_VERSION)

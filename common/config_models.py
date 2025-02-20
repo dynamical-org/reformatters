@@ -24,6 +24,7 @@ class FrozenBaseModel(pydantic.BaseModel):
 
 class DatasetAttributes(FrozenBaseModel):
     dataset_id: str
+    dataset_version: str
     name: str
     description: str
     attribution: str
