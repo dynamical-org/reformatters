@@ -4,11 +4,12 @@ import json
 import logging
 import os
 import subprocess
+import warnings
 from collections import defaultdict
 from collections.abc import Generator, Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
 from functools import partial
-from itertools import batched, groupby, islice, starmap
+from itertools import batched, groupby, starmap
 from pathlib import Path
 from typing import Any
 
@@ -16,22 +17,23 @@ import numpy as np
 import pandas as pd
 import sentry_sdk
 import xarray as xr
+import zarr
 
 from common import docker, validation
 from common.config import Config  # noqa:F401
 from common.config_models import EnsembleStatistic
 from common.download_directory import cd_into_download_directory
-from common.iterating import chunk_i_slices, consume
+from common.iterating import chunk_i_slices, consume, get_worker_jobs
 from common.kubernetes import Job, ReformatCronJob, ValidationCronJob
-from common.types import Array1D, DatetimeLike, StoreLike
+from common.types import Array1D, DatetimeLike
 from common.zarr import (
     copy_data_var,
     copy_zarr_metadata,
     get_local_tmp_store,
     get_mode,
-    get_store,
+    get_zarr_store,
 )
-from noaa.gefs.forecast import template, template_config
+from noaa.gefs.forecast import template
 from noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
 from noaa.gefs.read_data import (
     SourceFileCoords,
@@ -49,16 +51,15 @@ logger.setLevel(logging.INFO)
 
 
 @sentry_sdk.monitor(
-    monitor_slug=f"{template_config.DATASET_ID}-validation",
+    monitor_slug=f"{template.DATASET_ID}-validation",
     monitor_config={
         "schedule": {"type": "crontab", "value": _VALIDATION_CRON_SCHEDULE},
         "timezone": "UTC",
     },
 )
 def validate_zarr() -> None:
-    zarr_path = get_store()
     validation.validate_zarr(
-        zarr_path,
+        get_store(),
         validators=(
             validation.check_forecast_current_data,
             validation.check_forecast_recent_nans,
@@ -67,7 +68,7 @@ def validate_zarr() -> None:
 
 
 @sentry_sdk.monitor(
-    monitor_slug=f"{template_config.DATASET_ID}-reformat-operational-update",
+    monitor_slug=f"{template.DATASET_ID}-reformat-operational-update",
     monitor_config={
         "schedule": {"type": "crontab", "value": _OPERATIONAL_CRON_SCHEDULE},
         "timezone": "UTC",
@@ -77,7 +78,7 @@ def reformat_operational_update() -> None:
     final_store = get_store()
     tmp_store = get_local_tmp_store()
     # Get the dataset, check what data is already present
-    ds = xr.open_zarr(final_store)
+    ds = xr.open_zarr(final_store, decode_timedelta=True)
     for coord in ds.coords.values():
         coord.load()
     last_existing_init_time = ds.init_time.max()
@@ -86,9 +87,10 @@ def reformat_operational_update() -> None:
     template_ds.ingested_forecast_length.loc[{"init_time": ds.init_time.values}] = (
         ds.ingested_forecast_length
     )
+
     # Uncomment this line for local testing to scope down the number of init times
-    # you will process.
     # template_ds = template_ds.isel(init_time=slice(0, len(ds.init_time) + 2))
+
     # We make some assumptions about what is safe to parallelize and how to
     # write the data based on the init_time dimension having a chunk size of one.
     # If this changes we will need to refactor.
@@ -138,25 +140,27 @@ def reformat_operational_update() -> None:
         truncated_template_ds = template_ds.isel(
             init_time=slice(0, init_time_i_slice.stop)
         )
-        # Write through this i_slice
+        # Write through this i_slice. Metadata is required for to_zarr's region="auto" option.
         template.write_metadata(
             truncated_template_ds,
             tmp_store,
             get_mode(tmp_store),
         )
-        futures = []
+        data_var_upload_futures = []
         for data_var, max_lead_times in reformat_init_time_i_slices(
             [init_time_i_slice],
             template_ds,
             tmp_store,
         ):
-            # This only works because we know that chunks are size 1 in the
-            # init_time dimension.
-            futures.append(
+            # Writing a chunk without merging in existing data works because
+            # the init_time dimension chunk size is 1.
+            data_var_upload_futures.append(
                 upload_executor.submit(
-                    copy_data_var(
-                        data_var, init_time_i_slice.start, tmp_store, final_store
-                    )
+                    copy_data_var,
+                    data_var.name,
+                    init_time_i_slice.start,
+                    tmp_store,
+                    final_store,
                 )
             )
             for (init_time, ensemble_member), max_lead_time in max_lead_times.items():
@@ -165,13 +169,18 @@ def reformat_operational_update() -> None:
                         {"init_time": init_time, "ensemble_member": ensemble_member}
                     ] = max_lead_time
 
-        concurrent.futures.wait(futures, return_when="ALL_COMPLETED")
+        concurrent.futures.wait(data_var_upload_futures, return_when="FIRST_EXCEPTION")
+        for future in data_var_upload_futures:
+            if (e := future.exception()) is not None:
+                raise e
 
+        # Write metadata again to update the ingested_forecast_length
         template.write_metadata(
-            truncated_template_ds.isel(init_time=slice(0, init_time_i_slice.stop)),
+            truncated_template_ds,
             tmp_store,
             get_mode(tmp_store),
         )
+        # Write the metadata last, the data must be written first
         copy_zarr_metadata(truncated_template_ds, tmp_store, final_store)
 
 
@@ -209,7 +218,7 @@ def reformat_local(init_time_end: DatetimeLike) -> None:
     logger.info("Starting reformat")
     # Process all chunks by setting worker_index=0 and worker_total=1
     reformat_chunks(init_time_end, worker_index=0, workers_total=1)
-    logger.info("Done writing to", store)
+    logger.info(f"Done writing to {store}")
 
 
 def reformat_kubernetes(
@@ -219,7 +228,7 @@ def reformat_kubernetes(
 
     template_ds = template.get_template(init_time_end)
     store = get_store()
-    logger.info(f"Writing zarr metadata to {store.root}")
+    logger.info(f"Writing zarr metadata to {store.path}")
     template.write_metadata(template_ds, store, get_mode(store))
 
     num_jobs = sum(1 for _ in chunk_i_slices(template_ds, _PROCESSING_CHUNK_DIMENSION))
@@ -252,22 +261,20 @@ def reformat_kubernetes(
 
 
 def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
-    dataset_id = template_config.DATASET_ID
-
     operational_update_cron_job = ReformatCronJob(
-        name=f"{dataset_id}-operational-update",
+        name=f"{template.DATASET_ID}-operational-update",
         schedule=_OPERATIONAL_CRON_SCHEDULE,
         image=image_tag,
-        dataset_id=dataset_id,
+        dataset_id=template.DATASET_ID,
         cpu="6",  # fit on 8 vCPU node
         memory="60G",  # fit on 64GB node
         ephemeral_storage="150G",
     )
     validation_cron_job = ValidationCronJob(
-        name=f"{dataset_id}-validation",
+        name=f"{template.DATASET_ID}-validation",
         schedule=_VALIDATION_CRON_SCHEDULE,
         image=image_tag,
-        dataset_id=dataset_id,
+        dataset_id=template.DATASET_ID,
         cpu="6",  # fit on 8 vCPU node
         memory="60G",  # fit on 64GB node
     )
@@ -283,7 +290,6 @@ def reformat_chunks(
     template_ds = template.get_template(init_time_end)
     store = get_store()
 
-    logger.info("Getting i slices")
     worker_init_time_i_slices = list(
         get_worker_jobs(
             chunk_i_slices(template_ds, _PROCESSING_CHUNK_DIMENSION),
@@ -303,12 +309,14 @@ type EnsOrStat = int | np.integer[Any] | str
 
 
 def reformat_init_time_i_slices(
-    init_time_i_slices: list[slice], template_ds: xr.Dataset, store: StoreLike
+    init_time_i_slices: list[slice],
+    template_ds: xr.Dataset,
+    store: zarr.storage.FsspecStore | Path,
 ) -> Generator[
     tuple[GEFSDataVar, dict[tuple[pd.Timestamp, EnsOrStat], pd.Timedelta]], None, None
 ]:
     """
-    Helper function to reformat the chunk data.
+    Do the chunk data reformatting work - download files, read into memory, write to zarr.
     Yields the data variable/init time combinations and their corresponding maximum
     ingested lead time as it processes.
     """
@@ -429,7 +437,7 @@ def reformat_init_time_i_slices(
                             chunk_template_ds[data_var.name], np.nan
                         )
                         # Drop all non-dimension coordinates.
-                        # They are already written with different chunks.
+                        # They are already written by write_metadata.
                         data_array = data_array.drop_vars(
                             [
                                 coord
@@ -450,11 +458,18 @@ def reformat_init_time_i_slices(
                         )
 
                         logger.info(f"Writing {data_var.name} {chunk_init_times_str}")
-                        (
-                            data_array.chunk(
-                                template_ds[data_var.name].encoding["preferred_chunks"]
-                            ).to_zarr(store, region="auto")
+                        data_array = data_array.chunk(
+                            template_ds[data_var.name].encoding["preferred_chunks"]
                         )
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings(
+                                "ignore",
+                                message="In a future version of xarray decode_timedelta will default to False rather than None.",
+                                category=FutureWarning,
+                            )
+                            ## Write to zarr ##
+                            data_array.to_zarr(store, region="auto")  # type: ignore[call-overload]
+
                         yield (data_var, max_lead_times)
 
                         del data_array
@@ -498,6 +513,16 @@ def download_var_group_files(
 def group_data_vars_by_gefs_file_type(
     data_vars: Iterable[GEFSDataVar], group_size: int = 4
 ) -> list[tuple[GEFSFileType, EnsembleStatistic | None, tuple[GEFSDataVar, ...]]]:
+    """
+    Group data variables by the things which determine which source file they come from:
+    1. their GEFS file type (a, b, or s) and
+    2. their ensemble statistic if present or None if they are an ensemble trace.
+
+    Then, within each group, chunk them into groups of size `group_size`. We download
+    all variables in a group together which can reduce the number of tiny requests if
+    they are nearby in the source grib file. By breaking groups into `group_size`, we
+    allow reading/writing to begin before we've downloaded _all_ variables from a file.
+    """
     grouper = defaultdict(list)
     for data_var in data_vars:
         gefs_file_type = data_var.internal_attrs.gefs_file_type
@@ -517,8 +542,5 @@ def group_data_vars_by_gefs_file_type(
     return chunks
 
 
-def get_worker_jobs[T](
-    jobs: Iterable[T], worker_index: int, workers_total: int
-) -> Iterable[T]:
-    """Returns the subset of `jobs` that worker_index should process if there are workers_total workers."""
-    return islice(jobs, worker_index, None, workers_total)
+def get_store() -> zarr.storage.FsspecStore:
+    return get_zarr_store(template.DATASET_ID, template.DATASET_VERSION)

@@ -1,4 +1,5 @@
 import logging
+import warnings
 from collections.abc import Sized
 from pathlib import Path
 from typing import Any, Literal
@@ -8,11 +9,11 @@ import dask.array
 import numpy as np
 import rioxarray  # noqa: F401  Adds .rio accessor to datasets
 import xarray as xr
+import zarr
 
 from common.config import Config  # noqa:F401
-from common.config_models import Coordinate
-from common.types import DatetimeLike, StoreLike
-from noaa.gefs.gefs_config_models import GEFSDataVar
+from common.config_models import Coordinate, DataVar
+from common.types import DatetimeLike
 
 from .template_config import (
     COORDINATES,
@@ -26,8 +27,18 @@ from .template_config import (
     get_init_time_coordinates,
     get_template_dimension_coordinates,
 )
+
+# Explicitly re-export the DATA_VARIABLES, DATASET_ID, and DATASET_VERSION
+# which are part of the template module's public interface along with
+# get_template and update_template.
 from .template_config import (
     DATA_VARIABLES as DATA_VARIABLES,
+)
+from .template_config import (
+    DATASET_ID as DATASET_ID,
+)
+from .template_config import (
+    DATASET_VERSION as DATASET_VERSION,
 )
 
 TEMPLATE_PATH = "noaa/gefs/forecast/templates/latest.zarr"
@@ -37,7 +48,7 @@ logger.setLevel(logging.INFO)
 
 
 def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
-    ds: xr.Dataset = xr.open_zarr(TEMPLATE_PATH)
+    ds: xr.Dataset = xr.open_zarr(TEMPLATE_PATH, decode_timedelta=True)
 
     # Expand init_time dimension with complete coordinates
     ds = empty_copy_with_reindex(
@@ -63,8 +74,13 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     #             "percent_frozen_precipitation_surface",
     #         ]
     #     ].sel(
-    #         ensemble_member=slice(3),
-    #         lead_time=["0h", "3h", "90h", "240h", "840h"],
+    #         ensemble_member=slice(2),
+    #         lead_time=[
+    #             "0h",
+    #             "3h",
+    #             "240h",
+    #             "840h",
+    #         ],
     #     )
 
     return ds
@@ -133,7 +149,7 @@ def add_derived_coordinates(ds: xr.Dataset, copy_metadata: bool = True) -> xr.Da
 
 
 def assign_var_metadata(
-    var: xr.DataArray, var_config: GEFSDataVar | Coordinate
+    var: xr.DataArray, var_config: DataVar[Any] | Coordinate
 ) -> xr.DataArray:
     var.encoding = var_config.encoding.model_dump(exclude_none=True)
 
@@ -151,7 +167,7 @@ def assign_var_metadata(
 
 
 def construct_data_variable(
-    var_config: GEFSDataVar, coords: dict[Dim, Any]
+    var_config: DataVar[Any], coords: dict[Dim, Any]
 ) -> tuple[tuple[Dim, ...], dask.array.Array]:  # type: ignore[name-defined]
     if var_config.attrs.ensemble_statistic is None:
         dims = ENSEMBLE_VAR_DIMS
@@ -204,8 +220,16 @@ def empty_copy_with_reindex(
 
 def write_metadata(
     template_ds: xr.Dataset,
-    store: StoreLike,
+    store: zarr.storage.StoreLike,
     mode: Literal["w", "w-"],
 ) -> None:
-    template_ds.to_zarr(store, mode=mode, compute=False)
+    with warnings.catch_warnings():
+        # Unconsolidated metadata is also written so adding
+        # consolidated metadata is unlikely to impact interoperability.
+        warnings.filterwarnings(
+            "ignore",
+            message="Consolidated metadata is currently not part in the Zarr format 3 specification",
+            category=UserWarning,
+        )
+        template_ds.to_zarr(store, mode=mode, compute=False)  # type: ignore[call-overload]
     logger.info(f"Wrote metadata to {store} with mode {mode}.")
