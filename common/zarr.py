@@ -7,6 +7,7 @@ from uuid import uuid4
 import fsspec  # type: ignore
 import xarray as xr
 import zarr
+from fsspec.implementations.local import LocalFileSystem  # type: ignore
 
 from common.config import Config
 
@@ -30,8 +31,6 @@ def get_zarr_store(dataset_id: str, version: str) -> zarr.storage.FsspecStore:
         local_path = Path(f"data/output/{dataset_id}/v{version}.zarr").absolute()
 
         store = zarr.storage.LocalStore(local_path)
-
-        from fsspec.implementations.local import LocalFileSystem  # type: ignore
 
         fs = LocalFileSystem(auto_mkdir=True)
         store.fs = fs  # type: ignore[attr-defined]
