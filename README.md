@@ -7,10 +7,12 @@ We use
 * `uv` to manage dependencies and python environments
 * `ruff` for linting and formatting
 * `mypy` for type checking
-* `pre-commit` to automatically lint and format as you git commit (type checking on commit is TODO)
+* `pytest` for testing
+* `pre-commit` to automatically lint and format as you git commit
 
 ### Setup
 1. [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
+1. Run `uv pip install -e .` to install the project in editable mode
 1. Run `uv run pre-commit install` to setup the git hooks
 1. If you use VSCode, you may want to install the extensions (ruff, mypy) it will recommend when you open this folder
 
@@ -18,14 +20,14 @@ We use
 
 * `uv run main --help`
 * `uv run main noaa-gefs-forecast update-template`
-* `uv run main noaa-gefs-forecast reformat-local 2024-09-02T00:00`
+* `uv run main noaa-gefs-forecast reformat-local 2024-01-02T00:00`
 
 ### Development commands
 * Add dependency: `uv add <package> [--dev]`. Use `--dev` to add a development only dependency.
 * Lint: `uv run ruff check`
 * Type check: `uv run mypy`
 * Format: `uv run ruff format`
-
+* Test: `uv run pytest`
 
 ## Deploying to the cloud
 
