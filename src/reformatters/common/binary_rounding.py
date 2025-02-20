@@ -44,12 +44,10 @@ def round_float32(value: FloatArray, keep_mantissa_bits: int) -> FloatArray:
     mantissa: IntArray = bits & MANTISSA_MASK
 
     # Get rounding bits
-    round_bit: IntArray = bits & np.uint32(
-        1 << drop_bits
-    )  # nth place - smallest bit kept
-    half_bit: IntArray = bits & np.uint32(1 << (drop_bits - 1))  # n+1th place
+    round_bit: IntArray = bits & np.uint32(1 << drop_bits)
+    half_bit: IntArray = bits & np.uint32(1 << (drop_bits - 1))
     sticky_mask = np.uint32((1 << (drop_bits - 1)) - 1)
-    sticky_bits: IntArray = bits & sticky_mask  # n+2 and beyond
+    sticky_bits: IntArray = bits & sticky_mask
 
     # Vectorized rounding logic
     round_down_mask = half_bit == 0

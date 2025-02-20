@@ -11,7 +11,8 @@ def test_get_zarr_store_dev() -> None:
     Config.env = Env.dev
     store = get_zarr_store("test-dataset", "1.0.0")
     assert isinstance(store, zarr.storage.LocalStore)
-    assert store.path == str(Path("data/output/test-dataset/vdev.zarr").absolute())
+    # LocalStore doesn't normally have a path attribute, we set it for consistency with FsspecStore
+    assert store.path == str(Path("data/output/test-dataset/vdev.zarr").absolute())  # type: ignore[attr-defined]
 
 
 def test_get_zarr_store_prod() -> None:
@@ -30,8 +31,8 @@ def test_get_mode() -> None:
     dev_store = zarr.storage.LocalStore(Path("test-dev.zarr"))
     assert get_mode(dev_store) == "w"
 
-    prod_store = zarr.storage.FsspecStore.from_url("s3://test-bucket/test.zarr")
-    assert get_mode(prod_store) == "w-"
-
     tmp_store = Path("test-tmp.zarr")
     assert get_mode(tmp_store) == "w"
+
+    prod_store = zarr.storage.FsspecStore.from_url("s3://test-bucket/test.zarr")
+    assert get_mode(prod_store) == "w-"
