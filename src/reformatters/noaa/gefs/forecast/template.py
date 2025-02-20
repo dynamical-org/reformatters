@@ -11,9 +11,9 @@ import rioxarray  # noqa: F401  Adds .rio accessor to datasets
 import xarray as xr
 import zarr
 
-from common.config import Config  # noqa:F401
-from common.config_models import Coordinate, DataVar
-from common.types import DatetimeLike
+from reformatters.common.config import Config  # noqa:F401
+from reformatters.common.config_models import Coordinate, DataVar
+from reformatters.common.types import DatetimeLike
 
 from .template_config import (
     COORDINATES,

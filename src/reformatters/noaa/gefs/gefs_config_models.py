@@ -1,7 +1,7 @@
 from typing import Literal
 
-from common.config_models import DataVar
-from noaa.noaa_config_models import NOAAInternalAttrs
+from reformatters.common.config_models import DataVar
+from reformatters.noaa.noaa_config_models import NOAAInternalAttrs
 
 # We pull data from 3 types of source files: `a`, `b` and `s`.
 # Selected variables are available in `s` at higher resolution (0.25 vs 0.5 deg)

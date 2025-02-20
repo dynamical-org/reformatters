@@ -6,7 +6,7 @@ import pandas as pd
 import zarr
 from numcodecs.zarr3 import BitRound  # type: ignore
 
-from common.config_models import (
+from reformatters.common.config_models import (
     Coordinate,
     CoordinateAttrs,
     DatasetAttributes,
@@ -15,8 +15,8 @@ from common.config_models import (
     StatisticsApproximate,
     replace,
 )
-from common.types import DatetimeLike
-from noaa.gefs.gefs_config_models import GEFSDataVar, GEFSInternalAttrs
+from reformatters.common.types import DatetimeLike
+from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar, GEFSInternalAttrs
 
 DATASET_ID = "noaa-gefs-forecast"
 DATASET_VERSION = "0.1.0"

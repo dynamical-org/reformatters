@@ -1,4 +1,4 @@
-from common.config_models import FrozenBaseModel
+from reformatters.common.config_models import FrozenBaseModel
 
 
 class NOAAInternalAttrs(FrozenBaseModel):

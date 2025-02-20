@@ -9,7 +9,7 @@ import xarray as xr
 import zarr
 from fsspec.implementations.local import LocalFileSystem  # type: ignore
 
-from common.config import Config
+from reformatters.common.config import Config
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)

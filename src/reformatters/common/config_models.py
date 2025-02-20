@@ -4,7 +4,7 @@ from typing import Annotated, Any, Generic, Literal, TypeVar
 import numcodecs  # type: ignore
 import pydantic
 
-from common.types import TimedeltaUnits, TimestampUnits
+from reformatters.common.types import TimedeltaUnits, TimestampUnits
 
 B = TypeVar("B", bound=pydantic.BaseModel)
 
