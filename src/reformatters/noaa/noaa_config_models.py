@@ -1,7 +1,7 @@
-from reformatters.common.config_models import FrozenBaseModel
+from reformatters.common.config_models import BaseInternalAttrs
 
 
-class NOAAInternalAttrs(FrozenBaseModel):
+class NOAAInternalAttrs(BaseInternalAttrs):
     grib_element: str
     grib_description: str
     grib_index_level: str

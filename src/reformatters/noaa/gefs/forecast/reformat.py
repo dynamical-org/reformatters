@@ -20,6 +20,7 @@ import xarray as xr
 import zarr
 
 from reformatters.common import docker, validation
+from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config import Config  # noqa:F401
 from reformatters.common.config_models import EnsembleStatistic
 from reformatters.common.download_directory import cd_into_download_directory
@@ -457,10 +458,18 @@ def reformat_init_time_i_slices(
                             )
                         )
 
+                        logger.info("Starting bitrounding")
+                        if isinstance(data_var.internal_attrs.keep_mantissa_bits, int):
+                            round_float32_inplace(
+                                data_array.values,
+                                keep_mantissa_bits=data_var.internal_attrs.keep_mantissa_bits,
+                            )
+
                         logger.info(f"Writing {data_var.name} {chunk_init_times_str}")
                         data_array = data_array.chunk(
                             template_ds[data_var.name].encoding["preferred_chunks"]
                         )
+
                         with warnings.catch_warnings():
                             warnings.filterwarnings(
                                 "ignore",
