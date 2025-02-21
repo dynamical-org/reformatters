@@ -22,6 +22,11 @@ dependencies = [
     "zarr>=3.0.3",
 ]
 
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+
 [project.scripts]
 main = "reformatters.__main__:app"
 
@@ -69,5 +74,5 @@ init_forbid_extra = true
 init_typed = true
 warn_required_dynamic_aliases = true
 
-[tool.setuptools.package-data]
-reformatters = ["common/py.typed"]
+[project.package-data]
+reformatters = ["py.typed"]

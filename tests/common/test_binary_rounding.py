@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from src.reformatters.common.binary_rounding import round_float32
+from reformatters.common.binary_rounding import round_float32
 
 
 def test_round_float32_negative_values() -> None:
