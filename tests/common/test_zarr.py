@@ -7,7 +7,6 @@ from reformatters.common.zarr import get_mode, get_zarr_store
 
 
 def test_get_zarr_store_dev() -> None:
-    # Test dev environment store creation
     Config.env = Env.dev
     store = get_zarr_store("test-dataset", "1.0.0")
     assert isinstance(store, zarr.storage.LocalStore)
@@ -15,7 +14,6 @@ def test_get_zarr_store_dev() -> None:
 
 
 def test_get_zarr_store_prod() -> None:
-    # Test prod environment store creation
     Config.env = Env.prod
     store = get_zarr_store("test-dataset", "1.0.0")
     assert isinstance(store, zarr.storage.FsspecStore)
@@ -26,12 +24,12 @@ def test_get_zarr_store_prod() -> None:
 
 
 def test_get_mode() -> None:
-    # Test mode selection for different store types
+    # Dev and temp stores can be overwritten, everything else should not overwrite.
     dev_store = zarr.storage.LocalStore(Path("test-dev.zarr"))
     assert get_mode(dev_store) == "w"
 
-    prod_store = zarr.storage.FsspecStore.from_url("s3://test-bucket/test.zarr")
-    assert get_mode(prod_store) == "w-"
-
     tmp_store = Path("test-tmp.zarr")
     assert get_mode(tmp_store) == "w"
+
+    prod_store = zarr.storage.FsspecStore.from_url("s3://test-bucket/test.zarr")
+    assert get_mode(prod_store) == "w-"
