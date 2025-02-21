@@ -231,6 +231,20 @@ def test_round_keep_all_bits() -> None:
     assert rounded_values[0] == original
 
 
+def test_round_keep_zero_bits() -> None:
+    # Format: 0|10000001|10000000000000000000111
+    bits = np.uint32(0b0_10000001_10000000000000000000000)
+    original = np.frombuffer(bits.tobytes(), dtype=np.float32)[0]
+    assert original == 6.0
+
+    values = np.array([original], dtype=np.float32)
+    rounded_values = round_float32_inplace(values, keep_mantissa_bits=0)
+
+    expected_bits = np.uint32(0b0_10000010_00000000000000000000000)
+    expected = np.frombuffer(expected_bits.tobytes(), dtype=np.float32)[0]
+    assert rounded_values[0] == expected
+
+
 def test_round_keep_all_but_one_bits_trailing_1() -> None:
     # Format: 0|10000001|10000000000000000000111
     bits = np.uint32(0b0_10000001_10000000000000000000111)

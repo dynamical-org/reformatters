@@ -4,7 +4,7 @@ import numpy as np
 
 from reformatters.common.types import ArrayFloat32
 
-# IEEE 754 binary32 constants
+# IEEE 754 binary32 (float32) constants
 MANTISSA_BITS: Final[int] = 23
 MANTISSA_MASK: Final[np.uint32] = np.uint32((1 << MANTISSA_BITS) - 1)
 EXPONENT_MASK: Final[np.uint32] = np.uint32(((1 << 8) - 1) << (32 - 8 - 1))
@@ -25,6 +25,8 @@ def round_float32_inplace(value: ArrayFloat32, keep_mantissa_bits: int) -> Array
     Returns:
         Rounded float32 array
     """
+    if keep_mantissa_bits < 0:
+        raise ValueError("keep_mantissa_bits must be at least 0")
     if keep_mantissa_bits > MANTISSA_BITS:
         raise ValueError(f"keep_mantissa_bits must be less than {MANTISSA_BITS}")
     if keep_mantissa_bits == MANTISSA_BITS:
