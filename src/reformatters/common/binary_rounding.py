@@ -1,11 +1,8 @@
 from typing import Final
 
 import numpy as np
-import numpy.typing as npt
 
-# Type aliases
-FloatArray = npt.NDArray[np.float32]
-IntArray = npt.NDArray[np.uint32]
+from reformatters.common.types import ArrayFloat32
 
 # IEEE 754 binary32 constants
 MANTISSA_BITS: Final[int] = 23
@@ -14,10 +11,12 @@ EXPONENT_MASK: Final[np.uint32] = np.uint32(((1 << 8) - 1) << (32 - 8 - 1))
 SIGN_MASK: Final[np.uint32] = np.uint32(1 << 31)
 
 
-def round_float32(value: FloatArray, keep_mantissa_bits: int) -> FloatArray:
-    """Round float32 values to keep a specific number of mantissa bits.
+def round_float32_inplace(value: ArrayFloat32, keep_mantissa_bits: int) -> ArrayFloat32:
+    """
+    Round float32 values to keep a specific number of mantissa bits.
+    This improves compression by creating more trailing zeros.
 
-    Vectorized implementation that works on numpy float32 arrays.
+    Modifies the input array in place.
 
     Args:
         value: The float32 array to round
@@ -26,62 +25,63 @@ def round_float32(value: FloatArray, keep_mantissa_bits: int) -> FloatArray:
     Returns:
         Rounded float32 array
     """
-    if keep_mantissa_bits >= MANTISSA_BITS:
+    if keep_mantissa_bits > MANTISSA_BITS:
+        raise ValueError(f"keep_mantissa_bits must be less than {MANTISSA_BITS}")
+    if keep_mantissa_bits == MANTISSA_BITS:
         return value
 
-    # Early return for any NaN or Inf values
-    if np.any(~np.isfinite(value)):
-        return value.copy()
+    bits: np.ndarray[tuple[int, ...], np.dtype[np.uint32]] = value.view(np.uint32)
 
-    bits: IntArray = value.view(np.uint32)
-
-    # Number of trailing bits to drop
     drop_bits = MANTISSA_BITS - keep_mantissa_bits
 
-    # Extract components
-    sign: IntArray = bits & SIGN_MASK
-    exponent: IntArray = bits & EXPONENT_MASK
-    mantissa: IntArray = bits & MANTISSA_MASK
+    mantissa = bits & MANTISSA_MASK
 
-    # Get rounding bits
-    round_bit: IntArray = bits & np.uint32(1 << drop_bits)
-    half_bit: IntArray = bits & np.uint32(1 << (drop_bits - 1))
-    sticky_mask = np.uint32((1 << (drop_bits - 1)) - 1)
-    sticky_bits: IntArray = bits & sticky_mask
+    round_bit = bits & np.uint32(1 << drop_bits)
+    half_bit = bits & np.uint32(1 << (drop_bits - 1))
+    sticky_bits = bits & np.uint32((1 << (drop_bits - 1)) - 1)
 
-    # Vectorized rounding logic
-    round_down_mask = half_bit == 0
-    round_up_mask = (~round_down_mask) & (sticky_bits != 0)
-    round_even_mask = (~round_down_mask) & (sticky_bits == 0)
-
-    # Apply rounding rules
+    # Apply rounding rules directly to mantissa
     keep_mask = ~np.uint32((1 << drop_bits) - 1)
     increment = np.uint32(1 << drop_bits)
 
-    # Round down (clear lower bits)
+    # clear lower bits
     mantissa &= keep_mask
 
     # Round up where needed
-    mantissa[round_up_mask] += increment
+    round_up = (half_bit != 0) & (sticky_bits != 0)
+    mantissa[round_up] += increment
 
-    # Round to even where needed (if round bit is 1)
-    round_even_up_mask = round_even_mask & (round_bit != 0)
-    mantissa[round_even_up_mask] += increment
+    # Round to even where needed
+    round_even = (half_bit != 0) & (sticky_bits == 0) & (round_bit != 0)
+    mantissa[round_even] += increment
 
     # Handle mantissa overflow
-    overflow_mask = mantissa > MANTISSA_MASK
-    if np.any(overflow_mask):
+    mantissa_overflow_mask = mantissa > MANTISSA_MASK
+    if np.any(mantissa_overflow_mask):
+        # Extract sign and exponent only where needed
+        sign = bits & SIGN_MASK
+        exponent = bits & EXPONENT_MASK
+
         # Increment exponent and wrap mantissa
-        exponent[overflow_mask] += np.uint32(1 << MANTISSA_BITS)
-        mantissa[overflow_mask] &= MANTISSA_MASK
+        exponent[mantissa_overflow_mask] += np.uint32(1 << MANTISSA_BITS)
+        mantissa[mantissa_overflow_mask] &= MANTISSA_MASK
 
         # Check for exponent overflow
-        inf_mask = exponent >= EXPONENT_MASK
-        if np.any(inf_mask):
-            result = value.copy()
-            result[inf_mask] = np.where(sign[inf_mask] == 0, np.inf, -np.inf)
-            return result
+        exponent_overflow_mask = exponent >= EXPONENT_MASK
+        if np.any(exponent_overflow_mask):
+            bits_float = bits.view(np.float32)
+            bits_float[exponent_overflow_mask] = np.where(
+                sign[exponent_overflow_mask] == 0, np.inf, -np.inf
+            )
 
-    # Recombine components
-    result_bits = sign | exponent | mantissa
-    return result_bits.view(np.float32)
+        # Recombine sign, exponent, and mantissa
+        # bits = sign | exponent | mantissa
+        bits = np.bitwise_or(sign, exponent, out=bits)
+        bits = np.bitwise_or(bits, mantissa, out=bits)
+    else:
+        # No overflow - just update mantissa bits
+        # bits = (bits & ~MANTISSA_MASK) | mantissa
+        bits = np.bitwise_and(~MANTISSA_MASK, bits, out=bits)
+        bits = np.bitwise_or(bits, mantissa, out=bits)
+
+    return bits.view(np.float32)
