@@ -458,11 +458,12 @@ def reformat_init_time_i_slices(
                             )
                         )
 
-                        logger.info("Starting bitrounding")
-                        if isinstance(data_var.internal_attrs.keep_mantissa_bits, int):
+                        keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
+                        if isinstance(keep_mantissa_bits, int):
+                            logger.info(f"Starting bit rounding {data_var.name}")
                             round_float32_inplace(
                                 data_array.values,
-                                keep_mantissa_bits=data_var.internal_attrs.keep_mantissa_bits,
+                                keep_mantissa_bits=keep_mantissa_bits,
                             )
 
                         logger.info(f"Writing {data_var.name} {chunk_init_times_str}")
