@@ -43,6 +43,7 @@ def round_float32_inplace(value: ArrayFloat32, keep_mantissa_bits: int) -> Array
 def _round_float32_inplace_numba(
     bits: np.ndarray[tuple[int, ...], np.dtype[np.uint32]],
     keep_mantissa_bits: int,
+    # The following arguments are constants but numba can't access globals
     mantissa_bits: int,
     mantissa_mask: np.uint32,
     exponent_mask: np.uint32,
