@@ -559,12 +559,6 @@
         "fill_value": 0.0,
         "codecs": [
           {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -628,12 +622,6 @@
         },
         "fill_value": 0.0,
         "codecs": [
-          {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
           {
             "name": "bytes",
             "configuration": {
@@ -701,12 +689,6 @@
         "fill_value": 0.0,
         "codecs": [
           {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -769,12 +751,6 @@
         },
         "fill_value": 0.0,
         "codecs": [
-          {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
           {
             "name": "bytes",
             "configuration": {
@@ -941,12 +917,6 @@
         },
         "fill_value": 0.0,
         "codecs": [
-          {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 8
-            }
-          },
           {
             "name": "bytes",
             "configuration": {
@@ -1280,12 +1250,6 @@
         "fill_value": 0.0,
         "codecs": [
           {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -1348,12 +1312,6 @@
         },
         "fill_value": 0.0,
         "codecs": [
-          {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
           {
             "name": "bytes",
             "configuration": {
@@ -1420,12 +1378,6 @@
         "fill_value": 0.0,
         "codecs": [
           {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -1488,12 +1440,6 @@
         },
         "fill_value": 0.0,
         "codecs": [
-          {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
           {
             "name": "bytes",
             "configuration": {
@@ -1560,12 +1506,6 @@
         "fill_value": 0.0,
         "codecs": [
           {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -1631,12 +1571,6 @@
         "fill_value": 0.0,
         "codecs": [
           {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -1699,12 +1633,6 @@
         },
         "fill_value": 0.0,
         "codecs": [
-          {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
           {
             "name": "bytes",
             "configuration": {
@@ -1771,12 +1699,6 @@
         "fill_value": 0.0,
         "codecs": [
           {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -1839,12 +1761,6 @@
         },
         "fill_value": 0.0,
         "codecs": [
-          {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
           {
             "name": "bytes",
             "configuration": {
@@ -1911,12 +1827,6 @@
         "fill_value": 0.0,
         "codecs": [
           {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -1980,12 +1890,6 @@
         },
         "fill_value": 0.0,
         "codecs": [
-          {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
           {
             "name": "bytes",
             "configuration": {
@@ -2053,12 +1957,6 @@
         "fill_value": 0.0,
         "codecs": [
           {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -2123,12 +2021,6 @@
         },
         "fill_value": 0.0,
         "codecs": [
-          {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
           {
             "name": "bytes",
             "configuration": {
@@ -2197,12 +2089,6 @@
         "fill_value": 0.0,
         "codecs": [
           {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 6
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -2267,12 +2153,6 @@
         },
         "fill_value": 0.0,
         "codecs": [
-          {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 6
-            }
-          },
           {
             "name": "bytes",
             "configuration": {
@@ -2389,12 +2269,6 @@
         "fill_value": 0.0,
         "codecs": [
           {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -2458,12 +2332,6 @@
         },
         "fill_value": 0.0,
         "codecs": [
-          {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
           {
             "name": "bytes",
             "configuration": {
@@ -2531,12 +2399,6 @@
         "fill_value": 0.0,
         "codecs": [
           {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -2600,12 +2462,6 @@
         },
         "fill_value": 0.0,
         "codecs": [
-          {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 7
-            }
-          },
           {
             "name": "bytes",
             "configuration": {
@@ -2729,12 +2585,6 @@
         "fill_value": 0.0,
         "codecs": [
           {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 6
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -2801,12 +2651,6 @@
         "fill_value": 0.0,
         "codecs": [
           {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 6
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -2870,12 +2714,6 @@
         },
         "fill_value": 0.0,
         "codecs": [
-          {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 6
-            }
-          },
           {
             "name": "bytes",
             "configuration": {
@@ -2943,12 +2781,6 @@
         "fill_value": 0.0,
         "codecs": [
           {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 6
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -3015,12 +2847,6 @@
         "fill_value": 0.0,
         "codecs": [
           {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 6
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -3084,12 +2910,6 @@
         },
         "fill_value": 0.0,
         "codecs": [
-          {
-            "name": "numcodecs.bitround",
-            "configuration": {
-              "keepbits": 6
-            }
-          },
           {
             "name": "bytes",
             "configuration": {
