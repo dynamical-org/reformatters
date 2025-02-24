@@ -348,6 +348,29 @@ def test_round_subnormal_to_subnormal() -> None:
     assert rounded_values[0] == expected
 
 
+def test_round_subnormal_to_zero() -> None:
+    # Format: 0|00000000|00000000000000000000001
+    # Smallest possible subnormal number
+    bits = np.uint32(0b0_00000000_00000000000000000000001)
+    original = np.frombuffer(bits.tobytes(), dtype=np.float32)[0]
+    assert original == 1.4e-45  # Smallest possible subnormal float32
+
+    values = np.array([original], dtype=np.float32)
+    # Keep only a few bits - this should round to zero since all significant bits will be dropped
+    rounded_values = round_float32_inplace(values, keep_mantissa_bits=3)
+    assert rounded_values[0] == 0.0
+
+    # Test with a slightly larger subnormal number
+    # Format: 0|00000000|00000000000000000001111
+    bits = np.uint32(0b0_00000000_00000000000000000001111)
+    original = np.frombuffer(bits.tobytes(), dtype=np.float32)[0]
+
+    values = np.array([original], dtype=np.float32)
+    # This should also round to zero when keeping only a few bits
+    rounded_values = round_float32_inplace(values, keep_mantissa_bits=5)
+    assert rounded_values[0] == 0.0
+
+
 def test_wide_logspace_percent_difference() -> None:
     values = np.logspace(-127, 127, num=2000, base=2, dtype=np.float32)
     max_diff = 0.0

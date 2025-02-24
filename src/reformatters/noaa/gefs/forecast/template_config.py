@@ -1,10 +1,9 @@
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Any, Final, Literal
 
 import numpy as np
 import pandas as pd
 import zarr
-from numcodecs.zarr3 import BitRound  # type: ignore
 
 from reformatters.common.config_models import (
     Coordinate,
@@ -114,11 +113,15 @@ BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE = zarr.codecs.BloscCodec(
     shuffle="shuffle",  # byte shuffle
 ).to_dict()
 
+GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT: Final[int] = 7
+GEFS_BITROUND_KEEP_MANTISSA_BITS_CATEGORICAL: Final[Literal["no-rounding"]] = (
+    "no-rounding"
+)
+
 ENCODING_FLOAT32_DEFAULT = Encoding(
     dtype="float32",
     fill_value=np.nan,
     chunks=ENSEMBLE_VAR_CHUNKS_ORDERED,
-    filters=[BitRound(keepbits=7)],
     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
 )
 ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT = Encoding(
@@ -307,11 +310,12 @@ _DATA_VARIABLES = (
     #         grib_index_level="surface",
     #         gefs_file_type="s+b",
     #         index_position=1,
+    #         keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
     #     ),
     # ),
     # GEFSDataVar(
     #     name="wind_gust_surface",
-    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
+    #     encoding=ENCODING_FLOAT32_DEFAULT,
     #     attrs=DataVarAttrs(
     #         short_name="gust",
     #         long_name="Wind speed (gust)",
@@ -324,6 +328,7 @@ _DATA_VARIABLES = (
     #         grib_index_level="surface",
     #         gefs_file_type="s+b",
     #         index_position=2,
+    #         keep_mantissa_bits=6,
     #     ),
     # ),
     # GEFSDataVar(
@@ -341,6 +346,7 @@ _DATA_VARIABLES = (
     #         grib_index_level="mean sea level",
     #         gefs_file_type="s+b",
     #         index_position=3,
+    #         keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
     #     ),
     # ),
     GEFSDataVar(
@@ -359,6 +365,7 @@ _DATA_VARIABLES = (
             grib_index_level="surface",
             gefs_file_type="s+a",
             index_position=4,
+            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     # GEFSDataVar(
@@ -376,6 +383,7 @@ _DATA_VARIABLES = (
     #         grib_index_level="0-0.1 m below ground",
     #         gefs_file_type="s+a",
     #         index_position=5,
+    #         keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
     #     ),
     # ),
     # GEFSDataVar(
@@ -393,6 +401,7 @@ _DATA_VARIABLES = (
     #         grib_index_level="0-0.1 m below ground",
     #         gefs_file_type="s+a",
     #         index_position=6,
+    #         keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
     #     ),
     # ),
     # GEFSDataVar(
@@ -410,6 +419,7 @@ _DATA_VARIABLES = (
     #         grib_index_level="surface",
     #         gefs_file_type="s+a",
     #         index_position=7,
+    #         keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
     #     ),
     # ),
     # GEFSDataVar(
@@ -428,6 +438,7 @@ _DATA_VARIABLES = (
     #         grib_index_level="surface",
     #         gefs_file_type="s+a",
     #         index_position=8,
+    #         keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
     #     ),
     # ),
     # GEFSDataVar(
@@ -445,6 +456,7 @@ _DATA_VARIABLES = (
     #         grib_index_level="surface",
     #         gefs_file_type="s+a",
     #         index_position=9,
+    #         keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
     #     ),
     # ),
     GEFSDataVar(
@@ -463,6 +475,7 @@ _DATA_VARIABLES = (
             grib_index_level="2 m above ground",
             gefs_file_type="s+a",
             index_position=10,
+            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     # GEFSDataVar(
@@ -480,13 +493,12 @@ _DATA_VARIABLES = (
     #         grib_index_level="2 m above ground",
     #         gefs_file_type="s+b",
     #         index_position=11,
+    #         keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
     #     ),
     # ),
     GEFSDataVar(
         name="relative_humidity_2m",
-        encoding=replace(
-            ENCODING_FLOAT32_DEFAULT, add_offset=50.0, filters=[BitRound(keepbits=6)]
-        ),
+        encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=50.0),
         attrs=DataVarAttrs(
             short_name="r2",
             long_name="2 metre relative humidity",
@@ -500,6 +512,7 @@ _DATA_VARIABLES = (
             grib_index_level="2 m above ground",
             gefs_file_type="s+a",
             index_position=12,
+            keep_mantissa_bits=6,
         ),
     ),
     GEFSDataVar(
@@ -517,6 +530,7 @@ _DATA_VARIABLES = (
             grib_index_level="2 m above ground",
             gefs_file_type="s+a",
             index_position=13,
+            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     GEFSDataVar(
@@ -534,11 +548,12 @@ _DATA_VARIABLES = (
             grib_index_level="2 m above ground",
             gefs_file_type="s+a",
             index_position=14,
+            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     GEFSDataVar(
         name="wind_u_10m",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="u10",
             long_name="10 metre U wind component",
@@ -552,11 +567,12 @@ _DATA_VARIABLES = (
             grib_index_level="10 m above ground",
             gefs_file_type="s+a",
             index_position=15,
+            keep_mantissa_bits=6,
         ),
     ),
     GEFSDataVar(
         name="wind_v_10m",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="v10",
             long_name="10 metre V wind component",
@@ -570,11 +586,12 @@ _DATA_VARIABLES = (
             grib_index_level="10 m above ground",
             gefs_file_type="s+a",
             index_position=16,
+            keep_mantissa_bits=6,
         ),
     ),
     GEFSDataVar(
         name="wind_u_100m",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="u100",
             long_name="100 metre U wind component",
@@ -588,11 +605,12 @@ _DATA_VARIABLES = (
             grib_index_level="100 m above ground",
             gefs_file_type="b",
             index_position=357,
+            keep_mantissa_bits=6,
         ),
     ),
     GEFSDataVar(
         name="wind_v_100m",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="v100",
             long_name="100 metre V wind component",
@@ -606,6 +624,7 @@ _DATA_VARIABLES = (
             grib_index_level="100 m above ground",
             gefs_file_type="b",
             index_position=358,
+            keep_mantissa_bits=6,
         ),
     ),
     GEFSDataVar(
@@ -623,6 +642,7 @@ _DATA_VARIABLES = (
             grib_index_level="surface",
             gefs_file_type="s+b",
             index_position=17,
+            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     GEFSDataVar(
@@ -641,6 +661,7 @@ _DATA_VARIABLES = (
             gefs_file_type="s+a",
             index_position=18,
             include_lead_time_suffix=True,
+            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     GEFSDataVar(
@@ -658,6 +679,7 @@ _DATA_VARIABLES = (
             grib_index_level="surface",
             gefs_file_type="s+a",
             index_position=19,
+            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_CATEGORICAL,
         ),
     ),
     GEFSDataVar(
@@ -675,6 +697,7 @@ _DATA_VARIABLES = (
             grib_index_level="surface",
             gefs_file_type="s+a",
             index_position=20,
+            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_CATEGORICAL,
         ),
     ),
     GEFSDataVar(
@@ -692,6 +715,7 @@ _DATA_VARIABLES = (
             grib_index_level="surface",
             gefs_file_type="s+a",
             index_position=21,
+            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_CATEGORICAL,
         ),
     ),
     GEFSDataVar(
@@ -709,11 +733,12 @@ _DATA_VARIABLES = (
             grib_index_level="surface",
             gefs_file_type="s+a",
             index_position=22,
+            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_CATEGORICAL,
         ),
     ),
     # GEFSDataVar(
     #     name="mean_latent_heat_flux_surface",
-    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
+    #     encoding=replace(ENCODING_FLOAT32_DEFAULT),
     #     attrs=DataVarAttrs(
     #         short_name="mslhf",
     #         long_name="Mean surface latent heat flux",
@@ -726,11 +751,12 @@ _DATA_VARIABLES = (
     #         grib_index_level="surface",
     #         gefs_file_type="s+a",
     #         index_position=23,
+    #         keep_mantissa_bits=6,
     #     ),
     # ),
     # GEFSDataVar(
     #     name="mean_sensible_heat_flux_surface",
-    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=6)]),
+    #     encoding=replace(ENCODING_FLOAT32_DEFAULT),
     #     attrs=DataVarAttrs(
     #         short_name="msshf",
     #         long_name="Mean surface sensible heat flux",
@@ -743,6 +769,7 @@ _DATA_VARIABLES = (
     #         grib_index_level="surface",
     #         gefs_file_type="s+a",
     #         index_position=24,
+    #         keep_mantissa_bits=6,
     #     ),
     # ),
     GEFSDataVar(
@@ -760,6 +787,7 @@ _DATA_VARIABLES = (
             grib_index_level="entire atmosphere (considered as a single layer)",
             gefs_file_type="s+a",
             index_position=27,
+            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     GEFSDataVar(
@@ -777,11 +805,12 @@ _DATA_VARIABLES = (
             grib_index_level="entire atmosphere",
             gefs_file_type="s+a",
             index_position=28,
+            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     GEFSDataVar(
         name="geopotential_height_cloud_ceiling",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, filters=[BitRound(keepbits=8)]),
+        encoding=replace(ENCODING_FLOAT32_DEFAULT),
         attrs=DataVarAttrs(
             short_name="gh",
             long_name="Geopotential height",
@@ -795,6 +824,7 @@ _DATA_VARIABLES = (
             grib_index_level="cloud ceiling",
             gefs_file_type="s+b",
             index_position=29,
+            keep_mantissa_bits=8,
         ),
     ),
     GEFSDataVar(
@@ -812,6 +842,7 @@ _DATA_VARIABLES = (
             grib_index_level="surface",
             gefs_file_type="s+a",
             index_position=30,
+            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     GEFSDataVar(
@@ -829,6 +860,7 @@ _DATA_VARIABLES = (
             grib_index_level="surface",
             gefs_file_type="s+a",
             index_position=31,
+            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     # GEFSDataVar(
@@ -846,6 +878,7 @@ _DATA_VARIABLES = (
     #         grib_index_level="surface",
     #         gefs_file_type="s+a",
     #         index_position=32,
+    #         keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
     #     ),
     # ),
     # GEFSDataVar(
@@ -863,6 +896,7 @@ _DATA_VARIABLES = (
     #         grib_index_level="3000-0 m above ground",
     #         gefs_file_type="s+b",
     #         index_position=35,
+    #         keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
     #     ),
     # ),
     GEFSDataVar(
@@ -880,6 +914,7 @@ _DATA_VARIABLES = (
             grib_index_level="mean sea level",
             gefs_file_type="s+a",
             index_position=38,
+            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
 )

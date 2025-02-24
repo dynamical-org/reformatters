@@ -104,7 +104,11 @@ class Coordinate(FrozenBaseModel):
     attrs: CoordinateAttrs
 
 
-INTERNAL_ATTRS = TypeVar("INTERNAL_ATTRS", bound=pydantic.BaseModel)
+class BaseInternalAttrs(FrozenBaseModel):
+    keep_mantissa_bits: int | Literal["no-rounding"]
+
+
+INTERNAL_ATTRS = TypeVar("INTERNAL_ATTRS", bound=BaseInternalAttrs)
 
 
 class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS]):
