@@ -44,9 +44,18 @@ def _deaccumulate_to_rates_numba(
     values: ArrayFloat32,
     is_3h_accum: np.ndarray[tuple[int], np.dtype[np.bool]],
     lead_time_seconds: np.ndarray[tuple[int], np.dtype[np.int64]],
-    invalid_below_threshold: float = -1e-6,
+    invalid_below_threshold_rate: float = -1e-5,
 ) -> None:
-    """Convert accumulated values to per-second rates in place.
+    """
+    Convert GEFS 3 or 6 hour accumulated values to per-second rates in place.
+
+    GEFS accumulations are over the last 6 hour period for 00, 06, 12, 18
+    UTC hours or the last 3 hour period for 03, 09, 15, 21 UTC hours.
+
+    Accumulations should only go up. If they go down a tiny bit,
+    most likely due to numerical precision issues, we clamp to 0.
+    If they go down to a *rate* that is less than `invalid_below_threshold`,
+    this sets the value to NaN and raises an error.
 
     Args:
         values: Array to modify in place, with lead_time as the last dimension
@@ -60,6 +69,7 @@ def _deaccumulate_to_rates_numba(
     flat_values = values.reshape((-1, n_lead_times))
 
     negative_count = 0
+    clamped_count = 0
 
     for i in prange(flat_values.shape[0]):
         sequence = flat_values[i]
@@ -86,14 +96,18 @@ def _deaccumulate_to_rates_numba(
                     # No 3h accumulation before - calculate rate for full 6h period
                     sequence[t] /= time_step
 
+            # Accumulations should only go up
+            # If they go down a tiny bit, clamp to 0
+            # If they go down more, set to NaN and then raise
             if sequence[t] < 0:
-                if sequence[t] < invalid_below_threshold:
+                if sequence[t] > invalid_below_threshold_rate:
+                    clamped_count += 1
+                    sequence[t] = 0
+                else:
                     negative_count += 1
                     sequence[t] = np.nan
-                else:
-                    sequence[t] = 0
 
     if negative_count > 0:
-        raise ValueError(
-            f"Found {negative_count} values below threshold {invalid_below_threshold}"
-        )
+        raise ValueError(f"Found {negative_count} values below threshold")
+    if clamped_count / values.size > 0.05:
+        raise ValueError(f"Over 5% ({clamped_count} total) values were clamped to 0")

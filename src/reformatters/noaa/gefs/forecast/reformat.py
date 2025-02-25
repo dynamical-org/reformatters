@@ -463,7 +463,15 @@ def reformat_init_time_i_slices(
                             logger.info(
                                 f"Converting {data_var.name} from accumulations to rates"
                             )
-                            deaccumulate_to_rates_inplace(data_array, dim="lead_time")
+                            try:
+                                deaccumulate_to_rates_inplace(
+                                    data_array, dim="lead_time"
+                                )
+                            except ValueError as e:
+                                # Log exception so we are notified if deaccumulation errors are larger than expected.
+                                logger.exception(
+                                    f"Error deaccumulating {data_var.name}", e
+                                )
 
                         keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
                         if isinstance(keep_mantissa_bits, int):
