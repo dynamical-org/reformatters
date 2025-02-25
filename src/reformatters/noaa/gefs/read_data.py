@@ -7,7 +7,7 @@ from collections.abc import Iterable, Sequence
 from datetime import timedelta
 from itertools import product
 from pathlib import Path
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, TypedDict, assert_never
 
 import numpy as np
 import obstore
@@ -15,6 +15,7 @@ import pandas as pd
 import rasterio  # type: ignore
 import requests
 import xarray as xr
+from affine import Affine  # type: ignore
 
 from reformatters.common.config import Config
 from reformatters.common.config_models import EnsembleStatistic
@@ -26,6 +27,10 @@ FILE_RESOLUTIONS = {
     "a": "0p50",
     "b": "0p50",
 }
+
+_TRANSFORM_025D = Affine(0.25, 0.0, -180.125, 0.0, -0.25, 90.125)
+_BOUNDS_025D = (-180.125, -90.125, 179.875, 90.125)
+_SHAPE_025D = (721, 1440)
 
 
 class EnsembleSourceFileCoords(TypedDict):
@@ -269,35 +274,22 @@ def read_into(
             path,
             grib_element,
             data_var.internal_attrs.grib_description,
+            coords,
+            data_var,
         )
     except Exception as e:
         print("Read failed", coords, e)
         return
 
-    out.loc[ds_coords] = maybe_resample(raw_data, coords, data_var)
-
-
-def maybe_resample(
-    raw_data: Array2D[np.float32],
-    coords: SourceFileCoords,
-    data_var: GEFSDataVar,
-) -> Array2D[np.float32]:
-    gefs_file_type = get_gefs_file_type_for_lead_time(
-        coords["lead_time"], data_var.internal_attrs.gefs_file_type
-    )
-    if gefs_file_type in ["a", "b"]:
-        # Duplicate 1 pixel into 4 to go from 361x720 (a and b file resolution) to 721x1440 (s file resolution)
-        # TODO figure out least worst translation from 361 -> 721 pixels
-        len_lat, len_lon = raw_data.shape
-        lat_ix = np.arange(len_lat).repeat(2)[:-1]
-        lon_ix = np.arange(len_lon).repeat(2)
-        return raw_data[np.ix_(lat_ix, lon_ix)]  # type: ignore
-
-    return raw_data
+    out.loc[ds_coords] = raw_data
 
 
 def read_rasterio(
-    path: os.PathLike[str], grib_element: str, grib_description: str
+    path: os.PathLike[str],
+    grib_element: str,
+    grib_description: str,
+    coords: SourceFileCoords,
+    data_var: GEFSDataVar,
 ) -> Array2D[np.float32]:
     with rasterio.open(path) as reader:
         matching_bands = [
@@ -311,7 +303,31 @@ def read_rasterio(
         assert len(matching_bands) == 1, f"Expected exactly 1 matching band, found {matching_bands}. {grib_element=}, {grib_description=}, {path=}"  # fmt: skip
         rasterio_band_index = matching_bands[0]
 
-        return reader.read(rasterio_band_index, out_dtype=np.float32)  # type: ignore
+        result: Array2D[np.float32]
+        match get_gefs_file_type_for_lead_time(
+            coords["lead_time"], data_var.internal_attrs.gefs_file_type
+        ):
+            case "a" | "b":
+                # Interpolate 0.5 degree data to 0.25 degrees for consistency
+                window = rasterio.windows.from_bounds(
+                    *_BOUNDS_025D, transform=_TRANSFORM_025D
+                )
+                result = reader.read(
+                    rasterio_band_index,
+                    out_dtype=np.float32,
+                    out_shape=_SHAPE_025D,
+                    window=window,
+                    resampling=rasterio.warp.Resampling.bilinear,
+                )
+                return result
+            case "s":
+                result = reader.read(
+                    rasterio_band_index,
+                    out_dtype=np.float32,
+                )
+                return result
+            case _ as unreachable:
+                assert_never(unreachable)
 
 
 class DefaultTimeoutHTTPAdapter(requests.adapters.HTTPAdapter):
