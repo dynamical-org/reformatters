@@ -467,10 +467,10 @@ def reformat_init_time_i_slices(
                                 deaccumulate_to_rates_inplace(
                                     data_array, dim="lead_time"
                                 )
-                            except ValueError as e:
+                            except ValueError:
                                 # Log exception so we are notified if deaccumulation errors are larger than expected.
                                 logger.exception(
-                                    f"Error deaccumulating {data_var.name}", e
+                                    f"Error deaccumulating {data_var.name}"
                                 )
 
                         keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
