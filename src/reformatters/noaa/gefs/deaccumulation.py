@@ -4,7 +4,7 @@ import numpy as np
 import xarray as xr
 from numba import njit, prange  # type: ignore
 
-from reformatters.common.types import ArrayFloat32
+from reformatters.common.types import Array1D, ArrayFloat32
 
 SECONDS_PER_6_HOUR: Final[int] = 6 * 60 * 60
 
@@ -42,8 +42,8 @@ def deaccumulate_to_rates_inplace(
 @njit(parallel=True)  # type: ignore
 def _deaccumulate_to_rates_numba(
     values: ArrayFloat32,
-    is_3h_accum: np.ndarray[tuple[int], np.dtype[np.bool]],
-    lead_time_seconds: np.ndarray[tuple[int], np.dtype[np.int64]],
+    is_3h_accum: Array1D[np.bool],
+    lead_time_seconds: Array1D[np.int64],
     invalid_below_threshold_rate: float = -1e-5,
 ) -> None:
     """
