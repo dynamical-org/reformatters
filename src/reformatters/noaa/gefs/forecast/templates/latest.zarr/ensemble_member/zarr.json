@@ -20,16 +20,38 @@
   "fill_value": 0,
   "codecs": [
     {
-      "name": "bytes",
+      "name": "sharding_indexed",
       "configuration": {
-        "endian": "little"
-      }
-    },
-    {
-      "name": "zstd",
-      "configuration": {
-        "level": 0,
-        "checksum": false
+        "chunk_shape": [
+          31
+        ],
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "zstd",
+            "configuration": {
+              "level": 0,
+              "checksum": false
+            }
+          }
+        ],
+        "index_codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "crc32c"
+          }
+        ],
+        "index_location": "end"
       }
     }
   ],
