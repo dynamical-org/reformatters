@@ -152,13 +152,6 @@ ENCODING_FLOAT32_DEFAULT = Encoding(
     shards=ENSEMBLE_VAR_SHARDS_ORDERED,
     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
 )
-ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT = Encoding(
-    dtype="float32",
-    fill_value=np.nan,
-    chunks=ENSEMBLE_VAR_CHUNKS_ORDERED,
-    shards=ENSEMBLE_VAR_SHARDS_ORDERED,
-    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-)
 
 # 00 UTC forecasts have a 35 day lead time, the rest go out 16 days.
 EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR = pd.Series(
@@ -704,7 +697,7 @@ _DATA_VARIABLES = (
     ),
     GEFSDataVar(
         name="categorical_snow_surface",
-        encoding=ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="csnow",
             long_name="Categorical snow",
@@ -722,7 +715,7 @@ _DATA_VARIABLES = (
     ),
     GEFSDataVar(
         name="categorical_ice_pellets_surface",
-        encoding=ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="cicep",
             long_name="Categorical ice pellets",
@@ -740,7 +733,7 @@ _DATA_VARIABLES = (
     ),
     GEFSDataVar(
         name="categorical_freezing_rain_surface",
-        encoding=ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="cfrzr",
             long_name="Categorical freezing rain",
@@ -758,7 +751,7 @@ _DATA_VARIABLES = (
     ),
     GEFSDataVar(
         name="categorical_rain_surface",
-        encoding=ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="crain",
             long_name="Categorical rain",
