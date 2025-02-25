@@ -34,6 +34,7 @@ from reformatters.common.zarr import (
     get_mode,
     get_zarr_store,
 )
+from reformatters.noaa.gefs.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.noaa.gefs.forecast import template
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
 from reformatters.noaa.gefs.read_data import (
@@ -457,6 +458,20 @@ def reformat_init_time_i_slices(
                                 *zip(*var_coords_and_paths, strict=True),
                             )
                         )
+
+                        if data_var.attrs.step_type == "accum":
+                            logger.info(
+                                f"Converting {data_var.name} from accumulations to rates"
+                            )
+                            try:
+                                deaccumulate_to_rates_inplace(
+                                    data_array, dim="lead_time"
+                                )
+                            except ValueError:
+                                # Log exception so we are notified if deaccumulation errors are larger than expected.
+                                logger.exception(
+                                    f"Error deaccumulating {data_var.name}"
+                                )
 
                         keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
                         if isinstance(keep_mantissa_bits, int):
