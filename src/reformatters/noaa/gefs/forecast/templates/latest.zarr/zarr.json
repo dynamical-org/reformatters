@@ -1718,7 +1718,7 @@
         "attributes": {
           "long_name": "Total Precipitation",
           "short_name": "tp",
-          "units": "kg/(m^2)/s",
+          "units": "mm/s",
           "step_type": "accum",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1781,7 +1781,7 @@
         "attributes": {
           "long_name": "Total Precipitation",
           "short_name": "tp",
-          "units": "kg/(m^2)/s",
+          "units": "mm/s",
           "step_type": "accum",
           "ensemble_statistic": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",

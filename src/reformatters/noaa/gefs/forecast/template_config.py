@@ -651,7 +651,7 @@ _DATA_VARIABLES = (
         attrs=DataVarAttrs(
             short_name="tp",
             long_name="Total Precipitation",
-            units="kg/(m^2)/s",
+            units="mm/s",
             step_type="accum",
         ),
         internal_attrs=GEFSInternalAttrs(
