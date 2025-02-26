@@ -55,15 +55,14 @@ EOT
 
 # Now install the APPLICATION from `/src` without any dependencies.
 # `/src` will NOT be copied into the runtime container.
-# LEAVE THIS OUT if your application is NOT a proper Python package.
 # As of uv 0.4.11, you can also use
 # `cd /src && uv sync --locked --no-dev --no-editable` instead.
-# COPY . /src
-# RUN --mount=type=cache,target=/root/.cache \
-#     uv pip install \
-#         --python=$UV_PROJECT_ENVIRONMENT \
-#         --no-deps \
-#         /src
+COPY . /src
+RUN --mount=type=cache,target=/root/.cache \
+    uv pip install \
+        --python=$UV_PROJECT_ENVIRONMENT \
+        --no-deps \
+        /src
 
 
 ##########################################################################
@@ -80,7 +79,7 @@ groupadd -r app
 useradd -r -d /app -g app -N app
 EOT
 
-ENTRYPOINT ["python", "main.py"]
+ENTRYPOINT ["python", "src/reformatters/__main__.py"]
 # See <https://hynek.me/articles/docker-signals/>.
 STOPSIGNAL SIGINT
 
@@ -101,9 +100,6 @@ EOT
 # and change the ownership to user app and group app in one step.
 COPY --from=build --chown=app:app /app /app
 
-# If your application is NOT a proper Python package that got
-# pip-installed above, you need to copy your application into
-# the container HERE:
 COPY . /app/
 
 USER app
@@ -112,5 +108,5 @@ WORKDIR /app
 # Light test that the app can be run
 RUN <<EOT
 python -V
-python main.py --help
+python src/reformatters/__main__.py --help
 EOT
