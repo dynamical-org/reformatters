@@ -4,8 +4,8 @@ from collections.abc import Iterable
 from typing import Protocol
 
 from reformatters.common import docker, kubernetes
-from reformatters.noaa.gefs.forecast.reformat import (
-    operational_kubernetes_resources as noaa_gefs_forecast_operational_kubernetes_resources,
+from reformatters.noaa.gefs.forecast_35_day.reformat import (
+    operational_kubernetes_resources as noaa_gefs_forecast_35_day_operational_kubernetes_resources,
 )
 
 
@@ -14,7 +14,7 @@ class OperationalKubernetesResources(Protocol):
 
 
 OPERATIONAL_RESOURCE_FNS: tuple[OperationalKubernetesResources] = (
-    noaa_gefs_forecast_operational_kubernetes_resources,
+    noaa_gefs_forecast_35_day_operational_kubernetes_resources,
 )
 
 

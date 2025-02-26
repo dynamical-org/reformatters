@@ -2,7 +2,7 @@ from typing import Annotated
 
 import typer
 
-from reformatters.noaa.gefs.forecast import reformat, template
+from reformatters.noaa.gefs.forecast_35_day import reformat, template
 
 app = typer.Typer()
 

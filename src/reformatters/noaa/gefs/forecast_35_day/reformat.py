@@ -35,7 +35,7 @@ from reformatters.common.zarr import (
     get_zarr_store,
 )
 from reformatters.noaa.gefs.deaccumulation import deaccumulate_to_rates_inplace
-from reformatters.noaa.gefs.forecast import template
+from reformatters.noaa.gefs.forecast_35_day import template
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
 from reformatters.noaa.gefs.read_data import (
     SourceFileCoords,
