@@ -267,10 +267,11 @@ def read_into(
             path,
             grib_element,
             data_var.internal_attrs.grib_description,
-            out.rio.bounds(),
             out.rio.shape,
+            out.rio.transform(),
+            out.rio.crs,
             coords,
-            data_var,
+            data_var.internal_attrs.gefs_file_type,
         )
     except Exception as e:
         print("Read failed", coords, e)
@@ -283,10 +284,11 @@ def read_rasterio(
     path: os.PathLike[str],
     grib_element: str,
     grib_description: str,
-    bounds: tuple[float, float, float, float],
-    spatial_shape: tuple[int, int],
+    out_spatial_shape: tuple[int, int],
+    out_transform: rasterio.transform.Affine,
+    out_crs: rasterio.crs.CRS,
     coords: SourceFileCoords,
-    data_var: GEFSDataVar,
+    gefs_file_type: GEFSFileType,
 ) -> Array2D[np.float32]:
     with rasterio.open(path) as reader:
         matching_bands = [
@@ -301,32 +303,36 @@ def read_rasterio(
         rasterio_band_index = matching_bands[0]
 
         result: Array2D[np.float32]
-        match get_gefs_file_type_for_lead_time(
-            coords["lead_time"], data_var.internal_attrs.gefs_file_type
-        ):
+        match get_gefs_file_type_for_lead_time(coords["lead_time"], gefs_file_type):
             case "a" | "b":
                 # Interpolate 0.5 degree data to the 0.25 degree grid.
                 # Every other 0.25 degree pixel's center aligns exactly with a 0.5 degree pixel's center.
-                # We use average resampling to retain the exact values from the 0.5 degree data
-                # at pixels that align, and take an average of intersecting 0.5 degree pixels
-                # for 0.25 degree pixels that don't align with 0.5 degree pixels.
+                # We use bilinear resampling to retain the exact values from the 0.5 degree data
+                # at pixels that align, and give a conservative interpolated value for 0.25 degree pixels
+                # that fall between the 0.5 degree pixels.
                 # Diagram: https://github.com/dynamical-org/reformatters/pull/44#issuecomment-2683799073
-                window = rasterio.windows.from_bounds(
-                    *bounds, transform=reader.transform
+                # Note: having the .read() call interpolate gives very slightly shifted results
+                # so we pay for an extra memory allocation and use reproject to do the interpolation instead.
+                raw = reader.read(rasterio_band_index, out_dtype=np.float32)
+                result, _ = rasterio.warp.reproject(
+                    raw,
+                    np.full(out_spatial_shape, np.nan, dtype=np.float32),
+                    src_transform=reader.transform,
+                    src_crs=reader.crs,
+                    dst_transform=out_transform,
+                    dst_crs=out_crs,
+                    resampling=rasterio.warp.Resampling.bilinear,
                 )
-                result = reader.read(
-                    rasterio_band_index,
-                    out_dtype=np.float32,
-                    out_shape=spatial_shape,
-                    window=window,
-                    resampling=rasterio.enums.Resampling.average,
-                )
+                if Config.is_dev:
+                    # Because the pixel centers are aligned we exactly retain the source data
+                    assert np.array_equal(raw, result[::2, ::2])
                 return result
             case "s":
                 # Confirm the arguments we use to resample 0.5 degree data
                 # to 0.25 degree grid above match the source 0.25 degree data.
-                assert tuple(reader.bounds) == bounds
-                assert reader.shape == spatial_shape
+                assert reader.shape == out_spatial_shape
+                assert reader.transform == out_transform
+                assert reader.crs.to_dict() == out_crs
 
                 result = reader.read(
                     rasterio_band_index,
