@@ -15,7 +15,6 @@ import pandas as pd
 import rasterio  # type: ignore
 import requests
 import xarray as xr
-from affine import Affine  # type: ignore
 
 from reformatters.common.config import Config
 from reformatters.common.config_models import EnsembleStatistic
@@ -27,10 +26,6 @@ FILE_RESOLUTIONS = {
     "a": "0p50",
     "b": "0p50",
 }
-
-_TRANSFORM_025D = Affine(0.25, 0.0, -180.125, 0.0, -0.25, 90.125)
-_BOUNDS_025D = (-180.125, -90.125, 179.875, 90.125)
-_SHAPE_025D = (721, 1440)
 
 
 class EnsembleSourceFileCoords(TypedDict):
@@ -123,8 +118,6 @@ def download_file(
         byte_range_starts, byte_range_ends = parse_index_byte_ranges(
             idx_local_path, gefs_idx_data_vars
         )
-
-        # print("Downloading", remote_path.split("/")[-1], vars_suffix)
 
         download_to_disk(
             store,
@@ -274,6 +267,8 @@ def read_into(
             path,
             grib_element,
             data_var.internal_attrs.grib_description,
+            out.rio.bounds(),
+            out.rio.shape,
             coords,
             data_var,
         )
@@ -288,6 +283,8 @@ def read_rasterio(
     path: os.PathLike[str],
     grib_element: str,
     grib_description: str,
+    bounds: tuple[float, float, float, float],
+    spatial_shape: tuple[int, int],
     coords: SourceFileCoords,
     data_var: GEFSDataVar,
 ) -> Array2D[np.float32]:
@@ -308,19 +305,29 @@ def read_rasterio(
             coords["lead_time"], data_var.internal_attrs.gefs_file_type
         ):
             case "a" | "b":
-                # Interpolate 0.5 degree data to 0.25 degrees for consistency
+                # Interpolate 0.5 degree data to the 0.25 degree grid.
+                # Every other 0.25 degree pixel's center aligns exactly with a 0.5 degree pixel's center.
+                # We use average resampling to retain the exact values from the 0.5 degree data
+                # at pixels that align, and take an average of intersecting 0.5 degree pixels
+                # for 0.25 degree pixels that don't align with 0.5 degree pixels.
+                # Diagram: https://github.com/dynamical-org/reformatters/pull/44#issuecomment-2683799073
                 window = rasterio.windows.from_bounds(
-                    *_BOUNDS_025D, transform=_TRANSFORM_025D
+                    *bounds, transform=reader.transform
                 )
                 result = reader.read(
                     rasterio_band_index,
                     out_dtype=np.float32,
-                    out_shape=_SHAPE_025D,
+                    out_shape=spatial_shape,
                     window=window,
-                    resampling=rasterio.warp.Resampling.bilinear,
+                    resampling=rasterio.enums.Resampling.average,
                 )
                 return result
             case "s":
+                # Confirm the arguments we use to resample 0.5 degree data
+                # to 0.25 degree grid above match the source 0.25 degree data.
+                assert tuple(reader.bounds) == bounds
+                assert reader.shape == spatial_shape
+
                 result = reader.read(
                     rasterio_band_index,
                     out_dtype=np.float32,
