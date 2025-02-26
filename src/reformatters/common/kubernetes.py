@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Sequence
 from datetime import timedelta
 from typing import Annotated, Any
 
@@ -8,7 +8,7 @@ import pydantic
 class Job(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
-    command: Annotated[Iterable[str], pydantic.Field(min_length=1)]
+    command: Annotated[Sequence[str], pydantic.Field(min_length=1)]
     image: Annotated[str, pydantic.Field(min_length=1)]
     dataset_id: Annotated[str, pydantic.Field(min_length=1)]
     cpu: Annotated[str, pydantic.Field(min_length=1)]
@@ -55,7 +55,7 @@ class Job(pydantic.BaseModel):
                             {
                                 "command": [
                                     "python",
-                                    "main.py",
+                                    "src/reformatters/__main__.py",
                                     f"{self.dataset_id}",
                                     *self.command,
                                 ],
@@ -171,13 +171,13 @@ class CronJob(Job):
 
 
 class ReformatCronJob(CronJob):
-    command: Iterable[str] = ["reformat-operational-update"]
+    command: Sequence[str] = ["reformat-operational-update"]
     # Operational updates expect a single worker
     workers_total: int = 1
     parallelism: int = 1
 
 
 class ValidationCronJob(CronJob):
-    command: Iterable[str] = ["validate-zarr"]
+    command: Sequence[str] = ["validate-zarr"]
     workers_total: int = 1
     parallelism: int = 1
