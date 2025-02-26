@@ -482,8 +482,10 @@ def reformat_init_time_i_slices(
                             )
 
                         logger.info(f"Writing {data_var.name} {chunk_init_times_str}")
+
+                        # Dask chunks when writing must match shards
                         data_array = data_array.chunk(
-                            template_ds[data_var.name].encoding["preferred_chunks"]
+                            template_ds[data_var.name].encoding["shards"]
                         )
 
                         with warnings.catch_warnings():

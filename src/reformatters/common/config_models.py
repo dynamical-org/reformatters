@@ -80,6 +80,27 @@ class Encoding(pydantic.BaseModel):
     # It's fine to add any valid dtype string to this literal.
     dtype: Literal["float32", "float64", "uint16", "int64", "bool"]
     chunks: tuple[int, ...] | int
+    shards: tuple[int, ...] | int
+
+    @pydantic.model_validator(mode="after")
+    def validate_shards_multiple_of_chunks(self) -> "Encoding":
+        if isinstance(self.chunks, int):
+            chunks: tuple[int, ...] = (self.chunks,)
+        else:
+            chunks = self.chunks
+
+        if isinstance(self.shards, int):
+            shards: tuple[int, ...] = (self.shards,)
+        else:
+            shards = self.shards
+
+        for chunk_size, shard_size in zip(chunks, shards, strict=True):
+            if shard_size % chunk_size != 0:
+                raise ValueError(
+                    f"Each shard size ({shard_size}) must be a multiple of its "
+                    f"corresponding chunk size ({chunk_size})"
+                )
+        return self
 
     fill_value: float | int | bool
 

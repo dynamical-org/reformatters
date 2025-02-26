@@ -65,26 +65,53 @@ def get_init_time_coordinates(
     )
 
 
+# CHUNKS
+# These chunks are about 2mb of uncompressed float32s
 ENSEMBLE_VAR_CHUNKS: dict[Dim, int] = {
     "init_time": 1,  # one forecast per chunk
     "ensemble_member": 31,  # all ensemble members in one chunk
-    "lead_time": 181,  # all lead times in one chunk
+    "lead_time": 64,  # 3 chunks, first chunk includes days 0-7, second days 8-mid day 21, third days 21-35
+    "latitude": 17,  # 43 chunks over 721 pixels
+    "longitude": 16,  # 90 chunks over 1440 pixels
+}
+# These chunks are about 1.3mb of uncompressed float32s
+STATISTIC_VAR_CHUNKS: dict[Dim, int] = {
+    "init_time": 1,  # one forecast per chunk
+    "lead_time": 64,  # 3 chunks
+    # Use larger spatial chunks for ensemble statistic vars because they don't have ensemble dimension
     "latitude": 73,  # 10 chunks over 721 pixels
     "longitude": 72,  # 20 chunks over 1440 pixels
 }
-STATISTIC_VAR_CHUNKS: dict[Dim, int] = {
-    "init_time": 1,  # one forecast per chunk
-    "lead_time": 181,  # all lead times in one chunk
-    # Use 4x larger spatial chunks for ensemble statistic vars because they don't have ensemble dimension
-    "latitude": (73 * 2),  # 5 chunks over 721 pixels
-    "longitude": (72 * 2),  # 10 chunks over 1440 pixels
+
+# SHARDS
+# About 300-550MB compressed, about 3GB uncompressed
+ENSEMBLE_VAR_SHARDS: dict[Dim, int] = {
+    "init_time": 1,  # one forecast per shard
+    "ensemble_member": 31,  # all ensemble members in one shard
+    "lead_time": ENSEMBLE_VAR_CHUNKS["lead_time"] * 3,  # all lead times in one shard
+    "latitude": ENSEMBLE_VAR_CHUNKS["latitude"] * 22,  # 2 shards over 721 pixels
+    "longitude": ENSEMBLE_VAR_CHUNKS["longitude"] * 23,  # 4 shards over 1440 pixels
+}
+# About 180-350MB compressed, about 1GB uncompressed
+STATISTIC_VAR_SHARDS: dict[Dim, int] = {
+    "init_time": 1,  # one forecast per shard
+    "lead_time": STATISTIC_VAR_CHUNKS["lead_time"] * 3,  # all lead times in one shard
+    "latitude": STATISTIC_VAR_CHUNKS["latitude"] * 22,  # all latitudes in one shard
+    "longitude": STATISTIC_VAR_CHUNKS["longitude"] * 23,  # all longitudes in one shard
 }
 assert ENSEMBLE_VAR_DIMS == tuple(ENSEMBLE_VAR_CHUNKS.keys())
 ENSEMBLE_VAR_CHUNKS_ORDERED = tuple(
     ENSEMBLE_VAR_CHUNKS[dim] for dim in ENSEMBLE_VAR_DIMS
 )
+ENSEMBLE_VAR_SHARDS_ORDERED = tuple(
+    ENSEMBLE_VAR_SHARDS[dim] for dim in ENSEMBLE_VAR_DIMS
+)
+
 STATISTIC_VAR_CHUNKS_ORDERED = tuple(
     STATISTIC_VAR_CHUNKS[dim] for dim in STATISTIC_VAR_DIMS
+)
+STATISTIC_VAR_SHARDS_ORDERED = tuple(
+    STATISTIC_VAR_SHARDS[dim] for dim in STATISTIC_VAR_DIMS
 )
 
 # The init time dimension is our append dimension during updates.
@@ -122,12 +149,7 @@ ENCODING_FLOAT32_DEFAULT = Encoding(
     dtype="float32",
     fill_value=np.nan,
     chunks=ENSEMBLE_VAR_CHUNKS_ORDERED,
-    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-)
-ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT = Encoding(
-    dtype="float32",
-    fill_value=np.nan,
-    chunks=ENSEMBLE_VAR_CHUNKS_ORDERED,
+    shards=ENSEMBLE_VAR_SHARDS_ORDERED,
     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
 )
 
@@ -153,6 +175,7 @@ COORDINATES: Sequence[Coordinate] = (
             calendar="proleptic_gregorian",
             units="seconds since 1970-01-01 00:00:00",
             chunks=INIT_TIME_COORDINATE_CHUNK_SIZE,
+            shards=INIT_TIME_COORDINATE_CHUNK_SIZE,
         ),
         attrs=CoordinateAttrs(
             units="seconds since 1970-01-01 00:00:00",
@@ -167,6 +190,7 @@ COORDINATES: Sequence[Coordinate] = (
             dtype="uint16",
             fill_value=-1,
             chunks=len(_dim_coords["ensemble_member"]),
+            shards=len(_dim_coords["ensemble_member"]),
         ),
         attrs=CoordinateAttrs(
             units="realization",
@@ -184,6 +208,7 @@ COORDINATES: Sequence[Coordinate] = (
             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             units="seconds",
             chunks=len(_dim_coords["lead_time"]),
+            shards=len(_dim_coords["lead_time"]),
         ),
         attrs=CoordinateAttrs(
             units="seconds",
@@ -200,6 +225,7 @@ COORDINATES: Sequence[Coordinate] = (
             fill_value=np.nan,
             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             chunks=len(_dim_coords["latitude"]),
+            shards=len(_dim_coords["latitude"]),
         ),
         attrs=CoordinateAttrs(
             units="degrees_north",
@@ -216,6 +242,7 @@ COORDINATES: Sequence[Coordinate] = (
             fill_value=np.nan,
             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             chunks=len(_dim_coords["longitude"]),
+            shards=len(_dim_coords["longitude"]),
         ),
         attrs=CoordinateAttrs(
             units="degrees_east",
@@ -234,6 +261,7 @@ COORDINATES: Sequence[Coordinate] = (
             calendar="proleptic_gregorian",
             units="seconds since 1970-01-01 00:00:00",
             chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
+            shards=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
         ),
         attrs=CoordinateAttrs(
             units="seconds since 1970-01-01 00:00:00",
@@ -250,6 +278,7 @@ COORDINATES: Sequence[Coordinate] = (
             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             units="seconds",
             chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
+            shards=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
         ),
         attrs=CoordinateAttrs(
             units="seconds",
@@ -267,6 +296,7 @@ COORDINATES: Sequence[Coordinate] = (
             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             units="seconds",
             chunks=INIT_TIME_COORDINATE_CHUNK_SIZE,
+            shards=INIT_TIME_COORDINATE_CHUNK_SIZE,
         ),
         attrs=CoordinateAttrs(
             units="seconds",
@@ -282,6 +312,7 @@ COORDINATES: Sequence[Coordinate] = (
             dtype="int64",
             fill_value=0,
             chunks=1,  # Scalar coordinate
+            shards=1,
         ),
         attrs=CoordinateAttrs(
             units="unitless",
@@ -666,7 +697,7 @@ _DATA_VARIABLES = (
     ),
     GEFSDataVar(
         name="categorical_snow_surface",
-        encoding=ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="csnow",
             long_name="Categorical snow",
@@ -684,7 +715,7 @@ _DATA_VARIABLES = (
     ),
     GEFSDataVar(
         name="categorical_ice_pellets_surface",
-        encoding=ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="cicep",
             long_name="Categorical ice pellets",
@@ -702,7 +733,7 @@ _DATA_VARIABLES = (
     ),
     GEFSDataVar(
         name="categorical_freezing_rain_surface",
-        encoding=ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="cfrzr",
             long_name="Categorical freezing rain",
@@ -720,7 +751,7 @@ _DATA_VARIABLES = (
     ),
     GEFSDataVar(
         name="categorical_rain_surface",
-        encoding=ENCODING_CATEGORICAL_WITH_MISSING_DEFAULT,
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="crain",
             long_name="Categorical rain",
@@ -924,7 +955,11 @@ _STATISTIC_DATA_VARIABLES = tuple(
         var,
         name=f"{var.name}_{ensemble_statistic}",
         attrs=replace(var.attrs, ensemble_statistic=ensemble_statistic),
-        encoding=replace(var.encoding, chunks=STATISTIC_VAR_CHUNKS_ORDERED),
+        encoding=replace(
+            var.encoding,
+            chunks=STATISTIC_VAR_CHUNKS_ORDERED,
+            shards=STATISTIC_VAR_SHARDS_ORDERED,
+        ),
     )
     for var in _DATA_VARIABLES
     for ensemble_statistic in ["avg"]
