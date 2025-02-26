@@ -438,15 +438,6 @@ def reformat_init_time_i_slices(
                         data_array = xr.full_like(
                             chunk_template_ds[data_var.name], np.nan
                         )
-                        # Drop all non-dimension coordinates.
-                        # They are already written by write_metadata.
-                        data_array = data_array.drop_vars(
-                            [
-                                coord
-                                for coord in data_array.coords
-                                if coord not in data_array.dims
-                            ]
-                        )
                         data_array.load()  # preallocate backing numpy arrays (for performance?)
                         consume(
                             cpu_executor.map(
@@ -486,6 +477,16 @@ def reformat_init_time_i_slices(
                         # Dask chunks when writing must match shards
                         data_array = data_array.chunk(
                             template_ds[data_var.name].encoding["shards"]
+                        )
+
+                        # Drop all non-dimension coordinates.
+                        # They are already written by write_metadata.
+                        data_array = data_array.drop_vars(
+                            [
+                                coord
+                                for coord in data_array.coords
+                                if coord not in data_array.dims
+                            ]
                         )
 
                         with warnings.catch_warnings():

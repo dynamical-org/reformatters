@@ -7,7 +7,7 @@ from collections.abc import Iterable, Sequence
 from datetime import timedelta
 from itertools import product
 from pathlib import Path
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, TypedDict, assert_never
 
 import numpy as np
 import obstore
@@ -118,8 +118,6 @@ def download_file(
         byte_range_starts, byte_range_ends = parse_index_byte_ranges(
             idx_local_path, gefs_idx_data_vars
         )
-
-        # print("Downloading", remote_path.split("/")[-1], vars_suffix)
 
         download_to_disk(
             store,
@@ -269,35 +267,28 @@ def read_into(
             path,
             grib_element,
             data_var.internal_attrs.grib_description,
+            out.rio.shape,
+            out.rio.transform(),
+            out.rio.crs,
+            coords,
+            data_var.internal_attrs.gefs_file_type,
         )
     except Exception as e:
         print("Read failed", coords, e)
         return
 
-    out.loc[ds_coords] = maybe_resample(raw_data, coords, data_var)
-
-
-def maybe_resample(
-    raw_data: Array2D[np.float32],
-    coords: SourceFileCoords,
-    data_var: GEFSDataVar,
-) -> Array2D[np.float32]:
-    gefs_file_type = get_gefs_file_type_for_lead_time(
-        coords["lead_time"], data_var.internal_attrs.gefs_file_type
-    )
-    if gefs_file_type in ["a", "b"]:
-        # Duplicate 1 pixel into 4 to go from 361x720 (a and b file resolution) to 721x1440 (s file resolution)
-        # TODO figure out least worst translation from 361 -> 721 pixels
-        len_lat, len_lon = raw_data.shape
-        lat_ix = np.arange(len_lat).repeat(2)[:-1]
-        lon_ix = np.arange(len_lon).repeat(2)
-        return raw_data[np.ix_(lat_ix, lon_ix)]  # type: ignore
-
-    return raw_data
+    out.loc[ds_coords] = raw_data
 
 
 def read_rasterio(
-    path: os.PathLike[str], grib_element: str, grib_description: str
+    path: os.PathLike[str],
+    grib_element: str,
+    grib_description: str,
+    out_spatial_shape: tuple[int, int],
+    out_transform: rasterio.transform.Affine,
+    out_crs: rasterio.crs.CRS,
+    coords: SourceFileCoords,
+    gefs_file_type: GEFSFileType,
 ) -> Array2D[np.float32]:
     with rasterio.open(path) as reader:
         matching_bands = [
@@ -311,7 +302,45 @@ def read_rasterio(
         assert len(matching_bands) == 1, f"Expected exactly 1 matching band, found {matching_bands}. {grib_element=}, {grib_description=}, {path=}"  # fmt: skip
         rasterio_band_index = matching_bands[0]
 
-        return reader.read(rasterio_band_index, out_dtype=np.float32)  # type: ignore
+        result: Array2D[np.float32]
+        match get_gefs_file_type_for_lead_time(coords["lead_time"], gefs_file_type):
+            case "a" | "b":
+                # Interpolate 0.5 degree data to the 0.25 degree grid.
+                # Every other 0.25 degree pixel's center aligns exactly with a 0.5 degree pixel's center.
+                # We use bilinear resampling to retain the exact values from the 0.5 degree data
+                # at pixels that align, and give a conservative interpolated value for 0.25 degree pixels
+                # that fall between the 0.5 degree pixels.
+                # Diagram: https://github.com/dynamical-org/reformatters/pull/44#issuecomment-2683799073
+                # Note: having the .read() call interpolate gives very slightly shifted results
+                # so we pay for an extra memory allocation and use reproject to do the interpolation instead.
+                raw = reader.read(rasterio_band_index, out_dtype=np.float32)
+                result, _ = rasterio.warp.reproject(
+                    raw,
+                    np.full(out_spatial_shape, np.nan, dtype=np.float32),
+                    src_transform=reader.transform,
+                    src_crs=reader.crs,
+                    dst_transform=out_transform,
+                    dst_crs=out_crs,
+                    resampling=rasterio.warp.Resampling.bilinear,
+                )
+                if not Config.is_prod:
+                    # Because the pixel centers are aligned we exactly retain the source data
+                    assert np.array_equal(raw, result[::2, ::2])
+                return result
+            case "s":
+                # Confirm the arguments we use to resample 0.5 degree data
+                # to 0.25 degree grid above match the source 0.25 degree data.
+                assert reader.shape == out_spatial_shape
+                assert reader.transform == out_transform
+                assert reader.crs.to_dict() == out_crs
+
+                result = reader.read(
+                    rasterio_band_index,
+                    out_dtype=np.float32,
+                )
+                return result
+            case _ as unreachable:
+                assert_never(unreachable)
 
 
 class DefaultTimeoutHTTPAdapter(requests.adapters.HTTPAdapter):

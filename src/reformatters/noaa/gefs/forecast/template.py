@@ -103,7 +103,13 @@ def update_template() -> None:
     ds = add_derived_coordinates(ds, copy_metadata=False)
 
     # Add coordinate reference system for out of the box rioxarray support
-    ds = ds.rio.write_crs("EPSG:4326")
+    ds = ds.rio.write_crs("+proj=longlat +a=6371229 +b=6371229 +no_defs +type=crs")
+    ds["spatial_ref"].attrs["comment"] = (
+        "This coordinate reference system matches the source data which "
+        "follows WMO conventions of assuming the earth is a perfect sphere "
+        "with a radius of 6,371,229m. It is similar to EPSG:4326, but "
+        "EPSG:4326 uses a more accurate representation of the earth's shape."
+    )
 
     assert {d.name for d in DATA_VARIABLES} == set(ds.data_vars)
     for var_config in DATA_VARIABLES:
