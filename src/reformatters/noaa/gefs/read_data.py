@@ -323,7 +323,7 @@ def read_rasterio(
                     dst_crs=out_crs,
                     resampling=rasterio.warp.Resampling.bilinear,
                 )
-                if Config.is_dev:
+                if not Config.is_prod:
                     # Because the pixel centers are aligned we exactly retain the source data
                     assert np.array_equal(raw, result[::2, ::2])
                 return result
