@@ -1,6 +1,6 @@
 {
   "attributes": {
-    "dataset_id": "noaa-gefs-forecast",
+    "dataset_id": "noaa-gefs-forecast-35-day",
     "dataset_version": "0.1.0",
     "name": "NOAA GEFS forecast",
     "description": "Weather forecasts from the Global Ensemble Forecast System (GEFS) operated by NOAA NWS NCEP.",

@@ -17,7 +17,7 @@ from reformatters.common.config_models import (
 from reformatters.common.types import DatetimeLike
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar, GEFSInternalAttrs
 
-DATASET_ID = "noaa-gefs-forecast"
+DATASET_ID = "noaa-gefs-forecast-35-day"
 DATASET_VERSION = "0.1.0"
 
 INIT_TIME_START = pd.Timestamp("2024-01-01T00:00")
