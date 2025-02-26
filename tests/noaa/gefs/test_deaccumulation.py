@@ -38,7 +38,9 @@ def test_deaccumulate_higher_dimensional() -> None:
         ]
     )
     data = np.stack([data, 2 * data])
-    data = np.expand_dims(data, axis=(3, 4))
+    # Add new dims of > len(1) to trailing dimensions
+    data = np.stack([data, data], axis=-1)
+    data = np.stack([data, data], axis=-1)
 
     data_array = xr.DataArray(
         data,  # Shape will be (2, 3, 5, 1, 1) for (init_time, ensemble_member, lead_time, lat, lon)
@@ -60,7 +62,8 @@ def test_deaccumulate_higher_dimensional() -> None:
         ]
     )
     expected = np.stack([expected, 2 * expected])
-    expected = np.expand_dims(expected, axis=(3, 4))
+    expected = np.stack([expected, expected], axis=-1)
+    expected = np.stack([expected, expected], axis=-1)
 
     result = deaccumulate_to_rates_inplace(data_array, dim="lead_time")
 
