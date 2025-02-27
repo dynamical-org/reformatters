@@ -134,7 +134,7 @@ def test_deaccumulate_1d_3_and_6_hour_large_accumulation_decreases() -> None:
     values = [
         {"lt": 0, "in": np.nan, "out": np.nan},
         {"lt": 3, "in": 2, "out": 2.0 / (3 * SECONDS_PER_HOUR)},
-        {"lt": 6, "in": 1.8, "out": np.nan},  # negative accumulation too large, set to NaN
+        {"lt": 6, "in": 1.7, "out": np.nan},  # negative accumulation too large, set to NaN
     ]  # fmt: off
 
     lead_times = pd.to_timedelta([step["lt"] for step in values], unit="h")
