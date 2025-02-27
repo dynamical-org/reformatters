@@ -48,7 +48,7 @@ def _deaccumulate_to_rates_numba(
     values: ArrayFloat32,
     is_3h_accum: Array1D[np.bool],
     lead_time_seconds: Array1D[np.int64],
-    invalid_below_threshold_rate: float = -1e-5,
+    invalid_below_threshold_rate: float = -5e-6,
 ) -> None:
     """
     Convert GEFS 3 or 6 hour accumulated values to per-second rates in place.
