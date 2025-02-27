@@ -20,7 +20,7 @@ dependencies = [
     "sentry-sdk>=2.20.0",
     "typer>=0.12.5",
     "xarray>=2025.1.2",
-    "zarr>=3.0.3",
+    "zarr>=3.0.4",
 ]
 
 [build-system]
