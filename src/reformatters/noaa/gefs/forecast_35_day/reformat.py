@@ -6,7 +6,7 @@ import os
 import subprocess
 import warnings
 from collections import defaultdict
-from collections.abc import Generator, Iterable
+from collections.abc import Generator, Iterable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from functools import partial
 from itertools import batched, groupby, starmap
@@ -439,6 +439,7 @@ def reformat_init_time_i_slices(
                             chunk_template_ds[data_var.name], np.nan
                         )
                         data_array.load()  # preallocate backing numpy arrays (for performance?)
+
                         consume(
                             cpu_executor.map(
                                 partial(
@@ -474,11 +475,6 @@ def reformat_init_time_i_slices(
 
                         logger.info(f"Writing {data_var.name} {chunk_init_times_str}")
 
-                        # Dask chunks when writing must match shards
-                        data_array = data_array.chunk(
-                            template_ds[data_var.name].encoding["shards"]
-                        )
-
                         # Drop all non-dimension coordinates.
                         # They are already written by write_metadata.
                         data_array = data_array.drop_vars(
@@ -489,14 +485,28 @@ def reformat_init_time_i_slices(
                             ]
                         )
 
-                        with warnings.catch_warnings():
-                            warnings.filterwarnings(
-                                "ignore",
-                                message="In a future version of xarray decode_timedelta will default to False rather than None.",
-                                category=FutureWarning,
+                        shard_slices = generate_shard_slices(
+                            data_array.shape,
+                            template_ds[data_var.name].encoding["shards"],
+                        )
+
+                        logger.info(
+                            f"Writing {len(shard_slices)} shards for {data_var.name} in parallel"
+                        )
+                        write_futures = []
+                        for shard_slice in shard_slices:
+                            write_futures.append(
+                                cpu_executor.submit(
+                                    write_shard_to_zarr, data_array, shard_slice, store
+                                )
                             )
-                            ## Write to zarr ##
-                            data_array.to_zarr(store, region="auto")  # type: ignore[call-overload]
+
+                        # Wait for all writes to complete
+                        for write_future in concurrent.futures.as_completed(
+                            write_futures
+                        ):
+                            if (e := write_future.exception()) is not None:
+                                raise e
 
                         yield (data_var, max_lead_times)
 
@@ -516,6 +526,7 @@ def download_var_group_files(
     directory: Path,
     io_executor: ThreadPoolExecutor,
 ) -> list[tuple[SourceFileCoords, Path | None]]:
+    logger.info(f"Downloading {[d.name for d in idx_data_vars]}")
     done, not_done = concurrent.futures.wait(
         [
             io_executor.submit(
@@ -572,3 +583,52 @@ def group_data_vars_by_gefs_file_type(
 
 def get_store() -> zarr.storage.FsspecStore:
     return get_zarr_store(template.DATASET_ID, template.DATASET_VERSION)
+
+
+def generate_shard_slices(
+    array_shape: tuple[int, ...], shard_shape: tuple[int, ...]
+) -> Sequence[tuple[slice, ...]]:
+    """
+    Generate a sequence of slice tuples to index into each shard of an array.
+    """
+    if len(array_shape) != len(shard_shape):
+        raise ValueError(
+            f"Dimensions mismatch: array shape {array_shape} vs shard shape {shard_shape}"
+        )
+
+    # Calculate how many shards along each dimension
+    shard_counts = [
+        int(np.ceil(dim_size / shard_size))
+        for dim_size, shard_size in zip(array_shape, shard_shape, strict=True)
+    ]
+
+    # Generate all combinations of start indices
+    shard_slices = []
+    for indices in np.ndindex(*shard_counts):
+        # Create a slice for each dimension
+        slices = []
+        for dim_idx, start_idx in enumerate(indices):
+            start = start_idx * shard_shape[dim_idx]
+            end = start + shard_shape[dim_idx]
+            slices.append(slice(start, end))
+        shard_slices.append(tuple(slices))
+
+    return shard_slices
+
+
+def write_shard_to_zarr(
+    data_array: xr.DataArray,
+    shard_slice: tuple[slice, ...],
+    store: zarr.storage.FsspecStore | Path,
+) -> None:
+    """Write a single shard of a data shard_slice to zarr."""
+    print(f"indexing shard {shard_slice}", flush=True)
+    shard = data_array[shard_slice]
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="In a future version of xarray decode_timedelta will default to False rather than None.",
+            category=FutureWarning,
+        )
+        print(f"writing shard {shard_slice}", flush=True)
+        shard.to_zarr(store, region="auto")  # type: ignore[call-overload]
