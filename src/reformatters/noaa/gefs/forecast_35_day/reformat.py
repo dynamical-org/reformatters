@@ -229,9 +229,12 @@ def reformat_local(init_time_end: DatetimeLike) -> None:
 
 
 def reformat_kubernetes(
-    init_time_end: DatetimeLike, jobs_per_pod: int, max_parallelism: int
+    init_time_end: DatetimeLike,
+    jobs_per_pod: int,
+    max_parallelism: int,
+    docker_image: str | None = None,
 ) -> None:
-    image_tag = docker.build_and_push_image()
+    image_tag = docker_image or docker.build_and_push_image()
 
     template_ds = template.get_template(init_time_end)
     store = get_store()
