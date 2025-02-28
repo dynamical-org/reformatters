@@ -1,21 +1,38 @@
 from collections import deque
 from collections.abc import Iterable
-from itertools import islice, pairwise, starmap
+from itertools import islice, pairwise, product, starmap
+from typing import Literal
 
-import numpy as np
 import xarray as xr
 
 
-def chunk_i_slices(ds: xr.Dataset, dim: str) -> Iterable[slice]:
-    """Returns the integer offset slices which correspond to each chunk along `dim` of `ds`."""
-    vars_dim_chunk_sizes = {var.chunksizes[dim] for var in ds.data_vars.values()}
-    assert len(vars_dim_chunk_sizes) == 1, (
-        f"Inconsistent chunk sizes among data variables along update dimension ({dim}): {vars_dim_chunk_sizes}"
+def dimension_slices(
+    ds: xr.Dataset, dim: str, kind: Literal["shards", "chunks"] = "shards"
+) -> Iterable[slice]:
+    """Returns the integer offset slices which correspond to each shard or chunk along a single `dim` of `ds`."""
+    chunk_sizes_set = {
+        var.encoding[kind][var.dims.index(dim)] for var in ds.data_vars.values()
+    }
+    assert len(chunk_sizes_set) == 1, (
+        f"Inconsistent {kind} sizes among data variables along dimension ({dim}): {chunk_sizes_set}"
     )
-    dim_chunk_sizes = next(iter(vars_dim_chunk_sizes))  # eg. 2, 2, 2
-    stop_idx = np.cumsum(dim_chunk_sizes)  # eg.    2, 4, 6
-    start_idx = np.insert(stop_idx, 0, 0)  # eg. 0, 2, 4, 6
-    return starmap(slice, pairwise(start_idx))  # eg. slice(0,2), slice(2,4), slice(4,6)
+    chunk_size = chunk_sizes_set.pop()
+    return chunk_slices(len(ds[dim]), chunk_size)
+
+
+def shard_slice_indexers(da: xr.DataArray) -> Iterable[tuple[slice, ...]]:
+    """
+    Returns tuples of integer offset slices which correspond to each shard of `da` across all dimensions.
+    Each tuple can be used to index into `da` to extract a shard, e.g. `da[shard_indexer]`.
+    """
+    dim_slices = map(chunk_slices, da.shape, da.encoding["shards"])
+    return product(*dim_slices)
+
+
+def chunk_slices(size: int, chunk_size: int) -> Iterable[slice]:
+    """chunk_slices(5, 2) => slice(0, 2), slice(2, 4), slice(4, 6)"""
+    indexes = range(0, size + chunk_size, chunk_size)
+    return starmap(slice, pairwise(indexes))
 
 
 def get_worker_jobs[T](

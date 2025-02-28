@@ -1,15 +1,15 @@
 import concurrent.futures
-import gc
 import json
 import logging
 import os
 import subprocess
 import warnings
 from collections import defaultdict
-from collections.abc import Generator, Iterable
-from concurrent.futures import Future, ThreadPoolExecutor
+from collections.abc import Generator, Iterable, Sequence
+from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor
 from functools import partial
 from itertools import batched, groupby, starmap
+from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from typing import Any
 
@@ -24,9 +24,14 @@ from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config import Config  # noqa:F401
 from reformatters.common.config_models import EnsembleStatistic
 from reformatters.common.download_directory import cd_into_download_directory
-from reformatters.common.iterating import chunk_i_slices, consume, get_worker_jobs
+from reformatters.common.iterating import (
+    consume,
+    dimension_slices,
+    get_worker_jobs,
+    shard_slice_indexers,
+)
 from reformatters.common.kubernetes import Job, ReformatCronJob, ValidationCronJob
-from reformatters.common.types import Array1D, DatetimeLike
+from reformatters.common.types import Array1D, ArrayFloat32, DatetimeLike
 from reformatters.common.zarr import (
     copy_data_var,
     copy_zarr_metadata,
@@ -233,7 +238,9 @@ def reformat_kubernetes(
     logger.info(f"Writing zarr metadata to {store.path}")
     template.write_metadata(template_ds, store, get_mode(store))
 
-    num_jobs = sum(1 for _ in chunk_i_slices(template_ds, _PROCESSING_CHUNK_DIMENSION))
+    num_jobs = sum(
+        1 for _ in dimension_slices(template_ds, _PROCESSING_CHUNK_DIMENSION)
+    )
     workers_total = int(np.ceil(num_jobs / jobs_per_pod))
     parallelism = min(workers_total, max_parallelism)
 
@@ -292,9 +299,9 @@ def reformat_chunks(
     template_ds = template.get_template(init_time_end)
     store = get_store()
 
-    worker_init_time_i_slices = list(
+    worker_init_time_i_slices = tuple(
         get_worker_jobs(
-            chunk_i_slices(template_ds, _PROCESSING_CHUNK_DIMENSION),
+            dimension_slices(template_ds, _PROCESSING_CHUNK_DIMENSION),
             worker_index,
             workers_total,
         )
@@ -311,7 +318,7 @@ type EnsOrStat = int | np.integer[Any] | str
 
 
 def reformat_init_time_i_slices(
-    init_time_i_slices: list[slice],
+    init_time_i_slices: Sequence[slice],
     template_ds: xr.Dataset,
     store: zarr.storage.FsspecStore | Path,
 ) -> Generator[
@@ -332,11 +339,10 @@ def reformat_init_time_i_slices(
     }
 
     with (
-        ThreadPoolExecutor(max_workers=2) as wait_executor,
+        ThreadPoolExecutor(max_workers=1) as wait_executor,
         ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2) as io_executor,
-        ThreadPoolExecutor(
-            max_workers=int((os.cpu_count() or 1) * 1.5)
-        ) as cpu_executor,
+        ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as cpu_executor,
+        ProcessPoolExecutor(max_workers=os.cpu_count() or 1) as cpu_process_executor,
     ):
         for init_time_i_slice in init_time_i_slices:
             chunk_template_ds = template_ds.isel(init_time=init_time_i_slice)
@@ -424,7 +430,6 @@ def reformat_init_time_i_slices(
 
                     # Write variable by variable to avoid blowing up memory usage
                     for data_var in data_vars:
-                        logger.info(f"Reading {data_var.name}")
                         # Skip reading the 0-hour for accumulated or last N hours avg values
                         if data_var.attrs.step_type in ("accum", "avg"):
                             var_coords_and_paths = [
@@ -435,10 +440,33 @@ def reformat_init_time_i_slices(
                             ]
                         else:
                             var_coords_and_paths = coords_and_paths
-                        data_array = xr.full_like(
-                            chunk_template_ds[data_var.name], np.nan
+
+                        # This template is small and we will pass it between processes
+                        data_array_template = chunk_template_ds[data_var.name]
+
+                        # This data array will be assigned actual, shared memory
+                        data_array = data_array_template.copy()
+
+                        print("shared memory creation", flush=True)
+
+                        # The only effective way we've found to fully utilize cpu resources
+                        # while writing to zarr is to parallelize across processes (not threads).
+                        # Use shared memory to avoid pickling large arrays to share between processes.
+                        shared_buffer = SharedMemory(
+                            create=True, size=data_array.nbytes
                         )
-                        data_array.load()  # preallocate backing numpy arrays (for performance?)
+                        shared_array: ArrayFloat32 = np.ndarray(
+                            data_array.shape,
+                            dtype=data_array.dtype,
+                            buffer=shared_buffer.buf,
+                        )
+                        print("shared memory initialization", flush=True)
+                        # We rely on initializing with nans so failed reads (eg. corrupt source data) leave nan
+                        shared_array[:] = np.nan
+                        data_array.data = shared_array
+
+                        print("reading", flush=True)
+                        logger.info(f"Reading {data_var.name}")
                         consume(
                             cpu_executor.map(
                                 partial(
@@ -472,16 +500,8 @@ def reformat_init_time_i_slices(
                                 keep_mantissa_bits=keep_mantissa_bits,
                             )
 
-                        logger.info(f"Writing {data_var.name} {chunk_init_times_str}")
-
-                        # Dask chunks when writing must match shards
-                        data_array = data_array.chunk(
-                            template_ds[data_var.name].encoding["shards"]
-                        )
-
-                        # Drop all non-dimension coordinates.
-                        # They are already written by write_metadata.
-                        data_array = data_array.drop_vars(
+                        # Drop all non-dimension coordinates, they are already written by write_metadata.
+                        data_array_template = data_array_template.drop_vars(
                             [
                                 coord
                                 for coord in data_array.coords
@@ -489,19 +509,34 @@ def reformat_init_time_i_slices(
                             ]
                         )
 
-                        with warnings.catch_warnings():
-                            warnings.filterwarnings(
-                                "ignore",
-                                message="In a future version of xarray decode_timedelta will default to False rather than None.",
-                                category=FutureWarning,
+                        shard_indexers = tuple(
+                            shard_slice_indexers(data_array_template)
+                        )
+
+                        logger.info(
+                            f"Writing {data_var.name} {chunk_init_times_str} in {len(shard_indexers)} shards"
+                        )
+
+                        # Use ProcessPoolExecutor for parallel writing of shards
+                        consume(
+                            cpu_process_executor.map(
+                                partial(
+                                    write_shard_to_zarr,
+                                    data_array_template,
+                                    shared_buffer.name,
+                                    store,
+                                ),
+                                shard_indexers,
                             )
-                            ## Write to zarr ##
-                            data_array.to_zarr(store, region="auto")  # type: ignore[call-overload]
+                        )
+
+                        # Clean up shared memory and references to it
+                        del data_array
+                        del shared_array
+                        shared_buffer.close()
+                        shared_buffer.unlink()
 
                         yield (data_var, max_lead_times)
-
-                        del data_array
-                        gc.collect()
 
                     # Reclaim space once done.
                     for _, filepath in coords_and_paths:
@@ -516,6 +551,7 @@ def download_var_group_files(
     directory: Path,
     io_executor: ThreadPoolExecutor,
 ) -> list[tuple[SourceFileCoords, Path | None]]:
+    logger.info(f"Downloading {[d.name for d in idx_data_vars]}")
     done, not_done = concurrent.futures.wait(
         [
             io_executor.submit(
@@ -572,3 +608,32 @@ def group_data_vars_by_gefs_file_type(
 
 def get_store() -> zarr.storage.FsspecStore:
     return get_zarr_store(template.DATASET_ID, template.DATASET_VERSION)
+
+
+def write_shard_to_zarr(
+    data_array_template: xr.DataArray,
+    shared_buffer_name: str,
+    store: zarr.storage.FsspecStore | Path,
+    shard_indexer: tuple[slice, ...],
+) -> None:
+    """Write a shard of data to zarr storage using shared memory."""
+    shared_memory = SharedMemory(name=shared_buffer_name)
+
+    shared_array: ArrayFloat32 = np.ndarray(
+        data_array_template.shape,
+        dtype=data_array_template.dtype,
+        buffer=shared_memory.buf,
+    )
+
+    data_array = data_array_template.copy()
+    data_array.data = shared_array
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="In a future version of xarray decode_timedelta will default to False rather than None.",
+            category=FutureWarning,
+        )
+        data_array[shard_indexer].to_zarr(store, region="auto")  # type: ignore[call-overload]
+
+    shared_memory.close()
