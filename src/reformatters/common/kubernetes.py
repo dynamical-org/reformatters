@@ -121,7 +121,6 @@ class Job(pydantic.BaseModel):
                         "nodeSelector": {
                             "eks.amazonaws.com/compute-type": "auto",
                             "karpenter.sh/capacity-type": "spot",
-                            "kubernetes.io/arch": "amd64",
                         },
                         "restartPolicy": "Never",
                         "securityContext": {
