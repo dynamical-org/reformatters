@@ -22,6 +22,7 @@ def build_and_push_image() -> str:
             "/usr/bin/docker",
             "buildx",
             "build",
+            "--platform linux/amd64,linux/arm64",
             "--push",
             "--file",
             "deploy/Dockerfile",

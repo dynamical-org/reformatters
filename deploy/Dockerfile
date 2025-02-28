@@ -8,6 +8,7 @@ FROM ubuntu:noble AS build
 SHELL ["sh", "-exc"]
 
 ### Start Build Prep.
+# The gdal & build-essential/gcc packages are needed to compile numcodecs on ARM64.
 RUN <<EOT
 apt-get update -qy
 apt-get install -qyy \
@@ -16,7 +17,11 @@ apt-get install -qyy \
     build-essential \
     ca-certificates \
     python3-setuptools \
-    python3.12-dev
+    python3.12-dev \
+    build-essential \
+    gcc \
+    gdal-bin \
+    libgdal-dev
 EOT
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -30,7 +35,13 @@ ENV UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never \
     UV_PYTHON=python3.12 \
-    UV_PROJECT_ENVIRONMENT=/app
+    UV_PROJECT_ENVIRONMENT=/app 
+
+
+# Needed to be able to compile numcodecs on ARM64
+ENV DISABLE_NUMCODECS_SSE2=1 \
+    DISABLE_NUMCODECS_AVX2=1 \
+    CFLAGS="-Wno-implicit-function-declaration" 
 
 ### End Build Prep
 
@@ -85,12 +96,14 @@ STOPSIGNAL SIGINT
 
 # Note how the runtime dependencies differ from build-time ones.
 # Notably, there is no uv either!
+# libgdal-dev is needed for rasterio at runtime on arm64.
 RUN <<EOT
 apt-get update -qy
 apt-get install -qyy \
     -o APT::Install-Suggests=false \
     python3.12 \
     libpython3.12 \
+    libgdal-dev \
 
 apt-get clean
 rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
