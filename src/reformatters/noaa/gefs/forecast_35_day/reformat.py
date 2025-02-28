@@ -299,12 +299,10 @@ def reformat_chunks(
     template_ds = template.get_template(init_time_end)
     store = get_store()
 
-    worker_init_time_i_slices = tuple(
-        get_worker_jobs(
-            dimension_slices(template_ds, _PROCESSING_CHUNK_DIMENSION),
-            worker_index,
-            workers_total,
-        )
+    worker_init_time_i_slices = get_worker_jobs(
+        dimension_slices(template_ds, _PROCESSING_CHUNK_DIMENSION),
+        worker_index,
+        workers_total,
     )
 
     logger.info(
