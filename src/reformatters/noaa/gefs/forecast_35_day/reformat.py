@@ -235,8 +235,8 @@ def reformat_kubernetes(
 
     template_ds = template.get_template(init_time_end)
     store = get_store()
-    # logger.info(f"Writing zarr metadata to {store.path}")
-    # template.write_metadata(template_ds, store, get_mode(store))
+    logger.info(f"Writing zarr metadata to {store.path}")
+    template.write_metadata(template_ds, store, get_mode(store))
 
     num_jobs = sum(
         1 for _ in dimension_slices(template_ds, _PROCESSING_CHUNK_DIMENSION)
@@ -461,14 +461,12 @@ def reformat_init_time_i_slices(
                             dtype=data_array.dtype,
                             buffer=shared_buffer.buf,
                         )
-                        print("shared memory initialization", flush=True)
                         # Important:
                         # We rely on initializing with nans so failed reads (eg. corrupt source data)
                         # leave nan and to reuse the same shared buffer for each variable.
                         shared_array[:] = np.nan
                         data_array.data = shared_array
 
-                        print("reading", flush=True)
                         logger.info(f"Reading {data_var.name}")
                         consume(
                             cpu_executor.map(
