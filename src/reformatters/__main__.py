@@ -19,8 +19,10 @@ app.add_typer(noaa_gefs_forecast_35_day.app, name="noaa-gefs-forecast-35-day")
 
 
 @app.command()
-def deploy_operational_updates() -> None:
-    deploy.deploy_operational_updates()
+def deploy_operational_updates(
+    docker_image: str | None = None,
+) -> None:
+    deploy.deploy_operational_updates(docker_image=docker_image)
 
 
 if __name__ == "__main__":

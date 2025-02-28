@@ -19,9 +19,14 @@ def reformat_local(init_time_end: str) -> None:
 
 @app.command()
 def reformat_kubernetes(
-    init_time_end: str, jobs_per_pod: int = 10, max_parallelism: int = 32
+    init_time_end: str,
+    jobs_per_pod: int = 10,
+    max_parallelism: int = 32,
+    docker_image: str | None = None,
 ) -> None:
-    reformat.reformat_kubernetes(init_time_end, jobs_per_pod, max_parallelism)
+    reformat.reformat_kubernetes(
+        init_time_end, jobs_per_pod, max_parallelism, docker_image=docker_image
+    )
 
 
 @app.command()

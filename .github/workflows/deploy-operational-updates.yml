@@ -13,6 +13,9 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  IMAGE_TAG: "${{ secrets.DOCKER_REPOSITORY }}:${{ github.sha }}"
+
 jobs:
   deploy:
     name: Deploy
@@ -42,13 +45,6 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
-        id: login-ecr
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Install kubectl
         uses: azure/setup-kubectl@v3
         with:
@@ -58,7 +54,21 @@ jobs:
         run: |
           aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
 
+      - name: Set up Depot CLI
+        uses: depot/setup-action@v1
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+        id: login-ecr
+
+      - uses: depot/build-push-action@v1
+        with:
+          project: ${{ secrets.DEPOT_PROJECT }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE_TAG }}
+          context: .
+          file: deploy/Dockerfile
+
       - name: Deploy
-        env:
-          DOCKER_REPOSITORY: ${{ steps.login-ecr.outputs.registry }}/reformatters/main
-        run: uv run main.py deploy-operational-updates
+        run: uv run main.py deploy-operational-updates --docker-image ${{ env.IMAGE_TAG }}
