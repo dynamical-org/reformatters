@@ -235,8 +235,8 @@ def reformat_kubernetes(
 
     template_ds = template.get_template(init_time_end)
     store = get_store()
-    logger.info(f"Writing zarr metadata to {store.path}")
-    template.write_metadata(template_ds, store, get_mode(store))
+    # logger.info(f"Writing zarr metadata to {store.path}")
+    # template.write_metadata(template_ds, store, get_mode(store))
 
     num_jobs = sum(
         1 for _ in dimension_slices(template_ds, _PROCESSING_CHUNK_DIMENSION)
@@ -275,7 +275,7 @@ def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
         schedule=_OPERATIONAL_CRON_SCHEDULE,
         image=image_tag,
         dataset_id=template.DATASET_ID,
-        cpu="6",  # fit on 8 vCPU node
+        cpu="14",  # fit on 16 vCPU node
         memory="60G",  # fit on 64GB node
         ephemeral_storage="150G",
     )
@@ -337,6 +337,15 @@ def reformat_init_time_i_slices(
         for var in template_ds.data_vars.values()
         if (statistic := var.attrs.get("ensemble_statistic")) is not None
     }
+
+    # The only effective way we've found to fully utilize cpu resources
+    # while writing to zarr is to parallelize across processes (not threads).
+    # Use shared memory to avoid pickling large arrays to share between processes.
+    shared_buffer_size = max(
+        data_var.nbytes
+        for data_var in template_ds.isel(init_time=init_time_i_slices[0]).values()
+    )
+    shared_buffer = SharedMemory(create=True, size=shared_buffer_size)
 
     with (
         ThreadPoolExecutor(max_workers=1) as wait_executor,
@@ -447,21 +456,15 @@ def reformat_init_time_i_slices(
                         # This data array will be assigned actual, shared memory
                         data_array = data_array_template.copy()
 
-                        print("shared memory creation", flush=True)
-
-                        # The only effective way we've found to fully utilize cpu resources
-                        # while writing to zarr is to parallelize across processes (not threads).
-                        # Use shared memory to avoid pickling large arrays to share between processes.
-                        shared_buffer = SharedMemory(
-                            create=True, size=data_array.nbytes
-                        )
                         shared_array: ArrayFloat32 = np.ndarray(
                             data_array.shape,
                             dtype=data_array.dtype,
                             buffer=shared_buffer.buf,
                         )
                         print("shared memory initialization", flush=True)
-                        # We rely on initializing with nans so failed reads (eg. corrupt source data) leave nan
+                        # Important:
+                        # We rely on initializing with nans so failed reads (eg. corrupt source data)
+                        # leave nan and to reuse the same shared buffer for each variable.
                         shared_array[:] = np.nan
                         data_array.data = shared_array
 
@@ -530,18 +533,15 @@ def reformat_init_time_i_slices(
                             )
                         )
 
-                        # Clean up shared memory and references to it
-                        del data_array
-                        del shared_array
-                        shared_buffer.close()
-                        shared_buffer.unlink()
-
                         yield (data_var, max_lead_times)
 
                     # Reclaim space once done.
                     for _, filepath in coords_and_paths:
                         if filepath is not None:
                             filepath.unlink()
+
+    shared_buffer.close()
+    shared_buffer.unlink()
 
 
 def download_var_group_files(

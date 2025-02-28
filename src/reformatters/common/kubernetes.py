@@ -20,7 +20,7 @@ class Job(pydantic.BaseModel):
 
     @property
     def job_name(self) -> str:
-        return f"{self.dataset_id}-{'-'.join(self.command).replace(':', '-')}".lower()
+        return f"cores16-{self.dataset_id}-{'-'.join(self.command).replace(':', '-')}".lower()
 
     def as_kubernetes_object(self) -> dict[str, Any]:
         return {
@@ -110,7 +110,8 @@ class Job(pydantic.BaseModel):
                                     }
                                 },
                                 "volumeMounts": [
-                                    {"mountPath": "/app/data", "name": "ephemeral-vol"}
+                                    {"mountPath": "/app/data", "name": "ephemeral-vol"},
+                                    {"mountPath": "/dev/shm", "name": "dshm"},
                                 ],
                             }
                         ],
@@ -140,7 +141,11 @@ class Job(pydantic.BaseModel):
                                     }
                                 },
                                 "name": "ephemeral-vol",
-                            }
+                            },
+                            {
+                                "name": "dshm",
+                                "emptyDir": {"medium": "Memory", "sizeLimit": "22Gi"},
+                            },
                         ],
                     }
                 },
