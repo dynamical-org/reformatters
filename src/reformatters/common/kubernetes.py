@@ -110,7 +110,11 @@ class Job(pydantic.BaseModel):
                                     }
                                 },
                                 "volumeMounts": [
-                                    {"mountPath": "/app/data", "name": "ephemeral-vol"}
+                                    {"mountPath": "/app/data", "name": "ephemeral-vol"},
+                                    {
+                                        "mountPath": "/dev/shm",  # noqa: S108 yes we're using a known, shared path
+                                        "name": "shared-memory-dir",
+                                    },
                                 ],
                             }
                         ],
@@ -140,7 +144,11 @@ class Job(pydantic.BaseModel):
                                     }
                                 },
                                 "name": "ephemeral-vol",
-                            }
+                            },
+                            {
+                                "name": "shared-memory-dir",
+                                "emptyDir": {"medium": "Memory", "sizeLimit": "22Gi"},
+                            },
                         ],
                     }
                 },
