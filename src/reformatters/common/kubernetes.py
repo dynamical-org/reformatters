@@ -1,3 +1,5 @@
+import random
+import string
 from collections.abc import Sequence
 from datetime import timedelta
 from typing import Annotated, Any
@@ -20,7 +22,14 @@ class Job(pydantic.BaseModel):
 
     @property
     def job_name(self) -> str:
-        return f"{self.dataset_id}-{'-'.join(self.command).replace(':', '-')}".lower()
+        # Job names should be a valid DNS name, 63 characters or less
+        name = f"{self.dataset_id[:21]}-{'-'.join(self.command)}"
+        name = name.lower().replace("_", "-").replace(":", "-")
+        name = name[:58]
+        random_chars = "".join(
+            random.choices(string.ascii_lowercase + string.digits, k=4)  # noqa: S311
+        )
+        return f"{name}-{random_chars}"
 
     def as_kubernetes_object(self) -> dict[str, Any]:
         return {
