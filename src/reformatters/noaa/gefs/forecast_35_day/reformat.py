@@ -275,7 +275,7 @@ def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
         schedule=_OPERATIONAL_CRON_SCHEDULE,
         image=image_tag,
         dataset_id=template.DATASET_ID,
-        cpu="14",  # fit on 16 vCPU node
+        cpu="6",  # fit on 8 vCPU node
         memory="60G",  # fit on 64GB node
         ephemeral_storage="150G",
     )
