@@ -20,7 +20,7 @@ from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar, GEFSInternalA
 DATASET_ID = "noaa-gefs-forecast-35-day"
 DATASET_VERSION = "0.1.0"
 
-INIT_TIME_START = pd.Timestamp("2024-01-01T00:00")
+INIT_TIME_START = pd.Timestamp("2025-02-01T00:00")
 INIT_TIME_FREQUENCY = pd.Timedelta("24h")
 
 DATASET_ATTRIBUTES = DatasetAttributes(

@@ -7,7 +7,7 @@
     "attribution": "NOAA NWS NCEP GEFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
     "spatial_domain": "Global",
     "spatial_resolution": "0-240 hours: 0.25 degrees (~20km), 243-840 hours: 0.5 degrees (~40km)",
-    "time_domain": "Forecasts initialized 2024-01-01 00:00:00 UTC to Present",
+    "time_domain": "Forecasts initialized 2025-02-01 00:00:00 UTC to Present",
     "time_resolution": "Forecasts initialized every 24 hours.",
     "forecast_domain": "Forecast lead time 0-840 hours (0-35 days) ahead",
     "forecast_resolution": "Forecast step 0-240 hours: 3 hourly, 243-840 hours: 6 hourly"
@@ -1470,7 +1470,7 @@
         ],
         "attributes": {
           "statistics_approximate": {
-            "min": "2024-01-01T00:00:00",
+            "min": "2025-02-01T00:00:00",
             "max": "Present"
           },
           "units": "seconds since 1970-01-01",
@@ -3537,7 +3537,7 @@
         ],
         "attributes": {
           "statistics_approximate": {
-            "min": "2024-01-01T00:00:00",
+            "min": "2025-02-01T00:00:00",
             "max": "Present + 35 days"
           },
           "units": "seconds since 1970-01-01",
