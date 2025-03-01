@@ -42,7 +42,6 @@ class Job(pydantic.BaseModel):
                 "completions": self.workers_total,
                 "maxFailedIndexes": max(5, self.workers_total // 8),
                 "parallelism": self.parallelism,
-                "podRetentionPolicy": "Always",
                 "podFailurePolicy": {
                     "rules": [
                         {
