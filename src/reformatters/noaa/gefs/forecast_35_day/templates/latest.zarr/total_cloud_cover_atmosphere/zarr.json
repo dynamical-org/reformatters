@@ -76,7 +76,6 @@
     "units": "%",
     "step_type": "avg",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
-    "add_offset": 50.0,
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [

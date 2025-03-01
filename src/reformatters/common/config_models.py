@@ -115,9 +115,6 @@ class Encoding(pydantic.BaseModel):
     # Decoded units for all variables are in DataVarAttrs
     units: TimestampUnits | TimedeltaUnits | None = None
 
-    add_offset: float | None = None
-    scale_factor: float | None = None
-
 
 class Coordinate(FrozenBaseModel):
     name: str

@@ -328,7 +328,7 @@ COORDINATES: Sequence[Coordinate] = (
 _DATA_VARIABLES = (
     # GEFSDataVar(
     #     name="visibility_surface",
-    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=15_000.0),
+    #     encoding=replace(ENCODING_FLOAT32_DEFAULT),
     #     attrs=DataVarAttrs(
     #         short_name="vis",
     #         long_name="Visibility",
@@ -364,7 +364,7 @@ _DATA_VARIABLES = (
     # ),
     # GEFSDataVar(
     #     name="pressure_mean_sea_level",
-    #     encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=101_000.0),
+    #     encoding=replace(ENCODING_FLOAT32_DEFAULT),
     #     attrs=DataVarAttrs(
     #         short_name="mslet",
     #         long_name="MSLP (Eta model reduction)",
@@ -377,12 +377,12 @@ _DATA_VARIABLES = (
     #         grib_index_level="mean sea level",
     #         gefs_file_type="s+b",
     #         index_position=3,
-    #         keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
+    #         keep_mantissa_bits=8,
     #     ),
     # ),
     GEFSDataVar(
         name="pressure_surface",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=100_000.0),
+        encoding=replace(ENCODING_FLOAT32_DEFAULT),
         attrs=DataVarAttrs(
             short_name="sp",
             long_name="Surface pressure",
@@ -396,7 +396,7 @@ _DATA_VARIABLES = (
             grib_index_level="surface",
             gefs_file_type="s+a",
             index_position=4,
-            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
+            keep_mantissa_bits=8,
         ),
     ),
     # GEFSDataVar(
@@ -529,7 +529,7 @@ _DATA_VARIABLES = (
     # ),
     GEFSDataVar(
         name="relative_humidity_2m",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=50.0),
+        encoding=replace(ENCODING_FLOAT32_DEFAULT),
         attrs=DataVarAttrs(
             short_name="r2",
             long_name="2 metre relative humidity",
@@ -543,7 +543,7 @@ _DATA_VARIABLES = (
             grib_index_level="2 m above ground",
             gefs_file_type="s+a",
             index_position=12,
-            keep_mantissa_bits=6,
+            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     GEFSDataVar(
@@ -823,7 +823,7 @@ _DATA_VARIABLES = (
     ),
     GEFSDataVar(
         name="total_cloud_cover_atmosphere",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=50.0),
+        encoding=replace(ENCODING_FLOAT32_DEFAULT),
         attrs=DataVarAttrs(
             short_name="tcc",
             long_name="Total Cloud Cover",
@@ -878,7 +878,7 @@ _DATA_VARIABLES = (
     ),
     GEFSDataVar(
         name="downward_long_wave_radiation_flux_surface",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=300.0),
+        encoding=replace(ENCODING_FLOAT32_DEFAULT),
         attrs=DataVarAttrs(
             short_name="sdlwrf",
             long_name="Surface downward long-wave radiation flux",
@@ -932,7 +932,7 @@ _DATA_VARIABLES = (
     # ),
     GEFSDataVar(
         name="pressure_reduced_to_mean_sea_level",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT, add_offset=101_000.0),
+        encoding=replace(ENCODING_FLOAT32_DEFAULT),
         attrs=DataVarAttrs(
             short_name="prmsl",
             long_name="Pressure reduced to MSL",
@@ -945,7 +945,7 @@ _DATA_VARIABLES = (
             grib_index_level="mean sea level",
             gefs_file_type="s+a",
             index_position=38,
-            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
+            keep_mantissa_bits=8,
         ),
     ),
 )
