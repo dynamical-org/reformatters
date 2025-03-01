@@ -811,7 +811,6 @@
           "units": "W/(m^2)",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
-          "add_offset": 300.0,
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -901,7 +900,6 @@
           "step_type": "avg",
           "ensemble_statistic": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
-          "add_offset": 300.0,
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -2592,7 +2590,6 @@
           "units": "Pa",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
-          "add_offset": 101000.0,
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -2682,7 +2679,6 @@
           "step_type": "instant",
           "ensemble_statistic": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
-          "add_offset": 101000.0,
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -2774,7 +2770,6 @@
           "units": "Pa",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
-          "add_offset": 100000.0,
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -2865,7 +2860,6 @@
           "step_type": "instant",
           "ensemble_statistic": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
-          "add_offset": 100000.0,
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -2957,7 +2951,6 @@
           "units": "%",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
-          "add_offset": 50.0,
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -3048,7 +3041,6 @@
           "step_type": "instant",
           "ensemble_statistic": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
-          "add_offset": 50.0,
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -3369,7 +3361,6 @@
           "units": "%",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
-          "add_offset": 50.0,
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -3459,7 +3450,6 @@
           "step_type": "avg",
           "ensemble_statistic": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
-          "add_offset": 50.0,
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [

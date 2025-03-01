@@ -74,7 +74,6 @@
     "step_type": "avg",
     "ensemble_statistic": "avg",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
-    "add_offset": 300.0,
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [
