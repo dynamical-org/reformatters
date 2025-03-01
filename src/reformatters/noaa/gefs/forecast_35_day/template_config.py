@@ -945,7 +945,7 @@ _DATA_VARIABLES = (
             grib_index_level="mean sea level",
             gefs_file_type="s+a",
             index_position=38,
-            keep_mantissa_bits=8,
+            keep_mantissa_bits=10,
         ),
     ),
 )
