@@ -99,10 +99,10 @@ def reformat_operational_update() -> None:
     # template_ds = template_ds.isel(init_time=slice(0, len(ds.init_time) + 2))
 
     # We make some assumptions about what is safe to parallelize and how to
-    # write the data based on the init_time dimension having a chunk size of one.
+    # write the data based on the init_time dimension having a shard size of one.
     # If this changes we will need to refactor.
     assert all(
-        all(1 == val for val in da.chunksizes[_PROCESSING_CHUNK_DIMENSION])
+        1 == da.encoding["shards"][da.dims.index(_PROCESSING_CHUNK_DIMENSION)]
         for da in ds.data_vars.values()
     )
     new_init_times = template_ds.init_time.loc[

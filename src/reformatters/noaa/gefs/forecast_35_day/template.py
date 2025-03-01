@@ -213,7 +213,9 @@ def empty_copy_with_reindex(
             fill_value=np.nan,
             shape=[ds.sizes[dim] for dim in var.dims],
             dtype=var.dtype,
-            chunks=var.encoding["chunks"],
+            # Using actual chunk size causes OOM when writing metadata.
+            # Check the chunks/shards in the encoding for the stored sizes.
+            chunks=-1,
         )
         ds[var_name] = (var.dims, nan_array)
         ds[var_name].attrs = var.attrs.copy()
