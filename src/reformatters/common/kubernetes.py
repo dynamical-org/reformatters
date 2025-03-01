@@ -18,7 +18,7 @@ class Job(pydantic.BaseModel):
     ephemeral_storage: Annotated[str, pydantic.Field(min_length=1)] = "10G"
     workers_total: Annotated[int, pydantic.Field(ge=1)]
     parallelism: Annotated[int, pydantic.Field(ge=1)]
-    ttl: timedelta = timedelta(days=7)
+    ttl: timedelta = timedelta(days=1)
 
     @property
     def job_name(self) -> str:
@@ -37,11 +37,12 @@ class Job(pydantic.BaseModel):
             "kind": "Job",
             "metadata": {"name": self.job_name},
             "spec": {
-                "backoffLimitPerIndex": 4,
+                "backoffLimitPerIndex": 5,
                 "completionMode": "Indexed",
                 "completions": self.workers_total,
-                "maxFailedIndexes": min(3, self.workers_total),
+                "maxFailedIndexes": max(5, self.workers_total // 8),
                 "parallelism": self.parallelism,
+                "podRetentionPolicy": "Always",
                 "podFailurePolicy": {
                     "rules": [
                         {
