@@ -17,10 +17,15 @@ def build_and_push_image() -> str:
     job_timestamp = pd.Timestamp.now("UTC").strftime("%Y-%m-%dT%H-%M-%SZ")
     image_tag = f"{docker_repo}:{job_timestamp}"
 
+    # If depot cli is installed where expected, use it to accelerate builds
+    if os.path.exists("/usr/bin/depot"):
+        builder = ["/usr/bin/depot"]
+    else:
+        builder = ["/usr/bin/docker", "buildx"]
+
     subprocess.run(  # noqa: S603  allow passing variable to subprocess, it's realtively sanitized above
         [
-            "/usr/bin/docker",
-            "buildx",
+            *builder,
             "build",
             "--platform",
             "linux/amd64,linux/arm64",
