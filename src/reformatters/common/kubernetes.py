@@ -25,7 +25,7 @@ class Job(pydantic.BaseModel):
         # Job names should be a valid DNS name, 63 characters or less
         name = f"{self.dataset_id[:21]}-{'-'.join(self.command)}"
         name = name.lower().replace("_", "-").replace(":", "-")
-        name = name[:58]
+        name = name[:53]  # we add 5 random, then pods within the job add 5. 53+5+5=63
         random_chars = "".join(
             random.choices(string.ascii_lowercase + string.digits, k=4)  # noqa: S311
         )
