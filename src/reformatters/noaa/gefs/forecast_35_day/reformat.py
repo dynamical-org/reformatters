@@ -8,7 +8,7 @@ from collections import defaultdict
 from collections.abc import Generator, Iterable, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor
 from functools import partial
-from itertools import batched, groupby, starmap
+from itertools import batched, groupby, product, starmap
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from typing import Any
@@ -50,6 +50,7 @@ from reformatters.noaa.gefs.read_data import (
 )
 
 _PROCESSING_CHUNK_DIMENSION = "init_time"
+_VARIABLES_PER_BACKFILL_JOB = 3
 _OPERATIONAL_CRON_SCHEDULE = "0 7 * * *"  # At 7:00 UTC every day.
 _VALIDATION_CRON_SCHEDULE = "0 9 * * *"  # At 9:00 UTC every day.
 logging.basicConfig()
@@ -155,7 +156,7 @@ def reformat_operational_update() -> None:
         )
         data_var_upload_futures = []
         for data_var, max_lead_times in reformat_init_time_i_slices(
-            [init_time_i_slice],
+            [(init_time_i_slice, list(template_ds.data_vars.keys()))],
             template_ds,
             tmp_store,
         ):
@@ -238,9 +239,7 @@ def reformat_kubernetes(
     logger.info(f"Writing zarr metadata to {store.path}")
     template.write_metadata(template_ds, store, get_mode(store))
 
-    num_jobs = sum(
-        1 for _ in dimension_slices(template_ds, _PROCESSING_CHUNK_DIMENSION)
-    )
+    num_jobs = sum(1 for _ in all_jobs_ordered(template_ds))
     workers_total = int(np.ceil(num_jobs / jobs_per_pod))
     parallelism = min(workers_total, max_parallelism)
 
@@ -299,16 +298,28 @@ def reformat_chunks(
     template_ds = template.get_template(init_time_end)
     store = get_store()
 
-    worker_init_time_i_slices = get_worker_jobs(
-        dimension_slices(template_ds, _PROCESSING_CHUNK_DIMENSION),
+    worker_jobs = get_worker_jobs(
+        all_jobs_ordered(template_ds),
         worker_index,
         workers_total,
     )
 
-    logger.info(
-        f"This is {worker_index = }, {workers_total = }, {worker_init_time_i_slices}"
+    logger.info(f"This is {worker_index = }, {workers_total = }, {worker_jobs}")
+    consume(reformat_init_time_i_slices(worker_jobs, template_ds, store))
+
+
+def all_jobs_ordered(
+    template_ds: xr.Dataset,
+) -> list[tuple[slice, list[str]]]:
+    init_time_i_slices = dimension_slices(template_ds, _PROCESSING_CHUNK_DIMENSION)
+    data_var_groups = group_data_vars_by_gefs_file_type(
+        [d for d in template.DATA_VARIABLES if d.name in template_ds],
+        group_size=_VARIABLES_PER_BACKFILL_JOB,
     )
-    consume(reformat_init_time_i_slices(worker_init_time_i_slices, template_ds, store))
+    data_var_name_groups = [
+        [data_var.name for data_var in data_vars] for _, _, data_vars in data_var_groups
+    ]
+    return list(product(init_time_i_slices, data_var_name_groups))
 
 
 # Integer ensemble member or an ensemble statistic
@@ -316,7 +327,7 @@ type EnsOrStat = int | np.integer[Any] | str
 
 
 def reformat_init_time_i_slices(
-    init_time_i_slices: Sequence[slice],
+    jobs: Sequence[tuple[slice, list[str]]],
     template_ds: xr.Dataset,
     store: zarr.storage.FsspecStore | Path,
 ) -> Generator[
@@ -327,9 +338,6 @@ def reformat_init_time_i_slices(
     Yields the data variable/init time combinations and their corresponding maximum
     ingested lead time as it processes.
     """
-    data_var_groups = group_data_vars_by_gefs_file_type(
-        [d for d in template.DATA_VARIABLES if d.name in template_ds]
-    )
     ensemble_statistics: set[EnsembleStatistic] = {
         statistic
         for var in template_ds.data_vars.values()
@@ -340,8 +348,7 @@ def reformat_init_time_i_slices(
     # while writing to zarr is to parallelize across processes (not threads).
     # Use shared memory to avoid pickling large arrays to share between processes.
     shared_buffer_size = max(
-        data_var.nbytes
-        for data_var in template_ds.isel(init_time=init_time_i_slices[0]).values()
+        data_var.nbytes for data_var in template_ds.isel(init_time=jobs[0][0]).values()
     )
     shared_buffer = SharedMemory(create=True, size=shared_buffer_size)
 
@@ -351,12 +358,19 @@ def reformat_init_time_i_slices(
         ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as cpu_executor,
         ProcessPoolExecutor(max_workers=os.cpu_count() or 1) as cpu_process_executor,
     ):
-        for init_time_i_slice in init_time_i_slices:
-            chunk_template_ds = template_ds.isel(init_time=init_time_i_slice)
+        for init_time_i_slice, data_var_names in jobs:
+            chunk_template_ds = template_ds[data_var_names].isel(
+                init_time=init_time_i_slice
+            )
 
             chunk_init_times = pd.to_datetime(chunk_template_ds["init_time"].values)
             chunk_lead_times = pd.to_timedelta(chunk_template_ds["lead_time"].values)
-            chunk_ensemble_members = chunk_template_ds["ensemble_member"].values
+            # jobs with only ensemble statistic vars won't have ensemble_member dim
+            chunk_ensemble_members = (
+                chunk_template_ds["ensemble_member"].values
+                if "ensemble_member" in chunk_template_ds
+                else np.array([], dtype=np.uint16)
+            )
 
             chunk_coords_by_type = generate_chunk_coordinates(
                 chunk_init_times,
@@ -375,6 +389,10 @@ def reformat_init_time_i_slices(
                     Future[list[tuple[SourceFileCoords, Path | None]]],
                     tuple[GEFSDataVar, ...],
                 ] = {}
+                data_var_groups = group_data_vars_by_gefs_file_type(
+                    [d for d in template.DATA_VARIABLES if d.name in chunk_template_ds],
+                    group_size=_VARIABLES_PER_BACKFILL_JOB,
+                )
                 for gefs_file_type, ensemble_statistic, data_vars in data_var_groups:
                     chunk_coords: Iterable[SourceFileCoords]
                     if ensemble_statistic is None:
@@ -570,7 +588,7 @@ def download_var_group_files(
 
 
 def group_data_vars_by_gefs_file_type(
-    data_vars: Iterable[GEFSDataVar], group_size: int = 4
+    data_vars: Iterable[GEFSDataVar], *, group_size: int
 ) -> list[tuple[GEFSFileType, EnsembleStatistic | None, tuple[GEFSDataVar, ...]]]:
     """
     Group data variables by the things which determine which source file they come from:
@@ -597,8 +615,8 @@ def group_data_vars_by_gefs_file_type(
                 for data_vars_chunk in batched(idx_data_vars, group_size)
             ]
         )
-
-    return chunks
+    # Consistent group order is required for correct job distribution between workers
+    return list(sorted(chunks, key=str))  # noqa: C413
 
 
 def get_store() -> zarr.storage.FsspecStore:
