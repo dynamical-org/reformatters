@@ -16,10 +16,10 @@ spec:
           values: ["spot"]
         - key: "eks.amazonaws.com/instance-category"
           operator: In
-          values: ["c", "m", "r"]
+          values: ["r"] # ["c", "m", "r"]
         - key: "eks.amazonaws.com/instance-cpu"
           operator: Lt
-          values: ["9"]
+          values: ["33"]
         - key: "topology.kubernetes.io/zone"
           operator: In
           values: ["us-west-2a", "us-west-2b", "us-west-2c", "us-west-2d"]
