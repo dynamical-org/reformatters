@@ -199,7 +199,7 @@ def parse_index_byte_ranges(
             index_contents,
         )
         assert len(matches) == 1, (
-            f"Expected exactly 1 match, found {matches}, {var_info=}"
+            f"Expected exactly 1 match, found {matches}, {var_info.name} {idx_local_path}"
         )
         match = matches[0]
         start_byte = int(match[0])
