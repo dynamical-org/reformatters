@@ -3,6 +3,7 @@ import functools
 import hashlib
 import os
 import re
+import warnings
 from collections.abc import Iterable, Sequence
 from datetime import timedelta
 from itertools import product
@@ -290,7 +291,10 @@ def read_rasterio(
     coords: SourceFileCoords,
     gefs_file_type: GEFSFileType,
 ) -> Array2D[np.float32]:
-    with rasterio.open(path) as reader:
+    with (
+        warnings.catch_warnings(),
+        rasterio.open(path) as reader,
+    ):
         matching_bands = [
             rasterio_band_i
             for band_i in range(reader.count)
@@ -313,6 +317,9 @@ def read_rasterio(
                 # Diagram: https://github.com/dynamical-org/reformatters/pull/44#issuecomment-2683799073
                 # Note: having the .read() call interpolate gives very slightly shifted results
                 # so we pay for an extra memory allocation and use reproject to do the interpolation instead.
+                warnings.filterwarnings(
+                    "ignore", category=rasterio.errors.NotGeoreferencedWarning
+                )
                 raw = reader.read(rasterio_band_index, out_dtype=np.float32)
                 result, _ = rasterio.warp.reproject(
                     raw,
