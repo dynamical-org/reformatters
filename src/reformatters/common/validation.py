@@ -1,4 +1,3 @@
-import logging
 from collections.abc import Sequence
 from datetime import timedelta
 from typing import Protocol
@@ -9,9 +8,9 @@ import pydantic
 import xarray as xr
 import zarr
 
-logging.basicConfig()
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+from reformatters.common.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class ValidationResult(pydantic.BaseModel):

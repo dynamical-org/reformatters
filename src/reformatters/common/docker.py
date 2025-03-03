@@ -1,13 +1,12 @@
-import logging
 import os
 import re
 import subprocess
 
 import pandas as pd
 
-logging.basicConfig()
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+from reformatters.common.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def build_and_push_image() -> str:
