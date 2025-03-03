@@ -20,8 +20,9 @@ OPERATIONAL_RESOURCE_FNS: tuple[OperationalKubernetesResources] = (
 
 def deploy_operational_updates(
     fns: tuple[OperationalKubernetesResources] = OPERATIONAL_RESOURCE_FNS,
+    docker_image: str | None = None,
 ) -> None:
-    image_tag = docker.build_and_push_image()
+    image_tag = docker_image or docker.build_and_push_image()
 
     reformat_jobs: list[kubernetes.Job] = []
     for fn in fns:
