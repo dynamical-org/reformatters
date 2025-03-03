@@ -1,5 +1,4 @@
 import json
-import logging
 import warnings
 from collections.abc import Sized
 from pathlib import Path
@@ -14,6 +13,7 @@ import zarr
 
 from reformatters.common.config import Config  # noqa:F401
 from reformatters.common.config_models import Coordinate, DataVar
+from reformatters.common.logging import get_logger
 from reformatters.common.types import DatetimeLike
 
 from .template_config import (
@@ -44,8 +44,7 @@ from .template_config import (
 
 TEMPLATE_PATH = Path(__file__).parent / "templates" / "latest.zarr"
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger = get_logger(__name__)
 
 
 def get_template(init_time_end: DatetimeLike) -> xr.Dataset:

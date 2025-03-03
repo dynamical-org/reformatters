@@ -1,6 +1,5 @@
 import concurrent.futures
 import json
-import logging
 import os
 import subprocess
 import warnings
@@ -31,6 +30,7 @@ from reformatters.common.iterating import (
     shard_slice_indexers,
 )
 from reformatters.common.kubernetes import Job, ReformatCronJob, ValidationCronJob
+from reformatters.common.logging import get_logger
 from reformatters.common.types import Array1D, ArrayFloat32, DatetimeLike
 from reformatters.common.zarr import (
     copy_data_var,
@@ -53,9 +53,8 @@ _PROCESSING_CHUNK_DIMENSION = "init_time"
 _VARIABLES_PER_BACKFILL_JOB = 3
 _OPERATIONAL_CRON_SCHEDULE = "0 7 * * *"  # At 7:00 UTC every day.
 _VALIDATION_CRON_SCHEDULE = "0 9 * * *"  # At 9:00 UTC every day.
-logging.basicConfig()
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+
+logger = get_logger(__name__)
 
 
 @sentry_sdk.monitor(

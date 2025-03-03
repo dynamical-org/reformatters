@@ -1,4 +1,3 @@
-import logging
 from functools import cache
 from pathlib import Path
 from typing import Literal
@@ -10,10 +9,9 @@ import zarr
 from fsspec.implementations.local import LocalFileSystem  # type: ignore
 
 from reformatters.common.config import Config
+from reformatters.common.logging import get_logger
 
-logging.basicConfig()
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger = get_logger(__name__)
 
 
 def get_zarr_store(dataset_id: str, version: str) -> zarr.storage.FsspecStore:
