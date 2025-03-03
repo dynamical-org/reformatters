@@ -6,6 +6,7 @@ import warnings
 from collections import defaultdict
 from collections.abc import Generator, Iterable, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor
+from contextlib import closing, contextmanager
 from functools import partial
 from itertools import batched, groupby, product, starmap
 from multiprocessing.shared_memory import SharedMemory
@@ -352,13 +353,12 @@ def reformat_init_time_i_slices(
     shared_buffer_size = max(
         data_var.nbytes for data_var in template_ds.isel(init_time=jobs[0][0]).values()
     )
-    shared_buffer = SharedMemory(create=True, size=shared_buffer_size)
-
     with (
         ThreadPoolExecutor(max_workers=1) as wait_executor,
         ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2) as io_executor,
         ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as cpu_executor,
         ProcessPoolExecutor(max_workers=os.cpu_count() or 1) as cpu_process_executor,
+        create_shared_buffer(shared_buffer_size) as shared_buffer,
     ):
         for init_time_i_slice, data_var_names in jobs:
             chunk_template_ds = template_ds[data_var_names].isel(
@@ -555,9 +555,6 @@ def reformat_init_time_i_slices(
                         if filepath is not None:
                             filepath.unlink()
 
-    shared_buffer.close()
-    shared_buffer.unlink()
-
 
 def download_var_group_files(
     idx_data_vars: Iterable[GEFSDataVar],
@@ -632,18 +629,19 @@ def write_shard_to_zarr(
     shard_indexer: tuple[slice, ...],
 ) -> None:
     """Write a shard of data to zarr storage using shared memory."""
-    shared_memory = SharedMemory(name=shared_buffer_name)
+    with (
+        warnings.catch_warnings(),
+        closing(SharedMemory(name=shared_buffer_name)) as shared_memory,
+    ):
+        shared_array: ArrayFloat32 = np.ndarray(
+            data_array_template.shape,
+            dtype=data_array_template.dtype,
+            buffer=shared_memory.buf,
+        )
 
-    shared_array: ArrayFloat32 = np.ndarray(
-        data_array_template.shape,
-        dtype=data_array_template.dtype,
-        buffer=shared_memory.buf,
-    )
+        data_array = data_array_template.copy()
+        data_array.data = shared_array
 
-    data_array = data_array_template.copy()
-    data_array.data = shared_array
-
-    with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore",
             message="In a future version of xarray decode_timedelta will default to False rather than None.",
@@ -651,4 +649,12 @@ def write_shard_to_zarr(
         )
         data_array[shard_indexer].to_zarr(store, region="auto")  # type: ignore[call-overload]
 
-    shared_memory.close()
+
+@contextmanager
+def create_shared_buffer(size: int) -> Generator[SharedMemory, None, None]:
+    try:
+        shared_memory = SharedMemory(create=True, size=size)
+        yield shared_memory
+    finally:
+        shared_memory.close()
+        shared_memory.unlink()
