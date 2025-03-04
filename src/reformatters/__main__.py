@@ -10,7 +10,12 @@ if Config.is_sentry_enabled:
     sentry_sdk.init(
         dsn=Config.sentry_dsn,
         environment=Config.env.value,
-        integrations=[TyperIntegration()],
+        project_root="src/",
+        in_app_include=["reformatters"],
+        default_integrations=True,
+        integrations=[
+            TyperIntegration(),
+        ],
     )
 
 
