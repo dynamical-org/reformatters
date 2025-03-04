@@ -19,7 +19,7 @@ spec:
           values: ["r"] # ["c", "m", "r"]
         - key: "eks.amazonaws.com/instance-cpu"
           operator: Lt
-          values: ["65"]
+          values: ["17"]
         - key: "eks.amazonaws.com/instance-generation"
           operator: Gt
           values: ["4"]
