@@ -41,7 +41,10 @@ class Job(pydantic.BaseModel):
                 "backoffLimitPerIndex": 5,
                 "completionMode": "Indexed",
                 "completions": self.workers_total,
-                "maxFailedIndexes": min(100, max(5, self.workers_total // 8)),
+                # A low numbers of workers max == total, then max = total // 8, finally max = 100
+                "maxFailedIndexes": min(
+                    100, max(min(5, self.workers_total), self.workers_total // 8)
+                ),
                 "parallelism": self.parallelism,
                 "podFailurePolicy": {
                     "rules": [
