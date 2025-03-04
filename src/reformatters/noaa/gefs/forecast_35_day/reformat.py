@@ -286,8 +286,8 @@ def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
         schedule=_VALIDATION_CRON_SCHEDULE,
         image=image_tag,
         dataset_id=template.DATASET_ID,
-        cpu="6",  # fit on 8 vCPU node
-        memory="60G",  # fit on 64GB node
+        cpu="3",  # fit on 4 vCPU node
+        memory="30G",  # fit on 32GB node
     )
 
     return [operational_update_cron_job, validation_cron_job]
