@@ -71,4 +71,4 @@ jobs:
           file: deploy/Dockerfile
 
       - name: Deploy
-        run: uv run main.py deploy-operational-updates --docker-image ${{ env.IMAGE_TAG }}
+        run: uv run main deploy-operational-updates --docker-image ${{ env.IMAGE_TAG }}
