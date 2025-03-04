@@ -1,3 +1,4 @@
+import time
 from functools import cache
 from pathlib import Path
 from typing import Literal
@@ -137,8 +138,19 @@ def _copy_to_store(
     (The AsyncFileSystem wrapper on LocalFilesystem raises NotImplementedError when _put is called
     so we can't just use that.)
     """
-    if hasattr(dest_fs, "_put"):
-        # Zarr's FsspecStore creates async fsspec filesystems, so use their sync method
-        zarr.core.sync.sync(getattr(dest_fs, "_" + method)(source, dest, **kwargs))
-    else:
-        getattr(dest_fs, method)(source, dest, **kwargs)
+    max_attempts = 6
+    for attempt in range(max_attempts):
+        try:
+            if hasattr(dest_fs, "_put"):
+                # Zarr's FsspecStore creates async fsspec filesystems, so use their sync method
+                zarr.core.sync.sync(
+                    getattr(dest_fs, "_" + method)(source, dest, **kwargs)
+                )
+            else:
+                getattr(dest_fs, method)(source, dest, **kwargs)
+            break
+        except Exception:
+            if attempt == max_attempts - 1:  # Last attempt failed
+                raise
+            time.sleep(1)
+            continue
