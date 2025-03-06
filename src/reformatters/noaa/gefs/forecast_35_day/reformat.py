@@ -53,7 +53,7 @@ from reformatters.noaa.gefs.read_data import (
 _PROCESSING_CHUNK_DIMENSION = "init_time"
 _VARIABLES_PER_BACKFILL_JOB = 3
 _OPERATIONAL_CRON_SCHEDULE = "0 7 * * *"  # At 7:00 UTC every day.
-_VALIDATION_CRON_SCHEDULE = "0 9 * * *"  # At 9:00 UTC every day.
+_VALIDATION_CRON_SCHEDULE = "0 10 * * *"  # At 10:00 UTC every day.
 
 logger = get_logger(__name__)
 
