@@ -809,6 +809,7 @@
           "long_name": "Surface downward long-wave radiation flux",
           "short_name": "sdlwrf",
           "units": "W/(m^2)",
+          "comment": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -897,6 +898,7 @@
           "long_name": "Surface downward long-wave radiation flux",
           "short_name": "sdlwrf",
           "units": "W/(m^2)",
+          "comment": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
           "step_type": "avg",
           "ensemble_statistic": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
@@ -988,6 +990,7 @@
           "long_name": "Surface downward short-wave radiation flux",
           "short_name": "sdswrf",
           "units": "W/(m^2)",
+          "comment": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1076,6 +1079,7 @@
           "long_name": "Surface downward short-wave radiation flux",
           "short_name": "sdswrf",
           "units": "W/(m^2)",
+          "comment": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
           "step_type": "avg",
           "ensemble_statistic": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
@@ -2409,7 +2413,8 @@
           "long_name": "Total Precipitation",
           "short_name": "tp",
           "units": "mm/s",
-          "step_type": "accum",
+          "comment": "Average precipitation rate since the previous forecast step.",
+          "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -2497,7 +2502,8 @@
           "long_name": "Total Precipitation",
           "short_name": "tp",
           "units": "mm/s",
-          "step_type": "accum",
+          "comment": "Average precipitation rate since the previous forecast step.",
+          "step_type": "avg",
           "ensemble_statistic": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3359,6 +3365,7 @@
           "long_name": "Total Cloud Cover",
           "short_name": "tcc",
           "units": "%",
+          "comment": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3447,6 +3454,7 @@
           "long_name": "Total Cloud Cover",
           "short_name": "tcc",
           "units": "%",
+          "comment": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
           "step_type": "avg",
           "ensemble_statistic": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",

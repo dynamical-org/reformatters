@@ -49,6 +49,7 @@ class DataVarAttrs(FrozenBaseModel):
     short_name: str
     standard_name: str | None = None
     units: str
+    comment: str | None = None
     step_type: Literal["instant", "accum", "avg", "min", "max"]
     ensemble_statistic: EnsembleStatistic | None = None
 

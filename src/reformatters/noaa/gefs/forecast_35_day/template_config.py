@@ -683,7 +683,8 @@ _DATA_VARIABLES = (
             short_name="tp",
             long_name="Total Precipitation",
             units="mm/s",
-            step_type="accum",
+            comment="Average precipitation rate since the previous forecast step.",
+            step_type="avg",
         ),
         internal_attrs=GEFSInternalAttrs(
             grib_element="APCP",
@@ -828,6 +829,7 @@ _DATA_VARIABLES = (
             short_name="tcc",
             long_name="Total Cloud Cover",
             units="%",
+            comment="Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
             step_type="avg",
         ),
         internal_attrs=GEFSInternalAttrs(
@@ -865,6 +867,7 @@ _DATA_VARIABLES = (
             short_name="sdswrf",
             long_name="Surface downward short-wave radiation flux",
             units="W/(m^2)",
+            comment="Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
             step_type="avg",
         ),
         internal_attrs=GEFSInternalAttrs(
@@ -883,6 +886,7 @@ _DATA_VARIABLES = (
             short_name="sdlwrf",
             long_name="Surface downward long-wave radiation flux",
             units="W/(m^2)",
+            comment="Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
             step_type="avg",
         ),
         internal_attrs=GEFSInternalAttrs(
