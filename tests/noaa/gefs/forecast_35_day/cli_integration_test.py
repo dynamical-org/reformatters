@@ -1,23 +1,90 @@
 import json
 import os
+from datetime import timedelta
 from pathlib import Path
 
+import pytest
+import xarray as xr
 from pytest import MonkeyPatch
 
-from reformatters.noaa.gefs.forecast_35_day import cli, template
+from reformatters.common import zarr
+from reformatters.noaa.gefs.forecast_35_day import (
+    cli,
+    reformat,
+    template,
+    template_config,
+)
+
+pytestmark = pytest.mark.slow
 
 
 def test_update_template(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    latest_zarr_template_path = template.TEMPLATE_PATH
-    template_path = tmp_path / "latest.zarr"
-    monkeypatch.setattr(template, "TEMPLATE_PATH", template_path)
+    with open(os.path.join(template.TEMPLATE_PATH, "zarr.json")) as latest_f:
+        template_consolidated_metadata = json.load(latest_f)
+
+    test_template_path = tmp_path / "latest.zarr"
+    monkeypatch.setattr(template, "TEMPLATE_PATH", test_template_path)
 
     cli.update_template()
 
-    with open(os.path.join(template_path, "zarr.json")) as test_f:
-        test_zarr_json = json.load(test_f)
+    with open(test_template_path / "zarr.json") as test_f:
+        updated_consolidated_metadata = json.load(test_f)
 
-    with open(os.path.join(latest_zarr_template_path, "zarr.json")) as latest_f:
-        latest_zarr_json = json.load(latest_f)
+    assert json.dumps(updated_consolidated_metadata) == json.dumps(
+        template_consolidated_metadata
+    )
 
-    assert json.dumps(test_zarr_json) == json.dumps(latest_zarr_json)
+
+def test_reformat_local_and_operational_update(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(zarr, "_LOCAL_ZARR_STORE_BASE_PATH", tmp_path)
+    init_time_start = template_config.INIT_TIME_START
+    init_time_end = init_time_start + timedelta(days=1)
+
+    # 1. Backfill archive
+    cli.reformat_local(init_time_end=init_time_end.isoformat())
+    original_ds = xr.open_zarr(reformat.get_store(), decode_timedelta=True, chunks=None)
+
+    space_subset_ds = original_ds.sel(latitude=slice(10, 0), longitude=slice(0, 10))
+    assert (space_subset_ds.isnull().mean() == 0).all().to_array().all()
+
+    point_ds = original_ds.sel(
+        latitude=0,
+        longitude=0,
+        init_time=init_time_start,
+        lead_time="0h",
+        ensemble_member=1,
+    )
+    assert point_ds["temperature_2m_avg"] == 23.875
+    assert point_ds["wind_u_100m"] == 1.65625
+
+    # 2. Update archive
+    monkeypatch.setattr(
+        reformat,
+        "_get_operational_update_init_time_end",
+        lambda: init_time_end + timedelta(days=1),
+    )
+
+    cli.reformat_operational_update()
+    updated_ds = xr.open_zarr(reformat.get_store(), decode_timedelta=True, chunks=None)
+
+    assert len(updated_ds.init_time) == 2
+    assert updated_ds.init_time.max() == init_time_end
+    assert set(original_ds.keys()) == set(updated_ds.keys())
+
+    space_subset_ds = updated_ds.sel(latitude=slice(10, 0), longitude=slice(0, 10))
+    assert (space_subset_ds.isnull().mean() == 0).all().to_array().all()
+
+    point_ds = updated_ds.sel(
+        latitude=0,
+        longitude=0,
+        lead_time="0h",
+        ensemble_member=1,
+    )
+
+    assert point_ds["temperature_2m_avg"].sel(init_time=init_time_start) == 23.875
+    assert point_ds["wind_u_100m"].sel(init_time=init_time_start) == 1.65625
+
+    assert point_ds["temperature_2m_avg"].sel(init_time=init_time_end) == 24.0
+    assert point_ds["wind_u_100m"].sel(init_time=init_time_end) == 1.09375

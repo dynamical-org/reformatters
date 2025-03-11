@@ -60,28 +60,10 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     for coordinate in ds.coords.values():
         coordinate.load()
 
-    # Uncomment to make smaller dataset while developing
-    # if Config.is_dev:
-    #     ds = ds[
-    #         [
-    #             "wind_u_10m",
-    #             "wind_u_10m_avg",
-    #             "wind_u_100m",
-    #             "temperature_2m",
-    #             "temperature_2m_avg",
-    #             "precipitation_surface",
-    #             "precipitation_surface_avg",
-    #             "percent_frozen_precipitation_surface",
-    #         ]
-    #     ].sel(
-    #         ensemble_member=slice(2),
-    #         lead_time=[
-    #             "0h",
-    #             "3h",
-    #             "240h",
-    #             "840h",
-    #         ],
-    #     )
+    if not Config.is_prod:
+        ds = ds[["wind_u_100m", "temperature_2m", "temperature_2m_avg"]].sel(
+            ensemble_member=slice(2), lead_time=["0h", "840h"]
+        )
 
     return ds
 
