@@ -14,12 +14,13 @@ from reformatters.common.logging import get_logger
 
 logger = get_logger(__name__)
 
+_LOCAL_ZARR_STORE_BASE_PATH = "data/output"
+
 
 def get_zarr_store(dataset_id: str, version: str) -> zarr.storage.FsspecStore:
     if not Config.is_prod:
         version = "dev"
 
-    if Config.is_dev:
         # This should work, but it gives FileNotFoundError when it should be creating a new zarr.
         # return zarr.storage.FsspecStore.from_url(
         #     "file://data/output/noaa/gefs/forecast/dev.zarr"
@@ -27,7 +28,9 @@ def get_zarr_store(dataset_id: str, version: str) -> zarr.storage.FsspecStore:
         # Instead make a zarr LocalStore and attach an fsspec filesystem to it.
         # Technically that filesystem should be an AsyncFileSystem to match
         # zarr.storage.FsspecStore but AsyncFileSystem does not support _put.
-        local_path = Path(f"data/output/{dataset_id}/v{version}.zarr").absolute()
+        local_path = Path(
+            f"{_LOCAL_ZARR_STORE_BASE_PATH}/{dataset_id}/v{version}.zarr"
+        ).absolute()
 
         store = zarr.storage.LocalStore(local_path)
 

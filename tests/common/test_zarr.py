@@ -1,20 +1,21 @@
 from pathlib import Path
 
 import zarr
+from pytest import MonkeyPatch
 
 from reformatters.common.config import Config, Env
 from reformatters.common.zarr import get_mode, get_zarr_store
 
 
-def test_get_zarr_store_dev() -> None:
-    Config.env = Env.dev
+def test_get_zarr_store_dev(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setattr(Config, "env", Env.dev)
     store = get_zarr_store("test-dataset", "1.0.0")
     assert isinstance(store, zarr.storage.LocalStore)
     assert store.path == str(Path("data/output/test-dataset/vdev.zarr").absolute())
 
 
-def test_get_zarr_store_prod() -> None:
-    Config.env = Env.prod
+def test_get_zarr_store_prod(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setattr(Config, "env", Env.prod)
     store = get_zarr_store("test-dataset", "1.0.0")
     assert isinstance(store, zarr.storage.FsspecStore)
     assert (

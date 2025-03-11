@@ -75,6 +75,10 @@ def validate_zarr() -> None:
     )
 
 
+def _get_operational_update_init_time_end() -> pd.Timestamp:
+    return pd.Timestamp.utcnow().tz_localize(None)
+
+
 @sentry_sdk.monitor(
     monitor_slug=f"{template.DATASET_ID}-reformat-operational-update",
     monitor_config={
@@ -90,7 +94,7 @@ def reformat_operational_update() -> None:
     for coord in ds.coords.values():
         coord.load()
     last_existing_init_time = ds.init_time.max()
-    init_time_end = pd.Timestamp.utcnow().tz_localize(None)
+    init_time_end = _get_operational_update_init_time_end()
     template_ds = template.get_template(init_time_end)
     template_ds.ingested_forecast_length.loc[{"init_time": ds.init_time.values}] = (
         ds.ingested_forecast_length
