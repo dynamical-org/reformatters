@@ -256,13 +256,6 @@ def read_into(
         else:
             raise AssertionError(f"Unexpected lead time hours: {lead_hours}")
 
-    # The statistic "dimension" is flattened into the variable names (eg. temperature_2m_avg),
-    # so remove the statistic coordinate from coords used to index into xarray Dataset/DataArray.
-    if "statistic" in coords:
-        ds_coords = {k: v for k, v in coords.items() if k != "statistic"}
-    else:
-        ds_coords = dict(coords)
-
     try:
         raw_data = read_rasterio(
             path,
@@ -278,7 +271,7 @@ def read_into(
         print("Read failed", coords, e)
         return
 
-    out.loc[ds_coords] = raw_data
+    out.loc[coords] = raw_data
 
 
 def read_rasterio(

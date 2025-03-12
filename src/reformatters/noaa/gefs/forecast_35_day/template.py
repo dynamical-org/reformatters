@@ -61,7 +61,7 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
         coordinate.load()
 
     if not Config.is_prod:
-        ds = ds[["wind_u_100m", "temperature_2m", "temperature_2m_avg"]].sel(
+        ds = ds[["wind_u_100m", "temperature_2m"]].sel(
             ensemble_member=slice(2), lead_time=["0h", "840h"]
         )
 
@@ -221,8 +221,8 @@ def write_metadata(
         template_ds.to_zarr(store, mode=mode, compute=False)  # type: ignore[call-overload]
     logger.info(f"Wrote metadata to {store} with mode {mode}.")
 
-    if isinstance(store, Path):
-        sort_consolidated_metadata(store / "zarr.json")
+    if isinstance(store, Path | str):
+        sort_consolidated_metadata(Path(store) / "zarr.json")
 
 
 def sort_consolidated_metadata(zarr_json_path: Path) -> None:
