@@ -23,7 +23,6 @@ from reformatters.common import docker, validation
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config import Config  # noqa:F401
 from reformatters.common.config_models import EnsembleStatistic
-from reformatters.common.download_directory import cd_into_download_directory
 from reformatters.common.iterating import (
     consume,
     dimension_slices,
@@ -44,6 +43,7 @@ from reformatters.noaa.gefs.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.noaa.gefs.forecast_35_day import template
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
 from reformatters.noaa.gefs.read_data import (
+    ChunkCoordinates,
     SourceFileCoords,
     download_file,
     generate_chunk_coordinates,
@@ -390,181 +390,62 @@ def reformat_init_time_i_slices(
             )
             logger.info(f"Starting chunk with init times {chunk_init_times_str}")
 
-            with cd_into_download_directory() as directory:
-                download_var_group_futures: dict[
-                    Future[list[tuple[SourceFileCoords, Path | None]]],
-                    tuple[GEFSDataVar, ...],
-                ] = {}
-                data_var_groups = group_data_vars_by_gefs_file_type(
-                    [d for d in template.DATA_VARIABLES if d.name in chunk_template_ds],
-                    group_size=_VARIABLES_PER_BACKFILL_JOB,
-                )
-                for gefs_file_type, ensemble_statistic, data_vars in data_var_groups:
-                    chunk_coords: Iterable[SourceFileCoords]
-                    if ensemble_statistic is None:
-                        chunk_coords = chunk_coords_by_type["ensemble"]
-                    else:
-                        chunk_coords = chunk_coords_by_type["statistic"]
+            download_var_group_futures = _get_download_var_group_futures(
+                chunk_template_ds,
+                chunk_coords_by_type,
+                io_executor,
+                wait_executor,
+            )
+            for future in concurrent.futures.as_completed(download_var_group_futures):
+                if (e := future.exception()) is not None:
+                    raise e
 
-                    download_var_group_futures[
-                        wait_executor.submit(
-                            download_var_group_files,
-                            data_vars,
-                            chunk_coords,
-                            gefs_file_type,
-                            directory,
-                            io_executor,
+                coords_and_paths = future.result()
+                data_vars = download_var_group_futures[future]
+
+                max_lead_times = _get_max_lead_times(coords_and_paths)
+
+                # Write variable by variable to avoid blowing up memory usage
+                for data_var in data_vars:
+                    data_array_template = _get_data_array_template(
+                        data_var,
+                        chunk_template_ds,
+                        coords_and_paths,
+                        shared_buffer,
+                        cpu_executor,
+                    )
+
+                    shard_indexers = tuple(shard_slice_indexers(data_array_template))
+
+                    logger.info(
+                        f"Writing {data_var.name} {chunk_init_times_str} in {len(shard_indexers)} shards"
+                    )
+
+                    # Use ProcessPoolExecutor for parallel writing of shards
+                    consume(
+                        cpu_process_executor.map(
+                            partial(
+                                write_shard_to_zarr,
+                                data_array_template,
+                                shared_buffer.name,
+                                store,
+                            ),
+                            shard_indexers,
                         )
-                    ] = data_vars
+                    )
 
-                for future in concurrent.futures.as_completed(
-                    download_var_group_futures
-                ):
-                    if (e := future.exception()) is not None:
-                        raise e
+                    yield (data_var, max_lead_times)
 
-                    coords_and_paths = future.result()
-                    data_vars = download_var_group_futures[future]
-
-                    def groupbykey(
-                        v: tuple[SourceFileCoords, Path | None],
-                    ) -> tuple[pd.Timestamp, EnsOrStat]:
-                        coords, _ = v
-
-                        ensemble_portion: EnsOrStat
-                        if isinstance(
-                            ensemble_member := coords.get("ensemble_member"),
-                            int | np.integer,
-                        ):
-                            ensemble_portion = ensemble_member
-                        elif isinstance(statistic := coords.get("statistic"), str):
-                            ensemble_portion = statistic
-                        return (coords["init_time"], ensemble_portion)
-
-                    max_lead_times: dict[
-                        tuple[pd.Timestamp, EnsOrStat], pd.Timedelta
-                    ] = {}
-                    for (
-                        init_time,
-                        ensemble_member,
-                    ), init_time_coords_and_paths in groupby(
-                        sorted(coords_and_paths, key=groupbykey), key=groupbykey
-                    ):
-                        ingested_lead_times = [
-                            coord["lead_time"]
-                            for coord, path in init_time_coords_and_paths
-                            if path is not None
-                        ]
-                        max_lead_times[(init_time, ensemble_member)] = max(
-                            ingested_lead_times, default=pd.Timedelta("NaT")
-                        )
-
-                    # Write variable by variable to avoid blowing up memory usage
-                    for data_var in data_vars:
-                        # Skip reading the 0-hour for accumulated or last N hours avg values
-                        if data_var.attrs.step_type in ("accum", "avg"):
-                            var_coords_and_paths = [
-                                coords_and_path
-                                for coords_and_path in coords_and_paths
-                                if coords_and_path[0]["lead_time"]
-                                > pd.Timedelta(hours=0)
-                            ]
-                        else:
-                            var_coords_and_paths = coords_and_paths
-
-                        # This template is small and we will pass it between processes
-                        data_array_template = chunk_template_ds[data_var.name]
-
-                        # This data array will be assigned actual, shared memory
-                        data_array = data_array_template.copy()
-
-                        shared_array: ArrayFloat32 = np.ndarray(
-                            data_array.shape,
-                            dtype=data_array.dtype,
-                            buffer=shared_buffer.buf,
-                        )
-                        # Important:
-                        # We rely on initializing with nans so failed reads (eg. corrupt source data)
-                        # leave nan and to reuse the same shared buffer for each variable.
-                        shared_array[:] = np.nan
-                        data_array.data = shared_array
-
-                        logger.info(f"Reading {data_var.name}")
-                        consume(
-                            cpu_executor.map(
-                                partial(
-                                    read_into,
-                                    data_array,
-                                    data_var=data_var,
-                                ),
-                                *zip(*var_coords_and_paths, strict=True),
-                            )
-                        )
-
-                        if data_var.attrs.step_type == "accum":
-                            logger.info(
-                                f"Converting {data_var.name} from accumulations to rates"
-                            )
-                            try:
-                                deaccumulate_to_rates_inplace(
-                                    data_array, dim="lead_time"
-                                )
-                            except ValueError:
-                                # Log exception so we are notified if deaccumulation errors are larger than expected.
-                                logger.exception(
-                                    f"Error deaccumulating {data_var.name}"
-                                )
-
-                        keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
-                        if isinstance(keep_mantissa_bits, int):
-                            round_float32_inplace(
-                                data_array.values,
-                                keep_mantissa_bits=keep_mantissa_bits,
-                            )
-
-                        # Drop all non-dimension coordinates, they are already written by write_metadata.
-                        data_array_template = data_array_template.drop_vars(
-                            [
-                                coord
-                                for coord in data_array.coords
-                                if coord not in data_array.dims
-                            ]
-                        )
-
-                        shard_indexers = tuple(
-                            shard_slice_indexers(data_array_template)
-                        )
-
-                        logger.info(
-                            f"Writing {data_var.name} {chunk_init_times_str} in {len(shard_indexers)} shards"
-                        )
-
-                        # Use ProcessPoolExecutor for parallel writing of shards
-                        consume(
-                            cpu_process_executor.map(
-                                partial(
-                                    write_shard_to_zarr,
-                                    data_array_template,
-                                    shared_buffer.name,
-                                    store,
-                                ),
-                                shard_indexers,
-                            )
-                        )
-
-                        yield (data_var, max_lead_times)
-
-                    # Reclaim space once done.
-                    for _, filepath in coords_and_paths:
-                        if filepath is not None:
-                            filepath.unlink()
+                # Reclaim space once done.
+                for _, filepath in coords_and_paths:
+                    if filepath is not None:
+                        filepath.unlink()
 
 
 def download_var_group_files(
     idx_data_vars: Iterable[GEFSDataVar],
     chunk_coords: Iterable[SourceFileCoords],
     gefs_file_type: GEFSFileType,
-    directory: Path,
     io_executor: ThreadPoolExecutor,
 ) -> list[tuple[SourceFileCoords, Path | None]]:
     logger.info(f"Downloading {[d.name for d in idx_data_vars]}")
@@ -574,7 +455,6 @@ def download_var_group_files(
                 download_file,
                 coord,
                 gefs_file_type=gefs_file_type,
-                directory=directory,
                 gefs_idx_data_vars=idx_data_vars,
             )
             for coord in chunk_coords
@@ -588,6 +468,43 @@ def download_var_group_files(
 
     logger.info(f"Completed download for {[d.name for d in idx_data_vars]}")
     return [f.result() for f in done]
+
+
+type DownloadVarGroupFutures = dict[
+    Future[list[tuple[SourceFileCoords, Path | None]]],
+    tuple[GEFSDataVar, ...],
+]
+
+
+def _get_download_var_group_futures(
+    chunk_template_ds: xr.Dataset,
+    chunk_coords_by_type: ChunkCoordinates,
+    io_executor: ThreadPoolExecutor,
+    wait_executor: ThreadPoolExecutor,
+) -> DownloadVarGroupFutures:
+    download_var_group_futures: DownloadVarGroupFutures = {}
+    data_var_groups = group_data_vars_by_gefs_file_type(
+        [d for d in template.DATA_VARIABLES if d.name in chunk_template_ds],
+        group_size=_VARIABLES_PER_BACKFILL_JOB,
+    )
+    for gefs_file_type, ensemble_statistic, data_vars in data_var_groups:
+        chunk_coords: Iterable[SourceFileCoords]
+        if ensemble_statistic is None:
+            chunk_coords = chunk_coords_by_type["ensemble"]
+        else:
+            chunk_coords = chunk_coords_by_type["statistic"]
+
+        download_var_group_futures[
+            wait_executor.submit(
+                download_var_group_files,
+                data_vars,
+                chunk_coords,
+                gefs_file_type,
+                io_executor,
+            )
+        ] = data_vars
+
+    return download_var_group_futures
 
 
 def group_data_vars_by_gefs_file_type(
@@ -620,6 +537,110 @@ def group_data_vars_by_gefs_file_type(
         )
     # Consistent group order is required for correct job distribution between workers
     return list(sorted(chunks, key=str))  # noqa: C413
+
+
+def _get_max_lead_times(
+    coords_and_paths: list[tuple[SourceFileCoords, Path | None]],
+) -> dict[tuple[pd.Timestamp, EnsOrStat], pd.Timedelta]:
+    max_lead_times: dict[tuple[pd.Timestamp, EnsOrStat], pd.Timedelta] = {}
+
+    def group_by_key(
+        v: tuple[SourceFileCoords, Path | None],
+    ) -> tuple[pd.Timestamp, EnsOrStat]:
+        coords, _ = v
+
+        ensemble_portion: EnsOrStat
+        if isinstance(
+            ensemble_member := coords.get("ensemble_member"),
+            int | np.integer,
+        ):
+            ensemble_portion = ensemble_member
+        elif isinstance(statistic := coords.get("statistic"), str):
+            ensemble_portion = statistic
+        return (coords["init_time"], ensemble_portion)
+
+    sorted_coords_and_paths = sorted(coords_and_paths, key=group_by_key)
+    groups = groupby(sorted_coords_and_paths, key=group_by_key)
+
+    for (init_time, ensemble_member), init_time_coords_and_paths in groups:
+        ingested_lead_times = [
+            coord["lead_time"]
+            for coord, path in init_time_coords_and_paths
+            if path is not None
+        ]
+        max_lead_times[(init_time, ensemble_member)] = max(
+            ingested_lead_times, default=pd.Timedelta("NaT")
+        )
+    return max_lead_times
+
+
+def _get_data_array_template(
+    data_var: GEFSDataVar,
+    chunk_template_ds: xr.Dataset,
+    coords_and_paths: list[tuple[SourceFileCoords, Path | None]],
+    shared_buffer: SharedMemory,
+    cpu_executor: ThreadPoolExecutor,
+) -> xr.DataArray:
+    # Skip reading the 0-hour for accumulated or last N hours avg values
+    if data_var.attrs.step_type in ("accum", "avg"):
+        var_coords_and_paths = [
+            coords_and_path
+            for coords_and_path in coords_and_paths
+            if coords_and_path[0]["lead_time"] > pd.Timedelta(hours=0)
+        ]
+    else:
+        var_coords_and_paths = coords_and_paths
+
+    # This template is small and we will pass it between processes
+    data_array_template = chunk_template_ds[data_var.name]
+
+    # This data array will be assigned actual, shared memory
+    data_array = data_array_template.copy()
+
+    shared_array: ArrayFloat32 = np.ndarray(
+        data_array.shape,
+        dtype=data_array.dtype,
+        buffer=shared_buffer.buf,
+    )
+    # Important:
+    # We rely on initializing with nans so failed reads (eg. corrupt source data)
+    # leave nan and to reuse the same shared buffer for each variable.
+    shared_array[:] = np.nan
+    data_array.data = shared_array
+
+    logger.info(f"Reading {data_var.name}")
+    consume(
+        cpu_executor.map(
+            partial(
+                read_into,
+                data_array,
+                data_var=data_var,
+            ),
+            *zip(*var_coords_and_paths, strict=True),
+        )
+    )
+
+    if data_var.attrs.step_type == "accum":
+        logger.info(f"Converting {data_var.name} from accumulations to rates")
+        try:
+            deaccumulate_to_rates_inplace(data_array, dim="lead_time")
+        except ValueError:
+            # Log exception so we are notified if deaccumulation errors are larger than expected.
+            logger.exception(f"Error deaccumulating {data_var.name}")
+
+    keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
+    if isinstance(keep_mantissa_bits, int):
+        round_float32_inplace(
+            data_array.values,
+            keep_mantissa_bits=keep_mantissa_bits,
+        )
+
+    # Drop all non-dimension coordinates, they are already written by write_metadata.
+    data_array_template = data_array_template.drop_vars(
+        [coord for coord in data_array.coords if coord not in data_array.dims]
+    )
+
+    return data_array_template
 
 
 def get_store() -> zarr.storage.FsspecStore:
