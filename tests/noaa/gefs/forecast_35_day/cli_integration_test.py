@@ -55,7 +55,7 @@ def test_reformat_local_and_operational_update(
         lead_time="0h",
         ensemble_member=1,
     )
-    assert point_ds["temperature_2m_avg"] == 23.875
+    assert point_ds["temperature_2m"] == 23.875
     assert point_ds["wind_u_100m"] == 1.65625
 
     # 2. Update archive
@@ -82,8 +82,8 @@ def test_reformat_local_and_operational_update(
         ensemble_member=1,
     )
 
-    assert point_ds["temperature_2m_avg"].sel(init_time=init_time_start) == 23.875
+    assert point_ds["temperature_2m"].sel(init_time=init_time_start) == 23.875
     assert point_ds["wind_u_100m"].sel(init_time=init_time_start) == 1.65625
 
-    assert point_ds["temperature_2m_avg"].sel(init_time=init_time_end) == 24.0
+    assert point_ds["temperature_2m"].sel(init_time=init_time_end) == 23.375
     assert point_ds["wind_u_100m"].sel(init_time=init_time_end) == 1.09375

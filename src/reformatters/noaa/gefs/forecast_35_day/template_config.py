@@ -325,7 +325,7 @@ COORDINATES: Sequence[Coordinate] = (
 )
 
 
-_DATA_VARIABLES = (
+DATA_VARIABLES: Sequence[GEFSDataVar] = (
     # GEFSDataVar(
     #     name="visibility_surface",
     #     encoding=replace(ENCODING_FLOAT32_DEFAULT),
@@ -953,23 +953,3 @@ _DATA_VARIABLES = (
         ),
     ),
 )
-
-_STATISTIC_DATA_VARIABLES = tuple(
-    replace(
-        var,
-        name=f"{var.name}_{ensemble_statistic}",
-        attrs=replace(var.attrs, ensemble_statistic=ensemble_statistic),
-        encoding=replace(
-            var.encoding,
-            chunks=STATISTIC_VAR_CHUNKS_ORDERED,
-            shards=STATISTIC_VAR_SHARDS_ORDERED,
-        ),
-    )
-    for var in _DATA_VARIABLES
-    for ensemble_statistic in ["avg"]
-    # Precomputed ensemble statistic files are not available for "b" files.
-    # Should we compute the statistics ourselves?
-    if var.internal_attrs.gefs_file_type not in ("b", "s+b")
-)
-
-DATA_VARIABLES: Sequence[GEFSDataVar] = _DATA_VARIABLES + _STATISTIC_DATA_VARIABLES
