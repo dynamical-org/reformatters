@@ -6,7 +6,6 @@ from typing import Any, Literal
 
 import dask.array
 import numpy as np
-import pandas as pd
 import xarray as xr
 import zarr
 
@@ -54,16 +53,16 @@ def sort_consolidated_metadata(zarr_json_path: Path) -> None:
 
 def make_empty_variable(
     dims: tuple[str, ...],
-    coords: dict[str, Sized | np.ndarray[Any, Any] | pd.Index[Any]],
+    coords: dict[str, Any],
     dtype: np.typing.DTypeLike,
 ) -> xr.Variable:
     shape = tuple(len(coords[dim]) for dim in dims)
 
-    array = dask.array.full(  # type: ignore
+    array = dask.array.full(  # type: ignore[no-untyped-call,attr-defined]
         shape=shape,
         fill_value=np.nan,
         dtype=dtype,
-        chunks=-1,  # see encoding's chunk/shards for stored chunks
+        chunks=-1,
     )
 
     return xr.Variable(dims, array)
@@ -91,7 +90,10 @@ def empty_copy_with_reindex(
     template_ds: xr.Dataset,
     dim: str,
     new_coords: Sized,
-    derive_coordinates_fn: Callable[[xr.Dataset], dict[str, xr.DataArray]]
+    derive_coordinates_fn: Callable[
+        [xr.Dataset],
+        dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]],
+    ]
     | None = None,
 ) -> xr.Dataset:
     # Skip coords where one of the dims is `dim`, those need to

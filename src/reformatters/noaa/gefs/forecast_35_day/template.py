@@ -1,5 +1,5 @@
-from collections.abc import Sized
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import rioxarray  # noqa: F401  Adds .rio accessor to datasets
@@ -63,7 +63,7 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
 
 
 def update_template() -> None:
-    coords: dict[str, Sized] = get_template_dimension_coordinates()  # type: ignore[assignment]
+    coords = get_template_dimension_coordinates()
 
     data_vars = {
         var_config.name: make_empty_variable(
@@ -102,18 +102,18 @@ def update_template() -> None:
 
 def derive_coordinates(
     ds: xr.Dataset,
-) -> dict[str, xr.DataArray]:
+) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
     return {
-        "ingested_forecast_length": xr.DataArray(
+        "ingested_forecast_length": (
+            ("init_time", "ensemble_member"),
             np.full(
                 (ds["init_time"].size, ds["ensemble_member"].size),
                 np.timedelta64("NaT", "ns"),
             ),
-            dims=("init_time", "ensemble_member"),
         ),
-        "expected_forecast_length": xr.DataArray(
+        "expected_forecast_length": (
+            ("init_time",),
             EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR.loc[ds["init_time"].dt.hour],
-            dims=("init_time",),
         ),
         "valid_time": ds["init_time"] + ds["lead_time"],
     }
