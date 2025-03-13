@@ -44,7 +44,9 @@ ENSEMBLE_VAR_DIMS: tuple[Dim, ... ] = ("init_time", "ensemble_member", "lead_tim
 STATISTIC_VAR_DIMS: tuple[Dim, ...] = ("init_time",                    "lead_time", "latitude", "longitude")  # fmt: off
 
 
-def get_template_dimension_coordinates() -> dict[Dim, Any]:
+def get_template_dimension_coordinates() -> dict[
+    str, np.ndarray[Any, Any] | pd.Index[Any]
+]:
     return {
         "init_time": get_init_time_coordinates(INIT_TIME_START + INIT_TIME_FREQUENCY),
         "ensemble_member": np.arange(31),
