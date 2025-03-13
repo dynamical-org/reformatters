@@ -22,7 +22,7 @@ import zarr
 from reformatters.common import docker, validation
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config import Config  # noqa:F401
-from reformatters.common.config_models import EnsembleStatistic
+from reformatters.common.config_models import DataVar, EnsembleStatistic
 from reformatters.common.iterating import (
     consume,
     dimension_slices,
@@ -332,6 +332,9 @@ def all_jobs_ordered(
 # Integer ensemble member or an ensemble statistic
 type EnsOrStat = int | np.integer[Any] | str
 
+type CoordAndPath = tuple[SourceFileCoords, Path | None]
+type CoordsAndPaths = list[CoordAndPath]
+
 
 def reformat_init_time_i_slices(
     jobs: Sequence[tuple[slice, list[str]]],
@@ -407,31 +410,21 @@ def reformat_init_time_i_slices(
 
                 # Write variable by variable to avoid blowing up memory usage
                 for data_var in data_vars:
-                    data_array_template = _get_data_array_template(
-                        data_var,
-                        chunk_template_ds,
-                        coords_and_paths,
+                    data_array, data_array_template = create_data_array_and_template(
+                        chunk_template_ds, data_var, shared_buffer
+                    )
+                    var_coords_and_paths = filter_coords_and_paths(
+                        data_var, coords_and_paths
+                    )
+                    read_into_data_array(
+                        data_array, data_var, var_coords_and_paths, cpu_executor
+                    )
+                    apply_data_transformations_inplace(data_array, data_var)
+                    write_shards(
+                        data_array_template,
+                        store,
                         shared_buffer,
-                        cpu_executor,
-                    )
-
-                    shard_indexers = tuple(shard_slice_indexers(data_array_template))
-
-                    logger.info(
-                        f"Writing {data_var.name} {chunk_init_times_str} in {len(shard_indexers)} shards"
-                    )
-
-                    # Use ProcessPoolExecutor for parallel writing of shards
-                    consume(
-                        cpu_process_executor.map(
-                            partial(
-                                write_shard_to_zarr,
-                                data_array_template,
-                                shared_buffer.name,
-                                store,
-                            ),
-                            shard_indexers,
-                        )
+                        cpu_process_executor,
                     )
 
                     yield (data_var, max_lead_times)
@@ -574,28 +567,24 @@ def _get_max_lead_times(
     return max_lead_times
 
 
-def _get_data_array_template(
-    data_var: GEFSDataVar,
-    chunk_template_ds: xr.Dataset,
-    coords_and_paths: list[tuple[SourceFileCoords, Path | None]],
-    shared_buffer: SharedMemory,
-    cpu_executor: ThreadPoolExecutor,
-) -> xr.DataArray:
-    # Skip reading the 0-hour for accumulated or last N hours avg values
-    if data_var.attrs.step_type in ("accum", "avg"):
-        var_coords_and_paths = [
-            coords_and_path
-            for coords_and_path in coords_and_paths
-            if coords_and_path[0]["lead_time"] > pd.Timedelta(hours=0)
-        ]
-    else:
-        var_coords_and_paths = coords_and_paths
-
+def create_data_array_and_template(
+    chunk_template_ds: xr.Dataset, data_var: GEFSDataVar, shared_buffer: SharedMemory
+) -> tuple[xr.DataArray, xr.DataArray]:
     # This template is small and we will pass it between processes
     data_array_template = chunk_template_ds[data_var.name]
 
     # This data array will be assigned actual, shared memory
     data_array = data_array_template.copy()
+
+    # Drop all non-dimension coordinates from the template only,
+    # they are already written by write_metadata.
+    data_array_template = data_array_template.drop_vars(
+        [
+            coord
+            for coord in data_array_template.coords
+            if coord not in data_array_template.dims
+        ]
+    )
 
     shared_array: ArrayFloat32 = np.ndarray(
         data_array.shape,
@@ -608,18 +597,45 @@ def _get_data_array_template(
     shared_array[:] = np.nan
     data_array.data = shared_array
 
+    return data_array, data_array_template
+
+
+def filter_coords_and_paths(
+    data_var: GEFSDataVar, coords_and_paths: CoordsAndPaths
+) -> CoordsAndPaths:
+    # Skip reading the 0-hour for accumulated or last N hours avg values
+    if data_var.attrs.step_type in ("accum", "avg"):
+        return [
+            coords_and_path
+            for coords_and_path in coords_and_paths
+            if coords_and_path[0]["lead_time"] > pd.Timedelta(hours=0)
+        ]
+    else:
+        return coords_and_paths
+
+
+def read_into_data_array(
+    out: xr.DataArray,
+    data_var: GEFSDataVar,
+    var_coords_and_paths: CoordsAndPaths,
+    cpu_executor: ThreadPoolExecutor,
+) -> None:
     logger.info(f"Reading {data_var.name}")
     consume(
         cpu_executor.map(
             partial(
                 read_into,
-                data_array,
+                out,
                 data_var=data_var,
             ),
             *zip(*var_coords_and_paths, strict=True),
         )
     )
 
+
+def apply_data_transformations_inplace(
+    data_array: xr.DataArray, data_var: DataVar[Any]
+) -> None:
     if data_var.attrs.step_type == "accum":
         logger.info(f"Converting {data_var.name} from accumulations to rates")
         try:
@@ -635,16 +651,35 @@ def _get_data_array_template(
             keep_mantissa_bits=keep_mantissa_bits,
         )
 
-    # Drop all non-dimension coordinates, they are already written by write_metadata.
-    data_array_template = data_array_template.drop_vars(
-        [coord for coord in data_array.coords if coord not in data_array.dims]
+
+def write_shards(
+    data_array_template: xr.DataArray,
+    store: zarr.storage.FsspecStore | Path,
+    shared_buffer: SharedMemory,
+    cpu_process_executor: ProcessPoolExecutor,
+) -> None:
+    shard_indexers = tuple(shard_slice_indexers(data_array_template))
+    chunk_init_times_str = ", ".join(
+        data_array_template.init_time.dt.strftime("%Y-%m-%dT%H:%M").values
+    )
+    logger.info(
+        f"Writing {data_array_template.name} {chunk_init_times_str} in {len(shard_indexers)} shards"
     )
 
-    return data_array_template
-
-
-def get_store() -> zarr.storage.FsspecStore:
-    return get_zarr_store(template.DATASET_ID, template.DATASET_VERSION)
+    # Use ProcessPoolExecutor for parallel writing of shards.
+    # Pass only a lightweight template and the name of the shared buffer
+    # to avoid ProcessPool pickling very large arrays.
+    consume(
+        cpu_process_executor.map(
+            partial(
+                write_shard_to_zarr,
+                data_array_template,
+                shared_buffer.name,
+                store,
+            ),
+            shard_indexers,
+        )
+    )
 
 
 def write_shard_to_zarr(
@@ -673,6 +708,10 @@ def write_shard_to_zarr(
             category=FutureWarning,
         )
         data_array[shard_indexer].to_zarr(store, region="auto")  # type: ignore[call-overload]
+
+
+def get_store() -> zarr.storage.FsspecStore:
+    return get_zarr_store(template.DATASET_ID, template.DATASET_VERSION)
 
 
 @contextmanager
