@@ -18,11 +18,11 @@ pytestmark = pytest.mark.slow
 
 
 def test_update_template(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    with open(template.TEMPLATE_PATH / "zarr.json") as latest_f:
+    with open(template._TEMPLATE_PATH / "zarr.json") as latest_f:
         template_consolidated_metadata = json.load(latest_f)
 
     test_template_path = tmp_path / "latest.zarr"
-    monkeypatch.setattr(template, "TEMPLATE_PATH", test_template_path)
+    monkeypatch.setattr(template, "_TEMPLATE_PATH", test_template_path)
 
     cli.update_template()
 
