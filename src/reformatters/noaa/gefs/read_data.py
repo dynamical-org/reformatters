@@ -28,6 +28,8 @@ FILE_RESOLUTIONS = {
     "b": "0p50",
 }
 
+DOWNLOAD_DIR = Path("data/download/")
+
 
 class EnsembleSourceFileCoords(TypedDict):
     init_time: pd.Timestamp
@@ -53,7 +55,6 @@ def download_file(
     coords: SourceFileCoords,
     gefs_file_type: GEFSFileType,
     gefs_idx_data_vars: Iterable[GEFSDataVar],
-    directory: Path,
 ) -> tuple[SourceFileCoords, Path | None]:
     init_time = coords["init_time"]
     lead_time = coords["lead_time"]
@@ -98,7 +99,7 @@ def download_file(
     local_base_file_name = remote_path.replace("/", "_")
 
     idx_remote_path = f"{remote_path}.idx"
-    idx_local_path = Path(f"{local_base_file_name}.idx")
+    idx_local_path = Path(DOWNLOAD_DIR, f"{local_base_file_name}.idx")
 
     # Create a unique, human debuggable suffix representing the data vars stored in the output file
     vars_str = "-".join(
@@ -106,7 +107,7 @@ def download_file(
     )
     vars_hash = digest(format_gefs_idx_var(var_info) for var_info in gefs_idx_data_vars)
     vars_suffix = f"{vars_str}-{vars_hash}"
-    local_path = Path(directory, f"{local_base_file_name}.{vars_suffix}")
+    local_path = Path(DOWNLOAD_DIR, f"{local_base_file_name}.{vars_suffix}")
 
     try:
         download_to_disk(
