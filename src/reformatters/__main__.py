@@ -20,7 +20,7 @@ if Config.is_sentry_enabled:
 
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
-app.add_typer(noaa_gefs_forecast_35_day.app, name="noaa-gefs-forecast-35-day")
+app.add_typer(noaa_gefs_forecast_35_day.app, name=noaa_gefs_forecast_35_day.DATASET_ID)
 
 
 @app.command()

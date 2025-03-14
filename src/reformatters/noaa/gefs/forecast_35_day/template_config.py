@@ -43,6 +43,8 @@ type Dim =                     Literal["init_time", "ensemble_member", "lead_tim
 ENSEMBLE_VAR_DIMS: tuple[Dim, ... ] = ("init_time", "ensemble_member", "lead_time", "latitude", "longitude")  # fmt: off
 STATISTIC_VAR_DIMS: tuple[Dim, ...] = ("init_time",                    "lead_time", "latitude", "longitude")  # fmt: off
 
+APPEND_DIMENSION = "init_time"
+
 
 def get_template_dimension_coordinates() -> dict[str, Any]:
     return {
