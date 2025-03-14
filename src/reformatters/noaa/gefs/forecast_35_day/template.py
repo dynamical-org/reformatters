@@ -17,6 +17,10 @@ from reformatters.common.template_utils import (
 )
 from reformatters.common.types import DatetimeLike
 
+# Explicitly re-export the DATA_VARIABLES, DATASET_ID, DATASET_VERSION and APPEND_DIMENSION
+# which are part of the template module's public interface along with
+# get_template and update_template.
+from .template_config import APPEND_DIMENSION as APPEND_DIMENSION
 from .template_config import (
     COORDINATES,
     DATASET_ATTRIBUTES,
@@ -25,10 +29,6 @@ from .template_config import (
     get_init_time_coordinates,
     get_template_dimension_coordinates,
 )
-
-# Explicitly re-export the DATA_VARIABLES, DATASET_ID, and DATASET_VERSION
-# which are part of the template module's public interface along with
-# get_template and update_template.
 from .template_config import DATA_VARIABLES as DATA_VARIABLES
 from .template_config import DATASET_ID as DATASET_ID
 from .template_config import DATASET_VERSION as DATASET_VERSION
@@ -44,7 +44,7 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
     # Expand init_time dimension with complete coordinates
     ds = empty_copy_with_reindex(
         ds,
-        "init_time",
+        APPEND_DIMENSION,
         get_init_time_coordinates(init_time_end),
         derive_coordinates_fn=derive_coordinates,
     )

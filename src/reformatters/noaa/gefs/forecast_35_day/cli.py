@@ -3,6 +3,7 @@ from typing import Annotated
 import typer
 
 from reformatters.noaa.gefs.forecast_35_day import reformat, template
+from reformatters.noaa.gefs.forecast_35_day.template import DATASET_ID as DATASET_ID
 
 app = typer.Typer()
 

@@ -35,7 +35,6 @@ from reformatters.noaa.gefs.forecast_35_day.reformat_internals import (
     reformat_init_time_i_slices,
 )
 
-_PROCESSING_CHUNK_DIMENSION = "init_time"
 _VARIABLES_PER_BACKFILL_JOB = 3
 _OPERATIONAL_CRON_SCHEDULE = "0 7 * * *"  # At 7:00 UTC every day.
 _VALIDATION_CRON_SCHEDULE = "0 10 * * *"  # At 10:00 UTC every day.
@@ -151,15 +150,15 @@ def reformat_operational_update() -> None:
     # write the data based on the init_time dimension having a shard size of one.
     # If this changes we will need to refactor.
     assert all(
-        1 == da.encoding["shards"][da.dims.index(_PROCESSING_CHUNK_DIMENSION)]
+        1 == da.encoding["shards"][da.dims.index(template.APPEND_DIMENSION)]
         for da in ds.data_vars.values()
     )
     new_init_times = template_ds.init_time.loc[
         template_ds.init_time > last_existing_init_time
     ]
-    new_init_time_indices = template_ds.get_index("init_time").get_indexer(
-        new_init_times
-    )  # type: ignore
+    new_init_time_indices = template_ds.get_index(
+        template.APPEND_DIMENSION
+    ).get_indexer(new_init_times)  # type: ignore
     new_init_time_i_slices = list(
         starmap(
             slice,
@@ -176,7 +175,7 @@ def reformat_operational_update() -> None:
     # an additional 25 days after a delay.
     recent_incomplete_init_times = _get_recent_init_times_for_reprocessing(ds)
     recent_incomplete_init_times_indices = template_ds.get_index(
-        "init_time"
+        template.APPEND_DIMENSION
     ).get_indexer(recent_incomplete_init_times)  # type: ignore
     recent_incomplete_init_time_i_slices = list(
         starmap(
@@ -311,7 +310,7 @@ def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
 def all_jobs_ordered(
     template_ds: xr.Dataset,
 ) -> list[tuple[slice, list[str]]]:
-    init_time_i_slices = dimension_slices(template_ds, _PROCESSING_CHUNK_DIMENSION)
+    init_time_i_slices = dimension_slices(template_ds, template.APPEND_DIMENSION)
     data_var_groups = group_data_vars_by_gefs_file_type(
         [d for d in template.DATA_VARIABLES if d.name in template_ds],
         group_size=_VARIABLES_PER_BACKFILL_JOB,
