@@ -1,9 +1,16 @@
+from collections.abc import Sequence
 from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
 
-from reformatters.common.config_models import DatasetAttributes
+from reformatters.common.config_models import (
+    Coordinate,
+    CoordinateAttrs,
+    DatasetAttributes,
+    Encoding,
+    StatisticsApproximate,
+)
 from reformatters.common.types import DatetimeLike
 
 DATASET_ID = "noaa-hrrr-forecast-48-hour"
@@ -27,19 +34,19 @@ DATASET_ATTRIBUTES = DatasetAttributes(
     forecast_resolution="Hourly",
 )
 
-type Dim =                     Literal["init_time", "lead_time", "latitude", "longitude"]  # fmt: off
+type Dim =       Literal["init_time", "lead_time", "latitude", "longitude"]  # fmt: off
 DIMS: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")  # fmt: off
 
 
 # TODO: figure out latitude/longitude dimensions
 def get_template_dimension_coordinates() -> dict[str, Any]:
-    return {
-        "init_time": get_init_time_coordinates(INIT_TIME_START + INIT_TIME_FREQUENCY),
-        "lead_time": pd.timedelta_range("0h", "48h", freq=LEAD_TIME_FREQUENCY),
-        # latitude descends when north is up
-        "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
-        "longitude": np.arange(-180, 180, 0.25),
-    }
+    raise NotImplementedError()
+    # return {
+    #     "init_time": get_init_time_coordinates(INIT_TIME_START + INIT_TIME_FREQUENCY),
+    #     "lead_time": pd.timedelta_range("0h", "48h", freq=LEAD_TIME_FREQUENCY),
+    #     "x": np.arange(1059),
+    #     "y": np.arange(1799)
+    # }
 
 
 def get_init_time_coordinates(
@@ -50,13 +57,183 @@ def get_init_time_coordinates(
     )
 
 
+# TODO
 # CHUNKS
 # These chunks are about XXXmb of uncompressed float32s
 CHUNKS: dict[Dim, int] = {}
 
+# TODO
 # SHARDS
 # About XXXMB compressed, about XXGB uncompressed
 SHARDS: dict[Dim, int] = {}
 
-STATISTIC_VAR_CHUNKS_ORDERED = tuple(CHUNKS[dim] for dim in DIMS)
-STATISTIC_VAR_SHARDS_ORDERED = tuple(SHARDS[dim] for dim in DIMS)
+CHUNKS_ORDERED = tuple(CHUNKS[dim] for dim in DIMS)
+SHARDS_ORDERED = tuple(SHARDS[dim] for dim in DIMS)
+
+
+# TODO: review chunksize
+# The init time dimension is our append dimension during updates.
+# We also want coordinates to be in a single chunk for dataset open speed.
+# By fixing the chunk size for coordinates along the append dimension to
+# something much larger than we will really use, the array is always
+# a fixed underlying chunk size and values in it can be safely updated
+# prior to metadata document updates that increase the reported array size.
+# This is a zarr format hack to allow expanding an array safely and requires
+# that new array values are written strictly before new metadata is written
+# (doing this correctly is a key benefit of icechunk).
+INIT_TIME_COORDINATE_CHUNK_SIZE = int(
+    pd.Timedelta(hours=365 * 24 * 15) / INIT_TIME_FREQUENCY
+)
+
+_dim_coords = get_template_dimension_coordinates()
+
+# TODO
+COORDINATES: Sequence[Coordinate] = (
+    Coordinate(
+        name="init_time",
+        encoding=Encoding(
+            dtype="int64",
+            fill_value=0,
+            # TODO
+            # compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+            calendar="proleptic_gregorian",
+            units="seconds since 1970-01-01 00:00:00",
+            chunks=INIT_TIME_COORDINATE_CHUNK_SIZE,
+            shards=INIT_TIME_COORDINATE_CHUNK_SIZE,
+        ),
+        attrs=CoordinateAttrs(
+            units="seconds since 1970-01-01 00:00:00",
+            statistics_approximate=StatisticsApproximate(
+                min=INIT_TIME_START.isoformat(), max="Present"
+            ),
+        ),
+    ),
+    Coordinate(
+        name="lead_time",
+        encoding=Encoding(
+            dtype="int64",
+            fill_value=-1,
+            # TODO
+            # compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+            units="seconds",
+            chunks=len(_dim_coords["lead_time"]),
+            shards=len(_dim_coords["lead_time"]),
+        ),
+        attrs=CoordinateAttrs(
+            units="seconds",
+            statistics_approximate=StatisticsApproximate(
+                min=str(_dim_coords["lead_time"].min()),
+                max=str(_dim_coords["lead_time"].max()),
+            ),
+        ),
+    ),
+    Coordinate(
+        name="x",
+        encoding=Encoding(
+            dtype="float64",
+            fill_value=np.nan,
+            # TODO
+            # compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+            chunks=len(_dim_coords["x"]),
+            shards=len(_dim_coords["x"]),
+        ),
+        attrs=CoordinateAttrs(
+            units="unitless",
+            statistics_approximate=StatisticsApproximate(
+                min=_dim_coords["x"].min(),
+                max=_dim_coords["x"].max(),
+            ),
+        ),
+    ),
+    Coordinate(
+        name="y",
+        encoding=Encoding(
+            dtype="float64",
+            fill_value=np.nan,
+            # TODO
+            # compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+            chunks=len(_dim_coords["y"]),
+            shards=len(_dim_coords["y"]),
+        ),
+        attrs=CoordinateAttrs(
+            units="unitless",
+            statistics_approximate=StatisticsApproximate(
+                min=_dim_coords["y"].min(),
+                max=_dim_coords["y"].max(),
+            ),
+        ),
+    ),
+    Coordinate(
+        name="valid_time",
+        encoding=Encoding(
+            dtype="int64",
+            fill_value=0,
+            # TODO
+            # compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+            calendar="proleptic_gregorian",
+            units="seconds since 1970-01-01 00:00:00",
+            chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
+            shards=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
+        ),
+        attrs=CoordinateAttrs(
+            units="seconds since 1970-01-01 00:00:00",
+            statistics_approximate=StatisticsApproximate(
+                min=INIT_TIME_START.isoformat(), max="Present + 48 hours"
+            ),
+        ),
+    ),
+    Coordinate(
+        name="ingested_forecast_length",
+        encoding=Encoding(
+            dtype="int64",
+            fill_value=-1,
+            # TODO
+            # compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+            units="seconds",
+            chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
+            shards=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
+        ),
+        attrs=CoordinateAttrs(
+            units="seconds",
+            statistics_approximate=StatisticsApproximate(
+                min=str(_dim_coords["lead_time"].min()),
+                max=str(_dim_coords["lead_time"].max()),
+            ),
+        ),
+    ),
+    Coordinate(
+        name="expected_forecast_length",
+        encoding=Encoding(
+            dtype="int64",
+            fill_value=-1,
+            # TODO
+            # compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+            units="seconds",
+            chunks=INIT_TIME_COORDINATE_CHUNK_SIZE,
+            shards=INIT_TIME_COORDINATE_CHUNK_SIZE,
+        ),
+        attrs=CoordinateAttrs(
+            units="seconds",
+            statistics_approximate=StatisticsApproximate(
+                min=str(_dim_coords["lead_time"].min()),
+                max=str(_dim_coords["lead_time"].max()),
+            ),
+        ),
+    ),
+    Coordinate(
+        name="spatial_ref",
+        encoding=Encoding(
+            dtype="int64",
+            fill_value=0,
+            chunks=1,  # Scalar coordinate
+            shards=1,
+        ),
+        attrs=CoordinateAttrs(
+            units="unitless",
+            statistics_approximate=StatisticsApproximate(
+                min=0,
+                max=0,
+            ),
+        ),
+    ),
+)
