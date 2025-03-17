@@ -1,7 +1,6 @@
 from collections.abc import Sequence
 from typing import Any, Literal
 
-import numpy as np
 import pandas as pd
 
 from reformatters.common.config_models import (
@@ -46,7 +45,7 @@ def get_template_dimension_coordinates() -> dict[str, Any]:
     #     "init_time": get_init_time_coordinates(INIT_TIME_START + INIT_TIME_FREQUENCY),
     #     "lead_time": pd.timedelta_range("0h", "48h", freq=LEAD_TIME_FREQUENCY),
     #     "x": np.arange(1059),
-    #     "y": np.arange(1799)
+    #     "y": np.arange(1799),
     # }
 
 
@@ -128,42 +127,44 @@ COORDINATES: Sequence[Coordinate] = (
             ),
         ),
     ),
-    Coordinate(
-        name="x",
-        encoding=Encoding(
-            dtype="float64",
-            fill_value=np.nan,
-            # TODO
-            # compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-            chunks=len(_dim_coords["x"]),
-            shards=len(_dim_coords["x"]),
-        ),
-        attrs=CoordinateAttrs(
-            units="unitless",
-            statistics_approximate=StatisticsApproximate(
-                min=_dim_coords["x"].min(),
-                max=_dim_coords["x"].max(),
-            ),
-        ),
-    ),
-    Coordinate(
-        name="y",
-        encoding=Encoding(
-            dtype="float64",
-            fill_value=np.nan,
-            # TODO
-            # compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-            chunks=len(_dim_coords["y"]),
-            shards=len(_dim_coords["y"]),
-        ),
-        attrs=CoordinateAttrs(
-            units="unitless",
-            statistics_approximate=StatisticsApproximate(
-                min=_dim_coords["y"].min(),
-                max=_dim_coords["y"].max(),
-            ),
-        ),
-    ),
+    # TODO: encode x/y dimensions in latitude/longitude coordinates
+    # Coordinate(
+    #     name="latitude",
+    #     encoding=Encoding(
+    #         dtype="float64",
+    #         fill_value=np.nan,
+    #         # TODO
+    #         # compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+    #         chunks=len(_dim_coords["x"]),
+    #         shards=len(_dim_coords["x"]),
+    #     ),
+    #     attrs=CoordinateAttrs(
+    #         units="unitless",
+    #         statistics_approximate=StatisticsApproximate(
+    #             min=_dim_coords["x"].min(),
+    #             max=_dim_coords["x"].max(),
+    #         ),
+    #     ),
+    # ),
+    # Coordinate(
+    #     name="longitude",
+    #     encoding=Encoding(
+    #         dtype="float64",
+    #         fill_value=np.nan,
+    #         # TODO
+    #         # compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+    #         chunks=len(_dim_coords["y"]),
+    #         shards=len(_dim_coords["y"]),
+    #     ),
+    #     # TODO
+    #     attrs=CoordinateAttrs(
+    #         units="unitless",
+    #         statistics_approximate=StatisticsApproximate(
+    #             min=_dim_coords["y"].min(),
+    #             max=_dim_coords["y"].max(),
+    #         ),
+    #     ),
+    # ),
     Coordinate(
         name="valid_time",
         encoding=Encoding(
