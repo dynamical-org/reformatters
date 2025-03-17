@@ -34,8 +34,9 @@ DATASET_ATTRIBUTES = DatasetAttributes(
     forecast_resolution="Hourly",
 )
 
-type Dim =       Literal["init_time", "lead_time", "latitude", "longitude"]  # fmt: off
-DIMS: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")  # fmt: off
+# TODO: Review x/y dims. HRRR has an irregular lat/lon grid.
+type Dim =       Literal["init_time", "lead_time", "x", "y"]  # fmt: off
+DIMS: tuple[Dim, ...] = ("init_time", "lead_time", "x", "y")  # fmt: off
 
 
 # TODO: figure out latitude/longitude dimensions
