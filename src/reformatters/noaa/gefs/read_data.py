@@ -6,7 +6,6 @@ import re
 import warnings
 from collections.abc import Iterable, Sequence
 from datetime import timedelta
-from itertools import product
 from pathlib import Path
 from typing import Any, Literal, TypedDict, assert_never
 
@@ -151,39 +150,6 @@ def get_gefs_file_type_for_lead_time(
             return "b"
     else:
         return gefs_file_type
-
-
-def generate_chunk_coordinates(
-    chunk_init_times: Iterable[pd.Timestamp],
-    chunk_ensemble_members: Iterable[int],
-    chunk_lead_times: Iterable[pd.Timedelta],
-    statistics: Iterable[EnsembleStatistic],
-) -> ChunkCoordinates:
-    chunk_coords_ensemble: list[EnsembleSourceFileCoords] = [
-        {
-            "init_time": init_time,
-            "ensemble_member": ensemble_member,
-            "lead_time": lead_time,
-        }
-        for init_time, ensemble_member, lead_time in product(
-            chunk_init_times, chunk_ensemble_members, chunk_lead_times
-        )
-    ]
-
-    chunk_coords_statistic: list[StatisticSourceFileCoords] = [
-        {
-            "init_time": init_time,
-            "statistic": statistic,
-            "lead_time": lead_time,
-        }
-        for init_time, statistic, lead_time in product(
-            chunk_init_times, statistics, chunk_lead_times
-        )
-    ]
-    return {
-        "ensemble": chunk_coords_ensemble,
-        "statistic": chunk_coords_statistic,
-    }
 
 
 def parse_index_byte_ranges(
