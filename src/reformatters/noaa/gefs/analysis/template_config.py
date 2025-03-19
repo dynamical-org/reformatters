@@ -69,7 +69,7 @@ VAR_CHUNKS: dict[Dim, int] = {
 
 # SHARDS
 VAR_SHARDS: dict[Dim, int] = {
-    "time": VAR_CHUNKS["time"],  # one forecast per shard
+    "time": VAR_CHUNKS["time"],
     "latitude": VAR_CHUNKS["latitude"] * 22,  # 2 shards over 721 pixels
     "longitude": VAR_CHUNKS["longitude"] * 23,  # 4 shards over 1440 pixels
 }
