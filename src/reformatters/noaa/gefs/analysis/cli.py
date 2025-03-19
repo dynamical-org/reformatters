@@ -41,14 +41,15 @@ def reformat_chunks(
     )
 
 
-@app.command()
-def reformat_operational_update() -> None:
-    reformat.reformat_operational_update()
+# Not implemented yet
+# @app.command()
+# def reformat_operational_update() -> None:
+#     reformat.reformat_operational_update()
 
 
-@app.command()
-def validate_zarr() -> None:
-    reformat.validate_zarr()
+# @app.command()
+# def validate_zarr() -> None:
+#     reformat.validate_zarr()
 
 
 if __name__ == "__main__":
