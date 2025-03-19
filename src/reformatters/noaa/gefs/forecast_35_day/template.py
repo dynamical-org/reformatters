@@ -24,8 +24,8 @@ from .template_config import APPEND_DIMENSION as APPEND_DIMENSION
 from .template_config import (
     COORDINATES,
     DATASET_ATTRIBUTES,
-    ENSEMBLE_VAR_DIMS,
     EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR,
+    VAR_DIMS,
     get_init_time_coordinates,
     get_template_dimension_coordinates,
 )
@@ -67,7 +67,7 @@ def update_template() -> None:
 
     data_vars = {
         var_config.name: make_empty_variable(
-            ENSEMBLE_VAR_DIMS, coords, var_config.encoding.dtype
+            VAR_DIMS, coords, var_config.encoding.dtype
         )
         for var_config in DATA_VARIABLES
     }

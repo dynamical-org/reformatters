@@ -17,6 +17,21 @@ logger = get_logger(__name__)
 _LOCAL_ZARR_STORE_BASE_PATH = "data/output"
 
 
+BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE = zarr.codecs.BloscCodec(
+    typesize=4,
+    cname="zstd",
+    clevel=3,
+    shuffle="shuffle",  # byte shuffle to improve compression
+).to_dict()
+
+BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE = zarr.codecs.BloscCodec(
+    typesize=8,
+    cname="zstd",
+    clevel=3,
+    shuffle="shuffle",
+).to_dict()
+
+
 def get_zarr_store(dataset_id: str, version: str) -> zarr.storage.FsspecStore:
     if not Config.is_prod:
         version = "dev"
