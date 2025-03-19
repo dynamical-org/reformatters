@@ -20,7 +20,7 @@ from reformatters.noaa.gefs.common_gefs_template_config import (
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
 
 DATASET_ID = "noaa-gefs-analysis"
-DATASET_VERSION = "0.0.1"
+DATASET_VERSION = "0.0.1-dev"
 
 TIME_START = pd.Timestamp("2020-10-01T00:00")
 TIME_FREQUENCY = pd.Timedelta("3h")
@@ -62,16 +62,16 @@ def get_time_coordinates(
 
 # CHUNKS
 VAR_CHUNKS: dict[Dim, int] = {
-    "time": 2 * 365 * (24 // 3),  # 2 years of 3 hourly data
-    "latitude": 17,  # 43 chunks over 721 pixels
-    "longitude": 16,  # 90 chunks over 1440 pixels
+    "time": 365 * (24 // 3),  # 1 year of 3 hourly data
+    "latitude": 32,  # 23 chunks over 721 pixels
+    "longitude": 32,  # 45 chunks over 1440 pixels
 }
 
 # SHARDS
 VAR_SHARDS: dict[Dim, int] = {
-    "time": VAR_CHUNKS["time"],
-    "latitude": VAR_CHUNKS["latitude"] * 22,  # 2 shards over 721 pixels
-    "longitude": VAR_CHUNKS["longitude"] * 23,  # 4 shards over 1440 pixels
+    "time": VAR_CHUNKS["time"] * 2,
+    "latitude": VAR_CHUNKS["latitude"] * 12,  # 2 shards over 721 pixels
+    "longitude": VAR_CHUNKS["longitude"] * 12,  # 4 shards over 1440 pixels
 }
 assert DIMS == tuple(VAR_CHUNKS.keys())
 VAR_CHUNKS_ORDERED = tuple(VAR_CHUNKS[dim] for dim in DIMS)
