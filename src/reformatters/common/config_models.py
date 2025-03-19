@@ -32,8 +32,8 @@ class DatasetAttributes(FrozenBaseModel):
     spatial_resolution: str
     time_domain: str
     time_resolution: str
-    forecast_domain: str
-    forecast_resolution: str
+    forecast_domain: str | None = None
+    forecast_resolution: str | None = None
 
 
 class StatisticsApproximate(FrozenBaseModel):

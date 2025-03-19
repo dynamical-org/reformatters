@@ -6,10 +6,10 @@ from collections.abc import Generator, Iterable, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import closing, contextmanager
 from functools import partial
-from itertools import batched, groupby, product
+from itertools import batched, groupby
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import numpy as np
 import pandas as pd
@@ -24,14 +24,11 @@ from reformatters.common.iterating import (
 )
 from reformatters.common.logging import get_logger
 from reformatters.common.types import ArrayFloat32
+from reformatters.noaa.gefs.analysis import template
 from reformatters.noaa.gefs.deaccumulation import deaccumulate_to_rates_inplace
-from reformatters.noaa.gefs.forecast_35_day import template
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
 from reformatters.noaa.gefs.read_data import (
-    ChunkCoordinates,
-    EnsembleSourceFileCoords,
     SourceFileCoords,
-    StatisticSourceFileCoords,
     download_file,
     read_into,
 )
@@ -42,10 +39,12 @@ logger = get_logger(__name__)
 type EnsOrStat = int | np.integer[Any] | str
 
 type CoordAndPath = tuple[SourceFileCoords, Path | None]
-type CoordsAndPaths = list[CoordAndPath]
+type CoordsAndPaths = Sequence[CoordAndPath]
+
+INIT_TIME_FREQUENCY: Final[pd.Timedelta] = pd.Timedelta("6h")
 
 
-def reformat_init_time_i_slices(
+def reformat_time_i_slices(
     jobs: Sequence[tuple[slice, list[str]]],
     template_ds: xr.Dataset,
     store: zarr.storage.FsspecStore | Path,
@@ -55,20 +54,16 @@ def reformat_init_time_i_slices(
 ]:
     """
     Do the chunk data reformatting work - download files, read into memory, write to zarr.
-    Yields the data variable/init time combinations and their corresponding maximum
-    ingested lead time as it processes.
+    Yields the data variable/time slice combinations as it processes.
     """
-    ensemble_statistics: set[EnsembleStatistic] = {
-        statistic
-        for var in template_ds.data_vars.values()
-        if (statistic := var.attrs.get("ensemble_statistic")) is not None
-    }
-
     # The only effective way we've found to fully utilize cpu resources
     # while writing to zarr is to parallelize across processes (not threads).
     # Use shared memory to avoid pickling large arrays to share between processes.
     shared_buffer_size = max(
-        data_var.nbytes for data_var in template_ds.isel(init_time=jobs[0][0]).values()
+        data_var.nbytes
+        for data_var in template_ds.isel(
+            {template.APPEND_DIMENSION: jobs[0][0]}
+        ).values()
     )
     with (
         ThreadPoolExecutor(max_workers=1) as wait_executor,
@@ -77,35 +72,18 @@ def reformat_init_time_i_slices(
         ProcessPoolExecutor(max_workers=os.cpu_count() or 1) as cpu_process_executor,
         create_shared_buffer(shared_buffer_size) as shared_buffer,
     ):
-        for init_time_i_slice, data_var_names in jobs:
+        for append_dim_i_slice, data_var_names in jobs:
             chunk_template_ds = template_ds[data_var_names].isel(
-                init_time=init_time_i_slice
+                {template.APPEND_DIMENSION: append_dim_i_slice}
             )
 
-            chunk_init_times = pd.to_datetime(chunk_template_ds["init_time"].values)
-            chunk_lead_times = pd.to_timedelta(chunk_template_ds["lead_time"].values)
-            # jobs with only ensemble statistic vars won't have ensemble_member dim
-            chunk_ensemble_members = (
-                chunk_template_ds["ensemble_member"].values
-                if "ensemble_member" in chunk_template_ds
-                else np.array([], dtype=np.uint16)
-            )
+            chunk_times = pd.to_datetime(chunk_template_ds["time"].values)
 
-            chunk_coords_by_type = generate_chunk_coordinates(
-                chunk_init_times,
-                chunk_ensemble_members,
-                chunk_lead_times,
-                ensemble_statistics,
-            )
-
-            chunk_init_times_str = ", ".join(
-                chunk_init_times.strftime("%Y-%m-%dT%H:%M")
-            )
-            logger.info(f"Starting chunk with init times {chunk_init_times_str}")
+            chunk_times_str = f"{chunk_times[0].strftime('%Y-%m-%dT%H:%M')} - {chunk_times[-1].strftime('%Y-%m-%dT%H:%M')}"
+            logger.info(f"Starting chunk with times {chunk_times_str}")
 
             download_var_group_futures = get_download_var_group_futures(
                 chunk_template_ds,
-                chunk_coords_by_type,
                 io_executor,
                 wait_executor,
                 var_download_group_size,
@@ -146,37 +124,48 @@ def reformat_init_time_i_slices(
                         filepath.unlink()
 
 
-def generate_chunk_coordinates(
-    chunk_init_times: Iterable[pd.Timestamp],
-    chunk_ensemble_members: Iterable[int],
-    chunk_lead_times: Iterable[pd.Timedelta],
-    statistics: Iterable[EnsembleStatistic],
-) -> ChunkCoordinates:
-    chunk_coords_ensemble: list[EnsembleSourceFileCoords] = [
-        {
-            "init_time": init_time,
-            "ensemble_member": ensemble_member,
-            "lead_time": lead_time,
-        }
-        for init_time, ensemble_member, lead_time in product(
-            chunk_init_times, chunk_ensemble_members, chunk_lead_times
-        )
-    ]
+type DownloadVarGroupFutures = dict[
+    Future[Sequence[tuple[SourceFileCoords, Path | None]]],
+    tuple[GEFSDataVar, ...],
+]
 
-    chunk_coords_statistic: list[StatisticSourceFileCoords] = [
-        {
-            "init_time": init_time,
-            "statistic": statistic,
-            "lead_time": lead_time,
-        }
-        for init_time, statistic, lead_time in product(
-            chunk_init_times, statistics, chunk_lead_times
+
+def get_download_var_group_futures(
+    chunk_template_ds: xr.Dataset,
+    io_executor: ThreadPoolExecutor,
+    wait_executor: ThreadPoolExecutor,
+    group_size: int,
+) -> DownloadVarGroupFutures:
+    download_var_group_futures: DownloadVarGroupFutures = {}
+    data_var_groups = group_data_vars_by_gefs_file_type(
+        [d for d in template.DATA_VARIABLES if d.name in chunk_template_ds],
+        group_size=group_size,
+    )
+    for gefs_file_type, ensemble_statistic, has_hour_0, data_vars in data_var_groups:
+        chunk_coords_by_type = generate_chunk_coordinates(
+            chunk_template_ds["time"],
+            template.ANALYSIS_ENSEMBLE_MEMBER,
+            init_time_frequency=INIT_TIME_FREQUENCY,
+            var_has_hour_0_values=has_hour_0,
         )
-    ]
-    return {
-        "ensemble": chunk_coords_ensemble,
-        "statistic": chunk_coords_statistic,
-    }
+
+        chunk_coords: Iterable[SourceFileCoords]
+        if ensemble_statistic is None:
+            chunk_coords = chunk_coords_by_type["ensemble"]
+        else:
+            chunk_coords = chunk_coords_by_type["statistic"]
+
+        download_var_group_futures[
+            wait_executor.submit(
+                download_var_group_files,
+                data_vars,
+                chunk_coords,
+                gefs_file_type,
+                io_executor,
+            )
+        ] = data_vars
+
+    return download_var_group_futures
 
 
 def download_var_group_files(
@@ -184,7 +173,7 @@ def download_var_group_files(
     chunk_coords: Iterable[SourceFileCoords],
     gefs_file_type: GEFSFileType,
     io_executor: ThreadPoolExecutor,
-) -> list[tuple[SourceFileCoords, Path | None]]:
+) -> Sequence[tuple[SourceFileCoords, Path | None]]:
     logger.info(f"Downloading {[d.name for d in idx_data_vars]}")
     done, not_done = concurrent.futures.wait(
         [
@@ -207,47 +196,41 @@ def download_var_group_files(
     return [f.result() for f in done]
 
 
-type DownloadVarGroupFutures = dict[
-    Future[list[tuple[SourceFileCoords, Path | None]]],
-    tuple[GEFSDataVar, ...],
-]
+def generate_chunk_coordinates(
+    chunk_times: Iterable[pd.Timestamp],
+    ensemble_member: int,
+    init_time_frequency: pd.Timedelta,
+    var_has_hour_0_values: bool,
+) -> dict[str, Sequence[SourceFileCoords]]:
+    """Construct the init time and lead time coordinates which correspond to each time in `chunk_times`."""
+    times = pd.to_datetime(chunk_times)  # type: ignore[call-overload]
+    init_times = times.floor(init_time_frequency)
+    # If var doesn't have hour 0 values we have to go back one forecast.
+    # eg. Get the 6th hour rather than the 0th hour for 6-hourly init times.
+    if not var_has_hour_0_values:
+        is_hour_0 = times == init_times
+        init_times = init_times.where(~is_hour_0, init_times - init_time_frequency)
+
+    lead_times = times - init_times
+
+    ensemble_coords: Sequence[SourceFileCoords] = [
+        {
+            "init_time": init_time,
+            "ensemble_member": ensemble_member,
+            "lead_time": lead_time,
+        }
+        for init_time, lead_time in zip(init_times, lead_times, strict=True)
+    ]
+    return {"ensemble": ensemble_coords}
 
 
-def get_download_var_group_futures(
-    chunk_template_ds: xr.Dataset,
-    chunk_coords_by_type: ChunkCoordinates,
-    io_executor: ThreadPoolExecutor,
-    wait_executor: ThreadPoolExecutor,
-    group_size: int,
-) -> DownloadVarGroupFutures:
-    download_var_group_futures: DownloadVarGroupFutures = {}
-    data_var_groups = group_data_vars_by_gefs_file_type(
-        [d for d in template.DATA_VARIABLES if d.name in chunk_template_ds],
-        group_size=group_size,
-    )
-    for gefs_file_type, ensemble_statistic, data_vars in data_var_groups:
-        chunk_coords: Iterable[SourceFileCoords]
-        if ensemble_statistic is None:
-            chunk_coords = chunk_coords_by_type["ensemble"]
-        else:
-            chunk_coords = chunk_coords_by_type["statistic"]
-
-        download_var_group_futures[
-            wait_executor.submit(
-                download_var_group_files,
-                data_vars,
-                chunk_coords,
-                gefs_file_type,
-                io_executor,
-            )
-        ] = data_vars
-
-    return download_var_group_futures
+def data_var_has_hour_0_values(data_var: DataVar[Any]) -> bool:
+    return data_var.attrs.step_type not in ("accum", "avg")
 
 
 def group_data_vars_by_gefs_file_type(
     data_vars: Iterable[GEFSDataVar], *, group_size: int
-) -> list[tuple[GEFSFileType, EnsembleStatistic | None, tuple[GEFSDataVar, ...]]]:
+) -> list[tuple[GEFSFileType, EnsembleStatistic | None, bool, tuple[GEFSDataVar, ...]]]:
     """
     Group data variables by the things which determine which source file they come from:
     1. their GEFS file type (a, b, or s) and
@@ -261,15 +244,23 @@ def group_data_vars_by_gefs_file_type(
     grouper = defaultdict(list)
     for data_var in data_vars:
         gefs_file_type = data_var.internal_attrs.gefs_file_type
-        grouper[(gefs_file_type, data_var.attrs.ensemble_statistic)].append(data_var)
+        ensemble_statistic = data_var.attrs.ensemble_statistic
+        has_hour_0_values = data_var_has_hour_0_values(data_var)
+        grouper[(gefs_file_type, ensemble_statistic, has_hour_0_values)].append(
+            data_var
+        )
     chunks = []
-    for (file_type, ensemble_statistic), idx_data_vars in grouper.items():
+    for (
+        file_type,
+        ensemble_statistic,
+        has_hour_0_values,
+    ), idx_data_vars in grouper.items():
         idx_data_vars = sorted(
             idx_data_vars, key=lambda data_var: data_var.internal_attrs.index_position
         )
         chunks.extend(
             [
-                (file_type, ensemble_statistic, data_vars_chunk)
+                (file_type, ensemble_statistic, has_hour_0_values, data_vars_chunk)
                 for data_vars_chunk in batched(idx_data_vars, group_size)
             ]
         )
@@ -278,7 +269,7 @@ def group_data_vars_by_gefs_file_type(
 
 
 def get_max_lead_times(
-    coords_and_paths: list[tuple[SourceFileCoords, Path | None]],
+    coords_and_paths: Sequence[tuple[SourceFileCoords, Path | None]],
 ) -> dict[tuple[pd.Timestamp, EnsOrStat], pd.Timedelta]:
     max_lead_times: dict[tuple[pd.Timestamp, EnsOrStat], pd.Timedelta] = {}
 
@@ -404,13 +395,15 @@ def write_shards(
     cpu_process_executor: ProcessPoolExecutor,
 ) -> None:
     shard_indexers = tuple(shard_slice_indexers(data_array_template))
-    chunk_init_times_str = ", ".join(
-        data_array_template.init_time.dt.strftime("%Y-%m-%dT%H:%M").values
+    chunk_times_str = " - ".join(
+        data_array_template[template.APPEND_DIMENSION]
+        .isel({template.APPEND_DIMENSION: [0, -1]})
+        .dt.strftime("%Y-%m-%dT%H:%M")
+        .values
     )
     logger.info(
-        f"Writing {data_array_template.name} {chunk_init_times_str} in {len(shard_indexers)} shards"
+        f"Writing {data_array_template.name} {chunk_times_str} in {len(shard_indexers)} shards"
     )
-
     # Use ProcessPoolExecutor for parallel writing of shards.
     # Pass only a lightweight template and the name of the shared buffer
     # to avoid ProcessPool pickling very large arrays.

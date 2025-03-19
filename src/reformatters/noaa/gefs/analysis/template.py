@@ -1,7 +1,5 @@
 from pathlib import Path
-from typing import Any
 
-import numpy as np
 import rioxarray  # noqa: F401  Adds .rio accessor to datasets
 import xarray as xr
 
@@ -17,17 +15,18 @@ from reformatters.common.template_utils import (
 )
 from reformatters.common.types import DatetimeLike
 
-# Explicitly re-export the DATA_VARIABLES, DATASET_ID, DATASET_VERSION and APPEND_DIMENSION
+from .template_config import ANALYSIS_ENSEMBLE_MEMBER as ANALYSIS_ENSEMBLE_MEMBER
+
+# Explicitly re-export the DATA_VARIABLES, DATASET_ID, DATASET_VERSION, and APPEND_DIMENSION
 # which are part of the template module's public interface along with
 # get_template and update_template.
 from .template_config import APPEND_DIMENSION as APPEND_DIMENSION
 from .template_config import (
     COORDINATES,
     DATASET_ATTRIBUTES,
-    EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR,
-    VAR_DIMS,
-    get_init_time_coordinates,
+    DIMS,
     get_template_dimension_coordinates,
+    get_time_coordinates,
 )
 from .template_config import DATA_VARIABLES as DATA_VARIABLES
 from .template_config import DATASET_ID as DATASET_ID
@@ -43,10 +42,7 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
 
     # Expand init_time dimension with complete coordinates
     ds = empty_copy_with_reindex(
-        ds,
-        APPEND_DIMENSION,
-        get_init_time_coordinates(init_time_end),
-        derive_coordinates_fn=derive_coordinates,
+        ds, APPEND_DIMENSION, get_time_coordinates(init_time_end)
     )
 
     # Coordinates which are dask arrays are not written with .to_zarr(store, compute=False)
@@ -55,9 +51,7 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
         coordinate.load()
 
     if not Config.is_prod:
-        ds = ds[["wind_u_100m", "temperature_2m"]].sel(
-            ensemble_member=slice(2), lead_time=["0h", "840h"]
-        )
+        ds = ds[["precipitation_surface", "temperature_2m"]]
 
     return ds
 
@@ -66,15 +60,11 @@ def update_template() -> None:
     coords = get_template_dimension_coordinates()
 
     data_vars = {
-        var_config.name: make_empty_variable(
-            VAR_DIMS, coords, var_config.encoding.dtype
-        )
+        var_config.name: make_empty_variable(DIMS, coords, var_config.encoding.dtype)
         for var_config in DATA_VARIABLES
     }
 
     ds = xr.Dataset(data_vars, coords, DATASET_ATTRIBUTES.model_dump(exclude_none=True))
-
-    ds = ds.assign_coords(derive_coordinates(ds))
 
     # Add coordinate reference system for out of the box rioxarray support
     ds = ds.rio.write_crs("+proj=longlat +a=6371229 +b=6371229 +no_defs +type=crs")
@@ -98,22 +88,3 @@ def update_template() -> None:
         assign_var_metadata(ds.coords[coord_config.name], coord_config)
 
     write_metadata(ds, _TEMPLATE_PATH, mode="w")
-
-
-def derive_coordinates(
-    ds: xr.Dataset,
-) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
-    return {
-        "ingested_forecast_length": (
-            ("init_time", "ensemble_member"),
-            np.full(
-                (ds["init_time"].size, ds["ensemble_member"].size),
-                np.timedelta64("NaT", "ns"),
-            ),
-        ),
-        "expected_forecast_length": (
-            ("init_time",),
-            EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR.loc[ds["init_time"].dt.hour],
-        ),
-        "valid_time": ds["init_time"] + ds["lead_time"],
-    }
