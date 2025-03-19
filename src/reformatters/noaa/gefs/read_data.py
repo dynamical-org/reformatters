@@ -241,8 +241,16 @@ def read_into(
         print("Read failed", coords, e)
         return
 
-    # Flatten the init and lead time dimensions into a single time dimension for our analysis dataset
-    out_coords = {"time": coords["init_time"] + coords["lead_time"]}
+    if "init_time" in out.dims:
+        assert "lead_time" in out.dims
+        out_coords = dict(coords)
+    elif "time" in out.dims:
+        # Flatten the init and lead time dimensions into a single time dimension
+        # and drop the ensemble member coordinate for our analysis dataset
+        out_coords = {"time": coords["init_time"] + coords["lead_time"]}
+    else:
+        raise ValueError(f"Unexpected dimensions: {out.dims}")
+
     out.loc[out_coords] = raw_data
 
 
