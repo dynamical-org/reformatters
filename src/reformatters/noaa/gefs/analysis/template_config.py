@@ -39,10 +39,12 @@ DATASET_ATTRIBUTES = DatasetAttributes(
 
 # Silly to list dims twice, but typing.get_args() doesn't guarantee the return order,
 # the order in DIMS is important, and type parameters can't be constants.
-type Dim = Literal["time", "latitude", "longitude"]  # fmt: off
+type Dim =       Literal["time", "latitude", "longitude"]  # fmt: off
 DIMS: tuple[Dim, ...] = ("time", "latitude", "longitude")  # fmt: off
 
 APPEND_DIMENSION: Final[Dim] = "time"
+
+ANALYSIS_ENSEMBLE_MEMBER = 0  # the GEFS control member
 
 
 def get_template_dimension_coordinates() -> dict[str, Any]:

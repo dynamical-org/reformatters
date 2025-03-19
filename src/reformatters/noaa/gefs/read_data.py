@@ -19,7 +19,10 @@ import xarray as xr
 from reformatters.common.config import Config
 from reformatters.common.config_models import EnsembleStatistic
 from reformatters.common.types import Array2D
-from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
+from reformatters.noaa.gefs.gefs_config_models import (
+    GEFSDataVar,
+    GEFSFileType,
+)
 
 FILE_RESOLUTIONS = {
     "s": "0p25",
@@ -238,7 +241,9 @@ def read_into(
         print("Read failed", coords, e)
         return
 
-    out.loc[coords] = raw_data
+    # Flatten the init and lead time dimensions into a single time dimension for our analysis dataset
+    out_coords = {"time": coords["init_time"] + coords["lead_time"]}
+    out.loc[out_coords] = raw_data
 
 
 def read_rasterio(

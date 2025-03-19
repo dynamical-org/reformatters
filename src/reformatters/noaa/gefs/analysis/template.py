@@ -15,6 +15,8 @@ from reformatters.common.template_utils import (
 )
 from reformatters.common.types import DatetimeLike
 
+from .template_config import ANALYSIS_ENSEMBLE_MEMBER as ANALYSIS_ENSEMBLE_MEMBER
+
 # Explicitly re-export the DATA_VARIABLES, DATASET_ID, DATASET_VERSION, and APPEND_DIMENSION
 # which are part of the template module's public interface along with
 # get_template and update_template.
