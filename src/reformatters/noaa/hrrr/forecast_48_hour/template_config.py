@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from typing import Any, Literal
 
+import numpy as np
 import pandas as pd
 
 from reformatters.common.config_models import (
@@ -11,6 +12,7 @@ from reformatters.common.config_models import (
     StatisticsApproximate,
 )
 from reformatters.common.types import DatetimeLike
+from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
 
 DATASET_ID = "noaa-hrrr-forecast-48-hour"
 DATASET_VERSION = "0.0.0"
@@ -40,13 +42,12 @@ DIMS: tuple[Dim, ...] = ("init_time", "lead_time", "x", "y")  # fmt: off
 
 # TODO: figure out latitude/longitude dimensions
 def get_template_dimension_coordinates() -> dict[str, Any]:
-    raise NotImplementedError()
-    # return {
-    #     "init_time": get_init_time_coordinates(INIT_TIME_START + INIT_TIME_FREQUENCY),
-    #     "lead_time": pd.timedelta_range("0h", "48h", freq=LEAD_TIME_FREQUENCY),
-    #     "x": np.arange(1059),
-    #     "y": np.arange(1799),
-    # }
+    return {
+        "init_time": get_init_time_coordinates(INIT_TIME_START + INIT_TIME_FREQUENCY),
+        "lead_time": pd.timedelta_range("0h", "48h", freq=LEAD_TIME_FREQUENCY),
+        "x": np.arange(1059),
+        "y": np.arange(1799),
+    }
 
 
 def get_init_time_coordinates(
@@ -113,8 +114,7 @@ COORDINATES: Sequence[Coordinate] = (
         encoding=Encoding(
             dtype="int64",
             fill_value=-1,
-            # TODO
-            # compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+            compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             units="seconds",
             chunks=len(_dim_coords["lead_time"]),
             shards=len(_dim_coords["lead_time"]),
@@ -127,51 +127,82 @@ COORDINATES: Sequence[Coordinate] = (
             ),
         ),
     ),
-    # TODO: encode x/y dimensions in latitude/longitude coordinates
-    # Coordinate(
-    #     name="latitude",
-    #     encoding=Encoding(
-    #         dtype="float64",
-    #         fill_value=np.nan,
-    #         # TODO
-    #         # compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-    #         chunks=len(_dim_coords["x"]),
-    #         shards=len(_dim_coords["x"]),
-    #     ),
-    #     attrs=CoordinateAttrs(
-    #         units="unitless",
-    #         statistics_approximate=StatisticsApproximate(
-    #             min=_dim_coords["x"].min(),
-    #             max=_dim_coords["x"].max(),
-    #         ),
-    #     ),
-    # ),
-    # Coordinate(
-    #     name="longitude",
-    #     encoding=Encoding(
-    #         dtype="float64",
-    #         fill_value=np.nan,
-    #         # TODO
-    #         # compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-    #         chunks=len(_dim_coords["y"]),
-    #         shards=len(_dim_coords["y"]),
-    #     ),
-    #     # TODO
-    #     attrs=CoordinateAttrs(
-    #         units="unitless",
-    #         statistics_approximate=StatisticsApproximate(
-    #             min=_dim_coords["y"].min(),
-    #             max=_dim_coords["y"].max(),
-    #         ),
-    #     ),
-    # ),
+    Coordinate(
+        name="x",
+        encoding=Encoding(
+            dtype="int64",
+            fill_value=np.nan,
+            compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+            chunks=len(_dim_coords["x"]),
+            shards=len(_dim_coords["x"]),
+        ),
+        attrs=CoordinateAttrs(
+            units="unitless",
+            statistics_approximate=StatisticsApproximate(
+                min=_dim_coords["x"].min(),
+                max=_dim_coords["x"].max(),
+            ),
+        ),
+    ),
+    Coordinate(
+        name="y",
+        encoding=Encoding(
+            dtype="int64",
+            fill_value=np.nan,
+            compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+            chunks=len(_dim_coords["y"]),
+            shards=len(_dim_coords["y"]),
+        ),
+        attrs=CoordinateAttrs(
+            units="unitless",
+            statistics_approximate=StatisticsApproximate(
+                min=_dim_coords["y"].min(),
+                max=_dim_coords["y"].max(),
+            ),
+        ),
+    ),
+    Coordinate(
+        name="latitude",
+        encoding=Encoding(
+            dtype="float64",
+            fill_value=np.nan,
+            compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+            chunks=(len(_dim_coords["y"]), len(_dim_coords["x"])),
+            shards=(len(_dim_coords["y"]), len(_dim_coords["x"])),
+        ),
+        attrs=CoordinateAttrs(
+            units="unitless",
+            # TODO: How to set these min/max values?
+            statistics_approximate=StatisticsApproximate(
+                min=_dim_coords["y"].min(),
+                max=_dim_coords["y"].max(),
+            ),
+        ),
+    ),
+    Coordinate(
+        name="longitude",
+        encoding=Encoding(
+            dtype="float64",
+            fill_value=np.nan,
+            compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+            chunks=(len(_dim_coords["y"]), len(_dim_coords["x"])),
+            shards=(len(_dim_coords["y"]), len(_dim_coords["x"])),
+        ),
+        attrs=CoordinateAttrs(
+            units="unitless",
+            # TODO: How to set these min/max values?
+            statistics_approximate=StatisticsApproximate(
+                min=_dim_coords["x"].min(),
+                max=_dim_coords["x"].max(),
+            ),
+        ),
+    ),
     Coordinate(
         name="valid_time",
         encoding=Encoding(
             dtype="int64",
             fill_value=0,
-            # TODO
-            # compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+            compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             calendar="proleptic_gregorian",
             units="seconds since 1970-01-01 00:00:00",
             chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
@@ -189,8 +220,7 @@ COORDINATES: Sequence[Coordinate] = (
         encoding=Encoding(
             dtype="int64",
             fill_value=-1,
-            # TODO
-            # compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+            compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             units="seconds",
             chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
             shards=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
@@ -208,8 +238,7 @@ COORDINATES: Sequence[Coordinate] = (
         encoding=Encoding(
             dtype="int64",
             fill_value=-1,
-            # TODO
-            # compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+            compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             units="seconds",
             chunks=INIT_TIME_COORDINATE_CHUNK_SIZE,
             shards=INIT_TIME_COORDINATE_CHUNK_SIZE,
