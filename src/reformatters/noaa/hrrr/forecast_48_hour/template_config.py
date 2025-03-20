@@ -13,6 +13,7 @@ from reformatters.common.config_models import (
 )
 from reformatters.common.types import DatetimeLike
 from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
+from reformatters.noaa.hrrr.hrrr_config_models import HRRRDataVar
 
 DATASET_ID = "noaa-hrrr-forecast-48-hour"
 DATASET_VERSION = "0.0.0"
@@ -38,6 +39,8 @@ DATASET_ATTRIBUTES = DatasetAttributes(
 # TODO: Review x/y dims. HRRR has an irregular lat/lon grid.
 type Dim =       Literal["init_time", "lead_time", "x", "y"]  # fmt: off
 DIMS: tuple[Dim, ...] = ("init_time", "lead_time", "x", "y")  # fmt: off
+
+APPEND_DIMENSION = "init_time"
 
 
 # TODO: figure out latitude/longitude dimensions
@@ -95,8 +98,7 @@ COORDINATES: Sequence[Coordinate] = (
         encoding=Encoding(
             dtype="int64",
             fill_value=0,
-            # TODO
-            # compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+            compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             calendar="proleptic_gregorian",
             units="seconds since 1970-01-01 00:00:00",
             chunks=INIT_TIME_COORDINATE_CHUNK_SIZE,
@@ -268,3 +270,5 @@ COORDINATES: Sequence[Coordinate] = (
         ),
     ),
 )
+
+DATA_VARIABLES: Sequence[HRRRDataVar] = []
