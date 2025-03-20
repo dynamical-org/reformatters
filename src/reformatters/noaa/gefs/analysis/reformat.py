@@ -85,6 +85,7 @@ def reformat_kubernetes(
         parallelism=parallelism,
         cpu="6",  # fit on 8 vCPU node
         memory="60G",  # fit on 64GB node
+        shared_memory="25G",
         ephemeral_storage="60G",
         command=[
             "reformat-chunks",
@@ -297,6 +298,7 @@ def reformat_chunks(
 #         dataset_id=template.DATASET_ID,
 #         cpu="6",  # fit on 8 vCPU node
 #         memory="60G",  # fit on 64GB node
+#         shared_memory="25G",
 #         ephemeral_storage="150G",
 #     )
 #     validation_cron_job = ValidationCronJob(
