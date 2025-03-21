@@ -2,16 +2,23 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import rioxarray  # noqa: F401  Adds .rio accessor to datasets
 import xarray as xr
 
-from reformatters.common.template_utils import make_empty_variable
-from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
+from reformatters.common.template_utils import assign_var_metadata, make_empty_variable
+from reformatters.common.template_utils import (
+    write_metadata as write_metadata,  # re-export
+)
+
+from .template_config import (
+    COORDINATES,
     DATA_VARIABLES,
     DATASET_ATTRIBUTES,
     DIMS,
     EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR,
     get_template_dimension_coordinates,
 )
+from .template_config import DATASET_ID as DATASET_ID
 
 _TEMPLATE_PATH = Path(__file__).parent / "templates" / "latest.zarr"
 
@@ -26,7 +33,26 @@ def update_template() -> None:
 
     ds = xr.Dataset(data_vars, coords, DATASET_ATTRIBUTES.model_dump(exclude_none=True))
 
-    ds.assign_coords(derive_coordinates(ds))
+    ds = ds.rio.write_crs(
+        "+proj=lcc +a=6371229 +b=6371229 +lon_0=262.5 +lat_0=38.5 +lat_1=38.5 +lat_2=38.5"
+    )
+
+    assert {d.name for d in DATA_VARIABLES} == set(ds.data_vars)
+
+    ds = ds.assign_coords(derive_coordinates(ds))
+
+    for var_config in DATA_VARIABLES:
+        assign_var_metadata(ds[var_config.name], var_config)
+
+    assert {c.name for c in COORDINATES} == set(ds.coords)
+    for coord_config in COORDINATES:
+        # Don't overwrite -- retain the attributes that .rio.write_crs adds
+        if coord_config.name == "spatial_ref":
+            continue
+
+        assign_var_metadata(ds.coords[coord_config.name], coord_config)
+
+    write_metadata(ds, _TEMPLATE_PATH, mode="w")
 
 
 def derive_coordinates(

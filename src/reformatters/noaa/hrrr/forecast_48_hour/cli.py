@@ -2,12 +2,15 @@ from typing import Annotated
 
 import typer
 
+from reformatters.noaa.hrrr.forecast_48_hour import template
+from reformatters.noaa.hrrr.forecast_48_hour.template import DATASET_ID as DATASET_ID
+
 app = typer.Typer()
 
 
 @app.command()
 def update_template() -> None:
-    raise NotImplementedError("update_template not implemented")
+    template.update_template()
 
 
 @app.command()

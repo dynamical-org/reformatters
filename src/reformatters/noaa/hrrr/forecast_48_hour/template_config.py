@@ -81,8 +81,8 @@ CHUNKS: dict[Dim, int] = {}
 # About XXXMB compressed, about XXGB uncompressed
 SHARDS: dict[Dim, int] = {}
 
-CHUNKS_ORDERED = tuple(CHUNKS[dim] for dim in DIMS)
-SHARDS_ORDERED = tuple(SHARDS[dim] for dim in DIMS)
+CHUNKS_ORDERED = tuple(CHUNKS.get(dim, 1) for dim in DIMS)
+SHARDS_ORDERED = tuple(SHARDS.get(dim, 1) for dim in DIMS)
 
 
 # TODO: review chunksize
@@ -183,7 +183,7 @@ COORDINATES: Sequence[Coordinate] = (
             shards=(len(_dim_coords["y"]), len(_dim_coords["x"])),
         ),
         attrs=CoordinateAttrs(
-            units="unitless",
+            units="degrees_north",
             # TODO: How to set these min/max values?
             statistics_approximate=StatisticsApproximate(
                 min=_dim_coords["y"].min(),
@@ -201,7 +201,7 @@ COORDINATES: Sequence[Coordinate] = (
             shards=(len(_dim_coords["y"]), len(_dim_coords["x"])),
         ),
         attrs=CoordinateAttrs(
-            units="unitless",
+            units="degrees_east",
             # TODO: How to set these min/max values?
             statistics_approximate=StatisticsApproximate(
                 min=_dim_coords["x"].min(),
