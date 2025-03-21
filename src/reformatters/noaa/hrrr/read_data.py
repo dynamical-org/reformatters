@@ -36,8 +36,6 @@ def download_file(
     init_date_str = init_time.strftime("%Y%m%d")
     init_hour_str = init_time.strftime("%H")
 
-    print(lead_time_hours)
-
     remote_path = f"hrrr.{init_date_str}/{domain}/hrrr.t{init_hour_str}z.wrf{hrrr_file_type}f{int(lead_time_hours):02d}.grib2"
 
     store = http_store("https://noaa-hrrr-bdp-pds.s3.amazonaws.com")
