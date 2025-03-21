@@ -3,7 +3,6 @@ from typing import Any, Final, Literal
 
 import numpy as np
 import pandas as pd
-import zarr
 
 from reformatters.common.config_models import (
     Coordinate,
@@ -15,6 +14,10 @@ from reformatters.common.config_models import (
     replace,
 )
 from reformatters.common.types import DatetimeLike
+from reformatters.common.zarr import (
+    BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
+    BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
+)
 from reformatters.noaa.gfs.gfs_config_models import GFSDataVar, GFSInternalAttrs
 
 DATASET_ID = "noaa-gfs-forecast"
@@ -95,21 +98,6 @@ VAR_SHARDS_ORDERED = tuple(VAR_SHARDS[dim] for dim in VAR_DIMS)
 # that new array values are written strictly before new metadata is written
 # (doing this correctly is a key benefit of icechunk).
 INIT_TIME_COORDINATE_CHUNK_SIZE = int(pd.Timedelta(days=365 * 15) / INIT_TIME_FREQUENCY)
-
-
-BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE = zarr.codecs.BloscCodec(
-    typesize=4,
-    cname="zstd",
-    clevel=3,
-    shuffle="shuffle",  # byte shuffle
-).to_dict()
-
-BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE = zarr.codecs.BloscCodec(
-    typesize=8,
-    cname="zstd",
-    clevel=3,
-    shuffle="shuffle",  # byte shuffle
-).to_dict()
 
 GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT: Final[int] = 7
 GEFS_BITROUND_KEEP_MANTISSA_BITS_CATEGORICAL: Final[Literal["no-rounding"]] = (
