@@ -15,6 +15,7 @@ class Job(pydantic.BaseModel):
     dataset_id: Annotated[str, pydantic.Field(min_length=1)]
     cpu: Annotated[str, pydantic.Field(min_length=1)]
     memory: Annotated[str, pydantic.Field(min_length=1)]
+    shared_memory: Annotated[str, pydantic.Field(min_length=1)] = "1k"
     ephemeral_storage: Annotated[str, pydantic.Field(min_length=1)] = "10G"
     workers_total: Annotated[int, pydantic.Field(ge=1)]
     parallelism: Annotated[int, pydantic.Field(ge=1)]
@@ -159,7 +160,10 @@ class Job(pydantic.BaseModel):
                             },
                             {
                                 "name": "shared-memory-dir",
-                                "emptyDir": {"medium": "Memory", "sizeLimit": "22Gi"},
+                                "emptyDir": {
+                                    "medium": "Memory",
+                                    "sizeLimit": self.shared_memory,
+                                },
                             },
                         ],
                     }
