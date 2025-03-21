@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -8,8 +9,11 @@ from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
     DATA_VARIABLES,
     DATASET_ATTRIBUTES,
     DIMS,
+    EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR,
     get_template_dimension_coordinates,
 )
+
+_TEMPLATE_PATH = Path(__file__).parent / "templates" / "latest.zarr"
 
 
 def update_template() -> None:
@@ -28,4 +32,16 @@ def update_template() -> None:
 def derive_coordinates(
     ds: xr.Dataset,
 ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
-    return {}
+    return {
+        "latitude": (("y", "x"), np.full((ds["y"].size, ds["x"].size), 0.0)),
+        "longitude": (("y", "x"), np.full((ds["y"].size, ds["x"].size), 0.0)),
+        "ingested_forecast_length": (
+            ("init_time",),
+            np.full((ds["init_time"].size), np.timedelta64("NaT", "ns")),
+        ),
+        "expected_forecast_length": (
+            ("init_time",),
+            EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR.loc[ds["init_time"].dt.hour],
+        ),
+        "valid_time": ds["init_time"] + ds["lead_time"],
+    }

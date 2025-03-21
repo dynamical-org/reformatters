@@ -22,6 +22,16 @@ INIT_TIME_START = pd.Timestamp("2014-07-30T18:00")
 INIT_TIME_FREQUENCY = pd.Timedelta("6h")
 LEAD_TIME_FREQUENCY = pd.Timedelta("1h")
 
+#  All Standard Cycles go to forecast hour 18
+#  Init cycles going to forecast hour 48 are 00, 06, 12, 18
+EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR = pd.Series(
+    {
+        **{h: pd.Timedelta("18h") for h in range(0, 24 + 1)},
+        **{h: pd.Timedelta("48h") for h in range(0, 18 + 1, 6)},
+    }
+)
+
+
 DATASET_ATTRIBUTES = DatasetAttributes(
     dataset_id=DATASET_ID,
     dataset_version=DATASET_VERSION,
