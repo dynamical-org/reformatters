@@ -176,8 +176,8 @@ COORDINATES: Sequence[Coordinate] = (
             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             calendar="proleptic_gregorian",
             units="seconds since 1970-01-01 00:00:00",
-            chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
-            shards=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
+            chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE),
+            shards=(INIT_TIME_COORDINATE_CHUNK_SIZE),
         ),
         attrs=CoordinateAttrs(
             units="seconds since 1970-01-01 00:00:00",
@@ -193,8 +193,8 @@ COORDINATES: Sequence[Coordinate] = (
             fill_value=-1,
             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             units="seconds",
-            chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
-            shards=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
+            chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE),
+            shards=(INIT_TIME_COORDINATE_CHUNK_SIZE),
         ),
         attrs=CoordinateAttrs(
             units="seconds",

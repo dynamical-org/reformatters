@@ -33,14 +33,13 @@ def update_template() -> None:
 
     ds = xr.Dataset(data_vars, coords, DATASET_ATTRIBUTES.model_dump(exclude_none=True))
 
+    ds = ds.assign_coords(derive_coordinates(ds))
+
     ds = ds.rio.write_crs(
         "+proj=lcc +a=6371229 +b=6371229 +lon_0=262.5 +lat_0=38.5 +lat_1=38.5 +lat_2=38.5"
     )
 
     assert {d.name for d in DATA_VARIABLES} == set(ds.data_vars)
-
-    ds = ds.assign_coords(derive_coordinates(ds))
-
     for var_config in DATA_VARIABLES:
         assign_var_metadata(ds[var_config.name], var_config)
 
@@ -69,5 +68,5 @@ def derive_coordinates(
             ("init_time",),
             EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR.loc[ds["init_time"].dt.hour],
         ),
-        "valid_time": ds["init_time"] + ds["lead_time"],
+        "valid_time": ds["init_time"],
     }

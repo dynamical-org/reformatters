@@ -8,12 +8,16 @@ from reformatters.common.config_models import (
     Coordinate,
     CoordinateAttrs,
     DatasetAttributes,
+    DataVarAttrs,
     Encoding,
     StatisticsApproximate,
 )
 from reformatters.common.types import DatetimeLike
-from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
-from reformatters.noaa.hrrr.hrrr_config_models import HRRRDataVar
+from reformatters.common.zarr import (
+    BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
+    BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
+)
+from reformatters.noaa.hrrr.hrrr_config_models import HRRRDataVar, HRRRInternalAttrs
 
 DATASET_ID = "noaa-hrrr-forecast-48-hour"
 DATASET_VERSION = "0.0.0"
@@ -74,7 +78,12 @@ def get_init_time_coordinates(
 # TODO
 # CHUNKS
 # These chunks are about XXXmb of uncompressed float32s
-CHUNKS: dict[Dim, int] = {}
+CHUNKS: dict[Dim, int] = {
+    "init_time": 1,
+    "lead_time": 1,
+    "x": 1,
+    "y": 1,
+}
 
 # TODO
 # SHARDS
@@ -217,8 +226,8 @@ COORDINATES: Sequence[Coordinate] = (
             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             calendar="proleptic_gregorian",
             units="seconds since 1970-01-01 00:00:00",
-            chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
-            shards=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
+            chunks=INIT_TIME_COORDINATE_CHUNK_SIZE,
+            shards=INIT_TIME_COORDINATE_CHUNK_SIZE,
         ),
         attrs=CoordinateAttrs(
             units="seconds since 1970-01-01 00:00:00",
@@ -234,8 +243,8 @@ COORDINATES: Sequence[Coordinate] = (
             fill_value=-1,
             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             units="seconds",
-            chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
-            shards=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
+            chunks=INIT_TIME_COORDINATE_CHUNK_SIZE,
+            shards=INIT_TIME_COORDINATE_CHUNK_SIZE,
         ),
         attrs=CoordinateAttrs(
             units="seconds",
@@ -281,4 +290,30 @@ COORDINATES: Sequence[Coordinate] = (
     ),
 )
 
-DATA_VARIABLES: Sequence[HRRRDataVar] = []
+
+DATA_VARIABLES: Sequence[HRRRDataVar] = [
+    HRRRDataVar(
+        name="Composite reflectivity",
+        encoding=Encoding(
+            dtype="float32",
+            fill_value=np.nan,
+            chunks=CHUNKS_ORDERED,
+            shards=SHARDS_ORDERED,
+            compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
+        ),
+        attrs=DataVarAttrs(
+            short_name="refc",
+            long_name="Composite reflectivity",
+            units="dBZ",
+            step_type="instant",
+        ),
+        internal_attrs=HRRRInternalAttrs(
+            grib_element="REFC",
+            grib_description="TODO",  # TODO
+            index_position=0,
+            keep_mantissa_bits=10,
+            grib_index_level="entire atmosphere",
+            hrrr_file_type="sfc",
+        ),
+    )
+]
