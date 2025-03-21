@@ -78,18 +78,14 @@ def get_init_time_coordinates(
 # TODO
 # CHUNKS
 # These chunks are about XXXmb of uncompressed float32s
-CHUNKS: dict[Dim, int] = {
-    "init_time": 1,
-    "lead_time": 1,
-    "x": 1,
-    "y": 1,
-}
+CHUNKS: dict[Dim, int] = {}
 
 # TODO
 # SHARDS
 # About XXXMB compressed, about XXGB uncompressed
 SHARDS: dict[Dim, int] = {}
 
+# TODO: Remove default sizes probably
 CHUNKS_ORDERED = tuple(CHUNKS.get(dim, 1) for dim in DIMS)
 SHARDS_ORDERED = tuple(SHARDS.get(dim, 1) for dim in DIMS)
 

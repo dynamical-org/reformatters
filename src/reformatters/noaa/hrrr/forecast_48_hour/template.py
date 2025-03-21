@@ -58,7 +58,9 @@ def derive_coordinates(
     ds: xr.Dataset,
 ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
     return {
+        # TODO: Derive these coordinates from an actual model file
         "latitude": (("y", "x"), np.full((ds["y"].size, ds["x"].size), 0.0)),
+        # TODO: Derive these coordinates from an actual model file
         "longitude": (("y", "x"), np.full((ds["y"].size, ds["x"].size), 0.0)),
         "ingested_forecast_length": (
             ("init_time",),
@@ -68,5 +70,7 @@ def derive_coordinates(
             ("init_time",),
             EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR.loc[ds["init_time"].dt.hour],
         ),
+        # TODO: This used to be ds["init_time"] + ds["lead_time"], but that didn't validate.
+        # Want to understand why it was that way in GEFS.
         "valid_time": ds["init_time"],
     }
