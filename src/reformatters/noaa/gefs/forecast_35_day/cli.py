@@ -14,8 +14,21 @@ def update_template() -> None:
 
 
 @app.command()
-def reformat_local(init_time_end: str) -> None:
-    reformat.reformat_local(init_time_end)
+def reformat_local(
+    init_time_end: str,
+    filter_init_time_start: str | None = None,
+    filter_init_time_end: str | None = None,
+    filter_variable_names: list[str] | None = None,
+) -> None:
+    reformat.reformat_local(
+        init_time_end,
+        chunk_filters=reformat.ChunkFilters(
+            time_dim=template.APPEND_DIMENSION,
+            time_start=filter_init_time_start,
+            time_end=filter_init_time_end,
+            variable_names=filter_variable_names,
+        ),
+    )
 
 
 @app.command()
@@ -24,9 +37,23 @@ def reformat_kubernetes(
     jobs_per_pod: int = 10,
     max_parallelism: int = 32,
     docker_image: str | None = None,
+    skip_write_template: bool = False,
+    filter_init_time_start: str | None = None,
+    filter_init_time_end: str | None = None,
+    filter_variable_names: list[str] | None = None,
 ) -> None:
     reformat.reformat_kubernetes(
-        init_time_end, jobs_per_pod, max_parallelism, docker_image=docker_image
+        init_time_end,
+        jobs_per_pod,
+        max_parallelism,
+        docker_image=docker_image,
+        skip_write_template=skip_write_template,
+        chunk_filters=reformat.ChunkFilters(
+            time_dim=template.APPEND_DIMENSION,
+            time_start=filter_init_time_start,
+            time_end=filter_init_time_end,
+            variable_names=filter_variable_names,
+        ),
     )
 
 
@@ -35,9 +62,20 @@ def reformat_chunks(
     init_time_end: str,
     worker_index: Annotated[int, typer.Argument(envvar="WORKER_INDEX")],
     workers_total: Annotated[int, typer.Argument(envvar="WORKERS_TOTAL")],
+    filter_init_time_start: str | None = None,
+    filter_init_time_end: str | None = None,
+    filter_variable_names: list[str] | None = None,
 ) -> None:
     reformat.reformat_chunks(
-        init_time_end, worker_index=worker_index, workers_total=workers_total
+        init_time_end,
+        worker_index=worker_index,
+        workers_total=workers_total,
+        chunk_filters=reformat.ChunkFilters(
+            time_dim=template.APPEND_DIMENSION,
+            time_start=filter_init_time_start,
+            time_end=filter_init_time_end,
+            variable_names=filter_variable_names,
+        ),
     )
 
 

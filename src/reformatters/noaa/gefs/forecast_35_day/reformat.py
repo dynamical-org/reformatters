@@ -11,6 +11,7 @@ import pandas as pd
 import sentry_sdk
 import xarray as xr
 import zarr
+from pydantic import BaseModel
 
 from reformatters.common import docker, validation
 from reformatters.common.config import Config  # noqa:F401
@@ -42,7 +43,19 @@ _VALIDATION_CRON_SCHEDULE = "0 10 * * *"  # At 10:00 UTC every day.
 logger = get_logger(__name__)
 
 
-def reformat_local(init_time_end: DatetimeLike) -> None:
+class ChunkFilters(BaseModel):
+    """
+    Filters for controlling which chunks of data to process.
+    Only necessary if you don't want to process all data.
+    """
+
+    time_dim: str
+    time_start: str | None = None
+    time_end: str | None = None
+    variable_names: list[str] | None = None
+
+
+def reformat_local(init_time_end: DatetimeLike, chunk_filters: ChunkFilters) -> None:
     template_ds = template.get_template(init_time_end)
     store = get_store()
 
@@ -51,7 +64,9 @@ def reformat_local(init_time_end: DatetimeLike) -> None:
 
     logger.info("Starting reformat")
     # Process all chunks by setting worker_index=0 and worker_total=1
-    reformat_chunks(init_time_end, worker_index=0, workers_total=1)
+    reformat_chunks(
+        init_time_end, worker_index=0, workers_total=1, chunk_filters=chunk_filters
+    )
     logger.info(f"Done writing to {store}")
 
 
@@ -59,20 +74,35 @@ def reformat_kubernetes(
     init_time_end: DatetimeLike,
     jobs_per_pod: int,
     max_parallelism: int,
+    chunk_filters: ChunkFilters,
     docker_image: str | None = None,
+    skip_write_template: bool = False,
 ) -> None:
     image_tag = docker_image or docker.build_and_push_image()
 
     template_ds = template.get_template(init_time_end)
     store = get_store()
-    logger.info(f"Writing zarr metadata to {store.path}")
-    template.write_metadata(template_ds, store, get_mode(store))
+    if not skip_write_template:
+        logger.info(f"Writing zarr metadata to {store.path}")
+        template.write_metadata(template_ds, store, get_mode(store))
 
-    num_jobs = sum(1 for _ in all_jobs_ordered(template_ds))
+    num_jobs = sum(1 for _ in all_jobs_ordered(template_ds, chunk_filters))
     workers_total = int(np.ceil(num_jobs / jobs_per_pod))
     parallelism = min(workers_total, max_parallelism)
 
     dataset_id = template_ds.attrs["dataset_id"]
+
+    command = [
+        "reformat-chunks",
+        pd.Timestamp(init_time_end).isoformat(),
+    ]
+    if chunk_filters.time_start is not None:
+        command.append(f"--filter-init-time-start={chunk_filters.time_start}")
+    if chunk_filters.time_end is not None:
+        command.append(f"--filter-init-time-end={chunk_filters.time_end}")
+    if chunk_filters.variable_names is not None:
+        for variable_name in chunk_filters.variable_names:
+            command.append(f"--filter-variable-names={variable_name}")
 
     kubernetes_job = Job(
         image=image_tag,
@@ -83,10 +113,7 @@ def reformat_kubernetes(
         memory="60G",  # fit on 64GB node
         shared_memory="24G",
         ephemeral_storage="60G",
-        command=[
-            "reformat-chunks",
-            pd.Timestamp(init_time_end).isoformat(),
-        ],
+        command=command,
     )
     subprocess.run(  # noqa: S603
         ["/usr/bin/kubectl", "apply", "-f", "-"],
@@ -99,7 +126,11 @@ def reformat_kubernetes(
 
 
 def reformat_chunks(
-    init_time_end: DatetimeLike, *, worker_index: int, workers_total: int
+    init_time_end: DatetimeLike,
+    *,
+    worker_index: int,
+    workers_total: int,
+    chunk_filters: ChunkFilters,
 ) -> None:
     """Writes out array chunk data. Assumes the dataset metadata has already been written."""
     assert worker_index < workers_total
@@ -107,7 +138,7 @@ def reformat_chunks(
     store = get_store()
 
     worker_jobs = get_worker_jobs(
-        all_jobs_ordered(template_ds),
+        all_jobs_ordered(template_ds, chunk_filters),
         worker_index,
         workers_total,
     )
@@ -311,8 +342,25 @@ def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
 
 def all_jobs_ordered(
     template_ds: xr.Dataset,
+    chunk_filters: ChunkFilters,
 ) -> list[tuple[slice, list[str]]]:
-    init_time_i_slices = dimension_slices(template_ds, template.APPEND_DIMENSION)
+    if chunk_filters.time_start is not None:
+        template_ds = template_ds.sel(
+            {chunk_filters.time_dim: slice(chunk_filters.time_start, None)}
+        )
+    if chunk_filters.time_end is not None:
+        # end point is exclusive
+        template_ds = template_ds.sel(
+            {
+                chunk_filters.time_dim: template_ds[chunk_filters.time_dim]
+                < pd.Timestamp(chunk_filters.time_end)  # type: ignore[operator]
+            }
+        )
+    if chunk_filters.variable_names is not None:
+        template_ds = template_ds[chunk_filters.variable_names]
+
+    time_i_slices = dimension_slices(template_ds, chunk_filters.time_dim)
+
     data_var_groups = group_data_vars_by_gefs_file_type(
         [d for d in template.DATA_VARIABLES if d.name in template_ds],
         group_size=_VARIABLES_PER_BACKFILL_JOB,
@@ -320,7 +368,8 @@ def all_jobs_ordered(
     data_var_name_groups = [
         [data_var.name for data_var in data_vars] for _, _, data_vars in data_var_groups
     ]
-    return list(product(init_time_i_slices, data_var_name_groups))
+
+    return list(product(time_i_slices, data_var_name_groups))
 
 
 def get_store() -> zarr.storage.FsspecStore:
