@@ -46,7 +46,7 @@ logger = get_logger(__name__)
 class ChunkFilters(BaseModel):
     """
     Filters for controlling which chunks of data to process.
-    Only necessary if you don't want to process all data.
+    A value of None means no filtering.
     """
 
     time_dim: str
@@ -92,10 +92,7 @@ def reformat_kubernetes(
 
     dataset_id = template_ds.attrs["dataset_id"]
 
-    command = [
-        "reformat-chunks",
-        pd.Timestamp(init_time_end).isoformat(),
-    ]
+    command = ["reformat-chunks", pd.Timestamp(init_time_end).isoformat()]
     if chunk_filters.time_start is not None:
         command.append(f"--filter-init-time-start={chunk_filters.time_start}")
     if chunk_filters.time_end is not None:
