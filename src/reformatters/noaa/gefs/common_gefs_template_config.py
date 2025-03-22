@@ -305,6 +305,7 @@ def get_shared_data_var_configs(
                 gefs_file_type="s+a",
                 index_position=18,
                 include_lead_time_suffix=True,
+                deaccumulate_to_rates=True,
                 keep_mantissa_bits=keep_mantissa_bits_default,
             ),
         ),
