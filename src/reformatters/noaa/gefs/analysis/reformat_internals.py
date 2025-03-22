@@ -372,7 +372,7 @@ def read_into_data_array(
 def apply_data_transformations_inplace(
     data_array: xr.DataArray, data_var: DataVar[Any]
 ) -> None:
-    if data_var.attrs.step_type == "accum":
+    if data_var.internal_attrs.deaccumulate_to_rates:
         logger.info(f"Converting {data_var.name} from accumulations to rates")
         try:
             deaccumulate_to_rates_inplace(data_array, dim="lead_time")
