@@ -14,7 +14,7 @@ import xarray as xr
 
 from reformatters.common.config import Config
 from reformatters.common.config_models import EnsembleStatistic
-from reformatters.common.downloading import download_to_disk, http_store
+from reformatters.common.download import download_to_disk, http_store
 from reformatters.common.types import Array2D
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFSDataVar,

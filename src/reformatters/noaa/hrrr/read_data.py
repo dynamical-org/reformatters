@@ -4,7 +4,7 @@ from typing import TypedDict
 import pandas as pd
 
 from reformatters.common.config import Config
-from reformatters.common.downloading import download_to_disk, http_store
+from reformatters.common.download import download_to_disk, http_store
 from reformatters.noaa.hrrr.hrrr_config_models import (
     HRRRDomain,
     HRRRFileType,
