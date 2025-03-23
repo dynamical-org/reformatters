@@ -31,7 +31,9 @@ LEAD_TIME_FREQUENCY = pd.Timedelta("1h")
 EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR = pd.Series(
     {
         **{h: pd.Timedelta("18h") for h in range(0, 24)},
-        **{h: pd.Timedelta("48h") for h in range(0, 24, 6)},  # must be splatted last to overwrite 18h values
+        **{
+            h: pd.Timedelta("48h") for h in range(0, 24, 6)
+        },  # must be splatted last to overwrite 18h values
     }
 )
 
@@ -62,8 +64,8 @@ def get_template_dimension_coordinates() -> dict[str, Any]:
     return {
         "init_time": get_init_time_coordinates(INIT_TIME_START + INIT_TIME_FREQUENCY),
         "lead_time": pd.timedelta_range("0h", "48h", freq=LEAD_TIME_FREQUENCY),
-        "x": np.arange(1059),
-        "y": np.arange(1799),
+        "x": np.arange(1799),
+        "y": np.arange(1059),
     }
 
 
@@ -78,12 +80,22 @@ def get_init_time_coordinates(
 # TODO
 # CHUNKS
 # These chunks are about XXXmb of uncompressed float32s
-CHUNKS: dict[Dim, int] = {}
+CHUNKS: dict[Dim, int] = {
+    "init_time": 1,
+    "lead_time": 49,
+    "y": 180,
+    "x": 180,
+}
 
 # TODO
 # SHARDS
 # About XXXMB compressed, about XXGB uncompressed
-SHARDS: dict[Dim, int] = {}
+SHARDS: dict[Dim, int] = {
+    "init_time": 1,
+    "lead_time": 49,
+    "y": 180 * 3,  # 2 shards
+    "x": 180 * 3,  # 4 shards
+}
 
 # TODO: Remove default sizes probably
 CHUNKS_ORDERED = tuple(CHUNKS.get(dim, 1) for dim in DIMS)
