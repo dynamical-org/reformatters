@@ -70,7 +70,5 @@ def derive_coordinates(
             ("init_time",),
             EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR.loc[ds["init_time"].dt.hour],
         ),
-        # TODO: This used to be ds["init_time"] + ds["lead_time"], but that didn't validate.
-        # Want to understand why it was that way in GEFS.
-        "valid_time": ds["init_time"],
+        "valid_time": ds["init_time"] + ds["lead_time"],
     }
