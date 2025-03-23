@@ -341,22 +341,32 @@ def all_jobs_ordered(
     template_ds: xr.Dataset,
     chunk_filters: ChunkFilters,
 ) -> list[tuple[slice, list[str]]]:
-    if chunk_filters.time_start is not None:
-        template_ds = template_ds.sel(
-            {chunk_filters.time_dim: slice(chunk_filters.time_start, None)}
-        )
-    if chunk_filters.time_end is not None:
-        # end point is exclusive
-        template_ds = template_ds.sel(
-            {
-                chunk_filters.time_dim: template_ds[chunk_filters.time_dim]
-                < pd.Timestamp(chunk_filters.time_end)  # type: ignore[operator]
-            }
-        )
     if chunk_filters.variable_names is not None:
         template_ds = template_ds[chunk_filters.variable_names]
 
     time_i_slices = dimension_slices(template_ds, chunk_filters.time_dim)
+
+    if chunk_filters.time_start is not None:
+        time_start = pd.Timestamp(chunk_filters.time_start)
+        time_i_slices = tuple(
+            time_i_slice
+            for time_i_slice in time_i_slices
+            if template_ds.isel({chunk_filters.time_dim: time_i_slice})[
+                chunk_filters.time_dim
+            ].min()
+            >= time_start  # type: ignore[operator]
+        )
+
+    if chunk_filters.time_end is not None:
+        time_end = pd.Timestamp(chunk_filters.time_end)
+        time_i_slices = tuple(
+            time_i_slice
+            for time_i_slice in time_i_slices
+            if template_ds.isel({chunk_filters.time_dim: time_i_slice})[
+                chunk_filters.time_dim
+            ].max()
+            < time_end  # type: ignore[operator]
+        )
 
     data_var_groups = group_data_vars_by_gefs_file_type(
         [d for d in template.DATA_VARIABLES if d.name in template_ds],
