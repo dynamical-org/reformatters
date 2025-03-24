@@ -18,7 +18,7 @@ from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
-from reformatters.noaa.gfs.gfs_config_models import GFSDataVar, GFSInternalAttrs
+from reformatters.noaa.noaa_config_models import NOAADataVar, NOAAInternalAttrs
 
 DATASET_ID = "noaa-gfs-forecast"
 DATASET_VERSION = "0.0.0"
@@ -259,8 +259,8 @@ COORDINATES: Sequence[Coordinate] = (
 )
 
 # index_position = BAND - 1 from the grib files
-DATA_VARIABLES: Sequence[GFSDataVar] = (
-    GFSDataVar(
+DATA_VARIABLES: Sequence[NOAADataVar] = (
+    NOAADataVar(
         name="pressure_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -270,7 +270,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             step_type="instant",
             standard_name="surface_air_pressure",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="PRES",
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
@@ -278,7 +278,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             keep_mantissa_bits=10,
         ),
     ),
-    GFSDataVar(
+    NOAADataVar(
         name="temperature_2m",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -288,7 +288,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             step_type="instant",
             standard_name="air_temperature",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="TMP",
             grib_description='2[m] HTGL="Specified height level above ground"',
             grib_index_level="2 m above ground",
@@ -296,7 +296,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
-    GFSDataVar(
+    NOAADataVar(
         name="relative_humidity_2m",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -306,7 +306,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             step_type="instant",
             standard_name="relative_humidity",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="RH",
             grib_description='2[m] HTGL="Specified height level above ground"',
             grib_index_level="2 m above ground",
@@ -314,7 +314,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
-    GFSDataVar(
+    NOAADataVar(
         name="maximum_temperature_2m",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -323,7 +323,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             units="C",
             step_type="max",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="TMAX",
             grib_description='2[m] HTGL="Specified height level above ground"',
             grib_index_level="2 m above ground",
@@ -331,7 +331,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
-    GFSDataVar(
+    NOAADataVar(
         name="minimum_temperature_2m",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -340,7 +340,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             units="C",
             step_type="min",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="TMIN",
             grib_description='2[m] HTGL="Specified height level above ground"',
             grib_index_level="2 m above ground",
@@ -348,7 +348,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
-    GFSDataVar(
+    NOAADataVar(
         name="wind_u_10m",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -358,7 +358,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             step_type="instant",
             standard_name="eastward_wind",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="UGRD",
             grib_description='10[m] HTGL="Specified height level above ground"',
             grib_index_level="10 m above ground",
@@ -366,7 +366,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             keep_mantissa_bits=6,
         ),
     ),
-    GFSDataVar(
+    NOAADataVar(
         name="wind_v_10m",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -376,7 +376,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             step_type="instant",
             standard_name="northward_wind",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="VGRD",
             grib_description='10[m] HTGL="Specified height level above ground"',
             grib_index_level="10 m above ground",
@@ -384,7 +384,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             keep_mantissa_bits=6,
         ),
     ),
-    GFSDataVar(
+    NOAADataVar(
         name="wind_u_100m",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -394,7 +394,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             units="m/s",
             step_type="instant",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="UGRD",
             grib_description='100[m] HTGL="Specified height level above ground"',
             grib_index_level="100 m above ground",
@@ -402,7 +402,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             keep_mantissa_bits=6,
         ),
     ),
-    GFSDataVar(
+    NOAADataVar(
         name="wind_v_100m",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -412,7 +412,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             step_type="instant",
             standard_name="northward_wind",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="VGRD",
             grib_index_level="100 m above ground",
             grib_description='100[m] HTGL="Specified height level above ground"',
@@ -420,7 +420,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             keep_mantissa_bits=6,
         ),
     ),
-    GFSDataVar(
+    NOAADataVar(
         name="percent_frozen_precipitation_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -429,7 +429,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             units="%",
             step_type="instant",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="CPOFP",
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
@@ -437,7 +437,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
-    GFSDataVar(
+    NOAADataVar(
         name="precipitation_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -447,7 +447,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             comment="Average precipitation rate since the previous forecast step.",
             step_type="avg",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="APCP",
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
@@ -458,7 +458,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
     ),
     # TODO: There are multiple categorical surface variables
     # We can differentiate them by GRIB_FORECAST_SECONDS
-    GFSDataVar(
+    NOAADataVar(
         name="categorical_snow_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -467,7 +467,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             units="0=no; 1=yes",
             step_type="avg",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="CSNOW",
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
@@ -475,7 +475,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_CATEGORICAL,
         ),
     ),
-    GFSDataVar(
+    NOAADataVar(
         name="categorical_ice_pellets_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -484,7 +484,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             units="0=no; 1=yes",
             step_type="avg",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="CICEP",
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
@@ -492,7 +492,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_CATEGORICAL,
         ),
     ),
-    GFSDataVar(
+    NOAADataVar(
         name="categorical_freezing_rain_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -501,7 +501,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             units="0=no; 1=yes",
             step_type="avg",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="CFRZR",
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
@@ -509,7 +509,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_CATEGORICAL,
         ),
     ),
-    GFSDataVar(
+    NOAADataVar(
         name="categorical_rain_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -518,7 +518,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             units="0=no; 1=yes",
             step_type="avg",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="CRAIN",
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
@@ -526,7 +526,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_CATEGORICAL,
         ),
     ),
-    GFSDataVar(
+    NOAADataVar(
         name="precipitable_water_atmosphere",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -535,7 +535,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             units="kg/(m^2)",
             step_type="instant",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="PWAT",
             grib_description='0[-] EATM="Entire atmosphere (considered as a single layer)"',
             grib_index_level="entire atmosphere (considered as a single layer)",
@@ -543,7 +543,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
-    GFSDataVar(
+    NOAADataVar(
         name="total_cloud_cover_atmosphere",
         encoding=replace(ENCODING_FLOAT32_DEFAULT),
         attrs=DataVarAttrs(
@@ -552,7 +552,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             units="%",
             step_type="avg",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="TCDC",
             grib_description='0[-] EATM="Entire Atmosphere"',
             grib_index_level="entire atmosphere",
@@ -560,7 +560,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
-    GFSDataVar(
+    NOAADataVar(
         name="geopotential_height_cloud_ceiling",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -570,7 +570,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             step_type="instant",
             standard_name="geopotential_height",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="HGT",
             grib_description='0[-] CEIL="Cloud ceiling"',
             grib_index_level="cloud ceiling",
@@ -578,7 +578,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             keep_mantissa_bits=8,
         ),
     ),
-    GFSDataVar(
+    NOAADataVar(
         name="downward_short_wave_radiation_flux_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -587,7 +587,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             units="W/(m^2)",
             step_type="avg",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="DSWRF",
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
@@ -595,7 +595,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
-    GFSDataVar(
+    NOAADataVar(
         name="downward_long_wave_radiation_flux_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -604,7 +604,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             units="W/(m^2)",
             step_type="avg",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="DLWRF",
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
@@ -612,7 +612,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
-    GFSDataVar(
+    NOAADataVar(
         name="pressure_reduced_to_mean_sea_level",
         encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
@@ -621,7 +621,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             units="Pa",
             step_type="instant",
         ),
-        internal_attrs=GFSInternalAttrs(
+        internal_attrs=NOAAInternalAttrs(
             grib_element="PRMSL",
             grib_description='0[-] MSL="Mean sea level"',
             grib_index_level="mean sea level",
