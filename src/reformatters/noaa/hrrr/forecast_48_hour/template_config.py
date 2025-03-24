@@ -97,9 +97,8 @@ SHARDS: dict[Dim, int] = {
     "x": 180 * 3,  # 4 shards
 }
 
-# TODO: Remove default sizes probably
-CHUNKS_ORDERED = tuple(CHUNKS.get(dim, 1) for dim in DIMS)
-SHARDS_ORDERED = tuple(SHARDS.get(dim, 1) for dim in DIMS)
+CHUNKS_ORDERED = tuple(CHUNKS[dim] for dim in DIMS)
+SHARDS_ORDERED = tuple(SHARDS[dim] for dim in DIMS)
 
 
 # TODO: review chunksize
