@@ -1,16 +1,12 @@
-import contextlib
-import functools
 import hashlib
 import os
 import re
 import warnings
-from collections.abc import Iterable, Sequence
-from datetime import timedelta
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Literal, TypedDict, assert_never
 
 import numpy as np
-import obstore
 import pandas as pd
 import rasterio  # type: ignore
 import requests
@@ -18,6 +14,7 @@ import xarray as xr
 
 from reformatters.common.config import Config
 from reformatters.common.config_models import EnsembleStatistic
+from reformatters.common.download import download_to_disk, http_store
 from reformatters.common.types import Array2D
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFSDataVar,
@@ -334,61 +331,3 @@ class DefaultTimeoutHTTPAdapter(requests.adapters.HTTPAdapter):
         if kwargs.get("timeout") is None:
             kwargs["timeout"] = self.default_timeout
         return super().send(*args, **kwargs)
-
-
-@functools.cache
-def http_store(base_url: str) -> obstore.store.HTTPStore:
-    """
-    A obstore.store.HTTPStore tuned to maximize chance of success at the expense
-    of latency, while not waiting indefinitely for unresponsive servers.
-    """
-    return obstore.store.HTTPStore.from_url(
-        base_url,
-        client_options={
-            "connect_timeout": "4 seconds",
-            "timeout": "16 seconds",
-        },
-        retry_config={
-            "max_retries": 16,
-            "backoff": {
-                "base": 2,
-                "init_backoff": timedelta(seconds=1),
-                "max_backoff": timedelta(seconds=16),
-            },
-            # A backstop, shouldn't hit this with the above backoff settings
-            "retry_timeout": timedelta(minutes=5),
-        },
-    )
-
-
-def download_to_disk(
-    store: obstore.store.HTTPStore,
-    path: str,
-    local_path: Path,
-    *,
-    byte_ranges: tuple[Sequence[int], Sequence[int]] | None = None,
-    overwrite_existing: bool,
-) -> None:
-    if not overwrite_existing and local_path.exists():
-        return
-
-    local_path.parent.mkdir(parents=True, exist_ok=True)
-
-    response_buffers: obstore.BytesStream | list[obstore.Bytes]
-    if byte_ranges is not None:
-        byte_range_starts, byte_range_ends = byte_ranges[0], byte_ranges[1]
-        response_buffers = obstore.get_ranges(
-            store=store, path=path, starts=byte_range_starts, ends=byte_range_ends
-        )
-    else:
-        response_buffers = obstore.get(store, path).stream()
-
-    try:
-        with open(local_path, "wb") as file:
-            for buffer in response_buffers:
-                file.write(buffer)
-
-    except Exception:
-        with contextlib.suppress(FileNotFoundError):
-            os.remove(local_path)
-        raise
