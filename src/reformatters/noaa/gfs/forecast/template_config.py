@@ -23,19 +23,20 @@ from reformatters.noaa.gfs.gfs_config_models import GFSDataVar, GFSInternalAttrs
 DATASET_ID = "noaa-gfs-forecast"
 DATASET_VERSION = "0.0.0"
 
-INIT_TIME_START = pd.Timestamp("2021-04-13T00:00")
+# Technically there is data going back to 2021-04-13 but we are choosing a round date to start with
+INIT_TIME_START = pd.Timestamp("2021-05-01T00:00")
 INIT_TIME_FREQUENCY = pd.Timedelta("6h")
 
 DATASET_ATTRIBUTES = DatasetAttributes(
     dataset_id=DATASET_ID,
     dataset_version=DATASET_VERSION,
-    name="NOAA GFS forecast, 16 day",
+    name="NOAA GFS forecast",
     description="Weather forecasts from the Global Forecast System (GFS) operated by NOAA NWS NCEP.",
-    attribution="NOAA NWS NCEP GEFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
+    attribution="NOAA NWS NCEP GFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
     spatial_domain="Global",
-    spatial_resolution="0-384 hours: 0.25 degrees (~20km)",
+    spatial_resolution="0.25 degrees (~20km)",
     time_domain=f"Forecasts initialized {INIT_TIME_START} UTC to Present",
-    time_resolution="Forecasts initialized every 6 hours.",
+    time_resolution=f"Forecasts initialized every {int(INIT_TIME_FREQUENCY.total_seconds() / 3600)} hours.",
     forecast_domain="Forecast lead time 0-384 hours (0-16 days) ahead",
     forecast_resolution="Forecast step 0-120 hours: hourly, 123-384 hours: 3 hourly",
 )
@@ -68,7 +69,7 @@ def get_init_time_coordinates(
     )
 
 
-# TODO: Refine chunks and shards. These are copied from GEFS for now
+# TODO: Refine chunks and shards. These are copied from GFS for now
 # CHUNKS
 VAR_CHUNKS: dict[Dim, int] = {
     "init_time": 1,  # one forecast per chunk
@@ -99,8 +100,8 @@ VAR_SHARDS_ORDERED = tuple(VAR_SHARDS[dim] for dim in VAR_DIMS)
 # (doing this correctly is a key benefit of icechunk).
 INIT_TIME_COORDINATE_CHUNK_SIZE = int(pd.Timedelta(days=365 * 15) / INIT_TIME_FREQUENCY)
 
-GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT: Final[int] = 7
-GEFS_BITROUND_KEEP_MANTISSA_BITS_CATEGORICAL: Final[Literal["no-rounding"]] = (
+GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT: Final[int] = 7
+GFS_BITROUND_KEEP_MANTISSA_BITS_CATEGORICAL: Final[Literal["no-rounding"]] = (
     "no-rounding"
 )
 
@@ -210,8 +211,8 @@ COORDINATES: Sequence[Coordinate] = (
             fill_value=-1,
             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             units="seconds",
-            chunks=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
-            shards=(INIT_TIME_COORDINATE_CHUNK_SIZE, len(_dim_coords["lead_time"])),
+            chunks=INIT_TIME_COORDINATE_CHUNK_SIZE,
+            shards=INIT_TIME_COORDINATE_CHUNK_SIZE,
         ),
         attrs=CoordinateAttrs(
             units="seconds",
@@ -261,7 +262,7 @@ COORDINATES: Sequence[Coordinate] = (
 DATA_VARIABLES: Sequence[GFSDataVar] = (
     GFSDataVar(
         name="pressure_surface",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT),
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="sp",
             long_name="Surface pressure",
@@ -274,7 +275,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
             index_position=560,
-            keep_mantissa_bits=8,
+            keep_mantissa_bits=10,
         ),
     ),
     GFSDataVar(
@@ -292,12 +293,12 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             grib_description='2[m] HTGL="Specified height level above ground"',
             grib_index_level="2 m above ground",
             index_position=580,
-            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
+            keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     GFSDataVar(
         name="relative_humidity_2m",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT),
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="r2",
             long_name="2 metre relative humidity",
@@ -310,7 +311,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             grib_description='2[m] HTGL="Specified height level above ground"',
             grib_index_level="2 m above ground",
             index_position=583,
-            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
+            keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     GFSDataVar(
@@ -327,7 +328,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             grib_description='2[m] HTGL="Specified height level above ground"',
             grib_index_level="2 m above ground",
             index_position=585,
-            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
+            keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     GFSDataVar(
@@ -344,7 +345,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             grib_description='2[m] HTGL="Specified height level above ground"',
             grib_index_level="2 m above ground",
             index_position=586,
-            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
+            keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     GFSDataVar(
@@ -433,7 +434,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
             index_position=590,
-            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
+            keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     GFSDataVar(
@@ -452,7 +453,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             grib_index_level="surface",
             index_position=595,
             include_lead_time_suffix=True,
-            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
+            keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     # TODO: There are multiple categorical surface variables
@@ -471,7 +472,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
             index_position=604,
-            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_CATEGORICAL,
+            keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_CATEGORICAL,
         ),
     ),
     GFSDataVar(
@@ -488,7 +489,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
             index_position=605,
-            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_CATEGORICAL,
+            keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_CATEGORICAL,
         ),
     ),
     GFSDataVar(
@@ -505,7 +506,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
             index_position=606,
-            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_CATEGORICAL,
+            keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_CATEGORICAL,
         ),
     ),
     GFSDataVar(
@@ -522,7 +523,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
             index_position=607,
-            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_CATEGORICAL,
+            keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_CATEGORICAL,
         ),
     ),
     GFSDataVar(
@@ -539,7 +540,7 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             grib_description='0[-] EATM="Entire atmosphere (considered as a single layer)"',
             grib_index_level="entire atmosphere (considered as a single layer)",
             index_position=625,
-            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
+            keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     GFSDataVar(
@@ -549,8 +550,6 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             short_name="tcc",
             long_name="Total Cloud Cover",
             units="%",
-            # TODO check comment
-            comment="Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
             step_type="avg",
         ),
         internal_attrs=GFSInternalAttrs(
@@ -558,12 +557,12 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             grib_description='0[-] EATM="Entire Atmosphere"',
             grib_index_level="entire atmosphere",
             index_position=635,
-            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
+            keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     GFSDataVar(
         name="geopotential_height_cloud_ceiling",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT),
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="gh",
             long_name="Geopotential height",
@@ -586,7 +585,6 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             short_name="sdswrf",
             long_name="Surface downward short-wave radiation flux",
             units="W/(m^2)",
-            comment="Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
             step_type="avg",
         ),
         internal_attrs=GFSInternalAttrs(
@@ -594,17 +592,16 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
             index_position=652,
-            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
+            keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     GFSDataVar(
         name="downward_long_wave_radiation_flux_surface",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT),
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="sdlwrf",
             long_name="Surface downward long-wave radiation flux",
             units="W/(m^2)",
-            comment="Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
             step_type="avg",
         ),
         internal_attrs=GFSInternalAttrs(
@@ -612,12 +609,12 @@ DATA_VARIABLES: Sequence[GFSDataVar] = (
             grib_description='0[-] SFC="Ground or water surface"',
             grib_index_level="surface",
             index_position=653,
-            keep_mantissa_bits=GEFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
+            keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
     GFSDataVar(
         name="pressure_reduced_to_mean_sea_level",
-        encoding=replace(ENCODING_FLOAT32_DEFAULT),
+        encoding=ENCODING_FLOAT32_DEFAULT,
         attrs=DataVarAttrs(
             short_name="prmsl",
             long_name="Pressure reduced to MSL",
