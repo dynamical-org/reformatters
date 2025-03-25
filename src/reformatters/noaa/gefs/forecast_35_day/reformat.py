@@ -76,15 +76,13 @@ def reformat_kubernetes(
     max_parallelism: int,
     chunk_filters: ChunkFilters,
     docker_image: str | None = None,
-    skip_write_template: bool = False,
 ) -> None:
     image_tag = docker_image or docker.build_and_push_image()
 
     template_ds = template.get_template(init_time_end)
     store = get_store()
-    if not skip_write_template:
-        logger.info(f"Writing zarr metadata to {store.path}")
-        template.write_metadata(template_ds, store, get_mode(store))
+    logger.info(f"Writing zarr metadata to {store.path}")
+    template.write_metadata(template_ds, store, get_mode(store))
 
     num_jobs = sum(1 for _ in all_jobs_ordered(template_ds, chunk_filters))
     workers_total = int(np.ceil(num_jobs / jobs_per_pod))

@@ -37,7 +37,6 @@ def reformat_kubernetes(
     jobs_per_pod: int = 10,
     max_parallelism: int = 32,
     docker_image: str | None = None,
-    skip_write_template: bool = False,
     filter_init_time_start: str | None = None,
     filter_init_time_end: str | None = None,
     filter_variable_names: list[str] | None = None,
@@ -47,7 +46,6 @@ def reformat_kubernetes(
         jobs_per_pod,
         max_parallelism,
         docker_image=docker_image,
-        skip_write_template=skip_write_template,
         chunk_filters=reformat.ChunkFilters(
             time_dim=template.APPEND_DIMENSION,
             time_start=filter_init_time_start,
