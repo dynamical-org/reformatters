@@ -25,11 +25,11 @@ from reformatters.common.iterating import (
 from reformatters.common.logging import get_logger
 from reformatters.common.types import ArrayFloat32
 from reformatters.noaa.gefs.analysis import template
-from reformatters.noaa.gefs.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
 from reformatters.noaa.gefs.read_data import (
     SourceFileCoords,
     download_file,
+    is_v12_index,
     read_into,
 )
 
@@ -204,7 +204,11 @@ def generate_chunk_coordinates(
 ) -> dict[str, Sequence[SourceFileCoords]]:
     """Construct the init time and lead time coordinates which correspond to each time in `chunk_times`."""
     times = pd.to_datetime(chunk_times)  # type: ignore[call-overload]
+
+    times = filter_available_times(times)
+
     init_times = times.floor(init_time_frequency)
+
     # If var doesn't have hour 0 values we have to go back one forecast.
     # eg. Get the 6th hour rather than the 0th hour for 6-hourly init times.
     if not var_has_hour_0_values:
@@ -222,6 +226,13 @@ def generate_chunk_coordinates(
         for init_time, lead_time in zip(init_times, lead_times, strict=True)
     ]
     return {"ensemble": ensemble_coords}
+
+
+def filter_available_times(times: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    """Before v12, GEFS files had a 6 hour step."""
+    # pre-v12 data is all we have for the 9 month period after the v12 reforecast ends
+    # 2019-12-31 and before the v12 forecast archive starts 2020-10-01.
+    return times[is_v12_index(times) | (times.hour % 6 == 0)]
 
 
 def data_var_has_hour_0_values(data_var: DataVar[Any]) -> bool:
@@ -372,13 +383,14 @@ def read_into_data_array(
 def apply_data_transformations_inplace(
     data_array: xr.DataArray, data_var: DataVar[Any]
 ) -> None:
-    if data_var.internal_attrs.deaccumulate_to_rates:
-        logger.info(f"Converting {data_var.name} from accumulations to rates")
-        try:
-            deaccumulate_to_rates_inplace(data_array, dim="lead_time")
-        except ValueError:
-            # Log exception so we are notified if deaccumulation errors are larger than expected.
-            logger.exception(f"Error deaccumulating {data_var.name}")
+    # TODO refactor deaccumulation to work with the `time` not lead_time dimension
+    # if data_var.internal_attrs.deaccumulate_to_rates:
+    #     logger.info(f"Converting {data_var.name} from accumulations to rates")
+    #     try:
+    #         deaccumulate_to_rates_inplace(data_array, dim="time")
+    #     except ValueError:
+    #         # Log exception so we are notified if deaccumulation errors are larger than expected.
+    #         logger.exception(f"Error deaccumulating {data_var.name}")
 
     keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
     if isinstance(keep_mantissa_bits, int):
