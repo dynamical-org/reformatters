@@ -15,11 +15,14 @@ import xarray as xr
 from reformatters.common.config import Config
 from reformatters.common.config_models import EnsembleStatistic
 from reformatters.common.download import download_to_disk, http_store
+from reformatters.common.logging import get_logger
 from reformatters.common.types import Array2D
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFSDataVar,
     GEFSFileType,
 )
+
+logger = get_logger(__name__)
 
 FILE_RESOLUTIONS = {
     "s": "0p25",
@@ -48,6 +51,24 @@ type SourceFileCoords = EnsembleSourceFileCoords | StatisticSourceFileCoords
 class ChunkCoordinates(TypedDict):
     ensemble: Iterable[EnsembleSourceFileCoords]
     statistic: Iterable[StatisticSourceFileCoords]
+
+
+# We pull data from three different periods of GEFS.
+#
+# 1. The current configuration archive, which is 0.25 degree data from 2020-10-01 to the present.
+# 2. The pre GEFS v12 archive, which is 1.0 degree data that we use from 2020-01-01 to 2020-09-30.
+# 3. The GEFS v12 reforecast archive, which is 0.25 degree data from 2000-01-01 to 2019-12-31.
+#
+GEFS_CURRENT_ARCHIVE_START = pd.Timestamp("2020-10-01T00:00")
+GEFS_REFORECAST_END = pd.Timestamp("2020-01-01T00:00")  # exclusive end point
+
+
+def is_v12(init_time: pd.Timestamp) -> bool:
+    return init_time < GEFS_REFORECAST_END or GEFS_CURRENT_ARCHIVE_START <= init_time
+
+
+def is_v12_index(times: pd.DatetimeIndex) -> np.ndarray[Any, np.dtype[np.bool]]:
+    return (times < GEFS_REFORECAST_END) | (GEFS_CURRENT_ARCHIVE_START <= times)
 
 
 def download_file(
@@ -82,23 +103,27 @@ def download_file(
             if data_var.attrs.step_type not in ("accum", "avg")
         ]
 
-    true_gefs_file_type = get_gefs_file_type_for_lead_time(lead_time, gefs_file_type)
+    true_gefs_file_type = get_gefs_file_type(init_time, lead_time, gefs_file_type)
 
-    remote_path = (
-        f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2{true_gefs_file_type}{FILE_RESOLUTIONS[true_gefs_file_type].strip('0')}/"
-        f"ge{ensemble_or_statistic_str}.t{init_hour_str}z.pgrb2{true_gefs_file_type}.{FILE_RESOLUTIONS[true_gefs_file_type]}.f{lead_time_hours:03.0f}"
-    )
+    if coords["init_time"] >= GEFS_CURRENT_ARCHIVE_START:
+        base_path = (
+            f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2{true_gefs_file_type}{FILE_RESOLUTIONS[true_gefs_file_type].strip('0')}/"
+            f"ge{ensemble_or_statistic_str}.t{init_hour_str}z.pgrb2{true_gefs_file_type}.{FILE_RESOLUTIONS[true_gefs_file_type]}.f{lead_time_hours:03.0f}"
+        )
+    elif coords["init_time"] >= GEFS_REFORECAST_END:
+        base_path = (
+            f"gefs.{init_date_str}/{init_hour_str}/pgrb2{true_gefs_file_type}/"
+            f"ge{ensemble_or_statistic_str}.t{init_hour_str}z.pgrb2{true_gefs_file_type}f{lead_time_hours:02.0f}"
+        )
+    else:
+        raise NotImplementedError(
+            f"GEFS before {GEFS_REFORECAST_END} not yet implemented"
+        )
 
-    store = http_store("https://storage.googleapis.com/gfs-ensemble-forecast-system")
+    store = http_store("https://noaa-gefs-pds.s3.amazonaws.com")
 
-    # Eccodes index files break unless the process working directory is the same as
-    # where the files are. To process many files in parallel, we need them all
-    # to be in the same directory so we replace / -> - in the file names to put
-    # all files in `directory`.
-    local_base_file_name = remote_path.replace("/", "_")
-
-    idx_remote_path = f"{remote_path}.idx"
-    idx_local_path = Path(DOWNLOAD_DIR, f"{local_base_file_name}.idx")
+    idx_remote_path = f"{base_path}.idx"
+    idx_local_path = Path(DOWNLOAD_DIR, f"{base_path}.idx")
 
     # Create a unique, human debuggable suffix representing the data vars stored in the output file
     vars_str = "-".join(
@@ -106,7 +131,7 @@ def download_file(
     )
     vars_hash = digest(format_gefs_idx_var(var_info) for var_info in gefs_idx_data_vars)
     vars_suffix = f"{vars_str}-{vars_hash}"
-    local_path = Path(DOWNLOAD_DIR, f"{local_base_file_name}.{vars_suffix}")
+    local_path = Path(DOWNLOAD_DIR, f"{base_path}.{vars_suffix}")
 
     try:
         download_to_disk(
@@ -122,7 +147,7 @@ def download_file(
 
         download_to_disk(
             store,
-            remote_path,
+            base_path,
             local_path,
             overwrite_existing=not Config.is_dev,
             byte_ranges=(byte_range_starts, byte_range_ends),
@@ -130,26 +155,36 @@ def download_file(
 
         return coords, local_path
 
-    except Exception as e:
-        print("Download failed", vars_str, e)
+    except Exception:
+        logger.exception("Download failed")
         return coords, None
 
 
-def get_gefs_file_type_for_lead_time(
-    lead_time: pd.Timedelta, gefs_file_type: GEFSFileType
+def get_gefs_file_type(
+    init_time: pd.Timestamp, lead_time: pd.Timedelta, gefs_file_type: GEFSFileType
 ) -> Literal["a", "b", "s"]:
-    if gefs_file_type == "s+a":
-        if lead_time <= pd.Timedelta(hours=240):
-            return "s"
+    if is_v12(init_time):
+        if gefs_file_type == "s+a":
+            if lead_time <= pd.Timedelta(hours=240):
+                return "s"
+            else:
+                return "a"
+        elif gefs_file_type == "s+b":
+            if lead_time <= pd.Timedelta(hours=240):
+                return "s"
+            else:
+                return "b"
         else:
-            return "a"
-    elif gefs_file_type == "s+b":
-        if lead_time <= pd.Timedelta(hours=240):
-            return "s"
-        else:
-            return "b"
+            return gefs_file_type
+
     else:
-        return gefs_file_type
+        match gefs_file_type:
+            case "s+a" | "a":
+                return "a"
+            case "s+b" | "b":
+                return "b"
+            case _ as unreachable:
+                assert_never(unreachable)
 
 
 def parse_index_byte_ranges(
@@ -234,8 +269,8 @@ def read_into(
             coords,
             data_var.internal_attrs.gefs_file_type,
         )
-    except Exception as e:
-        print("Read failed", coords, e)
+    except Exception:
+        logger.exception("Read failed")
         return
 
     if "init_time" in out.dims:
@@ -277,13 +312,16 @@ def read_rasterio(
         rasterio_band_index = matching_bands[0]
 
         result: Array2D[np.float32]
-        match get_gefs_file_type_for_lead_time(coords["lead_time"], gefs_file_type):
+        match get_gefs_file_type(
+            coords["init_time"], coords["lead_time"], gefs_file_type
+        ):
             case "a" | "b":
-                # Interpolate 0.5 degree data to the 0.25 degree grid.
-                # Every other 0.25 degree pixel's center aligns exactly with a 0.5 degree pixel's center.
-                # We use bilinear resampling to retain the exact values from the 0.5 degree data
+                # Interpolate 1.0/0.5 degree data to the 0.25 degree grid.
+                # Every 2nd (0.5 deg) or every 4th (1.0 deg) 0.25 degree pixel's center aligns exactly
+                # with a 1.0/0.5 degree pixel's center.
+                # We use bilinear resampling to retain the exact values from the 1.0/0.5 degree data
                 # at pixels that align, and give a conservative interpolated value for 0.25 degree pixels
-                # that fall between the 0.5 degree pixels.
+                # that fall between the 1.0/0.5 degree pixels.
                 # Diagram: https://github.com/dynamical-org/reformatters/pull/44#issuecomment-2683799073
                 # Note: having the .read() call interpolate gives very slightly shifted results
                 # so we pay for an extra memory allocation and use reproject to do the interpolation instead.
@@ -302,7 +340,8 @@ def read_rasterio(
                 )
                 if not Config.is_prod:
                     # Because the pixel centers are aligned we exactly retain the source data
-                    assert np.array_equal(raw, result[::2, ::2])
+                    step = 2 if is_v12(coords["init_time"]) else 4
+                    assert np.array_equal(raw, result[::step, ::step])
                 return result
             case "s":
                 # Confirm the arguments we use to resample 0.5 degree data
