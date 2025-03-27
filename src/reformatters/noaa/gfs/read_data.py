@@ -4,12 +4,11 @@ import re
 import warnings
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import TypedDict
 
 import numpy as np
 import pandas as pd
 import rasterio  # type: ignore
-import requests
 import xarray as xr
 
 from reformatters.common.config import Config
@@ -47,18 +46,12 @@ def download_file(
             if data_var.attrs.step_type not in ("accum", "avg")
         ]
 
-    remote_path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_time_hours:03.0f}"
+    base_path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_time_hours:03.0f}"
 
     store = http_store("https://noaa-gfs-bdp-pds.s3.amazonaws.com")
 
-    # Eccodes index files break unless the process working directory is the same as
-    # where the files are. To process many files in parallel, we need them all
-    # to be in the same directory so we replace / -> - in the file names to put
-    # all files in `directory`.
-    local_base_file_name = remote_path.replace("/", "_")
-
-    idx_remote_path = f"{remote_path}.idx"
-    idx_local_path = Path(DOWNLOAD_DIR, f"{local_base_file_name}.idx")
+    idx_remote_path = f"{base_path}.idx"
+    idx_local_path = Path(DOWNLOAD_DIR, f"{base_path}.idx")
 
     # Create a unique, human debuggable suffix representing the data vars stored in the output file
     vars_str = "-".join(
@@ -69,7 +62,7 @@ def download_file(
         for var_info in gfs_idx_data_vars
     )
     vars_suffix = f"{vars_str}-{vars_hash}"
-    local_path = Path(DOWNLOAD_DIR, f"{local_base_file_name}.{vars_suffix}")
+    local_path = Path(DOWNLOAD_DIR, f"{base_path}.{vars_suffix}")
 
     try:
         download_to_disk(
@@ -85,7 +78,7 @@ def download_file(
 
         download_to_disk(
             store,
-            remote_path,
+            base_path,
             local_path,
             overwrite_existing=not Config.is_dev,
             byte_ranges=(byte_range_starts, byte_range_ends),
@@ -229,16 +222,3 @@ def read_rasterio(
             out_dtype=np.float32,
         )
         return result
-
-
-class DefaultTimeoutHTTPAdapter(requests.adapters.HTTPAdapter):
-    def __init__(
-        self, *args: Any, default_timeout: float | tuple[float, float], **kwargs: Any
-    ):
-        self.default_timeout = default_timeout
-        super().__init__(*args, **kwargs)
-
-    def send(self, *args: Any, **kwargs: Any) -> requests.Response:
-        if kwargs.get("timeout") is None:
-            kwargs["timeout"] = self.default_timeout
-        return super().send(*args, **kwargs)
