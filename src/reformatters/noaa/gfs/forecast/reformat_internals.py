@@ -17,6 +17,7 @@ import zarr
 from reformatters.common.iterating import consume, shard_slice_indexers
 from reformatters.common.logging import get_logger
 from reformatters.common.types import ArrayFloat32
+from reformatters.common.zarr import create_data_array_and_template
 from reformatters.noaa.gfs.forecast import template
 from reformatters.noaa.gfs.read_data import SourceFileCoords, download_file, read_into
 from reformatters.noaa.noaa_config_models import NOAADataVar
@@ -85,7 +86,7 @@ def reformat_time_i_slices(
                 # Write variable by variable to avoid blowing up memory usage
                 for data_var in data_vars:
                     data_array, data_array_template = create_data_array_and_template(
-                        chunk_template_ds, data_var, shared_buffer
+                        chunk_template_ds, data_var.name, shared_buffer
                     )
                     var_coords_and_paths = filter_coords_and_paths(
                         data_var, coords_and_paths
@@ -133,40 +134,6 @@ def get_max_lead_times(
             ingested_lead_times, default=pd.Timedelta("NaT")
         )
     return max_lead_times
-
-
-# TODO: move to common module
-def create_data_array_and_template(
-    chunk_template_ds: xr.Dataset, data_var: NOAADataVar, shared_buffer: SharedMemory
-) -> tuple[xr.DataArray, xr.DataArray]:
-    # This template is small and we will pass it between processes
-    data_array_template = chunk_template_ds[data_var.name]
-
-    # This data array will be assigned actual, shared memory
-    data_array = data_array_template.copy()
-
-    # Drop all non-dimension coordinates from the template only,
-    # they are already written by write_metadata.
-    data_array_template = data_array_template.drop_vars(
-        [
-            coord
-            for coord in data_array_template.coords
-            if coord not in data_array_template.dims
-        ]
-    )
-
-    shared_array: ArrayFloat32 = np.ndarray(
-        data_array.shape,
-        dtype=data_array.dtype,
-        buffer=shared_buffer.buf,
-    )
-    # Important:
-    # We rely on initializing with nans so failed reads (eg. corrupt source data)
-    # leave nan and to reuse the same shared buffer for each variable.
-    shared_array[:] = np.nan
-    data_array.data = shared_array
-
-    return data_array, data_array_template
 
 
 # TODO: Basically common except for the data_var type
