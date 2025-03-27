@@ -73,17 +73,17 @@ def get_init_time_coordinates(
 # CHUNKS
 VAR_CHUNKS: dict[Dim, int] = {
     "init_time": 1,  # one forecast per chunk
-    "lead_time": 64,  # 3 chunks
-    "latitude": 73,  # 10 chunks over 721 pixels
-    "longitude": 72,  # 20 chunks over 1440 pixels
+    "lead_time": 105,  # 2 chunks
+    "latitude": 121,  # 6 chunks over 721 pixels
+    "longitude": 121,  # 12 chunks over 1440 pixels
 }
 
 # SHARDS
 VAR_SHARDS: dict[Dim, int] = {
     "init_time": 1,  # one forecast per shard
-    "lead_time": VAR_CHUNKS["lead_time"] * 3,  # all lead times in one shard
-    "latitude": VAR_CHUNKS["latitude"] * 22,  # all latitudes in one shard
-    "longitude": VAR_CHUNKS["longitude"] * 23,  # all longitudes in one shard
+    "lead_time": VAR_CHUNKS["lead_time"] * 2,  # all lead times in one shard
+    "latitude": VAR_CHUNKS["latitude"] * 6,  # all latitudes in one shard
+    "longitude": VAR_CHUNKS["longitude"] * 6,  # all longitudes in one shard
 }
 
 VAR_CHUNKS_ORDERED = tuple(VAR_CHUNKS[dim] for dim in VAR_DIMS)
