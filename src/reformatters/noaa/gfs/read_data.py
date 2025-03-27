@@ -64,7 +64,10 @@ def download_file(
     vars_str = "-".join(
         var_info.internal_attrs.grib_element for var_info in gfs_idx_data_vars
     )
-    vars_hash = digest(format_gfs_idx_var(var_info) for var_info in gfs_idx_data_vars)
+    vars_hash = digest(
+        f"{var_info.internal_attrs.grib_element}:{var_info.internal_attrs.grib_index_level}"
+        for var_info in gfs_idx_data_vars
+    )
     vars_suffix = f"{vars_str}-{vars_hash}"
     local_path = Path(DOWNLOAD_DIR, f"{local_base_file_name}.{vars_suffix}")
 
@@ -93,10 +96,6 @@ def download_file(
     except Exception as e:
         print("Download failed", vars_str, e)
         return coords, None
-
-
-def format_gfs_idx_var(var_info: NOAADataVar) -> str:
-    return f"{var_info.internal_attrs.grib_element}:{var_info.internal_attrs.grib_index_level}"
 
 
 def digest(data: str | Iterable[str], length: int = 8) -> str:
@@ -133,6 +132,7 @@ def parse_index_byte_ranges(
             else:
                 reset_hour = lead_time_hours - diff_hours
             hours_str = f"{reset_hour}-{lead_time_hours}"
+
         matches = re.findall(
             f"\\d+:(\\d+):.+:{var_info.internal_attrs.grib_element}:{var_info.internal_attrs.grib_index_level}:{hours_str}.+:(\\n\\d+:(\\d+))?",
             index_contents,
@@ -162,91 +162,6 @@ def parse_index_byte_ranges(
         byte_range_ends.append(end_byte)
 
     return byte_range_starts, byte_range_ends
-
-
-# def parse_index_byte_ranges(
-#     idx_local_path: Path,
-#     gfs_idx_data_vars: Iterable[NOAADataVar],
-#     lead_time_hours: float,
-# ) -> tuple[list[int], list[int]]:
-#     lead_time_hours = int(lead_time_hours)
-#     with open(idx_local_path) as index_file:
-#         index_contents = index_file.read()
-#     index_content_lines = index_contents.split("\n")
-#     index_content_lines = index_content_lines[:-1]
-
-#     byte_range_starts = []
-#     byte_range_ends = []
-
-#     for var_info in gfs_idx_data_vars:
-#         matches = []
-#         for i, line in enumerate(index_content_lines):
-#             (
-#                 _band_i,
-#                 byte_start,
-#                 _init_time,
-#                 grib_element,
-#                 grib_level,
-#                 grib_description,
-#                 _,
-#             ) = line.split(":")
-
-#             match var_info.attrs.step_type:
-#                 case "instant":
-#                     return
-
-#             if (
-#                 grib_element == var_info.internal_attrs.grib_element
-#                 and grib_level == var_info.internal_attrs.grib_index_level
-#             ):
-#                 start_byte = int(byte_start)
-#                 if i < len(index_content_lines) - 2:
-#                     next_byte_start = index_content_lines[i + 1].split(":")[1]
-#                     end_byte = int(next_byte_start)
-#                 else:
-#                     # obstore does not support omitting the end byte
-#                     # to go all the way to the end of the file, but if
-#                     # you give a value off the end of the file you get
-#                     # the rest of the bytes in the file and no more.
-#                     # So we add a big number, but not too big because
-#                     # it has to fit in a usize in rust object store,
-#                     # and hope this code is never adapted to pull
-#                     # individual grib messages > 10 GiB.
-#                     # GEFS messages are ~0.5MB.
-#                     end_byte = start_byte + (10 * (2**30))  # +10 GiB
-#                 matches.append((start_byte, end_byte))
-
-#         # matches = re.findall(
-#         #     f"\\d+:(\\d+):.+:{grib_element}:{grib_level}:{start of hours str}:(.+):(\\n\\d+:(\\d+))?",
-#         #     index_contents,
-#         # )
-#         # breakpoint()
-#         if len(matches) > 1 and lead_time_hours > 13:
-#             breakpoint()
-#         assert len(matches) == 1, (
-#             f"Expected exactly 1 match, found {matches}, {var_info.name} {idx_local_path}"
-#         )
-#         match = matches[0]
-#         # start_byte = int(match[0])
-#         # if match[2] != "":
-#         #     end_byte = int(match[2])
-#         # else:
-#         #     # obstore does not support omitting the end byte
-#         #     # to go all the way to the end of the file, but if
-#         #     # you give a value off the end of the file you get
-#         #     # the rest of the bytes in the file and no more.
-#         #     # So we add a big number, but not too big because
-#         #     # it has to fit in a usize in rust object store,
-#         #     # and hope this code is never adapted to pull
-#         #     # individual grib messages > 10 GiB.
-#         #     # GEFS messages are ~0.5MB.
-#         #     end_byte = start_byte + (10 * (2**30))  # +10 GiB
-#         start_byte, end_byte = match
-
-#         byte_range_starts.append(start_byte)
-#         byte_range_ends.append(end_byte)
-
-#     return byte_range_starts, byte_range_ends
 
 
 def read_into(
@@ -301,9 +216,6 @@ def read_rasterio(
             and reader.tags(rasterio_band_i := band_i + 1)["GRIB_ELEMENT"]
             == grib_element
         ]
-        # if grib_element.startswith("APCP"):
-        #     breakpoint()
-        # print(grib_element)
 
         assert len(matching_bands) == 1, f"Expected exactly 1 matching band, found {matching_bands}. {grib_element=}, {grib_description=}, {path=}"  # fmt: skip
         rasterio_band_index = matching_bands[0]

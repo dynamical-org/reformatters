@@ -44,8 +44,8 @@ def reformat_time_i_slices(
     )
     with (
         ThreadPoolExecutor(max_workers=1) as wait_executor,
-        ThreadPoolExecutor(max_workers=(1)) as io_executor,
-        ThreadPoolExecutor(max_workers=1) as cpu_executor,
+        ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2) as io_executor,
+        ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as cpu_executor,
         ProcessPoolExecutor(max_workers=os.cpu_count() or 1) as cpu_process_executor,
         create_shared_buffer(shared_buffer_size) as shared_buffer,
     ):
