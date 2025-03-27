@@ -1,19 +1,16 @@
 import time
 from functools import cache
-from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
 import fsspec  # type: ignore
-import numpy as np
 import xarray as xr
 import zarr
 from fsspec.implementations.local import LocalFileSystem  # type: ignore
 
 from reformatters.common.config import Config
 from reformatters.common.logging import get_logger
-from reformatters.common.types import ArrayFloat32
 
 logger = get_logger(__name__)
 
@@ -175,38 +172,3 @@ def _copy_to_store(
                 raise
             time.sleep(1)
             continue
-
-
-def create_data_array_and_template(
-    chunk_template_ds: xr.Dataset,
-    data_var_name: str,
-    shared_buffer: SharedMemory,
-) -> tuple[xr.DataArray, xr.DataArray]:
-    # This template is small and we will pass it between processes
-    data_array_template = chunk_template_ds[data_var_name]
-
-    # This data array will be assigned actual, shared memory
-    data_array = data_array_template.copy()
-
-    # Drop all non-dimension coordinates from the template only,
-    # they are already written by write_metadata.
-    data_array_template = data_array_template.drop_vars(
-        [
-            coord
-            for coord in data_array_template.coords
-            if coord not in data_array_template.dims
-        ]
-    )
-
-    shared_array: ArrayFloat32 = np.ndarray(
-        data_array.shape,
-        dtype=data_array.dtype,
-        buffer=shared_buffer.buf,
-    )
-    # Important:
-    # We rely on initializing with nans so failed reads (eg. corrupt source data)
-    # leave nan and to reuse the same shared buffer for each variable.
-    shared_array[:] = np.nan
-    data_array.data = shared_array
-
-    return data_array, data_array_template
