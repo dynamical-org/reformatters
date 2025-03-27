@@ -1,0 +1,332 @@
+import hashlib
+import os
+import re
+import warnings
+from collections.abc import Iterable
+from pathlib import Path
+from typing import Any, TypedDict
+
+import numpy as np
+import pandas as pd
+import rasterio  # type: ignore
+import requests
+import xarray as xr
+
+from reformatters.common.config import Config
+from reformatters.common.download import download_to_disk, http_store
+from reformatters.common.types import Array2D
+from reformatters.noaa.noaa_config_models import NOAADataVar
+
+DOWNLOAD_DIR = Path("data/download/")
+
+
+class SourceFileCoords(TypedDict):
+    init_time: pd.Timestamp
+    lead_time: pd.Timedelta
+
+
+def download_file(
+    coords: SourceFileCoords,
+    gfs_idx_data_vars: Iterable[NOAADataVar],
+) -> tuple[SourceFileCoords, Path | None]:
+    init_time = coords["init_time"]
+    lead_time = coords["lead_time"]
+
+    lead_time_hours = lead_time.total_seconds() / (60 * 60)
+    if lead_time_hours != round(lead_time_hours):
+        raise ValueError(f"Lead time {lead_time} must be a whole number of hours")
+
+    init_date_str = init_time.strftime("%Y%m%d")
+    init_hour_str = init_time.strftime("%H")
+
+    # Accumulated and last N hour avg values don't exist in the 0-hour forecast.
+    if lead_time_hours == 0:
+        gfs_idx_data_vars = [
+            data_var
+            for data_var in gfs_idx_data_vars
+            if data_var.attrs.step_type not in ("accum", "avg")
+        ]
+
+    remote_path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_time_hours:03.0f}"
+
+    store = http_store("https://noaa-gfs-bdp-pds.s3.amazonaws.com")
+
+    # Eccodes index files break unless the process working directory is the same as
+    # where the files are. To process many files in parallel, we need them all
+    # to be in the same directory so we replace / -> - in the file names to put
+    # all files in `directory`.
+    local_base_file_name = remote_path.replace("/", "_")
+
+    idx_remote_path = f"{remote_path}.idx"
+    idx_local_path = Path(DOWNLOAD_DIR, f"{local_base_file_name}.idx")
+
+    # Create a unique, human debuggable suffix representing the data vars stored in the output file
+    vars_str = "-".join(
+        var_info.internal_attrs.grib_element for var_info in gfs_idx_data_vars
+    )
+    vars_hash = digest(format_gfs_idx_var(var_info) for var_info in gfs_idx_data_vars)
+    vars_suffix = f"{vars_str}-{vars_hash}"
+    local_path = Path(DOWNLOAD_DIR, f"{local_base_file_name}.{vars_suffix}")
+
+    try:
+        download_to_disk(
+            store,
+            idx_remote_path,
+            idx_local_path,
+            overwrite_existing=not Config.is_dev,
+        )
+
+        byte_range_starts, byte_range_ends = parse_index_byte_ranges(
+            idx_local_path, gfs_idx_data_vars, int(lead_time_hours)
+        )
+
+        download_to_disk(
+            store,
+            remote_path,
+            local_path,
+            overwrite_existing=not Config.is_dev,
+            byte_ranges=(byte_range_starts, byte_range_ends),
+        )
+
+        return coords, local_path
+
+    except Exception as e:
+        print("Download failed", vars_str, e)
+        return coords, None
+
+
+def format_gfs_idx_var(var_info: NOAADataVar) -> str:
+    return f"{var_info.internal_attrs.grib_element}:{var_info.internal_attrs.grib_index_level}"
+
+
+def digest(data: str | Iterable[str], length: int = 8) -> str:
+    """Consistent, likely collision free string digest of one or more strings."""
+    if isinstance(data, str):
+        data = [data]
+    message = hashlib.sha256()
+    for string in data:
+        message.update(string.encode())
+    return message.hexdigest()[:length]
+
+
+def parse_index_byte_ranges(
+    idx_local_path: Path,
+    gfs_idx_data_vars: Iterable[NOAADataVar],
+    lead_time_hours: int,
+) -> tuple[list[int], list[int]]:
+    lead_time_hours = int(lead_time_hours)
+    with open(idx_local_path) as index_file:
+        index_contents = index_file.read()
+
+    byte_range_starts = []
+    byte_range_ends = []
+
+    for var_info in gfs_idx_data_vars:
+        if lead_time_hours == 0:
+            hours_str = ""
+        elif var_info.attrs.step_type == "instant":
+            hours_str = f"{int(lead_time_hours)}"
+        else:
+            diff_hours = lead_time_hours % 6
+            if diff_hours == 0:
+                reset_hour = lead_time_hours - 6
+            else:
+                reset_hour = lead_time_hours - diff_hours
+            hours_str = f"{reset_hour}-{lead_time_hours}"
+        matches = re.findall(
+            f"\\d+:(\\d+):.+:{var_info.internal_attrs.grib_element}:{var_info.internal_attrs.grib_index_level}:{hours_str}.+:(\\n\\d+:(\\d+))?",
+            index_contents,
+        )
+
+        assert len(matches) == 1, (
+            f"Expected exactly 1 match, found {matches}, {var_info.name} {idx_local_path}"
+        )
+
+        match = matches[0]
+        start_byte = int(match[0])
+        if match[2] != "":
+            end_byte = int(match[2])
+        else:
+            # obstore does not support omitting the end byte
+            # to go all the way to the end of the file, but if
+            # you give a value off the end of the file you get
+            # the rest of the bytes in the file and no more.
+            # So we add a big number, but not too big because
+            # it has to fit in a usize in rust object store,
+            # and hope this code is never adapted to pull
+            # individual grib messages > 10 GiB.
+            # GEFS messages are ~0.5MB.
+            end_byte = start_byte + (10 * (2**30))  # +10 GiB
+
+        byte_range_starts.append(start_byte)
+        byte_range_ends.append(end_byte)
+
+    return byte_range_starts, byte_range_ends
+
+
+# def parse_index_byte_ranges(
+#     idx_local_path: Path,
+#     gfs_idx_data_vars: Iterable[NOAADataVar],
+#     lead_time_hours: float,
+# ) -> tuple[list[int], list[int]]:
+#     lead_time_hours = int(lead_time_hours)
+#     with open(idx_local_path) as index_file:
+#         index_contents = index_file.read()
+#     index_content_lines = index_contents.split("\n")
+#     index_content_lines = index_content_lines[:-1]
+
+#     byte_range_starts = []
+#     byte_range_ends = []
+
+#     for var_info in gfs_idx_data_vars:
+#         matches = []
+#         for i, line in enumerate(index_content_lines):
+#             (
+#                 _band_i,
+#                 byte_start,
+#                 _init_time,
+#                 grib_element,
+#                 grib_level,
+#                 grib_description,
+#                 _,
+#             ) = line.split(":")
+
+#             match var_info.attrs.step_type:
+#                 case "instant":
+#                     return
+
+#             if (
+#                 grib_element == var_info.internal_attrs.grib_element
+#                 and grib_level == var_info.internal_attrs.grib_index_level
+#             ):
+#                 start_byte = int(byte_start)
+#                 if i < len(index_content_lines) - 2:
+#                     next_byte_start = index_content_lines[i + 1].split(":")[1]
+#                     end_byte = int(next_byte_start)
+#                 else:
+#                     # obstore does not support omitting the end byte
+#                     # to go all the way to the end of the file, but if
+#                     # you give a value off the end of the file you get
+#                     # the rest of the bytes in the file and no more.
+#                     # So we add a big number, but not too big because
+#                     # it has to fit in a usize in rust object store,
+#                     # and hope this code is never adapted to pull
+#                     # individual grib messages > 10 GiB.
+#                     # GEFS messages are ~0.5MB.
+#                     end_byte = start_byte + (10 * (2**30))  # +10 GiB
+#                 matches.append((start_byte, end_byte))
+
+#         # matches = re.findall(
+#         #     f"\\d+:(\\d+):.+:{grib_element}:{grib_level}:{start of hours str}:(.+):(\\n\\d+:(\\d+))?",
+#         #     index_contents,
+#         # )
+#         # breakpoint()
+#         if len(matches) > 1 and lead_time_hours > 13:
+#             breakpoint()
+#         assert len(matches) == 1, (
+#             f"Expected exactly 1 match, found {matches}, {var_info.name} {idx_local_path}"
+#         )
+#         match = matches[0]
+#         # start_byte = int(match[0])
+#         # if match[2] != "":
+#         #     end_byte = int(match[2])
+#         # else:
+#         #     # obstore does not support omitting the end byte
+#         #     # to go all the way to the end of the file, but if
+#         #     # you give a value off the end of the file you get
+#         #     # the rest of the bytes in the file and no more.
+#         #     # So we add a big number, but not too big because
+#         #     # it has to fit in a usize in rust object store,
+#         #     # and hope this code is never adapted to pull
+#         #     # individual grib messages > 10 GiB.
+#         #     # GEFS messages are ~0.5MB.
+#         #     end_byte = start_byte + (10 * (2**30))  # +10 GiB
+#         start_byte, end_byte = match
+
+#         byte_range_starts.append(start_byte)
+#         byte_range_ends.append(end_byte)
+
+#     return byte_range_starts, byte_range_ends
+
+
+def read_into(
+    out: xr.DataArray,
+    coords: SourceFileCoords,
+    path: os.PathLike[str] | None,
+    data_var: NOAADataVar,
+) -> None:
+    if path is None:
+        return  # in rare case file is missing there's nothing to do
+
+    grib_element = data_var.internal_attrs.grib_element
+    if data_var.internal_attrs.include_lead_time_suffix:
+        lead_hours = coords["lead_time"].total_seconds() / (60 * 60)
+        lead_hours_accum = int(lead_hours % 6)
+        if lead_hours_accum == 0:
+            lead_hours_accum = 6
+        grib_element += str(lead_hours_accum).zfill(2)
+
+    try:
+        raw_data = read_rasterio(
+            path,
+            grib_element,
+            data_var.internal_attrs.grib_description,
+            out.rio.shape,
+            out.rio.transform(),
+            out.rio.crs,
+        )
+    except Exception as e:
+        print("Read failed", coords, e)
+        return
+
+    out.loc[coords] = raw_data
+
+
+def read_rasterio(
+    path: os.PathLike[str],
+    grib_element: str,
+    grib_description: str,
+    out_spatial_shape: tuple[int, int],
+    out_transform: rasterio.transform.Affine,
+    out_crs: rasterio.crs.CRS,
+) -> Array2D[np.float32]:
+    with (
+        warnings.catch_warnings(),
+        rasterio.open(path) as reader,
+    ):
+        matching_bands = [
+            rasterio_band_i
+            for band_i in range(reader.count)
+            if reader.descriptions[band_i] == grib_description
+            and reader.tags(rasterio_band_i := band_i + 1)["GRIB_ELEMENT"]
+            == grib_element
+        ]
+        # if grib_element.startswith("APCP"):
+        #     breakpoint()
+        # print(grib_element)
+
+        assert len(matching_bands) == 1, f"Expected exactly 1 matching band, found {matching_bands}. {grib_element=}, {grib_description=}, {path=}"  # fmt: skip
+        rasterio_band_index = matching_bands[0]
+
+        assert reader.shape == out_spatial_shape
+        assert reader.transform == out_transform
+        assert reader.crs.to_dict() == out_crs
+
+        result: Array2D[np.float32] = reader.read(
+            rasterio_band_index,
+            out_dtype=np.float32,
+        )
+        return result
+
+
+class DefaultTimeoutHTTPAdapter(requests.adapters.HTTPAdapter):
+    def __init__(
+        self, *args: Any, default_timeout: float | tuple[float, float], **kwargs: Any
+    ):
+        self.default_timeout = default_timeout
+        super().__init__(*args, **kwargs)
+
+    def send(self, *args: Any, **kwargs: Any) -> requests.Response:
+        if kwargs.get("timeout") is None:
+            kwargs["timeout"] = self.default_timeout
+        return super().send(*args, **kwargs)
