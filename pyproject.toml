@@ -13,6 +13,7 @@ dependencies = [
     "numpy>=2.1.1",
     "obstore>=0.4.0",
     "pydantic>=2.10.2",
+    "pygrib>=2.1.6",
     "rasterio>=1.4.2",
     "requests>=2.32.3",
     "rioxarray>=0.18.2",

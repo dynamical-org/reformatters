@@ -1089,6 +1089,25 @@ wheels = [
 ]
 
 [[package]]
+name = "pygrib"
+version = "2.1.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "pyproj" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/27/60/bac29fc06197f85efccb346879da3ae9ee125525d43e28b0a1b768831a74/pygrib-2.1.6.tar.gz", hash = "sha256:047980aeb010ef457999950bcc8e46556910316cb77fe78c0bd1b3520aa920f0", size = 21808824 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/71/99/436f5af4e9093277b13153c6ce51336df886e7493076c3d756c44c988d47/pygrib-2.1.6-cp312-cp312-macosx_11_0_x86_64.whl", hash = "sha256:fa4613eef98b26bf9a8719869f656aa15362f700311aec777b2190deb1060a1d", size = 18467761 },
+    { url = "https://files.pythonhosted.org/packages/b0/4d/e2d3150961801d46af88c4cf113c00ff0825206ac6d726cec11f667c9f8e/pygrib-2.1.6-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:332d29bbc16749375b24c8d9bd01180c0a9eda471df86b2073432fba3339d658", size = 18356620 },
+    { url = "https://files.pythonhosted.org/packages/ab/cc/4b2b85241086a3c42fcf4e9e225a1b2f5bfcb299a4c9c8e46f56c6a2d7c3/pygrib-2.1.6-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:d368c359acacae4061ebcdfe635fb826f21fbc1f6c2227a269c870d9e8b49e70", size = 18617948 },
+    { url = "https://files.pythonhosted.org/packages/ac/bb/a35a9b012c234416100abe53661cb7002e8fd6f3120f4f85475604cf9d00/pygrib-2.1.6-cp313-cp313-macosx_11_0_x86_64.whl", hash = "sha256:3cf2d87ad30449726d9279ca8cfa4afbdc83670750a4dfb5d965e3fc55d3aa8d", size = 18466301 },
+    { url = "https://files.pythonhosted.org/packages/fd/15/bb162b016378993b5a779d83ec499dfd82d8df7776885fb826b69d2b7b98/pygrib-2.1.6-cp313-cp313-macosx_14_0_arm64.whl", hash = "sha256:00f84e99372c6cf51f6a67e26c394dc3371ec356906e5aa9177f12372d92b228", size = 18356130 },
+    { url = "https://files.pythonhosted.org/packages/ea/42/112c2f6836e730343fe21ad85e916c1b742d1f951738a3e9b3f6fab65128/pygrib-2.1.6-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:56d70f492e1a298429a94662c5003c6959d8cc1b078173312fa9cf3bf36a14b8", size = 18613954 },
+]
+
+[[package]]
 name = "pyparsing"
 version = "3.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1271,6 +1290,7 @@ dependencies = [
     { name = "numpy" },
     { name = "obstore" },
     { name = "pydantic" },
+    { name = "pygrib" },
     { name = "rasterio" },
     { name = "requests" },
     { name = "rioxarray" },
@@ -1301,6 +1321,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.1.1" },
     { name = "obstore", specifier = ">=0.4.0" },
     { name = "pydantic", specifier = ">=2.10.2" },
+    { name = "pygrib", specifier = ">=2.1.6" },
     { name = "rasterio", specifier = ">=1.4.2" },
     { name = "requests", specifier = ">=2.32.3" },
     { name = "rioxarray", specifier = ">=0.18.2" },
