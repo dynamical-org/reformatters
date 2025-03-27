@@ -88,36 +88,6 @@ def get_mode(
     return "w-"  # Safe default - don't overwrite
 
 
-def copy__name(
-    data_var_name: str,
-    chunk_index: int,
-    tmp_store: Path,
-    final_store: zarr.storage.FsspecStore,
-) -> None:
-    relative_dir = f"{data_var_name}/c/{chunk_index}/"
-
-    logger.info(
-        f"Copying data var chunks to final store ({final_store}) for {relative_dir}."
-    )
-    fs = final_store.fs
-    fs.auto_mkdir = True
-
-    # We want to support local and s3fs filesystems. fsspec local filesystem is sync,
-    # but our s3fs from zarr.storage.FsspecStore is async and here we work around it.
-    # The AsyncFileSystem wrapper on LocalFilesystem raises NotImplementedError when _put is called.
-    source = f"{tmp_store / relative_dir}/"
-    dest = f"{final_store.path}/{relative_dir}"
-    _copy_to_store("put", source, dest, fs, recursive=True, auto_mkdir=True)
-
-    try:
-        # Delete data to conserve disk space.
-        for file in tmp_store.glob(f"{relative_dir}**/*"):
-            if file.is_file():
-                file.unlink()
-    except Exception as e:
-        logger.warning(f"Failed to delete chunk after upload: {e}")
-
-
 def copy_data_var(
     data_var_name: str,
     chunk_index: int,
