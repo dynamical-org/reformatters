@@ -115,7 +115,7 @@ def parse_index_byte_ranges(
 
     for var_info in gfs_idx_data_vars:
         if lead_time_hours == 0:
-            hours_str_prefix = "an"
+            hours_str_prefix = ""
         elif var_info.attrs.step_type == "instant":
             hours_str_prefix = str(lead_time_hours)
         else:
