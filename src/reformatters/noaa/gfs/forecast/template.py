@@ -54,7 +54,21 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
         coordinate.load()
 
     if not Config.is_prod:
-        ds = ds[["precipitation_surface", "temperature_2m"]].sel(
+        # Include a variable with:
+        # - avg step_type
+        # - instant step_type
+        # - max step_type
+        # - min step_type
+        # - () in the grib_index_level
+        ds = ds[
+            [
+                "precipitation_surface",
+                "temperature_2m",
+                "maximum_temperature_2m",
+                "minimum_temperature_2m",
+                "precipitable_water_atmosphere",
+            ]
+        ].sel(
             lead_time=[
                 "0h",
                 "5h",
