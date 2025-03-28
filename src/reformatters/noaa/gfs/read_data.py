@@ -43,7 +43,7 @@ def download_file(
         gfs_idx_data_vars = [
             data_var
             for data_var in gfs_idx_data_vars
-            if data_var.attrs.step_type not in ("accum", "avg")
+            if data_var.attrs.step_type not in ("accum", "avg", "min", "max")
         ]
 
     base_path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_time_hours:03.0f}"
@@ -115,19 +115,22 @@ def parse_index_byte_ranges(
 
     for var_info in gfs_idx_data_vars:
         if lead_time_hours == 0:
-            hours_str = ""
+            hours_str_prefix = "an"
         elif var_info.attrs.step_type == "instant":
-            hours_str = f"{int(lead_time_hours)}"
+            hours_str_prefix = str(lead_time_hours)
         else:
             diff_hours = lead_time_hours % 6
             if diff_hours == 0:
                 reset_hour = lead_time_hours - 6
             else:
                 reset_hour = lead_time_hours - diff_hours
-            hours_str = f"{reset_hour}-{lead_time_hours}"
+            hours_str_prefix = f"{reset_hour}-{lead_time_hours}"
 
+        var_match_str = re.escape(
+            f"{var_info.internal_attrs.grib_element}:{var_info.internal_attrs.grib_index_level}:{hours_str_prefix}"
+        )
         matches = re.findall(
-            f"\\d+:(\\d+):.+:{var_info.internal_attrs.grib_element}:{var_info.internal_attrs.grib_index_level}:{hours_str}.+:(\\n\\d+:(\\d+))?",
+            f"\\d+:(\\d+):.+:{var_match_str}.+:(\\n\\d+:(\\d+))?",
             index_contents,
         )
 
