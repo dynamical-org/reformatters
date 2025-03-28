@@ -201,8 +201,8 @@ COORDINATES: Sequence[Coordinate] = (
         attrs=CoordinateAttrs(
             units="degrees_north",
             statistics_approximate=StatisticsApproximate(
-                min=21.138,
-                max=52.615,
+                min=21.147,
+                max=52.629,
             ),
         ),
     ),
@@ -219,8 +219,8 @@ COORDINATES: Sequence[Coordinate] = (
             units="degrees_east",
             # TODO: How to set these min/max values?
             statistics_approximate=StatisticsApproximate(
-                min=-134.095,
-                max=-60.917,
+                min=-134.121,
+                max=-60.928,
             ),
         ),
     ),

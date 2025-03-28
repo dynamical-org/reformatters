@@ -3,7 +3,8 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-import pygrib  # type: ignore
+import pyproj
+import rasterio as rio  # type: ignore
 import rioxarray  # noqa: F401  Adds .rio accessor to datasets
 import xarray as xr
 
@@ -71,9 +72,14 @@ def derive_coordinates(
     )
     # "sfc" is the smallest available file type.
     _, filepath = download_file(data_coords, "sfc")
-    grib = pygrib.open(filepath)
-    lats, lons = grib[1].latlons()
-    grib.close()
+
+    hrrrds = rio.open(str(filepath))
+    height, width = hrrrds.shape
+    yidxs, xidxs = np.meshgrid(np.arange(height), np.arange(width), indexing="ij")
+    proj = pyproj.Proj(hrrrds.crs)
+    projx, projy = hrrrds.transform * (xidxs, yidxs)
+    lons, lats = proj(projx, projy, inverse=True)
+    print(lons.min(), lons.max(), lats.min(), lats.max())
 
     return {
         "latitude": (("y", "x"), lats),
