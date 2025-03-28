@@ -2,6 +2,9 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pandas as pd
+import pyproj
+import rasterio as rio  # type: ignore
 import rioxarray  # noqa: F401  Adds .rio accessor to datasets
 import xarray as xr
 
@@ -9,6 +12,7 @@ from reformatters.common.template_utils import assign_var_metadata, make_empty_v
 from reformatters.common.template_utils import (
     write_metadata as write_metadata,  # re-export
 )
+from reformatters.noaa.hrrr.read_data import SourceFileCoords, download_file
 
 from .template_config import (
     COORDINATES,
@@ -57,11 +61,29 @@ def update_template() -> None:
 def derive_coordinates(
     ds: xr.Dataset,
 ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
+    # derivation of HRRR latitude / longutide coordinates is simplest by downloading
+    # a sample file and extracting the coordinates from the file itself.
+    data_coords = SourceFileCoords(
+        {
+            "init_time": pd.Timestamp.now(),
+            "lead_time": pd.Timedelta("0h"),
+            "domain": "conus",
+        }
+    )
+    # "sfc" is the smallest available file type.
+    _, filepath = download_file(data_coords, "sfc")
+
+    hrrrds = rio.open(str(filepath))
+    height, width = hrrrds.shape
+    yidxs, xidxs = np.meshgrid(np.arange(height), np.arange(width), indexing="ij")
+    proj = pyproj.Proj(hrrrds.crs)
+    projx, projy = hrrrds.transform * (xidxs, yidxs)
+    lons, lats = proj(projx, projy, inverse=True)
+    print(lons.min(), lons.max(), lats.min(), lats.max())
+
     return {
-        # TODO: Derive these coordinates from an actual model file
-        "latitude": (("y", "x"), np.full((ds["y"].size, ds["x"].size), 0.0)),
-        # TODO: Derive these coordinates from an actual model file
-        "longitude": (("y", "x"), np.full((ds["y"].size, ds["x"].size), 0.0)),
+        "latitude": (("y", "x"), lats),
+        "longitude": (("y", "x"), lons),
         "ingested_forecast_length": (
             ("init_time",),
             np.full((ds["init_time"].size), np.timedelta64("NaT", "ns")),
