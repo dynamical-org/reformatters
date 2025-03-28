@@ -18,6 +18,8 @@ from reformatters.noaa.noaa_config_models import NOAADataVar
 
 DOWNLOAD_DIR = Path("data/download/")
 
+ACCUM_RESET_HOURS = 6  # Accumulated, avg. min, and max variables reset every 6 hours
+
 
 class SourceFileCoords(TypedDict):
     init_time: pd.Timestamp
@@ -43,7 +45,7 @@ def download_file(
         gfs_idx_data_vars = [
             data_var
             for data_var in gfs_idx_data_vars
-            if data_var.attrs.step_type not in ("accum", "avg")
+            if data_var.attrs.step_type not in ("accum", "avg", "min", "max")
         ]
 
     base_path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_time_hours:03.0f}"
@@ -115,19 +117,22 @@ def parse_index_byte_ranges(
 
     for var_info in gfs_idx_data_vars:
         if lead_time_hours == 0:
-            hours_str = ""
+            hours_str_prefix = ""
         elif var_info.attrs.step_type == "instant":
-            hours_str = f"{int(lead_time_hours)}"
+            hours_str_prefix = str(lead_time_hours)
         else:
-            diff_hours = lead_time_hours % 6
+            diff_hours = lead_time_hours % ACCUM_RESET_HOURS
             if diff_hours == 0:
-                reset_hour = lead_time_hours - 6
+                reset_hour = lead_time_hours - ACCUM_RESET_HOURS
             else:
                 reset_hour = lead_time_hours - diff_hours
-            hours_str = f"{reset_hour}-{lead_time_hours}"
+            hours_str_prefix = f"{reset_hour}-{lead_time_hours}"
 
+        var_match_str = re.escape(
+            f"{var_info.internal_attrs.grib_element}:{var_info.internal_attrs.grib_index_level}:{hours_str_prefix}"
+        )
         matches = re.findall(
-            f"\\d+:(\\d+):.+:{var_info.internal_attrs.grib_element}:{var_info.internal_attrs.grib_index_level}:{hours_str}.+:(\\n\\d+:(\\d+))?",
+            f"\\d+:(\\d+):.+:{var_match_str}.+:(\\n\\d+:(\\d+))?",
             index_contents,
         )
 
@@ -169,7 +174,7 @@ def read_into(
     grib_element = data_var.internal_attrs.grib_element
     if data_var.internal_attrs.include_lead_time_suffix:
         lead_hours = coords["lead_time"].total_seconds() / (60 * 60)
-        lead_hours_accum = int(lead_hours % 6)
+        lead_hours_accum = int(lead_hours % ACCUM_RESET_HOURS)
         if lead_hours_accum == 0:
             lead_hours_accum = 6
         grib_element += str(lead_hours_accum).zfill(2)

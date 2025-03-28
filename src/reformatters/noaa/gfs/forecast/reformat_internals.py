@@ -139,7 +139,7 @@ def filter_coords_and_paths(
     data_var: NOAADataVar, coords_and_paths: CoordsAndPaths
 ) -> CoordsAndPaths:
     # Skip reading the 0-hour for accumulated or last N hours avg values
-    if data_var.attrs.step_type in ("accum", "avg"):
+    if data_var.attrs.step_type in ("accum", "avg", "min", "max"):
         return [
             coords_and_path
             for coords_and_path in coords_and_paths
