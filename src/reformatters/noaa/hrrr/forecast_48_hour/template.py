@@ -61,21 +61,20 @@ def derive_coordinates(
     # https://github.com/jswhit/pygrib/blob/master/src/pygrib/_pygrib.pyx#L1623-L1644
     lat_corner = 21.138123
     lon_corner = 237.280472
-    nx = 1799
-    ny = 1059
-    dx, dy = 3000.0, 3000.0
+    dx, dy = 3000, 3000
+    nx = ds.x.size
+    ny = ds.y.size
 
     pj = pyproj.Proj(ds.rio.crs.to_proj4())
-    x_corner, y_corner = pj(lon_corner, lat_corner)
-    x = x_corner + np.arange(nx) * dx
-    y = y_corner + np.arange(ny) * dy
+    proj_xcorner, proj_ycorner = pj(lon_corner, lat_corner)
+    x = proj_xcorner + np.arange(nx) * dx
+    y = proj_ycorner + np.arange(ny) * dy
     xs, ys = np.meshgrid(x, y)
     lons, lats = pj(xs, ys, inverse=True)
-    proj_xs, proj_ys = pj(lons, lats)
 
     return {
-        "y": (("y",), proj_ys[:, 0]),
-        "x": (("x",), proj_xs[0, :]),
+        "y": (("y",), y),
+        "x": (("x",), x),
         "latitude": (("y", "x"), lats),
         "longitude": (("y", "x"), lons),
         "ingested_forecast_length": (
