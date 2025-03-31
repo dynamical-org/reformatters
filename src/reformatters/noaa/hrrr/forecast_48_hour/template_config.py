@@ -158,7 +158,7 @@ COORDINATES: Sequence[Coordinate] = (
     Coordinate(
         name="x",
         encoding=Encoding(
-            dtype="int64",
+            dtype="float64",
             fill_value=np.nan,
             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             chunks=len(_dim_coords["x"]),
@@ -175,7 +175,7 @@ COORDINATES: Sequence[Coordinate] = (
     Coordinate(
         name="y",
         encoding=Encoding(
-            dtype="int64",
+            dtype="float64",
             fill_value=np.nan,
             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             chunks=len(_dim_coords["y"]),

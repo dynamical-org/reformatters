@@ -2,17 +2,13 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import pandas as pd
 import pyproj
-import rasterio as rio  # type: ignore
-import rioxarray  # noqa: F401  Adds .rio accessor to datasets
 import xarray as xr
 
 from reformatters.common.template_utils import assign_var_metadata, make_empty_variable
 from reformatters.common.template_utils import (
     write_metadata as write_metadata,  # re-export
 )
-from reformatters.noaa.hrrr.read_data import SourceFileCoords, download_file
 
 from .template_config import (
     COORDINATES,
@@ -37,11 +33,11 @@ def update_template() -> None:
 
     ds = xr.Dataset(data_vars, coords, DATASET_ATTRIBUTES.model_dump(exclude_none=True))
 
-    ds = ds.assign_coords(derive_coordinates(ds))
-
     ds = ds.rio.write_crs(
         "+proj=lcc +a=6371229 +b=6371229 +lon_0=262.5 +lat_0=38.5 +lat_1=38.5 +lat_2=38.5"
     )
+
+    ds = ds.assign_coords(derive_coordinates(ds))
 
     assert {d.name for d in DATA_VARIABLES} == set(ds.data_vars)
     for var_config in DATA_VARIABLES:
@@ -61,27 +57,25 @@ def update_template() -> None:
 def derive_coordinates(
     ds: xr.Dataset,
 ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
-    # derivation of HRRR latitude / longutide coordinates is simplest by downloading
-    # a sample file and extracting the coordinates from the file itself.
-    data_coords = SourceFileCoords(
-        {
-            "init_time": pd.Timestamp.now(),
-            "lead_time": pd.Timedelta("0h"),
-            "domain": "conus",
-        }
-    )
-    # "sfc" is the smallest available file type.
-    _, filepath = download_file(data_coords, "sfc")
+    # following pygrib methodology for lat/lon calculation
+    # https://github.com/jswhit/pygrib/blob/master/src/pygrib/_pygrib.pyx#L1623-L1644
+    lat_corner = 21.138123
+    lon_corner = 237.280472
+    nx = 1799
+    ny = 1059
+    dx, dy = 3000.0, 3000.0
 
-    hrrrds = rio.open(str(filepath))
-    height, width = hrrrds.shape
-    yidxs, xidxs = np.meshgrid(np.arange(height), np.arange(width), indexing="ij")
-    proj = pyproj.Proj(hrrrds.crs)
-    projx, projy = hrrrds.transform * (xidxs, yidxs)
-    lons, lats = proj(projx, projy, inverse=True)
-    print(lons.min(), lons.max(), lats.min(), lats.max())
+    pj = pyproj.Proj(ds.rio.crs.to_proj4())
+    x_corner, y_corner = pj(lon_corner, lat_corner)
+    x = x_corner + np.arange(nx) * dx
+    y = y_corner + np.arange(ny) * dy
+    xs, ys = np.meshgrid(x, y)
+    lons, lats = pj(xs, ys, inverse=True)
+    proj_xs, proj_ys = pj(lons, lats)
 
     return {
+        "y": (("y",), proj_ys[:, 0]),
+        "x": (("x",), proj_xs[0, :]),
         "latitude": (("y", "x"), lats),
         "longitude": (("y", "x"), lons),
         "ingested_forecast_length": (
