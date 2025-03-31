@@ -18,8 +18,8 @@ We use
 ### Running locally
 
 * `uv run main --help`
-* `uv run main noaa-gefs-forecast-35-day update-template`
-* `uv run main noaa-gefs-forecast-35-day reformat-local 2024-01-02T00:00`
+* `uv run main <DATASET_ID> update-template`
+* `uv run main <DATASET_ID> reformat-local <INIT_TIME_END>`
 
 ### Development commands
 * Add dependency: `uv add <package> [--dev]`. Use `--dev` to add a development only dependency.
@@ -41,8 +41,8 @@ We use
 1. Install `docker` and `kubectl`. Make sure `docker` can be found at /usr/bin/docker and `kubectl` at /usr/bin/kubectl.
 1. Setup a docker image repository and export the DOCKER_REPOSITORY environment variable in your local shell. eg. `export DOCKER_REPOSITORY=us-central1-docker.pkg.dev/<project-id>/reformatters/main`
 1. Setup a kubernetes cluster and configure kubectl to point to your cluster. eg `gcloud container clusters get-credentials <cluster-name> --region <region> --project <project>`
-1. Create a kubectl secret containing your Source Coop S3 credentials `kubectl create secret generic source-coop-key --from-literal='AWS_ACCESS_KEY_ID=XXX' --from-literal='AWS_SECRET_ACCESS_KEY=XXX'`
+1. Create a kubectl secret containing your Source Coop S3 credentials `kubectl create secret generic source-coop-key --from-literal='AWS_ACCESS_KEY_ID=xxx' --from-literal='AWS_SECRET_ACCESS_KEY=xxx'` and set these environment variables in your local shell `export DYNAMICAL_SOURCE_COOP_AWS_ACCESS_KEY_ID=xxx; export DYNAMICAL_SOURCE_COOP_AWS_SECRET_ACCESS_KEY=xxx`.
 
 
 ### Development commands
-1. `uv run main noaa-gefs-forecast-35-day reformat-kubernetes <INIT_TIME_END> [--jobs-per-pod <int>] [--max-parallelism <int>]`
+1. `DYNAMICAL_ENV=prod uv run main <DATASET_ID> reformat-kubernetes <INIT_TIME_END> [--jobs-per-pod <int>] [--max-parallelism <int>]`
