@@ -58,7 +58,7 @@ def derive_coordinates(
     ds: xr.Dataset,
 ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
     # following pygrib methodology for lat/lon calculation
-    # https://github.com/jswhit/pygrib/blob/master/src/pygrib/_pygrib.pyx#L1623-L1644
+    # https://github.com/jswhit/pygrib/blob/a69fb89e62f4ba5fffdfa86aee40948ee26f5c42/src/pygrib/_pygrib.pyx#L1623-L1644
     lat_corner = 21.138123
     lon_corner = 237.280472
     dx, dy = 3000, 3000
