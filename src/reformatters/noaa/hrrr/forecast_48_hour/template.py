@@ -2,12 +2,18 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import pyproj
+import rioxarray  # noqa: F401  Adds .rio accessor to datasets
 import xarray as xr
 
 from reformatters.common.template_utils import assign_var_metadata, make_empty_variable
 from reformatters.common.template_utils import (
     write_metadata as write_metadata,  # re-export
+)
+from reformatters.noaa.hrrr.read_data import (
+    SourceFileCoords,
+    download_file,
 )
 
 from .template_config import (
@@ -57,18 +63,33 @@ def update_template() -> None:
 def derive_coordinates(
     ds: xr.Dataset,
 ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
-    # following pygrib methodology for lat/lon calculation
-    # https://github.com/jswhit/pygrib/blob/a69fb89e62f4ba5fffdfa86aee40948ee26f5c42/src/pygrib/_pygrib.pyx#L1623-L1644
-    lat_corner = 21.138123
-    lon_corner = 237.280472
+    # derivation of HRRR latitude / longitude coordinates is simplest by downloading
+    # a sample file and extracting the coordinates from the file itself.
+    data_coords = SourceFileCoords(
+        {
+            "init_time": pd.Timestamp("2025-01-01T00:00:00"),
+            "lead_time": pd.Timedelta("0h"),
+            "domain": "conus",
+        }
+    )
+
+    # "sfc" is the smallest available file type.
+    # TODO (tony): ensure we only pull down 1 grib message for this to save download time/bdwth
+    _, filepath = download_file(data_coords, "sfc")
+    hrrrds = xr.open_dataset(str(filepath), engine="rasterio")
+
+    hrrrds_bounds = hrrrds.rio.bounds(recalc=True)
     dx, dy = 3000, 3000
+
+    proj_xcorner, proj_ycorner = hrrrds_bounds[0], hrrrds_bounds[1]
     nx = ds.x.size
     ny = ds.y.size
 
     pj = pyproj.Proj(ds.rio.crs.to_proj4())
-    proj_xcorner, proj_ycorner = pj(lon_corner, lat_corner)
-    x = proj_xcorner + np.arange(nx) * dx
-    y = proj_ycorner + np.arange(ny) * dy
+    # rio.bounds returns the lower left corner, but we want the center of the gridcell
+    # so we offset by half the gridcell size.
+    x = (proj_xcorner + (0.5 * dx)) + np.arange(nx) * dx
+    y = (proj_ycorner + (0.5 * dy)) + np.arange(ny) * dy
     xs, ys = np.meshgrid(x, y)
     lons, lats = pj(xs, ys, inverse=True)
 
