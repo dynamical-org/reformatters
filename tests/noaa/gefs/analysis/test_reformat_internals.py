@@ -21,9 +21,6 @@ def test_generate_chunk_coordinates_reforecast_with_hour_0() -> None:
     assert "ensemble" in result
     ensemble_coords: Sequence[EnsembleSourceFileCoords] = result["ensemble"]  # type: ignore[assignment]
 
-    # Filter the times just as the function does
-    filtered_times = filter_available_times(times)
-
     # Select some specific samples to verify directly
     # Sample 1: 2019-12-30T00:00 - This is a reforecast date with init_time = valid_time
     # But there are no hour 0 values in the reforecast period, so we shift back one forecast
@@ -87,6 +84,7 @@ def test_generate_chunk_coordinates_reforecast_with_hour_0() -> None:
     assert coords_jan01_12["ensemble_member"] == 0
 
     # Verify we have the right number of coordinates
+    filtered_times = filter_available_times(times)
     assert len(ensemble_coords) == len(filtered_times)
 
 
@@ -101,9 +99,6 @@ def test_generate_chunk_coordinates_reforecast_without_hour_0() -> None:
 
     assert "ensemble" in result
     ensemble_coords: Sequence[EnsembleSourceFileCoords] = result["ensemble"]  # type: ignore[assignment]
-
-    # Filter the times just as the function does
-    filtered_times = filter_available_times(times)
 
     # Sample 1: 2019-12-30T00:00 - This is a reforecast which does not contain hour 0 values
     coords_dec30_00 = next(
@@ -157,6 +152,7 @@ def test_generate_chunk_coordinates_reforecast_without_hour_0() -> None:
     assert coords_jan01_12["ensemble_member"] == 0
 
     # Verify we have the right number of coordinates
+    filtered_times = filter_available_times(times)
     assert len(ensemble_coords) == len(filtered_times)
 
 
@@ -171,9 +167,6 @@ def test_generate_chunk_coordinates_v12_transition_with_hour_0() -> None:
 
     assert "ensemble" in result
     ensemble_coords: Sequence[EnsembleSourceFileCoords] = result["ensemble"]  # type: ignore[assignment]
-
-    # Filter the times just as the function does
-    filtered_times = filter_available_times(times)
 
     # Sample 1: 2020-09-30T00:00 - This is pre-GEFS v12 with hour 0
     coords_sep30_00 = next(
@@ -226,6 +219,7 @@ def test_generate_chunk_coordinates_v12_transition_with_hour_0() -> None:
     assert coords_oct01_06["ensemble_member"] == 0
 
     # Verify we have the right number of coordinates
+    filtered_times = filter_available_times(times)
     assert len(ensemble_coords) == len(filtered_times)
 
 
@@ -240,9 +234,6 @@ def test_generate_chunk_coordinates_v12_transition_without_hour_0() -> None:
 
     assert "ensemble" in result
     ensemble_coords: Sequence[EnsembleSourceFileCoords] = result["ensemble"]  # type: ignore[assignment]
-
-    # Filter the times just as the function does
-    filtered_times = filter_available_times(times)
 
     # Sample 1: 2020-09-30T00:00 - This is pre-GEFS v12 on hour 0
     coords_sep30_00 = next(
@@ -305,6 +296,7 @@ def test_generate_chunk_coordinates_v12_transition_without_hour_0() -> None:
     assert coords_oct01_09["ensemble_member"] == 0
 
     # Verify we have the right number of coordinates
+    filtered_times = filter_available_times(times)
     assert len(ensemble_coords) == len(filtered_times)
 
 

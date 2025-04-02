@@ -137,7 +137,7 @@ def download_file(
         )
         store = http_store("https://noaa-gefs-pds.s3.amazonaws.com")
     else:
-        assert len(gefs_idx_data_vars) == 1, "Only one data variable per file in GEFS v12 retrospective"  # fmt: skip
+        assert len(gefs_idx_data_vars) == 1, "Only one data variable per file in GEFS v12 reforecast"  # fmt: skip
         data_var = gefs_idx_data_vars[0]
         days_str = "Days:1-10" if lead_time <= pd.Timedelta(hours=240) else "Days:10-16"
         level_str = GEFS_REFORECAST_LEVELS_SHORT[data_var.internal_attrs.grib_index_level]  # fmt: skip
