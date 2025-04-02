@@ -1,6 +1,7 @@
 from typing import Final
 
 import numpy as np
+import pandas as pd
 import xarray as xr
 from numba import njit, prange  # type: ignore
 
@@ -10,7 +11,10 @@ SECONDS_PER_6_HOUR: Final[int] = 6 * 60 * 60
 
 
 def deaccumulate_to_rates_inplace(
-    data_array: xr.DataArray, *, dim: str
+    data_array: xr.DataArray,
+    *,
+    dim: str,
+    reset_frequency: pd.Timedelta,
 ) -> xr.DataArray:
     """
     Convert accumulated values to per-second rates in place.
@@ -21,10 +25,21 @@ def deaccumulate_to_rates_inplace(
         "Output units must be a per-second rate"
     )
 
-    lead_time_seconds = data_array.lead_time.dt.total_seconds().values
+    # Support timedelta or datetime dimension values, converting either to seconds
+    times = data_array[dim].values
+    if np.issubdtype(times.dtype, np.datetime64):
+        start_time = np.datetime64(pd.Timestamp(times[0]).floor(reset_frequency))  # type: ignore[arg-type]
+        times = times - start_time
+
+    # First step must be a resetting step so we know the start point of the accumulation is zero.
+    assert times[0] % reset_frequency == pd.Timedelta(0)
+
+    assert np.issubdtype(times.dtype, np.timedelta64)
+    seconds = times.astype("timedelta64[s]").astype(np.int64)
+
     supported_accum_durations = [SECONDS_PER_6_HOUR, SECONDS_PER_6_HOUR // 2]
-    assert np.isin(np.diff(lead_time_seconds), supported_accum_durations).all()
-    is_3h_accum = (lead_time_seconds % SECONDS_PER_6_HOUR) != 0
+    assert np.isin(np.diff(seconds), supported_accum_durations).all()
+    is_3h_accum = (seconds % SECONDS_PER_6_HOUR) != 0
 
     # make array 3D with shape (flattend_leading_dims, lead_time, flattend_trailing_dims)
     lead_time_dim_index = data_array.dims.index(dim)
@@ -37,7 +52,7 @@ def deaccumulate_to_rates_inplace(
     _deaccumulate_to_rates_numba(
         values,
         is_3h_accum,
-        lead_time_seconds,
+        seconds,
     )
 
     return data_array
@@ -47,7 +62,7 @@ def deaccumulate_to_rates_inplace(
 def _deaccumulate_to_rates_numba(
     values: ArrayFloat32,
     is_3h_accum: Array1D[np.bool],
-    lead_time_seconds: Array1D[np.int64],
+    seconds: Array1D[np.int64],
     invalid_below_threshold_rate: float = -2e-5,
 ) -> None:
     """
@@ -66,13 +81,13 @@ def _deaccumulate_to_rates_numba(
     Args:
         values: Array to modify in place. Must be 3D with lead_time the *middle* dimension
         is_3h_accum: 1D array of booleans indicating if the accumulation is 3h or 6h
-        lead_time_seconds: 1D array of seconds since forecast start
+        seconds: 1D array of seconds since forecast start
         epsilon: Threshold below which values are considered invalid
     """
     assert values.ndim == 3
-    assert lead_time_seconds.ndim == 1
+    assert seconds.ndim == 1
     assert is_3h_accum.ndim == 1
-    assert values.shape[1] == lead_time_seconds.size
+    assert values.shape[1] == seconds.size
     assert values.shape[1] == is_3h_accum.size
 
     n_lead_times = values.shape[1]
@@ -86,7 +101,7 @@ def _deaccumulate_to_rates_numba(
 
             # Skip first step, no accumulation yet
             for t in range(1, n_lead_times):
-                time_step = lead_time_seconds[t] - lead_time_seconds[t - 1]
+                time_step = seconds[t] - seconds[t - 1]
 
                 if is_3h_accum[t]:
                     # 3h accumulation point - simple division
@@ -96,9 +111,7 @@ def _deaccumulate_to_rates_numba(
 
                     if t > 1 and is_3h_accum[t - 1]:
                         # There was a 3h accumulation before - calculate rate for just the last 3h
-                        previous_time_step = (
-                            lead_time_seconds[t - 1] - lead_time_seconds[t - 2]
-                        )
+                        previous_time_step = seconds[t - 1] - seconds[t - 2]
                         previous_accumulation = sequence[t - 1] * previous_time_step
                         accumulation = sequence[t] - previous_accumulation
                         sequence[t] = accumulation / time_step
