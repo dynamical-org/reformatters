@@ -37,9 +37,8 @@ def deaccumulate_to_rates_inplace(
     assert np.issubdtype(times.dtype, np.timedelta64)
     seconds = times.astype("timedelta64[s]").astype(np.int64)
 
-    supported_accum_durations = [SECONDS_PER_6_HOUR, SECONDS_PER_6_HOUR // 2]
-    assert np.isin(np.diff(seconds), supported_accum_durations).all()
-    is_3h_accum = (seconds % SECONDS_PER_6_HOUR) != 0
+    resets_after = (seconds % reset_frequency.total_seconds()) == 0
+    assert resets_after[0]  # Again, first step must be a resetting step
 
     # make array 3D with shape (flattend_leading_dims, lead_time, flattend_trailing_dims)
     lead_time_dim_index = data_array.dims.index(dim)
@@ -51,7 +50,7 @@ def deaccumulate_to_rates_inplace(
 
     _deaccumulate_to_rates_numba(
         values,
-        is_3h_accum,
+        resets_after,
         seconds,
     )
 
@@ -61,7 +60,7 @@ def deaccumulate_to_rates_inplace(
 @njit(parallel=True)  # type: ignore
 def _deaccumulate_to_rates_numba(
     values: ArrayFloat32,
-    is_3h_accum: Array1D[np.bool],
+    resets_after: Array1D[np.bool],
     seconds: Array1D[np.int64],
     invalid_below_threshold_rate: float = -2e-5,
 ) -> None:
@@ -86,9 +85,9 @@ def _deaccumulate_to_rates_numba(
     """
     assert values.ndim == 3
     assert seconds.ndim == 1
-    assert is_3h_accum.ndim == 1
+    assert resets_after.ndim == 1
     assert values.shape[1] == seconds.size
-    assert values.shape[1] == is_3h_accum.size
+    assert values.shape[1] == resets_after.size
 
     n_lead_times = values.shape[1]
 
@@ -103,21 +102,15 @@ def _deaccumulate_to_rates_numba(
             for t in range(1, n_lead_times):
                 time_step = seconds[t] - seconds[t - 1]
 
-                if is_3h_accum[t]:
-                    # 3h accumulation point - simple division
+                if resets_after[t - 1]:
+                    # First step after reset - simple division by time since reset
                     sequence[t] /= time_step
                 else:
-                    # 6h accumulation point
-
-                    if t > 1 and is_3h_accum[t - 1]:
-                        # There was a 3h accumulation before - calculate rate for just the last 3h
-                        previous_time_step = seconds[t - 1] - seconds[t - 2]
-                        previous_accumulation = sequence[t - 1] * previous_time_step
-                        accumulation = sequence[t] - previous_accumulation
-                        sequence[t] = accumulation / time_step
-                    else:
-                        # No 3h accumulation before - calculate rate for full 6h period
-                        sequence[t] /= time_step
+                    # There was an accumulation before - calculate rate for just the last step
+                    previous_time_step = seconds[t - 1] - seconds[t - 2]
+                    previous_accumulation = sequence[t - 1] * previous_time_step
+                    accumulation = sequence[t] - previous_accumulation
+                    sequence[t] = accumulation / time_step
 
                 # Accumulations should only go up
                 # If they go down a tiny bit, clamp to 0
