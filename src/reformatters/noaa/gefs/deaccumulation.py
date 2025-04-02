@@ -98,19 +98,27 @@ def _deaccumulate_to_rates_numba(
         for j in range(values.shape[2]):
             sequence = values[i, :, j]
 
+            current_reset_window_accumulation = 0
+
             # Skip first step, no accumulation yet
             for t in range(1, n_lead_times):
                 time_step = seconds[t] - seconds[t - 1]
 
                 if resets_after[t - 1]:
                     # First step after reset - simple division by time since reset
+                    current_reset_window_accumulation = sequence[t]
                     sequence[t] /= time_step
                 else:
                     # There was an accumulation before - calculate rate for just the last step
-                    previous_time_step = seconds[t - 1] - seconds[t - 2]
-                    previous_accumulation = sequence[t - 1] * previous_time_step
-                    accumulation = sequence[t] - previous_accumulation
+                    accumulation = sequence[t] - current_reset_window_accumulation
+                    current_reset_window_accumulation = sequence[t]
                     sequence[t] = accumulation / time_step
+
+                # TODO: Is this necessary because in the esets_after[t - 1] case
+                # we update current_reset_window_accumulation to the first valuse
+                # post reset?
+                if resets_after[t]:
+                    current_reset_window_accumulation = 0
 
                 # Accumulations should only go up
                 # If they go down a tiny bit, clamp to 0
