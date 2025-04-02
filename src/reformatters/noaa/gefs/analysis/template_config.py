@@ -22,7 +22,7 @@ from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
 DATASET_ID = "noaa-gefs-analysis"
 DATASET_VERSION = "0.0.1-dev"
 
-TIME_START = pd.Timestamp("2020-01-02T00:00")
+TIME_START = pd.Timestamp("2000-01-01T00:00")
 TIME_FREQUENCY = pd.Timedelta("3h")
 
 DATASET_ATTRIBUTES = DatasetAttributes(
