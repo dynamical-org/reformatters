@@ -16,7 +16,7 @@ spec:
           values: ["spot"]
         - key: "eks.amazonaws.com/instance-category"
           operator: In
-          values: ["r"] # ["c", "m", "r"]
+          values: ["c", "m", "r"]
         - key: "eks.amazonaws.com/instance-cpu"
           operator: Lt
           values: ["17"]
