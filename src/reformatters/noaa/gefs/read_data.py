@@ -48,8 +48,8 @@ type SourceFileCoords = EnsembleSourceFileCoords | StatisticSourceFileCoords
 
 
 class ChunkCoordinates(TypedDict):
-    ensemble: Iterable[EnsembleSourceFileCoords]
-    statistic: Iterable[StatisticSourceFileCoords]
+    ensemble: Sequence[EnsembleSourceFileCoords]
+    statistic: Sequence[StatisticSourceFileCoords]
 
 
 # We pull data from three different periods of GEFS.
@@ -220,7 +220,7 @@ def get_gefs_file_type(
 
 def parse_index_byte_ranges(
     idx_local_path: Path,
-    gefs_idx_data_vars: Iterable[GEFSDataVar],
+    gefs_idx_data_vars: Sequence[GEFSDataVar],
     lead_time_hours: float,
 ) -> tuple[list[int], list[int]]:
     with open(idx_local_path) as index_file:

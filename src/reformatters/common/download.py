@@ -31,6 +31,7 @@ def download_to_disk(
     else:
         response_buffers = obstore.get(store, path).stream()
 
+    # Avoid race by writing to temp file then renaming when complete
     temp_path = local_path.with_name(f"{local_path.name}.{uuid.uuid4().hex[:8]}")
 
     try:
