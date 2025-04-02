@@ -1,6 +1,7 @@
 from typing import Final
 
 import numpy as np
+import pandas as pd
 import xarray as xr
 from numba import njit, prange  # type: ignore
 
@@ -10,35 +11,49 @@ SECONDS_PER_6_HOUR: Final[int] = 6 * 60 * 60
 
 
 def deaccumulate_to_rates_inplace(
-    data_array: xr.DataArray, *, dim: str
+    data_array: xr.DataArray,
+    *,
+    dim: str,
+    reset_frequency: pd.Timedelta,
 ) -> xr.DataArray:
     """
     Convert accumulated values to per-second rates in place.
-    For NOAA GEFS data, accumulations are either over 3h or 6h periods.
-    See https://noaa-gefs-retrospective.s3.amazonaws.com/Description_of_reforecast_data.pdf
+
+    Args:
+        data_array: Array containing accumulated values to be converted to rates in place
+        dim: Dimension over which to deaccumulate
+        reset_frequency: Frequency at which the accumulation resets (eg 6 hours for GEFS and GFS)
     """
     assert data_array.attrs["units"].endswith("/s"), (
         "Output units must be a per-second rate"
     )
 
-    lead_time_seconds = data_array.lead_time.dt.total_seconds().values
-    supported_accum_durations = [SECONDS_PER_6_HOUR, SECONDS_PER_6_HOUR // 2]
-    assert np.isin(np.diff(lead_time_seconds), supported_accum_durations).all()
-    is_3h_accum = (lead_time_seconds % SECONDS_PER_6_HOUR) != 0
+    # Support timedelta or datetime dimension values, converting either to seconds
+    times = data_array[dim].values
+    if np.issubdtype(times.dtype, np.datetime64):
+        start_time = np.datetime64(pd.Timestamp(times[0]).floor(reset_frequency))  # type: ignore[arg-type]
+        timedeltas = times - start_time
+    else:
+        assert np.issubdtype(times.dtype, np.timedelta64)
+        timedeltas = times
+
+    # First step must be a resetting step so we know the start point of the accumulation is zero.
+    assert timedeltas[0] % reset_frequency == pd.Timedelta(0)
+
+    seconds = timedeltas.astype("timedelta64[s]").astype(np.int64)
+
+    reset_after = (seconds % reset_frequency.total_seconds()) == 0
+    assert reset_after[0]  # Again, first step must be a resetting step
 
     # make array 3D with shape (flattend_leading_dims, lead_time, flattend_trailing_dims)
-    lead_time_dim_index = data_array.dims.index(dim)
+    time_dim_index = data_array.dims.index(dim)
     values = data_array.values.reshape(
-        np.prod(data_array.shape[:lead_time_dim_index] or 1),
-        data_array.shape[lead_time_dim_index],
-        np.prod(data_array.shape[lead_time_dim_index + 1 :] or 1),
+        np.prod(data_array.shape[:time_dim_index] or 1),
+        data_array.shape[time_dim_index],
+        np.prod(data_array.shape[time_dim_index + 1 :] or 1),
     )
 
-    _deaccumulate_to_rates_numba(
-        values,
-        is_3h_accum,
-        lead_time_seconds,
-    )
+    _deaccumulate_to_rates_numba(values, seconds, reset_after)
 
     return data_array
 
@@ -46,15 +61,12 @@ def deaccumulate_to_rates_inplace(
 @njit(parallel=True)  # type: ignore
 def _deaccumulate_to_rates_numba(
     values: ArrayFloat32,
-    is_3h_accum: Array1D[np.bool],
-    lead_time_seconds: Array1D[np.int64],
+    seconds: Array1D[np.int64],
+    reset_after: Array1D[np.bool],
     invalid_below_threshold_rate: float = -2e-5,
 ) -> None:
     """
-    Convert GEFS 3 or 6 hour accumulated values to per-second rates in place.
-
-    GEFS accumulations are over the last 6 hour period for 00, 06, 12, 18
-    UTC hours or the last 3 hour period for 03, 09, 15, 21 UTC hours.
+    Convert accumulated values to per-second rates, mutating `values` in place.
 
     Accumulations should only go up. If they go down a tiny bit,
     most likely due to numerical precision issues, we clamp to 0.
@@ -64,16 +76,16 @@ def _deaccumulate_to_rates_numba(
     Parallel processing is done over the leading dimension of values.
 
     Args:
-        values: Array to modify in place. Must be 3D with lead_time the *middle* dimension
-        is_3h_accum: 1D array of booleans indicating if the accumulation is 3h or 6h
-        lead_time_seconds: 1D array of seconds since forecast start
-        epsilon: Threshold below which values are considered invalid
+        values: Array to modify in place. Must be 3D with accumulation dimension as the *middle* dimension
+        seconds: 1D array of seconds since forecast start or a reference time
+        reset_after: 1D array of booleans where True indicates the accumulation resets after the current step
+        invalid_below_threshold_rate: Threshold below which values are considered invalid
     """
     assert values.ndim == 3
-    assert lead_time_seconds.ndim == 1
-    assert is_3h_accum.ndim == 1
-    assert values.shape[1] == lead_time_seconds.size
-    assert values.shape[1] == is_3h_accum.size
+    assert seconds.ndim == 1
+    assert reset_after.ndim == 1
+    assert values.shape[1] == seconds.size
+    assert values.shape[1] == reset_after.size
 
     n_lead_times = values.shape[1]
 
@@ -83,28 +95,18 @@ def _deaccumulate_to_rates_numba(
     for i in prange(values.shape[0]):
         for j in range(values.shape[2]):
             sequence = values[i, :, j]
+            previous_accumulation = 0
 
             # Skip first step, no accumulation yet
             for t in range(1, n_lead_times):
-                time_step = lead_time_seconds[t] - lead_time_seconds[t - 1]
+                time_step = seconds[t] - seconds[t - 1]
+                step_accumulation = sequence[t] - previous_accumulation
+                # store previous accumulation before we overwrite sequence[t] with rate
+                previous_accumulation = sequence[t]
+                sequence[t] = step_accumulation / time_step
 
-                if is_3h_accum[t]:
-                    # 3h accumulation point - simple division
-                    sequence[t] /= time_step
-                else:
-                    # 6h accumulation point
-
-                    if t > 1 and is_3h_accum[t - 1]:
-                        # There was a 3h accumulation before - calculate rate for just the last 3h
-                        previous_time_step = (
-                            lead_time_seconds[t - 1] - lead_time_seconds[t - 2]
-                        )
-                        previous_accumulation = sequence[t - 1] * previous_time_step
-                        accumulation = sequence[t] - previous_accumulation
-                        sequence[t] = accumulation / time_step
-                    else:
-                        # No 3h accumulation before - calculate rate for full 6h period
-                        sequence[t] /= time_step
+                if reset_after[t]:
+                    previous_accumulation = 0
 
                 # Accumulations should only go up
                 # If they go down a tiny bit, clamp to 0

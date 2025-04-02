@@ -66,7 +66,7 @@ GEFS_REFORECAST_INIT_TIME_FREQUENCY = pd.Timedelta("24h")
 GEFS_INIT_TIME_FREQUENCY: Final[pd.Timedelta] = pd.Timedelta("6h")
 
 # Accumulations are reset every 6 hours in all periods of GEFS data
-GEFS_ACCUMULATION_RESET_HOURS: Final[int] = 6
+GEFS_ACCUMULATION_RESET_FREQUENCY: Final[pd.Timedelta] = pd.Timedelta("6h")
 
 # Short names are used in the file names of the GEFS v12 reforecast
 GEFS_REFORECAST_LEVELS_SHORT = {
@@ -256,14 +256,21 @@ def parse_index_byte_ranges(
 
 
 def get_hours_str(var_info: GEFSDataVar, lead_time_hours: float) -> str:
+    gefs_accumulation_reset_hours = (
+        GEFS_ACCUMULATION_RESET_FREQUENCY.total_seconds() // (60 * 60)
+    )
+    assert (
+        pd.Timedelta(hours=gefs_accumulation_reset_hours)
+        == GEFS_ACCUMULATION_RESET_FREQUENCY
+    )
     if lead_time_hours == 0:
         hours_str = "anl"  # analysis
     elif var_info.attrs.step_type == "instant":
         hours_str = f"{lead_time_hours:.0f} hour"
     else:
-        diff_hours = lead_time_hours % GEFS_ACCUMULATION_RESET_HOURS
+        diff_hours = lead_time_hours % gefs_accumulation_reset_hours
         if diff_hours == 0:
-            reset_hour = lead_time_hours - GEFS_ACCUMULATION_RESET_HOURS
+            reset_hour = lead_time_hours - gefs_accumulation_reset_hours
         else:
             reset_hour = lead_time_hours - diff_hours
         hours_str = f"{reset_hour:.0f}-{lead_time_hours:.0f} hour"
