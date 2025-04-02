@@ -109,7 +109,7 @@ def test_deaccumulate_1d_3_and_6_hour_normal_cases() -> None:
     np.testing.assert_equal(result.values, expected)
 
 
-def test_deaccumulate_1d_gfs_hourly_6h_reset_normal_cases() -> None:
+def test_deaccumulate_1d_hourly_6h_reset_normal_cases() -> None:
     reset_frequency = pd.Timedelta(hours=6)
     sec = float(SECONDS_PER_HOUR)
 
@@ -120,14 +120,53 @@ def test_deaccumulate_1d_gfs_hourly_6h_reset_normal_cases() -> None:
         {"lt": 1, "in": 4 * sec, "out": 4.0},  # standard 1h case
         {"lt": 2, "in": 4 * sec, "out": 0.0},  # no new accumulation between 1h and 2h steps
         {"lt": 3, "in": 5 * sec, "out": 1.0},  # new accumulation between 2h and 3h steps
-        {"lt": 4, "in": 7 * sec, "out": 2.0},  # 2 mm new accumulation
+        {"lt": 4, "in": 7 * sec, "out": 2.0},  # 2 mm/s new accumulation
         {"lt": 5, "in": 7 * sec, "out": 0.0},  # no new accumulation
         {"lt": 6, "in": 7 * sec, "out": 0.0},  # no new accumulation
         {"lt": 7, "in": 7 * sec, "out": 7.0},  # 7 mm new accumulation after 6h reset
-        # # Test transition from 1h to 3h accumulation after
-        # # 3 hourly step:
-        # {"lt": 18, "in": 3 * sec * 3, "out": 3.0},  # standard 6h case following a 3h step
-        # {"lt": 24, "in": 7 * sec * 3, "out": 7.0},  # standard 6h case
+    ]  # fmt: off
+
+    lead_times = pd.to_timedelta([step["lt"] for step in values], unit="h")
+    data = np.array([step["in"] for step in values], dtype=np.float32)
+    expected = np.array([step["out"] for step in values], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        data,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "mm/s"},
+    )
+
+    result = deaccumulate_to_rates_inplace(
+        data_array, dim="lead_time", reset_frequency=reset_frequency
+    )
+
+    np.testing.assert_equal(result.values, expected)
+
+
+def test_deaccumulate_1d_hourly_3hourly_6hourly_6h_reset_normal_cases() -> None:
+    reset_frequency = pd.Timedelta(hours=6)
+    sec = float(SECONDS_PER_HOUR)
+
+    # These values will have large accumulations going in and output rates that in the single digits
+    values = [
+        # 1 hourly step:
+        {"lt": 0, "in": np.nan, "out": np.nan},  # no deaccum on first step
+        {"lt": 1, "in": 4 * sec, "out": 4.0},  # standard 1h case
+        {"lt": 2, "in": 4 * sec, "out": 0.0},  # no new accumulation between 1h and 2h steps
+        {"lt": 3, "in": 5 * sec, "out": 1.0},  # new accumulation between 2h and 3h steps
+        {"lt": 4, "in": 7 * sec, "out": 2.0},  # 2 mm/s new accumulation
+        {"lt": 5, "in": 7 * sec, "out": 0.0},  # no new accumulation
+        {"lt": 6, "in": 7 * sec, "out": 0.0},  # no new accumulation
+        # 3 hourly step:
+        {"lt": 9, "in": 7 * sec * 3, "out": 7.0},  # 7 mm/s new accumulation over 3 hours after 6h reset
+        {"lt": 12, "in": 8 * sec * 3, "out": 1.0},  # 1 mm/s new accumulation over 3 hours
+        {"lt": 15, "in": 8 * sec * 3, "out": 8.0},  # 8 mm/s new accumulation over 3 hours
+        {"lt": 18, "in": 9 * sec * 3, "out": 1.0},  # 1 mm/s new accumulation over 3 hours
+        # 6 hourly step:
+        {"lt": 24, "in": 3 * sec * 6, "out": 3.0},  # 3 mm/s new accumulation over 6 hours
+        {"lt": 30, "in": 0 * sec * 6, "out": 0.0},  # no new accumulation over 6 hours
+        {"lt": 36, "in": 5 * sec * 6, "out": 5.0},  # no new accumulation over 6 hours
     ]  # fmt: off
 
     lead_times = pd.to_timedelta([step["lt"] for step in values], unit="h")
