@@ -39,7 +39,8 @@ from reformatters.noaa.gefs.analysis.reformat_internals import (
     reformat_time_i_slices,
 )
 
-_VARIABLES_PER_BACKFILL_JOB = 3
+# 1 makes logic simpler when accessing GEFSv12 reforecast which has a file per variable
+_VARIABLES_PER_BACKFILL_JOB = 1
 _OPERATIONAL_CRON_SCHEDULE = "0 7 * * *"  # At 7:00 UTC every day.
 _VALIDATION_CRON_SCHEDULE = "0 10 * * *"  # At 10:00 UTC every day.
 

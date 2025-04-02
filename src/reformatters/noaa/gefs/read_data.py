@@ -2,14 +2,13 @@ import hashlib
 import os
 import re
 import warnings
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Any, Literal, TypedDict, assert_never
+from typing import Any, Final, Literal, TypedDict, assert_never
 
 import numpy as np
 import pandas as pd
 import rasterio  # type: ignore
-import requests
 import xarray as xr
 
 from reformatters.common.config import Config
@@ -49,18 +48,37 @@ type SourceFileCoords = EnsembleSourceFileCoords | StatisticSourceFileCoords
 
 
 class ChunkCoordinates(TypedDict):
-    ensemble: Iterable[EnsembleSourceFileCoords]
-    statistic: Iterable[StatisticSourceFileCoords]
+    ensemble: Sequence[EnsembleSourceFileCoords]
+    statistic: Sequence[StatisticSourceFileCoords]
 
 
 # We pull data from three different periods of GEFS.
 #
 # 1. The current configuration archive, which is 0.25 degree data from 2020-10-01 to the present.
 # 2. The pre GEFS v12 archive, which is 1.0 degree data that we use from 2020-01-01 to 2020-09-30.
-# 3. The GEFS v12 reforecast archive, which is 0.25 degree data from 2000-01-01 to 2019-12-31.
+# 3. The GEFS v12 retrospective (reforecast) archive, which is 0.25 degree data from 2000-01-01 to 2019-12-31.
 #
 GEFS_CURRENT_ARCHIVE_START = pd.Timestamp("2020-10-01T00:00")
+GEFS_REFORECAST_START = pd.Timestamp("2000-01-01T00:00")
 GEFS_REFORECAST_END = pd.Timestamp("2020-01-01T00:00")  # exclusive end point
+
+GEFS_REFORECAST_INIT_TIME_FREQUENCY = pd.Timedelta("24h")
+GEFS_INIT_TIME_FREQUENCY: Final[pd.Timedelta] = pd.Timedelta("6h")
+
+# Accumulations are reset every 6 hours in all periods of GEFS data
+GEFS_ACCUMULATION_RESET_HOURS: Final[int] = 6
+
+# Short names are used in the file names of the GEFS v12 reforecast
+GEFS_REFORECAST_LEVELS_SHORT = {
+    "entire atmosphere": "eatm",
+    "entire atmosphere (considered as a single layer)": "eatm",
+    "cloud ceiling": "ceiling",
+    "surface": "sfc",
+    "mean sea level": "msl",
+    "2 m above ground": "2m",
+    "10 m above ground": "hgt",
+    "100 m above ground": "hgt",
+}
 
 
 def is_v12(init_time: pd.Timestamp) -> bool:
@@ -74,7 +92,7 @@ def is_v12_index(times: pd.DatetimeIndex) -> np.ndarray[Any, np.dtype[np.bool]]:
 def download_file(
     coords: SourceFileCoords,
     gefs_file_type: GEFSFileType,
-    gefs_idx_data_vars: Iterable[GEFSDataVar],
+    gefs_idx_data_vars: Sequence[GEFSDataVar],
 ) -> tuple[SourceFileCoords, Path | None]:
     init_time = coords["init_time"]
     lead_time = coords["lead_time"]
@@ -106,21 +124,31 @@ def download_file(
     true_gefs_file_type = get_gefs_file_type(init_time, lead_time, gefs_file_type)
 
     if coords["init_time"] >= GEFS_CURRENT_ARCHIVE_START:
+        resolution_str = FILE_RESOLUTIONS[true_gefs_file_type]
         base_path = (
-            f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2{true_gefs_file_type}{FILE_RESOLUTIONS[true_gefs_file_type].strip('0')}/"
-            f"ge{ensemble_or_statistic_str}.t{init_hour_str}z.pgrb2{true_gefs_file_type}.{FILE_RESOLUTIONS[true_gefs_file_type]}.f{lead_time_hours:03.0f}"
+            f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2{true_gefs_file_type}{resolution_str.strip('0')}/"
+            f"ge{ensemble_or_statistic_str}.t{init_hour_str}z.pgrb2{true_gefs_file_type}.{resolution_str}.f{lead_time_hours:03.0f}"
         )
+        store = http_store("https://noaa-gefs-pds.s3.amazonaws.com")
     elif coords["init_time"] >= GEFS_REFORECAST_END:
         base_path = (
             f"gefs.{init_date_str}/{init_hour_str}/pgrb2{true_gefs_file_type}/"
             f"ge{ensemble_or_statistic_str}.t{init_hour_str}z.pgrb2{true_gefs_file_type}f{lead_time_hours:02.0f}"
         )
+        store = http_store("https://noaa-gefs-pds.s3.amazonaws.com")
     else:
-        raise NotImplementedError(
-            f"GEFS before {GEFS_REFORECAST_END} not yet implemented"
+        assert len(gefs_idx_data_vars) == 1, "Only one data variable per file in GEFS v12 reforecast"  # fmt: skip
+        data_var = gefs_idx_data_vars[0]
+        days_str = "Days:1-10" if lead_time <= pd.Timedelta(hours=240) else "Days:10-16"
+        level_str = GEFS_REFORECAST_LEVELS_SHORT[data_var.internal_attrs.grib_index_level]  # fmt: skip
+        base_path = (
+            f"GEFSv12/reforecast/{coords['init_time'].year}/{init_date_str}{init_hour_str}/"
+            f"{ensemble_or_statistic_str}/{days_str}/"
+            f"{data_var.internal_attrs.grib_element.lower()}_{level_str}_"
+            f"{init_date_str}{init_hour_str}_{ensemble_or_statistic_str}.grib2"
         )
 
-    store = http_store("https://noaa-gefs-pds.s3.amazonaws.com")
+        store = http_store("https://noaa-gefs-retrospective.s3.amazonaws.com/")
 
     idx_remote_path = f"{base_path}.idx"
     idx_local_path = Path(DOWNLOAD_DIR, f"{base_path}.idx")
@@ -129,8 +157,11 @@ def download_file(
     vars_str = "-".join(
         var_info.internal_attrs.grib_element for var_info in gefs_idx_data_vars
     )
-    vars_hash = digest(format_gefs_idx_var(var_info) for var_info in gefs_idx_data_vars)
-    vars_suffix = f"{vars_str}-{vars_hash}"
+    vars_hash = digest(
+        format_gefs_idx_var(var_info, lead_time_hours)
+        for var_info in gefs_idx_data_vars
+    )
+    vars_suffix = f"{lead_time_hours:03.0f}-{vars_str}-{vars_hash}"
     local_path = Path(DOWNLOAD_DIR, f"{base_path}.{vars_suffix}")
 
     try:
@@ -142,7 +173,7 @@ def download_file(
         )
 
         byte_range_starts, byte_range_ends = parse_index_byte_ranges(
-            idx_local_path, gefs_idx_data_vars
+            idx_local_path, gefs_idx_data_vars, lead_time_hours
         )
 
         download_to_disk(
@@ -189,20 +220,19 @@ def get_gefs_file_type(
 
 def parse_index_byte_ranges(
     idx_local_path: Path,
-    gefs_idx_data_vars: Iterable[GEFSDataVar],
+    gefs_idx_data_vars: Sequence[GEFSDataVar],
+    lead_time_hours: float,
 ) -> tuple[list[int], list[int]]:
     with open(idx_local_path) as index_file:
         index_contents = index_file.read()
     byte_range_starts = []
     byte_range_ends = []
     for var_info in gefs_idx_data_vars:
-        var_match_str = re.escape(format_gefs_idx_var(var_info))
-        matches = re.findall(
-            f"\\d+:(\\d+):.+:{var_match_str}:.+(\\n\\d+:(\\d+))?",
-            index_contents,
-        )
+        var_match_str = re.escape(format_gefs_idx_var(var_info, lead_time_hours))
+        regex = f"\\d+:(\\d+):.+:{var_match_str}.+(\\n\\d+:(\\d+))?"
+        matches = re.findall(regex, index_contents)
         assert len(matches) == 1, (
-            f"Expected exactly 1 match, found {matches}, {var_info.name} {idx_local_path}"
+            f"Expected exactly 1 match, found {len(matches)}, {var_info.name} `{regex}` {idx_local_path} {len(index_contents)}"
         )
         match = matches[0]
         start_byte = int(match[0])
@@ -225,8 +255,24 @@ def parse_index_byte_ranges(
     return byte_range_starts, byte_range_ends
 
 
-def format_gefs_idx_var(var_info: GEFSDataVar) -> str:
-    return f"{var_info.internal_attrs.grib_element}:{var_info.internal_attrs.grib_index_level}"
+def get_hours_str(var_info: GEFSDataVar, lead_time_hours: float) -> str:
+    if lead_time_hours == 0:
+        hours_str = "anl"  # analysis
+    elif var_info.attrs.step_type == "instant":
+        hours_str = f"{lead_time_hours:.0f} hour"
+    else:
+        diff_hours = lead_time_hours % GEFS_ACCUMULATION_RESET_HOURS
+        if diff_hours == 0:
+            reset_hour = lead_time_hours - GEFS_ACCUMULATION_RESET_HOURS
+        else:
+            reset_hour = lead_time_hours - diff_hours
+        hours_str = f"{reset_hour:.0f}-{lead_time_hours:.0f} hour"
+    return hours_str
+
+
+def format_gefs_idx_var(var_info: GEFSDataVar, lead_time_hours: float) -> str:
+    hours_str = get_hours_str(var_info, lead_time_hours)
+    return f"{var_info.internal_attrs.grib_element}:{var_info.internal_attrs.grib_index_level}:{hours_str}"
 
 
 def digest(data: str | Iterable[str], length: int = 8) -> str:
@@ -296,77 +342,62 @@ def read_rasterio(
     coords: SourceFileCoords,
     gefs_file_type: GEFSFileType,
 ) -> Array2D[np.float32]:
-    with (
-        warnings.catch_warnings(),
-        rasterio.open(path) as reader,
-    ):
-        matching_bands = [
-            rasterio_band_i
-            for band_i in range(reader.count)
-            if reader.descriptions[band_i] == grib_description
-            and reader.tags(rasterio_band_i := band_i + 1)["GRIB_ELEMENT"]
-            == grib_element
-        ]
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", category=rasterio.errors.NotGeoreferencedWarning
+        )
+        with rasterio.open(path) as reader:
+            matching_bands = [
+                rasterio_band_i
+                for band_i in range(reader.count)
+                if reader.descriptions[band_i] == grib_description
+                and reader.tags(rasterio_band_i := band_i + 1)["GRIB_ELEMENT"]
+                == grib_element
+            ]
 
-        assert len(matching_bands) == 1, f"Expected exactly 1 matching band, found {matching_bands}. {grib_element=}, {grib_description=}, {path=}"  # fmt: skip
-        rasterio_band_index = matching_bands[0]
+            assert len(matching_bands) == 1, f"Expected exactly 1 matching band, found {matching_bands}. {grib_element=}, {grib_description=}, {path=}"  # fmt: skip
+            rasterio_band_index = matching_bands[0]
 
-        result: Array2D[np.float32]
-        match get_gefs_file_type(
-            coords["init_time"], coords["lead_time"], gefs_file_type
-        ):
-            case "a" | "b":
-                # Interpolate 1.0/0.5 degree data to the 0.25 degree grid.
-                # Every 2nd (0.5 deg) or every 4th (1.0 deg) 0.25 degree pixel's center aligns exactly
-                # with a 1.0/0.5 degree pixel's center.
-                # We use bilinear resampling to retain the exact values from the 1.0/0.5 degree data
-                # at pixels that align, and give a conservative interpolated value for 0.25 degree pixels
-                # that fall between the 1.0/0.5 degree pixels.
-                # Diagram: https://github.com/dynamical-org/reformatters/pull/44#issuecomment-2683799073
-                # Note: having the .read() call interpolate gives very slightly shifted results
-                # so we pay for an extra memory allocation and use reproject to do the interpolation instead.
-                warnings.filterwarnings(
-                    "ignore", category=rasterio.errors.NotGeoreferencedWarning
-                )
-                raw = reader.read(rasterio_band_index, out_dtype=np.float32)
-                result, _ = rasterio.warp.reproject(
-                    raw,
-                    np.full(out_spatial_shape, np.nan, dtype=np.float32),
-                    src_transform=reader.transform,
-                    src_crs=reader.crs,
-                    dst_transform=out_transform,
-                    dst_crs=out_crs,
-                    resampling=rasterio.warp.Resampling.bilinear,
-                )
-                if not Config.is_prod:
-                    # Because the pixel centers are aligned we exactly retain the source data
-                    step = 2 if is_v12(coords["init_time"]) else 4
-                    assert np.array_equal(raw, result[::step, ::step])
-                return result
-            case "s":
-                # Confirm the arguments we use to resample 0.5 degree data
-                # to 0.25 degree grid above match the source 0.25 degree data.
-                assert reader.shape == out_spatial_shape
-                assert reader.transform == out_transform
-                assert reader.crs.to_dict() == out_crs
+            result: Array2D[np.float32]
+            match get_gefs_file_type(
+                coords["init_time"], coords["lead_time"], gefs_file_type
+            ):
+                case "a" | "b":
+                    # Interpolate 1.0/0.5 degree data to the 0.25 degree grid.
+                    # Every 2nd (0.5 deg) or every 4th (1.0 deg) 0.25 degree pixel's center aligns exactly
+                    # with a 1.0/0.5 degree pixel's center.
+                    # We use bilinear resampling to retain the exact values from the 1.0/0.5 degree data
+                    # at pixels that align, and give a conservative interpolated value for 0.25 degree pixels
+                    # that fall between the 1.0/0.5 degree pixels.
+                    # Diagram: https://github.com/dynamical-org/reformatters/pull/44#issuecomment-2683799073
+                    # Note: having the .read() call interpolate gives very slightly shifted results
+                    # so we pay for an extra memory allocation and use reproject to do the interpolation instead.
+                    raw = reader.read(rasterio_band_index, out_dtype=np.float32)
+                    result, _ = rasterio.warp.reproject(
+                        raw,
+                        np.full(out_spatial_shape, np.nan, dtype=np.float32),
+                        src_transform=reader.transform,
+                        src_crs=reader.crs,
+                        dst_transform=out_transform,
+                        dst_crs=out_crs,
+                        resampling=rasterio.warp.Resampling.bilinear,
+                    )
+                    if not Config.is_prod:
+                        # Because the pixel centers are aligned we exactly retain the source data
+                        step = 2 if is_v12(coords["init_time"]) else 4
+                        assert np.array_equal(raw, result[::step, ::step])
+                    return result
+                case "s":
+                    # Confirm the arguments we use to resample 1.0/0.5 degree data
+                    # to 0.25 degree grid above match the source 0.25 degree data.
+                    assert reader.shape == out_spatial_shape
+                    assert reader.transform == out_transform
+                    assert reader.crs.to_dict() == out_crs
 
-                result = reader.read(
-                    rasterio_band_index,
-                    out_dtype=np.float32,
-                )
-                return result
-            case _ as unreachable:
-                assert_never(unreachable)
-
-
-class DefaultTimeoutHTTPAdapter(requests.adapters.HTTPAdapter):
-    def __init__(
-        self, *args: Any, default_timeout: float | tuple[float, float], **kwargs: Any
-    ):
-        self.default_timeout = default_timeout
-        super().__init__(*args, **kwargs)
-
-    def send(self, *args: Any, **kwargs: Any) -> requests.Response:
-        if kwargs.get("timeout") is None:
-            kwargs["timeout"] = self.default_timeout
-        return super().send(*args, **kwargs)
+                    result = reader.read(
+                        rasterio_band_index,
+                        out_dtype=np.float32,
+                    )
+                    return result
+                case _ as unreachable:
+                    assert_never(unreachable)

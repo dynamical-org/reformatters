@@ -180,8 +180,8 @@ def generate_chunk_coordinates(
 
 
 def download_var_group_files(
-    idx_data_vars: Iterable[GEFSDataVar],
-    chunk_coords: Iterable[SourceFileCoords],
+    idx_data_vars: Sequence[GEFSDataVar],
+    chunk_coords: Sequence[SourceFileCoords],
     gefs_file_type: GEFSFileType,
     io_executor: ThreadPoolExecutor,
 ) -> list[tuple[SourceFileCoords, Path | None]]:
@@ -226,7 +226,7 @@ def get_download_var_group_futures(
         group_size=group_size,
     )
     for gefs_file_type, ensemble_statistic, data_vars in data_var_groups:
-        chunk_coords: Iterable[SourceFileCoords]
+        chunk_coords: Sequence[SourceFileCoords]
         if ensemble_statistic is None:
             chunk_coords = chunk_coords_by_type["ensemble"]
         else:

@@ -1,6 +1,7 @@
 import contextlib
 import functools
 import os
+import uuid
 from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
@@ -30,14 +31,21 @@ def download_to_disk(
     else:
         response_buffers = obstore.get(store, path).stream()
 
+    # Avoid race by writing to temp file then renaming when complete
+    temp_path = local_path.with_name(f"{local_path.name}.{uuid.uuid4().hex[:8]}")
+
     try:
-        with open(local_path, "wb") as file:
+        with open(temp_path, "wb") as file:
             for buffer in response_buffers:
                 file.write(buffer)
 
+        temp_path.rename(local_path)
+
     except Exception:
         with contextlib.suppress(FileNotFoundError):
+            os.remove(temp_path)
             os.remove(local_path)
+
         raise
 
 

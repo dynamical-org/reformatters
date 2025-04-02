@@ -9,7 +9,7 @@ from functools import partial
 from itertools import batched, groupby
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
-from typing import Any, Final
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -27,6 +27,10 @@ from reformatters.common.types import ArrayFloat32
 from reformatters.noaa.gefs.analysis import template
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
 from reformatters.noaa.gefs.read_data import (
+    GEFS_INIT_TIME_FREQUENCY,
+    GEFS_REFORECAST_END,
+    GEFS_REFORECAST_INIT_TIME_FREQUENCY,
+    GEFS_REFORECAST_START,
     SourceFileCoords,
     download_file,
     is_v12_index,
@@ -40,8 +44,6 @@ type EnsOrStat = int | np.integer[Any] | str
 
 type CoordAndPath = tuple[SourceFileCoords, Path | None]
 type CoordsAndPaths = Sequence[CoordAndPath]
-
-INIT_TIME_FREQUENCY: Final[pd.Timedelta] = pd.Timedelta("6h")
 
 
 def reformat_time_i_slices(
@@ -145,7 +147,6 @@ def get_download_var_group_futures(
         chunk_coords_by_type = generate_chunk_coordinates(
             chunk_template_ds["time"],
             template.ANALYSIS_ENSEMBLE_MEMBER,
-            init_time_frequency=INIT_TIME_FREQUENCY,
             var_has_hour_0_values=has_hour_0,
         )
 
@@ -169,7 +170,7 @@ def get_download_var_group_futures(
 
 
 def download_var_group_files(
-    idx_data_vars: Iterable[GEFSDataVar],
+    idx_data_vars: Sequence[GEFSDataVar],
     chunk_coords: Iterable[SourceFileCoords],
     gefs_file_type: GEFSFileType,
     io_executor: ThreadPoolExecutor,
@@ -199,7 +200,6 @@ def download_var_group_files(
 def generate_chunk_coordinates(
     chunk_times: Iterable[pd.Timestamp],
     ensemble_member: int,
-    init_time_frequency: pd.Timedelta,
     var_has_hour_0_values: bool,
 ) -> dict[str, Sequence[SourceFileCoords]]:
     """Construct the init time and lead time coordinates which correspond to each time in `chunk_times`."""
@@ -207,13 +207,30 @@ def generate_chunk_coordinates(
 
     times = filter_available_times(times)
 
-    init_times = times.floor(init_time_frequency)
+    # If var doesn't have hour 0 values we have to go back one forecast
+    # so the first step after the reforecast will still be drawn from the reforecast.
+    if var_has_hour_0_values:
+        is_reforecast = times < GEFS_REFORECAST_END
+    else:
+        is_reforecast = times <= GEFS_REFORECAST_END
 
-    # If var doesn't have hour 0 values we have to go back one forecast.
+    init_times = (
+        times[is_reforecast]
+        .floor(GEFS_REFORECAST_INIT_TIME_FREQUENCY)
+        .append(times[~is_reforecast].floor(GEFS_INIT_TIME_FREQUENCY))
+    )
+
+    # If var doesn't have hour 0 values OR we are in the reforecast period which
+    # does not have hour 0 values for any variable, we have to go back one forecast.
     # eg. Get the 6th hour rather than the 0th hour for 6-hourly init times.
-    if not var_has_hour_0_values:
-        is_hour_0 = times == init_times
-        init_times = init_times.where(~is_hour_0, init_times - init_time_frequency)
+    is_hour_0 = times == init_times
+    do_shift = is_hour_0 & ((not var_has_hour_0_values) | is_reforecast)
+    shifted_init_times = np.where(
+        is_reforecast,
+        init_times - GEFS_REFORECAST_INIT_TIME_FREQUENCY,
+        init_times - GEFS_INIT_TIME_FREQUENCY,
+    )
+    init_times = init_times.where(~do_shift, shifted_init_times)
 
     lead_times = times - init_times
 
@@ -224,7 +241,10 @@ def generate_chunk_coordinates(
             "lead_time": lead_time,
         }
         for init_time, lead_time in zip(init_times, lead_times, strict=True)
+        # skip if we shifted init to before start of archive
+        if init_time >= GEFS_REFORECAST_START
     ]
+
     return {"ensemble": ensemble_coords}
 
 
