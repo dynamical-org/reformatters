@@ -79,7 +79,13 @@ def derive_coordinates(
     hrrrds = xr.open_dataset(str(filepath), engine="rasterio")
 
     hrrrds_bounds = hrrrds.rio.bounds(recalc=True)
-    dx, dy = 3000, 3000
+    hrrrds_res = hrrrds.rio.resolution(recalc=True)
+    dx, dy = (
+        hrrrds_res[0],
+        hrrrds_res[1] * -1,
+    )  # y offset is positive, but reported as negative by `rio.resolution`
+    # this may be a bug in how rioxarray is handling bounds that cross a central parallel
+    # but also I'd expect that to be the case with lat/lon coordinates too, so I'm not sure.
 
     proj_xcorner, proj_ycorner = hrrrds_bounds[0], hrrrds_bounds[1]
     nx = ds.x.size
