@@ -15,6 +15,7 @@ def deaccumulate_to_rates_inplace(
     *,
     dim: str,
     reset_frequency: pd.Timedelta,
+    skip_step: Array1D[np.bool] | None = None,
 ) -> xr.DataArray:
     """
     Convert accumulated values to per-second rates in place.
@@ -23,6 +24,8 @@ def deaccumulate_to_rates_inplace(
         data_array: Array containing accumulated values to be converted to rates in place
         dim: Dimension over which to deaccumulate
         reset_frequency: Frequency at which the accumulation resets (eg 6 hours for GEFS and GFS)
+        skip_step: Array of booleans indicating whether to skip the step. Values in skipped
+            steps are left unchanged and the deaccumulation acts as if they are not present.
     """
     assert data_array.attrs["units"].endswith("/s"), (
         "Output units must be a per-second rate"
@@ -45,6 +48,11 @@ def deaccumulate_to_rates_inplace(
     reset_after = (seconds % reset_frequency.total_seconds()) == 0
     assert reset_after[0]  # Again, first step must be a resetting step
 
+    if skip_step is None:
+        skip_step = np.zeros(seconds.shape, dtype=np.bool)
+    else:
+        assert skip_step.shape == seconds.shape
+
     # make array 3D with shape (flattend_leading_dims, lead_time, flattend_trailing_dims)
     time_dim_index = data_array.dims.index(dim)
     values = data_array.values.reshape(
@@ -53,7 +61,7 @@ def deaccumulate_to_rates_inplace(
         np.prod(data_array.shape[time_dim_index + 1 :] or 1),
     )
 
-    _deaccumulate_to_rates_numba(values, seconds, reset_after)
+    _deaccumulate_to_rates_numba(values, seconds, reset_after, skip_step)
 
     return data_array
 
@@ -63,6 +71,7 @@ def _deaccumulate_to_rates_numba(
     values: ArrayFloat32,
     seconds: Array1D[np.int64],
     reset_after: Array1D[np.bool],
+    skip_step: Array1D[np.bool],
     invalid_below_threshold_rate: float = -2e-5,
 ) -> None:
     """
@@ -79,13 +88,16 @@ def _deaccumulate_to_rates_numba(
         values: Array to modify in place. Must be 3D with accumulation dimension as the *middle* dimension
         seconds: 1D array of seconds since forecast start or a reference time
         reset_after: 1D array of booleans where True indicates the accumulation resets after the current step
+        skip_step: 1D array of booleans where True indicates the step should be skipped
         invalid_below_threshold_rate: Threshold below which values are considered invalid
     """
     assert values.ndim == 3
     assert seconds.ndim == 1
     assert reset_after.ndim == 1
+    assert skip_step.ndim == 1
     assert values.shape[1] == seconds.size
     assert values.shape[1] == reset_after.size
+    assert values.shape[1] == skip_step.size
 
     n_lead_times = values.shape[1]
 
@@ -95,11 +107,17 @@ def _deaccumulate_to_rates_numba(
     for i in prange(values.shape[0]):
         for j in range(values.shape[2]):
             sequence = values[i, :, j]
+            previous_seconds = seconds[0]
             previous_accumulation = 0
 
             # Skip first step, no accumulation yet
             for t in range(1, n_lead_times):
-                time_step = seconds[t] - seconds[t - 1]
+                if skip_step[t]:
+                    continue
+
+                time_step = seconds[t] - previous_seconds
+                previous_seconds = seconds[t]
+
                 step_accumulation = sequence[t] - previous_accumulation
                 # store previous accumulation before we overwrite sequence[t] with rate
                 previous_accumulation = sequence[t]

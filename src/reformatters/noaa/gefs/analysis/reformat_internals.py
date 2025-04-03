@@ -24,7 +24,7 @@ from reformatters.common.iterating import (
     shard_slice_indexers,
 )
 from reformatters.common.logging import get_logger
-from reformatters.common.types import ArrayFloat32
+from reformatters.common.types import Array1D, ArrayFloat32
 from reformatters.noaa.gefs.analysis import template
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
 from reformatters.noaa.gefs.read_data import (
@@ -273,11 +273,15 @@ def generate_chunk_coordinates(
     return {"ensemble": ensemble_coords}
 
 
-def filter_available_times(times: pd.DatetimeIndex) -> pd.DatetimeIndex:
+def is_available_time(times: pd.DatetimeIndex) -> Array1D[np.bool]:
     """Before v12, GEFS files had a 6 hour step."""
     # pre-v12 data is all we have for the 9 month period after the v12 reforecast ends
     # 2019-12-31 and before the v12 forecast archive starts 2020-10-01.
-    return times[is_v12_index(times) | (times.hour % 6 == 0)]
+    return is_v12_index(times) | (times.hour % 6 == 0)
+
+
+def filter_available_times(times: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    return times[is_available_time(times)]
 
 
 def data_var_has_hour_0_values(data_var: DataVar[Any]) -> bool:
@@ -436,6 +440,7 @@ def apply_data_transformations_inplace(
                 data_array,
                 dim="time",
                 reset_frequency=GEFS_ACCUMULATION_RESET_FREQUENCY,
+                skip_step=~is_available_time(pd.to_datetime(data_array["time"].values)),
             )
         except ValueError:
             # Log exception so we are notified if deaccumulation errors are larger than expected.

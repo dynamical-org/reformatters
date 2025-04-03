@@ -67,6 +67,12 @@ GEFS_INIT_TIME_FREQUENCY: Final[pd.Timedelta] = pd.Timedelta("6h")
 
 # Accumulations are reset every 6 hours in all periods of GEFS data
 GEFS_ACCUMULATION_RESET_FREQUENCY: Final[pd.Timedelta] = pd.Timedelta("6h")
+GEFS_ACCUMULATION_RESET_HOURS: Final[int] = int(
+    GEFS_ACCUMULATION_RESET_FREQUENCY.total_seconds() / (60 * 60)
+)
+assert GEFS_ACCUMULATION_RESET_FREQUENCY == pd.Timedelta(
+    hours=GEFS_ACCUMULATION_RESET_HOURS
+)
 
 # Short names are used in the file names of the GEFS v12 reforecast
 GEFS_REFORECAST_LEVELS_SHORT = {
@@ -256,21 +262,14 @@ def parse_index_byte_ranges(
 
 
 def get_hours_str(var_info: GEFSDataVar, lead_time_hours: float) -> str:
-    gefs_accumulation_reset_hours = (
-        GEFS_ACCUMULATION_RESET_FREQUENCY.total_seconds() // (60 * 60)
-    )
-    assert (
-        pd.Timedelta(hours=gefs_accumulation_reset_hours)
-        == GEFS_ACCUMULATION_RESET_FREQUENCY
-    )
     if lead_time_hours == 0:
         hours_str = "anl"  # analysis
     elif var_info.attrs.step_type == "instant":
         hours_str = f"{lead_time_hours:.0f} hour"
     else:
-        diff_hours = lead_time_hours % gefs_accumulation_reset_hours
+        diff_hours = lead_time_hours % GEFS_ACCUMULATION_RESET_HOURS
         if diff_hours == 0:
-            reset_hour = lead_time_hours - gefs_accumulation_reset_hours
+            reset_hour = lead_time_hours - GEFS_ACCUMULATION_RESET_HOURS
         else:
             reset_hour = lead_time_hours - diff_hours
         hours_str = f"{reset_hour:.0f}-{lead_time_hours:.0f} hour"
@@ -304,9 +303,9 @@ def read_into(
     grib_element = data_var.internal_attrs.grib_element
     if data_var.internal_attrs.include_lead_time_suffix:
         lead_hours = coords["lead_time"].total_seconds() / (60 * 60)
-        if lead_hours % 6 == 0:
+        if lead_hours % GEFS_ACCUMULATION_RESET_HOURS == 0:
             grib_element += "06"
-        elif lead_hours % 6 == 3:
+        elif lead_hours % GEFS_ACCUMULATION_RESET_HOURS == 3:
             grib_element += "03"
         else:
             raise AssertionError(f"Unexpected lead time hours: {lead_hours}")
