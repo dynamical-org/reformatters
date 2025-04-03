@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from reformatters.noaa.gefs.deaccumulation import (
+from reformatters.common.deaccumulation import (
     deaccumulate_to_rates_inplace,
 )
 

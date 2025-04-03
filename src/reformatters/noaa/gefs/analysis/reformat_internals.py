@@ -18,6 +18,7 @@ import zarr
 
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config_models import DataVar, EnsembleStatistic
+from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.iterating import (
     consume,
     shard_slice_indexers,
@@ -25,7 +26,6 @@ from reformatters.common.iterating import (
 from reformatters.common.logging import get_logger
 from reformatters.common.types import ArrayFloat32
 from reformatters.noaa.gefs.analysis import template
-from reformatters.noaa.gefs.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
 from reformatters.noaa.gefs.read_data import (
     GEFS_ACCUMULATION_RESET_FREQUENCY,
