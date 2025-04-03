@@ -2,12 +2,18 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pandas as pd
+import pyproj
 import rioxarray  # noqa: F401  Adds .rio accessor to datasets
 import xarray as xr
 
 from reformatters.common.template_utils import assign_var_metadata, make_empty_variable
 from reformatters.common.template_utils import (
     write_metadata as write_metadata,  # re-export
+)
+from reformatters.noaa.hrrr.read_data import (
+    SourceFileCoords,
+    download_file,
 )
 
 from .template_config import (
@@ -33,11 +39,11 @@ def update_template() -> None:
 
     ds = xr.Dataset(data_vars, coords, DATASET_ATTRIBUTES.model_dump(exclude_none=True))
 
-    ds = ds.assign_coords(derive_coordinates(ds))
-
     ds = ds.rio.write_crs(
         "+proj=lcc +a=6371229 +b=6371229 +lon_0=262.5 +lat_0=38.5 +lat_1=38.5 +lat_2=38.5"
     )
+
+    ds = ds.assign_coords(derive_coordinates(ds))
 
     assert {d.name for d in DATA_VARIABLES} == set(ds.data_vars)
     for var_config in DATA_VARIABLES:
@@ -57,11 +63,47 @@ def update_template() -> None:
 def derive_coordinates(
     ds: xr.Dataset,
 ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
+    # derivation of HRRR latitude / longitude coordinates is simplest by downloading
+    # a sample file and extracting the coordinates from the file itself.
+    data_coords = SourceFileCoords(
+        {
+            "init_time": pd.Timestamp("2025-01-01T00:00:00"),
+            "lead_time": pd.Timedelta("0h"),
+            "domain": "conus",
+        }
+    )
+
+    # "sfc" is the smallest available file type.
+    # TODO (tony): ensure we only pull down 1 grib message for this to save download time/bdwth
+    _, filepath = download_file(data_coords, "sfc")
+    hrrrds = xr.open_dataset(str(filepath), engine="rasterio")
+
+    hrrrds_bounds = hrrrds.rio.bounds(recalc=True)
+    hrrrds_res = hrrrds.rio.resolution(recalc=True)
+    dx, dy = (
+        hrrrds_res[0],
+        hrrrds_res[1] * -1,
+    )  # y offset is positive, but reported as negative by `rio.resolution`
+    # this may be a bug in how rioxarray is handling bounds that cross a central parallel
+    # but also I'd expect that to be the case with lat/lon coordinates too, so I'm not sure.
+
+    proj_xcorner, proj_ycorner = hrrrds_bounds[0], hrrrds_bounds[1]
+    nx = ds.x.size
+    ny = ds.y.size
+
+    pj = pyproj.Proj(ds.rio.crs.to_proj4())
+    # rio.bounds returns the lower left corner, but we want the center of the gridcell
+    # so we offset by half the gridcell size.
+    x = (proj_xcorner + (0.5 * dx)) + np.arange(nx) * dx
+    y = (proj_ycorner + (0.5 * dy)) + np.arange(ny) * dy
+    xs, ys = np.meshgrid(x, y)
+    lons, lats = pj(xs, ys, inverse=True)
+
     return {
-        # TODO: Derive these coordinates from an actual model file
-        "latitude": (("y", "x"), np.full((ds["y"].size, ds["x"].size), 0.0)),
-        # TODO: Derive these coordinates from an actual model file
-        "longitude": (("y", "x"), np.full((ds["y"].size, ds["x"].size), 0.0)),
+        "y": (("y",), y),
+        "x": (("x",), x),
+        "latitude": (("y", "x"), lats),
+        "longitude": (("y", "x"), lons),
         "ingested_forecast_length": (
             ("init_time",),
             np.full((ds["init_time"].size), np.timedelta64("NaT", "ns")),

@@ -158,7 +158,7 @@ COORDINATES: Sequence[Coordinate] = (
     Coordinate(
         name="x",
         encoding=Encoding(
-            dtype="int64",
+            dtype="float64",
             fill_value=np.nan,
             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             chunks=len(_dim_coords["x"]),
@@ -175,7 +175,7 @@ COORDINATES: Sequence[Coordinate] = (
     Coordinate(
         name="y",
         encoding=Encoding(
-            dtype="int64",
+            dtype="float64",
             fill_value=np.nan,
             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             chunks=len(_dim_coords["y"]),
@@ -200,10 +200,9 @@ COORDINATES: Sequence[Coordinate] = (
         ),
         attrs=CoordinateAttrs(
             units="degrees_north",
-            # TODO: How to set these min/max values?
             statistics_approximate=StatisticsApproximate(
-                min=_dim_coords["y"].min(),
-                max=_dim_coords["y"].max(),
+                min=21.138123,
+                max=52.615653,
             ),
         ),
     ),
@@ -220,8 +219,8 @@ COORDINATES: Sequence[Coordinate] = (
             units="degrees_east",
             # TODO: How to set these min/max values?
             statistics_approximate=StatisticsApproximate(
-                min=_dim_coords["x"].min(),
-                max=_dim_coords["x"].max(),
+                min=-134.09548,
+                max=-60.917192,
             ),
         ),
     ),
