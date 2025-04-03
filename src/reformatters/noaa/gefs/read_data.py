@@ -58,9 +58,9 @@ class ChunkCoordinates(TypedDict):
 # 2. The pre GEFS v12 archive, which is 1.0 degree data that we use from 2020-01-01 to 2020-09-30.
 # 3. The GEFS v12 retrospective (reforecast) archive, which is 0.25 degree data from 2000-01-01 to 2019-12-31.
 #
-GEFS_CURRENT_ARCHIVE_START = pd.Timestamp("2020-10-01T00:00")
-GEFS_REFORECAST_START = pd.Timestamp("2000-01-01T00:00")
+GEFS_CURRENT_ARCHIVE_START = pd.Timestamp("2020-09-23T00:00")
 GEFS_REFORECAST_END = pd.Timestamp("2020-01-01T00:00")  # exclusive end point
+GEFS_REFORECAST_START = pd.Timestamp("2000-01-01T00:00")
 
 GEFS_REFORECAST_INIT_TIME_FREQUENCY = pd.Timedelta("24h")
 GEFS_INIT_TIME_FREQUENCY: Final[pd.Timedelta] = pd.Timedelta("6h")

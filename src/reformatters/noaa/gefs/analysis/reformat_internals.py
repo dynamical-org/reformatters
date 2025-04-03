@@ -66,7 +66,11 @@ def reformat_time_i_slices(
     shared_buffer_size = max(
         data_var.nbytes
         for data_var in template_ds.isel(
-            {template.APPEND_DIMENSION: jobs[0][0]}
+            {
+                template.APPEND_DIMENSION: slice(
+                    max(0, jobs[-1][0].start - 1), jobs[-1][0].stop + 1
+                )
+            }
         ).values()
     )
     with (
