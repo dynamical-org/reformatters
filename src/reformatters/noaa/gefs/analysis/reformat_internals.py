@@ -63,14 +63,14 @@ def reformat_time_i_slices(
     # The only effective way we've found to fully utilize cpu resources
     # while writing to zarr is to parallelize across processes (not threads).
     # Use shared memory to avoid pickling large arrays to share between processes.
+    widest_slice = max(
+        (buffer_slice(j[0], buffer_size=1) for j in jobs),
+        key=lambda s: s.stop - s.start,
+    )
     shared_buffer_size = max(
         data_var.nbytes
         for data_var in template_ds.isel(
-            {
-                template.APPEND_DIMENSION: slice(
-                    max(0, jobs[-1][0].start - 1), jobs[-1][0].stop + 1
-                )
-            }
+            {template.APPEND_DIMENSION: widest_slice}
         ).values()
     )
     with (
@@ -91,9 +91,7 @@ def reformat_time_i_slices(
             if not np.all(
                 is_v12_index(pd.to_datetime(chunk_template_ds["time"].values))
             ):
-                processing_i_slice = slice(
-                    max(0, append_dim_i_slice.start - 1), append_dim_i_slice.stop + 1
-                )
+                processing_i_slice = buffer_slice(append_dim_i_slice, buffer_size=1)
                 chunk_template_ds = template_ds[data_var_names].isel(
                     {template.APPEND_DIMENSION: processing_i_slice}
                 )
@@ -147,6 +145,10 @@ def reformat_time_i_slices(
 
 def time_range_str(times: xr.DataArray) -> str:
     return f"{times.min().dt.strftime('%Y-%m-%dT%H:%M').item()} - {times.max().dt.strftime('%Y-%m-%dT%H:%M').item()}"
+
+
+def buffer_slice(in_slice: slice, *, buffer_size: int) -> slice:
+    return slice(max(0, in_slice.start - buffer_size), in_slice.stop + buffer_size)
 
 
 type DownloadVarGroupFutures = dict[
