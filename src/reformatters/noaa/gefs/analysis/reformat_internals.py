@@ -80,11 +80,20 @@ def reformat_time_i_slices(
             chunk_template_ds = template_ds[data_var_names].isel(
                 {template.APPEND_DIMENSION: append_dim_i_slice}
             )
+            logger.info(f"Starting chunk {time_range_str(chunk_template_ds['time'])}")
 
-            chunk_times = pd.to_datetime(chunk_template_ds["time"].values)
-
-            chunk_times_str = f"{chunk_times[0].strftime('%Y-%m-%dT%H:%M')} - {chunk_times[-1].strftime('%Y-%m-%dT%H:%M')}"
-            logger.info(f"Starting chunk with times {chunk_times_str}")
+            # Pre-v12 data has a 6 hour step, so we expand time range to ensure
+            # we have boundary values for interpolation to 3 hourly values.
+            if not np.all(
+                is_v12_index(pd.to_datetime(chunk_template_ds["time"].values))
+            ):
+                processing_i_slice = slice(
+                    max(0, append_dim_i_slice.start - 1), append_dim_i_slice.stop + 1
+                )
+                chunk_template_ds = template_ds[data_var_names].isel(
+                    {template.APPEND_DIMENSION: processing_i_slice}
+                )
+                logger.info(f"Expanded to {time_range_str(chunk_template_ds['time'])}")
 
             download_var_group_futures = get_download_var_group_futures(
                 chunk_template_ds,
@@ -113,6 +122,10 @@ def reformat_time_i_slices(
                         data_array, data_var, var_coords_and_paths, cpu_executor
                     )
                     apply_data_transformations_inplace(data_array, data_var)
+                    # Trim to exact chunk size in case we expanded the time range above
+                    data_array = data_array.isel(
+                        {template.APPEND_DIMENSION: append_dim_i_slice}
+                    )
                     write_shards(
                         data_array_template,
                         store,
@@ -126,6 +139,10 @@ def reformat_time_i_slices(
                 for _, filepath in coords_and_paths:
                     if filepath is not None:
                         filepath.unlink()
+
+
+def time_range_str(times: xr.DataArray) -> str:
+    return f"{times.min().dt.strftime('%Y-%m-%dT%H:%M').item()} - {times.max().dt.strftime('%Y-%m-%dT%H:%M').item()}"
 
 
 type DownloadVarGroupFutures = dict[
