@@ -339,37 +339,31 @@ def test_filter_available_times() -> None:
 
 
 def test_filter_available_times_current_archive_boundary() -> None:
-    start_time = pd.Timestamp("2020-09-30T00:00")
-    end_time = pd.Timestamp("2020-10-01T18:00")
+    start_time = pd.Timestamp("2020-09-22T00:00")
+    end_time = pd.Timestamp("2020-09-24T00:00")
 
     # Create a date range with 3-hourly steps
     times = pd.date_range(start=start_time, end=end_time, freq="3h")
 
     filtered_times = filter_available_times(times)
 
-    # Times before Oct 1 should be 6-hourly
-    before_oct = filtered_times[filtered_times < pd.Timestamp("2020-10-01")]
-    expected_before = pd.DatetimeIndex(
+    expected = pd.DatetimeIndex(
         [
-            pd.Timestamp("2020-09-30T00:00"),
-            pd.Timestamp("2020-09-30T06:00"),
-            pd.Timestamp("2020-09-30T12:00"),
-            pd.Timestamp("2020-09-30T18:00"),
+            # Times before Sept 23 should be 6-hourly
+            pd.Timestamp("2020-09-22T00:00"),
+            pd.Timestamp("2020-09-22T06:00"),
+            pd.Timestamp("2020-09-22T12:00"),
+            pd.Timestamp("2020-09-22T18:00"),
+            # Times from Sept 23 onwards should be 3-hourly
+            pd.Timestamp("2020-09-23T00:00"),
+            pd.Timestamp("2020-09-23T03:00"),
+            pd.Timestamp("2020-09-23T06:00"),
+            pd.Timestamp("2020-09-23T09:00"),
+            pd.Timestamp("2020-09-23T12:00"),
+            pd.Timestamp("2020-09-23T15:00"),
+            pd.Timestamp("2020-09-23T18:00"),
+            pd.Timestamp("2020-09-23T21:00"),
+            pd.Timestamp("2020-09-24T00:00"),
         ]
     )
-    pd.testing.assert_index_equal(before_oct, expected_before)
-
-    # Times from Oct 1 onwards should be 3-hourly
-    after_oct = filtered_times[filtered_times >= pd.Timestamp("2020-10-01")]
-    expected_after = pd.DatetimeIndex(
-        [
-            pd.Timestamp("2020-10-01T00:00"),
-            pd.Timestamp("2020-10-01T03:00"),
-            pd.Timestamp("2020-10-01T06:00"),
-            pd.Timestamp("2020-10-01T09:00"),
-            pd.Timestamp("2020-10-01T12:00"),
-            pd.Timestamp("2020-10-01T15:00"),
-            pd.Timestamp("2020-10-01T18:00"),
-        ]
-    )
-    pd.testing.assert_index_equal(after_oct, expected_after)
+    pd.testing.assert_index_equal(filtered_times, expected)

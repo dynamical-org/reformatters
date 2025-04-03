@@ -371,10 +371,10 @@ def test_deaccumulate_1d_skip_every_other_step() -> None:
     values = [
         # 3 hourly step with 6 hourly data
         {"lt": 0, "in": nan, "out": nan, "skip": False},  # no deaccum on first step
-        {"lt": 3, "in": nan, "out": nan, "skip": True},  # standard 3h case
-        {"lt": 6, "in": 4 * sec * 6, "out": 4.0, "skip": False},  # no new accumulation between 3h and 6h steps
-        {"lt": 9, "in": nan, "out": nan, "skip": True},  # no new accumulation between 6h and 3h steps
-        {"lt": 12, "in": 2 * sec * 6, "out": 2.0, "skip": False}, # 0 mm accumulated in first 3 hours, 2 mm accumulated in next 3 hours
+        {"lt": 3, "in": nan, "out": nan, "skip": True},  # skip step
+        {"lt": 6, "in": 4 * sec * 6, "out": 4.0, "skip": False},  # 4 mm/s accumulation in last 6 hours
+        {"lt": 9, "in": nan, "out": nan, "skip": True},  # skip step
+        {"lt": 12, "in": 2 * sec * 6, "out": 2.0, "skip": False}, # 2 mm/s accumulation in last 6 hours
     ]  # fmt: off
 
     lead_times = pd.to_timedelta([step["lt"] for step in values], unit="h")
