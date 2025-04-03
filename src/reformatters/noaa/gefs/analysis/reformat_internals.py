@@ -25,8 +25,10 @@ from reformatters.common.iterating import (
 from reformatters.common.logging import get_logger
 from reformatters.common.types import ArrayFloat32
 from reformatters.noaa.gefs.analysis import template
+from reformatters.noaa.gefs.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
 from reformatters.noaa.gefs.read_data import (
+    GEFS_ACCUMULATION_RESET_FREQUENCY,
     GEFS_INIT_TIME_FREQUENCY,
     GEFS_REFORECAST_END,
     GEFS_REFORECAST_INIT_TIME_FREQUENCY,
@@ -256,7 +258,7 @@ def filter_available_times(times: pd.DatetimeIndex) -> pd.DatetimeIndex:
 
 
 def data_var_has_hour_0_values(data_var: DataVar[Any]) -> bool:
-    return data_var.attrs.step_type not in ("accum", "avg")
+    return data_var.attrs.step_type == "instant"
 
 
 def group_data_vars_by_gefs_file_type(
@@ -266,6 +268,7 @@ def group_data_vars_by_gefs_file_type(
     Group data variables by the things which determine which source file they come from:
     1. their GEFS file type (a, b, or s) and
     2. their ensemble statistic if present or None if they are an ensemble trace.
+    3. whether they have hour 0 values or not (skip lead time 0 files or not)
 
     Then, within each group, chunk them into groups of size `group_size`. We download
     all variables in a group together which can reduce the number of tiny requests if
@@ -403,14 +406,17 @@ def read_into_data_array(
 def apply_data_transformations_inplace(
     data_array: xr.DataArray, data_var: DataVar[Any]
 ) -> None:
-    # TODO refactor deaccumulation to work with the `time` not lead_time dimension
-    # if data_var.internal_attrs.deaccumulate_to_rates:
-    #     logger.info(f"Converting {data_var.name} from accumulations to rates")
-    #     try:
-    #         deaccumulate_to_rates_inplace(data_array, dim="time")
-    #     except ValueError:
-    #         # Log exception so we are notified if deaccumulation errors are larger than expected.
-    #         logger.exception(f"Error deaccumulating {data_var.name}")
+    if data_var.internal_attrs.deaccumulate_to_rates:
+        logger.info(f"Converting {data_var.name} from accumulations to rates")
+        try:
+            deaccumulate_to_rates_inplace(
+                data_array,
+                dim="time",
+                reset_frequency=GEFS_ACCUMULATION_RESET_FREQUENCY,
+            )
+        except ValueError:
+            # Log exception so we are notified if deaccumulation errors are larger than expected.
+            logger.exception(f"Error deaccumulating {data_var.name}")
 
     keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
     if isinstance(keep_mantissa_bits, int):
