@@ -23,7 +23,7 @@ from reformatters.common.reformat_utils import (
 )
 from reformatters.noaa.gfs.forecast import template
 from reformatters.noaa.gfs.read_data import (
-    GFS_ACCUMULATION_RESET_FREQUENCY_TIMEDELTA,
+    GFS_ACCUMULATION_RESET_FREQUENCY,
     SourceFileCoords,
     download_file,
     read_into,
@@ -187,7 +187,7 @@ def apply_data_transformations_inplace(
             deaccumulate_to_rates_inplace(
                 data_array,
                 dim="lead_time",
-                reset_frequency=GFS_ACCUMULATION_RESET_FREQUENCY_TIMEDELTA,
+                reset_frequency=GFS_ACCUMULATION_RESET_FREQUENCY,
             )
         except ValueError:
             # Log exception so we are notified if deaccumulation errors are larger than expected.

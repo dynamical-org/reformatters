@@ -20,9 +20,12 @@ from reformatters.noaa.noaa_utils import has_hour_0_values
 DOWNLOAD_DIR = Path("data/download/")
 
 # Accumulations are reset every 6 hours
-GFS_ACCUMULATION_RESET_FREQUENCY_HOURS = 6
-GFS_ACCUMULATION_RESET_FREQUENCY_TIMEDELTA: Final[pd.Timedelta] = pd.Timedelta(
-    f"{GFS_ACCUMULATION_RESET_FREQUENCY_HOURS}h"
+GFS_ACCUMULATION_RESET_FREQUENCY: Final[pd.Timedelta] = pd.Timedelta("6h")
+GFS_ACCUMULATION_RESET_HOURS: Final[int] = int(
+    GFS_ACCUMULATION_RESET_FREQUENCY.total_seconds() / (60 * 60)
+)
+assert GFS_ACCUMULATION_RESET_FREQUENCY == pd.Timedelta(
+    hours=GFS_ACCUMULATION_RESET_HOURS
 )
 
 
@@ -123,9 +126,9 @@ def parse_index_byte_ranges(
         elif var_info.attrs.step_type == "instant":
             hours_str_prefix = str(lead_time_hours)
         else:
-            diff_hours = lead_time_hours % GFS_ACCUMULATION_RESET_FREQUENCY_HOURS
+            diff_hours = lead_time_hours % GFS_ACCUMULATION_RESET_HOURS
             if diff_hours == 0:
-                reset_hour = lead_time_hours - GFS_ACCUMULATION_RESET_FREQUENCY_HOURS
+                reset_hour = lead_time_hours - GFS_ACCUMULATION_RESET_HOURS
             else:
                 reset_hour = lead_time_hours - diff_hours
             hours_str_prefix = f"{reset_hour}-{lead_time_hours}"
@@ -176,7 +179,7 @@ def read_into(
     grib_element = data_var.internal_attrs.grib_element
     if data_var.internal_attrs.include_lead_time_suffix:
         lead_hours = coords["lead_time"].total_seconds() / (60 * 60)
-        lead_hours_accum = int(lead_hours % GFS_ACCUMULATION_RESET_FREQUENCY_HOURS)
+        lead_hours_accum = int(lead_hours % GFS_ACCUMULATION_RESET_HOURS)
         if lead_hours_accum == 0:
             lead_hours_accum = 6
         grib_element += str(lead_hours_accum).zfill(2)
