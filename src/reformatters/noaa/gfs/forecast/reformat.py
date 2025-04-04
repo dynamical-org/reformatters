@@ -68,7 +68,7 @@ def reformat_kubernetes(
         dataset_id=dataset_id,
         workers_total=workers_total,
         parallelism=parallelism,
-        cpu="3.3",  # fit on 4 vCPU node
+        cpu="3.5",  # fit on 4 vCPU node
         memory="7G",  # fit on 8GB node
         shared_memory="1.5G",
         ephemeral_storage="20G",
