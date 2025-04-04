@@ -304,22 +304,22 @@ def group_data_vars_by_gefs_file_type(
     for data_var in data_vars:
         gefs_file_type = data_var.internal_attrs.gefs_file_type
         ensemble_statistic = data_var.attrs.ensemble_statistic
-        has_hour_0_values = has_hour_0_values(data_var)
-        grouper[(gefs_file_type, ensemble_statistic, has_hour_0_values)].append(
+        var_has_hour_0_values = has_hour_0_values(data_var)
+        grouper[(gefs_file_type, ensemble_statistic, var_has_hour_0_values)].append(
             data_var
         )
     chunks = []
     for (
         file_type,
         ensemble_statistic,
-        has_hour_0_values,
+        var_has_hour_0_values,
     ), idx_data_vars in grouper.items():
         idx_data_vars = sorted(
             idx_data_vars, key=lambda data_var: data_var.internal_attrs.index_position
         )
         chunks.extend(
             [
-                (file_type, ensemble_statistic, has_hour_0_values, data_vars_chunk)
+                (file_type, ensemble_statistic, var_has_hour_0_values, data_vars_chunk)
                 for data_vars_chunk in batched(idx_data_vars, group_size)
             ]
         )
