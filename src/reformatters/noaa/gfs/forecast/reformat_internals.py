@@ -5,11 +5,15 @@ from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor
 from functools import partial
 from itertools import batched, groupby, product
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import xarray as xr
 import zarr
 
+from reformatters.common.binary_rounding import round_float32_inplace
+from reformatters.common.config_models import DataVar
+from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.iterating import consume
 from reformatters.common.logging import get_logger
 from reformatters.common.reformat_utils import (
@@ -18,7 +22,12 @@ from reformatters.common.reformat_utils import (
     write_shards,
 )
 from reformatters.noaa.gfs.forecast import template
-from reformatters.noaa.gfs.read_data import SourceFileCoords, download_file, read_into
+from reformatters.noaa.gfs.read_data import (
+    GFS_ACCUMULATION_RESET_FREQUENCY,
+    SourceFileCoords,
+    download_file,
+    read_into,
+)
 from reformatters.noaa.noaa_config_models import NOAADataVar
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
@@ -95,7 +104,7 @@ def reformat_time_i_slices(
                     read_into_data_array(
                         data_array, data_var, var_coords_and_paths, cpu_executor
                     )
-                    # apply_data_transformations_inplace(data_array, data_var)
+                    apply_data_transformations_inplace(data_array, data_var)
                     write_shards(
                         data_array_template,
                         store,
@@ -169,23 +178,27 @@ def read_into_data_array(
     )
 
 
-# def apply_data_transformations_inplace(
-#     data_array: xr.DataArray, data_var: DataVar[Any]
-# ) -> None:
-#     if data_var.internal_attrs.deaccumulate_to_rates:
-#         logger.info(f"Converting {data_var.name} from accumulations to rates")
-#         try:
-#             deaccumulate_to_rates_inplace(data_array, dim="lead_time")
-#         except ValueError:
-#             # Log exception so we are notified if deaccumulation errors are larger than expected.
-#             logger.exception(f"Error deaccumulating {data_var.name}")
+def apply_data_transformations_inplace(
+    data_array: xr.DataArray, data_var: DataVar[Any]
+) -> None:
+    if data_var.internal_attrs.deaccumulate_to_rates:
+        logger.info(f"Converting {data_var.name} from accumulations to rates")
+        try:
+            deaccumulate_to_rates_inplace(
+                data_array,
+                dim="lead_time",
+                reset_frequency=GFS_ACCUMULATION_RESET_FREQUENCY,
+            )
+        except ValueError:
+            # Log exception so we are notified if deaccumulation errors are larger than expected.
+            logger.exception(f"Error deaccumulating {data_var.name}")
 
-#     keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
-#     if isinstance(keep_mantissa_bits, int):
-#         round_float32_inplace(
-#             data_array.values,
-#             keep_mantissa_bits=keep_mantissa_bits,
-#         )
+    keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
+    if isinstance(keep_mantissa_bits, int):
+        round_float32_inplace(
+            data_array.values,
+            keep_mantissa_bits=keep_mantissa_bits,
+        )
 
 
 type ChunkCoordinates = Sequence[SourceFileCoords]

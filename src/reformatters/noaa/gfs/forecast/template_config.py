@@ -69,7 +69,6 @@ def get_init_time_coordinates(
     )
 
 
-# TODO: Refine chunks and shards. These are copied from GFS for now
 # CHUNKS
 VAR_CHUNKS: dict[Dim, int] = {
     "init_time": 1,  # one forecast per chunk
@@ -453,11 +452,10 @@ DATA_VARIABLES: Sequence[NOAADataVar] = (
             grib_index_level="surface",
             index_position=595,
             include_lead_time_suffix=True,
+            deaccumulate_to_rates=True,
             keep_mantissa_bits=GFS_BITROUND_KEEP_MANTISSA_BITS_DEFAULT,
         ),
     ),
-    # TODO: There are multiple categorical surface variables
-    # We can differentiate them by GRIB_FORECAST_SECONDS
     NOAADataVar(
         name="categorical_snow_surface",
         encoding=ENCODING_FLOAT32_DEFAULT,
