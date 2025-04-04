@@ -61,7 +61,6 @@ def test_linear_interpolate_1d_inplace_unexpected_nan() -> None:
 
     da.values[::2, :, :] = np.nan
     da.values[1, :, :] = np.nan  # "unexpected" nan
-    print(da.values)
 
     # First True has unexpected nan before it so interpolation returns nan
     # Second True has valid surrounding values so interpolation returns a value (4)
