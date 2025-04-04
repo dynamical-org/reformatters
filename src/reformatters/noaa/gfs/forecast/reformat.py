@@ -25,9 +25,8 @@ from reformatters.noaa.gfs.forecast.reformat_internals import (
     reformat_time_i_slices,
 )
 
-_VARIABLES_PER_BACKFILL_JOB = (
-    30  # More variables than we currently have but have a buffer in case we add more
-)
+# More variables than we currently have but have a buffer in case we add more
+_VARIABLES_PER_BACKFILL_JOB = 30
 
 logger = get_logger(__name__)
 
