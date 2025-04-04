@@ -21,7 +21,7 @@ from reformatters.common.zarr import (
 from reformatters.noaa.noaa_config_models import NOAADataVar, NOAAInternalAttrs
 
 DATASET_ID = "noaa-gfs-forecast"
-DATASET_VERSION = "0.0.0"
+DATASET_VERSION = "0.0.1-dev"
 
 # Technically there is data going back to 2021-04-13 but we are choosing a round date to start with
 INIT_TIME_START = pd.Timestamp("2021-05-01T00:00")
