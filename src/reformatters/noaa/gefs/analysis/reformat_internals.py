@@ -434,7 +434,7 @@ def read_into_data_array(
 def apply_data_transformations_inplace(
     data_array: xr.DataArray, data_var: DataVar[Any]
 ) -> None:
-    is_missing = ~is_available_time(pd.to_datetime(data_array["time"].values))
+    expected_missing = ~is_available_time(pd.to_datetime(data_array["time"].values))
     if data_var.internal_attrs.deaccumulate_to_rates:
         logger.info(f"Converting {data_var.name} from accumulations to rates")
         try:
@@ -442,15 +442,15 @@ def apply_data_transformations_inplace(
                 data_array,
                 dim="time",
                 reset_frequency=GEFS_ACCUMULATION_RESET_FREQUENCY,
-                skip_step=is_missing,
+                skip_step=expected_missing,
             )
         except ValueError:
             # Log exception so we are notified if deaccumulation errors are larger than expected.
             logger.exception(f"Error deaccumulating {data_var.name}")
 
-    if is_missing.any():
+    if expected_missing.any():
         logger.info(f"Interpolating missing values for {data_var.name}")
-        linear_interpolate_1d_inplace(data_array, dim="time", where=is_missing)
+        linear_interpolate_1d_inplace(data_array, dim="time", where=expected_missing)
 
     keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
     if isinstance(keep_mantissa_bits, int):

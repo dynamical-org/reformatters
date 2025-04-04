@@ -55,22 +55,21 @@ def test_linear_interpolate_1d_inplace_where_all_false() -> None:
     assert result is da
 
 
-def test_linear_interpolate_1d_inplace_nans_propagate() -> None:
-    # Create a 3D data array with linearly increasing values along first dimension
-
+def test_linear_interpolate_1d_inplace_unexpected_nan() -> None:
     data = np.arange(6, dtype=np.float32).reshape(6, 1, 1)
     da = xr.DataArray(data, dims=["z", "y", "x"])
 
-    da.values[0, :, :] = np.nan
-    da.values[1::2, :, :] = np.nan
-    da.values[-1, :, :] = np.nan
+    da.values[::2, :, :] = np.nan
+    da.values[1, :, :] = np.nan  # "unexpected" nan
+    print(da.values)
 
-    result = linear_interpolate_1d_inplace(
-        da, dim="z", where=np.isnan(da.values[:, 0, 0])
-    )
+    # First True has unexpected nan before it so interpolation returns nan
+    # Second True has valid surrounding values so interpolation returns a value (4)
+    where = np.array([False, False, True, False, True, False])
+    result = linear_interpolate_1d_inplace(da, dim="z", where=where)
 
     np.testing.assert_equal(
         result.values.ravel(),
-        np.array([np.nan, np.nan, 2, 3, 4, np.nan], dtype=np.float32),
+        np.array([np.nan, np.nan, np.nan, 3, 4, 5], dtype=np.float32),
     )
     assert result is da
