@@ -19,6 +19,7 @@ import zarr
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config_models import DataVar, EnsembleStatistic
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
+from reformatters.common.interpolation import linear_interpolate_1d_inplace
 from reformatters.common.iterating import (
     consume,
     shard_slice_indexers,
@@ -433,6 +434,7 @@ def read_into_data_array(
 def apply_data_transformations_inplace(
     data_array: xr.DataArray, data_var: DataVar[Any]
 ) -> None:
+    expected_missing = ~is_available_time(pd.to_datetime(data_array["time"].values))
     if data_var.internal_attrs.deaccumulate_to_rates:
         logger.info(f"Converting {data_var.name} from accumulations to rates")
         try:
@@ -440,11 +442,15 @@ def apply_data_transformations_inplace(
                 data_array,
                 dim="time",
                 reset_frequency=GEFS_ACCUMULATION_RESET_FREQUENCY,
-                skip_step=~is_available_time(pd.to_datetime(data_array["time"].values)),
+                skip_step=expected_missing,
             )
         except ValueError:
             # Log exception so we are notified if deaccumulation errors are larger than expected.
             logger.exception(f"Error deaccumulating {data_var.name}")
+
+    if expected_missing.any():
+        logger.info(f"Interpolating missing values for {data_var.name}")
+        linear_interpolate_1d_inplace(data_array, dim="time", where=expected_missing)
 
     keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
     if isinstance(keep_mantissa_bits, int):
