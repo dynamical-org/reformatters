@@ -24,7 +24,7 @@ from reformatters.common.iterating import (
     shard_slice_indexers,
 )
 from reformatters.common.logging import get_logger
-from reformatters.common.types import ArrayFloat32
+from reformatters.common.types import Array1D, ArrayFloat32
 from reformatters.noaa.gefs.analysis import template
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
 from reformatters.noaa.gefs.read_data import (
@@ -63,10 +63,14 @@ def reformat_time_i_slices(
     # The only effective way we've found to fully utilize cpu resources
     # while writing to zarr is to parallelize across processes (not threads).
     # Use shared memory to avoid pickling large arrays to share between processes.
+    widest_slice = max(
+        (buffer_slice(j[0], buffer_size=1) for j in jobs),
+        key=lambda s: s.stop - s.start,
+    )
     shared_buffer_size = max(
         data_var.nbytes
         for data_var in template_ds.isel(
-            {template.APPEND_DIMENSION: jobs[0][0]}
+            {template.APPEND_DIMENSION: widest_slice}
         ).values()
     )
     with (
@@ -80,11 +84,18 @@ def reformat_time_i_slices(
             chunk_template_ds = template_ds[data_var_names].isel(
                 {template.APPEND_DIMENSION: append_dim_i_slice}
             )
+            logger.info(f"Starting chunk {time_range_str(chunk_template_ds['time'])}")
 
-            chunk_times = pd.to_datetime(chunk_template_ds["time"].values)
-
-            chunk_times_str = f"{chunk_times[0].strftime('%Y-%m-%dT%H:%M')} - {chunk_times[-1].strftime('%Y-%m-%dT%H:%M')}"
-            logger.info(f"Starting chunk with times {chunk_times_str}")
+            # Pre-v12 data has a 6 hour step, so we expand time range to ensure
+            # we have boundary values for interpolation to 3 hourly values.
+            if not np.all(
+                is_v12_index(pd.to_datetime(chunk_template_ds["time"].values))
+            ):
+                processing_i_slice = buffer_slice(append_dim_i_slice, buffer_size=1)
+                chunk_template_ds = template_ds[data_var_names].isel(
+                    {template.APPEND_DIMENSION: processing_i_slice}
+                )
+                logger.info(f"Expanded to {time_range_str(chunk_template_ds['time'])}")
 
             download_var_group_futures = get_download_var_group_futures(
                 chunk_template_ds,
@@ -113,6 +124,10 @@ def reformat_time_i_slices(
                         data_array, data_var, var_coords_and_paths, cpu_executor
                     )
                     apply_data_transformations_inplace(data_array, data_var)
+                    # Trim to exact chunk size in case we expanded the time range above
+                    data_array = data_array.isel(
+                        {template.APPEND_DIMENSION: append_dim_i_slice}
+                    )
                     write_shards(
                         data_array_template,
                         store,
@@ -126,6 +141,14 @@ def reformat_time_i_slices(
                 for _, filepath in coords_and_paths:
                     if filepath is not None:
                         filepath.unlink()
+
+
+def time_range_str(times: xr.DataArray) -> str:
+    return f"{times.min().dt.strftime('%Y-%m-%dT%H:%M').item()} - {times.max().dt.strftime('%Y-%m-%dT%H:%M').item()}"
+
+
+def buffer_slice(in_slice: slice, *, buffer_size: int) -> slice:
+    return slice(max(0, in_slice.start - buffer_size), in_slice.stop + buffer_size)
 
 
 type DownloadVarGroupFutures = dict[
@@ -250,11 +273,15 @@ def generate_chunk_coordinates(
     return {"ensemble": ensemble_coords}
 
 
-def filter_available_times(times: pd.DatetimeIndex) -> pd.DatetimeIndex:
+def is_available_time(times: pd.DatetimeIndex) -> Array1D[np.bool]:
     """Before v12, GEFS files had a 6 hour step."""
     # pre-v12 data is all we have for the 9 month period after the v12 reforecast ends
     # 2019-12-31 and before the v12 forecast archive starts 2020-10-01.
-    return times[is_v12_index(times) | (times.hour % 6 == 0)]
+    return is_v12_index(times) | (times.hour % 6 == 0)
+
+
+def filter_available_times(times: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    return times[is_available_time(times)]
 
 
 def data_var_has_hour_0_values(data_var: DataVar[Any]) -> bool:
@@ -413,6 +440,7 @@ def apply_data_transformations_inplace(
                 data_array,
                 dim="time",
                 reset_frequency=GEFS_ACCUMULATION_RESET_FREQUENCY,
+                skip_step=~is_available_time(pd.to_datetime(data_array["time"].values)),
             )
         except ValueError:
             # Log exception so we are notified if deaccumulation errors are larger than expected.

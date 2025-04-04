@@ -319,3 +319,81 @@ def test_deaccumulate_1d_time_dim_3_and_6_hour_normal_cases() -> None:
     )
 
     np.testing.assert_equal(result.values, expected)
+
+
+def test_deaccumulate_skip_steps_all_false() -> None:
+    reset_frequency = pd.Timedelta(hours=6)
+    sec = float(SECONDS_PER_HOUR)
+
+    # These values will have large accumulations going in and output rates that in the single digits
+    values = [
+        # 3 hourly step:
+        {"lt": 0, "in": np.nan, "out": np.nan},  # no deaccum on first step
+        {"lt": 3, "in": 4 * sec * 3, "out": 4.0},  # standard 3h case
+        {"lt": 6, "in": 4 * sec * 3, "out": 0.0},  # no new accumulation between 3h and 6h steps
+        {"lt": 9, "in": 0 * sec * 3, "out": 0.0},  # no new accumulation between 6h and 3h steps
+        {"lt": 12, "in": 2 * sec * 3, "out": 2.0}, # 0 mm accumulated in first 3 hours, 2 mm accumulated in next 3 hours
+        # Test transition from 3h to 6h accumulation
+        # 6 hourly step:
+        {"lt": 18, "in": 3 * sec * 6, "out": 3.0},  # standard 6h case following a 3h step
+        {"lt": 24, "in": 7 * sec * 6, "out": 7.0},  # standard 6h case
+    ]  # fmt: off
+
+    lead_times = pd.to_timedelta([step["lt"] for step in values], unit="h")
+    # Start time at 03:00 tests reseting works regardless of the start time
+    times = pd.Timestamp("2000-01-01T00:00") + lead_times
+    data = np.array([step["in"] for step in values], dtype=np.float32)
+    expected = np.array([step["out"] for step in values], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        data,
+        coords={"time": times},
+        dims=["time"],
+        attrs={"units": "mm/s"},
+    )
+
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="time",
+        reset_frequency=reset_frequency,
+        skip_step=np.zeros(len(times), dtype=np.bool),
+    )
+
+    np.testing.assert_equal(result.values, expected)
+
+
+def test_deaccumulate_1d_skip_every_other_step() -> None:
+    reset_frequency = pd.Timedelta(hours=6)
+    sec = float(SECONDS_PER_HOUR)
+    nan = np.nan
+
+    # These values will have large accumulations going in and output rates that in the single digits
+    values = [
+        # 3 hourly step with 6 hourly data
+        {"lt": 0, "in": nan, "out": nan, "skip": False},  # no deaccum on first step
+        {"lt": 3, "in": nan, "out": nan, "skip": True},  # skip step
+        {"lt": 6, "in": 4 * sec * 6, "out": 4.0, "skip": False},  # 4 mm/s accumulation in last 6 hours
+        {"lt": 9, "in": nan, "out": nan, "skip": True},  # skip step
+        {"lt": 12, "in": 2 * sec * 6, "out": 2.0, "skip": False}, # 2 mm/s accumulation in last 6 hours
+    ]  # fmt: off
+
+    lead_times = pd.to_timedelta([step["lt"] for step in values], unit="h")
+    skip_step = np.array([step["skip"] for step in values])
+    data = np.array([step["in"] for step in values], dtype=np.float32)
+    expected = np.array([step["out"] for step in values], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        data,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "mm/s"},
+    )
+
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="lead_time",
+        reset_frequency=reset_frequency,
+        skip_step=skip_step,
+    )
+
+    np.testing.assert_equal(result.values, expected)
