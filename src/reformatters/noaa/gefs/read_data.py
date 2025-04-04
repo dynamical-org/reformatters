@@ -20,6 +20,7 @@ from reformatters.noaa.gefs.gefs_config_models import (
     GEFSDataVar,
     GEFSFileType,
 )
+from reformatters.noaa.noaa_utils import has_hour_0_values
 
 logger = get_logger(__name__)
 
@@ -122,9 +123,7 @@ def download_file(
     # Accumulated and last N hour avg values don't exist in the 0-hour forecast.
     if lead_time_hours == 0:
         gefs_idx_data_vars = [
-            data_var
-            for data_var in gefs_idx_data_vars
-            if data_var.attrs.step_type not in ("accum", "avg")
+            data_var for data_var in gefs_idx_data_vars if has_hour_0_values(data_var)
         ]
 
     true_gefs_file_type = get_gefs_file_type(init_time, lead_time, gefs_file_type)

@@ -39,6 +39,7 @@ from reformatters.noaa.gefs.read_data import (
     is_v12_index,
     read_into,
 )
+from reformatters.noaa.noaa_utils import has_hour_0_values
 
 logger = get_logger(__name__)
 
@@ -285,10 +286,6 @@ def filter_available_times(times: pd.DatetimeIndex) -> pd.DatetimeIndex:
     return times[is_available_time(times)]
 
 
-def data_var_has_hour_0_values(data_var: DataVar[Any]) -> bool:
-    return data_var.attrs.step_type == "instant"
-
-
 def group_data_vars_by_gefs_file_type(
     data_vars: Iterable[GEFSDataVar], *, group_size: int
 ) -> list[tuple[GEFSFileType, EnsembleStatistic | None, bool, tuple[GEFSDataVar, ...]]]:
@@ -307,7 +304,7 @@ def group_data_vars_by_gefs_file_type(
     for data_var in data_vars:
         gefs_file_type = data_var.internal_attrs.gefs_file_type
         ensemble_statistic = data_var.attrs.ensemble_statistic
-        has_hour_0_values = data_var_has_hour_0_values(data_var)
+        has_hour_0_values = has_hour_0_values(data_var)
         grouper[(gefs_file_type, ensemble_statistic, has_hour_0_values)].append(
             data_var
         )
@@ -402,7 +399,7 @@ def filter_coords_and_paths(
     data_var: GEFSDataVar, coords_and_paths: CoordsAndPaths
 ) -> CoordsAndPaths:
     # Skip reading the 0-hour for accumulated or last N hours avg values
-    if data_var.attrs.step_type in ("accum", "avg"):
+    if not has_hour_0_values(data_var):
         return [
             coords_and_path
             for coords_and_path in coords_and_paths

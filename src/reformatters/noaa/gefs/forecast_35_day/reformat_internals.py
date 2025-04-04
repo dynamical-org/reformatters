@@ -36,6 +36,7 @@ from reformatters.noaa.gefs.read_data import (
     download_file,
     read_into,
 )
+from reformatters.noaa.noaa_utils import has_hour_0_values
 
 logger = get_logger(__name__)
 
@@ -350,7 +351,7 @@ def filter_coords_and_paths(
     data_var: GEFSDataVar, coords_and_paths: CoordsAndPaths
 ) -> CoordsAndPaths:
     # Skip reading the 0-hour for accumulated or last N hours avg values
-    if data_var.attrs.step_type in ("accum", "avg"):
+    if not has_hour_0_values(data_var):
         return [
             coords_and_path
             for coords_and_path in coords_and_paths

@@ -15,6 +15,7 @@ from reformatters.common.config import Config
 from reformatters.common.download import download_to_disk, http_store
 from reformatters.common.types import Array2D
 from reformatters.noaa.noaa_config_models import NOAADataVar
+from reformatters.noaa.noaa_utils import has_hour_0_values
 
 DOWNLOAD_DIR = Path("data/download/")
 
@@ -43,9 +44,7 @@ def download_file(
     # Accumulated and last N hour avg values don't exist in the 0-hour forecast.
     if lead_time_hours == 0:
         gfs_idx_data_vars = [
-            data_var
-            for data_var in gfs_idx_data_vars
-            if data_var.attrs.step_type not in ("accum", "avg", "min", "max")
+            data_var for data_var in gfs_idx_data_vars if has_hour_0_values(data_var)
         ]
 
     base_path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_time_hours:03.0f}"
