@@ -192,6 +192,14 @@ def download_file(
 
         return coords, local_path
 
+    except FileNotFoundError as e:
+        # For recent files, we expect some files to not exist yet, just log the path
+        if init_time > (pd.Timestamp.now() - pd.Timedelta(hours=24)):
+            logger.info(" ".join(str(e).split("\n")[:2]))
+        else:
+            logger.exception("File not found")
+        return coords, None
+
     except Exception:
         logger.exception("Download failed")
         return coords, None
