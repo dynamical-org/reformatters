@@ -11,7 +11,6 @@ type GEFSFileType = Literal["a", "b", "s+a", "s+b"]
 
 class GEFSInternalAttrs(NOAAInternalAttrs):
     gefs_file_type: GEFSFileType
-    deaccumulate_to_rates: bool = False
 
 
 class GEFSDataVar(DataVar[GEFSInternalAttrs]):

@@ -7,6 +7,7 @@ class NOAAInternalAttrs(BaseInternalAttrs):
     grib_index_level: str
     index_position: int
     include_lead_time_suffix: bool = False
+    deaccumulate_to_rates: bool = False
 
 
 class NOAADataVar(DataVar[NOAAInternalAttrs]):
