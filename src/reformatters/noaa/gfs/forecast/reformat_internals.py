@@ -20,6 +20,7 @@ from reformatters.common.reformat_utils import (
 from reformatters.noaa.gfs.forecast import template
 from reformatters.noaa.gfs.read_data import SourceFileCoords, download_file, read_into
 from reformatters.noaa.noaa_config_models import NOAADataVar
+from reformatters.noaa.noaa_utils import has_hour_0_values
 
 logger = get_logger(__name__)
 
@@ -139,7 +140,7 @@ def filter_coords_and_paths(
     data_var: NOAADataVar, coords_and_paths: CoordsAndPaths
 ) -> CoordsAndPaths:
     # Skip reading the 0-hour for accumulated or last N hours avg values
-    if data_var.attrs.step_type in ("accum", "avg", "min", "max"):
+    if not has_hour_0_values(data_var):
         return [
             coords_and_path
             for coords_and_path in coords_and_paths
