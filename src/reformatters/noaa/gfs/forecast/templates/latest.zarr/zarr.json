@@ -1,7 +1,7 @@
 {
   "attributes": {
     "dataset_id": "noaa-gfs-forecast",
-    "dataset_version": "0.0.0",
+    "dataset_version": "0.1.0",
     "name": "NOAA GFS forecast",
     "description": "Weather forecasts from the Global Forecast System (GFS) operated by NOAA NWS NCEP.",
     "attribution": "NOAA NWS NCEP GFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
@@ -30,9 +30,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -49,9 +49,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {
@@ -117,9 +117,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -136,9 +136,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {
@@ -204,9 +204,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -223,9 +223,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {
@@ -291,9 +291,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -310,9 +310,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {
@@ -378,9 +378,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -397,9 +397,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {
@@ -465,9 +465,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -484,9 +484,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {
@@ -626,9 +626,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -645,9 +645,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {
@@ -1087,9 +1087,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -1106,9 +1106,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {
@@ -1174,9 +1174,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -1193,9 +1193,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {
@@ -1261,9 +1261,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -1280,9 +1280,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {
@@ -1348,9 +1348,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -1367,9 +1367,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {
@@ -1435,9 +1435,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -1454,9 +1454,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {
@@ -1523,9 +1523,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -1542,9 +1542,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {
@@ -1610,9 +1610,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -1629,9 +1629,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {
@@ -1698,9 +1698,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -1717,9 +1717,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {
@@ -1835,9 +1835,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -1854,9 +1854,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {
@@ -1923,9 +1923,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -1942,9 +1942,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {
@@ -2089,9 +2089,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -2108,9 +2108,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {
@@ -2177,9 +2177,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -2196,9 +2196,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {
@@ -2265,9 +2265,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -2284,9 +2284,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {
@@ -2353,9 +2353,9 @@
           "configuration": {
             "chunk_shape": [
               1,
-              192,
-              1606,
-              1656
+              210,
+              726,
+              726
             ]
           }
         },
@@ -2372,9 +2372,9 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                64,
-                73,
-                72
+                105,
+                121,
+                121
               ],
               "codecs": [
                 {

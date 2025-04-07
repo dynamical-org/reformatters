@@ -11,9 +11,9 @@
     "configuration": {
       "chunk_shape": [
         1,
-        192,
-        1606,
-        1656
+        210,
+        726,
+        726
       ]
     }
   },
@@ -30,9 +30,9 @@
       "configuration": {
         "chunk_shape": [
           1,
-          64,
-          73,
-          72
+          105,
+          121,
+          121
         ],
         "codecs": [
           {
