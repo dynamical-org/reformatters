@@ -20,7 +20,7 @@ from reformatters.noaa.gefs.common_gefs_template_config import (
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
 
 DATASET_ID = "noaa-gefs-analysis"
-DATASET_VERSION = "0.0.1-dev"
+DATASET_VERSION = "0.1.0"
 
 TIME_START = pd.Timestamp("2000-01-01T00:00")
 TIME_FREQUENCY = pd.Timedelta("3h")
@@ -62,7 +62,7 @@ def get_time_coordinates(
 
 # CHUNKS
 VAR_CHUNKS: dict[Dim, int] = {
-    "time": 365 * (24 // 3),  # 1 year of 3 hourly data
+    "time": 180 * (24 // 3),  # 180 days of 3 hourly data
     "latitude": 32,  # 23 chunks over 721 pixels
     "longitude": 32,  # 45 chunks over 1440 pixels
 }
