@@ -66,8 +66,8 @@ def reformat_time_i_slices(
     # while writing to zarr is to parallelize across processes (not threads).
     # Use shared memory to avoid pickling large arrays to share between processes.
 
-    # Pre-v12 data has a 6 hour step, so we expand time range to ensure
-    # we have boundary values for interpolation to 3 hourly values.
+    # We expand time range to ensure we have boundary values for interpolation
+    # to 3 hourly values even if the variable is accumumulated and doesn't have hour 0 values.
     # We need to buffer by 1 step to have endpoints for interpolation,
     # but then by 2 steps to ensure accumulation starts at a reset step.
     time_buffer_i_size = 2
@@ -94,17 +94,13 @@ def reformat_time_i_slices(
             )
             logger.info(f"Starting chunk {time_range_str(chunk_template_ds['time'])}")
 
-            # See pre-v12 note above
-            if not np.all(
-                is_v12_index(pd.to_datetime(chunk_template_ds["time"].values))
-            ):
-                processing_i_slice = buffer_slice(
-                    append_dim_i_slice, buffer_size=time_buffer_i_size
-                )
-                chunk_template_ds = template_ds[data_var_names].isel(
-                    {template.APPEND_DIMENSION: processing_i_slice}
-                )
-                logger.info(f"Expanded to {time_range_str(chunk_template_ds['time'])}")
+            processing_i_slice = buffer_slice(
+                append_dim_i_slice, buffer_size=time_buffer_i_size
+            )
+            chunk_template_ds = template_ds[data_var_names].isel(
+                {template.APPEND_DIMENSION: processing_i_slice}
+            )
+            logger.info(f"Expanded to {time_range_str(chunk_template_ds['time'])}")
 
             download_var_group_futures = get_download_var_group_futures(
                 chunk_template_ds,
