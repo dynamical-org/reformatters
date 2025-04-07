@@ -85,9 +85,9 @@ def reformat_kubernetes(
         workers_total=workers_total,
         parallelism=parallelism,
         cpu="6",  # fit on 8 vCPU node
-        memory="60G",  # fit on 64GB node
-        shared_memory="25G",
-        ephemeral_storage="60G",
+        memory="30G",  # fit on 32GB node
+        shared_memory="12G",
+        ephemeral_storage="30G",
         command=[
             "reformat-chunks",
             pd.Timestamp(time_end).isoformat(),
