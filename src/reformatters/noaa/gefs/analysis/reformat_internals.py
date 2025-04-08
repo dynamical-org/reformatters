@@ -470,11 +470,12 @@ def write_shards(
     cpu_process_executor: ProcessPoolExecutor,
 ) -> None:
     """
-    Write the shards of a data array to zarr storage using shared memory.
+    Write the shards of a data array as zarr to `store`. The data array is
+    reconstructed from `data_array_template` and the `shared_buffer`.
 
-    data_array_template may included additional steps along append_dim,
-    while chunk_template is has exactly the output size and coordinates along
-    append_dim of the shards to write.
+    `data_array_template` may include additional, padded steps along `append_dim`,
+    while `chunk_template_ds` has exactly the output size and coordinates along
+    `append_dim` of the shards to write.
     """
 
     shard_indexers = tuple(
@@ -529,6 +530,8 @@ def write_shard_to_zarr(
         data_array = data_array_template.copy()
         data_array.data = shared_array
 
+        # Data array may have been padded along `append_dim` to support interpolation and deaccumulation.
+        # Trim to the exact shard length provided by chunk_template_ds.
         append_dim_coords = chunk_template_ds[append_dim]
         # coords.max() implies an _inclusive_ slice endpoint which only happens with time indexes in pandas
         assert np.issubdtype(append_dim_coords.dtype, np.datetime64)
