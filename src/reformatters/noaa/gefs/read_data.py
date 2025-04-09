@@ -86,6 +86,9 @@ GEFS_REFORECAST_LEVELS_SHORT = {
     "10 m above ground": "hgt",
     "100 m above ground": "hgt",
 }
+GEFS_REFORECAST_GRIB_ELEMENT_RENAME = {
+    "PRMSL": "PRES",  # In the reforecast, PRMSL is PRES with level "mean sea level"
+}
 
 
 def is_v12(init_time: pd.Timestamp) -> bool:
@@ -145,11 +148,12 @@ def download_file(
         assert len(gefs_idx_data_vars) == 1, "Only one data variable per file in GEFS v12 reforecast"  # fmt: skip
         data_var = gefs_idx_data_vars[0]
         days_str = "Days:1-10" if lead_time <= pd.Timedelta(hours=240) else "Days:10-16"
+        grib_element = get_grib_element(data_var, init_time)
         level_str = GEFS_REFORECAST_LEVELS_SHORT[data_var.internal_attrs.grib_index_level]  # fmt: skip
         base_path = (
             f"GEFSv12/reforecast/{coords['init_time'].year}/{init_date_str}{init_hour_str}/"
             f"{ensemble_or_statistic_str}/{days_str}/"
-            f"{data_var.internal_attrs.grib_element.lower()}_{level_str}_"
+            f"{grib_element.lower()}_{level_str}_"
             f"{init_date_str}{init_hour_str}_{ensemble_or_statistic_str}.grib2"
         )
 
@@ -163,7 +167,7 @@ def download_file(
         var_info.internal_attrs.grib_element for var_info in gefs_idx_data_vars
     )
     vars_hash = digest(
-        format_gefs_idx_var(var_info, lead_time_hours)
+        format_gefs_idx_var(var_info, init_time, lead_time_hours)
         for var_info in gefs_idx_data_vars
     )
     vars_suffix = f"{lead_time_hours:03.0f}-{vars_str}-{vars_hash}"
@@ -178,7 +182,7 @@ def download_file(
         )
 
         byte_range_starts, byte_range_ends = parse_index_byte_ranges(
-            idx_local_path, gefs_idx_data_vars, lead_time_hours
+            idx_local_path, gefs_idx_data_vars, init_time, lead_time_hours
         )
 
         download_to_disk(
@@ -234,6 +238,7 @@ def get_gefs_file_type(
 def parse_index_byte_ranges(
     idx_local_path: Path,
     gefs_idx_data_vars: Sequence[GEFSDataVar],
+    init_time: pd.Timestamp,
     lead_time_hours: float,
 ) -> tuple[list[int], list[int]]:
     with open(idx_local_path) as index_file:
@@ -241,7 +246,9 @@ def parse_index_byte_ranges(
     byte_range_starts = []
     byte_range_ends = []
     for var_info in gefs_idx_data_vars:
-        var_match_str = re.escape(format_gefs_idx_var(var_info, lead_time_hours))
+        var_match_str = re.escape(
+            format_gefs_idx_var(var_info, init_time, lead_time_hours)
+        )
         regex = f"\\d+:(\\d+):.+:{var_match_str}.+(\\n\\d+:(\\d+))?"
         matches = re.findall(regex, index_contents)
         assert len(matches) == 1, (
@@ -283,9 +290,20 @@ def get_hours_str(var_info: GEFSDataVar, lead_time_hours: float) -> str:
     return hours_str
 
 
-def format_gefs_idx_var(var_info: GEFSDataVar, lead_time_hours: float) -> str:
+def get_grib_element(var_info: GEFSDataVar, init_time: pd.Timestamp) -> str:
+    grib_element = var_info.internal_attrs.grib_element
+    if init_time < GEFS_REFORECAST_END:
+        return GEFS_REFORECAST_GRIB_ELEMENT_RENAME.get(grib_element, grib_element)
+    else:
+        return grib_element
+
+
+def format_gefs_idx_var(
+    var_info: GEFSDataVar, init_time: pd.Timestamp, lead_time_hours: float
+) -> str:
     hours_str = get_hours_str(var_info, lead_time_hours)
-    return f"{var_info.internal_attrs.grib_element}:{var_info.internal_attrs.grib_index_level}:{hours_str}"
+    grib_element = get_grib_element(var_info, init_time)
+    return f"{grib_element}:{var_info.internal_attrs.grib_index_level}:{hours_str}"
 
 
 def digest(data: str | Iterable[str], length: int = 8) -> str:
@@ -307,7 +325,7 @@ def read_into(
     if path is None:
         return  # in rare case file is missing there's nothing to do
 
-    grib_element = data_var.internal_attrs.grib_element
+    grib_element = get_grib_element(data_var, coords["init_time"])
     if data_var.internal_attrs.include_lead_time_suffix:
         lead_hours = coords["lead_time"].total_seconds() / (60 * 60)
         if lead_hours % GEFS_ACCUMULATION_RESET_HOURS == 0:
