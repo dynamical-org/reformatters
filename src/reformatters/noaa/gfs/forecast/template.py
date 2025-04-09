@@ -71,13 +71,15 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
         ].sel(
             lead_time=[
                 "0h",
-                "5h",
+                "1h",
+                "2h",
                 "6h",
                 "7h",
+                "12h",
+                "120h",
                 "123h",
                 "126h",
                 "129h",
-                "384h",
             ]
         )
 
