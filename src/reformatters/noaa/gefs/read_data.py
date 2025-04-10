@@ -17,6 +17,8 @@ from reformatters.common.download import download_to_disk, http_store
 from reformatters.common.logging import get_logger
 from reformatters.common.types import Array2D
 from reformatters.noaa.gefs.gefs_config_models import (
+    GEFS_B22_TRANSITION_DATE,
+    GEFS_S_FILE_MAX,
     GEFSDataVar,
     GEFSFileType,
 )
@@ -129,7 +131,7 @@ def download_file(
             data_var for data_var in gefs_idx_data_vars if has_hour_0_values(data_var)
         ]
 
-    true_gefs_file_type = get_gefs_file_type(init_time, lead_time, gefs_file_type)
+    true_gefs_file_type = get_gefs_file_type(init_time, lead_time, gefs_idx_data_vars)
 
     if coords["init_time"] >= GEFS_CURRENT_ARCHIVE_START:
         resolution_str = FILE_RESOLUTIONS[true_gefs_file_type]
@@ -209,17 +211,31 @@ def download_file(
 
 
 def get_gefs_file_type(
-    init_time: pd.Timestamp, lead_time: pd.Timedelta, gefs_file_type: GEFSFileType
+    init_time: pd.Timestamp, lead_time: pd.Timedelta, data_vars: Sequence[GEFSDataVar]
 ) -> Literal["a", "b", "s"]:
+    # See `GEFSFileType` for details on the different types of files.
+
+    gefs_file_types = {data_var.internal_attrs.gefs_file_type for data_var in data_vars}
+    assert len(gefs_file_types) == 1, "All data vars must have the same gefs file type"
+    gefs_file_type = gefs_file_types.pop()
+
     if is_v12(init_time):
         if gefs_file_type == "s+a":
-            if lead_time <= pd.Timedelta(hours=240):
+            if lead_time <= GEFS_S_FILE_MAX:
                 return "s"
             else:
                 return "a"
         elif gefs_file_type == "s+b":
-            if lead_time <= pd.Timedelta(hours=240):
+            if lead_time <= GEFS_S_FILE_MAX:
                 return "s"
+            else:
+                return "b"
+        elif gefs_file_type == "s+b-b22":
+            if init_time >= GEFS_B22_TRANSITION_DATE:
+                if lead_time <= GEFS_S_FILE_MAX:
+                    return "s"
+                else:
+                    return "b"
             else:
                 return "b"
         else:
@@ -229,7 +245,7 @@ def get_gefs_file_type(
         match gefs_file_type:
             case "s+a" | "a":
                 return "a"
-            case "s+b" | "b":
+            case "s+b" | "s+b-b22" | "b":
                 return "b"
             case _ as unreachable:
                 assert_never(unreachable)
@@ -335,6 +351,10 @@ def read_into(
         else:
             raise AssertionError(f"Unexpected lead time hours: {lead_hours}")
 
+    true_gefs_file_type = get_gefs_file_type(
+        coords["init_time"], coords["lead_time"], [data_var]
+    )
+
     try:
         raw_data = read_rasterio(
             path,
@@ -344,7 +364,7 @@ def read_into(
             out.rio.transform(),
             out.rio.crs,
             coords,
-            data_var.internal_attrs.gefs_file_type,
+            true_gefs_file_type,
         )
     except Exception:
         logger.exception("Read failed")
@@ -371,7 +391,7 @@ def read_rasterio(
     out_transform: rasterio.transform.Affine,
     out_crs: rasterio.crs.CRS,
     coords: SourceFileCoords,
-    gefs_file_type: GEFSFileType,
+    true_gefs_file_type: Literal["a", "b", "s"],
 ) -> Array2D[np.float32]:
     with warnings.catch_warnings():
         warnings.filterwarnings(
@@ -390,9 +410,7 @@ def read_rasterio(
             rasterio_band_index = matching_bands[0]
 
             result: Array2D[np.float32]
-            match get_gefs_file_type(
-                coords["init_time"], coords["lead_time"], gefs_file_type
-            ):
+            match true_gefs_file_type:
                 case "a" | "b":
                     # Interpolate 1.0/0.5 degree data to the 0.25 degree grid.
                     # Every 2nd (0.5 deg) or every 4th (1.0 deg) 0.25 degree pixel's center aligns exactly
