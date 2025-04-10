@@ -97,13 +97,15 @@ def reformat_time_i_slices(
             processing_i_slice = buffer_slice(
                 append_dim_i_slice, buffer_size=time_buffer_i_size
             )
-            chunk_template_ds = template_ds[data_var_names].isel(
+            padded_chunk_template_ds = template_ds[data_var_names].isel(
                 {template.APPEND_DIMENSION: processing_i_slice}
             )
-            logger.info(f"Expanded to {time_range_str(chunk_template_ds['time'])}")
+            logger.info(
+                f"Expanded to {time_range_str(padded_chunk_template_ds['time'])}"
+            )
 
             download_var_group_futures = get_download_var_group_futures(
-                chunk_template_ds,
+                padded_chunk_template_ds,
                 io_executor,
                 wait_executor,
                 var_download_group_size,
@@ -120,7 +122,7 @@ def reformat_time_i_slices(
                 # Write variable by variable to avoid blowing up memory usage
                 for data_var in data_vars:
                     data_array, data_array_template = create_data_array_and_template(
-                        chunk_template_ds, data_var, shared_buffer
+                        padded_chunk_template_ds, data_var, shared_buffer
                     )
                     var_coords_and_paths = filter_coords_and_paths(
                         data_var, coords_and_paths
@@ -130,13 +132,12 @@ def reformat_time_i_slices(
                     )
                     apply_data_transformations_inplace(data_array, data_var)
                     # Trim to exact chunk size in case we expanded the time range above
-                    data_array = data_array.isel(
-                        {template.APPEND_DIMENSION: append_dim_i_slice}
-                    )
                     write_shards(
                         data_array_template,
-                        store,
                         shared_buffer,
+                        template.APPEND_DIMENSION,
+                        chunk_template_ds,
+                        store,
                         cpu_process_executor,
                     )
 
@@ -462,11 +463,24 @@ def apply_data_transformations_inplace(
 
 def write_shards(
     data_array_template: xr.DataArray,
-    store: zarr.storage.FsspecStore | Path,
     shared_buffer: SharedMemory,
+    append_dim: str,
+    chunk_template_ds: xr.Dataset,
+    store: zarr.storage.FsspecStore | Path,
     cpu_process_executor: ProcessPoolExecutor,
 ) -> None:
-    shard_indexers = tuple(shard_slice_indexers(data_array_template))
+    """
+    Write the shards of a data array as zarr to `store`. The data array is
+    reconstructed from `data_array_template` and the `shared_buffer`.
+
+    `data_array_template` may include additional, padded steps along `append_dim`,
+    while `chunk_template_ds` has exactly the output size and coordinates along
+    `append_dim` of the shards to write.
+    """
+
+    shard_indexers = tuple(
+        shard_slice_indexers(chunk_template_ds[data_array_template.name])
+    )
     chunk_times_str = " - ".join(
         data_array_template[template.APPEND_DIMENSION]
         .isel({template.APPEND_DIMENSION: [0, -1]})
@@ -485,6 +499,8 @@ def write_shards(
                 write_shard_to_zarr,
                 data_array_template,
                 shared_buffer.name,
+                append_dim,
+                chunk_template_ds,
                 store,
             ),
             shard_indexers,
@@ -495,6 +511,8 @@ def write_shards(
 def write_shard_to_zarr(
     data_array_template: xr.DataArray,
     shared_buffer_name: str,
+    append_dim: str,
+    chunk_template_ds: xr.Dataset,
     store: zarr.storage.FsspecStore | Path,
     shard_indexer: tuple[slice, ...],
 ) -> None:
@@ -511,6 +529,14 @@ def write_shard_to_zarr(
 
         data_array = data_array_template.copy()
         data_array.data = shared_array
+
+        # Data array may have been padded along `append_dim` to support interpolation and deaccumulation.
+        # Trim to the exact shard length provided by chunk_template_ds.
+        append_dim_coords = chunk_template_ds[append_dim]
+        # coords.max() implies an _inclusive_ slice endpoint which only happens with time indexes in pandas
+        assert np.issubdtype(append_dim_coords.dtype, np.datetime64)
+        append_dim_slice = slice(append_dim_coords.min(), append_dim_coords.max())
+        data_array = data_array.sel({append_dim: append_dim_slice})
 
         warnings.filterwarnings(
             "ignore",
