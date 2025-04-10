@@ -131,7 +131,6 @@ def reformat_time_i_slices(
                         data_array, data_var, var_coords_and_paths, cpu_executor
                     )
                     apply_data_transformations_inplace(data_array, data_var)
-                    # Trim to exact chunk size in case we expanded the time range above
                     write_shards(
                         data_array_template,
                         shared_buffer,
