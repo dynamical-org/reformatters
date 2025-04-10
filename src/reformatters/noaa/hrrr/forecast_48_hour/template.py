@@ -11,6 +11,7 @@ from reformatters.common.template_utils import assign_var_metadata, make_empty_v
 from reformatters.common.template_utils import (
     write_metadata as write_metadata,  # re-export
 )
+from reformatters.noaa.hrrr.hrrr_config_models import HRRRDataVar
 from reformatters.noaa.hrrr.read_data import (
     SourceFileCoords,
     download_file,
@@ -61,7 +62,7 @@ def update_template() -> None:
 
 
 def derive_coordinates(
-    ds: xr.Dataset,
+    ds: xr.Dataset, data_var: HRRRDataVar = DATA_VARIABLES[0]
 ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
     # derivation of HRRR latitude / longitude coordinates is simplest by downloading
     # a sample file and extracting the coordinates from the file itself.
@@ -74,8 +75,7 @@ def derive_coordinates(
     )
 
     # "sfc" is the smallest available file type.
-    # TODO (tony): ensure we only pull down 1 grib message for this to save download time/bdwth
-    _, filepath = download_file(data_coords, "sfc")
+    _, filepath = download_file(data_coords, "sfc", [data_var])
     hrrrds = xr.open_dataset(str(filepath), engine="rasterio")
 
     hrrrds_bounds = hrrrds.rio.bounds(recalc=True)
