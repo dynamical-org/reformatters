@@ -1,7 +1,7 @@
 {
   "attributes": {
     "dataset_id": "noaa-gefs-analysis",
-    "dataset_version": "0.1.0",
+    "dataset_version": "0.1.1",
     "name": "NOAA GEFS analysis",
     "description": "Weather analysis from the Global Ensemble Forecast System (GEFS) operated by NOAA NWS NCEP.",
     "attribution": "NOAA NWS NCEP GEFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
