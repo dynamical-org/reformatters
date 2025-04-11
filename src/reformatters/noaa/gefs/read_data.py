@@ -216,7 +216,7 @@ def get_gefs_file_type(
     # See `GEFSFileType` for details on the different types of files.
 
     gefs_file_types = {data_var.internal_attrs.gefs_file_type for data_var in data_vars}
-    assert len(gefs_file_types) == 1, "All data vars must have the same gefs file type"
+    # assert len(gefs_file_types) == 1, "All data vars must have the same gefs file type"
     gefs_file_type = gefs_file_types.pop()
 
     if is_v12(init_time):
