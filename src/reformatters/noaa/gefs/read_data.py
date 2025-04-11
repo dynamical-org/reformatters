@@ -130,6 +130,8 @@ def download_file(
         gefs_idx_data_vars = [
             data_var for data_var in gefs_idx_data_vars if has_hour_0_values(data_var)
         ]
+        if len(gefs_idx_data_vars) == 0:
+            return coords, None
 
     true_gefs_file_type = get_gefs_file_type(init_time, lead_time, gefs_idx_data_vars)
 
@@ -216,7 +218,9 @@ def get_gefs_file_type(
     # See `GEFSFileType` for details on the different types of files.
 
     gefs_file_types = {data_var.internal_attrs.gefs_file_type for data_var in data_vars}
-    # assert len(gefs_file_types) == 1, "All data vars must have the same gefs file type"
+    assert len(gefs_file_types) == 1, (
+        f"All data vars must have the same gefs file type. Received {gefs_file_types}"
+    )
     gefs_file_type = gefs_file_types.pop()
 
     if is_v12(init_time):
