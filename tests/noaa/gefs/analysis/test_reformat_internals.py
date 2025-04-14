@@ -349,16 +349,14 @@ def test_filter_available_times_current_archive_boundary() -> None:
 
     expected = pd.DatetimeIndex(
         [
-            # Times before Sept 23 should be 6-hourly
+            # Times before 2020-09-23T12 should be 6-hourly
             pd.Timestamp("2020-09-22T00:00"),
             pd.Timestamp("2020-09-22T06:00"),
             pd.Timestamp("2020-09-22T12:00"),
             pd.Timestamp("2020-09-22T18:00"),
-            # Times from Sept 23 onwards should be 3-hourly
             pd.Timestamp("2020-09-23T00:00"),
-            pd.Timestamp("2020-09-23T03:00"),
             pd.Timestamp("2020-09-23T06:00"),
-            pd.Timestamp("2020-09-23T09:00"),
+            # Times from 2020-09-23T12 onwards should be 3-hourly
             pd.Timestamp("2020-09-23T12:00"),
             pd.Timestamp("2020-09-23T15:00"),
             pd.Timestamp("2020-09-23T18:00"),

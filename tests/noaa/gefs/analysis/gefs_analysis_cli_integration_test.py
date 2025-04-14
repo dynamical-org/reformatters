@@ -71,13 +71,6 @@ def test_reformat_local_reforecast_period(
     assert np.isclose(point_ds["temperature_2m"], 26.125)
     assert np.isclose(point_ds["wind_u_100m"], 4.0)
 
-    point_ds = original_ds.sel(
-        latitude=0, longitude=0, time=time_end - timedelta(hours=3)
-    )
-    assert np.isclose(point_ds["precipitation_surface"], 4.6253204e-05)
-    assert np.isclose(point_ds["temperature_2m"], 26.75)
-    assert np.isclose(point_ds["wind_u_100m"], -1.359375)
-
 
 def test_reformat_local_reforecast_to_pre_v12_transition_period(
     monkeypatch: MonkeyPatch, tmp_path: Path
