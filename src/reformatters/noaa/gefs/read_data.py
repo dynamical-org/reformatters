@@ -57,11 +57,11 @@ class ChunkCoordinates(TypedDict):
 
 # We pull data from three different periods of GEFS.
 #
-# 1. The current configuration archive, which is 0.25 degree data from 2020-10-01 to the present.
-# 2. The pre GEFS v12 archive, which is 1.0 degree data that we use from 2020-01-01 to 2020-09-30.
-# 3. The GEFS v12 retrospective (reforecast) archive, which is 0.25 degree data from 2000-01-01 to 2019-12-31.
+# 1. The current configuration archive, which is 0.25 degree data from 2020-09-23T12 the present.
+# 2. The pre GEFS v12 archive, which is 1.0 degree data that we use from 2020-01-01T00 to 2020-09-23T06.
+# 3. The GEFS v12 retrospective (reforecast) archive, which is 0.25 degree data from 2000-01-01T03 to 2019-12-31T21.
 #
-GEFS_CURRENT_ARCHIVE_START = pd.Timestamp("2020-09-23T00:00")
+GEFS_CURRENT_ARCHIVE_START = pd.Timestamp("2020-09-23T12:00")
 GEFS_REFORECAST_END = pd.Timestamp("2020-01-01T00:00")  # exclusive end point
 GEFS_REFORECAST_START = pd.Timestamp("2000-01-01T00:00")
 
@@ -214,7 +214,7 @@ def download_file(
 
 def get_gefs_file_type(
     init_time: pd.Timestamp, lead_time: pd.Timedelta, data_vars: Sequence[GEFSDataVar]
-) -> Literal["a", "b", "s"]:
+) -> Literal["a", "b", "s", "reforecast"]:
     # See `GEFSFileType` for details on the different types of files.
 
     gefs_file_types = {data_var.internal_attrs.gefs_file_type for data_var in data_vars}
@@ -223,7 +223,7 @@ def get_gefs_file_type(
     )
     gefs_file_type = gefs_file_types.pop()
 
-    if is_v12(init_time):
+    if init_time >= GEFS_CURRENT_ARCHIVE_START:
         if gefs_file_type == "s+a":
             if lead_time <= GEFS_S_FILE_MAX:
                 return "s"
@@ -245,7 +245,7 @@ def get_gefs_file_type(
         else:
             return gefs_file_type
 
-    else:
+    elif init_time >= GEFS_REFORECAST_END:
         match gefs_file_type:
             case "s+a" | "a":
                 return "a"
@@ -253,6 +253,10 @@ def get_gefs_file_type(
                 return "b"
             case _ as unreachable:
                 assert_never(unreachable)
+    elif init_time >= GEFS_REFORECAST_START:
+        return "reforecast"
+    else:
+        raise ValueError(f"Unexpected init time: {init_time}")
 
 
 def parse_index_byte_ranges(
@@ -395,7 +399,7 @@ def read_rasterio(
     out_transform: rasterio.transform.Affine,
     out_crs: rasterio.crs.CRS,
     coords: SourceFileCoords,
-    true_gefs_file_type: Literal["a", "b", "s"],
+    true_gefs_file_type: Literal["a", "b", "s", "reforecast"],
 ) -> Array2D[np.float32]:
     with warnings.catch_warnings():
         warnings.filterwarnings(
@@ -440,7 +444,7 @@ def read_rasterio(
                         step = 2 if is_v12(coords["init_time"]) else 4
                         assert np.array_equal(raw, result[::step, ::step])
                     return result
-                case "s":
+                case "s" | "reforecast":
                     # Confirm the arguments we use to resample 1.0/0.5 degree data
                     # to 0.25 degree grid above match the source 0.25 degree data.
                     assert reader.shape == out_spatial_shape

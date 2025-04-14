@@ -14,30 +14,30 @@ def update_template() -> None:
 
 
 @app.command()
-def reformat_local(init_time_end: str) -> None:
-    reformat.reformat_local(init_time_end)
+def reformat_local(time_end: str) -> None:
+    reformat.reformat_local(time_end)
 
 
 @app.command()
 def reformat_kubernetes(
-    init_time_end: str,
+    time_end: str,
     jobs_per_pod: int = 1,
     max_parallelism: int = 32,
     docker_image: str | None = None,
 ) -> None:
     reformat.reformat_kubernetes(
-        init_time_end, jobs_per_pod, max_parallelism, docker_image=docker_image
+        time_end, jobs_per_pod, max_parallelism, docker_image=docker_image
     )
 
 
 @app.command()
 def reformat_chunks(
-    init_time_end: str,
+    time_end: str,
     worker_index: Annotated[int, typer.Argument(envvar="WORKER_INDEX")],
     workers_total: Annotated[int, typer.Argument(envvar="WORKERS_TOTAL")],
 ) -> None:
     reformat.reformat_chunks(
-        init_time_end, worker_index=worker_index, workers_total=workers_total
+        time_end, worker_index=worker_index, workers_total=workers_total
     )
 
 
