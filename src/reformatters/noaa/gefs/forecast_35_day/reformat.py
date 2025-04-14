@@ -11,10 +11,8 @@ import pandas as pd
 import sentry_sdk
 import xarray as xr
 import zarr
-from pydantic import BaseModel
 
 from reformatters.common import docker, validation
-from reformatters.common.config import Config  # noqa:F401
 from reformatters.common.iterating import (
     consume,
     dimension_slices,
@@ -22,6 +20,7 @@ from reformatters.common.iterating import (
 )
 from reformatters.common.kubernetes import Job, ReformatCronJob, ValidationCronJob
 from reformatters.common.logging import get_logger
+from reformatters.common.reformat_utils import ChunkFilters
 from reformatters.common.types import Array1D, DatetimeLike
 from reformatters.common.zarr import (
     copy_data_var,
@@ -41,18 +40,6 @@ _OPERATIONAL_CRON_SCHEDULE = "0 7 * * *"  # At 7:00 UTC every day.
 _VALIDATION_CRON_SCHEDULE = "0 10 * * *"  # At 10:00 UTC every day.
 
 logger = get_logger(__name__)
-
-
-class ChunkFilters(BaseModel):
-    """
-    Filters for controlling which chunks of data to process.
-    A value of None means no filtering.
-    """
-
-    time_dim: str
-    time_start: str | None = None
-    time_end: str | None = None
-    variable_names: list[str] | None = None
 
 
 def reformat_local(init_time_end: DatetimeLike, chunk_filters: ChunkFilters) -> None:

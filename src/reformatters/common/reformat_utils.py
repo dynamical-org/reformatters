@@ -9,12 +9,25 @@ from pathlib import Path
 import numpy as np
 import xarray as xr
 import zarr
+from pydantic import BaseModel
 
 from reformatters.common.iterating import consume, shard_slice_indexers
 from reformatters.common.logging import get_logger
 from reformatters.common.types import ArrayFloat32
 
 logger = get_logger(__name__)
+
+
+class ChunkFilters(BaseModel):
+    """
+    Filters for controlling which chunks of data to process.
+    A value of None means no filtering.
+    """
+
+    time_dim: str
+    time_start: str | None = None
+    time_end: str | None = None
+    variable_names: list[str] | None = None
 
 
 def create_data_array_and_template(
