@@ -51,7 +51,7 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
         coordinate.load()
 
     if not Config.is_prod:
-        ds = ds[["precipitation_surface", "temperature_2m"]]
+        ds = ds[["precipitation_surface", "temperature_2m", "wind_u_100m"]]
 
     return ds
 
