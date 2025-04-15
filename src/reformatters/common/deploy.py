@@ -4,6 +4,9 @@ from collections.abc import Iterable
 from typing import Protocol
 
 from reformatters.common import docker, kubernetes
+from reformatters.noaa.gefs.analysis.reformat import (
+    operational_kubernetes_resources as noaa_gefs_analysis_operational_kubernetes_resources,
+)
 from reformatters.noaa.gefs.forecast_35_day.reformat import (
     operational_kubernetes_resources as noaa_gefs_forecast_35_day_operational_kubernetes_resources,
 )
@@ -13,13 +16,14 @@ class OperationalKubernetesResources(Protocol):
     def __call__(self, image_tag: str) -> Iterable[kubernetes.Job]: ...
 
 
-OPERATIONAL_RESOURCE_FNS: tuple[OperationalKubernetesResources] = (
+OPERATIONAL_RESOURCE_FNS: tuple[OperationalKubernetesResources, ...] = (
     noaa_gefs_forecast_35_day_operational_kubernetes_resources,
+    noaa_gefs_analysis_operational_kubernetes_resources,
 )
 
 
 def deploy_operational_updates(
-    fns: tuple[OperationalKubernetesResources] = OPERATIONAL_RESOURCE_FNS,
+    fns: tuple[OperationalKubernetesResources, ...] = OPERATIONAL_RESOURCE_FNS,
     docker_image: str | None = None,
 ) -> None:
     image_tag = docker_image or docker.build_and_push_image()
