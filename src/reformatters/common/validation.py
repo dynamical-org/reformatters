@@ -78,7 +78,7 @@ def check_forecast_current_data(ds: xr.Dataset) -> ValidationResult:
 def check_forecast_recent_nans(
     ds: xr.Dataset, max_nan_percentage: float = 30
 ) -> ValidationResult:
-    """Check for NaN values in the most recent day of data. Fails if more than 70% of sampled data is NaN."""
+    """Check for NaN values in the most recent day of data. Fails if more than max_nan_percentage of sampled data is NaN."""
 
     now = pd.Timestamp.now()
     # We want to show that the latest init time has valid data going out up to 10 days (we may not have forecasts
@@ -107,4 +107,51 @@ def check_forecast_recent_nans(
     return ValidationResult(
         passed=True,
         message=f"All variables have acceptable NaN percentages (<{max_nan_percentage}%) in sampled locations of latest data",
+    )
+
+
+def check_analysis_current_data(ds: xr.Dataset) -> ValidationResult:
+    """Check for data in the most recent day. Fails if no data is found."""
+    now = pd.Timestamp.now()
+    latest_init_time_ds = ds.sel(time=slice(now - timedelta(hours=12), None))
+    if latest_init_time_ds.sizes["time"] == 0:
+        return ValidationResult(
+            passed=False, message="No data found for the latest day"
+        )
+
+    return ValidationResult(
+        passed=True,
+        message="Data found for the latest day",
+    )
+
+
+def check_analysis_recent_nans(
+    ds: xr.Dataset, max_nan_percentage: float = 5
+) -> ValidationResult:
+    """Check for NaN values in the most recent day of data. Fails if more than max_nan_percentage of sampled data is NaN."""
+
+    now = pd.Timestamp.now()
+
+    lon, lat = np.random.uniform(-180, 179), np.random.uniform(-90, 89)
+    sample_ds = ds.sel(
+        time=slice(now - timedelta(hours=12), None),
+        latitude=slice(lat, lat - 2),
+        longitude=slice(lon, lon + 2),
+    )
+
+    problem_vars = []
+    for var_name, da in sample_ds.data_vars.items():
+        nan_percentage = da.isnull().mean().compute() * 100
+        if nan_percentage > max_nan_percentage:
+            problem_vars.append((var_name, nan_percentage))
+
+    if problem_vars:
+        message = "Excessive NaN values found:\n"
+        for var, pct in problem_vars:
+            message += f"- {var}: {pct:.1f}% NaN\n"
+        return ValidationResult(passed=False, message=message)
+
+    return ValidationResult(
+        passed=True,
+        message=f"All variables have acceptable NaN percentages (<{max_nan_percentage}%) in sampled location of latest data",
     )

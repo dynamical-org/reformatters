@@ -2,6 +2,7 @@ from typing import Annotated
 
 import typer
 
+from reformatters.common.reformat_utils import ChunkFilters
 from reformatters.noaa.gefs.forecast_35_day import reformat, template
 from reformatters.noaa.gefs.forecast_35_day.template import DATASET_ID as DATASET_ID
 
@@ -22,7 +23,7 @@ def reformat_local(
 ) -> None:
     reformat.reformat_local(
         init_time_end,
-        chunk_filters=reformat.ChunkFilters(
+        chunk_filters=ChunkFilters(
             time_dim=template.APPEND_DIMENSION,
             time_start=filter_init_time_start,
             time_end=filter_init_time_end,
@@ -46,7 +47,7 @@ def reformat_kubernetes(
         jobs_per_pod,
         max_parallelism,
         docker_image=docker_image,
-        chunk_filters=reformat.ChunkFilters(
+        chunk_filters=ChunkFilters(
             time_dim=template.APPEND_DIMENSION,
             time_start=filter_init_time_start,
             time_end=filter_init_time_end,
@@ -68,7 +69,7 @@ def reformat_chunks(
         init_time_end,
         worker_index=worker_index,
         workers_total=workers_total,
-        chunk_filters=reformat.ChunkFilters(
+        chunk_filters=ChunkFilters(
             time_dim=template.APPEND_DIMENSION,
             time_start=filter_init_time_start,
             time_end=filter_init_time_end,
