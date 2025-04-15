@@ -1,5 +1,6 @@
 import json
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -12,9 +13,12 @@ from reformatters.common import zarr
 from reformatters.noaa.gefs.analysis import (
     cli,
     reformat,
+    reformat_internals,
     template,
     template_config,
 )
+from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
+from reformatters.noaa.gefs.read_data import SourceFileCoords
 
 pytestmark = pytest.mark.slow
 
@@ -127,7 +131,7 @@ def test_reformat_local_pre_v12_to_v12_transition_period_and_operational_update(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
     time_start = pd.Timestamp("2020-09-22T00:00")
-    time_end = time_start + pd.Timedelta(days=2)
+    time_end = pd.Timestamp("2020-09-24T00:00")
 
     # Update the template so this test starts processing at time_start
     monkeypatch.setattr(template_config, "TIME_START", time_start)
@@ -160,19 +164,39 @@ def test_reformat_local_pre_v12_to_v12_transition_period_and_operational_update(
     assert np.allclose(point_ds["wind_u_100m"], expected_wind_u_100m)
 
     # 2. Operational update
-    time_end = time_end + pd.Timedelta(hours=12, minutes=5, seconds=2)
+    # In this test, the coords we attempt to update through stop at 24T12:00
+    # but the available data stops at 24T06:00
+    # So we should only end up with 3 additional steps: 24T00, 24T03, 24T06
+    time_end = pd.Timestamp("2020-09-24T12:34")
+    available_time_end = pd.Timestamp("2020-09-24T06:00")
     monkeypatch.setattr(
         reformat,
         "_get_operational_update_time_end",
         lambda: time_end,
     )
 
+    original_download_file = reformat_internals.download_file  # type: ignore[attr-defined]
+
+    def test_download_file(
+        coords: SourceFileCoords,
+        gefs_file_type: GEFSFileType,
+        gefs_idx_data_vars: Sequence[GEFSDataVar],
+    ) -> tuple[SourceFileCoords, Path | None]:
+        if coords["init_time"] + coords["lead_time"] > available_time_end:
+            return coords, None
+        return original_download_file(coords, gefs_file_type, gefs_idx_data_vars)
+
+    monkeypatch.setattr(reformat_internals, "download_file", test_download_file)
+
     cli.reformat_operational_update()
     updated_ds = xr.open_zarr(reformat.get_store(), decode_timedelta=True, chunks=None)
 
-    # +1 because the extra few minutes we add to time_end gets us one more step
-    assert len(updated_ds.time) == (2 * 24 + 12) // 3 + 1
-    assert updated_ds.time.max() == time_end.floor("3h")
+    assert len(updated_ds.time) == 19
+    assert (
+        len(updated_ds.time)
+        == (available_time_end - time_start) // pd.Timedelta("3h") + 1
+    )
+    assert updated_ds.time.max() == available_time_end.floor("3h")
     assert set(original_ds.keys()) == set(updated_ds.keys())
 
     # No nans
@@ -184,19 +208,17 @@ def test_reformat_local_pre_v12_to_v12_transition_period_and_operational_update(
 
     assert np.allclose(
         updated_point_ds["temperature_2m"],
-        np.concatenate([expected_temperature_2m, [23.5, 23.5, 23.5, 23.625, 23.75]]),
+        np.concatenate([expected_temperature_2m, [23.5, 23.5, 23.5]]),
     )
 
     assert np.allclose(
         updated_point_ds["precipitation_surface"],
-        np.concatenate(
-            [expected_precipitation_surface, [0.0, 0.0, 0.0, 9.275973e-07, 0.0]]
-        ),
+        np.concatenate([expected_precipitation_surface, [0.0, 0.0, 0.0]]),
     )
 
     assert np.allclose(
         updated_point_ds["wind_u_100m"],
-        np.concatenate([expected_wind_u_100m, [2.34375, 2.625, 3.59375, 2.09375, 3.0]]),
+        np.concatenate([expected_wind_u_100m, [2.34375, 2.625, 3.59375]]),
     )
 
     # Restore the template

@@ -5,6 +5,7 @@ import subprocess
 from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from itertools import product
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -206,6 +207,8 @@ def reformat_operational_update() -> None:
             tmp_store,
             get_mode(tmp_store),
         )
+        max_processed_time = pd.Timestamp.min
+
         data_var_upload_futures = []
         for data_var, _ in reformat_time_i_slices(
             [(time_i_slice, list(template_ds.data_vars.keys()))],
@@ -213,6 +216,10 @@ def reformat_operational_update() -> None:
             tmp_store,
             _VARIABLES_PER_BACKFILL_JOB,
         ):
+            max_processed_time = max(
+                max_processed_time,
+                get_latest_processed_time(tmp_store, time_i_slice, data_var.name),
+            )
             data_var_upload_futures.append(
                 upload_executor.submit(
                     copy_data_var,
@@ -230,12 +237,38 @@ def reformat_operational_update() -> None:
             if (e := future.exception()) is not None:
                 raise e
 
-        # Write the metadata last, the data must be written first
+        if max_processed_time == pd.Timestamp.min:
+            logger.info(
+                f"No data processed in time_i_slice={time_i_slice}, not updating metadata."
+            )
+            continue
+
+        # Trim off any steps that are not yet available and rewrite metadata locally
+        truncated_template_ds = template_ds.sel(time=slice(None, max_processed_time))
+        template.write_metadata(
+            truncated_template_ds,
+            tmp_store,
+            get_mode(tmp_store),
+        )
+
+        # Write the metadata to the final store last, the data must be written first
         copy_zarr_metadata(truncated_template_ds, tmp_store, final_store)
 
 
 def _get_operational_update_time_end() -> pd.Timestamp:
-    return pd.Timestamp.utcnow().tz_localize(None)
+    """Because we use early forecast hours, we may be able to process data a bit in the "future"."""
+    return pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(hours=6)
+
+
+def get_latest_processed_time(
+    tmp_store: Path, chunk_i_slice: slice, var_name: str
+) -> pd.Timestamp:
+    ds = xr.open_zarr(tmp_store, chunks=None, decode_timedelta=True)
+    da = ds[var_name].isel(time=chunk_i_slice, latitude=0, longitude=0)
+    da_finite = da[da.notnull()]
+    if len(da_finite) == 0:
+        return pd.Timestamp.min
+    return pd.Timestamp(da_finite.time.max().item())
 
 
 @sentry_sdk.monitor(
