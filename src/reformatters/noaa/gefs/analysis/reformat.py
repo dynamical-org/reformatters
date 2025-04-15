@@ -77,9 +77,8 @@ def reformat_kubernetes(
     logger.info(f"Writing zarr metadata to {store.path}")
     template.write_metadata(template_ds, store, get_mode(store))
 
-    num_jobs = sum(
-        1
-        for _ in all_jobs_ordered(
+    num_jobs = len(
+        all_jobs_ordered(
             template_ds,
             chunk_filters,
             template.DATA_VARIABLES,
@@ -176,8 +175,13 @@ def reformat_operational_update() -> None:
     time_end = _get_operational_update_time_end()
     template_ds = template.get_template(time_end)
 
-    start_time = template_ds.loc[template_ds.time > last_existing_time].time.min()
-    chunk_filters = ChunkFilters(time_dim=append_dim, time_start=start_time)
+    start_time_str = (
+        template_ds.sel(time=template_ds.time > last_existing_time)
+        .time.min()
+        .dt.strftime("%Y-%m-%dT%H:%M")
+        .item()
+    )
+    chunk_filters = ChunkFilters(time_dim=append_dim, time_start=start_time_str)
     update_jobs = get_worker_jobs(
         all_jobs_ordered(
             template_ds,
@@ -188,9 +192,13 @@ def reformat_operational_update() -> None:
         worker_index=0,
         workers_total=1,
     )
+    # Consolidate jobs for different vars with the same shard time slice,
+    # We want to process all variables for a shard before we write metadata.
+    update_time_i_slices = sorted({j[0] for j in update_jobs}, key=lambda s: s.start)
+
     upload_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
 
-    for time_i_slice, all_data_var_names in update_jobs:
+    for time_i_slice in update_time_i_slices:
         # Write through this i_slice. Metadata is required for to_zarr's region="auto" option.
         truncated_template_ds = template_ds.isel(time=slice(0, time_i_slice.stop))
         template.write_metadata(
@@ -200,18 +208,18 @@ def reformat_operational_update() -> None:
         )
         data_var_upload_futures = []
         for data_var, _ in reformat_time_i_slices(
-            [(time_i_slice, all_data_var_names)],
+            [(time_i_slice, list(template_ds.data_vars.keys()))],
             template_ds,
             tmp_store,
             _VARIABLES_PER_BACKFILL_JOB,
         ):
-            # Writing a chunk without merging in existing data works because
-            # the init_time dimension chunk size is 1.
             data_var_upload_futures.append(
                 upload_executor.submit(
                     copy_data_var,
                     data_var.name,
-                    time_i_slice.start,
+                    time_i_slice,
+                    template_ds,
+                    append_dim,
                     tmp_store,
                     final_store,
                 )
@@ -273,7 +281,7 @@ def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
 def all_jobs_ordered(
     template_ds: xr.Dataset,
     chunk_filters: ChunkFilters,
-    data_vars: Sequence[GEFSDataVar],
+    possible_data_vars: Sequence[GEFSDataVar],
     group_size: int,
 ) -> list[tuple[slice, list[str]]]:
     if chunk_filters.variable_names is not None:
@@ -288,7 +296,7 @@ def all_jobs_ordered(
             for time_i_slice in time_i_slices
             if template_ds.isel({chunk_filters.time_dim: time_i_slice})[
                 chunk_filters.time_dim
-            ].min()
+            ].max()
             >= time_start  # type: ignore[operator]
         )
 
@@ -299,13 +307,12 @@ def all_jobs_ordered(
             for time_i_slice in time_i_slices
             if template_ds.isel({chunk_filters.time_dim: time_i_slice})[
                 chunk_filters.time_dim
-            ].max()
+            ].min()
             < time_end  # type: ignore[operator]
         )
 
     data_var_groups = group_data_vars_by_gefs_file_type(
-        [d for d in data_vars if d.name in template_ds],
-        group_size=group_size,
+        [d for d in possible_data_vars if d.name in template_ds], group_size=group_size
     )
     data_var_name_groups = [
         [data_var.name for data_var in data_vars]

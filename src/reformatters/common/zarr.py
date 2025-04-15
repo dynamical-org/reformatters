@@ -90,11 +90,17 @@ def get_mode(
 
 def copy_data_var(
     data_var_name: str,
-    chunk_index: int,
+    i_slice: slice,
+    template_ds: xr.Dataset,
+    append_dim: str,
     tmp_store: Path,
     final_store: zarr.storage.FsspecStore,
 ) -> None:
-    relative_dir = f"{data_var_name}/c/{chunk_index}/"
+    dim_index = template_ds[data_var_name].dims.index(append_dim)
+    append_dim_shard_size = template_ds[data_var_name].encoding["shards"][dim_index]
+    shard_index = i_slice.start // append_dim_shard_size
+    assert dim_index == 0  # relative_dir format below assumes append dim is first
+    relative_dir = f"{data_var_name}/c/{shard_index}/"
 
     logger.info(
         f"Copying data var chunks to final store ({final_store}) for {relative_dir}."

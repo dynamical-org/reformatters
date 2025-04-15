@@ -71,7 +71,7 @@ def reformat_kubernetes(
     logger.info(f"Writing zarr metadata to {store.path}")
     template.write_metadata(template_ds, store, get_mode(store))
 
-    num_jobs = sum(1 for _ in all_jobs_ordered(template_ds, chunk_filters))
+    num_jobs = len(all_jobs_ordered(template_ds, chunk_filters))
     workers_total = int(np.ceil(num_jobs / jobs_per_pod))
     parallelism = min(workers_total, max_parallelism)
 
@@ -228,7 +228,9 @@ def reformat_operational_update() -> None:
                 upload_executor.submit(
                     copy_data_var,
                     data_var.name,
-                    init_time_i_slice.start,
+                    init_time_i_slice,
+                    template_ds,
+                    template.APPEND_DIMENSION,
                     tmp_store,
                     final_store,
                 )
@@ -338,7 +340,7 @@ def all_jobs_ordered(
             for time_i_slice in time_i_slices
             if template_ds.isel({chunk_filters.time_dim: time_i_slice})[
                 chunk_filters.time_dim
-            ].min()
+            ].max()
             >= time_start  # type: ignore[operator]
         )
 
@@ -349,7 +351,7 @@ def all_jobs_ordered(
             for time_i_slice in time_i_slices
             if template_ds.isel({chunk_filters.time_dim: time_i_slice})[
                 chunk_filters.time_dim
-            ].max()
+            ].min()
             < time_end  # type: ignore[operator]
         )
 

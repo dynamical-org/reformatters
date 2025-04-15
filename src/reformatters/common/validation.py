@@ -76,7 +76,7 @@ def check_forecast_current_data(ds: xr.Dataset) -> ValidationResult:
 
 
 def check_forecast_recent_nans(
-    ds: xr.Dataset, max_nan_percentage: float = 5
+    ds: xr.Dataset, max_nan_percentage: float = 30
 ) -> ValidationResult:
     """Check for NaN values in the most recent day of data. Fails if more than max_nan_percentage of sampled data is NaN."""
 

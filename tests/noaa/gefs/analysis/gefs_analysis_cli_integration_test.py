@@ -1,6 +1,5 @@
 import json
 import subprocess
-from datetime import timedelta
 from pathlib import Path
 
 import numpy as np
@@ -42,7 +41,7 @@ def test_reformat_local_reforecast_period(
 ) -> None:
     monkeypatch.setattr(zarr, "_LOCAL_ZARR_STORE_BASE_PATH", tmp_path)
     time_start = template_config.TIME_START
-    time_end = time_start + timedelta(days=1)
+    time_end = time_start + pd.Timedelta(days=1)
 
     # 1. Backfill archive
     cli.reformat_local(time_end=time_end.isoformat())
@@ -65,7 +64,7 @@ def test_reformat_local_reforecast_period(
     )
 
     point_ds = original_ds.sel(
-        latitude=0, longitude=0, time=time_start + timedelta(hours=3)
+        latitude=0, longitude=0, time=time_start + pd.Timedelta(hours=3)
     )
     assert np.isclose(point_ds["precipitation_surface"], 0.00032806)
     assert np.isclose(point_ds["temperature_2m"], 26.125)
@@ -78,7 +77,7 @@ def test_reformat_local_reforecast_to_pre_v12_transition_period(
     time_start = pd.Timestamp("2019-12-31T00:00")
     # Add 3 more hours to exclusive end point so we end on a 00Z hour
     # during the pre v12 data which is 6 hourly. This will give us no nans after interpolation.
-    time_end = time_start + timedelta(hours=24 * 2 + 3)
+    time_end = time_start + pd.Timedelta(hours=24 * 2 + 3)
 
     # Update the template so this test starts processing at time_start
     monkeypatch.setattr(template_config, "TIME_START", time_start)
@@ -124,11 +123,11 @@ def test_reformat_local_reforecast_to_pre_v12_transition_period(
     )
 
 
-def test_reformat_local_pre_v12_to_v12_transition_period(
+def test_reformat_local_pre_v12_to_v12_transition_period_and_operational_update(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
     time_start = pd.Timestamp("2020-09-22T00:00")
-    time_end = time_start + timedelta(days=2)
+    time_end = time_start + pd.Timedelta(days=2)
 
     # Update the template so this test starts processing at time_start
     monkeypatch.setattr(template_config, "TIME_START", time_start)
@@ -149,20 +148,56 @@ def test_reformat_local_pre_v12_to_v12_transition_period(
 
     point_ds = original_ds.sel(latitude=0, longitude=0)
 
+    expected_temperature_2m = np.array([22.5, 22.5, 22.5, 22.5, 22.625, 22.75, 22.875, 22.875, 22.875, 22.75, 22.75, 22.875, 23.0, 23.125, 23.375, 23.375])  # fmt: skip
+    assert np.allclose(point_ds["temperature_2m"], expected_temperature_2m)
+
+    expected_precipitation_surface = np.array([2.00195312e-01, 1.00097656e-01, 1.06692314e-05, 7.18235970e-06, 3.71038914e-06, 1.85519457e-06, 0.0, 0.0, 0.0, 0.0, 0.0, 4.61935997e-06, 9.23871994e-06, 9.27597284e-07, 0.0, 0.0])  # fmt: skip
     assert np.allclose(
-        point_ds["temperature_2m"],
-        np.array([22.5, 22.5, 22.5, 22.5, 22.625, 22.75, 22.875, 22.875, 22.875, 22.75, 22.75, 22.875, 23.0, 23.125, 23.375, 23.375])
-    )  # fmt: skip
+        point_ds["precipitation_surface"], expected_precipitation_surface
+    )
+
+    expected_wind_u_100m = np.array([3.34375, 3.875, 4.375, 4.9375, 5.5, 4.9375, 4.3125, 4.375, 4.4375, 3.78125, 3.09375, 1.9375, 0.78125, 1.828125, 2.78125, 3.0625])  # fmt: skip
+    assert np.allclose(point_ds["wind_u_100m"], expected_wind_u_100m)
+
+    # 2. Operational update
+    time_end = time_end + pd.Timedelta(hours=12, minutes=5, seconds=2)
+    monkeypatch.setattr(
+        reformat,
+        "_get_operational_update_time_end",
+        lambda: time_end,
+    )
+
+    cli.reformat_operational_update()
+    updated_ds = xr.open_zarr(reformat.get_store(), decode_timedelta=True, chunks=None)
+
+    # +1 because the extra few minutes we add to time_end gets us one more step
+    assert len(updated_ds.time) == (2 * 24 + 12) // 3 + 1
+    assert updated_ds.time.max() == time_end.floor("3h")
+    assert set(original_ds.keys()) == set(updated_ds.keys())
+
+    # No nans
+    assert (
+        (updated_ds.count() / np.prod(list(updated_ds.sizes.values()))).to_array().all()
+    )
+
+    updated_point_ds = updated_ds.sel(latitude=0, longitude=0)
 
     assert np.allclose(
-        point_ds["precipitation_surface"],
-        np.array([2.00195312e-01, 1.00097656e-01, 1.06692314e-05, 7.18235970e-06, 3.71038914e-06, 1.85519457e-06, 0.0, 0.0, 0.0, 0.0, 0.0, 4.61935997e-06, 9.23871994e-06, 9.27597284e-07, 0.0, 0.0])
-    )  # fmt: skip
+        updated_point_ds["temperature_2m"],
+        np.concatenate([expected_temperature_2m, [23.5, 23.5, 23.5, 23.625, 23.75]]),
+    )
 
     assert np.allclose(
-        point_ds["wind_u_100m"],
-        np.array([3.34375, 3.875, 4.375, 4.9375, 5.5, 4.9375, 4.3125, 4.375, 4.4375, 3.78125, 3.09375, 1.9375, 0.78125, 1.828125, 2.78125, 3.0625])
-    )  # fmt: skip
+        updated_point_ds["precipitation_surface"],
+        np.concatenate(
+            [expected_precipitation_surface, [0.0, 0.0, 0.0, 9.275973e-07, 0.0]]
+        ),
+    )
+
+    assert np.allclose(
+        updated_point_ds["wind_u_100m"],
+        np.concatenate([expected_wind_u_100m, [2.34375, 2.625, 3.59375, 2.09375, 3.0]]),
+    )
 
     # Restore the template
     subprocess.run(  # noqa: S603
