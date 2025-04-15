@@ -244,6 +244,7 @@ def reformat_operational_update() -> None:
             continue
 
         # Trim off any steps that are not yet available and rewrite metadata locally
+        logger.info(f"Writing updated metadata for dataset ending {max_processed_time}")
         truncated_template_ds = template_ds.sel(time=slice(None, max_processed_time))
         template.write_metadata(
             truncated_template_ds,
