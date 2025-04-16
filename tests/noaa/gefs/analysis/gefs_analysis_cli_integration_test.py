@@ -19,6 +19,7 @@ from reformatters.noaa.gefs.analysis import (
 )
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
 from reformatters.noaa.gefs.read_data import SourceFileCoords
+from reformatters.noaa.noaa_utils import has_hour_0_values
 
 pytestmark = pytest.mark.slow
 
@@ -165,10 +166,10 @@ def test_reformat_local_pre_v12_to_v12_transition_period_and_operational_update(
 
     # 2. Operational update
     # In this test, the coords we attempt to update through stop at 24T12:00
-    # but the available data stops at 24T06:00
+    # but the available data stops at 24T09:00 for precip and 24T06:00 for instantaneous vars
     # So we should only end up with 3 additional steps: 24T00, 24T03, 24T06
     time_end = pd.Timestamp("2020-09-24T12:34")
-    available_time_end = pd.Timestamp("2020-09-24T06:00")
+    available_time_end = pd.Timestamp("2020-09-24T09:00")
     monkeypatch.setattr(
         reformat,
         "_get_operational_update_time_end",
@@ -182,8 +183,16 @@ def test_reformat_local_pre_v12_to_v12_transition_period_and_operational_update(
         gefs_file_type: GEFSFileType,
         gefs_idx_data_vars: Sequence[GEFSDataVar],
     ) -> tuple[SourceFileCoords, Path | None]:
-        if coords["init_time"] + coords["lead_time"] > available_time_end:
-            return coords, None
+        valid_time = coords["init_time"] + coords["lead_time"]
+        # Simulate how hour 0 value vars won't have data available as far into the future
+        # because they use shorter lead times (0 and 3 hour) vs accumulated variables (3 and 6 hour)
+        if any(has_hour_0_values(data_var) for data_var in gefs_idx_data_vars):
+            if valid_time > available_time_end:
+                return coords, None
+        else:
+            if valid_time >= available_time_end:
+                return coords, None
+
         return original_download_file(coords, gefs_file_type, gefs_idx_data_vars)
 
     monkeypatch.setattr(reformat_internals, "download_file", test_download_file)
@@ -191,12 +200,10 @@ def test_reformat_local_pre_v12_to_v12_transition_period_and_operational_update(
     cli.reformat_operational_update()
     updated_ds = xr.open_zarr(reformat.get_store(), decode_timedelta=True, chunks=None)
 
+    # If we didn't trim the last step, it would be one more than this but we trim to avoid nans on all instantaneous variables
     assert len(updated_ds.time) == 19
-    assert (
-        len(updated_ds.time)
-        == (available_time_end - time_start) // pd.Timedelta("3h") + 1
-    )
-    assert updated_ds.time.max() == available_time_end.floor("3h")
+    assert len(updated_ds.time) == (available_time_end - time_start) / pd.Timedelta("3h")  # fmt: skip
+    assert updated_ds.time.max() == available_time_end - pd.Timedelta("3h")
     assert set(original_ds.keys()) == set(updated_ds.keys())
 
     # No nans
