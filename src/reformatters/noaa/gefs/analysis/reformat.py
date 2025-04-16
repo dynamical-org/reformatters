@@ -106,9 +106,9 @@ def reformat_kubernetes(
         workers_total=workers_total,
         parallelism=parallelism,
         cpu="6",  # fit on 8 vCPU node
-        memory="30G",  # fit on 32GB node
+        memory="14G",  # fit on 16GB node
         shared_memory="12G",
-        ephemeral_storage="30G",
+        ephemeral_storage="15G",
         command=command,
     )
     subprocess.run(  # noqa: S603
@@ -301,17 +301,17 @@ def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
         image=image_tag,
         dataset_id=template.DATASET_ID,
         cpu="6",  # fit on 8 vCPU node
-        memory="60G",  # fit on 64GB node
-        shared_memory="25G",
-        ephemeral_storage="150G",
+        memory="14G",  # fit on 16GB node
+        shared_memory="12G",
+        ephemeral_storage="15G",
     )
     validation_cron_job = ValidationCronJob(
         name=f"{template.DATASET_ID}-validation",
         schedule=_VALIDATION_CRON_SCHEDULE,
         image=image_tag,
         dataset_id=template.DATASET_ID,
-        cpu="3",  # fit on 4 vCPU node
-        memory="30G",  # fit on 32GB node
+        cpu="1.3",  # fit on 2 vCPU node
+        memory="7G",  # fit on 8GB node
     )
 
     return [operational_update_cron_job, validation_cron_job]
