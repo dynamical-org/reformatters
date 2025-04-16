@@ -243,9 +243,14 @@ def reformat_operational_update() -> None:
             )
             continue
 
-        # Trim off any steps that are not yet available and rewrite metadata locally
+        # Trim off any steps that are not yet available and rewrite metadata locally.
+        # We trim one less than the max_processed_time because the last step only has
+        # values for variables that do not have hour 0 data for which we have to use a
+        # longer lead time (eg 3 and 6 hour not 0 and 3 hour).
+        truncated_template_ds = template_ds.sel(
+            time=slice(None, max_processed_time)
+        ).isel(time=slice(None, -1))
         logger.info(f"Writing updated metadata for dataset ending {max_processed_time}")
-        truncated_template_ds = template_ds.sel(time=slice(None, max_processed_time))
         template.write_metadata(
             truncated_template_ds,
             tmp_store,
