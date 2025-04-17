@@ -238,7 +238,6 @@ def get_shared_data_var_configs(
                 long_name="100 metre U wind component",
                 standard_name="eastward_wind",
                 units="m/s",
-                comment="All lead times of this variable are interpolated from a 0.5 degree grid.",
                 step_type="instant",
             ),
             internal_attrs=GEFSInternalAttrs(
@@ -257,7 +256,6 @@ def get_shared_data_var_configs(
                 short_name="v100",
                 long_name="100 metre V wind component",
                 units="m/s",
-                comment="All lead times of this variable are interpolated from a 0.5 degree grid.",
                 step_type="instant",
                 standard_name="northward_wind",
             ),
