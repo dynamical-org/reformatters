@@ -20,7 +20,7 @@ from reformatters.noaa.gefs.common_gefs_template_config import (
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
 
 DATASET_ID = "noaa-gefs-analysis"
-DATASET_VERSION = "0.1.1"
+DATASET_VERSION = "0.1.2"
 
 TIME_START = pd.Timestamp("2000-01-01T00:00")
 TIME_FREQUENCY = pd.Timedelta("3h")
