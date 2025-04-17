@@ -277,6 +277,7 @@ def get_shared_data_var_configs(
                 short_name="cpofp",
                 long_name="Percent frozen precipitation",
                 units="%",
+                comment="Contains the value -50 when there is no precipitation.",
                 step_type="instant",
             ),
             internal_attrs=GEFSInternalAttrs(
