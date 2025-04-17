@@ -1780,7 +1780,6 @@
           "short_name": "u100",
           "standard_name": "eastward_wind",
           "units": "m/s",
-          "comment": "All lead times of this variable are interpolated from a 0.5 degree grid.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -1949,7 +1948,6 @@
           "short_name": "v100",
           "standard_name": "northward_wind",
           "units": "m/s",
-          "comment": "All lead times of this variable are interpolated from a 0.5 degree grid.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
