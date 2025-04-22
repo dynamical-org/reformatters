@@ -7,27 +7,64 @@ import pyproj
 import rioxarray  # noqa: F401  Adds .rio accessor to datasets
 import xarray as xr
 
-from reformatters.common.template_utils import assign_var_metadata, make_empty_variable
+from reformatters.common.config import Config  # noqa:F401
+from reformatters.common.template_utils import (
+    assign_var_metadata,
+    empty_copy_with_reindex,
+    make_empty_variable,
+)
 from reformatters.common.template_utils import (
     write_metadata as write_metadata,  # re-export
 )
+from reformatters.common.types import DatetimeLike
 from reformatters.noaa.hrrr.hrrr_config_models import HRRRDataVar
 from reformatters.noaa.hrrr.read_data import (
     SourceFileCoords,
     download_file,
 )
 
+from .template_config import APPEND_DIMENSION as APPEND_DIMENSION
 from .template_config import (
     COORDINATES,
-    DATA_VARIABLES,
     DATASET_ATTRIBUTES,
     DIMS,
     EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR,
+    get_init_time_coordinates,
     get_template_dimension_coordinates,
 )
+from .template_config import DATA_VARIABLES as DATA_VARIABLES
 from .template_config import DATASET_ID as DATASET_ID
+from .template_config import DATASET_VERSION as DATASET_VERSION
 
 _TEMPLATE_PATH = Path(__file__).parent / "templates" / "latest.zarr"
+
+
+def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
+    ds: xr.Dataset = xr.open_zarr(_TEMPLATE_PATH, decode_timedelta=True)
+
+    # Expand init_time dimension with complete coordinates
+    ds = empty_copy_with_reindex(
+        ds,
+        APPEND_DIMENSION,
+        get_init_time_coordinates(init_time_end),
+        derive_coordinates_fn=derive_coordinates,
+    )
+
+    # Coordinates which are dask arrays are not written with .to_zarr(store, compute=False)
+    # We want to write all coords when writing metadata, so ensure they are loaded as numpy arrays.
+    for coordinate in ds.coords.values():
+        coordinate.load()
+
+    if not Config.is_prod:
+        # Include a variable with:
+        # -...
+        ds = ds[
+            [
+                "composite_reflectivity",
+            ]
+        ].sel(lead_time=["0h", "1h", "2h", "6h"])
+
+    return ds
 
 
 def update_template() -> None:
@@ -41,7 +78,7 @@ def update_template() -> None:
     ds = xr.Dataset(data_vars, coords, DATASET_ATTRIBUTES.model_dump(exclude_none=True))
 
     ds = ds.rio.write_crs(
-        "+proj=lcc +a=6371229 +b=6371229 +lon_0=262.5 +lat_0=38.5 +lat_1=38.5 +lat_2=38.5"
+        "+proj=lcc +a=6371229 +b=6371229 +lon_0=-97.5 +lat_0=38.5 +lat_1=38.5 +lat_2=38.5"
     )
 
     ds = ds.assign_coords(derive_coordinates(ds))
@@ -71,23 +108,22 @@ def derive_coordinates(
             "init_time": pd.Timestamp("2025-01-01T00:00:00"),
             "lead_time": pd.Timedelta("0h"),
             "domain": "conus",
+            "file_type": "sfc",
         }
     )
 
     # "sfc" is the smallest available file type.
-    _, filepath = download_file(data_coords, "sfc", [data_var])
+    _, filepath = download_file(data_coords, [data_var])
     hrrrds = xr.open_dataset(str(filepath), engine="rasterio")
 
     hrrrds_bounds = hrrrds.rio.bounds(recalc=True)
     hrrrds_res = hrrrds.rio.resolution(recalc=True)
     dx, dy = (
         hrrrds_res[0],
-        hrrrds_res[1] * -1,
-    )  # y offset is positive, but reported as negative by `rio.resolution`
-    # this may be a bug in how rioxarray is handling bounds that cross a central parallel
-    # but also I'd expect that to be the case with lat/lon coordinates too, so I'm not sure.
+        hrrrds_res[1],
+    )
 
-    proj_xcorner, proj_ycorner = hrrrds_bounds[0], hrrrds_bounds[1]
+    proj_xcorner, proj_ycorner = hrrrds_bounds[0], hrrrds_bounds[3]
     nx = ds.x.size
     ny = ds.y.size
 
