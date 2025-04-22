@@ -22,7 +22,7 @@ from reformatters.noaa.hrrr.hrrr_config_models import HRRRDataVar, HRRRInternalA
 DATASET_ID = "noaa-hrrr-forecast-48-hour"
 DATASET_VERSION = "0.0.0"
 
-INIT_TIME_START = pd.Timestamp("2020-01-01T00:00")
+INIT_TIME_START = pd.Timestamp("2018-07-13T12:00")  # start of HRRR v3
 INIT_TIME_FREQUENCY = pd.Timedelta("6h")
 LEAD_TIME_FREQUENCY = pd.Timedelta("1h")
 
