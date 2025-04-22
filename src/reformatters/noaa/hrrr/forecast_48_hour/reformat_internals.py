@@ -183,6 +183,7 @@ def apply_data_transformations_inplace(
 ) -> None:
     if data_var.internal_attrs.deaccumulate_to_rates:
         raise NotImplementedError("Deaccumulation not implemented for HRRR")
+        # TODO: build deaccumulation?
         # logger.info(f"Converting {data_var.name} from accumulations to rates")
         # try:
         #     deaccumulate_to_rates_inplace(

@@ -84,8 +84,10 @@ def download_file(
         byte_range_starts, byte_range_ends = parse_index_byte_ranges(
             idx_local_path, idx_data_vars
         )
-        logger.info("Byte ranges (Start): %s", byte_range_starts)
-        logger.info("Byte ranges (End): %s", byte_range_ends)
+        logger.debug(
+            "reading byte ranges: %s",
+            list(zip(byte_range_starts, byte_range_ends, strict=True)),
+        )
 
         download_to_disk(
             store,

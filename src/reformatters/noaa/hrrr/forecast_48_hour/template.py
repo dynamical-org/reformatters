@@ -56,6 +56,7 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
         coordinate.load()
 
     if not Config.is_prod:
+        # TODO: get a good test example
         # Include a variable with:
         # -...
         ds = ds[
