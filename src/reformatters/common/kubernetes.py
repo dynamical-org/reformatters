@@ -20,6 +20,7 @@ class Job(pydantic.BaseModel):
     workers_total: Annotated[int, pydantic.Field(ge=1)]
     parallelism: Annotated[int, pydantic.Field(ge=1)]
     ttl: timedelta = timedelta(days=1)
+    pod_active_deadline: timedelta = timedelta(hours=6)
 
     @property
     def job_name(self) -> str:
@@ -141,6 +142,7 @@ class Job(pydantic.BaseModel):
                             "fsGroup": 999,  # this is the `app` group our app runs under
                         },
                         "terminationGracePeriodSeconds": 5,
+                        "activeDeadlineSeconds": self.pod_active_deadline.total_seconds(),
                         "volumes": [
                             {
                                 "ephemeral": {

@@ -4,6 +4,7 @@ import os
 import subprocess
 from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from itertools import product
 from pathlib import Path
 
@@ -110,6 +111,7 @@ def reformat_kubernetes(
         shared_memory="12G",
         ephemeral_storage="20G",
         command=command,
+        pod_active_deadline=timedelta(minutes=30),
     )
     subprocess.run(  # noqa: S603
         ["/usr/bin/kubectl", "apply", "-f", "-"],
@@ -298,6 +300,7 @@ def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
     operational_update_cron_job = ReformatCronJob(
         name=f"{template.DATASET_ID}-operational-update",
         schedule=_OPERATIONAL_CRON_SCHEDULE,
+        pod_active_deadline=timedelta(hours=1),
         image=image_tag,
         dataset_id=template.DATASET_ID,
         cpu="6",  # fit on 8 vCPU node
@@ -308,6 +311,7 @@ def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
     validation_cron_job = ValidationCronJob(
         name=f"{template.DATASET_ID}-validation",
         schedule=_VALIDATION_CRON_SCHEDULE,
+        pod_active_deadline=timedelta(minutes=10),
         image=image_tag,
         dataset_id=template.DATASET_ID,
         cpu="1.3",  # fit on 2 vCPU node
