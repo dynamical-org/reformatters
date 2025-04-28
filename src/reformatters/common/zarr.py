@@ -11,6 +11,7 @@ from fsspec.implementations.local import LocalFileSystem  # type: ignore
 
 from reformatters.common.config import Config
 from reformatters.common.logging import get_logger
+from reformatters.common.update_progress_tracker import UpdateProgressTracker
 
 logger = get_logger(__name__)
 
@@ -95,6 +96,7 @@ def copy_data_var(
     append_dim: str,
     tmp_store: Path,
     final_store: zarr.storage.FsspecStore,
+    progress_tracker: UpdateProgressTracker,
 ) -> None:
     dim_index = template_ds[data_var_name].dims.index(append_dim)
     append_dim_shard_size = template_ds[data_var_name].encoding["shards"][dim_index]
@@ -114,6 +116,8 @@ def copy_data_var(
     source = f"{tmp_store / relative_dir}/"
     dest = f"{final_store.path}/{relative_dir}"
     _copy_to_store("put", source, dest, fs, recursive=True, auto_mkdir=True)
+
+    progress_tracker.record_completion(data_var_name)
 
     try:
         # Delete data to conserve disk space.
