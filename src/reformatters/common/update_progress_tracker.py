@@ -52,7 +52,7 @@ class UpdateProgressTracker:
 
     def close(self) -> None:
         try:
-            self.store.fs.rm(self._get_path())
+            fsspec_apply(self.store.fs, "rm", self._get_path())
         except Exception as e:
             log.warning(f"Could not delete progress file: {e}")
 
