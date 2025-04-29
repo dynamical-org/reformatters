@@ -23,6 +23,7 @@ from reformatters.common.kubernetes import Job, ReformatCronJob, ValidationCronJ
 from reformatters.common.logging import get_logger
 from reformatters.common.reformat_utils import ChunkFilters
 from reformatters.common.types import Array1D, DatetimeLike
+from reformatters.common.update_progress_tracker import UpdateProgressTracker
 from reformatters.common.zarr import (
     copy_data_var,
     copy_zarr_metadata,
@@ -145,7 +146,7 @@ def reformat_chunks(
         "timezone": "UTC",
     },
 )
-def reformat_operational_update() -> None:
+def reformat_operational_update(job_name: str) -> None:
     final_store = get_store()
     tmp_store = get_local_tmp_store()
     # Get the dataset, check what data is already present
@@ -217,9 +218,15 @@ def reformat_operational_update() -> None:
             tmp_store,
             get_mode(tmp_store),
         )
+
+        progress_tracker = UpdateProgressTracker(
+            final_store, job_name, init_time_i_slice.start
+        )
+        vars_to_process = progress_tracker.get_unprocessed(template_ds.data_vars.keys())
+
         data_var_upload_futures = []
         for data_var, max_lead_times in reformat_init_time_i_slices(
-            [(init_time_i_slice, list(template_ds.data_vars.keys()))],
+            [(init_time_i_slice, vars_to_process)],
             template_ds,
             tmp_store,
             _VARIABLES_PER_BACKFILL_JOB,
@@ -235,6 +242,7 @@ def reformat_operational_update() -> None:
                     template.APPEND_DIMENSION,
                     tmp_store,
                     final_store,
+                    progress_tracker,
                 )
             )
             for (init_time, ensemble_member), max_lead_time in max_lead_times.items():
@@ -247,6 +255,8 @@ def reformat_operational_update() -> None:
         for future in data_var_upload_futures:
             if (e := future.exception()) is not None:
                 raise e
+
+        progress_tracker.close()
 
         # Write metadata again to update the ingested_forecast_length
         template.write_metadata(

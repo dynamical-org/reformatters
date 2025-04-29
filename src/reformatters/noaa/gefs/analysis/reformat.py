@@ -28,6 +28,7 @@ from reformatters.common.kubernetes import (
 from reformatters.common.logging import get_logger
 from reformatters.common.reformat_utils import ChunkFilters
 from reformatters.common.types import DatetimeLike
+from reformatters.common.update_progress_tracker import UpdateProgressTracker
 from reformatters.common.zarr import (
     copy_data_var,
     copy_zarr_metadata,
@@ -164,7 +165,7 @@ def reformat_chunks(
         "timezone": "UTC",
     },
 )
-def reformat_operational_update() -> None:
+def reformat_operational_update(job_name: str) -> None:
     append_dim = template.APPEND_DIMENSION
 
     final_store = get_store()
@@ -211,9 +212,14 @@ def reformat_operational_update() -> None:
         )
         max_processed_time = pd.Timestamp.min
 
+        progress_tracker = UpdateProgressTracker(
+            final_store, job_name, time_i_slice.start
+        )
+        vars_to_process = progress_tracker.get_unprocessed(template_ds.data_vars.keys())
+
         data_var_upload_futures = []
         for data_var, _ in reformat_time_i_slices(
-            [(time_i_slice, list(template_ds.data_vars.keys()))],
+            [(time_i_slice, vars_to_process)],
             template_ds,
             tmp_store,
             _VARIABLES_PER_BACKFILL_JOB,
@@ -231,6 +237,7 @@ def reformat_operational_update() -> None:
                     append_dim,
                     tmp_store,
                     final_store,
+                    progress_tracker,
                 )
             )
 
@@ -244,6 +251,8 @@ def reformat_operational_update() -> None:
                 f"No data processed in time_i_slice={time_i_slice}, not updating metadata."
             )
             continue
+
+        progress_tracker.close()
 
         # Trim off any steps that are not yet available and rewrite metadata locally.
         # We trim one less than the max_processed_time because the last step only has

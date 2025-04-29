@@ -197,7 +197,7 @@ def test_reformat_local_pre_v12_to_v12_transition_period_and_operational_update(
 
     monkeypatch.setattr(reformat_internals, "download_file", test_download_file)
 
-    cli.reformat_operational_update()
+    cli.reformat_operational_update(job_name="test")
     updated_ds = xr.open_zarr(reformat.get_store(), decode_timedelta=True, chunks=None)
 
     # If we didn't trim the last step, it would be one more than this but we trim to avoid nans on all instantaneous variables

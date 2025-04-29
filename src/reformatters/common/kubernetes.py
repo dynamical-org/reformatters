@@ -86,6 +86,14 @@ class Job(pydantic.BaseModel):
                                         },
                                     },
                                     {
+                                        "name": "JOB_NAME",
+                                        "valueFrom": {
+                                            "fieldRef": {
+                                                "fieldPath": "metadata.labels['job-name']"
+                                            }
+                                        },
+                                    },
+                                    {
                                         "name": "WORKER_INDEX",
                                         "valueFrom": {
                                             "fieldRef": {

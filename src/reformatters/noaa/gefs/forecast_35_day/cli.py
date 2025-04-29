@@ -79,8 +79,10 @@ def reformat_chunks(
 
 
 @app.command()
-def reformat_operational_update() -> None:
-    reformat.reformat_operational_update()
+def reformat_operational_update(
+    job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
+) -> None:
+    reformat.reformat_operational_update(job_name)
 
 
 @app.command()
