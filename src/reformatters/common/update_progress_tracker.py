@@ -5,6 +5,7 @@ from collections.abc import Iterable
 
 import zarr.storage
 
+from reformatters.common.fsspec import fsspec_apply
 from reformatters.common.logging import get_logger
 
 log = get_logger(__name__)
@@ -30,10 +31,10 @@ class UpdateProgressTracker:
         self.queue: queue.Queue[str] = queue.Queue()
 
         try:
-            with self.store.fs.open(self._get_path(), "r") as f:
-                self.processed_variables: set[str] = set(
-                    json.load(f)[PROCESSED_VARIABLES_KEY]
-                )
+            file_content = fsspec_apply(self.store.fs, "cat_file", self._get_path())
+            self.processed_variables: set[str] = set(
+                json.loads(file_content.decode("utf-8"))[PROCESSED_VARIABLES_KEY]
+            )
             log.info(
                 f"Loaded {len(self.processed_variables)} processed variables: {self.processed_variables}"
             )
@@ -65,10 +66,12 @@ class UpdateProgressTracker:
                 var = self.queue.get()
                 self.processed_variables.add(var)
 
-                with self.store.fs.open(self._get_path(), "w") as f:
-                    json.dump(
-                        {PROCESSED_VARIABLES_KEY: list(self.processed_variables)}, f
-                    )
+                content = json.dumps(
+                    {PROCESSED_VARIABLES_KEY: list(self.processed_variables)}
+                )
+                fsspec_apply(
+                    self.store.fs, "pipe", self._get_path(), content.encode("utf-8")
+                )
 
                 self.queue.task_done()
             except Exception as e:

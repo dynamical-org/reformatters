@@ -1,15 +1,14 @@
-import time
 from functools import cache
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-import fsspec  # type: ignore
 import xarray as xr
 import zarr
 from fsspec.implementations.local import LocalFileSystem  # type: ignore
 
 from reformatters.common.config import Config
+from reformatters.common.fsspec import fsspec_apply
 from reformatters.common.logging import get_logger
 from reformatters.common.update_progress_tracker import UpdateProgressTracker
 
@@ -115,7 +114,7 @@ def copy_data_var(
     # The AsyncFileSystem wrapper on LocalFilesystem raises NotImplementedError when _put is called.
     source = f"{tmp_store / relative_dir}/"
     dest = f"{final_store.path}/{relative_dir}"
-    _copy_to_store("put", source, dest, fs, recursive=True, auto_mkdir=True)
+    fsspec_apply(fs, "put", source, dest, recursive=True, auto_mkdir=True)
 
     progress_tracker.record_completion(data_var_name)
 
@@ -148,37 +147,4 @@ def copy_zarr_metadata(
     for file in metadata_files:
         relative = file.relative_to(tmp_store)
         dest = f"{final_store.path}/{relative}"
-        _copy_to_store("put_file", file, dest, final_store.fs)
-
-
-def _copy_to_store(
-    method: Literal["put", "put_file"],
-    source: str | Path,
-    dest: str,
-    dest_fs: fsspec.AbstractFileSystem,
-    **kwargs: bool,
-) -> None:
-    """
-    Copy a file or directory to the store's filesystem.
-
-    This function handles both sync and async filesystems. The fsspec local filesystem is sync,
-    but the fsspec store from zarr.storage.FsspecStore is async, so we need to handle both cases.
-    (The AsyncFileSystem wrapper on LocalFilesystem raises NotImplementedError when _put is called
-    so we can't just use that.)
-    """
-    max_attempts = 6
-    for attempt in range(max_attempts):
-        try:
-            if hasattr(dest_fs, "_put"):
-                # Zarr's FsspecStore creates async fsspec filesystems, so use their sync method
-                zarr.core.sync.sync(
-                    getattr(dest_fs, "_" + method)(source, dest, **kwargs)
-                )
-            else:
-                getattr(dest_fs, method)(source, dest, **kwargs)
-            break
-        except Exception:
-            if attempt == max_attempts - 1:  # Last attempt failed
-                raise
-            time.sleep(1)
-            continue
+        fsspec_apply(final_store.fs, "put_file", file, dest)
