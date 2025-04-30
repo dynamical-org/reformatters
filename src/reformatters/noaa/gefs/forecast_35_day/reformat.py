@@ -39,7 +39,7 @@ from reformatters.noaa.gefs.forecast_35_day.reformat_internals import (
 
 _VARIABLES_PER_BACKFILL_JOB = 3
 _OPERATIONAL_CRON_SCHEDULE = "0 7 * * *"  # At 7:00 UTC every day.
-_VALIDATION_CRON_SCHEDULE = "0 11 * * *"  # At 11:00 UTC every day.
+_VALIDATION_CRON_SCHEDULE = "30 11 * * *"  # At 11:30 UTC every day.
 
 logger = get_logger(__name__)
 
