@@ -22,7 +22,7 @@ from reformatters.noaa.hrrr.hrrr_config_models import HRRRDataVar, HRRRInternalA
 DATASET_ID = "noaa-hrrr-forecast-48-hour"
 DATASET_VERSION = "0.0.0"
 
-INIT_TIME_START = pd.Timestamp("2014-07-30T18:00")
+INIT_TIME_START = pd.Timestamp("2018-07-13T12:00")  # start of HRRR v3
 INIT_TIME_FREQUENCY = pd.Timedelta("6h")
 LEAD_TIME_FREQUENCY = pd.Timedelta("1h")
 
@@ -299,7 +299,7 @@ COORDINATES: Sequence[Coordinate] = (
 
 DATA_VARIABLES: Sequence[HRRRDataVar] = [
     HRRRDataVar(
-        name="Composite reflectivity",
+        name="composite_reflectivity",
         encoding=Encoding(
             dtype="float32",
             fill_value=np.nan,
@@ -315,7 +315,7 @@ DATA_VARIABLES: Sequence[HRRRDataVar] = [
         ),
         internal_attrs=HRRRInternalAttrs(
             grib_element="REFC",
-            grib_description="TODO",  # TODO
+            grib_description="REFC:entire atmosphere",  # TODO
             index_position=0,
             keep_mantissa_bits=10,
             grib_index_level="entire atmosphere",

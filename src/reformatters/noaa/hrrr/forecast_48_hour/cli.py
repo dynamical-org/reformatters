@@ -2,7 +2,7 @@ from typing import Annotated
 
 import typer
 
-from reformatters.noaa.hrrr.forecast_48_hour import template
+from reformatters.noaa.hrrr.forecast_48_hour import reformat, template
 from reformatters.noaa.hrrr.forecast_48_hour.template import DATASET_ID as DATASET_ID
 
 app = typer.Typer()
@@ -15,7 +15,7 @@ def update_template() -> None:
 
 @app.command()
 def reformat_local(init_time_end: str) -> None:
-    raise NotImplementedError("reformat_local not implemented")
+    reformat.reformat_local(init_time_end)
 
 
 @app.command()
