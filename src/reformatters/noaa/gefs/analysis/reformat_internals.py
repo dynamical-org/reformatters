@@ -71,14 +71,14 @@ def reformat_time_i_slices(
     # We need to buffer by 1 step to have endpoints for interpolation,
     # but then by 2 steps to ensure accumulation starts at a reset step.
     time_buffer_i_size = 2
-    widest_slice = max(
-        (buffer_slice(j[0], buffer_size=time_buffer_i_size) for j in jobs),
-        key=lambda s: s.stop - s.start,
+    widest_slice_length = max(
+        (s := buffer_slice(j[0], buffer_size=time_buffer_i_size)).stop - s.start
+        for j in jobs
     )
     shared_buffer_size = max(
         data_var.nbytes
         for data_var in template_ds.isel(
-            {template.APPEND_DIMENSION: widest_slice}
+            {template.APPEND_DIMENSION: slice(0, widest_slice_length)}
         ).values()
     )
     with (
