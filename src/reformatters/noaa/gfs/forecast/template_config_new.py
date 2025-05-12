@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from typing import Any
-from pydantic import model_validator
 
 import numpy as np
 import pandas as pd
@@ -137,7 +136,6 @@ class GFSTemplateConfig(TemplateConfig):
                 ),
             ),
         ]
-
 
     # --------------------------------------------------------------------
     # similarly, build data_vars inside the class
