@@ -69,10 +69,11 @@ def test_derive_coordinates_and_spatial_ref() -> None:
     assert isinstance(vt, xr.DataArray)
     assert vt.dims == ("init_time", "lead_time")
     assert vt.shape == (len(dc["init_time"]), len(dc["lead_time"]))
-    # ingested_forecast_length: all NaT
+    # ingested_forecast_length: all NaT (timedeltas)
     dims, arr = derived["ingested_forecast_length"]
     assert dims == (cfg.append_dim,)
-    assert arr.dtype == "datetime64[ns]"
+    # dtype is timedelta64[ns], not datetime64
+    assert arr.dtype == "timedelta64[ns]"
     assert np.all(pd.isna(arr))
     # expected_forecast_length: filled with max lead_time
     dims2, arr2 = derived["expected_forecast_length"]
