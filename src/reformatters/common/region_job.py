@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import Any, Generic, TypeVar
+from typing import Annotated, Any, Generic, TypeVar
 
 import pydantic
 import xarray as xr
@@ -7,7 +7,6 @@ from zarr.storage import FsspecStore
 
 from reformatters.common.config_models import DataVar
 from reformatters.common.template_config import AppendDim
-from typing import Annotated
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 
@@ -22,7 +21,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         pydantic.Field(
             ...,
             description="slice whose start/stop/step must be integers or None",
-        )
+        ),
     ]
     max_vars_per_backfill_job: int
 
