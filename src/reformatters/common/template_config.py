@@ -38,7 +38,6 @@ class TemplateConfig(BaseModel):
     var_shards: dict[Dim, int]
 
     coords: Sequence[Coordinate]
-    data_vars: Sequence[DataVar[Any]]
 
     def dimension_coordinates(self) -> dict[str, Any]:
         """
