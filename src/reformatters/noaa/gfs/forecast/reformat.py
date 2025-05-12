@@ -7,7 +7,7 @@ import pandas as pd
 import xarray as xr
 import zarr
 
-from reformatters.common import docker
+from reformatters.common import docker, template_utils
 from reformatters.common.iterating import (
     consume,
     dimension_slices,
@@ -20,10 +20,10 @@ from reformatters.common.zarr import (
     get_mode,
     get_zarr_store,
 )
-from reformatters.noaa.gfs.forecast import template
 from reformatters.noaa.gfs.forecast.reformat_internals import (
     reformat_time_i_slices,
 )
+from reformatters.noaa.gfs.forecast.template_config import GFS_FORECAST_TEMPLATE_CONFIG
 
 # More variables than we currently have but have a buffer in case we add more
 _VARIABLES_PER_BACKFILL_JOB = 30
@@ -32,11 +32,11 @@ logger = get_logger(__name__)
 
 
 def reformat_local(time_end: DatetimeLike) -> None:
-    template_ds = template.get_template(time_end)
+    template_ds = GFS_FORECAST_TEMPLATE_CONFIG.get_template(time_end)
     store = get_store()
 
     logger.info("Writing metadata")
-    template.write_metadata(template_ds, store, get_mode(store))
+    template_utils.write_metadata(template_ds, store, get_mode(store))
 
     logger.info("Starting reformat")
     # Process all chunks by setting worker_index=0 and worker_total=1
@@ -52,10 +52,10 @@ def reformat_kubernetes(
 ) -> None:
     image_tag = docker_image or docker.build_and_push_image()
 
-    template_ds = template.get_template(time_end)
+    template_ds = GFS_FORECAST_TEMPLATE_CONFIG.get_template(time_end)
     store = get_store()
     logger.info(f"Writing zarr metadata to {store.path}")
-    template.write_metadata(template_ds, store, get_mode(store))
+    template_utils.write_metadata(template_ds, store, get_mode(store))
 
     num_jobs = sum(1 for _ in all_jobs_ordered(template_ds))
     workers_total = int(np.ceil(num_jobs / jobs_per_pod))
@@ -92,7 +92,7 @@ def reformat_chunks(
 ) -> None:
     """Writes out array chunk data. Assumes the dataset metadata has already been written."""
     assert worker_index < workers_total
-    template_ds = template.get_template(time_end)
+    template_ds = GFS_FORECAST_TEMPLATE_CONFIG.get_template(time_end)
     store = get_store()
 
     worker_jobs = get_worker_jobs(
@@ -115,9 +115,11 @@ def reformat_chunks(
 def all_jobs_ordered(
     template_ds: xr.Dataset,
 ) -> list[tuple[slice, list[str]]]:
-    append_dim_slices = dimension_slices(template_ds, template.APPEND_DIMENSION)
+    append_dim_slices = dimension_slices(
+        template_ds, GFS_FORECAST_TEMPLATE_CONFIG.append_dim
+    )
     data_var_groups = batched(
-        [d for d in template.DATA_VARIABLES if d.name in template_ds],
+        [d for d in GFS_FORECAST_TEMPLATE_CONFIG.data_vars if d.name in template_ds],
         _VARIABLES_PER_BACKFILL_JOB,
     )
     data_var_name_groups = [
@@ -127,4 +129,7 @@ def all_jobs_ordered(
 
 
 def get_store() -> zarr.storage.FsspecStore:
-    return get_zarr_store(template.DATASET_ID, template.DATASET_VERSION)
+    return get_zarr_store(
+        GFS_FORECAST_TEMPLATE_CONFIG.dataset_id,
+        GFS_FORECAST_TEMPLATE_CONFIG.dataset_attributes.dataset_version,
+    )

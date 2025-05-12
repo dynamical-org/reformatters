@@ -30,6 +30,7 @@
     }
   ],
   "attributes": {
+    "comment": "This coordinate reference system matches the source data which follows WMO conventions of assuming the earth is a perfect sphere with a radius of 6,371,229m. It is similar to EPSG:4326, but EPSG:4326 uses a more accurate representation of the earth's shape.",
     "crs_wkt": "GEOGCS[\"unknown\",DATUM[\"unknown\",SPHEROID[\"unknown\",6371229,0]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AXIS[\"Longitude\",EAST],AXIS[\"Latitude\",NORTH]]",
     "semi_major_axis": 6371229.0,
     "semi_minor_axis": 6371229.0,
@@ -40,8 +41,7 @@
     "geographic_crs_name": "unknown",
     "horizontal_datum_name": "unknown",
     "grid_mapping_name": "latitude_longitude",
-    "spatial_ref": "GEOGCS[\"unknown\",DATUM[\"unknown\",SPHEROID[\"unknown\",6371229,0]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AXIS[\"Longitude\",EAST],AXIS[\"Latitude\",NORTH]]",
-    "comment": "This coordinate reference system matches the source data which follows WMO conventions of assuming the earth is a perfect sphere with a radius of 6,371,229m. It is similar to EPSG:4326, but EPSG:4326 uses a more accurate representation of the earth's shape."
+    "spatial_ref": "GEOGCS[\"unknown\",DATUM[\"unknown\",SPHEROID[\"unknown\",6371229,0]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AXIS[\"Longitude\",EAST],AXIS[\"Latitude\",NORTH]]"
   },
   "zarr_format": 3,
   "node_type": "array",

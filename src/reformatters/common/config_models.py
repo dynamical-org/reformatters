@@ -55,8 +55,8 @@ class DataVarAttrs(FrozenBaseModel):
 
 
 class CoordinateAttrs(FrozenBaseModel):
-    units: TimestampUnits | TimedeltaUnits | str
-    statistics_approximate: StatisticsApproximate
+    units: TimestampUnits | TimedeltaUnits | str | None
+    statistics_approximate: StatisticsApproximate | None
     comment: str | None = None
 
     # Rio xarray attributes to encode spatial reference system
@@ -95,10 +95,13 @@ class Encoding(pydantic.BaseModel):
     # It's fine to add any valid dtype string to this literal.
     dtype: Literal["float32", "float64", "uint16", "int64", "bool"]
     chunks: tuple[int, ...] | int
-    shards: tuple[int, ...] | int
+    shards: tuple[int, ...] | int | None  # We don't shard coordinate arrays
 
     @pydantic.model_validator(mode="after")
     def validate_shards_multiple_of_chunks(self) -> "Encoding":
+        if self.shards is None:
+            return self
+
         if isinstance(self.chunks, int):
             chunks: tuple[int, ...] = (self.chunks,)
         else:
