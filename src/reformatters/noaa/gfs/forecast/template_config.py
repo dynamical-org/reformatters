@@ -42,26 +42,14 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
             dataset_id="noaa-gfs-forecast",
             dataset_version="0.1.0",
             name="NOAA GFS forecast",
-            description=(
-                "Weather forecasts from the Global Forecast System (GFS) "
-                "operated by NOAA NWS NCEP."
-            ),
-            attribution=(
-                "NOAA NWS NCEP GFS data processed by dynamical.org "
-                "from NOAA Open Data Dissemination archives."
-            ),
+            description="Weather forecasts from the Global Forecast System (GFS) operated by NOAA NWS NCEP.",
+            attribution="NOAA NWS NCEP GFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
             spatial_domain="Global",
             spatial_resolution="0.25 degrees (~20km)",
-            time_domain=(
-                f"Forecasts initialized {self.append_dim_start} UTC to Present"
-            ),
-            time_resolution=(
-                f"Forecasts initialized every {self.append_dim_frequency.total_seconds() / 3600:.0f} hours"
-            ),
+            time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
+            time_resolution=f"Forecasts initialized every {self.append_dim_frequency.total_seconds() / 3600:.0f} hours",
             forecast_domain="Forecast lead time 0-384 hours (0-16 days) ahead",
-            forecast_resolution=(
-                "Forecast step 0-120 hours: hourly, 123-384 hours: 3 hourly"
-            ),
+            forecast_resolution="Forecast step 0-120 hours: hourly, 123-384 hours: 3 hourly",
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
@@ -663,6 +651,8 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
 
     def get_template(self, end_time: DatetimeLike) -> xr.Dataset:
         ds = super().get_template(end_time)
+
+        # Remove this whole subclass implementation of get_template and instead in the cli integration test monkey patch the implementation to do the same filtering as below but just in the test AI!
 
         if not Config.is_prod:
             # Include a variable with:
