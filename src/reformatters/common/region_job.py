@@ -1,4 +1,6 @@
-from typing import Generic, TypeVar, Sequence
+from collections.abc import Sequence
+from typing import Generic, TypeVar
+
 import pydantic
 import xarray as xr
 from zarr.storage import FsspecStore
@@ -8,12 +10,13 @@ from .config_models import DataVar
 
 D = TypeVar("D", bound=DataVar)
 
+
 class RegionJob(pydantic.BaseModel, Generic[D]):
     store: FsspecStore
     template_ds: xr.Dataset
     data_vars: Sequence[D]
-    append_dimension: str        # e.g. "time" or "init_time"
-    region: slice                # an integer slice along append_dimension
+    append_dimension: str  # e.g. "time" or "init_time"
+    region: slice  # an integer slice along append_dimension
     max_vars_per_backfill_job: int
 
     def process(self) -> None:
