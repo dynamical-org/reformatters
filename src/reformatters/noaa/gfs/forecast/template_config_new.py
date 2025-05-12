@@ -24,7 +24,6 @@ from reformatters.noaa.noaa_config_models import NOAADataVar, NOAAInternalAttrs
 
 
 class GFSTemplateConfig(TemplateConfig):
-    # ── Everything is now declared here inside the class ──────────────────────
     dataset_attributes: DatasetAttributes = DatasetAttributes(
         dataset_id="noaa-gfs-forecast",
         dataset_version="0.1.0",
@@ -38,14 +37,12 @@ class GFSTemplateConfig(TemplateConfig):
         forecast_domain="Forecast lead time 0-384 hours (0-16 days) ahead",
         forecast_resolution="Forecast step 0-120h: hourly, 123-384h: 3 hourly",
     )
+
+    dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
+    append_dim: AppendDim = "init_time"
     append_dim_start: pd.Timestamp = pd.Timestamp("2021-05-01T00:00")
     append_dim_frequency: pd.Timedelta = pd.Timedelta("6h")
 
-    # dims and append_dim
-    dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
-    append_dim: AppendDim = "init_time"
-
-    # raw chunk & shard maps
     var_chunks: dict[Dim, int] = {
         "init_time": 1,
         "lead_time": 105,
@@ -98,7 +95,6 @@ class GFSTemplateConfig(TemplateConfig):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def coords(self) -> Sequence[Coordinate]:
-        # assemble coordinate configs via the base-class helper
         dim_coords = self.dimension_coordinates()
 
         return [
@@ -180,6 +176,15 @@ class GFSTemplateConfig(TemplateConfig):
         chunks = tuple(self.var_chunks[d] for d in self.dims)
         shards = tuple(self.var_shards[d] for d in self.dims)
 
+        # use this everywhere it should go in the list below AI!
+
+        encoding_float32_default = Encoding(
+            dtype="float32",
+            fill_value=np.nan,
+            chunks=chunks,
+            shards=shards,
+            compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
+        )
         return [
             NOAADataVar(
                 name="pressure_surface",
