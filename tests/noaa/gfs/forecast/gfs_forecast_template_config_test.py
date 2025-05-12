@@ -6,7 +6,7 @@ from reformatters.common.template_config import SPATIAL_REF_COORDS
 from reformatters.noaa.gfs.forecast.template_config import GFS_FORECAST_TEMPLATE_CONFIG
 
 
-def test_dataset_attributes():
+def test_dataset_attributes() -> None:
     cfg = GFS_FORECAST_TEMPLATE_CONFIG
     attrs = cfg.dataset_attributes
     assert attrs.dataset_id == "noaa-gfs-forecast"
@@ -17,7 +17,7 @@ def test_dataset_attributes():
     assert "every 6 hours" in attrs.time_resolution
 
 
-def test_dimension_coordinates_shapes_and_values():
+def test_dimension_coordinates_shapes_and_values() -> None:
     cfg = GFS_FORECAST_TEMPLATE_CONFIG
     dc = cfg.dimension_coordinates()
     # must have exactly these four dims
@@ -48,7 +48,7 @@ def test_dimension_coordinates_shapes_and_values():
     assert len(lon) == 1440
 
 
-def test_derive_coordinates_and_spatial_ref():
+def test_derive_coordinates_and_spatial_ref() -> None:
     cfg = GFS_FORECAST_TEMPLATE_CONFIG
     dc = cfg.dimension_coordinates()
     ds = xr.Dataset(coords=dc)
@@ -80,7 +80,7 @@ def test_derive_coordinates_and_spatial_ref():
     assert derived["spatial_ref"] == SPATIAL_REF_COORDS
 
 
-def test_coords_property_order_and_names():
+def test_coords_property_order_and_names() -> None:
     cfg = GFS_FORECAST_TEMPLATE_CONFIG
     names = [c.name for c in cfg.coords]
     assert names == [
