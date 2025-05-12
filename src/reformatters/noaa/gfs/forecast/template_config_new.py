@@ -48,9 +48,7 @@ class GFSTemplateConfig(TemplateConfig):
                 f"Forecasts initialized every {self.append_dim_frequency}"
             ),
             forecast_domain="Forecast lead time 0-384 hours (0-16 days) ahead",
-            forecast_resolution=(
-                "Forecast step 0-120h: hourly, 123-384h: 3 hourly"
-            ),
+            forecast_resolution=("Forecast step 0-120h: hourly, 123-384h: 3 hourly"),
         )
 
     dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")

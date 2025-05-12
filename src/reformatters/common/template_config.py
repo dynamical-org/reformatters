@@ -19,9 +19,7 @@ class TemplateConfig(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def dataset_attributes(self) -> DatasetAttributes:
-        raise NotImplementedError(
-            "Implement `dataset_attributes` in your subclass"
-        )
+        raise NotImplementedError("Implement `dataset_attributes` in your subclass")
 
     dims: tuple[Dim, ...]
     append_dim: AppendDim
