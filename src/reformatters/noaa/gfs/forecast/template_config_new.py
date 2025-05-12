@@ -129,7 +129,9 @@ class GFSTemplateConfig(TemplateConfig):
             out.append(Coordinate(name=dim, encoding=enc, attrs=attrs))
         return out
 
-    coords: Sequence[Coordinate] = property(lambda self: self.build_coords())
+    @property
+    def coords(self) -> Sequence[Coordinate]:
+        return self.build_coords()
 
     # --------------------------------------------------------------------
     # similarly, build data_vars inside the class
