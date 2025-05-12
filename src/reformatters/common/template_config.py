@@ -6,7 +6,7 @@ from typing import Any, Literal
 import numpy as np
 import pandas as pd
 import xarray as xr
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel, ConfigDict, computed_field
 
 from reformatters.common import template_utils
 from reformatters.common.config_models import Coordinate, DatasetAttributes, DataVar
@@ -15,12 +15,17 @@ from reformatters.common.types import DatetimeLike
 type Dim = Literal["init_time", "ensemble_member", "lead_time", "latitude", "longitude"]
 type AppendDim = Literal["init_time", "time"]
 
+# Value is ignored, coordinate reference system metadata is stored in attributes
+SPATIAL_REF_COORDS = ((), np.array(0))
+
 
 class TemplateConfig(BaseModel):
     """
     Base class for the configuration details of a dataset.
     Define a subclass to configure the structure of a dataset.
     """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     dims: tuple[Dim, ...]
     append_dim: AppendDim
@@ -52,21 +57,16 @@ class TemplateConfig(BaseModel):
         self, ds: xr.Dataset
     ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
         """
-        Compute non-dimension coordinates which are dependent on coordinates of the append dimension.
+        Compute non-dimension coordinates.
         For example, if init_time is the append dimension, `{"valid_time": ds["init_time"] + ds["lead_time"]}`
-
-        For analysis and climatology datasets you likely don't need to implement this
-        unless you want to add additional coordinates to your dataset.
         """
-        if missing := {
-            "valid_time",
-            "ingested_forecast_length",
-            "expected_forecast_length",
-        }.intersection({coord.name for coord in self.coords}):
+        if len(missing := [c.name for c in self.coords if c.name not in self.dims]):
             raise NotImplementedError(
-                f"Coordinates {missing} are defined in self.coords and should be derived in your template config's derive_coordinates method"
+                f"Coordinates {missing} are defined in self.coords and should be returned from your template config's derive_coordinates method"
             )
-        return {}
+        return {
+            "spatial_ref": SPATIAL_REF_COORDS,
+        }
 
     # ----- Most subclasses will not need to override the following methods -----
 
@@ -86,7 +86,7 @@ class TemplateConfig(BaseModel):
             self.append_dim_start, end, freq=self.append_dim_frequency, inclusive="left"
         )
 
-    def get_template(self, end_time: pd.Timestamp) -> xr.Dataset:
+    def get_template(self, end_time: DatetimeLike) -> xr.Dataset:
         """
         Returns a template dataset expanded to the given end time.
 
