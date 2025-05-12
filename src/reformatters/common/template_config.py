@@ -1,7 +1,7 @@
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Generic, Literal, TypeVar
+from typing import Any, Generic, Literal, TypeVar, get_args
 
 import numpy as np
 import pandas as pd
@@ -20,7 +20,8 @@ type Dim = Literal[
     "time", "init_time", "ensemble_member", "lead_time", "latitude", "longitude"
 ]
 type AppendDim = Literal["init_time", "time"]
-# check that all the append dim literal value possibilities are in the Dim union AI!
+assert set(get_args(AppendDim)) <= set(get_args(Dim))
+
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 
