@@ -36,7 +36,7 @@ class DummyDatasetAttributes(DatasetAttributes):
 class SimpleConfig(TemplateConfig[DummyDataVar]):
     """A minimal concrete implementation to test the happy‐path logic."""
 
-    dims: tuple[Dim, ...] = ("time",)  # type: ignore
+    dims: tuple[Dim, ...] = ("time",)
     append_dim: AppendDim = "time"
     append_dim_start: pd.Timestamp = pd.Timestamp("2000-01-01")
     append_dim_frequency: pd.Timedelta = pd.Timedelta(days=1)
@@ -77,7 +77,7 @@ class BadCoordsConfig(SimpleConfig):
 @pytest.fixture
 def simple_cfg() -> SimpleConfig:
     return SimpleConfig(
-        dims=("time",),  # type: ignore[arg-type]
+        dims=("time",),
         append_dim="time",
         append_dim_start=pd.Timestamp("2000-01-01"),
         append_dim_frequency=pd.Timedelta(days=1),
@@ -113,7 +113,7 @@ def test_append_dim_coordinate_chunk_size_varies_with_start(
         append_dim_start: pd.Timestamp = pd.Timestamp(f"{start_year}-01-01")
 
     inst = C(
-        dims=("time",),  # type: ignore[arg-type]
+        dims=("time",),
         append_dim="time",
         append_dim_start=pd.Timestamp(f"{start_year}-01-01"),
         append_dim_frequency=pd.Timedelta(days=1),
@@ -135,7 +135,7 @@ def test_default_derive_coordinates_returns_spatial_ref(
 
 def test_derive_coordinates_raises_if_coords_not_returned() -> None:
     bad = BadCoordsConfig(
-        dims=("time",),  # type: ignore[arg-type]
+        dims=("time",),
         append_dim="time",
         append_dim_start=pd.Timestamp("2000-01-01"),
         append_dim_frequency=pd.Timedelta(days=1),
