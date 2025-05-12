@@ -62,7 +62,7 @@ class GFSTemplateConfig(TemplateConfig):
     # --------------------------------------------------------------------
     # now build coords *inside* the class
     def build_coords(self) -> Sequence[Coordinate]:
-        # 1) build raw numpy/pandas arrays for each dim
+        # ai, call self.dimension_coordinates() here instead
         end = self.time_start + self.time_frequency
         dim_coords: dict[str, Any] = {
             self.append_dim: pd.date_range(
@@ -77,7 +77,7 @@ class GFSTemplateConfig(TemplateConfig):
             "longitude": np.arange(-180, 180, 0.25),
         }
 
-        # 2) wrap each in your Coordinate(...) builder
+        # define this as a literal list of Coordinate(name=..., encoding=..., attrs=...)  AI!
         out: list[Coordinate] = []
         for dim in self.dims:
             arr = dim_coords[dim]
