@@ -95,7 +95,9 @@ class GFSTemplateConfig(TemplateConfig):
             ),
         }
 
-    def build_coords(self) -> Sequence[Coordinate]:
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def coords(self) -> Sequence[Coordinate]:
         # assemble coordinate configs via the base-class helper
         dim_coords = self.dimension_coordinates()
 
