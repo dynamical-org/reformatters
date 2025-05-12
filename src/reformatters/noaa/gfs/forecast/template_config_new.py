@@ -96,8 +96,7 @@ class GFSTemplateConfig(TemplateConfig):
     @property
     def coords(self) -> Sequence[Coordinate]:
         dim_coords = self.dimension_coordinates()
-
-        init_time_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
+        append_dim_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
 
         return [
             Coordinate(
@@ -108,8 +107,8 @@ class GFSTemplateConfig(TemplateConfig):
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
                     calendar="proleptic_gregorian",
                     units="seconds since 1970-01-01 00:00:00",
-                    chunks=init_time_coordinate_chunk_size,
-                    shards=init_time_coordinate_chunk_size,
+                    chunks=append_dim_coordinate_chunk_size,
+                    shards=append_dim_coordinate_chunk_size,
                 ),
                 attrs=CoordinateAttrs(
                     units="seconds since 1970-01-01 00:00:00",
@@ -179,11 +178,11 @@ class GFSTemplateConfig(TemplateConfig):
                     calendar="proleptic_gregorian",
                     units="seconds since 1970-01-01 00:00:00",
                     chunks=(
-                        init_time_coordinate_chunk_size,
+                        append_dim_coordinate_chunk_size,
                         len(dim_coords["lead_time"]),
                     ),
                     shards=(
-                        init_time_coordinate_chunk_size,
+                        append_dim_coordinate_chunk_size,
                         len(dim_coords["lead_time"]),
                     ),
                 ),
@@ -202,8 +201,8 @@ class GFSTemplateConfig(TemplateConfig):
                     fill_value=-1,
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
                     units="seconds",
-                    chunks=init_time_coordinate_chunk_size,
-                    shards=init_time_coordinate_chunk_size,
+                    chunks=append_dim_coordinate_chunk_size,
+                    shards=append_dim_coordinate_chunk_size,
                 ),
                 attrs=CoordinateAttrs(
                     units="seconds",
@@ -220,8 +219,8 @@ class GFSTemplateConfig(TemplateConfig):
                     fill_value=-1,
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
                     units="seconds",
-                    chunks=init_time_coordinate_chunk_size,
-                    shards=init_time_coordinate_chunk_size,
+                    chunks=append_dim_coordinate_chunk_size,
+                    shards=append_dim_coordinate_chunk_size,
                 ),
                 attrs=CoordinateAttrs(
                     units="seconds",

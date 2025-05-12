@@ -148,9 +148,13 @@ class TemplateConfig(BaseModel):
 
     def append_dim_coordinate_chunk_size(self) -> int:
         """
-        Returns a fixed chunk size for the append dimension to allow safe expansion.
+        Returns a stable, fixed chunk size for the append dimension to allow
+        expansion while making an effort to keep all coordinates in a single chunk.
         """
-        return int(pd.Timedelta(days=365 * 15) / self.append_dim_frequency)
+        # Give ourselves about 15 years of future dataset appending.
+        # 10 as a minimum to ensure we have some buffer.
+        num_years = max(2025 - self.append_dim_start.year + 15, 10)
+        return int(pd.Timedelta(days=365 * num_years) / self.append_dim_frequency)
 
     def template_path(self) -> Path:
         """Returns the templates/latest.zarr which is a sibling of the template config file."""
