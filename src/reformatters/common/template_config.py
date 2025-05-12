@@ -39,6 +39,15 @@ class TemplateConfig(BaseModel):
 
     coords: Sequence[Coordinate]
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def data_vars(self) -> Sequence[DataVar[Any]]:
+        """
+        Must be overridden in subclass to return the module-level
+        DATA_VARIABLES constant for that dataset.
+        """
+        raise NotImplementedError("Subclass must supply .data_vars")
+
     def dimension_coordinates(self) -> dict[str, Any]:
         """
         Returns a dictionary of dimension names to coordinates for the dataset.
