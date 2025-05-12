@@ -1,16 +1,18 @@
-import pytest
-import pandas as pd
-import xarray as xr
 from types import SimpleNamespace
 
+import pandas as pd
+import pytest
+import xarray as xr
+
 from reformatters.common.template_config import (
-    TemplateConfig,
     SPATIAL_REF_COORDS,
+    TemplateConfig,
 )
 
 
 class SimpleConfig(TemplateConfig[None]):
     """A minimal concrete implementation to test the happy‐path logic."""
+
     dims = ("time",)
     append_dim = "time"
     append_dim_start = pd.Timestamp("2000-01-01")
@@ -40,6 +42,7 @@ class SimpleConfig(TemplateConfig[None]):
 
 class BadCoordsConfig(SimpleConfig):
     """Injects a coord whose name isn't in dims to trigger the NotImplementedError."""
+
     @property
     def coords(self):
         # name "bad" is not in self.dims
