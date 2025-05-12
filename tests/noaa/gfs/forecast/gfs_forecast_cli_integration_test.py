@@ -22,7 +22,9 @@ def test_update_template(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
 
     test_template_path = tmp_path / "latest.zarr"
     monkeypatch.setattr(
-        GFS_FORECAST_TEMPLATE_CONFIG, "template_path", lambda: test_template_path
+        type(GFS_FORECAST_TEMPLATE_CONFIG),
+        "template_path",
+        lambda _self: test_template_path,
     )
 
     cli.update_template()
