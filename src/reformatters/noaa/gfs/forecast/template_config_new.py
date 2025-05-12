@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from typing import Any
+from pydantic import model_validator
 
 import numpy as np
 import pandas as pd
@@ -129,9 +130,6 @@ class GFSTemplateConfig(TemplateConfig):
             out.append(Coordinate(name=dim, encoding=enc, attrs=attrs))
         return out
 
-    @property
-    def coords(self) -> Sequence[Coordinate]:
-        return self.build_coords()
 
     # --------------------------------------------------------------------
     # similarly, build data_vars inside the class
@@ -141,6 +139,12 @@ class GFSTemplateConfig(TemplateConfig):
         base_shards = tuple(self.var_shards[d] for d in self.dims)
 
         return [
+
+    @model_validator(mode="after")
+    def populate_coords(self) -> "GFSTemplateConfig":
+        # assign the coords field from build_coords()
+        object.__setattr__(self, "coords", self.build_coords())
+        return self
             NOAADataVar(
                 name="pressure_surface",
                 encoding=Encoding(
