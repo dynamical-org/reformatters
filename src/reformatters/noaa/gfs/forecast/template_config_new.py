@@ -4,6 +4,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import xarray as xr
+from pydantic import computed_field
 
 from reformatters.common.config_models import (
     Coordinate,
@@ -37,8 +38,8 @@ class GFSTemplateConfig(TemplateConfig):
         forecast_domain="Forecast lead time 0-384 hours (0-16 days) ahead",
         forecast_resolution="Forecast step 0-120h: hourly, 123-384h: 3 hourly",
     )
-    time_start: pd.Timestamp = pd.Timestamp("2021-05-01T00:00")
-    time_frequency: pd.Timedelta = pd.Timedelta("6h")
+    append_dim_start: pd.Timestamp = pd.Timestamp("2021-05-01T00:00")
+    append_dim_frequency: pd.Timedelta = pd.Timedelta("6h")
 
     # dims and append_dim
     dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
@@ -58,8 +59,42 @@ class GFSTemplateConfig(TemplateConfig):
         "longitude": 121 * 6,
     }
 
-    # --------------------------------------------------------------------
-    # now build coords *inside* the class
+    def dimension_coordinates(self) -> dict[str, Any]:
+        """
+        Returns a dictionary of dimension names to coordinates for the dataset.
+        """
+        return {
+            self.append_dim: self.append_dim_coordinates(
+                self.append_dim_start + self.append_dim_frequency
+            ),
+            "lead_time": (
+                pd.timedelta_range("0h", "120h", freq="1h").union(
+                    pd.timedelta_range("123h", "384h", freq="3h")
+                )
+            ),
+            "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
+            "longitude": np.arange(-180, 180, 0.25),
+        }
+
+    def derive_coordinates(
+        self, ds: xr.Dataset
+    ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
+        return {
+            "valid_time": ds["init_time"] + ds["lead_time"],
+            "ingested_forecast_length": (
+                (self.append_dim,),
+                np.full(ds[self.append_dim].size, np.timedelta64("NaT", "ns")),
+            ),
+            "expected_forecast_length": (
+                (self.append_dim,),
+                np.full(
+                    ds[self.append_dim].size,
+                    ds["lead_time"].max(),
+                    dtype="timedelta64[ns]",
+                ),
+            ),
+        }
+
     def build_coords(self) -> Sequence[Coordinate]:
         # assemble coordinate configs via the base-class helper
         dim_coords = self.dimension_coordinates()
@@ -137,12 +172,11 @@ class GFSTemplateConfig(TemplateConfig):
             ),
         ]
 
-    # --------------------------------------------------------------------
-    # similarly, build data_vars inside the class
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def data_vars(self) -> Sequence[DataVar[Any]]:
-        base_chunks = tuple(self.var_chunks[d] for d in self.dims)
-        base_shards = tuple(self.var_shards[d] for d in self.dims)
+        chunks = tuple(self.var_chunks[d] for d in self.dims)
+        shards = tuple(self.var_shards[d] for d in self.dims)
 
         return [
             NOAADataVar(
@@ -150,8 +184,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -174,8 +208,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -198,8 +232,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -222,8 +256,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -245,8 +279,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -268,8 +302,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -292,8 +326,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -316,8 +350,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -340,8 +374,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -364,8 +398,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -387,8 +421,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -413,8 +447,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -436,8 +470,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -459,8 +493,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -482,8 +516,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -505,8 +539,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -528,8 +562,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -551,8 +585,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -575,8 +609,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -598,8 +632,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -621,8 +655,8 @@ class GFSTemplateConfig(TemplateConfig):
                 encoding=Encoding(
                     dtype="float32",
                     fill_value=np.nan,
-                    chunks=base_chunks,
-                    shards=base_shards,
+                    chunks=chunks,
+                    shards=shards,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                 ),
                 attrs=DataVarAttrs(
@@ -640,42 +674,3 @@ class GFSTemplateConfig(TemplateConfig):
                 ),
             ),
         ]
-
-    # --------------------------------------------------------------------
-
-    def dimension_coordinates(self) -> dict[str, Any]:
-        """
-        Returns a dictionary of dimension names to coordinates for the dataset.
-        """
-        end = self.time_start + self.time_frequency
-        return {
-            self.append_dim: pd.date_range(
-                self.time_start, end, freq=self.time_frequency, inclusive="left"
-            ),
-            "lead_time": (
-                pd.timedelta_range("0h", "120h", freq="1h").union(
-                    pd.timedelta_range("123h", "384h", freq="3h")
-                )
-            ),
-            "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
-            "longitude": np.arange(-180, 180, 0.25),
-        }
-
-    def derive_coordinates(
-        self, ds: xr.Dataset
-    ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
-        return {
-            "valid_time": ds[self.append_dim] + ds["lead_time"],
-            "ingested_forecast_length": (
-                (self.append_dim,),
-                np.full(ds[self.append_dim].size, np.timedelta64("NaT", "ns")),
-            ),
-            "expected_forecast_length": (
-                (self.append_dim,),
-                np.full(
-                    ds[self.append_dim].size,
-                    ds["lead_time"].max(),
-                    dtype="timedelta64[ns]",
-                ),
-            ),
-        }
