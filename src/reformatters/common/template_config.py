@@ -27,7 +27,7 @@ INTERNAL_ATTRS = TypeVar("INTERNAL_ATTRS", bound=BaseInternalAttrs)
 SPATIAL_REF_COORDS = ((), np.array(0))
 
 
-class TemplateConfig(GenericModel, Generic[INTERNAL_ATTRS]):
+class TemplateConfig(GenericModel, Generic[INTERNAL_ATTRS]):  # type: ignore[misc, valid-type]
     """
     Base class for the configuration details of a dataset.
     Define a subclass to configure the structure of a dataset.
