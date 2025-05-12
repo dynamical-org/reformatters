@@ -59,9 +59,8 @@ class GFSTemplateConfig(TemplateConfig):
     }
 
     # --------------------------------------------------------------------
-    # now build coords *inside* the class via a computed_field
-    @property
-    def coords(self) -> Sequence[Coordinate]:
+    # now build coords *inside* the class
+    def build_coords(self) -> Sequence[Coordinate]:
         # 1) build raw numpy/pandas arrays for each dim
         end = self.time_start + self.time_frequency
         dim_coords: dict[str, Any] = {
@@ -129,6 +128,8 @@ class GFSTemplateConfig(TemplateConfig):
                 )
             out.append(Coordinate(name=dim, encoding=enc, attrs=attrs))
         return out
+
+    coords: Sequence[Coordinate] = property(lambda self: self.build_coords())
 
     # --------------------------------------------------------------------
     # similarly, build data_vars inside the class
