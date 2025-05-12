@@ -97,20 +97,7 @@ class GFSTemplateConfig(TemplateConfig):
     def coords(self) -> Sequence[Coordinate]:
         dim_coords = self.dimension_coordinates()
 
-        # move this description and calculation to a method on the base class called append_dim_coordinate_chunk_size AI!
-
-        # The init time dimension is our append dimension during updates.
-        # We also want coordinates to be in a single chunk for dataset open speed.
-        # By fixing the chunk size for coordinates along the append dimension to
-        # something much larger than we will really use, the array is always
-        # a fixed underlying chunk size and values in it can be safely updated
-        # prior to metadata document updates that increase the reported array size.
-        # This is a zarr format hack to allow expanding an array safely and requires
-        # that new array values are written strictly before new metadata is written
-        # (doing this correctly is a key benefit of icechunk).
-        init_time_coordinate_chunk_size = int(
-            pd.Timedelta(days=365 * 15) / self.append_dim_frequency
-        )
+        init_time_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
 
         return [
             Coordinate(

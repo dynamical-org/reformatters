@@ -146,6 +146,12 @@ class TemplateConfig(BaseModel):
 
         template_utils.write_metadata(ds, self.template_path(), mode="w")
 
+    def append_dim_coordinate_chunk_size(self) -> int:
+        """
+        Returns a fixed chunk size for the append dimension to allow safe expansion.
+        """
+        return int(pd.Timedelta(days=365 * 15) / self.append_dim_frequency)
+
     def template_path(self) -> Path:
         """Returns the templates/latest.zarr which is a sibling of the template config file."""
         cls = self.__class__
