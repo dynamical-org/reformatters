@@ -35,3 +35,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
             return 2
         else:
             return 1
+
+    @pydantic.field_validator("region")
+    def _validate_region_is_int_slice(cls, v: slice) -> slice:
+        # ensure start, stop, step are ints or None
+        for attr in ("start", "stop", "step"):
+            val = getattr(v, attr)
+            assert val is None or isinstance(val, int), (
+                f"region.{attr!r} must be an int or None, got {type(val).__name__}"
+            )
+        return v
