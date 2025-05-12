@@ -1,17 +1,21 @@
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Generic, Literal, TypeVar
 
 import numpy as np
 import pandas as pd
 import xarray as xr
-from pydantic import BaseModel, ConfigDict, computed_field
+from pydantic import ConfigDict, computed_field
+from pydantic.generics import GenericModel
 
 from reformatters.common import template_utils
-from typing import TypeVar, Generic
-from pydantic.generics import GenericModel
-from reformatters.common.config_models import Coordinate, DatasetAttributes, DataVar, BaseInternalAttrs
+from reformatters.common.config_models import (
+    BaseInternalAttrs,
+    Coordinate,
+    DatasetAttributes,
+    DataVar,
+)
 from reformatters.common.types import DatetimeLike
 
 type Dim = Literal["init_time", "ensemble_member", "lead_time", "latitude", "longitude"]
