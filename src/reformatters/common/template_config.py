@@ -50,9 +50,6 @@ class TemplateConfig(BaseModel):
 
     # --------------------------------------------------------------------
     # automatically derive ordered chunks/shards tuples from the dicts + dims
-    var_chunks_ordered: tuple[int, ...]
-    var_shards_ordered: tuple[int, ...]
-
     @computed_field  # type: ignore[prop-decorator]
     @property
     def var_chunks_ordered(self) -> tuple[int, ...]:
@@ -113,7 +110,7 @@ class TemplateConfig(BaseModel):
         Returns:
             xr.Dataset: Template dataset with dimension coordinates
         """
-        ds: xr.Dataset = xr.open_zarr(self.template_path(), decode_timedelta=True)
+        ds: xr.Dataset = xr.open_zarr(self.template_path(__file__), decode_timedelta=True)
 
         # Expand init_time dimension with complete coordinates
         ds = template_utils.empty_copy_with_reindex(
@@ -161,7 +158,7 @@ class TemplateConfig(BaseModel):
                 ds.coords[coord_config.name], coord_config
             )
 
-        template_utils.write_metadata(ds, self.template_path(), mode="w")
+        template_utils.write_metadata(ds, self.template_path(__file__), mode="w")
 
     def template_path(self, template_config_file_path: str) -> Path:
         return Path(template_config_file_path).parent / "templates" / "latest.zarr"
