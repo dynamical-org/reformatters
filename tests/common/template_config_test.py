@@ -4,15 +4,18 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from reformatters.common.config_models import Coordinate, DatasetAttributes, DataVar
+# Use a dummy DataVar that is a subtype of BaseInternalAttrs, as required by the type var
+from reformatters.common.config_models import (
+    BaseInternalAttrs,
+    Coordinate,
+    DatasetAttributes,
+    DataVar,
+)
 from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
     TemplateConfig,
 )
 
-
-# Use a dummy DataVar that is a subtype of BaseInternalAttrs, as required by the type var
-from reformatters.common.config_models import BaseInternalAttrs
 
 class DummyDataVar(DataVar[BaseInternalAttrs]):
     pass
@@ -27,6 +30,7 @@ class DummyDatasetAttributes(DatasetAttributes):
 
 
 from typing import Literal
+
 
 class SimpleConfig(TemplateConfig[DummyDataVar]):
     """A minimal concrete implementation to test the happy‐path logic."""
@@ -53,7 +57,9 @@ class SimpleConfig(TemplateConfig[DummyDataVar]):
         # not used in these tests
         return {"time": self.append_dim_coordinates(self.append_dim_start)}
 
-    def derive_coordinates(self, ds: xr.Dataset) -> dict[str, xr.DataArray | tuple[tuple[str, ...], object]]:
+    def derive_coordinates(
+        self, ds: xr.Dataset
+    ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], object]]:
         # exercise the base‐class fallback (which only adds spatial_ref)
         return super().derive_coordinates(ds)
 
