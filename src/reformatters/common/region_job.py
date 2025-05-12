@@ -5,15 +5,13 @@ import pydantic
 import xarray as xr
 from zarr.storage import FsspecStore
 
-from reformatters.common.config_models import INTERNAL_ATTRS, DataVar
+from reformatters.common.config_models import DataVar
 
 
 class RegionJob(pydantic.BaseModel):
     store: FsspecStore
     template_ds: xr.Dataset
-    data_vars: Sequence[
-        DataVar
-    ]  # make this class and this attribute generic over the specific DataVar + DataVarInternalAttrs type AI!
+    data_vars: Sequence[DataVar]
     append_dimension: str  # e.g. "time" or "init_time"
     region: slice  # an integer slice along append_dimension
     max_vars_per_backfill_job: int
