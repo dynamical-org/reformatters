@@ -204,13 +204,7 @@ class GFSTemplateConfig(TemplateConfig):
             ),
             NOAADataVar(
                 name="temperature_2m",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="t2m",
                     long_name="2 metre temperature",
@@ -228,13 +222,7 @@ class GFSTemplateConfig(TemplateConfig):
             ),
             NOAADataVar(
                 name="relative_humidity_2m",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="r2",
                     long_name="2 metre relative humidity",
@@ -252,13 +240,7 @@ class GFSTemplateConfig(TemplateConfig):
             ),
             NOAADataVar(
                 name="maximum_temperature_2m",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="tmax",
                     long_name="Maximum temperature",
@@ -275,13 +257,7 @@ class GFSTemplateConfig(TemplateConfig):
             ),
             NOAADataVar(
                 name="minimum_temperature_2m",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="tmin",
                     long_name="Minimum temperature",
@@ -298,13 +274,7 @@ class GFSTemplateConfig(TemplateConfig):
             ),
             NOAADataVar(
                 name="wind_u_10m",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="u10",
                     long_name="10 metre U wind component",
@@ -322,13 +292,7 @@ class GFSTemplateConfig(TemplateConfig):
             ),
             NOAADataVar(
                 name="wind_v_10m",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="v10",
                     long_name="10 metre V wind component",
@@ -346,13 +310,7 @@ class GFSTemplateConfig(TemplateConfig):
             ),
             NOAADataVar(
                 name="wind_u_100m",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="u100",
                     long_name="100 metre U wind component",
@@ -370,13 +328,7 @@ class GFSTemplateConfig(TemplateConfig):
             ),
             NOAADataVar(
                 name="wind_v_100m",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="v100",
                     long_name="100 metre V wind component",
@@ -394,13 +346,7 @@ class GFSTemplateConfig(TemplateConfig):
             ),
             NOAADataVar(
                 name="percent_frozen_precipitation_surface",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="cpofp",
                     long_name="Percent frozen precipitation",
@@ -417,13 +363,7 @@ class GFSTemplateConfig(TemplateConfig):
             ),
             NOAADataVar(
                 name="precipitation_surface",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="tp",
                     long_name="Total Precipitation",
@@ -443,13 +383,7 @@ class GFSTemplateConfig(TemplateConfig):
             ),
             NOAADataVar(
                 name="categorical_snow_surface",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="csnow",
                     long_name="Categorical snow",
@@ -466,13 +400,7 @@ class GFSTemplateConfig(TemplateConfig):
             ),
             NOAADataVar(
                 name="categorical_ice_pellets_surface",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="cicep",
                     long_name="Categorical ice pellets",
@@ -489,13 +417,7 @@ class GFSTemplateConfig(TemplateConfig):
             ),
             NOAADataVar(
                 name="categorical_freezing_rain_surface",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="cfrzr",
                     long_name="Categorical freezing rain",
@@ -512,13 +434,7 @@ class GFSTemplateConfig(TemplateConfig):
             ),
             NOAADataVar(
                 name="categorical_rain_surface",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="crain",
                     long_name="Categorical rain",
@@ -533,6 +449,7 @@ class GFSTemplateConfig(TemplateConfig):
                     keep_mantissa_bits="no-rounding",
                 ),
             ),
+            # finish replacing manual encoding def with encoding_float32_default in all the rest of this list AI!
             NOAADataVar(
                 name="precipitable_water_atmosphere",
                 encoding=Encoding(
