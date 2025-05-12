@@ -16,13 +16,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
     append_dim: AppendDim
-    region: Annotated[
-        slice,
-        pydantic.Field(
-            ...,
-            description="slice whose start/stop/step must be integers or None",
-        ),
-    ]
+    region: slice
     max_vars_per_backfill_job: int
 
     def process(self) -> None:
@@ -42,12 +36,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         else:
             return 1
 
+    # implement an equivalent Annotation on the region field with a lambda AI!
     @pydantic.field_validator("region")
-    def _validate_region_is_int_slice(cls, v: slice) -> slice:
-        # ensure start, stop, step are ints or None
-        for attr in ("start", "stop", "step"):
-            val = getattr(v, attr)
-            assert val is None or isinstance(val, int), (
-                f"region.{attr!r} must be an int or None, got {type(val).__name__}"
-            )
-        return v
+    def _validate_region_is_int_slice(self, s: slice) -> slice:
+        assert isinstance(s.start, int)
+        assert isinstance(s.stop, int)
+        assert s.step is None
+        return s
