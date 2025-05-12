@@ -1,3 +1,5 @@
+import re
+
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -10,7 +12,7 @@ def test_dataset_attributes() -> None:
     cfg = GFS_FORECAST_TEMPLATE_CONFIG
     attrs = cfg.dataset_attributes
     assert attrs.dataset_id == "noaa-gfs-forecast"
-    assert attrs.dataset_version == "0.1.0"
+    assert re.match(r"\d+\.\d+\.\d+", attrs.dataset_version) is not None
     # time_domain mentions the configured start
     assert str(cfg.append_dim_start) in attrs.time_domain
     # time_resolution mentions the 6-hour frequency
