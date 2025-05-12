@@ -24,20 +24,34 @@ from reformatters.noaa.noaa_config_models import NOAADataVar, NOAAInternalAttrs
 
 
 class GFSTemplateConfig(TemplateConfig):
-    # As you make this a computed field, make the time_domain and time_resolution derived from append_dim_start and append_dim_frequency AI!
-    dataset_attributes: DatasetAttributes = DatasetAttributes(
-        dataset_id="noaa-gfs-forecast",
-        dataset_version="0.1.0",
-        name="NOAA GFS forecast",
-        description="Weather forecasts from the Global Forecast System (GFS) operated by NOAA NWS NCEP.",
-        attribution="NOAA NWS NCEP GFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
-        spatial_domain="Global",
-        spatial_resolution="0.25 degrees (~20km)",
-        time_domain="Forecasts initialized 2021-05-01T00:00 UTC to Present",
-        time_resolution="Forecasts initialized every 6 hours.",
-        forecast_domain="Forecast lead time 0-384 hours (0-16 days) ahead",
-        forecast_resolution="Forecast step 0-120h: hourly, 123-384h: 3 hourly",
-    )
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def dataset_attributes(self) -> DatasetAttributes:
+        return DatasetAttributes(
+            dataset_id="noaa-gfs-forecast",
+            dataset_version="0.1.0",
+            name="NOAA GFS forecast",
+            description=(
+                "Weather forecasts from the Global Forecast System (GFS) "
+                "operated by NOAA NWS NCEP."
+            ),
+            attribution=(
+                "NOAA NWS NCEP GFS data processed by dynamical.org "
+                "from NOAA Open Data Dissemination archives."
+            ),
+            spatial_domain="Global",
+            spatial_resolution="0.25 degrees (~20km)",
+            time_domain=(
+                f"Forecasts initialized {self.append_dim_start.isoformat()} UTC to Present"
+            ),
+            time_resolution=(
+                f"Forecasts initialized every {self.append_dim_frequency}"
+            ),
+            forecast_domain="Forecast lead time 0-384 hours (0-16 days) ahead",
+            forecast_resolution=(
+                "Forecast step 0-120h: hourly, 123-384h: 3 hourly"
+            ),
+        )
 
     dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
     append_dim: AppendDim = "init_time"

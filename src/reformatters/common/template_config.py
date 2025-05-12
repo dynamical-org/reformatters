@@ -16,8 +16,12 @@ type AppendDim = Literal["init_time", "time"]
 
 
 class TemplateConfig(BaseModel):
-    # AI also make this a computed field
-    dataset_attributes: DatasetAttributes
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def dataset_attributes(self) -> DatasetAttributes:
+        raise NotImplementedError(
+            "Implement `dataset_attributes` in your subclass"
+        )
 
     dims: tuple[Dim, ...]
     append_dim: AppendDim
