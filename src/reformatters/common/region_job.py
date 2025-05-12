@@ -1,19 +1,22 @@
 from collections.abc import Sequence
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 import pydantic
 import xarray as xr
 from zarr.storage import FsspecStore
 
 from reformatters.common.config_models import DataVar
+from reformatters.common.template_config import AppendDim
+
+DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 
 
-class RegionJob(pydantic.BaseModel):
+class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
     store: FsspecStore
     template_ds: xr.Dataset
-    data_vars: Sequence[DataVar]
-    append_dimension: str  # e.g. "time" or "init_time"
-    region: slice  # an integer slice along append_dimension
+    data_vars: Sequence[DATA_VAR]
+    append_dim: AppendDim
+    region: slice  # pydantic annotated slice of ints AI!
     max_vars_per_backfill_job: int
 
     def process(self) -> None:
