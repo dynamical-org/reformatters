@@ -8,7 +8,7 @@ from zarr.storage import FsspecStore
 # import your DataVar base class
 from .config_models import DataVar
 
-D = TypeVar("D", bound=DataVar)
+D = TypeVar("D", bound="DataVar")
 
 
 class RegionJob(pydantic.BaseModel, Generic[D]):
