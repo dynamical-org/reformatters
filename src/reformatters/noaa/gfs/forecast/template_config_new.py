@@ -24,6 +24,11 @@ from reformatters.noaa.noaa_config_models import NOAADataVar, NOAAInternalAttrs
 
 
 class GFSTemplateConfig(TemplateConfig):
+    dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
+    append_dim: AppendDim = "init_time"
+    append_dim_start: pd.Timestamp = pd.Timestamp("2021-05-01T00:00")
+    append_dim_frequency: pd.Timedelta = pd.Timedelta("6h")
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def dataset_attributes(self) -> DatasetAttributes:
@@ -51,14 +56,6 @@ class GFSTemplateConfig(TemplateConfig):
             forecast_resolution=("Forecast step 0-120h: hourly, 123-384h: 3 hourly"),
         )
 
-    dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
-    append_dim: AppendDim = "init_time"
-    append_dim_start: pd.Timestamp = pd.Timestamp("2021-05-01T00:00")
-    append_dim_frequency: pd.Timedelta = pd.Timedelta("6h")
-
-    # TODO / Questions
-    # 1. should this be a computed field?
-    # 2. derive dataset attributes from the dimension coordinates?
     def dimension_coordinates(self) -> dict[str, Any]:
         """
         Returns a dictionary of dimension names to coordinates for the dataset.
@@ -99,6 +96,8 @@ class GFSTemplateConfig(TemplateConfig):
     @property
     def coords(self) -> Sequence[Coordinate]:
         dim_coords = self.dimension_coordinates()
+
+        # move this description and calculation to a method on the base class called append_dim_coordinate_chunk_size AI!
 
         # The init time dimension is our append dimension during updates.
         # We also want coordinates to be in a single chunk for dataset open speed.

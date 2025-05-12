@@ -1,3 +1,4 @@
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal
@@ -16,15 +17,20 @@ type AppendDim = Literal["init_time", "time"]
 
 
 class TemplateConfig(BaseModel):
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def dataset_attributes(self) -> DatasetAttributes:
-        raise NotImplementedError("Implement `dataset_attributes` in your subclass")
+    """
+    Base class for the configuration details of a dataset.
+    Define a subclass to configure the structure of a dataset.
+    """
 
     dims: tuple[Dim, ...]
     append_dim: AppendDim
     append_dim_start: pd.Timestamp
     append_dim_frequency: pd.Timedelta
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def dataset_attributes(self) -> DatasetAttributes:
+        raise NotImplementedError("Implement `dataset_attributes` in your subclass")
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -49,7 +55,8 @@ class TemplateConfig(BaseModel):
         Compute non-dimension coordinates which are dependent on coordinates of the append dimension.
         For example, if init_time is the append dimension, `{"valid_time": ds["init_time"] + ds["lead_time"]}`
 
-        For analysis and climatology datasets you likely don't need to implement this.
+        For analysis and climatology datasets you likely don't need to implement this
+        unless you want to add additional coordinates to your dataset.
         """
         if missing := {
             "valid_time",
@@ -60,6 +67,8 @@ class TemplateConfig(BaseModel):
                 f"Coordinates {missing} are defined in self.coords and should be derived in your template config's derive_coordinates method"
             )
         return {}
+
+    # ----- Most subclasses will not need to override the following methods -----
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -87,9 +96,7 @@ class TemplateConfig(BaseModel):
         Returns:
             xr.Dataset: Template dataset with dimension coordinates
         """
-        ds: xr.Dataset = xr.open_zarr(
-            self.template_path(__file__), decode_timedelta=True
-        )
+        ds: xr.Dataset = xr.open_zarr(self.template_path(), decode_timedelta=True)
 
         # Expand init_time dimension with complete coordinates
         ds = template_utils.empty_copy_with_reindex(
@@ -137,7 +144,12 @@ class TemplateConfig(BaseModel):
                 ds.coords[coord_config.name], coord_config
             )
 
-        template_utils.write_metadata(ds, self.template_path(__file__), mode="w")
+        template_utils.write_metadata(ds, self.template_path(), mode="w")
 
-    def template_path(self, template_config_file_path: str) -> Path:
-        return Path(template_config_file_path).parent / "templates" / "latest.zarr"
+    def template_path(self) -> Path:
+        """Returns the templates/latest.zarr which is a sibling of the template config file."""
+        cls = self.__class__
+        assert cls is not TemplateConfig, "template_path() should only be called from a subclass"  # fmt: skip
+        subclass_template_config_file = sys.modules[cls.__module__].__file__
+        assert subclass_template_config_file is not None
+        return Path(subclass_template_config_file).parent / "templates" / "latest.zarr"
