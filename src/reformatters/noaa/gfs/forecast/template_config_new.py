@@ -62,73 +62,81 @@ class GFSTemplateConfig(TemplateConfig):
     # --------------------------------------------------------------------
     # now build coords *inside* the class
     def build_coords(self) -> Sequence[Coordinate]:
-        # ai, call self.dimension_coordinates() here instead
-        end = self.time_start + self.time_frequency
-        dim_coords: dict[str, Any] = {
-            self.append_dim: pd.date_range(
-                self.time_start, end, freq=self.time_frequency, inclusive="left"
-            ),
-            "lead_time": (
-                pd.timedelta_range("0h", "120h", freq="1h").union(
-                    pd.timedelta_range("123h", "384h", freq="3h")
-                )
-            ),
-            "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
-            "longitude": np.arange(-180, 180, 0.25),
-        }
+        # assemble coordinate configs via the base-class helper
+        dim_coords = self.dimension_coordinates()
 
-        # define this as a literal list of Coordinate(name=..., encoding=..., attrs=...)  AI!
-        out: list[Coordinate] = []
-        for dim in self.dims:
-            arr = dim_coords[dim]
-            # pick dtype/fill/units based on name
-            if dim == self.append_dim:
-                enc = Encoding(
+        return [
+            Coordinate(
+                name=self.append_dim,
+                encoding=Encoding(
                     dtype="int64",
                     fill_value=0,
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
                     calendar="proleptic_gregorian",
                     units="seconds since 1970-01-01 00:00:00",
-                    chunks=len(arr),
-                    shards=len(arr),
-                )
-                attrs = CoordinateAttrs(
+                    chunks=len(dim_coords[self.append_dim]),
+                    shards=len(dim_coords[self.append_dim]),
+                ),
+                attrs=CoordinateAttrs(
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
-                        min=str(arr.min()), max="Present"
+                        min=str(dim_coords[self.append_dim].min()), max="Present"
                     ),
-                )
-            elif dim == "lead_time":
-                enc = Encoding(
+                ),
+            ),
+            Coordinate(
+                name="lead_time",
+                encoding=Encoding(
                     dtype="int64",
                     fill_value=-1,
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
                     units="seconds",
-                    chunks=len(arr),
-                    shards=len(arr),
-                )
-                attrs = CoordinateAttrs(
+                    chunks=len(dim_coords["lead_time"]),
+                    shards=len(dim_coords["lead_time"]),
+                ),
+                attrs=CoordinateAttrs(
                     units="seconds",
                     statistics_approximate=StatisticsApproximate(
-                        min=str(arr.min()), max=str(arr.max())
+                        min=str(dim_coords["lead_time"].min()),
+                        max=str(dim_coords["lead_time"].max()),
                     ),
-                )
-            else:  # latitude/longitude
-                enc = Encoding(
+                ),
+            ),
+            Coordinate(
+                name="latitude",
+                encoding=Encoding(
                     dtype="float64",
                     fill_value=np.nan,
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    chunks=len(arr),
-                    shards=len(arr),
-                )
-                attrs = CoordinateAttrs(
-                    units="degrees_north" if dim == "latitude" else "degrees_east",
+                    chunks=len(dim_coords["latitude"]),
+                    shards=len(dim_coords["latitude"]),
+                ),
+                attrs=CoordinateAttrs(
+                    units="degrees_north",
                     statistics_approximate=StatisticsApproximate(
-                        min=float(arr.min()), max=float(arr.max())
+                        min=float(dim_coords["latitude"].min()),
+                        max=float(dim_coords["latitude"].max()),
                     ),
-                )
-            out.append(Coordinate(name=dim, encoding=enc, attrs=attrs))
-        return out
+                ),
+            ),
+            Coordinate(
+                name="longitude",
+                encoding=Encoding(
+                    dtype="float64",
+                    fill_value=np.nan,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    chunks=len(dim_coords["longitude"]),
+                    shards=len(dim_coords["longitude"]),
+                ),
+                attrs=CoordinateAttrs(
+                    units="degrees_east",
+                    statistics_approximate=StatisticsApproximate(
+                        min=float(dim_coords["longitude"].min()),
+                        max=float(dim_coords["longitude"].max()),
+                    ),
+                ),
+            ),
+        ]
 
 
     # --------------------------------------------------------------------
@@ -139,12 +147,6 @@ class GFSTemplateConfig(TemplateConfig):
         base_shards = tuple(self.var_shards[d] for d in self.dims)
 
         return [
-
-    @model_validator(mode="after")
-    def populate_coords(self) -> "GFSTemplateConfig":
-        # assign the coords field from build_coords()
-        object.__setattr__(self, "coords", self.build_coords())
-        return self
             NOAADataVar(
                 name="pressure_surface",
                 encoding=Encoding(
