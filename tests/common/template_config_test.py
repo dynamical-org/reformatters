@@ -11,7 +11,10 @@ from reformatters.common.template_config import (
 )
 
 
-class DummyDataVar(DataVar[int]):
+# Use a dummy DataVar that is a subtype of BaseInternalAttrs, as required by the type var
+from reformatters.common.config_models import BaseInternalAttrs
+
+class DummyDataVar(DataVar[BaseInternalAttrs]):
     pass
 
 
@@ -23,11 +26,13 @@ class DummyDatasetAttributes(DatasetAttributes):
     pass
 
 
+from typing import Literal
+
 class SimpleConfig(TemplateConfig[DummyDataVar]):
     """A minimal concrete implementation to test the happy‐path logic."""
 
-    dims: tuple[str, ...] = ("time",)
-    append_dim: str = "time"
+    dims: tuple[Literal["time"], ...] = ("time",)
+    append_dim: Literal["time"] = "time"
     append_dim_start: pd.Timestamp = pd.Timestamp("2000-01-01")
     append_dim_frequency: pd.Timedelta = pd.Timedelta(days=1)
 
@@ -48,7 +53,7 @@ class SimpleConfig(TemplateConfig[DummyDataVar]):
         # not used in these tests
         return {"time": self.append_dim_coordinates(self.append_dim_start)}
 
-    def derive_coordinates(self, ds: xr.Dataset) -> dict[str, object]:
+    def derive_coordinates(self, ds: xr.Dataset) -> dict[str, xr.DataArray | tuple[tuple[str, ...], object]]:
         # exercise the base‐class fallback (which only adds spatial_ref)
         return super().derive_coordinates(ds)
 
