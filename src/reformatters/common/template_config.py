@@ -48,6 +48,22 @@ class TemplateConfig(BaseModel):
         """
         raise NotImplementedError("Subclass must supply .data_vars")
 
+    # --------------------------------------------------------------------
+    # automatically derive ordered chunks/shards tuples from the dicts + dims
+    var_chunks_ordered: tuple[int, ...]
+    var_shards_ordered: tuple[int, ...]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def var_chunks_ordered(self) -> tuple[int, ...]:
+        return tuple(self.var_chunks[d] for d in self.dims)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def var_shards_ordered(self) -> tuple[int, ...]:
+        return tuple(self.var_shards[d] for d in self.dims)
+    # --------------------------------------------------------------------
+
     def dimension_coordinates(self) -> dict[str, Any]:
         """
         Returns a dictionary of dimension names to coordinates for the dataset.
