@@ -1,12 +1,11 @@
 import numpy as np
 import pandas as pd
 import xarray as xr
-import pytest
 
+from reformatters.common.template_config import SPATIAL_REF_COORDS
 from reformatters.noaa.gfs.forecast.template_config import (
     GFS_FORECAST_TEMPLATE_CONFIG as cfg,
 )
-from reformatters.common.template_config import SPATIAL_REF_COORDS
 
 
 def test_dataset_attributes():
