@@ -66,8 +66,8 @@ ignore = [
 
 [tool.mypy]
 files = "."
-plugins = ["pydantic.mypy", "numpy.typing.mypy_plugin"]
 strict = true
+plugins = ["pydantic.mypy", "numpy.typing.mypy_plugin"]
 enable_incomplete_feature = "NewGenericSyntax"
 
 [tool.pydantic-mypy]

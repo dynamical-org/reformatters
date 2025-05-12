@@ -10,19 +10,22 @@ from reformatters.common import zarr
 from reformatters.noaa.gfs.forecast import (
     cli,
     reformat,
-    template,
-    template_config,
 )
+from reformatters.noaa.gfs.forecast.template_config import GFS_FORECAST_TEMPLATE_CONFIG
 
 pytestmark = pytest.mark.slow
 
 
 def test_update_template(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    with open(template._TEMPLATE_PATH / "zarr.json") as latest_f:
+    with open(GFS_FORECAST_TEMPLATE_CONFIG.template_path() / "zarr.json") as latest_f:
         template_consolidated_metadata = json.load(latest_f)
 
     test_template_path = tmp_path / "latest.zarr"
-    monkeypatch.setattr(template, "_TEMPLATE_PATH", test_template_path)
+    monkeypatch.setattr(
+        type(GFS_FORECAST_TEMPLATE_CONFIG),
+        "template_path",
+        lambda _self: test_template_path,
+    )
 
     cli.update_template()
 
@@ -36,7 +39,7 @@ def test_update_template(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
 
 def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(zarr, "_LOCAL_ZARR_STORE_BASE_PATH", tmp_path)
-    init_time_start = template_config.INIT_TIME_START
+    init_time_start = GFS_FORECAST_TEMPLATE_CONFIG.append_dim_start
     init_time_end = init_time_start + timedelta(days=1)
 
     # 1. Backfill archive

@@ -21,7 +21,7 @@ from reformatters.common.reformat_utils import (
     create_shared_buffer,
     write_shards,
 )
-from reformatters.noaa.gfs.forecast import template
+from reformatters.noaa.gfs.forecast.template_config import GFS_FORECAST_TEMPLATE_CONFIG
 from reformatters.noaa.gfs.read_data import (
     GFS_ACCUMULATION_RESET_FREQUENCY,
     SourceFileCoords,
@@ -49,7 +49,7 @@ def reformat_time_i_slices(
     shared_buffer_size = max(
         data_var.nbytes
         for data_var in template_ds.isel(
-            {template.APPEND_DIMENSION: jobs[0][0]}
+            {GFS_FORECAST_TEMPLATE_CONFIG.append_dim: jobs[0][0]}
         ).values()
     )
     with (
@@ -256,7 +256,7 @@ def get_download_var_group_futures(
     download_var_group_futures: DownloadVarGroupFutures = {}
 
     chunk_data_vars = [
-        d for d in template.DATA_VARIABLES if d.name in chunk_template_ds
+        d for d in GFS_FORECAST_TEMPLATE_CONFIG.data_vars if d.name in chunk_template_ds
     ]
     chunk_data_vars = sorted(
         chunk_data_vars, key=lambda data_var: data_var.internal_attrs.index_position

@@ -2,15 +2,17 @@ from typing import Annotated
 
 import typer
 
-from reformatters.noaa.gfs.forecast import reformat, template
-from reformatters.noaa.gfs.forecast.template import DATASET_ID as DATASET_ID
+from reformatters.noaa.gfs.forecast import reformat
+from reformatters.noaa.gfs.forecast.template_config import GFS_FORECAST_TEMPLATE_CONFIG
+
+DATASET_ID = GFS_FORECAST_TEMPLATE_CONFIG.dataset_id
 
 app = typer.Typer()
 
 
 @app.command()
 def update_template() -> None:
-    template.update_template()
+    GFS_FORECAST_TEMPLATE_CONFIG.update_template()
 
 
 @app.command()

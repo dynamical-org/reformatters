@@ -14,7 +14,7 @@ import sentry_sdk
 import xarray as xr
 import zarr
 
-from reformatters.common import docker, validation
+from reformatters.common import docker, template_utils, validation
 from reformatters.common.iterating import (
     consume,
     dimension_slices,
@@ -56,7 +56,7 @@ def reformat_local(time_end: DatetimeLike, chunk_filters: ChunkFilters) -> None:
     store = get_store()
 
     logger.info("Writing metadata")
-    template.write_metadata(template_ds, store, get_mode(store))
+    template_utils.write_metadata(template_ds, store, get_mode(store))
 
     logger.info("Starting reformat")
     # Process all chunks by setting worker_index=0 and worker_total=1
@@ -166,6 +166,17 @@ def reformat_chunks(
     },
 )
 def reformat_operational_update(job_name: str) -> None:
+    # get stores (final and tmp)
+    # figure out end time to process through, AND time slices to process to fill from existing through that
+    # for update slice in update slices:
+    #   prepare local tmp store to be written into
+    #   track and skip variables that are already processed (if this pod restarted)
+    #   process data chunks to local tmp store
+    #   track max coordinates of processed data
+    #   upload from tmp store to final store
+    #   modify template ds based on what was processed
+    #   write template ds and copy to final store
+    #
     append_dim = template.APPEND_DIMENSION
 
     final_store = get_store()
