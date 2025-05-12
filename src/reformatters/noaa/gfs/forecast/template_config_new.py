@@ -176,7 +176,6 @@ class GFSTemplateConfig(TemplateConfig):
         chunks = tuple(self.var_chunks[d] for d in self.dims)
         shards = tuple(self.var_shards[d] for d in self.dims)
 
-
         encoding_float32_default = Encoding(
             dtype="float32",
             fill_value=np.nan,
