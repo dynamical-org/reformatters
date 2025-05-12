@@ -16,83 +16,28 @@ type AppendDim = Literal["init_time", "time"]
 
 
 class TemplateConfig(BaseModel):
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def dataset_id(self) -> str:
-        return self.dataset_attributes.dataset_id
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def dataset_version(self) -> str:
-        return self.dataset_attributes.dataset_version
-
     dataset_attributes: DatasetAttributes
-
-    time_start: pd.Timestamp
-    time_frequency: pd.Timedelta
 
     dims: tuple[Dim, ...]
     append_dim: AppendDim
-
-    var_chunks: dict[Dim, int]
-    var_shards: dict[Dim, int]
+    append_dim_start: pd.Timestamp
+    append_dim_frequency: pd.Timedelta
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def coords(self) -> Sequence[Coordinate]:
-        """
-        Coordinate configs, computed from subclass's build_coords().
-        """
-        return self.build_coords()
+        raise NotImplementedError("Implement `coords` in your subclass")
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def data_vars(self) -> Sequence[DataVar[Any]]:
-        """
-        Must be overridden in subclass to return the module-level
-        DATA_VARIABLES constant for that dataset.
-        """
-        raise NotImplementedError("Subclass must supply .data_vars")
-
-    # --------------------------------------------------------------------
-    # automatically derive ordered chunks/shards tuples from the dicts + dims
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def var_chunks_ordered(self) -> tuple[int, ...]:
-        return tuple(self.var_chunks[d] for d in self.dims)
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def var_shards_ordered(self) -> tuple[int, ...]:
-        return tuple(self.var_shards[d] for d in self.dims)
-
-    def build_coords(self) -> Sequence[Coordinate]:
-        """
-        Subclasses must override this to return their Sequence[Coordinate],
-        e.g. by copying the old module‐level COORDINATES logic into here.
-        """
-        raise NotImplementedError("Subclass must implement build_coords()")
-
-    # --------------------------------------------------------------------
+        raise NotImplementedError("Implement `data_vars` in your subclass")
 
     def dimension_coordinates(self) -> dict[str, Any]:
         """
         Returns a dictionary of dimension names to coordinates for the dataset.
         """
-        raise NotImplementedError(
-            "Return a dictionary from dimension names to coordinate arrays"
-        )
-
-    def append_dim_coordinates(self, end: DatetimeLike) -> pd.DatetimeIndex:
-        """
-        Returns DatetimeIndex for the append dimension from the configured start time to the given end time.
-
-        Args:
-            end (DatetimeLike): End time (exclusive) for the coordinates
-        """
-        return pd.date_range(
-            self.time_start, end, freq=self.time_frequency, inclusive="left"
-        )
+        raise NotImplementedError("Implement `dimension_coordinates` in your subclass")
 
     def derive_coordinates(
         self, ds: xr.Dataset
@@ -112,6 +57,22 @@ class TemplateConfig(BaseModel):
                 f"Coordinates {missing} are defined in self.coords and should be derived in your template config's derive_coordinates method"
             )
         return {}
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def dataset_id(self) -> str:
+        return self.dataset_attributes.dataset_id
+
+    def append_dim_coordinates(self, end: DatetimeLike) -> pd.DatetimeIndex:
+        """
+        Returns DatetimeIndex for the append dimension from the configured start time to the given end time.
+
+        Args:
+            end (DatetimeLike): End time (exclusive) for the coordinates
+        """
+        return pd.date_range(
+            self.append_dim_start, end, freq=self.append_dim_frequency, inclusive="left"
+        )
 
     def get_template(self, end_time: pd.Timestamp) -> xr.Dataset:
         """

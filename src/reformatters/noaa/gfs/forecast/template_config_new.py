@@ -43,19 +43,9 @@ class GFSTemplateConfig(TemplateConfig):
     append_dim_start: pd.Timestamp = pd.Timestamp("2021-05-01T00:00")
     append_dim_frequency: pd.Timedelta = pd.Timedelta("6h")
 
-    var_chunks: dict[Dim, int] = {
-        "init_time": 1,
-        "lead_time": 105,
-        "latitude": 121,
-        "longitude": 121,
-    }
-    var_shards: dict[Dim, int] = {
-        "init_time": 1,
-        "lead_time": 105 * 2,
-        "latitude": 121 * 6,
-        "longitude": 121 * 6,
-    }
-
+    # TODO / Questions
+    # 1. should this be a computed field?
+    # 2. derive dataset attributes from the dimension coordinates?
     def dimension_coordinates(self) -> dict[str, Any]:
         """
         Returns a dictionary of dimension names to coordinates for the dataset.
@@ -97,6 +87,19 @@ class GFSTemplateConfig(TemplateConfig):
     def coords(self) -> Sequence[Coordinate]:
         dim_coords = self.dimension_coordinates()
 
+        # The init time dimension is our append dimension during updates.
+        # We also want coordinates to be in a single chunk for dataset open speed.
+        # By fixing the chunk size for coordinates along the append dimension to
+        # something much larger than we will really use, the array is always
+        # a fixed underlying chunk size and values in it can be safely updated
+        # prior to metadata document updates that increase the reported array size.
+        # This is a zarr format hack to allow expanding an array safely and requires
+        # that new array values are written strictly before new metadata is written
+        # (doing this correctly is a key benefit of icechunk).
+        init_time_coordinate_chunk_size = int(
+            pd.Timedelta(days=365 * 15) / self.append_dim_frequency
+        )
+
         return [
             Coordinate(
                 name=self.append_dim,
@@ -106,8 +109,8 @@ class GFSTemplateConfig(TemplateConfig):
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
                     calendar="proleptic_gregorian",
                     units="seconds since 1970-01-01 00:00:00",
-                    chunks=len(dim_coords[self.append_dim]),
-                    shards=len(dim_coords[self.append_dim]),
+                    chunks=init_time_coordinate_chunk_size,
+                    shards=init_time_coordinate_chunk_size,
                 ),
                 attrs=CoordinateAttrs(
                     units="seconds since 1970-01-01 00:00:00",
@@ -168,21 +171,124 @@ class GFSTemplateConfig(TemplateConfig):
                     ),
                 ),
             ),
+            Coordinate(
+                name="valid_time",
+                encoding=Encoding(
+                    dtype="int64",
+                    fill_value=0,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    calendar="proleptic_gregorian",
+                    units="seconds since 1970-01-01 00:00:00",
+                    chunks=(
+                        init_time_coordinate_chunk_size,
+                        len(dim_coords["lead_time"]),
+                    ),
+                    shards=(
+                        init_time_coordinate_chunk_size,
+                        len(dim_coords["lead_time"]),
+                    ),
+                ),
+                attrs=CoordinateAttrs(
+                    units="seconds since 1970-01-01 00:00:00",
+                    statistics_approximate=StatisticsApproximate(
+                        min=self.append_dim_start.isoformat(),
+                        max="Present + 16 days",
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="ingested_forecast_length",
+                encoding=Encoding(
+                    dtype="int64",
+                    fill_value=-1,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    units="seconds",
+                    chunks=init_time_coordinate_chunk_size,
+                    shards=init_time_coordinate_chunk_size,
+                ),
+                attrs=CoordinateAttrs(
+                    units="seconds",
+                    statistics_approximate=StatisticsApproximate(
+                        min=str(dim_coords["lead_time"].min()),
+                        max=str(dim_coords["lead_time"].max()),
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="expected_forecast_length",
+                encoding=Encoding(
+                    dtype="int64",
+                    fill_value=-1,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    units="seconds",
+                    chunks=init_time_coordinate_chunk_size,
+                    shards=init_time_coordinate_chunk_size,
+                ),
+                attrs=CoordinateAttrs(
+                    units="seconds",
+                    statistics_approximate=StatisticsApproximate(
+                        min=str(dim_coords["lead_time"].min()),
+                        max=str(dim_coords["lead_time"].max()),
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="spatial_ref",
+                encoding=Encoding(
+                    dtype="int64",
+                    fill_value=0,
+                    chunks=1,  # Scalar coordinate
+                    shards=1,
+                ),
+                attrs=CoordinateAttrs(
+                    units="unitless",
+                    statistics_approximate=StatisticsApproximate(
+                        min=0,
+                        max=0,
+                    ),
+                    # Deterived by running `ds.rio.write_crs("+proj=longlat +a=6371229 +b=6371229 +no_defs +type=crs")["spatial_ref"].attrs
+                    crs_wkt='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
+                    semi_major_axis=6371229.0,
+                    semi_minor_axis=6371229.0,
+                    inverse_flattening=0.0,
+                    reference_ellipsoid_name="unknown",
+                    longitude_of_prime_meridian=0.0,
+                    prime_meridian_name="Greenwich",
+                    geographic_crs_name="unknown",
+                    horizontal_datum_name="unknown",
+                    grid_mapping_name="latitude_longitude",
+                    spatial_ref='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
+                    comment="This coordinate reference system matches the source data which follows WMO conventions of assuming the earth is a perfect sphere with a radius of 6,371,229m. It is similar to EPSG:4326, but EPSG:4326 uses a more accurate representation of the earth's shape.",
+                ),
+            ),
         ]
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def data_vars(self) -> Sequence[DataVar[Any]]:
-        chunks = tuple(self.var_chunks[d] for d in self.dims)
-        shards = tuple(self.var_shards[d] for d in self.dims)
+        var_chunks: dict[Dim, int] = {
+            "init_time": 1,
+            "lead_time": 105,
+            "latitude": 121,
+            "longitude": 121,
+        }
+        var_shards: dict[Dim, int] = {
+            "init_time": 1,
+            "lead_time": 105 * 2,
+            "latitude": 121 * 6,
+            "longitude": 121 * 6,
+        }
 
         encoding_float32_default = Encoding(
             dtype="float32",
             fill_value=np.nan,
-            chunks=chunks,
-            shards=shards,
+            chunks=tuple(var_chunks[d] for d in self.dims),
+            shards=tuple(var_shards[d] for d in self.dims),
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
+
+        default_keep_mantissa_bits = 7
+
         return [
             NOAADataVar(
                 name="pressure_surface",
@@ -217,7 +323,7 @@ class GFSTemplateConfig(TemplateConfig):
                     grib_description='2[m] HTGL="Specified height level above ground"',
                     grib_index_level="2 m above ground",
                     index_position=580,
-                    keep_mantissa_bits=7,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             NOAADataVar(
@@ -235,7 +341,7 @@ class GFSTemplateConfig(TemplateConfig):
                     grib_description='2[m] HTGL="Specified height level above ground"',
                     grib_index_level="2 m above ground",
                     index_position=583,
-                    keep_mantissa_bits=7,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             NOAADataVar(
@@ -252,7 +358,7 @@ class GFSTemplateConfig(TemplateConfig):
                     grib_description='2[m] HTGL="Specified height level above ground"',
                     grib_index_level="2 m above ground",
                     index_position=585,
-                    keep_mantissa_bits=7,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             NOAADataVar(
@@ -269,7 +375,7 @@ class GFSTemplateConfig(TemplateConfig):
                     grib_description='2[m] HTGL="Specified height level above ground"',
                     grib_index_level="2 m above ground",
                     index_position=586,
-                    keep_mantissa_bits=7,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             NOAADataVar(
@@ -358,7 +464,7 @@ class GFSTemplateConfig(TemplateConfig):
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
                     index_position=590,
-                    keep_mantissa_bits=7,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             NOAADataVar(
@@ -378,7 +484,7 @@ class GFSTemplateConfig(TemplateConfig):
                     index_position=595,
                     include_lead_time_suffix=True,
                     deaccumulate_to_rates=True,
-                    keep_mantissa_bits=7,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             NOAADataVar(
@@ -463,7 +569,7 @@ class GFSTemplateConfig(TemplateConfig):
                     grib_description='0[-] EATM="Entire atmosphere (considered as a single layer)"',
                     grib_index_level="entire atmosphere (considered as a single layer)",
                     index_position=625,
-                    keep_mantissa_bits=7,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             NOAADataVar(
@@ -480,7 +586,7 @@ class GFSTemplateConfig(TemplateConfig):
                     grib_description='0[-] EATM="Entire Atmosphere"',
                     grib_index_level="entire atmosphere",
                     index_position=635,
-                    keep_mantissa_bits=7,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             NOAADataVar(
@@ -515,7 +621,7 @@ class GFSTemplateConfig(TemplateConfig):
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
                     index_position=652,
-                    keep_mantissa_bits=7,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             NOAADataVar(
@@ -532,7 +638,7 @@ class GFSTemplateConfig(TemplateConfig):
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
                     index_position=653,
-                    keep_mantissa_bits=7,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             NOAADataVar(
