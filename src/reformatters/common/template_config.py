@@ -6,7 +6,7 @@ from typing import Any, Generic, Literal, TypeVar
 import numpy as np
 import pandas as pd
 import xarray as xr
-from pydantic import ConfigDict, computed_field, GenericModel
+from pydantic import ConfigDict, GenericModel, computed_field
 
 from reformatters.common import template_utils
 from reformatters.common.config_models import (
