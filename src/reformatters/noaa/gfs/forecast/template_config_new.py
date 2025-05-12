@@ -42,18 +42,18 @@ class GFSTemplateConfig(TemplateConfig):
     time_frequency: pd.Timedelta = pd.Timedelta("6h")
 
     # dims and append_dim
-    dims: tuple[Dim, ...] = ("append_dim", "lead_time", "latitude", "longitude")
-    append_dim: AppendDim = "append_dim"
+    dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
+    append_dim: AppendDim = "init_time"
 
     # raw chunk & shard maps
     var_chunks: dict[Dim, int] = {
-        "append_dim": 1,
+        "init_time": 1,
         "lead_time": 105,
         "latitude": 121,
         "longitude": 121,
     }
     var_shards: dict[Dim, int] = {
-        "append_dim": 1,
+        "init_time": 1,
         "lead_time": 105 * 2,
         "latitude": 121 * 6,
         "longitude": 121 * 6,
@@ -61,7 +61,6 @@ class GFSTemplateConfig(TemplateConfig):
 
     # --------------------------------------------------------------------
     # now build coords *inside* the class via a computed_field
-    @computed_field  # type: ignore[prop-decorator]
     @property
     def coords(self) -> Sequence[Coordinate]:
         # 1) build raw numpy/pandas arrays for each dim
@@ -95,7 +94,7 @@ class GFSTemplateConfig(TemplateConfig):
                     shards=len(arr),
                 )
                 attrs = CoordinateAttrs(
-                    units=enc.units,
+                    units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
                         min=str(arr.min()), max="Present"
                     ),
@@ -110,7 +109,7 @@ class GFSTemplateConfig(TemplateConfig):
                     shards=len(arr),
                 )
                 attrs = CoordinateAttrs(
-                    units=enc.units,
+                    units="seconds",
                     statistics_approximate=StatisticsApproximate(
                         min=str(arr.min()), max=str(arr.max())
                     ),
@@ -134,7 +133,6 @@ class GFSTemplateConfig(TemplateConfig):
 
     # --------------------------------------------------------------------
     # similarly, build data_vars inside the class
-    @computed_field  # type: ignore[prop-decorator]
     @property
     def data_vars(self) -> Sequence[DataVar[Any]]:
         base_chunks = tuple(self.var_chunks[d] for d in self.dims)
