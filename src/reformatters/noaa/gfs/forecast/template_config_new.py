@@ -449,16 +449,9 @@ class GFSTemplateConfig(TemplateConfig):
                     keep_mantissa_bits="no-rounding",
                 ),
             ),
-            # finish replacing manual encoding def with encoding_float32_default in all the rest of this list AI!
             NOAADataVar(
                 name="precipitable_water_atmosphere",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="pwat",
                     long_name="Precipitable water",
@@ -475,13 +468,7 @@ class GFSTemplateConfig(TemplateConfig):
             ),
             NOAADataVar(
                 name="total_cloud_cover_atmosphere",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="tcc",
                     long_name="Total Cloud Cover",
@@ -498,13 +485,7 @@ class GFSTemplateConfig(TemplateConfig):
             ),
             NOAADataVar(
                 name="geopotential_height_cloud_ceiling",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="gh",
                     long_name="Geopotential height",
@@ -522,13 +503,7 @@ class GFSTemplateConfig(TemplateConfig):
             ),
             NOAADataVar(
                 name="downward_short_wave_radiation_flux_surface",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="sdswrf",
                     long_name="Surface downward short-wave radiation flux",
@@ -545,13 +520,7 @@ class GFSTemplateConfig(TemplateConfig):
             ),
             NOAADataVar(
                 name="downward_long_wave_radiation_flux_surface",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="sdlwrf",
                     long_name="Surface downward long-wave radiation flux",
@@ -568,13 +537,7 @@ class GFSTemplateConfig(TemplateConfig):
             ),
             NOAADataVar(
                 name="pressure_reduced_to_mean_sea_level",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="prmsl",
                     long_name="Pressure reduced to MSL",
