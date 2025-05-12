@@ -20,6 +20,7 @@ type Dim = Literal[
     "time", "init_time", "ensemble_member", "lead_time", "latitude", "longitude"
 ]
 type AppendDim = Literal["init_time", "time"]
+# check that all the append dim literal value possibilities are in the Dim union AI!
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 
