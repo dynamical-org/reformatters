@@ -16,12 +16,12 @@ from reformatters.common.config_models import (
     StatisticsApproximate,
 )
 from reformatters.common.template_config import AppendDim, Dim, TemplateConfig
-from reformatters.common.types import DatetimeLike
 from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
 from reformatters.noaa.noaa_config_models import NOAADataVar, NOAAInternalAttrs
+
 
 class GFSTemplateConfig(TemplateConfig):
     # ── Everything is now declared here inside the class ──────────────────────
@@ -67,10 +67,13 @@ class GFSTemplateConfig(TemplateConfig):
         # 1) build raw numpy/pandas arrays for each dim
         end = self.time_start + self.time_frequency
         dim_coords: dict[str, Any] = {
-            self.append_dim: pd.date_range(self.time_start, end, freq=self.time_frequency, inclusive="left"),
+            self.append_dim: pd.date_range(
+                self.time_start, end, freq=self.time_frequency, inclusive="left"
+            ),
             "lead_time": (
-                pd.timedelta_range("0h", "120h", freq="1h")
-                .union(pd.timedelta_range("123h", "384h", freq="3h"))
+                pd.timedelta_range("0h", "120h", freq="1h").union(
+                    pd.timedelta_range("123h", "384h", freq="3h")
+                )
             ),
             "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
             "longitude": np.arange(-180, 180, 0.25),
@@ -93,7 +96,9 @@ class GFSTemplateConfig(TemplateConfig):
                 )
                 attrs = CoordinateAttrs(
                     units=enc.units,
-                    statistics_approximate=StatisticsApproximate(min=str(arr.min()), max="Present"),
+                    statistics_approximate=StatisticsApproximate(
+                        min=str(arr.min()), max="Present"
+                    ),
                 )
             elif dim == "lead_time":
                 enc = Encoding(
@@ -106,7 +111,9 @@ class GFSTemplateConfig(TemplateConfig):
                 )
                 attrs = CoordinateAttrs(
                     units=enc.units,
-                    statistics_approximate=StatisticsApproximate(min=str(arr.min()), max=str(arr.max())),
+                    statistics_approximate=StatisticsApproximate(
+                        min=str(arr.min()), max=str(arr.max())
+                    ),
                 )
             else:  # latitude/longitude
                 enc = Encoding(
@@ -118,7 +125,9 @@ class GFSTemplateConfig(TemplateConfig):
                 )
                 attrs = CoordinateAttrs(
                     units="degrees_north" if dim == "latitude" else "degrees_east",
-                    statistics_approximate=StatisticsApproximate(min=float(arr.min()), max=float(arr.max())),
+                    statistics_approximate=StatisticsApproximate(
+                        min=float(arr.min()), max=float(arr.max())
+                    ),
                 )
             out.append(Coordinate(name=dim, encoding=enc, attrs=attrs))
         return out
@@ -627,6 +636,7 @@ class GFSTemplateConfig(TemplateConfig):
                 ),
             ),
         ]
+
     # --------------------------------------------------------------------
 
     def dimension_coordinates(self) -> dict[str, Any]:
@@ -635,10 +645,13 @@ class GFSTemplateConfig(TemplateConfig):
         """
         end = self.time_start + self.time_frequency
         return {
-            self.append_dim: pd.date_range(self.time_start, end, freq=self.time_frequency, inclusive="left"),
+            self.append_dim: pd.date_range(
+                self.time_start, end, freq=self.time_frequency, inclusive="left"
+            ),
             "lead_time": (
-                pd.timedelta_range("0h", "120h", freq="1h")
-                .union(pd.timedelta_range("123h", "384h", freq="3h"))
+                pd.timedelta_range("0h", "120h", freq="1h").union(
+                    pd.timedelta_range("123h", "384h", freq="3h")
+                )
             ),
             "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
             "longitude": np.arange(-180, 180, 0.25),
