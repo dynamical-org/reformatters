@@ -2,13 +2,12 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from reformatters.noaa.gfs.forecast.template_config import GFS_FORECAST_TEMPLATE_CONFIG
 from reformatters.common.template_config import SPATIAL_REF_COORDS
-from reformatters.noaa.gfs.forecast.template_config import (
-    GFS_FORECAST_TEMPLATE_CONFIG as cfg,
-)
 
 
 def test_dataset_attributes():
+    cfg = GFS_FORECAST_TEMPLATE_CONFIG
     attrs = cfg.dataset_attributes
     assert attrs.dataset_id == "noaa-gfs-forecast"
     assert attrs.dataset_version == "0.1.0"
@@ -19,6 +18,7 @@ def test_dataset_attributes():
 
 
 def test_dimension_coordinates_shapes_and_values():
+    cfg = GFS_FORECAST_TEMPLATE_CONFIG
     dc = cfg.dimension_coordinates()
     # must have exactly these four dims
     assert set(dc) == {"init_time", "lead_time", "latitude", "longitude"}
@@ -49,6 +49,7 @@ def test_dimension_coordinates_shapes_and_values():
 
 
 def test_derive_coordinates_and_spatial_ref():
+    cfg = GFS_FORECAST_TEMPLATE_CONFIG
     dc = cfg.dimension_coordinates()
     ds = xr.Dataset(coords=dc)
     derived = cfg.derive_coordinates(ds)
@@ -80,6 +81,7 @@ def test_derive_coordinates_and_spatial_ref():
 
 
 def test_coords_property_order_and_names():
+    cfg = GFS_FORECAST_TEMPLATE_CONFIG
     names = [c.name for c in cfg.coords]
     assert names == [
         "init_time",
