@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import Literal
 
 import pandas as pd
 import pytest
@@ -27,9 +28,6 @@ class DummyCoordinate(Coordinate):
 
 class DummyDatasetAttributes(DatasetAttributes):
     pass
-
-
-from typing import Literal
 
 
 class SimpleConfig(TemplateConfig[DummyDataVar]):
