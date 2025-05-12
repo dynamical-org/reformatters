@@ -652,8 +652,6 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
     def get_template(self, end_time: DatetimeLike) -> xr.Dataset:
         ds = super().get_template(end_time)
 
-        # Remove this whole subclass implementation of get_template and instead in the cli integration test monkey patch the implementation to do the same filtering as below but just in the test AI!
-
         if not Config.is_prod:
             # Include a variable with:
             # - avg step_type

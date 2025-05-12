@@ -26,12 +26,7 @@ SPATIAL_REF_COORDS = ((), np.array(0))
 
 
 class TemplateConfig(BaseModel, Generic[DATA_VAR]):
-    """
-    Base class for the configuration details of a dataset.
-    Define a subclass to configure the structure of a dataset.
-    """
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    """Define a subclass of this class to configure the structure of a dataset."""
 
     dims: tuple[Dim, ...]
     append_dim: AppendDim
@@ -54,9 +49,7 @@ class TemplateConfig(BaseModel, Generic[DATA_VAR]):
         raise NotImplementedError("Implement `data_vars` in your subclass")
 
     def dimension_coordinates(self) -> dict[str, Any]:
-        """
-        Returns a dictionary of dimension names to coordinates for the dataset.
-        """
+        """Returns a dictionary of dimension names to coordinates for the dataset."""
         raise NotImplementedError("Implement `dimension_coordinates` in your subclass")
 
     def derive_coordinates(
@@ -74,7 +67,9 @@ class TemplateConfig(BaseModel, Generic[DATA_VAR]):
             "spatial_ref": SPATIAL_REF_COORDS,
         }
 
-    # ----- Most subclasses will not need to override the following methods -----
+    # ----- Most subclasses will not need to override the attributes and methods below -----
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True, strict=True)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
