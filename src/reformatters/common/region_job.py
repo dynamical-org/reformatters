@@ -7,6 +7,7 @@ from zarr.storage import FsspecStore
 
 from reformatters.common.config_models import DataVar
 from reformatters.common.template_config import AppendDim
+from typing import Annotated
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 
@@ -16,7 +17,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
     append_dim: AppendDim
-    region: slice  # pydantic annotated slice of ints AI!
+    region: Annotated[
+        slice,
+        pydantic.Field(
+            ...,
+            description="slice whose start/stop/step must be integers or None",
+        )
+    ]
     max_vars_per_backfill_job: int
 
     def process(self) -> None:
