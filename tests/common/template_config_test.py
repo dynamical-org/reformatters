@@ -4,20 +4,24 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.common.config_models import Coordinate, DatasetAttributes, DataVar
 from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
     TemplateConfig,
 )
-from reformatters.common.config_models import DataVar, Coordinate, DatasetAttributes
+
 
 class DummyDataVar(DataVar[int]):
     pass
 
+
 class DummyCoordinate(Coordinate):
     pass
 
+
 class DummyDatasetAttributes(DatasetAttributes):
     pass
+
 
 class SimpleConfig(TemplateConfig[DummyDataVar]):
     """A minimal concrete implementation to test the happy‐path logic."""
@@ -72,7 +76,9 @@ def test_dataset_id_property(simple_cfg: SimpleConfig) -> None:
     assert simple_cfg.dataset_id == "simple_dataset"
 
 
-def test_append_dim_coordinates_left_inclusive_right_exclusive(simple_cfg: SimpleConfig) -> None:
+def test_append_dim_coordinates_left_inclusive_right_exclusive(
+    simple_cfg: SimpleConfig,
+) -> None:
     # up to but not including 2000-01-05
     end = pd.Timestamp("2000-01-05")
     got = simple_cfg.append_dim_coordinates(end)
@@ -88,7 +94,9 @@ def test_append_dim_coordinates_left_inclusive_right_exclusive(simple_cfg: Simpl
         (2030, max(2025 - 2030 + 15, 10)),
     ],
 )
-def test_append_dim_coordinate_chunk_size_varies_with_start(start_year: int, expected_years: int) -> None:
+def test_append_dim_coordinate_chunk_size_varies_with_start(
+    start_year: int, expected_years: int
+) -> None:
     class C(SimpleConfig):
         append_dim_start: pd.Timestamp = pd.Timestamp(f"{start_year}-01-01")
 
@@ -103,7 +111,9 @@ def test_append_dim_coordinate_chunk_size_varies_with_start(start_year: int, exp
     assert inst.append_dim_coordinate_chunk_size() == expected
 
 
-def test_default_derive_coordinates_returns_spatial_ref(simple_cfg: SimpleConfig) -> None:
+def test_default_derive_coordinates_returns_spatial_ref(
+    simple_cfg: SimpleConfig,
+) -> None:
     ds = xr.Dataset()
     coords = simple_cfg.derive_coordinates(ds)
     # only the spatial_ref key should be present
