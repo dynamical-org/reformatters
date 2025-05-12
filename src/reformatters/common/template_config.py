@@ -37,7 +37,13 @@ class TemplateConfig(BaseModel):
     var_chunks: dict[Dim, int]
     var_shards: dict[Dim, int]
 
-    coords: Sequence[Coordinate]
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def coords(self) -> Sequence[Coordinate]:
+        """
+        Coordinate configs, computed from subclass's build_coords().
+        """
+        return self.build_coords()
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -59,6 +65,13 @@ class TemplateConfig(BaseModel):
     @property
     def var_shards_ordered(self) -> tuple[int, ...]:
         return tuple(self.var_shards[d] for d in self.dims)
+
+    def build_coords(self) -> Sequence[Coordinate]:
+        """
+        Subclasses must override this to return their Sequence[Coordinate],
+        e.g. by copying the old module‐level COORDINATES logic into here.
+        """
+        raise NotImplementedError("Subclass must implement build_coords()")
 
     # --------------------------------------------------------------------
 
