@@ -30,7 +30,7 @@ from reformatters.common.zarr import (
 from reformatters.noaa.noaa_config_models import NOAADataVar, NOAAInternalAttrs
 
 
-class GFSForecastTemplateConfig(TemplateConfig):
+class GFSForecastTemplateConfig(TemplateConfig[NOAAInternalAttrs]):
     dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
     append_dim: AppendDim = "init_time"
     append_dim_start: pd.Timestamp = pd.Timestamp("2021-05-01T00:00")
@@ -267,7 +267,7 @@ class GFSForecastTemplateConfig(TemplateConfig):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def data_vars(self) -> Sequence[DataVar[Any]]:
+    def data_vars(self) -> Sequence[DataVar[NOAAInternalAttrs]]:
         var_chunks: dict[Dim, int] = {
             "init_time": 1,
             "lead_time": 105,

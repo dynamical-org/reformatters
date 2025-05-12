@@ -9,17 +9,21 @@ import xarray as xr
 from pydantic import BaseModel, ConfigDict, computed_field
 
 from reformatters.common import template_utils
-from reformatters.common.config_models import Coordinate, DatasetAttributes, DataVar
+from typing import TypeVar, Generic
+from pydantic.generics import GenericModel
+from reformatters.common.config_models import Coordinate, DatasetAttributes, DataVar, BaseInternalAttrs
 from reformatters.common.types import DatetimeLike
 
 type Dim = Literal["init_time", "ensemble_member", "lead_time", "latitude", "longitude"]
 type AppendDim = Literal["init_time", "time"]
 
+INTERNAL_ATTRS = TypeVar("INTERNAL_ATTRS", bound=BaseInternalAttrs)
+
 # Value is ignored, coordinate reference system metadata is stored in attributes
 SPATIAL_REF_COORDS = ((), np.array(0))
 
 
-class TemplateConfig(BaseModel):
+class TemplateConfig(GenericModel, Generic[INTERNAL_ATTRS]):
     """
     Base class for the configuration details of a dataset.
     Define a subclass to configure the structure of a dataset.
@@ -44,7 +48,7 @@ class TemplateConfig(BaseModel):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def data_vars(self) -> Sequence[DataVar[Any]]:
+    def data_vars(self) -> Sequence[DataVar[INTERNAL_ATTRS]]:
         raise NotImplementedError("Implement `data_vars` in your subclass")
 
     def dimension_coordinates(self) -> dict[str, Any]:
