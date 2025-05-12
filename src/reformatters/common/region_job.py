@@ -16,7 +16,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
     append_dim: AppendDim
-    region: slice
+    region: Annotated[slice[int | None, int | None, int | None], ]
     max_vars_per_backfill_job: int
 
     def process(self) -> None:
@@ -36,7 +36,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         else:
             return 1
 
-    # implement an equivalent Annotation on the region field with a lambda AI!
     @pydantic.field_validator("region")
     def _validate_region_is_int_slice(self, s: slice) -> slice:
         assert isinstance(s.start, int)
