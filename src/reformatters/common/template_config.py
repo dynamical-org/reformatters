@@ -110,7 +110,9 @@ class TemplateConfig(BaseModel):
         Returns:
             xr.Dataset: Template dataset with dimension coordinates
         """
-        ds: xr.Dataset = xr.open_zarr(self.template_path(__file__), decode_timedelta=True)
+        ds: xr.Dataset = xr.open_zarr(
+            self.template_path(__file__), decode_timedelta=True
+        )
 
         # Expand init_time dimension with complete coordinates
         ds = template_utils.empty_copy_with_reindex(
