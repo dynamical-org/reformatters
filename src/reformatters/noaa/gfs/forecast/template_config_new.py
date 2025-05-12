@@ -176,7 +176,6 @@ class GFSTemplateConfig(TemplateConfig):
         chunks = tuple(self.var_chunks[d] for d in self.dims)
         shards = tuple(self.var_shards[d] for d in self.dims)
 
-        # use this everywhere it should go in the list below AI!
 
         encoding_float32_default = Encoding(
             dtype="float32",
@@ -188,13 +187,7 @@ class GFSTemplateConfig(TemplateConfig):
         return [
             NOAADataVar(
                 name="pressure_surface",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=chunks,
-                    shards=shards,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                ),
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="sp",
                     long_name="Surface pressure",
