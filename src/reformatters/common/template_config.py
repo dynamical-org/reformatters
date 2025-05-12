@@ -16,7 +16,9 @@ from reformatters.common.config_models import (
 )
 from reformatters.common.types import DatetimeLike
 
-type Dim = Literal["init_time", "ensemble_member", "lead_time", "latitude", "longitude"]
+type Dim = Literal[
+    "time", "init_time", "ensemble_member", "lead_time", "latitude", "longitude"
+]
 type AppendDim = Literal["init_time", "time"]
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])

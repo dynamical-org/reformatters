@@ -1,6 +1,7 @@
 from types import SimpleNamespace
-from typing import Literal
+from typing import Any
 
+import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
@@ -14,6 +15,8 @@ from reformatters.common.config_models import (
 )
 from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
+    AppendDim,
+    Dim,
     TemplateConfig,
 )
 
@@ -33,8 +36,8 @@ class DummyDatasetAttributes(DatasetAttributes):
 class SimpleConfig(TemplateConfig[DummyDataVar]):
     """A minimal concrete implementation to test the happy‐path logic."""
 
-    dims: tuple[Literal["time"], ...] = ("time",)
-    append_dim: Literal["time"] = "time"
+    dims: tuple[Dim, ...] = ("time",)  # type: ignore
+    append_dim: AppendDim = "time"
     append_dim_start: pd.Timestamp = pd.Timestamp("2000-01-01")
     append_dim_frequency: pd.Timedelta = pd.Timedelta(days=1)
 
@@ -57,7 +60,7 @@ class SimpleConfig(TemplateConfig[DummyDataVar]):
 
     def derive_coordinates(
         self, ds: xr.Dataset
-    ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], object]]:
+    ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
         # exercise the base‐class fallback (which only adds spatial_ref)
         return super().derive_coordinates(ds)
 
@@ -74,7 +77,7 @@ class BadCoordsConfig(SimpleConfig):
 @pytest.fixture
 def simple_cfg() -> SimpleConfig:
     return SimpleConfig(
-        dims=("time",),
+        dims=("time",),  # type: ignore[arg-type]
         append_dim="time",
         append_dim_start=pd.Timestamp("2000-01-01"),
         append_dim_frequency=pd.Timedelta(days=1),
@@ -110,7 +113,7 @@ def test_append_dim_coordinate_chunk_size_varies_with_start(
         append_dim_start: pd.Timestamp = pd.Timestamp(f"{start_year}-01-01")
 
     inst = C(
-        dims=("time",),
+        dims=("time",),  # type: ignore[arg-type]
         append_dim="time",
         append_dim_start=pd.Timestamp(f"{start_year}-01-01"),
         append_dim_frequency=pd.Timedelta(days=1),
@@ -132,7 +135,7 @@ def test_default_derive_coordinates_returns_spatial_ref(
 
 def test_derive_coordinates_raises_if_coords_not_returned() -> None:
     bad = BadCoordsConfig(
-        dims=("time",),
+        dims=("time",),  # type: ignore[arg-type]
         append_dim="time",
         append_dim_start=pd.Timestamp("2000-01-01"),
         append_dim_frequency=pd.Timedelta(days=1),
