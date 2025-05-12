@@ -16,12 +16,6 @@ type AppendDim = Literal["init_time", "time"]
 
 
 class TemplateConfig(BaseModel):
-    """Base class for dataset template configuration.
-
-    Subclasses should define all constants from template_config.py files as properties/attributes,
-    using lowercase naming. Instead of using "time" or "init_time" directly, use "append_dim" for field names.
-    """
-
     @computed_field  # type: ignore[prop-decorator]
     @property
     def dataset_id(self) -> str:
@@ -144,5 +138,5 @@ class TemplateConfig(BaseModel):
 
         template_utils.write_metadata(ds, self.template_path(), mode="w")
 
-    def template_path(self) -> Path:
-        return Path(__file__).parent / "templates" / "latest.zarr"
+    def template_path(self, template_config_file_path: str) -> Path:
+        return Path(template_config_file_path).parent / "templates" / "latest.zarr"
