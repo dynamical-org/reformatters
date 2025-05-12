@@ -1,22 +1,21 @@
-
-from typing import Any, Sequence
-from pathlib import Path
+from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 import pandas as pd
 import xarray as xr
 from pydantic import computed_field
 
-from reformatters.common.template_config import TemplateConfig, Dim, AppendDim
 from reformatters.common.config_models import (
-    DatasetAttributes,
     Coordinate,
     CoordinateAttrs,
+    DatasetAttributes,
     DataVar,
     DataVarAttrs,
     Encoding,
     StatisticsApproximate,
 )
+from reformatters.common.template_config import AppendDim, Dim, TemplateConfig
 from reformatters.common.types import DatetimeLike
 from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
@@ -51,6 +50,7 @@ VAR_SHARDS: dict[Dim, int] = {
     "longitude": VAR_CHUNKS["longitude"] * 6,
 }
 
+
 # coordinate arrays
 def _get_template_dim_coords(end: DatetimeLike) -> dict[str, Any]:
     return {
@@ -66,6 +66,7 @@ def _get_template_dim_coords(end: DatetimeLike) -> dict[str, Any]:
         "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
         "longitude": np.arange(-180, 180, 0.25),
     }
+
 
 # coordinate‐metadata
 _dim_coords = _get_template_dim_coords(INIT_TIME_START + INIT_TIME_FREQUENCY)
@@ -149,8 +150,14 @@ COORDINATES: Sequence[Coordinate] = (
             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
             calendar="proleptic_gregorian",
             units="seconds since 1970-01-01 00:00:00",
-            chunks=(int(pd.Timedelta(days=365 * 15) / INIT_TIME_FREQUENCY), len(_dim_coords["lead_time"])),
-            shards=(int(pd.Timedelta(days=365 * 15) / INIT_TIME_FREQUENCY), len(_dim_coords["lead_time"])),
+            chunks=(
+                int(pd.Timedelta(days=365 * 15) / INIT_TIME_FREQUENCY),
+                len(_dim_coords["lead_time"]),
+            ),
+            shards=(
+                int(pd.Timedelta(days=365 * 15) / INIT_TIME_FREQUENCY),
+                len(_dim_coords["lead_time"]),
+            ),
         ),
         attrs=CoordinateAttrs(
             units="seconds since 1970-01-01 00:00:00",
@@ -734,11 +741,12 @@ DATASET_ATTRIBUTES = DatasetAttributes(
     spatial_domain="Global",
     spatial_resolution="0.25 degrees (~20km)",
     time_domain=f"Forecasts initialized {INIT_TIME_START} UTC to Present",
-    time_resolution=f"Forecasts initialized every {int(INIT_TIME_FREQUENCY.total_seconds()/3600)} hours.",
+    time_resolution=f"Forecasts initialized every {int(INIT_TIME_FREQUENCY.total_seconds() / 3600)} hours.",
     forecast_domain="Forecast lead time 0-384 hours (0-16 days) ahead",
     forecast_resolution="Forecast step 0-120 hours: hourly, 123-384 hours: 3 hourly",
 )
 # -----------------------------------------------------------------------------
+
 
 class GFSTemplateConfig(TemplateConfig):
     # raw inputs

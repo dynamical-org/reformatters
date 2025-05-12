@@ -62,6 +62,7 @@ class TemplateConfig(BaseModel):
     @property
     def var_shards_ordered(self) -> tuple[int, ...]:
         return tuple(self.var_shards[d] for d in self.dims)
+
     # --------------------------------------------------------------------
 
     def dimension_coordinates(self) -> dict[str, Any]:
