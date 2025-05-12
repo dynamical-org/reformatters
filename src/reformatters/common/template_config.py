@@ -16,6 +16,7 @@ type AppendDim = Literal["init_time", "time"]
 
 
 class TemplateConfig(BaseModel):
+    # AI also make this a computed field
     dataset_attributes: DatasetAttributes
 
     dims: tuple[Dim, ...]

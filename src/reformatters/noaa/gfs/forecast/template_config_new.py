@@ -24,6 +24,7 @@ from reformatters.noaa.noaa_config_models import NOAADataVar, NOAAInternalAttrs
 
 
 class GFSTemplateConfig(TemplateConfig):
+    # As you make this a computed field, make the time_domain and time_resolution derived from append_dim_start and append_dim_frequency AI!
     dataset_attributes: DatasetAttributes = DatasetAttributes(
         dataset_id="noaa-gfs-forecast",
         dataset_version="0.1.0",
