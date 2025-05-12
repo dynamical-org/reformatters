@@ -3,6 +3,7 @@ from typing import Annotated, Any, Generic, TypeVar
 
 import pydantic
 import xarray as xr
+from pydantic.functional_validators import AfterValidator
 from zarr.storage import FsspecStore
 
 from reformatters.common.config_models import DataVar
@@ -16,7 +17,14 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
     append_dim: AppendDim
-    region: Annotated[slice[int | None, int | None, int | None],]
+    region: Annotated[
+        slice,
+        AfterValidator(
+            lambda s: isinstance(s.start, int)
+            and isinstance(s.stop, int)
+            and s.step is None
+        ),
+    ]
     max_vars_per_backfill_job: int
 
     def process(self) -> None:
@@ -24,21 +32,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
 
     def region_template_ds(self) -> xr.Dataset:
         var_names = [v.name for v in self.data_vars]
-        # select only those variables and then index the append_dimension
-        return self.template_ds[var_names].isel({self.append_dimension: self.region})
+        return self.template_ds[var_names].isel({self.append_dim: self.region})
 
     def get_processing_group_size(self) -> int:
-        n = len(self.data_vars)
-        if n > 6:
-            return 4
-        elif n > 3:
-            return 2
-        else:
-            return 1
-
-    @pydantic.field_validator("region")
-    def _validate_region_is_int_slice(self, s: slice) -> slice:
-        assert isinstance(s.start, int)
-        assert isinstance(s.stop, int)
-        assert s.step is None
-        return s
+        match len(self.data_vars):
+            case n if n > 6:
+                return 4
+            case n if n > 3:
+                return 2
+            case _:
+                return 1
