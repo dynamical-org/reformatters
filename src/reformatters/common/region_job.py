@@ -84,7 +84,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
                         data_var, coords_and_paths
                     )
                 # cleanup local files
-                for coord, path in coords_and_paths:
+                for _coord, path in coords_and_paths:
                     if path is not None:
                         path.unlink()
             return results
