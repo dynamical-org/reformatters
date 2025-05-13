@@ -1,5 +1,5 @@
 import os
-from collections.abc import Generator, Mapping, Sequence
+from collections.abc import Generator, Iterator, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import contextmanager
 from enum import Enum, auto
@@ -105,7 +105,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
     def get_processing_region(self, original_slice: slice) -> slice:
         return original_slice
 
-    def group_data_vars(self, chunk_ds: xr.Dataset) -> Sequence[Sequence[DATA_VAR]]:
+    def group_data_vars(self, chunk_ds: xr.Dataset) -> Iterator[Sequence[DATA_VAR]]:
         from itertools import batched
 
         return batched(self.data_vars, self.max_vars_per_backfill_job)
@@ -120,7 +120,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
     def download_file(self, coord: SourceFileCoord) -> Path | None:
         raise NotImplementedError("Subclasses must implement download_file")
 
-    def read_data(self, coord: SourceFileCoord) -> Any:
+    def read_data(
+        self,
+        coord: SourceFileCoord,
+        *,
+        out: xr.DataArray,
+        data_var: DATA_VAR,
+    ) -> Any:
         raise NotImplementedError("Subclasses must implement read_data")
 
     def apply_data_transformations(
@@ -193,7 +199,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
     ) -> tuple[xr.DataArray, xr.DataArray]:
         from reformatters.common.reformat_utils import create_data_array_and_template
 
-        return create_data_array_and_template(chunk_ds, data_var, shared_buffer)
+        return create_data_array_and_template(chunk_ds, data_var.name, shared_buffer)
 
     def _read_into_data_array(
         self,
@@ -227,10 +233,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         consume(
             write_shards(
                 data_array_template,
-                shared_buffer,
-                self.append_dim,
-                chunk_ds,
                 store,
+                shared_buffer,
                 ProcessPoolExecutor(max_workers=os.cpu_count() or 1),
             )
         )
