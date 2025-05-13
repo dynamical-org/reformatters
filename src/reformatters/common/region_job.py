@@ -230,11 +230,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         from reformatters.common.iterating import consume
         from reformatters.common.reformat_utils import write_shards
 
-        consume(
-            write_shards(
-                data_array_template,
-                store,
-                shared_buffer,
-                ProcessPoolExecutor(max_workers=os.cpu_count() or 1),
-            )
+        write_shards(
+            data_array_template,
+            store,
+            shared_buffer,
+            ProcessPoolExecutor(max_workers=os.cpu_count() or 1),
         )
