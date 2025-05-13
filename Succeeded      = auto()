@@ -1,0 +1,24 @@
+
+### Base `SourceFileCoord` Class
+
+- No fixed fields; dataset subclasses define attributes (e.g. `init_time`, `lead_time`, `ensemble_member`, `file_type`).  
+- Implements:  
+  - `get_url() -> str`  
+  - `target_loc() -> Dict[str, slice|int|...]`  
+- Fields:  
+  - `status: SourceFileStatus`  
+  - `downloaded_path: Path|None`
+
+## 4. Common Base Methods
+
+- `_calc_shared_buffer_size(chunk_ds: Dataset) -> int`  
+- `_make_shared_buffer(size: int) -> ContextManager[SharedMemory]`  
+- `_download_group(...)`  
+- `_read_and_write_one(coord, var_name, out_values)`  
+- `read_into_data_array(...)`  
+- `create_data_array_and_template(...)`  
+- `apply_data_transformations(...)`  
+- `write_shards(...)`
+
+## 5. Example Subclass
+

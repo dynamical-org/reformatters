@@ -1,0 +1,4 @@
+
+## 6. Future Extension
+
+- Add third stage: `upload_to_final_store(store)` or extend `write_shards` to push data to a remote target after writing local metadata.
