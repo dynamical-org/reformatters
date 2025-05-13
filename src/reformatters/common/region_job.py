@@ -221,7 +221,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         chunk_ds: xr.Dataset,
         store: FsspecStore,
     ) -> None:
-
         from reformatters.common.iterating import consume
         from reformatters.common.reformat_utils import write_shards
 
