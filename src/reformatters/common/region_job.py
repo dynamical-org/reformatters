@@ -1,4 +1,10 @@
-from collections.abc import Sequence
+import os
+from collections.abc import Generator, Mapping, Sequence
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from contextlib import contextmanager
+from enum import Enum, auto
+from multiprocessing.shared_memory import SharedMemory
+from pathlib import Path
 from typing import Annotated, Any, Generic, TypeVar
 
 import pydantic
@@ -6,23 +12,16 @@ import xarray as xr
 from pydantic.functional_validators import AfterValidator
 from zarr.storage import FsspecStore
 
-import os
-from contextlib import contextmanager
-from multiprocessing.shared_memory import SharedMemory
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-from typing import Generator
-
 from reformatters.common.config_models import DataVar
 from reformatters.common.template_config import AppendDim
-from enum import Enum, auto
-from pathlib import Path
-from typing import Mapping, Any
+
 
 class SourceFileStatus(Enum):
     Processing = auto()
     DownloadFailed = auto()
     ReadFailed = auto()
     Succeeded = auto()
+
 
 class SourceFileCoord(pydantic.BaseModel):
     status: SourceFileStatus = SourceFileStatus.Processing
@@ -33,6 +32,7 @@ class SourceFileCoord(pydantic.BaseModel):
 
     def out_loc(self) -> Mapping[str, Any]:
         raise NotImplementedError("Subclasses must implement out_loc")
+
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 
@@ -66,15 +66,23 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
             results: dict[str, Any] = {}
             # Group vars and process each group
             for data_var_group in self.group_data_vars(processing_ds):
-                coords_and_paths = self._download_processing_group(processing_ds, data_var_group)
+                coords_and_paths = self._download_processing_group(
+                    processing_ds, data_var_group
+                )
                 for data_var in data_var_group:
-                    data_array, data_array_template = self._create_data_array_and_template(
-                        processing_ds, data_var, shared_buffer
+                    data_array, data_array_template = (
+                        self._create_data_array_and_template(
+                            processing_ds, data_var, shared_buffer
+                        )
                     )
                     self._read_into_data_array(data_array, data_var, coords_and_paths)
                     self.apply_data_transformations(data_array, data_var)
-                    self._write_shards(data_array_template, shared_buffer, processing_ds, self.store)
-                    results[data_var.name] = self.summarize_processing_state(data_var, coords_and_paths)
+                    self._write_shards(
+                        data_array_template, shared_buffer, processing_ds, self.store
+                    )
+                    results[data_var.name] = self.summarize_processing_state(
+                        data_var, coords_and_paths
+                    )
                 # cleanup local files
                 for coord, path in coords_and_paths:
                     if path is not None:
@@ -99,10 +107,15 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
 
     def group_data_vars(self, chunk_ds: xr.Dataset) -> Sequence[Sequence[DATA_VAR]]:
         from itertools import batched
+
         return batched(self.data_vars, self.max_vars_per_backfill_job)
 
-    def generate_source_file_coords(self, chunk_ds: xr.Dataset) -> Sequence[SourceFileCoord]:
-        raise NotImplementedError("Subclasses must implement generate_source_file_coords")
+    def generate_source_file_coords(
+        self, chunk_ds: xr.Dataset
+    ) -> Sequence[SourceFileCoord]:
+        raise NotImplementedError(
+            "Subclasses must implement generate_source_file_coords"
+        )
 
     def download_file(self, coord: SourceFileCoord) -> Path | None:
         raise NotImplementedError("Subclasses must implement download_file")
@@ -110,14 +123,25 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
     def read_data(self, coord: SourceFileCoord) -> Any:
         raise NotImplementedError("Subclasses must implement read_data")
 
-    def apply_data_transformations(self, data_array: xr.DataArray, data_var: DATA_VAR) -> None:
+    def apply_data_transformations(
+        self, data_array: xr.DataArray, data_var: DATA_VAR
+    ) -> None:
         from reformatters.common.binary_rounding import round_float32_inplace
+
         keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
         if isinstance(keep_mantissa_bits, int):
-            round_float32_inplace(data_array.values, keep_mantissa_bits=keep_mantissa_bits)
+            round_float32_inplace(
+                data_array.values, keep_mantissa_bits=keep_mantissa_bits
+            )
 
-    def summarize_processing_state(self, data_var: DATA_VAR, coords_and_paths: Sequence[tuple[SourceFileCoord, Path | None]]) -> Any:
-        raise NotImplementedError("Subclasses must implement summarize_processing_state")
+    def summarize_processing_state(
+        self,
+        data_var: DATA_VAR,
+        coords_and_paths: Sequence[tuple[SourceFileCoord, Path | None]],
+    ) -> Any:
+        raise NotImplementedError(
+            "Subclasses must implement summarize_processing_state"
+        )
 
     def _calc_shared_buffer_size(self, chunk_ds: xr.Dataset) -> int:
         return max(var.nbytes for var in chunk_ds.data_vars.values())
@@ -137,16 +161,23 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         data_vars: Sequence[DATA_VAR],
     ) -> list[tuple[SourceFileCoord, Path | None]]:
         coords = self.generate_source_file_coords(chunk_ds)
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from concurrent.futures import as_completed
+
         io_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
-        futures = {io_executor.submit(self.download_file, coord): coord for coord in coords}
+        futures = {
+            io_executor.submit(self.download_file, coord): coord for coord in coords
+        }
         results: list[tuple[SourceFileCoord, Path | None]] = []
         for future in as_completed(futures):
             coord = futures[future]
             try:
                 path = future.result()
                 coord.downloaded_path = path
-                coord.status = SourceFileStatus.Succeeded if path else SourceFileStatus.DownloadFailed
+                coord.status = (
+                    SourceFileStatus.Succeeded
+                    if path
+                    else SourceFileStatus.DownloadFailed
+                )
                 results.append((coord, path))
             except Exception:
                 coord.status = SourceFileStatus.DownloadFailed
@@ -161,6 +192,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         shared_buffer: SharedMemory,
     ) -> tuple[xr.DataArray, xr.DataArray]:
         from reformatters.common.reformat_utils import create_data_array_and_template
+
         return create_data_array_and_template(chunk_ds, data_var, shared_buffer)
 
     def _read_into_data_array(
@@ -169,9 +201,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         data_var: DATA_VAR,
         coords_and_paths: Sequence[tuple[SourceFileCoord, Path | None]],
     ) -> None:
-        from concurrent.futures import ThreadPoolExecutor
-        from reformatters.common.iterating import consume
         from functools import partial
+
+        from reformatters.common.iterating import consume
+
         cpu_executor = ThreadPoolExecutor(max_workers=os.cpu_count() or 1)
         consume(
             cpu_executor.map(
@@ -188,9 +221,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         chunk_ds: xr.Dataset,
         store: FsspecStore,
     ) -> None:
+
         from reformatters.common.iterating import consume
-        from functools import partial
         from reformatters.common.reformat_utils import write_shards
+
         consume(
             write_shards(
                 data_array_template,
