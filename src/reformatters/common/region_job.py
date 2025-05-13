@@ -9,8 +9,8 @@ from typing import Annotated, Any, Generic, TypeVar
 
 import pydantic
 import xarray as xr
-from pydantic.functional_validators import AfterValidator
-from zarr.storage import FsspecStore
+import zarr
+from pydantic import AfterValidator
 
 from reformatters.common.config_models import DataVar
 from reformatters.common.template_config import AppendDim
@@ -38,7 +38,9 @@ DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 
 
 class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
-    store: FsspecStore
+    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+
+    store: zarr.storage.FsspecStore
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
     append_dim: AppendDim
@@ -215,7 +217,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         consume(
             cpu_executor.map(
                 partial(self.read_data, out=out, data_var=data_var),
-                *zip(*coords_and_paths, strict=True),
+                (coord for coord, _ in coords_and_paths),
             )
         )
         cpu_executor.shutdown(wait=True)
@@ -225,7 +227,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         data_array_template: xr.DataArray,
         shared_buffer: SharedMemory,
         chunk_ds: xr.Dataset,
-        store: FsspecStore,
+        store: zarr.storage.FsspecStore,
     ) -> None:
         from reformatters.common.reformat_utils import write_shards
 
