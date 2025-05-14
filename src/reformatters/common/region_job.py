@@ -89,60 +89,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
     ]
     max_vars_per_backfill_job: ClassVar[int]
 
-    def process(self) -> dict[str, Any]:
-        """
-        Orchestrate the full region job processing pipeline.
-
-        1. Group data variables for efficient processing (e.g., by file type or batch size).
-        2. For each group of data variables:
-            a. Download all required source files
-            b. For each variable in the group:
-                i.   Read data from source files into the shared array
-                ii.  Apply any required data transformations (e.g., rounding, deaccumulation).
-                iii. Write output shards to the Zarr store in parallel.
-
-        Returns:
-            dict[str, Any]: Mapping from data variable name to the output of `self.summarize_processing_state`.
-        """
-        processing_region_ds, output_region_ds = self._get_region_datasets()
-        results: dict[str, Any] = {}
-        with make_shared_buffer(processing_region_ds) as shared_buffer:
-            data_var_groups = self.group_data_vars(processing_region_ds)
-            for data_var_group in self._data_var_download_groups(data_var_groups):
-                source_file_coords = self.generate_source_file_coords(
-                    processing_region_ds,
-                    data_var_group,
-                )
-                source_file_coords = self._download_processing_group(source_file_coords)
-
-                for data_var in data_var_group:
-                    data_array, data_array_template = create_data_array_and_template(
-                        processing_region_ds,
-                        data_var.name,
-                        shared_buffer,
-                    )
-                    self._read_into_data_array(
-                        data_array,
-                        data_var,
-                        source_file_coords,
-                    )
-                    self.apply_data_transformations(
-                        data_array,
-                        data_var,
-                    )
-                    self._write_shards(
-                        data_array_template,
-                        shared_buffer,
-                        output_region_ds,
-                        self.store,
-                    )
-                    results[data_var.name] = self.summarize_processing_state(
-                        data_var,
-                        source_file_coords,
-                    )
-                self._cleanup_local_files(source_file_coords)
-        return results
-
     def get_processing_region(self) -> slice:
         """
         Return a slice of integer offsets into self.template_ds along self.append_dim that identifies
@@ -237,7 +183,63 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
 
     # ----- Most subclasses will not need to override the attributes and methods below -----
 
-    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+    model_config = pydantic.ConfigDict(
+        arbitrary_types_allowed=True, frozen=True, strict=True
+    )
+
+    def process(self) -> dict[str, Any]:
+        """
+        Orchestrate the full region job processing pipeline.
+
+        1. Group data variables for efficient processing (e.g., by file type or batch size).
+        2. For each group of data variables:
+            a. Download all required source files
+            b. For each variable in the group:
+                i.   Read data from source files into the shared array
+                ii.  Apply any required data transformations (e.g., rounding, deaccumulation).
+                iii. Write output shards to the Zarr store in parallel.
+
+        Returns:
+            dict[str, Any]: Mapping from data variable name to the output of `self.summarize_processing_state`.
+        """
+        processing_region_ds, output_region_ds = self._get_region_datasets()
+        results: dict[str, Any] = {}
+        with make_shared_buffer(processing_region_ds) as shared_buffer:
+            data_var_groups = self.group_data_vars(processing_region_ds)
+            for data_var_group in self._data_var_download_groups(data_var_groups):
+                source_file_coords = self.generate_source_file_coords(
+                    processing_region_ds,
+                    data_var_group,
+                )
+                source_file_coords = self._download_processing_group(source_file_coords)
+
+                for data_var in data_var_group:
+                    data_array, data_array_template = create_data_array_and_template(
+                        processing_region_ds,
+                        data_var.name,
+                        shared_buffer,
+                    )
+                    self._read_into_data_array(
+                        data_array,
+                        data_var,
+                        source_file_coords,
+                    )
+                    self.apply_data_transformations(
+                        data_array,
+                        data_var,
+                    )
+                    self._write_shards(
+                        data_array_template,
+                        shared_buffer,
+                        output_region_ds,
+                        self.store,
+                    )
+                    results[data_var.name] = self.summarize_processing_state(
+                        data_var,
+                        source_file_coords,
+                    )
+                self._cleanup_local_files(source_file_coords)
+        return results
 
     def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
         ds = self.template_ds[[v.name for v in self.data_vars]]
