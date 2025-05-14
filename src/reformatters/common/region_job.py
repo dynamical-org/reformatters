@@ -10,9 +10,11 @@ from typing import Annotated, Any, Generic, TypeVar
 import pydantic
 import xarray as xr
 import zarr
+from numpy.typing import NDArray
 from pydantic import AfterValidator
 
 from reformatters.common.config_models import DataVar
+from reformatters.common.reformat_utils import create_data_array_and_template
 from reformatters.common.template_config import AppendDim
 
 
@@ -30,7 +32,8 @@ class SourceFileCoord(pydantic.BaseModel):
     def get_url(self) -> str:
         raise NotImplementedError("Subclasses must implement get_url")
 
-    def out_loc(self) -> Mapping[str, Any]:
+    # TODO: A typehint explicitly noting that the key is a dimension name would be useful
+    def out_loc(self) -> Mapping[str, str | slice | int | float]:
         raise NotImplementedError("Subclasses must implement out_loc")
 
 
@@ -79,7 +82,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         Returns:
             dict[str, Any]: Mapping from data variable name to the output of `summarize_processing_state`.
         """
-        processing_ds = self.processing_ds()
+        processing_ds = self._processing_ds()
         with self._make_shared_buffer(processing_ds) as shared_buffer:
             # TODO: any more specific type hints or some summary Type that could make this clearer?
             #       Is Any correct here? Do we allow users to define the form of a summary and not just its contents?
@@ -89,10 +92,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
             for data_var_group in self.group_data_vars(processing_ds):
                 source_file_coords = self._download_processing_group(processing_ds)
                 for data_var in data_var_group:
-                    data_array, data_array_template = (
-                        self._create_data_array_and_template(
-                            processing_ds, data_var, shared_buffer
-                        )
+                    data_array, data_array_template = create_data_array_and_template(
+                        processing_ds, data_var.name, shared_buffer
                     )
                     self._read_into_data_array(data_array, data_var, source_file_coords)
                     self.apply_data_transformations(data_array, data_var)
@@ -107,7 +108,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
 
     # TODO: Consider calling this region_ds?
     # TODO: Consider making this a cached_property or just memoize the result to simplify our other method signatures?
-    def processing_ds(self) -> xr.Dataset:
+    def _processing_ds(self) -> xr.Dataset:
         region_slice = self.get_processing_region(self.region)
         var_names = [v.name for v in self.data_vars]
         return self.template_ds[var_names].isel({self.append_dim: region_slice})
@@ -142,15 +143,50 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
     def read_data(
         self,
         coord: SourceFileCoord,
-        *,
-        out: xr.DataArray,
         data_var: DATA_VAR,
-    ) -> Any:
+    ) -> NDArray[Any]:  # TODO: A more specific type and then fix the docstring
+        """
+        Read and return the data chunk for the given variable and source file coordinate.
+
+        Subclasses must implement this to load the data (e.g., from a file or remote source)
+        for the specified coord and data_var. The returned array will be written into the shared
+        output array by the base class.
+
+        Parameters
+        ----------
+        coord : SourceFileCoord
+            The coordinate specifying which file and region to read.
+        data_var : DATA_VAR
+            The data variable metadata.
+
+        Returns
+        -------
+        NDArray[Any]
+            The loaded data
+        """
         raise NotImplementedError("Subclasses must implement read_data")
 
     def apply_data_transformations(
         self, data_array: xr.DataArray, data_var: DATA_VAR
     ) -> None:
+        """
+        Apply in-place data transformations to the output data array for a given data variable.
+
+        This method is called after reading all data for a variable into the shared-memory array,
+        and before writing shards to the output store. The default implementation applies binary
+        rounding to float32 arrays if `data_var.internal_attrs.keep_mantissa_bits` is set.
+
+        Subclasses may override this method to implement additional transformations such as
+        deaccumulation, interpolation, or other custom logic. All transformations should be
+        performed in-place (i.e., do not copy data_array).
+
+        Parameters
+        ----------
+        data_array : xr.DataArray
+            The output data array to be transformed in-place.
+        data_var : DATA_VAR
+            The data variable metadata object, which may contain transformation parameters.
+        """
         from reformatters.common.binary_rounding import round_float32_inplace
 
         keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
@@ -212,34 +248,38 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         io_executor.shutdown(wait=True)
         return results
 
-    def _create_data_array_and_template(
-        self,
-        chunk_ds: xr.Dataset,
-        data_var: DATA_VAR,
-        shared_buffer: SharedMemory,
-    ) -> tuple[xr.DataArray, xr.DataArray]:
-        from reformatters.common.reformat_utils import create_data_array_and_template
-
-        return create_data_array_and_template(chunk_ds, data_var.name, shared_buffer)
-
     def _read_into_data_array(
         self,
         out: xr.DataArray,
         data_var: DATA_VAR,
         source_file_coords: Sequence[SourceFileCoord],
     ) -> None:
-        from functools import partial
+        """
+        For each coord with status Processing, submit a job to:
+          - call self.read_data(coord, data_var)
+          - write the result into the shared array at coord.out_loc()
+          - update coord.status to Succeeded or ReadFailed
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        from reformatters.common.iterating import consume
+        def _read_and_write_one(coord: SourceFileCoord) -> None:
+            try:
+                # read_data should return a numpy array chunk
+                chunk = self.read_data(coord, data_var=data_var)
+                # Write the chunk into the correct location in the shared array
+                out.loc[coord.out_loc()] = chunk
+                coord.status = SourceFileStatus.Succeeded
+            except Exception:
+                coord.status = SourceFileStatus.ReadFailed
 
-        cpu_executor = ThreadPoolExecutor(max_workers=os.cpu_count() or 1)
-        consume(
-            cpu_executor.map(
-                partial(self.read_data, out=out, data_var=data_var),
-                source_file_coords,
-            )
-        )
-        cpu_executor.shutdown(wait=True)
+        with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as executor:
+            futures = [
+                executor.submit(_read_and_write_one, coord)
+                for coord in source_file_coords
+                if coord.status == SourceFileStatus.Processing
+            ]
+            for future in as_completed(futures):
+                future.result()  # propagate exceptions if any
 
     def _write_shards(
         self,
