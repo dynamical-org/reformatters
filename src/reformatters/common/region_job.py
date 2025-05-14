@@ -1,21 +1,33 @@
 import os
-from collections.abc import Generator, Iterator, Mapping, Sequence
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from contextlib import contextmanager
+from collections.abc import Mapping, Sequence
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from enum import Enum, auto
+from itertools import batched
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
-from typing import Annotated, Any, Generic, TypeVar
+from typing import Annotated, Any, ClassVar, Generic, TypeVar
 
+import pandas as pd
 import pydantic
 import xarray as xr
 import zarr
 from numpy.typing import NDArray
 from pydantic import AfterValidator
 
+from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config_models import DataVar
-from reformatters.common.reformat_utils import create_data_array_and_template
-from reformatters.common.template_config import AppendDim
+from reformatters.common.logging import get_logger
+from reformatters.common.reformat_utils import (
+    create_data_array_and_template,
+    make_shared_buffer,
+    write_shards,
+)
+from reformatters.common.template_config import AppendDim, Dim
+
+logger = get_logger(__name__)
+
+type CoordinateValueOrRange = slice | int | float | pd.Timestamp | pd.Timedelta | str
+DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 
 
 class SourceFileStatus(Enum):
@@ -26,18 +38,40 @@ class SourceFileStatus(Enum):
 
 
 class SourceFileCoord(pydantic.BaseModel):
+    """
+    Base class representing the coordinates and status of a single source file required for processing.
+
+    Subclasses should define dataset-specific fields (e.g., init_time, lead_time, file_type) and
+    implement the `get_url` and `out_loc` methods.
+
+    Attributes
+    ----------
+    status : SourceFileStatus
+        The current processing status of this file (Processing, DownloadFailed, ReadFailed, Succeeded).
+    downloaded_path : Path | None
+        Local filesystem path to the downloaded file, or None if not downloaded.
+    """
+
     status: SourceFileStatus = SourceFileStatus.Processing
     downloaded_path: Path | None = None
 
     def get_url(self) -> str:
+        """
+        Return the remote URL for this source file.
+
+        Subclasses must implement this method.
+        """
         raise NotImplementedError("Subclasses must implement get_url")
 
-    # TODO: A typehint explicitly noting that the key is a dimension name would be useful
-    def out_loc(self) -> Mapping[str, str | slice | int | float]:
+    def out_loc(
+        self,
+    ) -> Mapping[Dim, CoordinateValueOrRange]:
+        """
+        Return the output location mapping for this file's data within the output array.
+
+        Subclasses must implement this method.
+        """
         raise NotImplementedError("Subclasses must implement out_loc")
-
-
-DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 
 
 class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
@@ -55,7 +89,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
             and s.step is None
         ),
     ]
-    max_vars_per_backfill_job: int
+    max_vars_per_backfill_job: ClassVar[int]
 
     def process(self) -> dict[str, Any]:
         """
@@ -82,62 +116,89 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         Returns:
             dict[str, Any]: Mapping from data variable name to the output of `summarize_processing_state`.
         """
-        processing_ds = self._processing_ds()
-        with self._make_shared_buffer(processing_ds) as shared_buffer:
-            # TODO: any more specific type hints or some summary Type that could make this clearer?
-            #       Is Any correct here? Do we allow users to define the form of a summary and not just its contents?
+        region_ds = self._region_ds()
+        with make_shared_buffer(region_ds) as shared_buffer:
             results: dict[str, Any] = {}
 
             # Group vars and process each group
-            for data_var_group in self.group_data_vars(processing_ds):
-                source_file_coords = self._download_processing_group(processing_ds)
+            for data_var_group in self._data_var_download_groups(region_ds):
+                # TODO: Does _download_processing_group need to be called for each group?
+                #       Should it be taking data_var_group?
+                source_file_coords = self._download_processing_group(region_ds)
                 for data_var in data_var_group:
                     data_array, data_array_template = create_data_array_and_template(
-                        processing_ds, data_var.name, shared_buffer
+                        region_ds,
+                        data_var.name,
+                        shared_buffer,
                     )
-                    self._read_into_data_array(data_array, data_var, source_file_coords)
-                    self.apply_data_transformations(data_array, data_var)
+                    self._read_into_data_array(
+                        data_array,
+                        data_var,
+                        source_file_coords,
+                    )
+                    self.apply_data_transformations(
+                        data_array,
+                        data_var,
+                    )
                     self._write_shards(
-                        data_array_template, shared_buffer, processing_ds, self.store
+                        data_array_template,
+                        shared_buffer,
+                        region_ds,
+                        self.store,
                     )
                     results[data_var.name] = self.summarize_processing_state(
-                        data_var, source_file_coords
+                        data_var,
+                        source_file_coords,
                     )
                 self._cleanup_local_files(source_file_coords)
             return results
 
-    # TODO: Consider calling this region_ds?
-    # TODO: Consider making this a cached_property or just memoize the result to simplify our other method signatures?
-    def _processing_ds(self) -> xr.Dataset:
+    def _region_ds(self) -> xr.Dataset:
         region_slice = self.get_processing_region(self.region)
         var_names = [v.name for v in self.data_vars]
         return self.template_ds[var_names].isel({self.append_dim: region_slice})
 
-    def get_processing_group_size(self) -> int:
-        match len(self.data_vars):
-            case n if n > 6:
-                return 4
-            case n if n > 3:
-                return 2
-            case _:
-                return 1
+    def _data_var_download_groups(
+        self, region_ds: xr.Dataset
+    ) -> Sequence[Sequence[DATA_VAR]]:
+        """
+        Possibly split groups of data variables into group sizes ideal for downloading.
+
+        When the batch_size is smaller than len(self.data_vars), downloading and reading/recompressing
+        can begin on variables can begin on an already downloaded group, while other variables finish
+        downloading.
+        """
+        data_var_groups = self.group_data_vars(region_ds)
+
+        if len(self.data_vars) > 6:
+            batch_size = 4
+        elif len(self.data_vars) > 3:
+            batch_size = 2
+        else:
+            batch_size = 1
+
+        return [
+            tuple(download_group)
+            for group in data_var_groups
+            for download_group in batched(group, batch_size)
+        ]
 
     def get_processing_region(self, original_slice: slice) -> slice:
         return original_slice
 
-    def group_data_vars(self, chunk_ds: xr.Dataset) -> Iterator[Sequence[DATA_VAR]]:
-        from itertools import batched
+    def group_data_vars(self, region_ds: xr.Dataset) -> Sequence[Sequence[DATA_VAR]]:
+        """Return groups of variables, where all variables in a group can be retrieived from the same source file."""
 
-        return batched(self.data_vars, self.max_vars_per_backfill_job)
+        return [self.data_vars]
 
     def generate_source_file_coords(
-        self, chunk_ds: xr.Dataset
+        self, region_ds: xr.Dataset
     ) -> Sequence[SourceFileCoord]:
         raise NotImplementedError(
             "Subclasses must implement generate_source_file_coords"
         )
 
-    def download_file(self, coord: SourceFileCoord) -> Path | None:
+    def download_file(self, coord: SourceFileCoord) -> Path:
         raise NotImplementedError("Subclasses must implement download_file")
 
     def read_data(
@@ -187,7 +248,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         data_var : DATA_VAR
             The data variable metadata object, which may contain transformation parameters.
         """
-        from reformatters.common.binary_rounding import round_float32_inplace
 
         keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
         if isinstance(keep_mantissa_bits, int):
@@ -204,48 +264,50 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
             "Subclasses must implement summarize_processing_state"
         )
 
-    def _calc_shared_buffer_size(self, chunk_ds: xr.Dataset) -> int:
-        return max(var.nbytes for var in chunk_ds.data_vars.values())
-
-    @contextmanager
-    def _make_shared_buffer(
-        self, processing_ds: xr.Dataset
-    ) -> Generator[SharedMemory, None, None]:
-        buffer_size = self._calc_shared_buffer_size(processing_ds)
-        shared_memory = SharedMemory(create=True, size=buffer_size)
-        try:
-            yield shared_memory
-        finally:
-            shared_memory.close()
-            shared_memory.unlink()
-
     def _download_processing_group(
         self,
-        chunk_ds: xr.Dataset,
+        region_ds: xr.Dataset,
     ) -> list[SourceFileCoord]:
-        coords = self.generate_source_file_coords(chunk_ds)
-        from concurrent.futures import as_completed
+        """
+        Download all required source files for the given region dataset in parallel.
 
-        io_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
-        futures = {
-            io_executor.submit(self.download_file, coord): coord for coord in coords
-        }
-        results: list[SourceFileCoord] = []
-        for future in as_completed(futures):
-            coord = futures[future]
-            try:
-                path = future.result()
-                coord.downloaded_path = path
-                coord.status = (
-                    SourceFileStatus.Succeeded
-                    if path
-                    else SourceFileStatus.DownloadFailed
-                )
-            except Exception:
-                coord.status = SourceFileStatus.DownloadFailed
-                coord.downloaded_path = None
-            results.append(coord)
-        io_executor.shutdown(wait=True)
+        This method generates the list of source file coordinates needed for the specified
+        region and time chunk, attempts to download each file, and updates the download
+        status and path for each coordinate.
+
+        Parameters
+        ----------
+        region_ds : xr.Dataset
+            The dataset representing the region and time chunk to process.
+
+        Returns
+        -------
+        list[SourceFileCoord]
+            List of SourceFileCoord objects with updated download status and path.
+        """
+        coords = self.generate_source_file_coords(region_ds)
+
+        with ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2) as io_executor:
+            futures = {
+                io_executor.submit(self.download_file, coord): coord for coord in coords
+            }
+            results: list[SourceFileCoord] = []
+            for future in as_completed(futures):
+                coord = futures[future]
+                try:
+                    path = future.result()
+                    coord.downloaded_path = path
+                except Exception as e:
+                    coord.status = SourceFileStatus.DownloadFailed
+                    if isinstance(e, FileNotFoundError) and getattr(
+                        coord, self.append_dim, pd.Timestamp.min
+                    ) > (pd.Timestamp.now() - pd.Timedelta(hours=24)):
+                        # For recent files, we expect some files to not exist yet, just log the path
+                        logger.info(" ".join(str(e).split("\n")[:2]))
+                    else:
+                        logger.exception("Download failed")
+
+                results.append(coord)
         return results
 
     def _read_into_data_array(
@@ -260,7 +322,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
           - write the result into the shared array at coord.out_loc()
           - update coord.status to Succeeded or ReadFailed
         """
-        from concurrent.futures import ThreadPoolExecutor, as_completed
 
         def _read_and_write_one(coord: SourceFileCoord) -> None:
             try:
@@ -288,14 +349,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         chunk_ds: xr.Dataset,
         store: zarr.storage.FsspecStore,
     ) -> None:
-        from reformatters.common.reformat_utils import write_shards
-
-        write_shards(
-            data_array_template,
-            store,
-            shared_buffer,
-            ProcessPoolExecutor(max_workers=os.cpu_count() or 1),
-        )
+        with ProcessPoolExecutor(max_workers=os.cpu_count() or 1) as process_executor:
+            write_shards(
+                data_array_template,
+                store,
+                shared_buffer,
+                process_executor,
+            )
 
     def _cleanup_local_files(
         self, source_file_coords: Sequence[SourceFileCoord]

@@ -123,10 +123,38 @@ def write_shard_to_zarr(
         data_array[shard_indexer].to_zarr(store, region="auto")  # type: ignore[call-overload]
 
 
+# TODO: Delete this version once all datasets are using _make_shared_buffer
 @contextmanager
 def create_shared_buffer(size: int) -> Generator[SharedMemory, None, None]:
     try:
         shared_memory = SharedMemory(create=True, size=size)
+        yield shared_memory
+    finally:
+        shared_memory.close()
+        shared_memory.unlink()
+    # TODO: Make common utility alongside write_shards
+
+
+@contextmanager
+def make_shared_buffer(ds: xr.Dataset) -> Generator[SharedMemory, None, None]:
+    """
+    Context manager to create and manage a shared memory buffer sized to fit the largest variable in the dataset.
+
+    Arguments
+    ----------
+    ds : xr.Dataset
+        The xarray Dataset whose data variables are used to determine the required buffer size.
+        This will most likely be a particular region of a dataset, rather than the entire dataset.
+
+    Yields
+    ------
+    SharedMemory
+        A shared memory object that can be used for inter-process communication.
+    """
+    buffer_size = max(data_var.nbytes for data_var in ds.data_vars.values())
+
+    shared_memory = SharedMemory(create=True, size=buffer_size)
+    try:
         yield shared_memory
     finally:
         shared_memory.close()
