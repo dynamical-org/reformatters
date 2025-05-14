@@ -1,5 +1,5 @@
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from enum import Enum, auto
 from itertools import batched
@@ -19,9 +19,8 @@ from reformatters.common.config_models import DataVar
 from reformatters.common.logging import get_logger
 from reformatters.common.reformat_utils import (
     create_data_array_and_template,
-    make_shared_buffer,
-    write_shards,
 )
+from reformatters.common.shared_memory_utils import make_shared_buffer, write_shards
 from reformatters.common.template_config import AppendDim, Dim
 
 logger = get_logger(__name__)
@@ -75,8 +74,6 @@ class SourceFileCoord(pydantic.BaseModel):
 
 
 class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
-    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
-
     store: zarr.storage.FsspecStore
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
@@ -116,18 +113,20 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         Returns:
             dict[str, Any]: Mapping from data variable name to the output of `summarize_processing_state`.
         """
-        region_ds = self._region_ds()
-        with make_shared_buffer(region_ds) as shared_buffer:
-            results: dict[str, Any] = {}
+        processing_region_ds, output_region_ds = self._get_region_datasets()
+        results: dict[str, Any] = {}
+        with make_shared_buffer(processing_region_ds) as shared_buffer:
+            data_var_groups = self.group_data_vars(processing_region_ds)
+            for data_var_group in self._data_var_download_groups(data_var_groups):
+                source_file_coords = self.generate_source_file_coords(
+                    processing_region_ds,
+                    data_var_group,
+                )
+                source_file_coords = self._download_processing_group(source_file_coords)
 
-            # Group vars and process each group
-            for data_var_group in self._data_var_download_groups(region_ds):
-                # TODO: Does _download_processing_group need to be called for each group?
-                #       Should it be taking data_var_group?
-                source_file_coords = self._download_processing_group(region_ds)
                 for data_var in data_var_group:
                     data_array, data_array_template = create_data_array_and_template(
-                        region_ds,
+                        processing_region_ds,
                         data_var.name,
                         shared_buffer,
                     )
@@ -143,7 +142,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
                     self._write_shards(
                         data_array_template,
                         shared_buffer,
-                        region_ds,
+                        output_region_ds,
                         self.store,
                     )
                     results[data_var.name] = self.summarize_processing_state(
@@ -151,48 +150,20 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
                         source_file_coords,
                     )
                 self._cleanup_local_files(source_file_coords)
-            return results
-
-    def _region_ds(self) -> xr.Dataset:
-        region_slice = self.get_processing_region(self.region)
-        var_names = [v.name for v in self.data_vars]
-        return self.template_ds[var_names].isel({self.append_dim: region_slice})
-
-    def _data_var_download_groups(
-        self, region_ds: xr.Dataset
-    ) -> Sequence[Sequence[DATA_VAR]]:
-        """
-        Possibly split groups of data variables into group sizes ideal for downloading.
-
-        When the batch_size is smaller than len(self.data_vars), downloading and reading/recompressing
-        can begin on variables can begin on an already downloaded group, while other variables finish
-        downloading.
-        """
-        data_var_groups = self.group_data_vars(region_ds)
-
-        if len(self.data_vars) > 6:
-            batch_size = 4
-        elif len(self.data_vars) > 3:
-            batch_size = 2
-        else:
-            batch_size = 1
-
-        return [
-            tuple(download_group)
-            for group in data_var_groups
-            for download_group in batched(group, batch_size)
-        ]
+        return results
 
     def get_processing_region(self, original_slice: slice) -> slice:
         return original_slice
 
-    def group_data_vars(self, region_ds: xr.Dataset) -> Sequence[Sequence[DATA_VAR]]:
+    def group_data_vars(
+        self, processing_region_ds: xr.Dataset
+    ) -> Sequence[Sequence[DATA_VAR]]:
         """Return groups of variables, where all variables in a group can be retrieived from the same source file."""
 
         return [self.data_vars]
 
     def generate_source_file_coords(
-        self, region_ds: xr.Dataset
+        self, processing_region_ds: xr.Dataset, data_var_group: Sequence[DATA_VAR]
     ) -> Sequence[SourceFileCoord]:
         raise NotImplementedError(
             "Subclasses must implement generate_source_file_coords"
@@ -205,7 +176,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         self,
         coord: SourceFileCoord,
         data_var: DATA_VAR,
-    ) -> NDArray[Any]:  # TODO: A more specific type and then fix the docstring
+    ) -> NDArray[Any]:
         """
         Read and return the data chunk for the given variable and source file coordinate.
 
@@ -260,13 +231,45 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         data_var: DATA_VAR,
         source_file_coords: Sequence[SourceFileCoord],
     ) -> Any:
-        raise NotImplementedError(
-            "Subclasses must implement summarize_processing_state"
-        )
+        return None
+
+    # ----- Most subclasses will not need to override the attributes and methods below -----
+
+    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+
+    def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
+        ds = self.template_ds[[v.name for v in self.data_vars]]
+        processing_region = self.get_processing_region(self.region)
+        processing_region_ds = ds.isel({self.append_dim: processing_region})
+        output_region_ds = ds.isel({self.append_dim: self.region})
+        return processing_region_ds, output_region_ds
+
+    def _data_var_download_groups(
+        self, data_var_groups: Sequence[Sequence[DATA_VAR]]
+    ) -> Sequence[Sequence[DATA_VAR]]:
+        """
+        Possibly split groups of data variables into group sizes ideal for downloading.
+
+        When the batch_size is smaller than len(self.data_vars), downloading and reading/recompressing
+        can begin on variables can begin on an already downloaded group, while other variables finish
+        downloading.
+        """
+
+        if len(self.data_vars) > 6:
+            batch_size = 4
+        elif len(self.data_vars) > 3:
+            batch_size = 2
+        else:
+            batch_size = 1
+
+        return [
+            tuple(download_group)
+            for group in data_var_groups
+            for download_group in batched(group, batch_size)
+        ]
 
     def _download_processing_group(
-        self,
-        region_ds: xr.Dataset,
+        self, coords: Iterable[SourceFileCoord]
     ) -> list[SourceFileCoord]:
         """
         Download all required source files for the given region dataset in parallel.
@@ -275,17 +278,11 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         region and time chunk, attempts to download each file, and updates the download
         status and path for each coordinate.
 
-        Parameters
-        ----------
-        region_ds : xr.Dataset
-            The dataset representing the region and time chunk to process.
-
         Returns
         -------
         list[SourceFileCoord]
             List of SourceFileCoord objects with updated download status and path.
         """
-        coords = self.generate_source_file_coords(region_ds)
 
         with ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2) as io_executor:
             futures = {
@@ -344,25 +341,24 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
 
     def _write_shards(
         self,
-        data_array_template: xr.DataArray,
+        processing_region_da_template: xr.DataArray,
         shared_buffer: SharedMemory,
-        chunk_ds: xr.Dataset,
+        output_region_ds: xr.Dataset,
         store: zarr.storage.FsspecStore,
     ) -> None:
         with ProcessPoolExecutor(max_workers=os.cpu_count() or 1) as process_executor:
             write_shards(
-                data_array_template,
-                store,
+                processing_region_da_template,
                 shared_buffer,
+                self.append_dim,
+                output_region_ds,
+                store,
                 process_executor,
             )
 
     def _cleanup_local_files(
         self, source_file_coords: Sequence[SourceFileCoord]
     ) -> None:
-        # TODO: Could make this a method on SourceFileCoord and just do
-        # for coord in source_file_coords:
-        #     coord.cleanup()
         for coord in source_file_coords:
             if coord.downloaded_path:
                 coord.downloaded_path.unlink()
