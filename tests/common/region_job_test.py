@@ -60,8 +60,8 @@ class TestRegionJob(RegionJob[FakeDataVar]):
         return [TestSourceFileCoord()]
 
     def download_file(self, coord: TestSourceFileCoord) -> Path:
-        # For testing, just return a dummy path
-        return Path("/tmp/testfile")
+        # For testing, just return a dummy path in the current directory
+        return Path("testfile")
 
     def read_data(
         self,
