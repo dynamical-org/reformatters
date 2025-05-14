@@ -1,19 +1,18 @@
-import pytest
-import xarray as xr
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import ClassVar
+
 import numpy as np
 import pandas as pd
-import zarr
-from pathlib import Path
-from typing import Mapping, Sequence, ClassVar
+import xarray as xr
 
+from reformatters.common.config_models import DataVar
 from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
-    SourceFileStatus,
 )
-from reformatters.common.template_config import AppendDim, Dim
+from reformatters.common.template_config import Dim
 from reformatters.common.types import ArrayFloat32
-from reformatters.common.config_models import DataVar
 
 
 # --- a fake DataVar and its internal‐attrs just for typing in our TestRegionJob ---
@@ -33,7 +32,9 @@ class TestSourceFileCoord(SourceFileCoord):
         # For testing, just return a dummy URL string
         return "file:///tmp/testfile"
 
-    def out_loc(self) -> Mapping[Dim, slice | int | float | pd.Timestamp | pd.Timedelta | str]:
+    def out_loc(
+        self,
+    ) -> Mapping[Dim, slice | int | float | pd.Timestamp | pd.Timedelta | str]:
         # For testing, just return a fixed location mapping
         return {"time": 0}
 
