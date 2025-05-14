@@ -7,11 +7,11 @@ from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Generic, TypeVar
 
+import numpy as np
 import pandas as pd
 import pydantic
 import xarray as xr
 import zarr
-from numpy.typing import NDArray
 from pydantic import AfterValidator
 
 from reformatters.common.binary_rounding import round_float32_inplace
@@ -22,6 +22,7 @@ from reformatters.common.reformat_utils import (
 )
 from reformatters.common.shared_memory_utils import make_shared_buffer, write_shards
 from reformatters.common.template_config import AppendDim, Dim
+from reformatters.common.types import ArrayFloat32
 
 logger = get_logger(__name__)
 
@@ -40,8 +41,8 @@ class SourceFileCoord(pydantic.BaseModel):
     """
     Base class representing the coordinates and status of a single source file required for processing.
 
-    Subclasses should define dataset-specific fields (e.g., init_time, lead_time, file_type) and
-    implement the `get_url` and `out_loc` methods.
+    Subclasses should define dataset-specific fields (e.g., data_vars, init_time, lead_time, file_type) required
+    to uniquely identify a source file and implement the `get_url` and `out_loc` methods.
 
     Attributes
     ----------
@@ -55,22 +56,22 @@ class SourceFileCoord(pydantic.BaseModel):
     downloaded_path: Path | None = None
 
     def get_url(self) -> str:
-        """
-        Return the remote URL for this source file.
-
-        Subclasses must implement this method.
-        """
-        raise NotImplementedError("Subclasses must implement get_url")
+        """Return the URL for this source file."""
+        raise NotImplementedError("Return the URL of the source file.")
 
     def out_loc(
         self,
     ) -> Mapping[Dim, CoordinateValueOrRange]:
         """
-        Return the output location mapping for this file's data within the output array.
+        Return a data array indexer which idetifies the region in the output dataset to write the data from the source file.
 
-        Subclasses must implement this method.
+        Examples:
+        - For an analysis dataset created from forecast data: {"time": self.init_time + self.lead_time}
+        - For an ensemble forecast dataset: {"init_time": self.init_time, "ensemble_member": self.ensemble_member, "lead_time": self.lead_time}
         """
-        raise NotImplementedError("Subclasses must implement out_loc")
+        raise NotImplementedError(
+            "Return a data array indexer which identifies the region in the output dataset to write the data from the source file."
+        )
 
 
 class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
@@ -92,26 +93,16 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         """
         Orchestrate the full region job processing pipeline.
 
-        This method manages the end-to-end workflow for processing a region of a dataset,
-        including grouping variables, downloading required files, reading and transforming data,
-        and writing output shards. The steps are:
-
-        1. Extract the processing region from the template dataset using `get_processing_region`.
-        2. Group data variables for efficient processing (e.g., by file type or batch size).
-        3. Set up shared resources, including a shared memory buffer and thread/process executors.
-        4. For each group of data variables:
-            a. Download all required source files in parallel, updating their status.
+        1. Group data variables for efficient processing (e.g., by file type or batch size).
+        2. For each group of data variables:
+            a. Download all required source files
             b. For each variable in the group:
-                i.   Create a shared-memory-backed output array and template.
-                ii.  Read data from source files into the shared array, in parallel.
-                iii. Apply any required data transformations (e.g., rounding, deaccumulation).
-                iv.  Write output shards to the Zarr store in parallel.
-                v.   Collect and summarize processing metadata for the variable.
-            c. Clean up any temporary local files.
-        5. Return a dictionary mapping each variable name to its processing summary.
+                i.   Read data from source files into the shared array
+                ii.  Apply any required data transformations (e.g., rounding, deaccumulation).
+                iii. Write output shards to the Zarr store in parallel.
 
         Returns:
-            dict[str, Any]: Mapping from data variable name to the output of `summarize_processing_state`.
+            dict[str, Any]: Mapping from data variable name to the output of `self.summarize_processing_state`.
         """
         processing_region_ds, output_region_ds = self._get_region_datasets()
         results: dict[str, Any] = {}
@@ -152,31 +143,40 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
                 self._cleanup_local_files(source_file_coords)
         return results
 
-    def get_processing_region(self, original_slice: slice) -> slice:
-        return original_slice
+    def get_processing_region(self) -> slice:
+        """
+        Return a slice of integer offsets into self.template_ds along self.append_dim that identifies
+        the region to process. In most cases this is exactly self.region, but if additional data outside
+        the region is required, for example for correct interpolation or deaccumulation, this method can
+        return a modified slice (e.g. `slice(self.region.start - 1, self.region.stop + 1)`).
+        """
+        return self.region
 
     def group_data_vars(
         self, processing_region_ds: xr.Dataset
     ) -> Sequence[Sequence[DATA_VAR]]:
         """Return groups of variables, where all variables in a group can be retrieived from the same source file."""
-
         return [self.data_vars]
 
     def generate_source_file_coords(
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[DATA_VAR]
     ) -> Sequence[SourceFileCoord]:
+        """Return a sequence of `SourceFileCoord`s, one for each source file required to process the data covered by processing_region_ds."""
         raise NotImplementedError(
-            "Subclasses must implement generate_source_file_coords"
+            "Return a sequence of SourceFileCoord objects, one for each source file required to process the data covered by processing_region_ds."
         )
 
     def download_file(self, coord: SourceFileCoord) -> Path:
-        raise NotImplementedError("Subclasses must implement download_file")
+        """Download the file for the given coordinate and return the local path."""
+        raise NotImplementedError(
+            "Download the file for the given coordinate and return the local path."
+        )
 
     def read_data(
         self,
         coord: SourceFileCoord,
         data_var: DATA_VAR,
-    ) -> NDArray[Any]:
+    ) -> ArrayFloat32:
         """
         Read and return the data chunk for the given variable and source file coordinate.
 
@@ -193,10 +193,12 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
 
         Returns
         -------
-        NDArray[Any]
-            The loaded data
+        ArrayFloat32
+            The loaded data.
         """
-        raise NotImplementedError("Subclasses must implement read_data")
+        raise NotImplementedError(
+            "Read and return data for the given variable and source file coordinate."
+        )
 
     def apply_data_transformations(
         self, data_array: xr.DataArray, data_var: DATA_VAR
@@ -239,7 +241,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
 
     def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
         ds = self.template_ds[[v.name for v in self.data_vars]]
-        processing_region = self.get_processing_region(self.region)
+        processing_region = self.get_processing_region()
         processing_region_ds = ds.isel({self.append_dim: processing_region})
         output_region_ds = ds.isel({self.append_dim: self.region})
         return processing_region_ds, output_region_ds
@@ -248,11 +250,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         self, data_var_groups: Sequence[Sequence[DATA_VAR]]
     ) -> Sequence[Sequence[DATA_VAR]]:
         """
-        Possibly split groups of data variables into group sizes ideal for downloading.
+        Possibly split groups of data variables into smaller group sizes ideal for downloading.
 
-        When the batch_size is smaller than len(self.data_vars), downloading and reading/recompressing
-        can begin on variables can begin on an already downloaded group, while other variables finish
-        downloading.
+        When the batch_size is smaller than len(self.data_vars), reading/recompressing
+        can begin on an already downloaded group, while later groups finish downloading.
         """
 
         if len(self.data_vars) > 6:
@@ -274,10 +275,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         """
         Download all required source files for the given region dataset in parallel.
 
-        This method generates the list of source file coordinates needed for the specified
-        region and time chunk, attempts to download each file, and updates the download
-        status and path for each coordinate.
-
         Returns
         -------
         list[SourceFileCoord]
@@ -296,10 +293,18 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
                     coord.downloaded_path = path
                 except Exception as e:
                     coord.status = SourceFileStatus.DownloadFailed
-                    if isinstance(e, FileNotFoundError) and getattr(
-                        coord, self.append_dim, pd.Timestamp.min
-                    ) > (pd.Timestamp.now() - pd.Timedelta(hours=24)):
-                        # For recent files, we expect some files to not exist yet, just log the path
+
+                    # For recent files, we expect some files to not exist yet, just log the path
+                    # else, log exception so it is caught by error reporting but doesn't stop processing
+                    append_dim_coord = getattr(coord, self.append_dim, pd.Timestamp.min)
+                    if isinstance(append_dim_coord, slice):
+                        append_dim_coord = append_dim_coord.start
+                    day_ago = pd.Timestamp.now() - pd.Timedelta(hours=24)
+                    if (
+                        isinstance(e, FileNotFoundError)
+                        and isinstance(append_dim_coord, np.datetime64 | pd.Timestamp)
+                        and append_dim_coord > day_ago
+                    ):
                         logger.info(" ".join(str(e).split("\n")[:2]))
                     else:
                         logger.exception("Download failed")
