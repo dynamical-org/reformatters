@@ -210,7 +210,35 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         filter_end: Timestamp | None = None,
         filter_variable_names: list[str] | None = None,
     ) -> Sequence["RegionJob[DATA_VAR, SOURCE_FILE_COORD]"]:
-        # docstring AI!
+        """
+        Return a sequence of RegionJob instances for backfill processing.
+
+        Parameters
+        ----------
+        store : zarr.abc.store.Store
+            The Zarr store to write output shards into.
+        template_ds : xr.Dataset
+            Dataset template defining structure and metadata.
+        append_dim : AppendDim
+            The dimension along which data is appended (e.g., "time").
+        all_data_vars : Sequence[DATA_VAR]
+            List of all data variables configured for processing.
+        worker_index : int, default 0
+            Zero-based index of this worker among all workers.
+        workers_total : int, default 1
+            Total number of parallel workers.
+        filter_start : Timestamp | None, default None
+            Optional inclusive start time to include.
+        filter_end : Timestamp | None, default None
+            Optional exclusive end time to include.
+        filter_variable_names : list[str] | None, default None
+            Optional subset of variable names to process.
+
+        Returns
+        -------
+        Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
+            RegionJob instances assigned to this worker.
+        """
 
         # Data variables -- filter and group
         data_vars: Sequence[DATA_VAR]
