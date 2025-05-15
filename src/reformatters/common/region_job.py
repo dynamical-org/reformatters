@@ -1,6 +1,7 @@
 import os
 from collections.abc import Iterable, Mapping, Sequence
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from contextlib import suppress
 from enum import Enum, auto
 from itertools import batched
 from multiprocessing.shared_memory import SharedMemory
@@ -12,10 +13,10 @@ import pandas as pd
 import pydantic
 import xarray as xr
 import zarr
-from pydantic import AfterValidator
+from pydantic import AfterValidator, Field
 
 from reformatters.common.binary_rounding import round_float32_inplace
-from reformatters.common.config_models import DataVar
+from reformatters.common.config_models import DataVar, FrozenBaseModel, replace
 from reformatters.common.logging import get_logger
 from reformatters.common.reformat_utils import (
     create_data_array_and_template,
@@ -27,7 +28,6 @@ from reformatters.common.types import ArrayFloat32
 logger = get_logger(__name__)
 
 type CoordinateValueOrRange = slice | int | float | pd.Timestamp | pd.Timedelta | str
-DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 
 
 class SourceFileStatus(Enum):
@@ -37,7 +37,7 @@ class SourceFileStatus(Enum):
     Succeeded = auto()
 
 
-class SourceFileCoord(pydantic.BaseModel):
+class SourceFileCoord(FrozenBaseModel):
     """
     Base class representing the coordinates and status of a single source file required for processing.
 
@@ -52,8 +52,8 @@ class SourceFileCoord(pydantic.BaseModel):
         Local filesystem path to the downloaded file, or None if not downloaded.
     """
 
-    status: SourceFileStatus = SourceFileStatus.Processing
-    downloaded_path: Path | None = None
+    status: SourceFileStatus = Field(default=SourceFileStatus.Processing, frozen=False)
+    downloaded_path: Path | None = Field(default=None, frozen=False)
 
     def get_url(self) -> str:
         """Return the URL for this source file."""
@@ -63,28 +63,42 @@ class SourceFileCoord(pydantic.BaseModel):
         self,
     ) -> Mapping[Dim, CoordinateValueOrRange]:
         """
-        Return a data array indexer which idetifies the region in the output dataset to write the data from the source file.
+        Return a data array indexer which identifies the region in the output dataset
+        to write the data from the source file. The indexer is a dict from dimension
+        names to coordinate values or slices.
 
-        Examples:
+        If the names of the coordinate attributes of your SourceFileCoord subclass are also all
+        dimension names in the output dataset, use the default implementation of this method.
+
+        Examples where you would override this method:
         - For an analysis dataset created from forecast data: {"time": self.init_time + self.lead_time}
-        - For an ensemble forecast dataset: {"init_time": self.init_time, "ensemble_member": self.ensemble_member, "lead_time": self.lead_time}
         """
-        raise NotImplementedError(
-            "Return a data array indexer which identifies the region in the output dataset to write the data from the source file."
-        )
+        # .model_dump() returns a dict from attribute names to values
+        return self.model_dump(exclude=["status", "downloaded_path"])  # type: ignore
 
 
-class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
-    store: zarr.storage.FsspecStore
+DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
+SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
+
+
+class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
+    store: Annotated[
+        zarr.storage.FsspecStore,
+        pydantic.PlainValidator(
+            lambda s: s
+            if isinstance(s, zarr.storage.FsspecStore | zarr.storage.LocalStore)
+            else ValueError("store must be a FsspecStore or LocalStore")
+        ),
+    ]
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
     append_dim: AppendDim
     region: Annotated[
         slice,
         AfterValidator(
-            lambda s: isinstance(s.start, int)
-            and isinstance(s.stop, int)
-            and s.step is None
+            lambda s: s
+            if isinstance(s.start, int) and isinstance(s.stop, int) and s.step is None
+            else ValueError("region must be integer slice")
         ),
     ]
     max_vars_per_backfill_job: ClassVar[int]
@@ -106,13 +120,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
 
     def generate_source_file_coords(
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[DATA_VAR]
-    ) -> Sequence[SourceFileCoord]:
-        """Return a sequence of `SourceFileCoord`s, one for each source file required to process the data covered by processing_region_ds."""
+    ) -> Sequence[SOURCE_FILE_COORD]:
+        """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
         raise NotImplementedError(
             "Return a sequence of SourceFileCoord objects, one for each source file required to process the data covered by processing_region_ds."
         )
 
-    def download_file(self, coord: SourceFileCoord) -> Path:
+    def download_file(self, coord: SOURCE_FILE_COORD) -> Path:
         """Download the file for the given coordinate and return the local path."""
         raise NotImplementedError(
             "Download the file for the given coordinate and return the local path."
@@ -120,7 +134,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
 
     def read_data(
         self,
-        coord: SourceFileCoord,
+        coord: SOURCE_FILE_COORD,
         data_var: DATA_VAR,
     ) -> ArrayFloat32:
         """
@@ -132,7 +146,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
 
         Parameters
         ----------
-        coord : SourceFileCoord
+        coord : SOURCE_FILE_COORD
             The coordinate specifying which file and region to read.
         data_var : DATA_VAR
             The data variable metadata.
@@ -177,7 +191,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
     def summarize_processing_state(
         self,
         data_var: DATA_VAR,
-        source_file_coords: Sequence[SourceFileCoord],
+        source_file_coords: Sequence[SOURCE_FILE_COORD],
     ) -> Any:
         return None
 
@@ -272,79 +286,69 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
         ]
 
     def _download_processing_group(
-        self, coords: Iterable[SourceFileCoord]
-    ) -> list[SourceFileCoord]:
+        self, source_file_coords: Iterable[SOURCE_FILE_COORD]
+    ) -> list[SOURCE_FILE_COORD]:
         """
-        Download all required source files for the given region dataset in parallel.
+        Download specified source files in parallel.
 
         Returns
         -------
-        list[SourceFileCoord]
+        list[SOURCE_FILE_COORD]
             List of SourceFileCoord objects with updated download status and path.
         """
 
+        def _call_download_file(coord: SOURCE_FILE_COORD) -> SOURCE_FILE_COORD:
+            try:
+                path = self.download_file(coord)
+                return replace(coord, downloaded_path=path)
+            except Exception as e:
+                updated_coord = replace(coord, status=SourceFileStatus.DownloadFailed)
+
+                # For recent files, we expect some files to not exist yet, just log the path
+                # else, log exception so it is caught by error reporting but doesn't stop processing
+                append_dim_coord = getattr(coord, self.append_dim, pd.Timestamp.min)
+                if isinstance(append_dim_coord, slice):
+                    append_dim_coord = append_dim_coord.start
+                day_ago = pd.Timestamp.now() - pd.Timedelta(hours=24)
+                if (
+                    isinstance(e, FileNotFoundError)
+                    and isinstance(append_dim_coord, np.datetime64 | pd.Timestamp)
+                    and append_dim_coord > day_ago
+                ):
+                    logger.info(" ".join(str(e).split("\n")[:2]))
+                else:
+                    logger.exception(f"Download failed {coord.get_url()}")
+
+                return updated_coord
+
         with ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2) as io_executor:
-            futures = {
-                io_executor.submit(self.download_file, coord): coord for coord in coords
-            }
-            results: list[SourceFileCoord] = []
-            for future in as_completed(futures):
-                coord = futures[future]
-                try:
-                    path = future.result()
-                    coord.downloaded_path = path
-                except Exception as e:
-                    coord.status = SourceFileStatus.DownloadFailed
-
-                    # For recent files, we expect some files to not exist yet, just log the path
-                    # else, log exception so it is caught by error reporting but doesn't stop processing
-                    append_dim_coord = getattr(coord, self.append_dim, pd.Timestamp.min)
-                    if isinstance(append_dim_coord, slice):
-                        append_dim_coord = append_dim_coord.start
-                    day_ago = pd.Timestamp.now() - pd.Timedelta(hours=24)
-                    if (
-                        isinstance(e, FileNotFoundError)
-                        and isinstance(append_dim_coord, np.datetime64 | pd.Timestamp)
-                        and append_dim_coord > day_ago
-                    ):
-                        logger.info(" ".join(str(e).split("\n")[:2]))
-                    else:
-                        logger.exception("Download failed")
-
-                results.append(coord)
-        return results
+            return list(io_executor.map(_call_download_file, source_file_coords))
 
     def _read_into_data_array(
         self,
         out: xr.DataArray,
         data_var: DATA_VAR,
-        source_file_coords: Sequence[SourceFileCoord],
-    ) -> None:
+        source_file_coords: Sequence[SOURCE_FILE_COORD],
+    ) -> list[SOURCE_FILE_COORD]:
         """
-        For each coord with status Processing, submit a job to:
-          - call self.read_data(coord, data_var)
-          - write the result into the shared array at coord.out_loc()
-          - update coord.status to Succeeded or ReadFailed
+        Reads data from source files into `out`.
+        Returns a list of coords with the final status.
         """
 
-        def _read_and_write_one(coord: SourceFileCoord) -> None:
+        def _read_and_write_one(coord: SOURCE_FILE_COORD) -> SOURCE_FILE_COORD:
             try:
-                # read_data should return a numpy array chunk
-                chunk = self.read_data(coord, data_var=data_var)
-                # Write the chunk into the correct location in the shared array
-                out.loc[coord.out_loc()] = chunk
-                coord.status = SourceFileStatus.Succeeded
+                out.loc[coord.out_loc()] = self.read_data(coord, data_var)
+                return replace(coord, status=SourceFileStatus.Succeeded)
             except Exception:
-                coord.status = SourceFileStatus.ReadFailed
+                logger.exception(f"Read failed {coord.downloaded_path}")
+                return replace(coord, status=SourceFileStatus.ReadFailed)
 
+        # Skip coords where the download failed
+        read_coords = (
+            c for c in source_file_coords if c.status == SourceFileStatus.Processing
+        )
         with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as executor:
-            futures = [
-                executor.submit(_read_and_write_one, coord)
-                for coord in source_file_coords
-                if coord.status == SourceFileStatus.Processing
-            ]
-            for future in as_completed(futures):
-                future.result()  # propagate exceptions if any
+            return list(executor.map(_read_and_write_one, read_coords))
 
     def _write_shards(
         self,
@@ -364,8 +368,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR]):
             )
 
     def _cleanup_local_files(
-        self, source_file_coords: Sequence[SourceFileCoord]
+        self, source_file_coords: Sequence[SOURCE_FILE_COORD]
     ) -> None:
         for coord in source_file_coords:
             if coord.downloaded_path:
-                coord.downloaded_path.unlink()
+                with suppress(FileNotFoundError):
+                    coord.downloaded_path.unlink()
