@@ -1,7 +1,7 @@
 from reformatters.common.dynamical_dataset import DynamicalDataset
 
 
-def test_dynamical_dataset_methods_exist():
+def test_dynamical_dataset_methods_exist() -> None:
     methods = [
         "update_template",
         "reformat_kubernetes",
