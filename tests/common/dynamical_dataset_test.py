@@ -1,13 +1,17 @@
 from typing import ClassVar
 from unittest.mock import Mock
 
+import numpy as np
 import pandas as pd
 import pytest
+import xarray as xr
+from pydantic import computed_field
 
 from reformatters.common.config_models import (
     BaseInternalAttrs,
-    DatasetAttributes,
     DataVar,
+    DataVarAttrs,
+    Encoding,
 )
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.region_job import RegionJob, SourceFileCoord
@@ -17,6 +21,19 @@ from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 
 class ExampleDataVar(DataVar[BaseInternalAttrs]):
     name: str = "var"
+    encoding: Encoding = Encoding(
+        dtype="float32",
+        fill_value=np.nan,
+        chunks=(1,),
+        shards=(1,),
+        compressors=[],
+    )
+    attrs: DataVarAttrs = DataVarAttrs(
+        short_name="var",
+        long_name="Variable",
+        units="C",
+        step_type="instant",
+    )
     internal_attrs: BaseInternalAttrs = BaseInternalAttrs(keep_mantissa_bits=10)
 
 
@@ -34,21 +51,20 @@ class ExampleConfig(TemplateConfig[ExampleDataVar]):
     append_dim_start: Timestamp = pd.Timestamp("2000-01-01")
     append_dim_frequency: Timedelta = pd.Timedelta("1D")
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
-    def dataset_attributes(self) -> DatasetAttributes:
-        return DatasetAttributes(
-            dataset_id="example",
-            dataset_version="v1",
-            name="example",
-            description="example",
-            attribution="example",
-            spatial_domain="",
-            spatial_resolution="",
-            time_domain="",
-            time_resolution="",
-            forecast_domain=None,
-            forecast_resolution=None,
-        )
+    def dataset_id(self) -> str:
+        return "example-dataset"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def version(self) -> str:
+        return "1.2.3"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def data_vars(self) -> list[ExampleDataVar]:
+        return [ExampleDataVar()]
 
 
 class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
@@ -90,20 +106,25 @@ def test_update_template(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_process_region_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_job0 = Mock()
+    mock_job0.summary = lambda: "job0-summary"
     mock_job1 = Mock()
+    mock_job1.summary = lambda: "job1-summary"
     monkeypatch.setattr(
         ExampleRegionJob,
         "get_backfill_jobs",
         classmethod(lambda cls, *args, **kwargs: [mock_job0, mock_job1]),
     )
+    monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
     )
+
     dataset.process_region_jobs(
         pd.Timestamp("2000-01-02"),
         worker_index=0,
         workers_total=1,
     )
+
     mock_job0.process.assert_called_once()
     mock_job1.process.assert_called_once()

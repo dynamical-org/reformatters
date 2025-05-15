@@ -20,19 +20,19 @@ from reformatters.common.template_config import (
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 
 
-class DummyDataVar(DataVar[BaseInternalAttrs]):
+class ExampleDataVar(DataVar[BaseInternalAttrs]):
     pass
 
 
-class DummyCoordinate(Coordinate):
+class ExampleCoordinate(Coordinate):
     pass
 
 
-class DummyDatasetAttributes(DatasetAttributes):
+class ExampleDatasetAttributes(DatasetAttributes):
     pass
 
 
-class SimpleConfig(TemplateConfig[DummyDataVar]):
+class ExampleConfig(TemplateConfig[ExampleDataVar]):
     """A minimal concrete implementation to test the happy‐path logic."""
 
     dims: tuple[Dim, ...] = ("time",)
@@ -41,7 +41,7 @@ class SimpleConfig(TemplateConfig[DummyDataVar]):
     append_dim_frequency: Timedelta = pd.Timedelta(days=1)
 
     @property
-    def dataset_attributes(self) -> DummyDatasetAttributes:
+    def dataset_attributes(self) -> ExampleDatasetAttributes:
         return SimpleNamespace(dataset_id="simple_dataset")  # type: ignore
 
     @property
@@ -50,7 +50,7 @@ class SimpleConfig(TemplateConfig[DummyDataVar]):
         return []
 
     @property
-    def data_vars(self) -> list[DummyDataVar]:
+    def data_vars(self) -> list[ExampleDataVar]:
         return []
 
     def dimension_coordinates(self) -> dict[str, pd.DatetimeIndex]:
@@ -64,7 +64,7 @@ class SimpleConfig(TemplateConfig[DummyDataVar]):
         return super().derive_coordinates(ds)
 
 
-class BadCoordsConfig(SimpleConfig):
+class BadCoordsConfig(ExampleConfig):
     """Injects a coord whose name isn't in dims to trigger the NotImplementedError."""
 
     @property
@@ -74,8 +74,8 @@ class BadCoordsConfig(SimpleConfig):
 
 
 @pytest.fixture
-def simple_cfg() -> SimpleConfig:
-    return SimpleConfig(
+def example_config() -> ExampleConfig:
+    return ExampleConfig(
         dims=("time",),
         append_dim="time",
         append_dim_start=pd.Timestamp("2000-01-01"),
@@ -83,16 +83,16 @@ def simple_cfg() -> SimpleConfig:
     )
 
 
-def test_dataset_id_property(simple_cfg: SimpleConfig) -> None:
-    assert simple_cfg.dataset_id == "simple_dataset"
+def test_dataset_id_property(example_config: ExampleConfig) -> None:
+    assert example_config.dataset_id == "simple_dataset"
 
 
 def test_append_dim_coordinates_left_inclusive_right_exclusive(
-    simple_cfg: SimpleConfig,
+    example_config: ExampleConfig,
 ) -> None:
     # up to but not including 2000-01-05
     end = pd.Timestamp("2000-01-05")
-    got = simple_cfg.append_dim_coordinates(end)
+    got = example_config.append_dim_coordinates(end)
     expected = pd.date_range("2000-01-01", end, freq="1D", inclusive="left")
     pd.testing.assert_index_equal(got, expected)
 
@@ -108,7 +108,7 @@ def test_append_dim_coordinates_left_inclusive_right_exclusive(
 def test_append_dim_coordinate_chunk_size_varies_with_start(
     start_year: int, expected_years: int
 ) -> None:
-    class C(SimpleConfig):
+    class C(ExampleConfig):
         append_dim_start: Timestamp = pd.Timestamp(f"{start_year}-01-01")
 
     inst = C(
@@ -123,10 +123,10 @@ def test_append_dim_coordinate_chunk_size_varies_with_start(
 
 
 def test_default_derive_coordinates_returns_spatial_ref(
-    simple_cfg: SimpleConfig,
+    example_config: ExampleConfig,
 ) -> None:
     ds = xr.Dataset()
-    coords = simple_cfg.derive_coordinates(ds)
+    coords = example_config.derive_coordinates(ds)
     # only the spatial_ref key should be present
     assert set(coords) == {"spatial_ref"}
     assert coords["spatial_ref"] == SPATIAL_REF_COORDS

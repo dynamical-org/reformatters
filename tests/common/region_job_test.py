@@ -23,7 +23,7 @@ from reformatters.common.types import ArrayFloat32, Timestamp
 from reformatters.common.zarr import get_zarr_store
 
 
-class DataVarA(DataVar[BaseInternalAttrs]):
+class ExampleDataVar(DataVar[BaseInternalAttrs]):
     encoding: Encoding = Encoding(
         dtype="float32", fill_value=np.nan, chunks=(1, 10, 15), shards=None
     )
@@ -36,42 +36,42 @@ class DataVarA(DataVar[BaseInternalAttrs]):
     internal_attrs: BaseInternalAttrs = BaseInternalAttrs(keep_mantissa_bits=10)
 
 
-class SourceFileCoordA(SourceFileCoord):
+class ExampleSourceFileCoords(SourceFileCoord):
     time: Timestamp
 
     def get_url(self) -> str:
         return f"https://test.org/testfile{self.time.strftime('%Y%m%d%H%M')}"
 
 
-class RegionJobA(RegionJob[DataVarA, SourceFileCoordA]):
+class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoords]):
     max_vars_per_backfill_job: ClassVar[int] = 2
 
     @classmethod
     def group_data_vars(
         cls,
-        data_vars: Sequence[DataVarA],
-    ) -> Sequence[Sequence[DataVarA]]:
+        data_vars: Sequence[ExampleDataVar],
+    ) -> Sequence[Sequence[ExampleDataVar]]:
         return list(batched(data_vars, 3))
 
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
-        data_var_group: Sequence[DataVarA],
-    ) -> Sequence[SourceFileCoordA]:
+        data_var_group: Sequence[ExampleDataVar],
+    ) -> Sequence[ExampleSourceFileCoords]:
         return [
-            SourceFileCoordA(time=t)
+            ExampleSourceFileCoords(time=t)
             for t in processing_region_ds[self.append_dim].values
         ]
 
-    def download_file(self, coord: SourceFileCoordA) -> Path:
+    def download_file(self, coord: ExampleSourceFileCoords) -> Path:
         if coord.time == pd.Timestamp("2025-01-01T00"):
             raise FileNotFoundError()  # simulate a missing file
         return Path("testfile")
 
     def read_data(
         self,
-        coord: SourceFileCoordA,
-        data_var: DataVarA,
+        coord: ExampleSourceFileCoords,
+        data_var: ExampleDataVar,
     ) -> ArrayFloat32:
         if coord.time == pd.Timestamp("2025-01-01T06"):
             raise ValueError("Test error")  # simulate a read error
@@ -111,10 +111,10 @@ def test_region_job(template_ds: xr.Dataset) -> None:
     # Write zarr metadata for this RegionJob to write into
     template_utils.write_metadata(template_ds, store, mode="w")
 
-    job = RegionJobA(
+    job = ExampleRegionJob(
         store=store,
         template_ds=template_ds,
-        data_vars=[DataVarA(name=name) for name in template_ds.data_vars.keys()],
+        data_vars=[ExampleDataVar(name=name) for name in template_ds.data_vars.keys()],
         append_dim="time",
         region=slice(0, 18),
     )
@@ -134,14 +134,14 @@ def test_region_job(template_ds: xr.Dataset) -> None:
 
 
 def test_source_file_coord_out_loc_default_impl() -> None:
-    coord = SourceFileCoordA(time=pd.Timestamp("2025-01-01T00"))
+    coord = ExampleSourceFileCoords(time=pd.Timestamp("2025-01-01T00"))
     assert coord.out_loc() == {"time": pd.Timestamp("2025-01-01T00")}
 
 
 def test_get_backfill_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
-    data_vars = [DataVarA(name=name) for name in template_ds.data_vars.keys()]
+    data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
     store = get_zarr_store("test-dataset-B", "test-version")
-    jobs = RegionJobA.get_backfill_jobs(
+    jobs = ExampleRegionJob.get_backfill_jobs(
         store=store,
         template_ds=template_ds,
         append_dim="time",
@@ -173,9 +173,9 @@ def test_get_backfill_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
 
 
 def test_get_backfill_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
-    data_vars = [DataVarA(name=name) for name in template_ds.data_vars.keys()]
+    data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
     store = get_zarr_store("test-dataset-B", "test-version")
-    jobs = RegionJobA.get_backfill_jobs(
+    jobs = ExampleRegionJob.get_backfill_jobs(
         store=store,
         template_ds=template_ds,
         append_dim="time",
@@ -214,9 +214,9 @@ def test_get_backfill_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
 def test_get_backfill_jobs_grouping_filters_and_worker_index(
     template_ds: xr.Dataset,
 ) -> None:
-    data_vars = [DataVarA(name=name) for name in template_ds.data_vars.keys()]
+    data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
     store = get_zarr_store("test-dataset-B", "test-version")
-    jobs = RegionJobA.get_backfill_jobs(
+    jobs = ExampleRegionJob.get_backfill_jobs(
         store=store,
         template_ds=template_ds,
         append_dim="time",

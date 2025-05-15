@@ -468,3 +468,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             if coord.downloaded_path:
                 with suppress(FileNotFoundError):
                     coord.downloaded_path.unlink()
+
+    def summary(self) -> str:
+        return f"({self.region.start} - {self.region.stop}) {[d.name for d in self.data_vars]}"

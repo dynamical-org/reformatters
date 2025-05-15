@@ -72,6 +72,11 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
     def dataset_id(self) -> str:
         return self.dataset_attributes.dataset_id
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def version(self) -> str:
+        return self.dataset_attributes.dataset_version
+
     def append_dim_coordinates(self, end: DatetimeLike) -> pd.DatetimeIndex:
         """
         Returns DatetimeIndex for the append dimension from the configured start time to the given end time.
