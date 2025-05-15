@@ -110,7 +110,7 @@ def test_region_job(template_ds: xr.Dataset) -> None:
     # to pass pydantic validation
     zarr.storage.FsspecStore.register(zarr.storage.LocalStore)
 
-    store = get_zarr_store("test-dataset", "test-version")
+    store = get_zarr_store("test-dataset-A", "test-version")
 
     # Write zarr metadata for this RegionJob to write into
     template_utils.write_metadata(template_ds, store, mode="w")
