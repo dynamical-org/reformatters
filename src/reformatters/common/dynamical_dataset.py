@@ -1,5 +1,6 @@
+from typing import Generic, TypeVar
+
 import pydantic
-from typing import Generic, Type, TypeVar
 
 from reformatters.common.region_job import RegionJob
 from reformatters.common.template_config import TemplateConfig
@@ -14,7 +15,7 @@ class DynamicalDataset(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD])
     """
 
     template_config: TemplateConfig[DATA_VAR]
-    region_job_class: Type[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
+    region_job_class: type[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
 
     def update_template(self) -> None:
         """Generate and persist the dataset template using the template_config."""
