@@ -15,11 +15,9 @@ from reformatters.common.config_models import (
 )
 from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
-    AppendDim,
-    Dim,
     TemplateConfig,
 )
-from reformatters.common.types import Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 
 
 class DummyDataVar(DataVar[BaseInternalAttrs]):

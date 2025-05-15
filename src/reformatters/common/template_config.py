@@ -1,7 +1,7 @@
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Generic, Literal, TypeVar, get_args
+from typing import Any, Generic, TypeVar
 
 import numpy as np
 import pandas as pd
@@ -15,14 +15,7 @@ from reformatters.common.config_models import (
     DataVar,
 )
 from reformatters.common.pydantic import FrozenBaseModel
-from reformatters.common.types import DatetimeLike, Timedelta, Timestamp
-
-type Dim = Literal[
-    "time", "init_time", "ensemble_member", "lead_time", "latitude", "longitude"
-]
-type AppendDim = Literal["init_time", "time"]
-assert set(get_args(AppendDim)) <= set(get_args(Dim))
-
+from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, Timestamp
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 

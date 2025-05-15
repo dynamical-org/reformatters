@@ -23,8 +23,7 @@ from reformatters.common.reformat_utils import (
     create_data_array_and_template,
 )
 from reformatters.common.shared_memory_utils import make_shared_buffer, write_shards
-from reformatters.common.template_config import AppendDim, Dim
-from reformatters.common.types import ArrayFloat32
+from reformatters.common.types import AppendDim, ArrayFloat32, Dim, Timestamp
 
 logger = get_logger(__name__)
 
@@ -88,6 +87,18 @@ def region_slice(s: slice) -> slice:
     return s
 
 
+class ChunkFilters(FrozenBaseModel):
+    """
+    Filters for controlling which chunks of data to process.
+    A value of None means no filtering.
+    """
+
+    append_dim: AppendDim
+    append_dim_start: Timestamp | None = None
+    append_dim_end: Timestamp | None = None
+    variable_names: list[str] | None = None
+
+
 class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     store: zarr.abc.store.Store
     template_ds: xr.Dataset
@@ -95,6 +106,15 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     append_dim: AppendDim
     region: Annotated[slice, AfterValidator(region_slice)]
     max_vars_per_backfill_job: ClassVar[int]
+
+    @classmethod
+    def get_backfill_jobs(
+        cls,
+        worker_index: int = 0,
+        workers_total: int = 1,
+        chunk_filters: ChunkFilters | None = None,
+    ) -> list["RegionJob[DATA_VAR, SOURCE_FILE_COORD]"]:
+        return []
 
     def get_processing_region(self) -> slice:
         """
