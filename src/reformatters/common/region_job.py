@@ -17,6 +17,7 @@ from pydantic import AfterValidator, Field
 
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config_models import DataVar
+from reformatters.common.iterating import dimension_slices, get_worker_jobs
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel, replace
 from reformatters.common.reformat_utils import (
@@ -87,34 +88,22 @@ def region_slice(s: slice) -> slice:
     return s
 
 
-class ChunkFilters(FrozenBaseModel):
-    """
-    Filters for controlling which chunks of data to process.
-    A value of None means no filtering.
-    """
-
-    append_dim: AppendDim
-    append_dim_start: Timestamp | None = None
-    append_dim_end: Timestamp | None = None
-    variable_names: list[str] | None = None
-
-
 class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     store: zarr.abc.store.Store
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
     append_dim: AppendDim
+    # integer slice along append_dim
     region: Annotated[slice, AfterValidator(region_slice)]
     max_vars_per_backfill_job: ClassVar[int]
 
     @classmethod
-    def get_backfill_jobs(
+    def group_data_vars(
         cls,
-        worker_index: int = 0,
-        workers_total: int = 1,
-        chunk_filters: ChunkFilters | None = None,
-    ) -> list["RegionJob[DATA_VAR, SOURCE_FILE_COORD]"]:
-        return []
+        data_vars: Sequence[DATA_VAR],
+    ) -> Sequence[Sequence[DATA_VAR]]:
+        """Return groups of variables, where all variables in a group can be retrieived from the same source file."""
+        return [data_vars]
 
     def get_processing_region(self) -> slice:
         """
@@ -124,12 +113,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         return a modified slice (e.g. `slice(self.region.start - 1, self.region.stop + 1)`).
         """
         return self.region
-
-    def group_data_vars(
-        self, processing_region_ds: xr.Dataset
-    ) -> Sequence[Sequence[DATA_VAR]]:
-        """Return groups of variables, where all variables in a group can be retrieived from the same source file."""
-        return [self.data_vars]
 
     def generate_source_file_coords(
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[DATA_VAR]
@@ -214,6 +197,63 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         arbitrary_types_allowed=True, frozen=True, strict=True
     )
 
+    @classmethod
+    def get_backfill_jobs(
+        cls,
+        store: zarr.abc.store.Store,
+        template_ds: xr.Dataset,
+        append_dim: AppendDim,
+        all_data_vars: Sequence[DATA_VAR],
+        worker_index: int = 0,
+        workers_total: int = 1,
+        filter_start: Timestamp | None = None,
+        filter_end: Timestamp | None = None,
+        filter_variable_names: list[str] | None = None,
+    ) -> Sequence["RegionJob[DATA_VAR, SOURCE_FILE_COORD]"]:
+        # docstring AI!
+
+        # Data variables -- filter and group
+        data_vars: Sequence[DATA_VAR]
+        if filter_variable_names:
+            data_vars = [v for v in all_data_vars if v.name in filter_variable_names]
+        else:
+            data_vars = all_data_vars
+        data_var_groups = cls.group_data_vars(data_vars)
+        data_var_groups = cls._maybe_split_groups(
+            data_var_groups, cls.max_vars_per_backfill_job
+        )
+
+        # Regions along append dimension
+        regions = dimension_slices(template_ds, append_dim, kind="shards")
+
+        # Filter regions
+        append_dim_coords = template_ds.coords[append_dim]
+        if filter_start is not None:
+            regions = [
+                region
+                for region in regions
+                if append_dim_coords.iloc[region].max() >= filter_start
+            ]
+        if filter_end is not None:
+            regions = [
+                region
+                for region in regions
+                if append_dim_coords.iloc[region].min() < filter_end
+            ]
+
+        all_jobs = [
+            cls(
+                store=store,
+                template_ds=template_ds,
+                data_vars=data_var_group,
+                append_dim=append_dim,
+                region=region,
+            )
+            for data_var_group in data_var_groups
+            for region in regions
+        ]
+        return get_worker_jobs(all_jobs, worker_index, workers_total)
+
     def process(self) -> dict[str, Any]:
         """
         Orchestrate the full region job processing pipeline.
@@ -230,10 +270,12 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             dict[str, Any]: Mapping from data variable name to the output of `self.summarize_processing_state`.
         """
         processing_region_ds, output_region_ds = self._get_region_datasets()
+        data_var_groups = self._data_var_download_groups(
+            self.group_data_vars(self.data_vars)
+        )
         results: dict[str, Any] = {}
         with make_shared_buffer(processing_region_ds) as shared_buffer:
-            data_var_groups = self.group_data_vars(processing_region_ds)
-            for data_var_group in self._data_var_download_groups(data_var_groups):
+            for data_var_group in data_var_groups:
                 source_file_coords = self.generate_source_file_coords(
                     processing_region_ds,
                     data_var_group,
@@ -275,6 +317,17 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         output_region_ds = ds.isel({self.append_dim: self.region})
         return processing_region_ds, output_region_ds
 
+    @classmethod
+    def _maybe_split_groups(
+        cls, data_var_groups: Sequence[Sequence[DATA_VAR]], batch_size: int
+    ) -> Sequence[Sequence[DATA_VAR]]:
+        """Splits inner groups into smaller groups of at most batch_size."""
+        return [
+            tuple(split_group)
+            for group in data_var_groups
+            for split_group in batched(group, batch_size)
+        ]
+
     def _data_var_download_groups(
         self, data_var_groups: Sequence[Sequence[DATA_VAR]]
     ) -> Sequence[Sequence[DATA_VAR]]:
@@ -284,7 +337,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         When the batch_size is smaller than len(self.data_vars), reading/recompressing
         can begin on an already downloaded group, while later groups finish downloading.
         """
-
         if len(self.data_vars) > 6:
             batch_size = 4
         elif len(self.data_vars) > 3:
@@ -292,11 +344,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         else:
             batch_size = 1
 
-        return [
-            tuple(download_group)
-            for group in data_var_groups
-            for download_group in batched(group, batch_size)
-        ]
+        return self._maybe_split_groups(data_var_groups, batch_size)
 
     def _download_processing_group(
         self, source_file_coords: Iterable[SOURCE_FILE_COORD]
