@@ -1,4 +1,4 @@
-from typing import ClassVar
+from typing import ClassVar, Type
 
 import pandas as pd
 
@@ -28,9 +28,9 @@ class ExampleConfig(TemplateConfig[ExampleDataVar]):
     append_dim_frequency: pd.Timedelta = pd.Timedelta("1D")
 
 
-class ExampleDataset(DynamicalDataset[ExampleDataVar]):
+class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
     template_config: ExampleConfig
-    region_job_class: type[RegionJob[ExampleDataVar, ExampleSourceFileCoord]]
+    region_job_class: Type[RegionJob[ExampleDataVar, ExampleSourceFileCoord]]
 
 
 def test_dynamical_dataset_methods_exist() -> None:
