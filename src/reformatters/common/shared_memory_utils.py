@@ -45,14 +45,38 @@ def make_shared_buffer(ds: xr.Dataset) -> Generator[SharedMemory, None, None]:
 
 
 def create_data_array_and_template(
-    chunk_template_ds: xr.Dataset,
+    processing_region_ds: xr.Dataset,
     data_var_name: str,
     shared_buffer: SharedMemory,
 ) -> tuple[xr.DataArray, xr.DataArray]:
-    # docstring AI!
+    """
+    Prepare an xarray.DataArray backed by shared memory for writing,
+    and a lightweight template of the same data array.
+
+    The returned template and the _name_ of the shared buffer are passed
+    between processes, avoiding costly pickling of the large shared memory buffer.
+
+    Parameters
+    ----------
+    processing_region_ds : xr.Dataset
+        Template dataset covering the region of the dataset to process.
+    data_var_name : str
+        Name of the variable within `processing_region_ds` to use.
+    shared_buffer : SharedMemory
+        A shared memory buffer to use as backing for the data array.
+
+    Returns
+    -------
+    data_array : xr.DataArray
+        A data array whose `.data` is a NumPy view
+        into the shared memory, initialized to NaN.
+    data_array_template : xr.DataArray
+        processing_region_ds[data_var_name] with non-dimension coordinates dropped.
+        This is lightweight and can be passed between processes.
+    """
 
     # This template is small and we will pass it between processes
-    data_array_template = chunk_template_ds[data_var_name]
+    data_array_template = processing_region_ds[data_var_name]
 
     # This data array will be assigned actual, shared memory
     data_array = data_array_template.copy()
@@ -136,7 +160,7 @@ def write_shard_to_zarr(
     store: zarr.storage.FsspecStore | Path,
     shard_indexer: tuple[slice, ...],
 ) -> None:
-    """Write a shard of data to zarr storage using shared memory."""
+    """Write a shard of data held in shared memory to a zarr store."""
     with (
         warnings.catch_warnings(),
         closing(SharedMemory(name=shared_buffer_name)) as shared_memory,
