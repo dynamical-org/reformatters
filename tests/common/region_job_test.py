@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from itertools import batched
+from itertools import batched, pairwise
 from pathlib import Path
 from typing import ClassVar
 
@@ -44,7 +44,7 @@ class SourceFileCoordA(SourceFileCoord):
 
 
 class RegionJobA(RegionJob[DataVarA, SourceFileCoordA]):
-    max_vars_per_backfill_job: ClassVar[int] = 4
+    max_vars_per_backfill_job: ClassVar[int] = 2
 
     @classmethod
     def group_data_vars(
@@ -88,8 +88,8 @@ def template_ds() -> xr.Dataset:
                 dims=["time", "latitude", "longitude"],
                 encoding={
                     "dtype": "float32",
-                    "chunks": (num_time // 2, 10, 15),
-                    "shards": (num_time, 10, 15),
+                    "chunks": (num_time // 4, 10, 15),
+                    "shards": (num_time // 2, 10, 15),
                 },
             )
             for i in range(4)
@@ -138,16 +138,107 @@ def test_source_file_coord_out_loc_default_impl() -> None:
     assert coord.out_loc() == {"time": pd.Timestamp("2025-01-01T00")}
 
 
-def test_get_backfill_jobs_grouping(template_ds: xr.Dataset) -> None:
+def test_get_backfill_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
     data_vars = [DataVarA(name=name) for name in template_ds.data_vars.keys()]
-    store = get_zarr_store("test-dataset-A", "test-version")
+    store = get_zarr_store("test-dataset-B", "test-version")
     jobs = RegionJobA.get_backfill_jobs(
         store=store,
         template_ds=template_ds,
         append_dim="time",
         all_data_vars=data_vars,
     )
-    # RegionJobA groups vars into batches of 3 -> [3,1], and shards of size 48 -> 1 region -> 2 jobs
+    # RegionJobA groups vars into batches of 3 -> [3,1] and then then max_backfill_jobs of 2 -> [2,1,1]
+    # and shards of size 24 -> 2 shards
+
+    # jobs are sorted by region start
+    assert all(a.region.start <= b.region.start for a, b in pairwise(jobs))
+
+    assert len(jobs) == 6
+    assert [j.data_vars for j in jobs] == [
+        (data_vars[0], data_vars[1]),
+        (data_vars[2],),
+        (data_vars[3],),
+        (data_vars[0], data_vars[1]),
+        (data_vars[2],),
+        (data_vars[3],),
+    ]
+    assert [j.region for j in jobs] == [
+        slice(0, 24),
+        slice(0, 24),
+        slice(0, 24),
+        slice(24, 48),
+        slice(24, 48),
+        slice(24, 48),
+    ]
+
+
+def test_get_backfill_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
+    data_vars = [DataVarA(name=name) for name in template_ds.data_vars.keys()]
+    store = get_zarr_store("test-dataset-B", "test-version")
+    jobs = RegionJobA.get_backfill_jobs(
+        store=store,
+        template_ds=template_ds,
+        append_dim="time",
+        all_data_vars=data_vars,
+        filter_variable_names=["var0", "var1", "var2"],
+        filter_start=pd.Timestamp("2025-01-02T03"),
+        filter_end=pd.Timestamp("2025-01-02T06"),
+    )
+    # RegionJobA groups vars into batches of 3 -> [3] and then then max_backfill_jobs of 2 -> [2, 1]
+    # and shards of size 24 -> 2 shards
+    # but filters limit to only second shard
+
+    # jobs are sorted by region start
+    assert all(a.region.start <= b.region.start for a, b in pairwise(jobs))
+
     assert len(jobs) == 2
-    sizes = sorted([len(job.data_vars) for job in jobs], reverse=True)
-    assert sizes == [3, 1]
+    assert [j.data_vars for j in jobs] == [
+        (data_vars[0], data_vars[1]),
+        (data_vars[2],),
+    ]
+    assert [j.region for j in jobs] == [
+        slice(24, 48),
+        slice(24, 48),
+    ]
+    processing_region_ds, output_region_ds = jobs[0]._get_region_datasets()
+    np.testing.assert_array_equal(
+        processing_region_ds.time.values,
+        pd.date_range("2025-01-02T00", freq="h", periods=24),
+    )
+    np.testing.assert_array_equal(
+        output_region_ds.time.values,
+        pd.date_range("2025-01-02T00", freq="h", periods=24),
+    )
+
+
+def test_get_backfill_jobs_grouping_filters_and_worker_index(
+    template_ds: xr.Dataset,
+) -> None:
+    data_vars = [DataVarA(name=name) for name in template_ds.data_vars.keys()]
+    store = get_zarr_store("test-dataset-B", "test-version")
+    jobs = RegionJobA.get_backfill_jobs(
+        store=store,
+        template_ds=template_ds,
+        append_dim="time",
+        all_data_vars=data_vars,
+        filter_variable_names=["var0", "var1", "var2"],
+        filter_start=pd.Timestamp("2025-01-02T03"),
+        filter_end=pd.Timestamp("2025-01-02T06"),
+        worker_index=0,
+        workers_total=2,
+    )
+    # RegionJobA groups vars into batches of 3 -> [3] and then then max_backfill_jobs of 2 -> [2, 1]
+    # and shards of size 24 -> 2 shards
+    # but filters limit to only second shard
+    # and then gets the first worker's single job
+
+    # jobs are sorted by region start
+    assert all(a.region.start <= b.region.start for a, b in pairwise(jobs))
+
+    assert len(jobs) == 1
+    assert [j.data_vars for j in jobs] == [
+        (data_vars[0], data_vars[1]),
+    ]
+    assert [j.region for j in jobs] == [
+        slice(24, 48),
+    ]
