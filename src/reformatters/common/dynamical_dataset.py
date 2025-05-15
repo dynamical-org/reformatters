@@ -7,16 +7,13 @@ from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
-SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
 
 
-class DynamicalDataset(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
-    """
-    Coordinates dataset template updates and RegionJob processing.
-    """
+class DynamicalDataset(pydantic.BaseModel, Generic[DATA_VAR]):
+    """Top level class managing a dataset configuration and processing."""
 
     template_config: TemplateConfig[DATA_VAR]
-    region_job_class: type[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
+    region_job_class: type[RegionJob[DATA_VAR, SourceFileCoord]]
 
     def update_template(self) -> None:
         """Generate and persist the dataset template using the template_config."""
@@ -31,7 +28,5 @@ class DynamicalDataset(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD])
         pass
 
     def process_region_jobs(self) -> None:
-        """
-        Orchestrate running RegionJob instances over all regions and data variables.
-        """
+        """Orchestrate running RegionJob instances."""
         pass

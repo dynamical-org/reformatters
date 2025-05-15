@@ -2,7 +2,7 @@ from typing import ClassVar
 
 import pandas as pd
 
-from reformatters.common.config_models import BaseInternalAttrs, DataVar
+from reformatters.common.config_models import AppendDim, BaseInternalAttrs, DataVar, Dim
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
@@ -10,7 +10,7 @@ from reformatters.common.template_config import TemplateConfig
 
 class ExampleDataVar(DataVar[BaseInternalAttrs]):
     name: str = "var"
-    internal_attrs: BaseInternalAttrs = BaseInternalAttrs()
+    internal_attrs: BaseInternalAttrs = BaseInternalAttrs(keep_mantissa_bits=10)
 
 
 class ExampleSourceFileCoord(SourceFileCoord):
@@ -18,14 +18,19 @@ class ExampleSourceFileCoord(SourceFileCoord):
 
 
 class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
-    max_vars_per_backfill_job: ClassVar[int] = 1
+    max_vars_per_backfill_job: ClassVar[int] = 2
 
 
 class ExampleConfig(TemplateConfig[ExampleDataVar]):
-    dims: tuple[str, ...] = ("time",)
-    append_dim: str = "time"
+    dims: tuple[Dim, ...] = ("time",)
+    append_dim: AppendDim = "time"
     append_dim_start: pd.Timestamp = pd.Timestamp("2000-01-01")
     append_dim_frequency: pd.Timedelta = pd.Timedelta("1D")
+
+
+class ExampleDataset(DynamicalDataset[ExampleDataVar]):
+    template_config: ExampleConfig
+    region_job_class: type[RegionJob[ExampleDataVar, ExampleSourceFileCoord]]
 
 
 def test_dynamical_dataset_methods_exist() -> None:
@@ -40,7 +45,7 @@ def test_dynamical_dataset_methods_exist() -> None:
 
 
 def test_dynamical_dataset_init() -> None:
-    dataset = DynamicalDataset(
+    dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
     )
