@@ -46,11 +46,12 @@ class SourceFileCoordA(SourceFileCoord):
 class RegionJobA(RegionJob[DataVarA, SourceFileCoordA]):
     max_vars_per_backfill_job: ClassVar[int] = 4
 
+    @classmethod
     def group_data_vars(
-        self,
-        processing_region_ds: xr.Dataset,
+        cls,
+        data_vars: Sequence[DataVarA],
     ) -> Sequence[Sequence[DataVarA]]:
-        return list(batched(self.data_vars, 3))
+        return list(batched(data_vars, 3))
 
     def generate_source_file_coords(
         self,
@@ -135,3 +136,18 @@ def test_region_job(template_ds: xr.Dataset) -> None:
 def test_source_file_coord_out_loc_default_impl() -> None:
     coord = SourceFileCoordA(time=pd.Timestamp("2025-01-01T00"))
     assert coord.out_loc() == {"time": pd.Timestamp("2025-01-01T00")}
+
+
+def test_get_backfill_jobs_grouping(template_ds: xr.Dataset) -> None:
+    data_vars = [DataVarA(name=name) for name in template_ds.data_vars.keys()]
+    store = get_zarr_store("test-dataset-A", "test-version")
+    jobs = RegionJobA.get_backfill_jobs(
+        store=store,
+        template_ds=template_ds,
+        append_dim="time",
+        all_data_vars=data_vars,
+    )
+    # RegionJobA groups vars into batches of 3 -> [3,1], and shards of size 48 -> 1 region -> 2 jobs
+    assert len(jobs) == 2
+    sizes = sorted([len(job.data_vars) for job in jobs], reverse=True)
+    assert sizes == [3, 1]
