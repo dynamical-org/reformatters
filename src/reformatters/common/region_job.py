@@ -213,26 +213,30 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         Return a sequence of RegionJob instances for backfill processing.
 
+        If `workers_total` and `worker_index` are provided the returned jobs are
+        filtered to only include jobs which should be processed by `worker_index`.
+
+        If any of the `filter_*` arguments are provided, the returned jobs are filtered
+        to only include jobs which intersect the filter. Complete jobs are always returned,
+        so regions may extend outside `filter_start` and `filter_end`.
+
         Parameters
         ----------
         store : zarr.abc.store.Store
-            The Zarr store to write output shards into.
+            The Zarr store to write into.
         template_ds : xr.Dataset
             Dataset template defining structure and metadata.
         append_dim : AppendDim
             The dimension along which data is appended (e.g., "time").
         all_data_vars : Sequence[DATA_VAR]
-            List of all data variables configured for processing.
+            All data variables objects which may be processed in order to access their metadata.
+
         worker_index : int, default 0
-            Zero-based index of this worker among all workers.
         workers_total : int, default 1
-            Total number of parallel workers.
+
         filter_start : Timestamp | None, default None
-            Optional inclusive start time to include.
         filter_end : Timestamp | None, default None
-            Optional exclusive end time to include.
         filter_variable_names : list[str] | None, default None
-            Optional subset of variable names to process.
 
         Returns
         -------
