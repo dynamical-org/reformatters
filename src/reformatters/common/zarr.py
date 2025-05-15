@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
+import fsspec  # type: ignore
 import xarray as xr
 import zarr
 from fsspec.implementations.local import LocalFileSystem  # type: ignore
@@ -94,7 +95,7 @@ def copy_data_var(
     template_ds: xr.Dataset,
     append_dim: str,
     tmp_store: Path,
-    final_store: zarr.storage.FsspecStore,
+    final_store: zarr.abc.store.Store,
     progress_tracker: UpdateProgressTracker,
 ) -> None:
     dim_index = template_ds[data_var_name].dims.index(append_dim)
@@ -106,14 +107,15 @@ def copy_data_var(
     logger.info(
         f"Copying data var chunks to final store ({final_store}) for {relative_dir}."
     )
-    fs = final_store.fs
+
+    fs, path = _get_fs_and_path(final_store)
     fs.auto_mkdir = True
 
     # We want to support local and s3fs filesystems. fsspec local filesystem is sync,
     # but our s3fs from zarr.storage.FsspecStore is async and here we work around it.
     # The AsyncFileSystem wrapper on LocalFilesystem raises NotImplementedError when _put is called.
     source = f"{tmp_store / relative_dir}/"
-    dest = f"{final_store.path}/{relative_dir}"
+    dest = f"{path}/{relative_dir}"
     fsspec_apply(fs, "put", source, dest, recursive=True, auto_mkdir=True)
 
     progress_tracker.record_completion(data_var_name)
@@ -128,7 +130,7 @@ def copy_data_var(
 
 
 def copy_zarr_metadata(
-    template_ds: xr.Dataset, tmp_store: Path, final_store: zarr.storage.FsspecStore
+    template_ds: xr.Dataset, tmp_store: Path, final_store: zarr.abc.store.Store
 ) -> None:
     logger.info(f"Copying metadata to final store ({final_store}) from {tmp_store}")
 
@@ -143,8 +145,25 @@ def copy_zarr_metadata(
     metadata_files.append(tmp_store / "zarr.json")
     metadata_files.extend(tmp_store.glob("*/zarr.json"))
 
+    fs, path = _get_fs_and_path(final_store)
+
     # This could be partially parallelized BUT make sure to write the coords before the metadata.
     for file in metadata_files:
         relative = file.relative_to(tmp_store)
-        dest = f"{final_store.path}/{relative}"
-        fsspec_apply(final_store.fs, "put_file", file, dest)
+        dest = f"{path}/{relative}"
+        fsspec_apply(fs, "put_file", file, dest)
+
+
+def _get_fs_and_path(
+    store: zarr.abc.store.Store,
+) -> tuple[fsspec.AbstractFileSystem, str]:
+    """Gross work around to allow us to make other store types quack like FsspecStore."""
+    fs = getattr(store, "fs", None)
+    if not isinstance(fs, fsspec.AbstractFileSystem):
+        raise ValueError(
+            "final_store must have an fs that is an instance of fsspec.AbstractFileSystem"
+        )
+    path = getattr(store, "path", None)
+    if not isinstance(path, str):
+        raise ValueError("final_store must have a path attribute that is a string")
+    return fs, path

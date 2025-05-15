@@ -1,3 +1,7 @@
+"""
+NOTE: We intend to delete this file once the RegionJob refactor is complete.
+"""
+
 import warnings
 from collections.abc import Generator
 from concurrent.futures import ProcessPoolExecutor
@@ -13,6 +17,9 @@ from pydantic import BaseModel
 
 from reformatters.common.iterating import consume, shard_slice_indexers
 from reformatters.common.logging import get_logger
+from reformatters.common.shared_memory_utils import (
+    create_data_array_and_template as create_data_array_and_template,
+)
 from reformatters.common.types import ArrayFloat32
 
 logger = get_logger(__name__)
@@ -30,41 +37,8 @@ class ChunkFilters(BaseModel):
     variable_names: list[str] | None = None
 
 
-def create_data_array_and_template(
-    chunk_template_ds: xr.Dataset,
-    data_var_name: str,
-    shared_buffer: SharedMemory,
-) -> tuple[xr.DataArray, xr.DataArray]:
-    # This template is small and we will pass it between processes
-    data_array_template = chunk_template_ds[data_var_name]
-
-    # This data array will be assigned actual, shared memory
-    data_array = data_array_template.copy()
-
-    # Drop all non-dimension coordinates from the template only,
-    # they are already written by write_metadata.
-    data_array_template = data_array_template.drop_vars(
-        [
-            coord
-            for coord in data_array_template.coords
-            if coord not in data_array_template.dims
-        ]
-    )
-
-    shared_array: ArrayFloat32 = np.ndarray(
-        data_array.shape,
-        dtype=data_array.dtype,
-        buffer=shared_buffer.buf,
-    )
-    # Important:
-    # We rely on initializing with nans so failed reads (eg. corrupt source data)
-    # leave nan and to reuse the same shared buffer for each variable.
-    shared_array[:] = np.nan
-    data_array.data = shared_array
-
-    return data_array, data_array_template
-
-
+# NOTE: This can be deleted once we complete the RegionJob refactor
+# It is superceded by utilities in zarr.py
 def write_shards(
     data_array_template: xr.DataArray,
     store: zarr.storage.FsspecStore | Path,
@@ -95,6 +69,8 @@ def write_shards(
     )
 
 
+# NOTE: This can be deleted once we complete the RegionJob refactor
+# It is superceded by utilities in zarr.py
 def write_shard_to_zarr(
     data_array_template: xr.DataArray,
     shared_buffer_name: str,
@@ -123,10 +99,11 @@ def write_shard_to_zarr(
         data_array[shard_indexer].to_zarr(store, region="auto")  # type: ignore[call-overload]
 
 
+# TODO: Delete this version once all datasets are using make_shared_buffer
 @contextmanager
 def create_shared_buffer(size: int) -> Generator[SharedMemory, None, None]:
+    shared_memory = SharedMemory(create=True, size=size)
     try:
-        shared_memory = SharedMemory(create=True, size=size)
         yield shared_memory
     finally:
         shared_memory.close()

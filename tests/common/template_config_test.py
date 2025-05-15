@@ -19,6 +19,7 @@ from reformatters.common.template_config import (
     Dim,
     TemplateConfig,
 )
+from reformatters.common.types import Timedelta, Timestamp
 
 
 class DummyDataVar(DataVar[BaseInternalAttrs]):
@@ -38,8 +39,8 @@ class SimpleConfig(TemplateConfig[DummyDataVar]):
 
     dims: tuple[Dim, ...] = ("time",)
     append_dim: AppendDim = "time"
-    append_dim_start: pd.Timestamp = pd.Timestamp("2000-01-01")
-    append_dim_frequency: pd.Timedelta = pd.Timedelta(days=1)
+    append_dim_start: Timestamp = pd.Timestamp("2000-01-01")
+    append_dim_frequency: Timedelta = pd.Timedelta(days=1)
 
     @property
     def dataset_attributes(self) -> DummyDatasetAttributes:
@@ -110,7 +111,7 @@ def test_append_dim_coordinate_chunk_size_varies_with_start(
     start_year: int, expected_years: int
 ) -> None:
     class C(SimpleConfig):
-        append_dim_start: pd.Timestamp = pd.Timestamp(f"{start_year}-01-01")
+        append_dim_start: Timestamp = pd.Timestamp(f"{start_year}-01-01")
 
     inst = C(
         dims=("time",),
