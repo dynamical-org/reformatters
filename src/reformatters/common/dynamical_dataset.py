@@ -1,12 +1,13 @@
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, Any
 
 import pydantic
 
-from reformatters.common.region_job import RegionJob
+from reformatters.common.config_models import DataVar
+from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
 
-DATA_VAR = TypeVar("DATA_VAR")
-SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD")
+DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
+SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
 
 
 class DynamicalDataset(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
