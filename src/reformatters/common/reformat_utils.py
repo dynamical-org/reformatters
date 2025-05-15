@@ -25,6 +25,7 @@ from reformatters.common.types import ArrayFloat32
 logger = get_logger(__name__)
 
 
+# NOTE: superseded by in region_job.py by just passing keyword arguments
 class ChunkFilters(BaseModel):
     """
     Filters for controlling which chunks of data to process.
