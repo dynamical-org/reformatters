@@ -1,11 +1,14 @@
 from typing import ClassVar
+from unittest.mock import Mock
 
 import pandas as pd
+import pytest
 
-from reformatters.common.config_models import AppendDim, BaseInternalAttrs, DataVar, Dim
+from reformatters.common.config_models import BaseInternalAttrs, DataVar
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
+from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 
 
 class ExampleDataVar(DataVar[BaseInternalAttrs]):
@@ -24,13 +27,13 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
 class ExampleConfig(TemplateConfig[ExampleDataVar]):
     dims: tuple[Dim, ...] = ("time",)
     append_dim: AppendDim = "time"
-    append_dim_start: pd.Timestamp = pd.Timestamp("2000-01-01")
-    append_dim_frequency: pd.Timedelta = pd.Timedelta("1D")
+    append_dim_start: Timestamp = pd.Timestamp("2000-01-01")
+    append_dim_frequency: Timedelta = pd.Timedelta("1D")
 
 
 class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
-    template_config: ExampleConfig
-    region_job_class: type[RegionJob[ExampleDataVar, ExampleSourceFileCoord]]
+    template_config: ExampleConfig = ExampleConfig()
+    region_job_class: type[ExampleRegionJob] = ExampleRegionJob
 
 
 def test_dynamical_dataset_methods_exist() -> None:
@@ -41,7 +44,7 @@ def test_dynamical_dataset_methods_exist() -> None:
         "process_region_jobs",
     ]
     for method in methods:
-        assert hasattr(DynamicalDataset, method), f"{method} not implemented"
+        assert hasattr(DynamicalDataset, method), f"{method} missing"
 
 
 def test_dynamical_dataset_init() -> None:
@@ -49,3 +52,20 @@ def test_dynamical_dataset_init() -> None:
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
     )
+
+
+def test_update_template(monkeypatch: pytest.MonkeyPatch) -> None:
+    mock_update_template = Mock()
+    monkeypatch.setattr(ExampleConfig, "update_template", mock_update_template)
+    template_config = ExampleConfig()
+
+    dataset = ExampleDataset(
+        template_config=template_config,
+        region_job_class=ExampleRegionJob,
+    )
+
+    dataset.update_template()
+    mock_update_template.assert_called_once()
+
+
+# quick test of process_region_jobs AI!
