@@ -45,7 +45,7 @@ def test_dynamical_dataset_methods_exist() -> None:
 
 
 def test_dynamical_dataset_init() -> None:
-    dataset = ExampleDataset(
+    ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
     )
