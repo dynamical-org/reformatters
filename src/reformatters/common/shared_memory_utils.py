@@ -11,8 +11,7 @@ import zarr
 
 from reformatters.common.iterating import consume, shard_slice_indexers
 from reformatters.common.logging import get_logger
-from reformatters.common.template_config import AppendDim
-from reformatters.common.types import ArrayFloat32
+from reformatters.common.types import AppendDim, ArrayFloat32
 
 logger = get_logger(__name__)
 
