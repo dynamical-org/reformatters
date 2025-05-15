@@ -68,4 +68,20 @@ def test_update_template(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_update_template.assert_called_once()
 
 
-# quick test of process_region_jobs AI!
+def test_process_region_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
+    mock_job = Mock()
+    monkeypatch.setattr(
+        ExampleRegionJob,
+        "get_backfill_jobs",
+        classmethod(lambda cls, *args, **kwargs: [mock_job]),
+    )
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(),
+        region_job_class=ExampleRegionJob,
+    )
+    dataset.process_region_jobs(
+        pd.Timestamp("2000-01-02"),
+        worker_index=0,
+        workers_total=1,
+    )
+    mock_job.process.assert_called_once()
