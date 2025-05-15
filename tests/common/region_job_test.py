@@ -108,22 +108,24 @@ def template_ds() -> xr.Dataset:
 def test_region_job(template_ds: xr.Dataset) -> None:
     # Gross test hack: register LocalStore as isinstance(zarr.storage.FsspecStore)
     # to pass pydantic validation
-    # Unregister it after the test AI!
     zarr.storage.FsspecStore.register(zarr.storage.LocalStore)
+    try:
+        store = get_zarr_store("test-dataset-A", "test-version")
 
-    store = get_zarr_store("test-dataset-A", "test-version")
+        # Write zarr metadata for this RegionJob to write into
+        template_utils.write_metadata(template_ds, store, mode="w")
 
-    # Write zarr metadata for this RegionJob to write into
-    template_utils.write_metadata(template_ds, store, mode="w")
-
-    job = RegionJobA(
-        store=store,
-        template_ds=template_ds,
-        data_vars=[DataVarA(name=name) for name in template_ds.data_vars.keys()],
-        append_dim="time",
-        region=slice(0, 18),
-    )
-    job.process()
+        job = RegionJobA(
+            store=store,
+            template_ds=template_ds,
+            data_vars=[DataVarA(name=name) for name in template_ds.data_vars.keys()],
+            append_dim="time",
+            region=slice(0, 18),
+        )
+        job.process()
+    finally:
+        # undo the registration hack
+        zarr.storage.FsspecStore.unregister(zarr.storage.LocalStore)
 
 
 def test_source_file_coord_out_loc_default_impl() -> None:
