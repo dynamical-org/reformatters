@@ -4,7 +4,7 @@ from unittest.mock import Mock
 import pandas as pd
 import pytest
 
-from reformatters.common.config_models import BaseInternalAttrs, DataVar
+from reformatters.common.config_models import BaseInternalAttrs, DataVar, DatasetAttributes
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
@@ -30,7 +30,21 @@ class ExampleConfig(TemplateConfig[ExampleDataVar]):
     append_dim_start: Timestamp = pd.Timestamp("2000-01-01")
     append_dim_frequency: Timedelta = pd.Timedelta("1D")
 
-    # impl dataset attributes prop AI!
+    @property
+    def dataset_attributes(self) -> DatasetAttributes:
+        return DatasetAttributes(
+            dataset_id="example",
+            dataset_version="v1",
+            name="example",
+            description="example",
+            attribution="example",
+            spatial_domain="",
+            spatial_resolution="",
+            time_domain="",
+            time_resolution="",
+            forecast_domain=None,
+            forecast_resolution=None,
+        )
 
 
 class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
