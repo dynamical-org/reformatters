@@ -1,6 +1,6 @@
 # RegionJob Refactor Plan
 
-This document outlines the detailed refactor plan to consolidate the existing `reformat_time_i_slices` and `reformat_init_time_i_slices` functions into a unified `RegionJob` base class.
+This document outlines the refactor plan to consolidate the existing `reformat_time_i_slices` and `reformat_init_time_i_slices` functions into a unified `RegionJob` base class. It's being kept in docs/ because some of it may be useful for documenting how to integrate a new dataset once the refactor is complete.
 
 ## 1. Orchestration in `RegionJob.process()`
 
