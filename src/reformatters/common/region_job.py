@@ -264,13 +264,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             regions = [
                 region
                 for region in regions
-                if append_dim_coords.iloc[region].max() >= filter_start
+                if append_dim_coords[region].max() >= filter_start  # type: ignore[operator]
             ]
         if filter_end is not None:
             regions = [
                 region
                 for region in regions
-                if append_dim_coords.iloc[region].min() < filter_end
+                if append_dim_coords[region].min() < filter_end  # type: ignore[operator]
             ]
 
         all_jobs = [
@@ -281,9 +281,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 append_dim=append_dim,
                 region=region,
             )
-            for data_var_group in data_var_groups
             for region in regions
+            for data_var_group in data_var_groups
         ]
+
         return get_worker_jobs(all_jobs, worker_index, workers_total)
 
     def process(self) -> dict[str, Any]:
