@@ -49,6 +49,8 @@ def create_data_array_and_template(
     data_var_name: str,
     shared_buffer: SharedMemory,
 ) -> tuple[xr.DataArray, xr.DataArray]:
+    # docstring AI!
+
     # This template is small and we will pass it between processes
     data_array_template = chunk_template_ds[data_var_name]
 
