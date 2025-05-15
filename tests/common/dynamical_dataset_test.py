@@ -1,4 +1,4 @@
-from typing import ClassVar, Type
+from typing import ClassVar
 
 import pandas as pd
 
@@ -30,7 +30,7 @@ class ExampleConfig(TemplateConfig[ExampleDataVar]):
 
 class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
     template_config: ExampleConfig
-    region_job_class: Type[RegionJob[ExampleDataVar, ExampleSourceFileCoord]]
+    region_job_class: type[RegionJob[ExampleDataVar, ExampleSourceFileCoord]]
 
 
 def test_dynamical_dataset_methods_exist() -> None:

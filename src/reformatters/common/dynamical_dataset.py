@@ -1,4 +1,4 @@
-from typing import Any, Generic, Type, TypeVar
+from typing import Any, Generic, TypeVar
 
 import pydantic
 
@@ -17,7 +17,7 @@ class DynamicalDataset(pydantic.BaseModel, Generic[DV, SFC]):
     """
 
     template_config: TemplateConfig[DV]
-    region_job_class: Type[RegionJob[DV, SFC]]
+    region_job_class: type[RegionJob[DV, SFC]]
 
     def update_template(self) -> None:
         """Generate and persist the dataset template using the template_config."""
