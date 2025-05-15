@@ -1,7 +1,26 @@
 from reformatters.common.dynamical_dataset import DynamicalDataset
 
-# AI, make an ExampleDataset, ExampleRegionJob, and ExampleConfig which use each other.
-# you might need to make an ExampleDataVar subclass too AI!
+from typing import ClassVar
+import pandas as pd
+from reformatters.common.config_models import DataVar, BaseInternalAttrs
+from reformatters.common.region_job import RegionJob, SourceFileCoord
+from reformatters.common.template_config import TemplateConfig
+
+class ExampleDataVar(DataVar[BaseInternalAttrs]):
+    name: str = "var"
+    internal_attrs: BaseInternalAttrs = BaseInternalAttrs()
+
+class ExampleSourceFileCoord(SourceFileCoord):
+    pass
+
+class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
+    max_vars_per_backfill_job: ClassVar[int] = 1
+
+class ExampleConfig(TemplateConfig[ExampleDataVar]):
+    dims: tuple[str, ...] = ("time",)
+    append_dim: str = "time"
+    append_dim_start: pd.Timestamp = pd.Timestamp("2000-01-01")
+    append_dim_frequency: pd.Timedelta = pd.Timedelta("1D")
 
 
 def test_dynamical_dataset_methods_exist() -> None:
