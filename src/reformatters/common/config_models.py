@@ -4,22 +4,8 @@ from typing import Annotated, Any, Generic, Literal, TypeVar
 import numcodecs  # type: ignore
 import pydantic
 
+from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.types import TimedeltaUnits, TimestampUnits
-
-B = TypeVar("B", bound=pydantic.BaseModel)
-
-
-def replace(obj: B, **kwargs: Any) -> B:
-    """Replace properties of pydantic model instances."""
-    # From https://github.com/pydantic/pydantic/discussions/3352#discussioncomment-10531773
-    # pydantic's model_copy(update=...) does not validate updates, this function does.
-    return type(obj).model_validate(obj.model_dump() | kwargs)
-
-
-class FrozenBaseModel(pydantic.BaseModel):
-    model_config = pydantic.ConfigDict(
-        frozen=True, strict=True, revalidate_instances="always"
-    )
 
 
 class DatasetAttributes(FrozenBaseModel):

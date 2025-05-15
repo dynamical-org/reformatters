@@ -13,8 +13,8 @@ from reformatters.common.config_models import (
     Coordinate,
     DatasetAttributes,
     DataVar,
-    FrozenBaseModel,
 )
+from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.types import DatetimeLike, Timedelta, Timestamp
 
 type Dim = Literal[

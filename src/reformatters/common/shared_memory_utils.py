@@ -4,7 +4,6 @@ from concurrent.futures import ProcessPoolExecutor
 from contextlib import closing, contextmanager
 from functools import partial
 from multiprocessing.shared_memory import SharedMemory
-from pathlib import Path
 
 import numpy as np
 import xarray as xr
@@ -110,7 +109,7 @@ def write_shards(
     shared_buffer: SharedMemory,
     append_dim: AppendDim,
     output_region_ds: xr.Dataset,
-    store: zarr.storage.FsspecStore | Path,
+    store: zarr.abc.store.Store,
     cpu_process_executor: ProcessPoolExecutor,
 ) -> None:
     """
@@ -157,7 +156,7 @@ def write_shard_to_zarr(
     shared_buffer_name: str,
     append_dim: AppendDim,
     output_region_ds: xr.Dataset,
-    store: zarr.storage.FsspecStore | Path,
+    store: zarr.abc.store.Store,
     shard_indexer: tuple[slice, ...],
 ) -> None:
     """Write a shard of data held in shared memory to a zarr store."""

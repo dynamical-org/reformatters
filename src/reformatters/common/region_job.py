@@ -16,8 +16,9 @@ import zarr
 from pydantic import AfterValidator, Field
 
 from reformatters.common.binary_rounding import round_float32_inplace
-from reformatters.common.config_models import DataVar, FrozenBaseModel, replace
+from reformatters.common.config_models import DataVar
 from reformatters.common.logging import get_logger
+from reformatters.common.pydantic import FrozenBaseModel, replace
 from reformatters.common.reformat_utils import (
     create_data_array_and_template,
 )
@@ -81,26 +82,18 @@ DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
 
 
+def region_slice(s: slice) -> slice:
+    if not (isinstance(s.start, int) and isinstance(s.stop, int) and s.step is None):
+        raise ValueError("region must be integer slice")
+    return s
+
+
 class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
-    store: Annotated[
-        zarr.storage.FsspecStore,
-        pydantic.PlainValidator(
-            lambda s: s
-            if isinstance(s, zarr.storage.FsspecStore | zarr.storage.LocalStore)
-            else ValueError("store must be a FsspecStore or LocalStore")
-        ),
-    ]
+    store: zarr.abc.store.Store
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
     append_dim: AppendDim
-    region: Annotated[
-        slice,
-        AfterValidator(
-            lambda s: s
-            if isinstance(s.start, int) and isinstance(s.stop, int) and s.step is None
-            else ValueError("region must be integer slice")
-        ),
-    ]
+    region: Annotated[slice, AfterValidator(region_slice)]
     max_vars_per_backfill_job: ClassVar[int]
 
     def get_processing_region(self) -> slice:
@@ -355,7 +348,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         processing_region_da_template: xr.DataArray,
         shared_buffer: SharedMemory,
         output_region_ds: xr.Dataset,
-        store: zarr.storage.FsspecStore,
+        store: zarr.abc.store.Store,
     ) -> None:
         with ProcessPoolExecutor(max_workers=os.cpu_count() or 1) as process_executor:
             write_shards(

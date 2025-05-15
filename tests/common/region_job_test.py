@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-import zarr
 
 from reformatters.common import template_utils
 from reformatters.common.config_models import (
@@ -106,26 +105,31 @@ def template_ds() -> xr.Dataset:
     "ignore:This process .* is multi-threaded, use of fork.* may lead to deadlocks in the child"
 )
 def test_region_job(template_ds: xr.Dataset) -> None:
-    # Gross test hack: register LocalStore as isinstance(zarr.storage.FsspecStore)
-    # to pass pydantic validation
-    zarr.storage.FsspecStore.register(zarr.storage.LocalStore)
-    try:
-        store = get_zarr_store("test-dataset-A", "test-version")
+    store = get_zarr_store("test-dataset-A", "test-version")
 
-        # Write zarr metadata for this RegionJob to write into
-        template_utils.write_metadata(template_ds, store, mode="w")
+    # Write zarr metadata for this RegionJob to write into
+    template_utils.write_metadata(template_ds, store, mode="w")
 
-        job = RegionJobA(
-            store=store,
-            template_ds=template_ds,
-            data_vars=[DataVarA(name=name) for name in template_ds.data_vars.keys()],
-            append_dim="time",
-            region=slice(0, 18),
-        )
-        job.process()
-    finally:
-        # undo the registration hack
-        zarr.storage.FsspecStore.unregister(zarr.storage.LocalStore)
+    job = RegionJobA(
+        store=store,
+        template_ds=template_ds,
+        data_vars=[DataVarA(name=name) for name in template_ds.data_vars.keys()],
+        append_dim="time",
+        region=slice(0, 18),
+    )
+
+    job.process()
+
+    ds = xr.open_zarr(store)
+    region_template_ds = template_ds.isel({job.append_dim: job.region})
+    region_ds = ds.isel({job.append_dim: job.region})
+    assert np.array_equal(region_ds.time.values, region_template_ds.time.values)
+
+    expected_values = np.ones((18, 10, 15))
+    expected_values[0, :, :] = np.nan
+    expected_values[6, :, :] = np.nan
+    for data_var in region_ds.data_vars.values():
+        np.testing.assert_array_equal(data_var.values, expected_values)
 
 
 def test_source_file_coord_out_loc_default_impl() -> None:
