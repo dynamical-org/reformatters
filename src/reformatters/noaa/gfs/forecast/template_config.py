@@ -21,7 +21,7 @@ from reformatters.common.template_config import (
     Dim,
     TemplateConfig,
 )
-from reformatters.common.types import DatetimeLike
+from reformatters.common.types import DatetimeLike, Timedelta, Timestamp
 from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
@@ -32,8 +32,8 @@ from reformatters.noaa.noaa_config_models import NOAADataVar, NOAAInternalAttrs
 class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
     dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
     append_dim: AppendDim = "init_time"
-    append_dim_start: pd.Timestamp = pd.Timestamp("2021-05-01T00:00")
-    append_dim_frequency: pd.Timedelta = pd.Timedelta("6h")
+    append_dim_start: Timestamp = pd.Timestamp("2021-05-01T00:00")
+    append_dim_frequency: Timedelta = pd.Timedelta("6h")
 
     @computed_field  # type: ignore[prop-decorator]
     @property

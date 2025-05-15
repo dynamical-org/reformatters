@@ -6,15 +6,16 @@ from typing import Any, Generic, Literal, TypeVar, get_args
 import numpy as np
 import pandas as pd
 import xarray as xr
-from pydantic import BaseModel, ConfigDict, computed_field
+from pydantic import computed_field
 
 from reformatters.common import template_utils
 from reformatters.common.config_models import (
     Coordinate,
     DatasetAttributes,
     DataVar,
+    FrozenBaseModel,
 )
-from reformatters.common.types import DatetimeLike
+from reformatters.common.types import DatetimeLike, Timedelta, Timestamp
 
 type Dim = Literal[
     "time", "init_time", "ensemble_member", "lead_time", "latitude", "longitude"
@@ -29,13 +30,13 @@ DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 SPATIAL_REF_COORDS = ((), np.array(0))
 
 
-class TemplateConfig(BaseModel, Generic[DATA_VAR]):
+class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
     """Define a subclass of this class to configure the structure of a dataset."""
 
     dims: tuple[Dim, ...]
     append_dim: AppendDim
-    append_dim_start: pd.Timestamp
-    append_dim_frequency: pd.Timedelta
+    append_dim_start: Timestamp
+    append_dim_frequency: Timedelta
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -72,8 +73,6 @@ class TemplateConfig(BaseModel, Generic[DATA_VAR]):
         }
 
     # ----- Most subclasses will not need to override the attributes and methods below -----
-
-    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True, strict=True)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
