@@ -4,7 +4,11 @@ from unittest.mock import Mock
 import pandas as pd
 import pytest
 
-from reformatters.common.config_models import BaseInternalAttrs, DataVar, DatasetAttributes
+from reformatters.common.config_models import (
+    BaseInternalAttrs,
+    DatasetAttributes,
+    DataVar,
+)
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
