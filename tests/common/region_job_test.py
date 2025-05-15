@@ -108,6 +108,7 @@ def template_ds() -> xr.Dataset:
 def test_region_job(template_ds: xr.Dataset) -> None:
     # Gross test hack: register LocalStore as isinstance(zarr.storage.FsspecStore)
     # to pass pydantic validation
+    # Unregister it after the test AI!
     zarr.storage.FsspecStore.register(zarr.storage.LocalStore)
 
     store = get_zarr_store("test-dataset-A", "test-version")
