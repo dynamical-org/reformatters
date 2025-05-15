@@ -30,6 +30,8 @@ class ExampleConfig(TemplateConfig[ExampleDataVar]):
     append_dim_start: Timestamp = pd.Timestamp("2000-01-01")
     append_dim_frequency: Timedelta = pd.Timedelta("1D")
 
+    # impl dataset attributes prop AI!
+
 
 class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
     template_config: ExampleConfig = ExampleConfig()
@@ -69,11 +71,12 @@ def test_update_template(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_process_region_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
-    mock_job = Mock()
+    mock_job0 = Mock()
+    mock_job1 = Mock()
     monkeypatch.setattr(
         ExampleRegionJob,
         "get_backfill_jobs",
-        classmethod(lambda cls, *args, **kwargs: [mock_job]),
+        classmethod(lambda cls, *args, **kwargs: [mock_job0, mock_job1]),
     )
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
@@ -84,4 +87,5 @@ def test_process_region_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
         worker_index=0,
         workers_total=1,
     )
-    mock_job.process.assert_called_once()
+    mock_job0.process.assert_called_once()
+    mock_job1.process.assert_called_once()
