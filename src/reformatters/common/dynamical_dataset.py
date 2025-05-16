@@ -2,13 +2,16 @@ from typing import Any, Generic, TypeVar
 
 import pandas as pd
 import pydantic
+import xarray as xr
+import zarr
 
+from reformatters.common import template_utils
 from reformatters.common.config_models import DataVar
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike
-from reformatters.common.zarr import get_zarr_store
+from reformatters.common.zarr import get_mode, get_zarr_store
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
@@ -30,9 +33,29 @@ class DynamicalDataset(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD])
         """Run dataset reformatting using Kubernetes index jobs."""
         pass
 
-    def reformat_local(self) -> None:
+    def reformat_local(
+        self,
+        append_dim_end: DatetimeLike,
+        *,
+        filter_start: DatetimeLike | None = None,
+        filter_end: DatetimeLike | None = None,
+        filter_variable_names: list[str] | None = None,
+    ) -> None:
         """Run dataset reformatting locally in this process."""
-        pass
+        template_ds = self._template_ds(append_dim_end)
+        store = self._store()
+
+        template_utils.write_metadata(template_ds, store, get_mode(store))
+
+        self.process_region_jobs(
+            append_dim_end,
+            worker_index=0,
+            workers_total=1,
+            filter_start=filter_start,
+            filter_end=filter_end,
+            filter_variable_names=filter_variable_names,
+        )
+        logger.info(f"Done writing to {store}")
 
     def process_region_jobs(
         self,
@@ -46,13 +69,9 @@ class DynamicalDataset(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD])
     ) -> None:
         """Orchestrate running RegionJob instances."""
 
-        store = get_zarr_store(
-            self.template_config.dataset_id, self.template_config.version
-        )
-
         region_jobs = self.region_job_class.get_backfill_jobs(
-            store=store,
-            template_ds=self.template_config.get_template(pd.Timestamp(append_dim_end)),
+            store=self._store(),
+            template_ds=self._template_ds(append_dim_end),
             append_dim=self.template_config.append_dim,
             all_data_vars=self.template_config.data_vars,
             worker_index=worker_index,
@@ -63,6 +82,16 @@ class DynamicalDataset(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD])
         )
 
         jobs_summary = ", ".join(j.summary() for j in region_jobs)
-        logger.info(f"This is {worker_index = }, {workers_total = }, {jobs_summary}")
+        logger.info(
+            f"This is {worker_index = }, {workers_total = }, {len(region_jobs)} jobs, {jobs_summary}"
+        )
         for region_job in region_jobs:
             region_job.process()
+
+    def _store(self) -> zarr.abc.store.Store:
+        return get_zarr_store(
+            self.template_config.dataset_id, self.template_config.version
+        )
+
+    def _template_ds(self, append_dim_end: DatetimeLike) -> xr.Dataset:
+        return self.template_config.get_template(pd.Timestamp(append_dim_end))

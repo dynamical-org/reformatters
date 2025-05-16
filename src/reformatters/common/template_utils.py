@@ -20,6 +20,7 @@ def write_metadata(
     store: zarr.storage.StoreLike,
     mode: Literal["w", "w-"],
 ) -> None:
+    logger.info(f"Writing metadata {store} with mode {mode}")
     with warnings.catch_warnings():
         # Unconsolidated metadata is also written so adding
         # consolidated metadata is unlikely to impact interoperability.
@@ -29,7 +30,6 @@ def write_metadata(
             category=UserWarning,
         )
         template_ds.to_zarr(store, mode=mode, compute=False)  # type: ignore[call-overload]
-    logger.info(f"Wrote metadata to {store} with mode {mode}.")
 
     if isinstance(store, Path | str):
         sort_consolidated_metadata(Path(store) / "zarr.json")

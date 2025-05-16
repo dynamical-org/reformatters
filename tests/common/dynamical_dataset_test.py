@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import ClassVar
 from unittest.mock import Mock
 
@@ -128,3 +129,38 @@ def test_process_region_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
 
     mock_job0.process.assert_called_once()
     mock_job1.process.assert_called_once()
+
+
+def test_reformat_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    mock_job0 = Mock()
+    mock_job0.summary = lambda: "job0-summary"
+    monkeypatch.setattr(
+        ExampleRegionJob,
+        "get_backfill_jobs",
+        classmethod(lambda cls, *args, **kwargs: [mock_job0]),
+    )
+    monkeypatch.setattr(
+        ExampleConfig,
+        "get_template",
+        lambda self, end: xr.Dataset(attrs={"cool": "weather"}),
+    )
+    monkeypatch.setattr(ExampleDataset, "_store", lambda _self: tmp_path)
+    process_region_jobs_mock = Mock()
+    monkeypatch.setattr(ExampleDataset, "process_region_jobs", process_region_jobs_mock)
+
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(),
+        region_job_class=ExampleRegionJob,
+    )
+
+    dataset.reformat_local(pd.Timestamp("2000-01-02"))
+
+    assert xr.open_zarr(tmp_path).attrs["cool"] == "weather"
+    process_region_jobs_mock.assert_called_once_with(
+        pd.Timestamp("2000-01-02"),
+        worker_index=0,
+        workers_total=1,
+        filter_start=None,
+        filter_end=None,
+        filter_variable_names=None,
+    )
