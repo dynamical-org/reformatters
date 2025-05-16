@@ -1,13 +1,13 @@
 from typing import Any, Generic, TypeVar
 
 import pandas as pd
-import pydantic
 import xarray as xr
 import zarr
 
 from reformatters.common import template_utils
 from reformatters.common.config_models import DataVar
 from reformatters.common.logging import get_logger
+from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike
@@ -19,7 +19,7 @@ SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
 logger = get_logger(__name__)
 
 
-class DynamicalDataset(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
+class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     """Top level class managing a dataset configuration and processing."""
 
     template_config: TemplateConfig[DATA_VAR]

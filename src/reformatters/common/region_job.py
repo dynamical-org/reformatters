@@ -233,7 +233,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         append_dim : AppendDim
             The dimension along which data is appended (e.g., "time").
         all_data_vars : Sequence[DATA_VAR]
-            All data variables objects which may be processed in order to access their metadata.
+            Sequence of all data variable configs for this dataset.
+            Provided so that grouping and RegionJob made access DataVar.internal_attrs.
 
         worker_index : int, default 0
         workers_total : int, default 1
@@ -249,6 +250,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
 
         # Data variables -- filter and group
+        assert {v.name for v in all_data_vars} == set(template_ds.data_vars)
+
         data_vars: Sequence[DATA_VAR]
         if filter_variable_names:
             data_vars = [v for v in all_data_vars if v.name in filter_variable_names]
