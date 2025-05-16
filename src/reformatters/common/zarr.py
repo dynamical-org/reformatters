@@ -72,7 +72,7 @@ def get_local_tmp_store() -> Path:
 
 
 def get_mode(
-    store: zarr.storage.FsspecStore | zarr.storage.LocalStore | Path,
+    store: zarr.abc.store.Store | Path,
 ) -> Literal["w-", "w"]:
     if isinstance(store, zarr.storage.FsspecStore):
         path_str = store.path
