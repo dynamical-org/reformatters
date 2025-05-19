@@ -69,10 +69,8 @@ class ExampleConfig(TemplateConfig[ExampleDataVar]):
 
 
 class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
-    template_config: TemplateConfig[ExampleDataVar] = ExampleConfig()
-    region_job_class: type[RegionJob[ExampleDataVar, ExampleSourceFileCoord]] = (
-        ExampleRegionJob
-    )
+    template_config: ExampleConfig = ExampleConfig()
+    region_job_class: type[ExampleRegionJob] = ExampleRegionJob
 
 
 def test_dynamical_dataset_methods_exist() -> None:
