@@ -5,8 +5,11 @@ import uuid
 from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 import obstore
+
+DOWNLOAD_DIR = Path("data/download/")
 
 
 def download_to_disk(
@@ -72,3 +75,16 @@ def http_store(base_url: str) -> obstore.store.HTTPStore:
             "retry_timeout": timedelta(minutes=5),
         },
     )
+
+
+def http_download(
+    dataset_id: str, url: str, filename: str, overwrite_existing: bool = False
+) -> Path:
+    parsed_url = urlparse(url)
+    base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+    store = http_store(base_url)
+    local_path = DOWNLOAD_DIR / dataset_id / filename
+    download_to_disk(
+        store, parsed_url.path, local_path, overwrite_existing=overwrite_existing
+    )
+    return local_path

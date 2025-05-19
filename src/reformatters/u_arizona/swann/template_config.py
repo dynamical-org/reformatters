@@ -80,6 +80,7 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
         #    49.91666793823242, 24.08333396911621 - 0.001, lat_pixel_size
         # )
         # longitude = np.arange(-125.0, -66.5 + 0.001, lon_pixel_size)
+        # TODO: Revisit all of this.
 
         return {
             self.append_dim: self.append_dim_coordinates(
