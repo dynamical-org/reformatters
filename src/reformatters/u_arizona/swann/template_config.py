@@ -6,6 +6,7 @@ import pandas as pd
 from pydantic import computed_field
 
 from reformatters.common.config_models import (
+    BaseInternalAttrs,
     Coordinate,
     CoordinateAttrs,
     DatasetAttributes,
@@ -18,9 +19,19 @@ from reformatters.common.template_config import (
     TemplateConfig,
 )
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.zarr import (
+    BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
+    BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
+)
+
+from .constants import LATITUDE_VALUES, LONGITUDE_VALUES
 
 
 class SWANNDataVar(DataVar[Any]):
+    pass
+
+
+class SWANNInternalAttrs(BaseInternalAttrs):
     pass
 
 
@@ -34,31 +45,48 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
     @property
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
-            dataset_id="nsidc-0719-snow",
-            dataset_version="1.0.0",
-            name="NSIDC Daily 4 km Gridded SWE and Snow Depth over CONUS",
-            description="Daily 4 km gridded snow water equivalent (SWE) and snow depth from assimilated in-situ and modeled data over the conterminous US.",
-            # TODO: Attribution is close but not quite right. See NSIDC docs.
-            attribution="Broxton, P., X. Zeng, and N. Dawson. 2019. Daily 4 km Gridded SWE and Snow Depth from Assimilated In-Situ and Modeled Data over the Conterminous US, Version 1. NASA NSIDC.",
+            dataset_id="u-arizona-swann",
+            dataset_version="0.1.0",
+            name="University of Arizona SWANN Snow",
+            description="Daily 4 km Gridded SWE and Snow Depth from Assimilated In-Situ and Modeled Data over the Conterminous US, Version 1",
+            attribution=(
+                "Broxton, P., X. Zeng, and N. Dawson. 2019. "
+                "Daily 4 km Gridded SWE and Snow Depth from Assimilated In-Situ and Modeled Data over the Conterminous  US, Version 1. "
+                "Boulder, Colorado USA. NASA  National Snow and Ice Data Center Distributed Active Archive Center. "
+                "https://doi.org/10.5067/0GGPB220EX6A. 2025-05-19."  # TODO: Interpolate Now?
+            ),
             spatial_domain="Conterminous US",
             spatial_resolution="4 km",
-            time_domain="1981-10-01 to 2023-09-30",
+            time_domain="1981-10-01 to Present",
             time_resolution="Daily",
             forecast_domain=None,
             forecast_resolution=None,
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
-        # latitude: 50.0 to 24.0 N, longitude: -125.0 to -66.5 W
-        # 4 km grid, so 0.036 degrees per pixel (approx), but user guide says 4 km, so let's use np.arange
-        latitude = np.arange(50.0, 24.0 - 0.001, -0.036)  # decreasing order
-        longitude = np.arange(-125.0, -66.5 + 0.001, 0.036)  # increasing order
+        ## Pixel sizes from GDAL info for the 4km SWE/Depth dataset
+        ## These values come from the NetCDF file's GeoTransform:
+        ## > gdalinfo "netcdf:UA_SWE_Depth_4km_v1_20241001_stable.nc:SWE" | grep "Pixel Size"
+        ## > Pixel Size = (0.041666666666667,-0.041666667692123)
+        # lon_pixel_size = 0.041666666666667
+        # lat_pixel_size = -0.041666667692123  # negative because latitude decreases
+
+        ## Generate coordinate arrays using the actual data boundaries from the NetCDF file
+        ## These values come from the actual data coordinates in the NetCDF file:
+        ## - lat: 24.08333396911621 to 49.91666793823242
+        ## - lon: -125.0 to -66.5
+        ## We use these exact values to ensure our zarr output matches the source data
+        # latitude = np.arange(
+        #    49.91666793823242, 24.08333396911621 - 0.001, lat_pixel_size
+        # )
+        # longitude = np.arange(-125.0, -66.5 + 0.001, lon_pixel_size)
+
         return {
             self.append_dim: self.append_dim_coordinates(
                 self.append_dim_start + pd.Timedelta(days=1)
             ),
-            "latitude": latitude,
-            "longitude": longitude,
+            "latitude": LATITUDE_VALUES,
+            "longitude": LONGITUDE_VALUES,
         }
 
     @computed_field  # type: ignore[prop-decorator]
@@ -72,7 +100,7 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
                 encoding=Encoding(
                     dtype="int64",
                     fill_value=0,
-                    compressors=[],
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
                     calendar="proleptic_gregorian",
                     units="seconds since 1970-01-01 00:00:00",
                     chunks=append_dim_coordinate_chunk_size,
@@ -82,10 +110,7 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
                         min=pd.Timestamp(self.append_dim_start).isoformat(),
-                        max=pd.Timestamp(
-                            self.append_dim_start
-                            + pd.Timedelta(days=len(dim_coords[self.append_dim]) - 1)
-                        ).isoformat(),
+                        max="Present",
                     ),
                 ),
             ),
@@ -94,7 +119,7 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
                 encoding=Encoding(
                     dtype="float64",
                     fill_value=np.nan,
-                    compressors=[],
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
                     chunks=len(dim_coords["latitude"]),
                     shards=None,
                 ),
@@ -111,7 +136,7 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
                 encoding=Encoding(
                     dtype="float64",
                     fill_value=np.nan,
-                    compressors=[],
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
                     chunks=len(dim_coords["longitude"]),
                     shards=None,
                 ),
@@ -124,7 +149,7 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
                 ),
             ),
             Coordinate(
-                name="spatial_ref",  # TODO: This spatial reference is coming from the docs
+                name="spatial_ref",
                 encoding=Encoding(
                     dtype="int64",
                     fill_value=0,
@@ -145,7 +170,7 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
                     horizontal_datum_name="North American Datum 1983",
                     grid_mapping_name="latitude_longitude",
                     spatial_ref='GEOGCS["NAD83",DATUM["North_American_Datum_1983",SPHEROID["GRS 1980",6378137,298.257222101,AUTHORITY["EPSG","7019"]],AUTHORITY["EPSG","6269"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST],AUTHORITY["EPSG","4269"]]',
-                    # TODO: Add comment field?
+                    comment="EPSG:4269",
                 ),
             ),
         ]
@@ -153,49 +178,59 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def data_vars(self) -> Sequence[SWANNDataVar]:
-        # TODO:
-        #  - Same style as GFSForecast?
-        #  - Not sure this chunking is correct?
-        #  - We need shards for the data variables
-        #  - Need compressor(s)
-        #  - Lowercase variable names?
-        lat_len = len(self.dimension_coordinates()["latitude"])
-        lon_len = len(self.dimension_coordinates()["longitude"])
+        # Chunking selected to target ~1.5mb compressed chunks (we are assuming ~20% compression)
+        var_chunks: dict[Dim, int] = {
+            "time": 365,
+            "latitude": 32,
+            "longitude": 32,
+        }
+        # Sharding selected to target ~300mb compressed shards (we are assuming ~20% compression)
+        var_shards: dict[Dim, int] = {
+            "time": var_chunks["time"] * 5,
+            "latitude": var_chunks["latitude"] * 15,
+            "longitude": var_chunks["longitude"] * 15,
+        }
+
+        encoding_float32_default = Encoding(
+            dtype="float32",
+            fill_value=np.nan,
+            chunks=tuple(var_chunks[d] for d in self.dims),
+            shards=tuple(var_shards[d] for d in self.dims),
+            compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
+        )
+
+        default_keep_mantissa_bits = 7
+
         return [
             SWANNDataVar(
-                name="SWE",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=(1, lat_len, lon_len),
-                    shards=None,
-                    compressors=[],
-                ),
+                name="snow_water_equivalent",
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="SWE",
+                    short_name="snow_water_equivalent",
                     long_name="Snow water equivalent",
-                    standard_name="lwe_thickness_of_snow_amount",
-                    units="mm",  # TODO: Do we need to say H2O?
+                    standard_name="lwe_thickness_of_surface_snow_amount",
+                    units="mm h20",
                     step_type="instant",
                 ),
-                internal_attrs=None,
+                internal_attrs=SWANNInternalAttrs(
+                    keep_mantissa_bits=default_keep_mantissa_bits
+                ),
             ),
             SWANNDataVar(
-                name="DEPTH",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=(1, lat_len, lon_len),
-                    shards=None,
-                    compressors=[],
-                ),
+                name="snow_depth",
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="DEPTH",
+                    short_name="snow_depth",
                     long_name="Snow depth",
                     standard_name="surface_snow_thickness",
-                    units="mm",
+                    units="mm snow thickness",
                     step_type="instant",
                 ),
-                internal_attrs=None,
+                internal_attrs=SWANNInternalAttrs(
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
             ),
         ]
+
+
+# TODO: make upstream-gridded-zarrs bucket
