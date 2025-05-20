@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from pathlib import Path
-from typing import ClassVar
 
 import numpy as np
 import xarray as xr
@@ -30,15 +29,8 @@ class SWANNSourceFileCoord(SourceFileCoord):
 
 
 class SWANNRegionJob(RegionJob[SWANNDataVar, SWANNSourceFileCoord]):
-    max_vars_per_backfill_job: ClassVar[int] = 2
-    io_parallelism: int = 4
-
-    @classmethod
-    def group_data_vars(
-        cls, data_vars: Sequence[SWANNDataVar]
-    ) -> Sequence[Sequence[SWANNDataVar]]:
-        # All variables are in the same file, so group all together
-        return [data_vars]
+    # Be gentle to UA HTTP servers
+    download_parallelism: int = 4
 
     def generate_source_file_coords(
         self,

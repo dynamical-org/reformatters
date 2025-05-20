@@ -47,7 +47,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoords]):
     max_vars_per_backfill_job: ClassVar[int] = 2
 
     @classmethod
-    def group_data_vars(
+    def source_groups(
         cls,
         data_vars: Sequence[ExampleDataVar],
     ) -> Sequence[Sequence[ExampleDataVar]]:
