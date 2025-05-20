@@ -15,14 +15,10 @@ from .template_config import SWANNDataVar
 class SWANNSourceFileCoord(SourceFileCoord):
     time: Timestamp
 
-    def get_url(self) -> str:
-        # TODO: fix this example
-        # Example: 4km_SWE_Depth_WY1982_v01.nc
-        # Example: UA_SWE_Depth_4km_v1_20241014_stable.nc
-        # https://climate.arizona.edu/data/UA_SWE/DailyData_4km/WY2025/UA_SWE_Depth_4km_v1_20241014_stable.nc
+    def get_url(self, status: str = "stable") -> str:
         water_year = self.get_water_year()
         year_month_day = self.time.strftime("%Y%m%d")
-        return f"https://climate.arizona.edu/data/UA_SWE/DailyData_4km/WY{water_year}/UA_SWE_Depth_4km_v1_{year_month_day}_stable.nc"
+        return f"https://climate.arizona.edu/data/UA_SWE/DailyData_4km/WY{water_year}/UA_SWE_Depth_4km_v1_{year_month_day}_{status}.nc"
 
     def get_water_year(self) -> int:
         return self.time.year if self.time.month < 10 else self.time.year + 1
@@ -30,7 +26,7 @@ class SWANNSourceFileCoord(SourceFileCoord):
 
 class SWANNRegionJob(RegionJob[SWANNDataVar, SWANNSourceFileCoord]):
     # Be gentle to UA HTTP servers
-    download_parallelism: int = 4
+    download_parallelism: int = 2
 
     def generate_source_file_coords(
         self,
@@ -41,9 +37,18 @@ class SWANNRegionJob(RegionJob[SWANNDataVar, SWANNSourceFileCoord]):
         return [SWANNSourceFileCoord(time=t) for t in times]
 
     def download_file(self, coord: SWANNSourceFileCoord) -> Path:
-        url = coord.get_url()
-        filename = Path(url).name
-        return http_download(url, filename, "U_ARIZONA_SWANN", overwrite_existing=False)
+        try:
+            url = coord.get_url()
+            filename = Path(url).name
+            return http_download(
+                url, filename, "U_ARIZONA_SWANN", overwrite_existing=False
+            )
+        except Exception:
+            url = coord.get_url(status="provisional")
+            filename = Path(url).name
+            return http_download(
+                url, filename, "U_ARIZONA_SWANN", overwrite_existing=False
+            )
 
     def read_data(
         self,
