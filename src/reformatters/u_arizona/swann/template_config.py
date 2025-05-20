@@ -200,7 +200,7 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
 
-        default_keep_mantissa_bits = 16
+        default_keep_mantissa_bits = 8
 
         return [
             SWANNDataVar(
