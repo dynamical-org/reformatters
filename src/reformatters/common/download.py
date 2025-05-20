@@ -9,11 +9,6 @@ from urllib.parse import urlparse
 
 import obstore
 
-from reformatters.common.logging import get_logger
-
-logger = get_logger(__name__)
-
-
 DOWNLOAD_DIR = Path("data/download/")
 
 
@@ -27,8 +22,6 @@ def download_to_disk(
 ) -> None:
     if not overwrite_existing and local_path.exists():
         return
-
-    logger.debug(f"Downloading {path} to {local_path}")
 
     local_path.parent.mkdir(parents=True, exist_ok=True)
 
