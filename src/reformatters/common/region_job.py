@@ -97,6 +97,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     region: Annotated[slice, AfterValidator(region_slice)]
     max_vars_per_backfill_job: ClassVar[int]
 
+    # Subclasses can override this to control download parallelism
+    # This particularly useful of the data source cannot handle a large number of concurrent requests
+    io_parallelism: int = (os.cpu_count() or 1) * 2
+
     @classmethod
     def group_data_vars(
         cls,
@@ -383,7 +387,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             batch_size = 2
         else:
             batch_size = 1
-
         return self._maybe_split_groups(data_var_groups, batch_size)
 
     def _download_processing_group(
@@ -422,7 +425,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
                 return updated_coord
 
-        with ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2) as io_executor:
+        with ThreadPoolExecutor(max_workers=self.io_parallelism) as io_executor:
             return list(io_executor.map(_call_download_file, source_file_coords))
 
     def _read_into_data_array(
