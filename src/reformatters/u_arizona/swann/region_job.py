@@ -80,4 +80,5 @@ def _read_netcdf(netcdf_path: str, band: int) -> Array2D[np.float32]:
     with rasterio.open(netcdf_path) as reader:
         result: Array2D[np.float32] = reader.read(band, out_dtype=np.float32)
         result[result == -999] = np.nan
+        assert result.shape == (621, 1405)
         return result
