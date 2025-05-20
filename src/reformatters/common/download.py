@@ -9,6 +9,11 @@ from urllib.parse import urlparse
 
 import obstore
 
+from reformatters.common.logging import get_logger
+
+logger = get_logger(__name__)
+
+
 DOWNLOAD_DIR = Path("data/download/")
 
 
@@ -22,6 +27,8 @@ def download_to_disk(
 ) -> None:
     if not overwrite_existing and local_path.exists():
         return
+
+    logger.debug(f"Downloading {path} to {local_path}")
 
     local_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -78,12 +85,12 @@ def http_store(base_url: str) -> obstore.store.HTTPStore:
 
 
 def http_download(
-    dataset_id: str, url: str, filename: str, overwrite_existing: bool = False
+    url: str, filename: str, subdirectory: str, overwrite_existing: bool = False
 ) -> Path:
     parsed_url = urlparse(url)
     base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
     store = http_store(base_url)
-    local_path = DOWNLOAD_DIR / dataset_id / filename
+    local_path = DOWNLOAD_DIR / subdirectory / filename
     download_to_disk(
         store, parsed_url.path, local_path, overwrite_existing=overwrite_existing
     )
