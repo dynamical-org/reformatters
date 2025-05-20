@@ -31,6 +31,7 @@ class SWANNSourceFileCoord(SourceFileCoord):
 
 class SWANNRegionJob(RegionJob[SWANNDataVar, SWANNSourceFileCoord]):
     max_vars_per_backfill_job: ClassVar[int] = 2
+    io_parallelism: int = 4
 
     @classmethod
     def group_data_vars(
@@ -50,8 +51,7 @@ class SWANNRegionJob(RegionJob[SWANNDataVar, SWANNSourceFileCoord]):
     def download_file(self, coord: SWANNSourceFileCoord) -> Path:
         url = coord.get_url()
         filename = Path(url).name
-        # TODO: Better directory name? How is this handled elsewhere?
-        return http_download("swann", url, filename, overwrite_existing=True)
+        return http_download(url, filename, "U_ARIZONA_SWANN", overwrite_existing=False)
 
     def read_data(
         self,
@@ -62,9 +62,22 @@ class SWANNRegionJob(RegionJob[SWANNDataVar, SWANNSourceFileCoord]):
 
         var_name = "SWE" if data_var.name == "snow_water_equivalent" else "DEPTH"
         netcdf_path = f"netcdf:{coord.downloaded_path}:{var_name}"
+        band = 1
+        return _read_netcdf(netcdf_path, band)
 
-        with rasterio.open(netcdf_path) as reader:
-            result: Array2D[np.float32] = reader.read(1, out_dtype=np.float32)
-            result[result == -999] = np.nan
-            assert result.shape == (621, 1405)
-            return result
+
+def _read_netcdf(netcdf_path: str, band: int) -> Array2D[np.float32]:
+    """Helper function to read a netcdf file with rasterio.
+
+    This is split out from read_data for easier testing and manual invocation.
+
+    Args:
+        netcdf_path: The path to the netcdf file.
+
+    Returns:
+        The data as a 2D array.
+    """
+    with rasterio.open(netcdf_path) as reader:
+        result: Array2D[np.float32] = reader.read(band, out_dtype=np.float32)
+        result[result == -999] = np.nan
+        return result
