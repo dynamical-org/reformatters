@@ -40,7 +40,7 @@
     "units": "degrees_east",
     "statistics_approximate": {
       "min": -125.0,
-      "max": -66.5
+      "max": -66.49999999999335
     },
     "_FillValue": "AAAAAAAA+H8="
   },

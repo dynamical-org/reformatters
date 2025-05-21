@@ -39,7 +39,7 @@
   "attributes": {
     "units": "degrees_north",
     "statistics_approximate": {
-      "min": 24.08333396911621,
+      "min": 24.083333969118286,
       "max": 49.91666793823242
     },
     "_FillValue": "AAAAAAAA+H8="
