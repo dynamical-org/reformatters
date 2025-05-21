@@ -24,8 +24,6 @@ from reformatters.common.zarr import (
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
 
-from .constants import LATITUDE_VALUES, LONGITUDE_VALUES
-
 
 class SWANNDataVar(DataVar[Any]):
     pass
@@ -64,30 +62,29 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
-        ## Pixel sizes from GDAL info for the 4km SWE/Depth dataset
-        ## These values come from the NetCDF file's GeoTransform:
-        ## > gdalinfo "netcdf:UA_SWE_Depth_4km_v1_20241001_stable.nc:SWE" | grep "Pixel Size"
-        ## > Pixel Size = (0.041666666666667,-0.041666667692123)
-        # lon_pixel_size = 0.041666666666667
-        # lat_pixel_size = -0.041666667692123  # negative because latitude decreases
+        # Pixel sizes from GDAL info for the 4km SWE/Depth dataset
+        # These values come from the NetCDF file's GeoTransform:
+        # > gdalinfo "netcdf:UA_SWE_Depth_4km_v1_20241001_stable.nc:SWE" | grep "Pixel Size"
+        # > Pixel Size = (0.041666666666667,-0.041666667692123)
+        lon_pixel_size = 0.041666666666667
+        lat_pixel_size = -0.041666667692123  # negative because latitude decreases
 
-        ## Generate coordinate arrays using the actual data boundaries from the NetCDF file
-        ## These values come from the actual data coordinates in the NetCDF file:
-        ## - lat: 24.08333396911621 to 49.91666793823242
-        ## - lon: -125.0 to -66.5
-        ## We use these exact values to ensure our zarr output matches the source data
-        # latitude = np.arange(
-        #    49.91666793823242, 24.08333396911621 - 0.001, lat_pixel_size
-        # )
-        # longitude = np.arange(-125.0, -66.5 + 0.001, lon_pixel_size)
-        # TODO: Revisit all of this.
+        # Generate coordinate arrays using the actual data boundaries from the NetCDF file
+        # These values come from the actual data coordinates in the NetCDF file:
+        # - lat: 24.08333396911621 to 49.91666793823242
+        # - lon: -125.0 to -66.5
+        # We use these exact values to ensure our zarr output matches the source data
+        latitude = np.arange(
+            49.91666793823242, 24.08333396911621 - 0.001, lat_pixel_size
+        )
+        longitude = np.arange(-125.0, -66.5 + 0.001, lon_pixel_size)
 
         return {
             self.append_dim: self.append_dim_coordinates(
                 self.append_dim_start + pd.Timedelta(days=1)
             ),
-            "latitude": LATITUDE_VALUES,
-            "longitude": LONGITUDE_VALUES,
+            "latitude": latitude,
+            "longitude": longitude,
         }
 
     @computed_field  # type: ignore[prop-decorator]
