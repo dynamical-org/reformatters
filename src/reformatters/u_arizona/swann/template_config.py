@@ -229,6 +229,3 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
                 ),
             ),
         ]
-
-
-# TODO: make upstream-gridded-zarrs bucket
