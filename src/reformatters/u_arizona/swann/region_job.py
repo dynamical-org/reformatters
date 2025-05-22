@@ -1,27 +1,60 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import ClassVar
 
 import numpy as np
 import xarray as xr
+from pydantic import Field
 from rasterio import rasterio  # type: ignore
 
-from reformatters.common.download import http_download
-from reformatters.common.region_job import RegionJob, SourceFileCoord
-from reformatters.common.types import Array2D, ArrayFloat32, Timestamp
+from reformatters.common.download import http_download_to_disk
+from reformatters.common.region_job import (
+    CoordinateValueOrRange,
+    RegionJob,
+    SourceFileCoord,
+)
+from reformatters.common.types import Array2D, ArrayFloat32, Dim, Timestamp
 
 from .template_config import SWANNDataVar
 
 
 class SWANNSourceFileCoord(SourceFileCoord):
+    possible_data_statuses: ClassVar[tuple[str, ...]] = ("stable", "provisional")
+
+    remaining_data_statuses: list[str] = Field(
+        default_factory=lambda: list(SWANNSourceFileCoord.possible_data_statuses)
+    )
+
     time: Timestamp
 
     def get_url(self, status: str = "stable") -> str:
         water_year = self.get_water_year()
         year_month_day = self.time.strftime("%Y%m%d")
-        return f"https://climate.arizona.edu/data/UA_SWE/DailyData_4km/WY{water_year}/UA_SWE_Depth_4km_v1_{year_month_day}_{status}.nc"
+
+        try:
+            data_status = self.get_data_status()
+        except IndexError:
+            # Allow get_url calls to return a URL for the last attempted status, even if it failed
+            data_status = SWANNSourceFileCoord.possible_data_statuses[-1]
+
+        return f"https://climate.arizona.edu/data/UA_SWE/DailyData_4km/WY{water_year}/UA_SWE_Depth_4km_v1_{year_month_day}_{data_status}.nc"
+
+    def out_loc(
+        self,
+    ) -> Mapping[Dim, CoordinateValueOrRange]:
+        return self.model_dump(
+            exclude=["status", "downloaded_path", "remaining_data_statuses"]  # type: ignore
+        )
 
     def get_water_year(self) -> int:
         return self.time.year if self.time.month < 10 else self.time.year + 1
+
+    def get_data_status(self) -> str:
+        return self.remaining_data_statuses[0]
+
+    def advance_data_status(self) -> bool:
+        self.remaining_data_statuses.pop(0)
+        return len(self.remaining_data_statuses) > 0
 
 
 class SWANNRegionJob(RegionJob[SWANNDataVar, SWANNSourceFileCoord]):
@@ -37,18 +70,12 @@ class SWANNRegionJob(RegionJob[SWANNDataVar, SWANNSourceFileCoord]):
         return [SWANNSourceFileCoord(time=t) for t in times]
 
     def download_file(self, coord: SWANNSourceFileCoord) -> Path:
-        try:
-            url = coord.get_url()
-            filename = Path(url).name
-            return http_download(
-                url, filename, "U_ARIZONA_SWANN", overwrite_existing=False
-            )
-        except Exception:
-            url = coord.get_url(status="provisional")
-            filename = Path(url).name
-            return http_download(
-                url, filename, "U_ARIZONA_SWANN", overwrite_existing=False
-            )
+        while True:
+            try:
+                return http_download_to_disk(coord.get_url(), self.dataset_id)
+            except FileNotFoundError:
+                if not coord.advance_data_status():
+                    raise
 
     def read_data(
         self,
@@ -57,25 +84,11 @@ class SWANNRegionJob(RegionJob[SWANNDataVar, SWANNSourceFileCoord]):
     ) -> ArrayFloat32:
         assert coord.downloaded_path is not None, "downloaded_path must not be None"
 
-        var_name = "SWE" if data_var.name == "snow_water_equivalent" else "DEPTH"
+        var_name = data_var.internal_attrs.netcdf_var_name
         netcdf_path = f"netcdf:{coord.downloaded_path}:{var_name}"
         band = 1
-        return _read_netcdf(netcdf_path, band)
-
-
-def _read_netcdf(netcdf_path: str, band: int) -> Array2D[np.float32]:
-    """Helper function to read a netcdf file with rasterio.
-
-    This is split out from read_data for easier testing and manual invocation.
-
-    Args:
-        netcdf_path: The path to the netcdf file.
-
-    Returns:
-        The data as a 2D array.
-    """
-    with rasterio.open(netcdf_path) as reader:
-        result: Array2D[np.float32] = reader.read(band, out_dtype=np.float32)
-        result[result == -999] = np.nan
-        assert result.shape == (621, 1405)
-        return result
+        with rasterio.open(netcdf_path) as reader:
+            result: Array2D[np.float32] = reader.read(band, out_dtype=np.float32)
+            result[result == -999] = np.nan
+            assert result.shape == (621, 1405)
+            return result

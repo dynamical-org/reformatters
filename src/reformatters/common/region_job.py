@@ -13,7 +13,7 @@ import pandas as pd
 import pydantic
 import xarray as xr
 import zarr
-from pydantic import AfterValidator, Field
+from pydantic import AfterValidator, Field, computed_field
 
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config_models import DataVar
@@ -210,6 +210,11 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     model_config = pydantic.ConfigDict(
         arbitrary_types_allowed=True, frozen=True, strict=True
     )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def dataset_id(self) -> str:
+        return str(self.template_ds.attrs["dataset_id"])
 
     @classmethod
     def get_backfill_jobs(

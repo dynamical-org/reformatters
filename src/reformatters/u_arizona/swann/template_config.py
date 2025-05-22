@@ -25,11 +25,11 @@ from reformatters.common.zarr import (
 )
 
 
-class SWANNDataVar(DataVar[Any]):
-    pass
-
-
 class SWANNInternalAttrs(BaseInternalAttrs):
+    netcdf_var_name: str
+
+
+class SWANNDataVar(DataVar[SWANNInternalAttrs]):
     pass
 
 
@@ -51,7 +51,7 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
                 "Broxton, P., X. Zeng, and N. Dawson. 2019. "
                 "Daily 4 km Gridded SWE and Snow Depth from Assimilated In-Situ and Modeled Data over the Conterminous  US, Version 1. "
                 "Boulder, Colorado USA. NASA  National Snow and Ice Data Center Distributed Active Archive Center. "
-                "https://doi.org/10.5067/0GGPB220EX6A. 2025-05-19."  # TODO: Interpolate Now?
+                "https://doi.org/10.5067/0GGPB220EX6A."
             ),
             spatial_domain="Conterminous US",
             spatial_resolution="4 km",
@@ -74,6 +74,7 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
         # - lat: 24.08333396911621 to 49.91666793823242
         # - lon: -125.0 to -66.5
         # We use these exact values to ensure our zarr output matches the source data
+        # TODO move these values to variables
         latitude = np.arange(
             49.91666793823242, 24.08333396911621 - 0.001, lat_pixel_size
         )
@@ -211,7 +212,8 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
                     step_type="instant",
                 ),
                 internal_attrs=SWANNInternalAttrs(
-                    keep_mantissa_bits=default_keep_mantissa_bits
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    netcdf_var_name="SWE",
                 ),
             ),
             SWANNDataVar(
@@ -226,6 +228,7 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
                 ),
                 internal_attrs=SWANNInternalAttrs(
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    netcdf_var_name="DEPTH",
                 ),
             ),
         ]

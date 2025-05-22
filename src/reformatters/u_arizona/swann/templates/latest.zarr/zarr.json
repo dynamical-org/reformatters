@@ -4,7 +4,7 @@
     "dataset_version": "0.1.0",
     "name": "University of Arizona SWANN Snow",
     "description": "Daily 4 km Gridded SWE and Snow Depth from Assimilated In-Situ and Modeled Data over the Conterminous US, Version 1",
-    "attribution": "Broxton, P., X. Zeng, and N. Dawson. 2019. Daily 4 km Gridded SWE and Snow Depth from Assimilated In-Situ and Modeled Data over the Conterminous  US, Version 1. Boulder, Colorado USA. NASA  National Snow and Ice Data Center Distributed Active Archive Center. https://doi.org/10.5067/0GGPB220EX6A. 2025-05-19.",
+    "attribution": "Broxton, P., X. Zeng, and N. Dawson. 2019. Daily 4 km Gridded SWE and Snow Depth from Assimilated In-Situ and Modeled Data over the Conterminous  US, Version 1. Boulder, Colorado USA. NASA  National Snow and Ice Data Center Distributed Active Archive Center. https://doi.org/10.5067/0GGPB220EX6A.",
     "spatial_domain": "Conterminous US",
     "spatial_resolution": "4 km",
     "time_domain": "1981-10-01 to Present",
