@@ -5,7 +5,7 @@ import pytest
 import xarray as xr
 from _pytest.monkeypatch import MonkeyPatch
 
-from reformatters.u_arizona.swann.dataset import SWANNDataset
+from reformatters.u_arizona.swann import SWANNDataset
 
 pytestmark = pytest.mark.slow
 
