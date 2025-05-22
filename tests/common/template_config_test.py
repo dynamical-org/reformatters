@@ -141,6 +141,6 @@ def test_derive_coordinates_raises_if_coords_not_returned() -> None:
     )
     with pytest.raises(
         NotImplementedError,
-        match=r"Coordinates \['bad'\] are defined.*derive_coordinates",
+        match=r"Coordinates {'bad'} are defined.*derive_coordinates",
     ):
         bad.derive_coordinates(xr.Dataset())
