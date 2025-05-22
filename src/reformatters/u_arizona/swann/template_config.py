@@ -69,16 +69,20 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
         lon_pixel_size = 0.041666666666667
         lat_pixel_size = -0.041666667692123  # negative because latitude decreases
 
+        latitude_max = 49.91666793823242
+        latitude_min = 24.08333396911621
+        longitude_max = -66.5
+        longitude_min = -125.0
+
+        epsilon = 1e-5
+
         # Generate coordinate arrays using the actual data boundaries from the NetCDF file
         # These values come from the actual data coordinates in the NetCDF file:
         # - lat: 24.08333396911621 to 49.91666793823242
         # - lon: -125.0 to -66.5
         # We use these exact values to ensure our zarr output matches the source data
-        # TODO move these values to variables
-        latitude = np.arange(
-            49.91666793823242, 24.08333396911621 - 0.001, lat_pixel_size
-        )
-        longitude = np.arange(-125.0, -66.5 + 0.001, lon_pixel_size)
+        latitude = np.arange(latitude_max, latitude_min - epsilon, lat_pixel_size)
+        longitude = np.arange(longitude_min, longitude_max + epsilon, lon_pixel_size)
 
         return {
             self.append_dim: self.append_dim_coordinates(
