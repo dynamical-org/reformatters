@@ -162,6 +162,7 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
                 attrs=CoordinateAttrs(
                     units=None,
                     statistics_approximate=None,
+                    # The following were obtained by running ds.rio.write_crs("EPSG:4269"), see test_get_template_spatial_ref.
                     crs_wkt='GEOGCS["NAD83",DATUM["North_American_Datum_1983",SPHEROID["GRS 1980",6378137,298.257222101,AUTHORITY["EPSG","7019"]],AUTHORITY["EPSG","6269"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST],AUTHORITY["EPSG","4269"]]',
                     semi_major_axis=6378137.0,
                     semi_minor_axis=6356752.314140356,
