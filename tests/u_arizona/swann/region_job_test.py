@@ -32,3 +32,32 @@ def test_source_file_coord_url_generation(
     coord = SWANNSourceFileCoord(time=date)
     assert coord.get_water_year() == expected_water_year
     assert coord.get_url() == expected_url
+
+
+def test_source_file_coord_data_status() -> None:
+    """Test data status handling and advancement."""
+    date = pd.Timestamp("2023-10-01")
+    coord = SWANNSourceFileCoord(time=date)
+
+    # Test initial status
+    assert coord.get_data_status() == "stable"
+    assert (
+        coord.get_url()
+        == "https://climate.arizona.edu/data/UA_SWE/DailyData_4km/WY2024/UA_SWE_Depth_4km_v1_20231001_stable.nc"
+    )
+
+    # Test advancing status
+    assert coord.advance_data_status() is True
+    assert coord.get_data_status() == "provisional"
+    assert (
+        coord.get_url()
+        == "https://climate.arizona.edu/data/UA_SWE/DailyData_4km/WY2024/UA_SWE_Depth_4km_v1_20231001_provisional.nc"
+    )
+
+    # Test final status advancement
+    assert coord.advance_data_status() is False
+    # Should still return the last attempted status URL
+    assert (
+        coord.get_url()
+        == "https://climate.arizona.edu/data/UA_SWE/DailyData_4km/WY2024/UA_SWE_Depth_4km_v1_20231001_provisional.nc"
+    )
