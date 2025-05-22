@@ -86,7 +86,7 @@ class SWANNRegionJob(RegionJob[SWANNDataVar, SWANNSourceFileCoord]):
 
         var_name = data_var.internal_attrs.netcdf_var_name
         netcdf_path = f"netcdf:{coord.downloaded_path}:{var_name}"
-        band = 1
+        band = 1  # because rasterio netcdf requires selecting the band in the file path we always want band 1
         with rasterio.open(netcdf_path) as reader:
             result: Array2D[np.float32] = reader.read(band, out_dtype=np.float32)
             result[result == -999] = np.nan
