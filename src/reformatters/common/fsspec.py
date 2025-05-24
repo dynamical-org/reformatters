@@ -31,7 +31,7 @@ def fsspec_apply(
             if hasattr(fs, f"_{method}"):
                 # Zarr's FsspecStore creates async fsspec filesystems, so use their sync method
                 return zarr.core.sync.sync(
-                    getattr(fs, f"_{method}")(*args, **kwargs), timeout=60
+                    getattr(fs, f"_{method}")(*args, **kwargs), timeout=120
                 )
             else:
                 return getattr(fs, method)(*args, **kwargs)

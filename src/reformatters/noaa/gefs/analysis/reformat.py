@@ -110,7 +110,7 @@ def reformat_kubernetes(
         cpu="6",  # fit on 8 vCPU node
         memory="14G",  # fit on 16GB node
         shared_memory="12G",
-        ephemeral_storage="20G",
+        ephemeral_storage="30G",
         command=command,
         pod_active_deadline=timedelta(minutes=30),
     )
@@ -326,7 +326,7 @@ def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
         cpu="6",  # fit on 8 vCPU node
         memory="14G",  # fit on 16GB node
         shared_memory="12G",
-        ephemeral_storage="20G",
+        ephemeral_storage="30G",
     )
     validation_cron_job = ValidationCronJob(
         name=f"{template.DATASET_ID}-validation",
