@@ -19,6 +19,10 @@ from .template_config import SWANNDataVar
 
 
 class SWANNSourceFileCoord(SourceFileCoord):
+    # SWANN data is revised over time and a single SWANNSourceFileCoord represents the
+    # most stable available version of the data for a single day. Mechanically, we optimistically
+    # start with the most stable version first and rely on the `.get_url()` caller to call
+    # `advance_data_status()` if a file is not found at the previously returned url.
     possible_data_statuses: ClassVar[tuple[str, ...]] = ("stable", "provisional")
 
     remaining_data_statuses: list[str] = Field(
@@ -42,9 +46,7 @@ class SWANNSourceFileCoord(SourceFileCoord):
     def out_loc(
         self,
     ) -> Mapping[Dim, CoordinateValueOrRange]:
-        return self.model_dump(
-            exclude=["status", "downloaded_path", "remaining_data_statuses"]  # type: ignore
-        )
+        return {"time": self.time}
 
     def get_water_year(self) -> int:
         return self.time.year if self.time.month < 10 else self.time.year + 1
@@ -82,7 +84,6 @@ class SWANNRegionJob(RegionJob[SWANNDataVar, SWANNSourceFileCoord]):
         coord: SWANNSourceFileCoord,
         data_var: SWANNDataVar,
     ) -> ArrayFloat32:
-        assert coord.downloaded_path is not None, "downloaded_path must not be None"
 
         var_name = data_var.internal_attrs.netcdf_var_name
         netcdf_path = f"netcdf:{coord.downloaded_path}:{var_name}"
