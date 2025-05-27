@@ -49,7 +49,7 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
             description="Daily 4 km Gridded SWE and Snow Depth from Assimilated In-Situ and Modeled Data over the Conterminous US, Version 1",
             attribution=(
                 "Broxton, P., X. Zeng, and N. Dawson. 2019. "
-                "Daily 4 km Gridded SWE and Snow Depth from Assimilated In-Situ and Modeled Data over the Conterminous  US, Version 1. "
+                "Daily 4 km Gridded SWE and Snow Depth from Assimilated In-Situ and Modeled Data over the Conterminous US, Version 1. "
                 "Boulder, Colorado USA. NASA  National Snow and Ice Data Center Distributed Active Archive Center. "
                 "https://doi.org/10.5067/0GGPB220EX6A."
             ),
