@@ -57,7 +57,9 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         Compute non-dimension coordinates.
         For example, if init_time is the append dimension, `{"valid_time": ds["init_time"] + ds["lead_time"]}`
         """
-        if len(missing := [c.name for c in self.coords if c.name not in self.dims]):
+        non_dimension_coords = {c.name for c in self.coords if c.name not in self.dims}
+        missing = non_dimension_coords - {"spatial_ref"}
+        if len(missing):
             raise NotImplementedError(
                 f"Coordinates {missing} are defined in self.coords and should be returned from your template config's derive_coordinates method"
             )

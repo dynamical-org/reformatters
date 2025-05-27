@@ -373,9 +373,10 @@ def test_round_subnormal_to_zero() -> None:
 
 def test_wide_logspace_percent_difference() -> None:
     values = np.logspace(-127, 127, num=2000, base=2, dtype=np.float32)
-    max_diff = 0.0
+    original = values.copy()
     rounded = round_float32_inplace(values, keep_mantissa_bits=9)
-    diff_percent = np.abs((values - rounded) / values) * 100
+    diff_percent = np.abs((original - rounded) / original) * 100
     max_diff = np.max(diff_percent)
 
+    assert max_diff > 0.0  # confirm that we have actually rounded the value
     assert max_diff < 0.5  # Less than 1/2 of 1% error

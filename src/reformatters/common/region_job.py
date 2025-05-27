@@ -13,7 +13,7 @@ import pandas as pd
 import pydantic
 import xarray as xr
 import zarr
-from pydantic import AfterValidator, Field
+from pydantic import AfterValidator, Field, computed_field
 
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config_models import DataVar
@@ -95,10 +95,20 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     append_dim: AppendDim
     # integer slice along append_dim
     region: Annotated[slice, AfterValidator(region_slice)]
-    max_vars_per_backfill_job: ClassVar[int]
+
+    # Limit the number of variables processed in each backfill job if set.
+    max_vars_per_backfill_job: ClassVar[int | None] = None
+    # Limit the number of variables processed in each download group if set.
+    # If value is less than len(data_vars), downloading, reading/recompressing, and writing steps
+    # will be pipelined within a region job.
+    max_vars_per_download_group: ClassVar[int | None] = None
+
+    # Subclasses can override this to control download parallelism
+    # This particularly useful of the data source cannot handle a large number of concurrent requests
+    download_parallelism: int = (os.cpu_count() or 1) * 2
 
     @classmethod
-    def group_data_vars(
+    def source_groups(
         cls,
         data_vars: Sequence[DATA_VAR],
     ) -> Sequence[Sequence[DATA_VAR]]:
@@ -201,6 +211,11 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         arbitrary_types_allowed=True, frozen=True, strict=True
     )
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def dataset_id(self) -> str:
+        return str(self.template_ds.attrs["dataset_id"])
+
     @classmethod
     def get_backfill_jobs(
         cls,
@@ -257,10 +272,12 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             data_vars = [v for v in all_data_vars if v.name in filter_variable_names]
         else:
             data_vars = all_data_vars
-        data_var_groups = cls.group_data_vars(data_vars)
-        data_var_groups = cls._maybe_split_groups(
-            data_var_groups, cls.max_vars_per_backfill_job
-        )
+
+        data_var_groups = cls.source_groups(data_vars)
+        if cls.max_vars_per_backfill_job is not None:
+            data_var_groups = cls._maybe_split_groups(
+                data_var_groups, cls.max_vars_per_backfill_job
+            )
 
         # Regions along append dimension
         regions = dimension_slices(template_ds, append_dim, kind="shards")
@@ -310,9 +327,12 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             dict[str, Any]: Mapping from data variable name to the output of `self.summarize_processing_state`.
         """
         processing_region_ds, output_region_ds = self._get_region_datasets()
-        data_var_groups = self._data_var_download_groups(
-            self.group_data_vars(self.data_vars)
-        )
+        data_var_groups = self.source_groups(self.data_vars)
+        if self.max_vars_per_download_group is not None:
+            data_var_groups = self._maybe_split_groups(
+                data_var_groups, self.max_vars_per_download_group
+            )
+
         results: dict[str, Any] = {}
         with make_shared_buffer(processing_region_ds) as shared_buffer:
             for data_var_group in data_var_groups:
@@ -368,24 +388,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             for split_group in batched(group, batch_size)
         ]
 
-    def _data_var_download_groups(
-        self, data_var_groups: Sequence[Sequence[DATA_VAR]]
-    ) -> Sequence[Sequence[DATA_VAR]]:
-        """
-        Possibly split groups of data variables into smaller group sizes ideal for downloading.
-
-        When the batch_size is smaller than len(self.data_vars), reading/recompressing
-        can begin on an already downloaded group, while later groups finish downloading.
-        """
-        if len(self.data_vars) > 6:
-            batch_size = 4
-        elif len(self.data_vars) > 3:
-            batch_size = 2
-        else:
-            batch_size = 1
-
-        return self._maybe_split_groups(data_var_groups, batch_size)
-
     def _download_processing_group(
         self, source_file_coords: Iterable[SOURCE_FILE_COORD]
     ) -> list[SOURCE_FILE_COORD]:
@@ -422,8 +424,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
                 return updated_coord
 
-        with ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2) as io_executor:
-            return list(io_executor.map(_call_download_file, source_file_coords))
+        with ThreadPoolExecutor(
+            max_workers=self.download_parallelism
+        ) as download_executor:
+            return list(download_executor.map(_call_download_file, source_file_coords))
 
     def _read_into_data_array(
         self,
