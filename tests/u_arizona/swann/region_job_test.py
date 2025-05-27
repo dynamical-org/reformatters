@@ -9,7 +9,7 @@ pytestmark = pytest.mark.slow
 
 
 @pytest.mark.parametrize(
-    "date,expected_water_year,expected_url",
+    "time,expected_water_year,expected_url",
     [
         (
             pd.Timestamp("2023-09-30"),  # End of water year
@@ -24,20 +24,20 @@ pytestmark = pytest.mark.slow
     ],
 )
 def test_source_file_coord_url_generation(
-    date: pd.Timestamp,
+    time: pd.Timestamp,
     expected_water_year: int,
     expected_url: str,
 ) -> None:
-    """Test URL generation and water year calculation for different dates."""
-    coord = SWANNSourceFileCoord(time=date)
+    """Test URL generation and water year calculation for different times."""
+    coord = SWANNSourceFileCoord(time=time)
     assert coord.get_water_year() == expected_water_year
     assert coord.get_url() == expected_url
 
 
 def test_source_file_coord_data_status() -> None:
     """Test data status handling and advancement."""
-    date = pd.Timestamp("2023-10-01")
-    coord = SWANNSourceFileCoord(time=date)
+    time = pd.Timestamp("2023-10-01")
+    coord = SWANNSourceFileCoord(time=time)
 
     # Test initial status
     assert coord.get_data_status() == "stable"
