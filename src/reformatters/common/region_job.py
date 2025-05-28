@@ -26,7 +26,6 @@ from reformatters.common.reformat_utils import (
 from reformatters.common.shared_memory_utils import make_shared_buffer, write_shards
 from reformatters.common.template_utils import write_metadata
 from reformatters.common.types import AppendDim, ArrayFloat32, Dim, Timestamp
-from reformatters.common.update_progress_tracker import UpdateProgressTracker
 from reformatters.common.zarr import copy_data_var, get_mode
 
 logger = get_logger(__name__)
@@ -337,10 +336,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             dict[str, Any]: Mapping from data variable name to the output of `self.summarize_processing_state`.
         """
         processing_region_ds, output_region_ds = self._get_region_datasets()
-        
+
         # Write metadata to tmp_store for region="auto" support
         write_metadata(self.template_ds, self.tmp_store, get_mode(self.tmp_store))
-        
+
         data_var_groups = self.source_groups(self.data_vars)
         if self.max_vars_per_download_group is not None:
             data_var_groups = self._maybe_split_groups(
@@ -350,7 +349,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         results: dict[str, Any] = {}
         upload_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
         upload_futures = []
-        
+
         with make_shared_buffer(processing_region_ds) as shared_buffer:
             for data_var_group in data_var_groups:
                 source_file_coords = self.generate_source_file_coords(
@@ -380,7 +379,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         output_region_ds,
                         self.tmp_store,
                     )
-                    
+
                     # Pipeline upload with processing of next variable
                     upload_future = upload_executor.submit(
                         copy_data_var,
@@ -393,17 +392,17 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         None,  # progress_tracker - not used in backfill case
                     )
                     upload_futures.append(upload_future)
-                    
+
                     results[data_var.name] = self.summarize_processing_state(
                         data_var,
                         source_file_coords,
                     )
                 self._cleanup_local_files(source_file_coords)
-        
+
         # Wait for all uploads to complete
         for future in upload_futures:
             future.result()  # This will raise any exceptions that occurred
-        
+
         upload_executor.shutdown(wait=True)
         return results
 
