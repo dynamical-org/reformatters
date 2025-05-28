@@ -130,7 +130,6 @@ class BaseInternalAttrs(FrozenBaseModel):
     keep_mantissa_bits: int | Literal["no-rounding"]
 
 
-# Here's the bind example AI
 INTERNAL_ATTRS = TypeVar("INTERNAL_ATTRS", bound=BaseInternalAttrs)
 
 
