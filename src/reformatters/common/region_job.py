@@ -90,6 +90,7 @@ def region_slice(s: slice) -> slice:
 
 class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     store: zarr.abc.store.Store
+    tmp_store: zarr.abc.store.Store | Path | None = None
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
     append_dim: AppendDim
