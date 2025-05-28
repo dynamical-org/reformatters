@@ -26,7 +26,6 @@ from reformatters.common.reformat_utils import (
 from reformatters.common.shared_memory_utils import make_shared_buffer, write_shards
 from reformatters.common.template_utils import write_metadata
 from reformatters.common.types import AppendDim, ArrayFloat32, Dim, Timestamp
-from reformatters.common.update_progress_tracker import UpdateProgressTracker
 from reformatters.common.zarr import copy_data_var, get_mode
 
 logger = get_logger(__name__)
@@ -209,7 +208,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> Sequence[SOURCE_FILE_COORD]:
         """
         Return a summary of the processing state for this data variable.
-        
+
         The default implementation returns the source file coords with their final status.
         Subclasses can override this to return dataset-specific processing summaries.
         """
@@ -500,15 +499,15 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         read_coords = [
             c for c in source_file_coords if c.status == SourceFileStatus.Processing
         ]
-        
+
         # Also include coords that failed download to preserve them in the results
         failed_coords = [
             c for c in source_file_coords if c.status != SourceFileStatus.Processing
         ]
-        
+
         with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as executor:
             processed_coords = list(executor.map(_read_and_write_one, read_coords))
-        
+
         return processed_coords + failed_coords
 
     def _write_shards(
