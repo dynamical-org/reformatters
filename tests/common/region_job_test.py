@@ -20,7 +20,7 @@ from reformatters.common.region_job import (
     SourceFileCoord,
 )
 from reformatters.common.types import ArrayFloat32, Timestamp
-from reformatters.common.zarr import get_zarr_store, get_local_tmp_store
+from reformatters.common.zarr import get_local_tmp_store, get_zarr_store
 
 
 class ExampleDataVar(DataVar[BaseInternalAttrs]):
