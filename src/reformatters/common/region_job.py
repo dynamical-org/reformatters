@@ -366,7 +366,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         data_array_template,
                         shared_buffer,
                         output_region_ds,
-                        self.store,
+                        self.final_store,
                     )
                     results[data_var.name] = self.summarize_processing_state(
                         data_var,
