@@ -52,9 +52,10 @@ class UpdateProgressTracker:
         # Method used by pre-RegionJob reformatters.
         return [v for v in all_vars if v not in self.processed_variables]
 
-    def get_unprocessed[T: INTERNAL_ATTRS](
-        self, all_vars: Iterable[DataVar[T]]
-    ) -> list[DataVar[T]]:
+    # Fix this signature to take and return DataVar[INTERNAL_ATTRS] AI!
+    def get_unprocessed[INTERNAL_ATTRS](
+        self, all_vars: Iterable[DataVar[INTERNAL_ATTRS]]
+    ) -> list[DataVar[INTERNAL_ATTRS]]:
         return [v for v in all_vars if v.name not in self.processed_variables]
 
     def close(self) -> None:
