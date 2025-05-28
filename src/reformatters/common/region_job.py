@@ -225,6 +225,43 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         return str(self.template_ds.attrs["dataset_id"])
 
     @classmethod
+    def operational_update_jobs(
+        cls,
+        final_store: zarr.abc.store.Store,
+        template_ds: xr.Dataset,
+        append_dim: AppendDim,
+        all_data_vars: Sequence[DATA_VAR],
+    ) -> Sequence["RegionJob[DATA_VAR, SOURCE_FILE_COORD]"]:
+        """
+        Return a sequence of RegionJob instances for operational update processing.
+
+        Subclasses must implement their own logic that:
+        1. Reads existing data from final_store to determine what's already processed
+        2. Determines what new data is available (dataset-specific logic)
+        3. Optionally identifies recent incomplete data for reprocessing
+        4. Returns appropriate RegionJob instances
+
+        Parameters
+        ----------
+        final_store : zarr.abc.store.Store
+            The destination Zarr store to read existing data from and write updates to.
+        template_ds : xr.Dataset
+            Dataset template defining structure and metadata.
+        append_dim : AppendDim
+            The dimension along which data is appended (e.g., "time").
+        all_data_vars : Sequence[DATA_VAR]
+            Sequence of all data variable configs for this dataset.
+
+        Returns
+        -------
+        Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
+            RegionJob instances that need processing for operational updates.
+        """
+        raise NotImplementedError(
+            "Subclasses must implement operational_update_jobs() with dataset-specific logic"
+        )
+
+    @classmethod
     def get_backfill_jobs(
         cls,
         final_store: zarr.abc.store.Store,

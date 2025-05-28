@@ -113,7 +113,7 @@ def test_region_job(template_ds: xr.Dataset) -> None:
     template_utils.write_metadata(template_ds, store, mode="w")
 
     job = ExampleRegionJob(
-        final_store=store,  # Update parameter name
+        final_store=store,
         tmp_store=tmp_store,
         template_ds=template_ds,
         data_vars=[ExampleDataVar(name=name) for name in template_ds.data_vars.keys()],
@@ -146,7 +146,7 @@ def test_get_backfill_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
     store = get_zarr_store("test-dataset-B", "test-version")
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_backfill_jobs(
-        final_store=store,  # Update parameter name
+        final_store=store,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -183,7 +183,7 @@ def test_get_backfill_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
     store = get_zarr_store("test-dataset-B", "test-version")
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_backfill_jobs(
-        final_store=store,  # Update parameter name
+        final_store=store,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -227,7 +227,7 @@ def test_get_backfill_jobs_grouping_filters_and_worker_index(
     store = get_zarr_store("test-dataset-B", "test-version")
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_backfill_jobs(
-        final_store=store,  # Update parameter name
+        final_store=store,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
