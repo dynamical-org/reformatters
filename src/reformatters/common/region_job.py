@@ -206,8 +206,14 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         self,
         data_var: DATA_VAR,
         source_file_coords: Sequence[SOURCE_FILE_COORD],
-    ) -> Any:
-        return None
+    ) -> Sequence[SOURCE_FILE_COORD]:
+        """
+        Return a summary of the processing state for this data variable.
+        
+        The default implementation returns the source file coords with their final status.
+        Subclasses can override this to return dataset-specific processing summaries.
+        """
+        return source_file_coords
 
     # ----- Most subclasses will not need to override the attributes and methods below -----
 
@@ -319,7 +325,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         return get_worker_jobs(all_jobs, worker_index, workers_total)
 
-    def process(self) -> dict[str, Any]:
+    def process(self) -> dict[str, Sequence[SOURCE_FILE_COORD]]:
         """
         Orchestrate the full region job processing pipeline.
 
@@ -347,7 +353,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 data_var_groups, self.max_vars_per_download_group
             )
 
-        results: dict[str, Any] = {}
+        results: dict[str, Sequence[SOURCE_FILE_COORD]] = {}
         upload_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
         upload_futures = []
 
@@ -365,7 +371,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         data_var.name,
                         shared_buffer,
                     )
-                    self._read_into_data_array(
+                    final_source_file_coords = self._read_into_data_array(
                         data_array,
                         data_var,
                         source_file_coords,
@@ -382,29 +388,21 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     )
 
                     # Pipeline upload with processing of next variable
-                    tmp_store_path = (
-                        self.tmp_store
-                        if isinstance(self.tmp_store, Path)
-                        else Path(str(self.tmp_store))
-                    )
-                    progress_tracker = UpdateProgressTracker(
-                        tmp_store_path / "progress"
-                    )
                     upload_future = upload_executor.submit(
                         copy_data_var,
                         data_var.name,
                         self.region,
                         self.template_ds,
                         self.append_dim,
-                        tmp_store_path,
+                        self.tmp_store,
                         self.final_store,
-                        progress_tracker,
+                        None,  # No progress tracker needed for backfill jobs
                     )
                     upload_futures.append(upload_future)
 
                     results[data_var.name] = self.summarize_processing_state(
                         data_var,
-                        source_file_coords,
+                        final_source_file_coords,
                     )
                 self._cleanup_local_files(source_file_coords)
 
@@ -499,11 +497,19 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 return replace(coord, status=SourceFileStatus.ReadFailed)
 
         # Skip coords where the download failed
-        read_coords = (
+        read_coords = [
             c for c in source_file_coords if c.status == SourceFileStatus.Processing
-        )
+        ]
+        
+        # Also include coords that failed download to preserve them in the results
+        failed_coords = [
+            c for c in source_file_coords if c.status != SourceFileStatus.Processing
+        ]
+        
         with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as executor:
-            return list(executor.map(_read_and_write_one, read_coords))
+            processed_coords = list(executor.map(_read_and_write_one, read_coords))
+        
+        return processed_coords + failed_coords
 
     def _write_shards(
         self,
