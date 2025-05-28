@@ -228,29 +228,34 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def operational_update_jobs(
         cls,
         final_store: zarr.abc.store.Store,
+        tmp_store: Path,
         template_ds: xr.Dataset,
         append_dim: AppendDim,
         all_data_vars: Sequence[DATA_VAR],
+        kubernetes_job_name: str,
     ) -> Sequence["RegionJob[DATA_VAR, SOURCE_FILE_COORD]"]:
         """
         Return a sequence of RegionJob instances for operational update processing.
 
-        Subclasses must implement their own logic that:
-        1. Reads existing data from final_store to determine what's already processed
-        2. Determines what new data is available (dataset-specific logic)
-        3. Optionally identifies recent incomplete data for reprocessing
-        4. Returns appropriate RegionJob instances
+        The exact logic is dataset-specific, but in general jobs do the steps from this which are applicable:
+        1. Read existing data from final_store to determine what's already processed
+        2. Optionally identify recent incomplete data for reprocessing
+        3. Return appropriate RegionJob instances, often by calling cls.get_backfill_jobs(..., filter_start=...)
 
         Parameters
         ----------
         final_store : zarr.abc.store.Store
             The destination Zarr store to read existing data from and write updates to.
+        tmp_store : zarr.abc.store.Store | Path
+            The temporary Zarr store to write into while processing.
         template_ds : xr.Dataset
             Dataset template defining structure and metadata.
         append_dim : AppendDim
             The dimension along which data is appended (e.g., "time").
         all_data_vars : Sequence[DATA_VAR]
             Sequence of all data variable configs for this dataset.
+        kubernetes_job_name : str
+            The name of the Kubernetes job, used for progress tracking.
 
         Returns
         -------
@@ -258,8 +263,16 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             RegionJob instances that need processing for operational updates.
         """
         raise NotImplementedError(
-            "Subclasses must implement operational_update_jobs() with dataset-specific logic"
+            "Subclasses implement operational_update_jobs() with dataset-specific logic"
         )
+
+    @classmethod
+    def operational_update_append_dim_end(cls, template_ds: xr.Dataset) -> Timestamp:
+        """
+        Return the end date of the operational update. Often this is the current time or a
+        few hours in the future.
+        """
+        return pd.Timestamp.now()
 
     @classmethod
     def get_backfill_jobs(
