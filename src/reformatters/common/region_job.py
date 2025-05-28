@@ -345,8 +345,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             self.final_store, self.kubernetes_job_name, self.region.start
         )
         data_vars_to_process = progress_tracker.get_unprocessed(self.data_vars)
-        # cast data_vars_to_process to Sequence[DATA_VAR] AI!
-        data_vars_to_process: Sequence[DATA_VAR] = data_vars_to_process
 
         data_var_groups = self.source_groups(data_vars_to_process)
         if self.max_vars_per_download_group is not None:
