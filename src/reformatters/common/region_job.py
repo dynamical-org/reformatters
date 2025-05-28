@@ -100,6 +100,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     append_dim: AppendDim
     # integer slice along append_dim
     region: Annotated[slice, AfterValidator(region_slice)]
+    kubernetes_job_name: str
 
     # Limit the number of variables processed in each backfill job if set.
     max_vars_per_backfill_job: ClassVar[int | None] = None
@@ -229,6 +230,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         template_ds: xr.Dataset,
         append_dim: AppendDim,
         all_data_vars: Sequence[DATA_VAR],
+        kubernetes_job_name: str,
         worker_index: int = 0,
         workers_total: int = 1,
         filter_start: Timestamp | None = None,
@@ -258,6 +260,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         all_data_vars : Sequence[DATA_VAR]
             Sequence of all data variable configs for this dataset.
             Provided so that grouping and RegionJob made access DataVar.internal_attrs.
+        kubernetes_job_name : str
+            The name of the Kubernetes job, used for progress tracking.
 
         worker_index : int, default 0
         workers_total : int, default 1
@@ -313,6 +317,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 data_vars=data_var_group,
                 append_dim=append_dim,
                 region=region,
+                kubernetes_job_name=kubernetes_job_name,
             )
             for region in regions
             for data_var_group in data_var_groups
@@ -334,6 +339,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 iv.  Upload chunk data from tmp_store to final_store (pipelined with next variabl
         """
         processing_region_ds, output_region_ds = self._get_region_datasets()
+
+        # initialize progress tracker AI!
+
         data_var_groups = self.source_groups(self.data_vars)
         if self.max_vars_per_download_group is not None:
             data_var_groups = self._maybe_split_groups(
@@ -386,7 +394,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         self.tmp_store,
                     )
 
-                    # Pipeline upload with processing of next variable
                     upload_futures.append(
                         upload_executor.submit(
                             copy_data_var,
@@ -402,7 +409,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     results[data_var.name] = data_var_source_file_coords
                 self._cleanup_local_files(source_file_coords)
 
-            # Wait for all uploads to complete and handle exceptions
             for future in concurrent.futures.as_completed(upload_futures):
                 if (e := future.exception()) is not None:
                     raise e
