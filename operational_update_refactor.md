@@ -27,7 +27,9 @@ For each region job:
 1. **Download** source files (concurrent)
 2. **Read/Compress/Write** to tmp_store (concurrent with upload of previous variable)
 3. **Upload** chunk data to final_store (concurrent with read/compress of next variable)
-4. **Update metadata** incrementally after each job
+4. **Update metadata** incrementally after each job.
+
+Step 4 only happens in the operational update case and is orchestrated by DynamicalDataset, while steps 1, 2 and 3 happen in RegionJob.process.
 
 ## Implementation Phases
 
@@ -40,7 +42,6 @@ For each region job:
 
 ### Phase 2: Operational update job determination
 - Add `RegionJob.operational_update_jobs()` class method
-- Implement base logic that subclasses can override
 - Update method signatures to use `final_store` consistently
 
 ### Phase 3: Template update interface
@@ -53,12 +54,6 @@ For each region job:
 - Implement `DynamicalDataset.reformat_operational_update()`
 - Integrate incremental metadata updates
 - Handle temporary store cleanup
-
-### Phase 5: Migration of existing datasets
-- Migrate GEFS analysis operational update logic
-- Migrate GEFS forecast_35_day operational update logic
-- Remove old `reformat_operational_update` functions
-- Update CLI interfaces
 
 ## Notes
 

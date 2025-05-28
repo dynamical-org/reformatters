@@ -443,7 +443,12 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         def _read_and_write_one(coord: SOURCE_FILE_COORD) -> SOURCE_FILE_COORD:
             try:
                 out.loc[coord.out_loc()] = self.read_data(coord, data_var)
-                return replace(coord, status=SourceFileStatus.Succeeded)
+                new_status = (
+                    SourceFileStatus.Succeeded
+                    if coord.status == SourceFileStatus.Processing
+                    else coord.status
+                )
+                return replace(coord, status=new_status)
             except Exception:
                 logger.exception(f"Read failed {coord.downloaded_path}")
                 return replace(coord, status=SourceFileStatus.ReadFailed)
