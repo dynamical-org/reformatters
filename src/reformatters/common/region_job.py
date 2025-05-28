@@ -24,7 +24,10 @@ from reformatters.common.reformat_utils import (
     create_data_array_and_template,
 )
 from reformatters.common.shared_memory_utils import make_shared_buffer, write_shards
+from reformatters.common.template_utils import write_metadata
 from reformatters.common.types import AppendDim, ArrayFloat32, Dim, Timestamp
+from reformatters.common.update_progress_tracker import UpdateProgressTracker
+from reformatters.common.zarr import copy_data_var, get_mode
 
 logger = get_logger(__name__)
 
@@ -89,7 +92,7 @@ def region_slice(s: slice) -> slice:
 
 
 class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
-    final_store: zarr.abc.store.Store  # Rename from 'store'
+    final_store: zarr.abc.store.Store
     tmp_store: zarr.abc.store.Store | Path
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
@@ -221,7 +224,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def get_backfill_jobs(
         cls,
         final_store: zarr.abc.store.Store,
-        tmp_store: zarr.abc.store.Store | Path,  # Add this parameter
+        tmp_store: zarr.abc.store.Store | Path,
         template_ds: xr.Dataset,
         append_dim: AppendDim,
         all_data_vars: Sequence[DATA_VAR],
@@ -303,7 +306,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         all_jobs = [
             cls(
-                final_store=final_store,  # Update parameter name
+                final_store=final_store,
                 tmp_store=tmp_store,
                 template_ds=template_ds,
                 data_vars=data_var_group,
@@ -320,18 +323,24 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         Orchestrate the full region job processing pipeline.
 
-        1. Group data variables for efficient processing (e.g., by file type or batch size).
-        2. For each group of data variables:
+        1. Write zarr metadata to tmp_store for region="auto" support
+        2. Group data variables for efficient processing (e.g., by file type or batch size).
+        3. For each group of data variables:
             a. Download all required source files
             b. For each variable in the group:
                 i.   Read data from source files into the shared array
                 ii.  Apply any required data transformations (e.g., rounding, deaccumulation).
-                iii. Write output shards to the Zarr store in parallel.
+                iii. Write output shards to the tmp_store in parallel.
+                iv.  Upload chunk data from tmp_store to final_store (pipelined with next variable)
 
         Returns:
             dict[str, Any]: Mapping from data variable name to the output of `self.summarize_processing_state`.
         """
         processing_region_ds, output_region_ds = self._get_region_datasets()
+        
+        # Write metadata to tmp_store for region="auto" support
+        write_metadata(self.template_ds, self.tmp_store, get_mode(self.tmp_store))
+        
         data_var_groups = self.source_groups(self.data_vars)
         if self.max_vars_per_download_group is not None:
             data_var_groups = self._maybe_split_groups(
@@ -339,6 +348,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
 
         results: dict[str, Any] = {}
+        upload_executor = ThreadPoolExecutor(max_workers=(os.cpu_count() or 1) * 2)
+        upload_futures = []
+        
         with make_shared_buffer(processing_region_ds) as shared_buffer:
             for data_var_group in data_var_groups:
                 source_file_coords = self.generate_source_file_coords(
@@ -366,13 +378,33 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         data_array_template,
                         shared_buffer,
                         output_region_ds,
-                        self.final_store,
+                        self.tmp_store,
                     )
+                    
+                    # Pipeline upload with processing of next variable
+                    upload_future = upload_executor.submit(
+                        copy_data_var,
+                        data_var.name,
+                        self.region,
+                        self.template_ds,
+                        self.append_dim,
+                        self.tmp_store,
+                        self.final_store,
+                        None,  # progress_tracker - not used in backfill case
+                    )
+                    upload_futures.append(upload_future)
+                    
                     results[data_var.name] = self.summarize_processing_state(
                         data_var,
                         source_file_coords,
                     )
                 self._cleanup_local_files(source_file_coords)
+        
+        # Wait for all uploads to complete
+        for future in upload_futures:
+            future.result()  # This will raise any exceptions that occurred
+        
+        upload_executor.shutdown(wait=True)
         return results
 
     def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
@@ -470,7 +502,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         processing_region_da_template: xr.DataArray,
         shared_buffer: SharedMemory,
         output_region_ds: xr.Dataset,
-        store: zarr.abc.store.Store,
+        store: zarr.abc.store.Store | Path,
     ) -> None:
         with ProcessPoolExecutor(max_workers=os.cpu_count() or 1) as process_executor:
             write_shards(
@@ -478,7 +510,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 shared_buffer,
                 self.append_dim,
                 output_region_ds,
-                store,  # This parameter will be updated in the next step
+                store,
                 process_executor,
             )
 
