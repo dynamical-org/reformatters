@@ -27,7 +27,7 @@ from reformatters.common.reformat_utils import (
 from reformatters.common.shared_memory_utils import make_shared_buffer, write_shards
 from reformatters.common.template_config import template_utils
 from reformatters.common.types import AppendDim, ArrayFloat32, Dim, Timestamp
-from reformatters.common.zarr import get_mode
+from reformatters.common.zarr import copy_data_var, get_mode
 
 logger = get_logger(__name__)
 
@@ -345,7 +345,11 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
 
         results: dict[str, Sequence[SOURCE_FILE_COORD]] = {}
-        with make_shared_buffer(processing_region_ds) as shared_buffer:
+        upload_futures: list[Any] = []
+        
+        with make_shared_buffer(processing_region_ds) as shared_buffer, ThreadPoolExecutor(
+            max_workers=(os.cpu_count() or 1) * 2
+        ) as upload_executor:
             for data_var_group in data_var_groups:
                 source_file_coords = self.generate_source_file_coords(
                     processing_region_ds,
@@ -377,8 +381,27 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         output_region_ds,
                         self.tmp_store,
                     )
+
+                    # Pipeline upload with processing of next variable
+                    upload_future = upload_executor.submit(
+                        copy_data_var,
+                        data_var.name,
+                        self.region,
+                        self.template_ds,
+                        self.append_dim,
+                        self.tmp_store,
+                        self.final_store,
+                    )
+                    upload_futures.append(upload_future)
+
                     results[data_var.name] = data_var_source_file_coords
                 self._cleanup_local_files(source_file_coords)
+
+            # Wait for all uploads to complete and handle exceptions
+            for future in upload_futures:
+                if (e := future.exception()) is not None:
+                    raise e
+
         return results
 
     def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
