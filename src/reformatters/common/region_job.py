@@ -17,6 +17,7 @@ import xarray as xr
 import zarr
 from pydantic import AfterValidator, Field, computed_field
 
+from reformatters.common import template_utils
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config_models import DataVar
 from reformatters.common.iterating import dimension_slices, get_worker_jobs
@@ -26,7 +27,6 @@ from reformatters.common.reformat_utils import (
     create_data_array_and_template,
 )
 from reformatters.common.shared_memory_utils import make_shared_buffer, write_shards
-from reformatters.common.template_config import template_utils
 from reformatters.common.types import AppendDim, ArrayFloat32, Dim, Timestamp
 from reformatters.common.update_progress_tracker import UpdateProgressTracker
 from reformatters.common.zarr import copy_data_var, get_mode
@@ -344,8 +344,11 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         progress_tracker = UpdateProgressTracker(
             self.final_store, self.kubernetes_job_name, self.region.start
         )
+        data_vars_to_process = progress_tracker.get_unprocessed(self.data_vars)
+        # cast data_vars_to_process to Sequence[DATA_VAR] AI!
+        data_vars_to_process: Sequence[DATA_VAR] = data_vars_to_process
 
-        data_var_groups = self.source_groups(self.data_vars)
+        data_var_groups = self.source_groups(data_vars_to_process)
         if self.max_vars_per_download_group is not None:
             data_var_groups = self._maybe_split_groups(
                 data_var_groups, self.max_vars_per_download_group
