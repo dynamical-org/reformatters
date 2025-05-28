@@ -84,9 +84,7 @@ class UpdateProgressTracker:
                 content = json.dumps(
                     {PROCESSED_VARIABLES_KEY: list(self.processed_variables)}
                 )
-                fsspec_apply(
-                    self.fs, "pipe", self._get_path(), content.encode("utf-8")
-                )
+                fsspec_apply(self.fs, "pipe", self._get_path(), content.encode("utf-8"))
 
                 self.queue.task_done()
             except Exception as e:
