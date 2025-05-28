@@ -221,6 +221,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def get_backfill_jobs(
         cls,
         store: zarr.abc.store.Store,
+        tmp_store: zarr.abc.store.Store | Path,  # Add this parameter
         template_ds: xr.Dataset,
         append_dim: AppendDim,
         all_data_vars: Sequence[DATA_VAR],
@@ -301,6 +302,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         all_jobs = [
             cls(
                 store=store,
+                tmp_store=tmp_store,  # Add this line
                 template_ds=template_ds,
                 data_vars=data_var_group,
                 append_dim=append_dim,
