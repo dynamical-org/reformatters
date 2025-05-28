@@ -27,12 +27,9 @@ class UpdateProgressTracker:
         job_name: str,
         time_i_slice_start: int,
     ):
-        self.store = store
         self.job_name = job_name
         self.time_i_slice_start = time_i_slice_start
         self.queue: queue.Queue[str] = queue.Queue()
-
-        # Extract filesystem and path from store
         self.fs, self.path = _get_fs_and_path(store)
 
         try:
@@ -56,6 +53,7 @@ class UpdateProgressTracker:
         # Method used by pre-RegionJob reformatters.
         return [v for v in all_vars if v not in self.processed_variables]
 
+    # How do i get the type signature here to capture the type of internal attrs and return the same type? AI!
     def get_unprocessed(
         self, all_vars: Iterable[DataVar[INTERNAL_ATTRS]]
     ) -> list[DataVar[INTERNAL_ATTRS]]:
