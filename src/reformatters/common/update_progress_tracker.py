@@ -31,10 +31,16 @@ class UpdateProgressTracker:
         self.time_i_slice_start = time_i_slice_start
         self.queue: queue.Queue[str] = queue.Queue()
 
-        # set fs and path AI!
+        # Extract filesystem and path from store
+        self.fs = getattr(store, "fs", None)
+        if self.fs is None:
+            raise ValueError("Store must have an fs attribute")
+        self.path = getattr(store, "path", None)
+        if self.path is None:
+            raise ValueError("Store must have a path attribute")
 
         try:
-            file_content = fsspec_apply(self.store.fs, "cat_file", self._get_path())
+            file_content = fsspec_apply(self.fs, "cat_file", self._get_path())
             self.processed_variables: set[str] = set(
                 json.loads(file_content.decode("utf-8"))[PROCESSED_VARIABLES_KEY]
             )
@@ -61,12 +67,12 @@ class UpdateProgressTracker:
 
     def close(self) -> None:
         try:
-            fsspec_apply(self.store.fs, "rm", self._get_path())
+            fsspec_apply(self.fs, "rm", self._get_path())
         except Exception as e:
             log.warning(f"Could not delete progress file: {e}")
 
     def _get_path(self) -> str:
-        return f"{self.store.path}/_internal_update_progress_{self.job_name}_{self.time_i_slice_start}.json"
+        return f"{self.path}/_internal_update_progress_{self.job_name}_{self.time_i_slice_start}.json"
 
     def _process_queue(self) -> None:
         """Run as a background thread to process variables from the queue and record progress."""
@@ -79,7 +85,7 @@ class UpdateProgressTracker:
                     {PROCESSED_VARIABLES_KEY: list(self.processed_variables)}
                 )
                 fsspec_apply(
-                    self.store.fs, "pipe", self._get_path(), content.encode("utf-8")
+                    self.fs, "pipe", self._get_path(), content.encode("utf-8")
                 )
 
                 self.queue.task_done()
