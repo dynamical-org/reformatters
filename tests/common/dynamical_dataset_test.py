@@ -123,6 +123,7 @@ def test_process_region_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
 
     dataset.process_region_jobs(
         pd.Timestamp("2000-01-02"),
+        "test-job-name",
         worker_index=0,
         workers_total=1,
     )
