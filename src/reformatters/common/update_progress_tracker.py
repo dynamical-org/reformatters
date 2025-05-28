@@ -32,6 +32,7 @@ class UpdateProgressTracker:
         self.queue: queue.Queue[str] = queue.Queue()
 
         # Extract filesystem and path from store
+        # use _get_fs_and_path() from zarr.py AI!
         self.fs = getattr(store, "fs", None)
         if self.fs is None:
             raise ValueError("Store must have an fs attribute")
