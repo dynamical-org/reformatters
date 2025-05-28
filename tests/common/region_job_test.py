@@ -20,7 +20,7 @@ from reformatters.common.region_job import (
     SourceFileCoord,
 )
 from reformatters.common.types import ArrayFloat32, Timestamp
-from reformatters.common.zarr import get_zarr_store
+from reformatters.common.zarr import get_zarr_store, get_local_tmp_store
 
 
 class ExampleDataVar(DataVar[BaseInternalAttrs]):
@@ -107,17 +107,19 @@ def template_ds() -> xr.Dataset:
 )
 def test_region_job(template_ds: xr.Dataset) -> None:
     store = get_zarr_store("test-dataset-A", "test-version")
+    tmp_store = get_local_tmp_store()
 
     # Write zarr metadata for this RegionJob to write into
     template_utils.write_metadata(template_ds, store, mode="w")
 
     job = ExampleRegionJob(
         final_store=store,  # Update parameter name
-        tmp_store=store,
+        tmp_store=tmp_store,
         template_ds=template_ds,
         data_vars=[ExampleDataVar(name=name) for name in template_ds.data_vars.keys()],
         append_dim="time",
         region=slice(0, 18),
+        kubernetes_job_name="test-job",
     )
 
     job.process()
@@ -142,12 +144,14 @@ def test_source_file_coord_out_loc_default_impl() -> None:
 def test_get_backfill_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
     store = get_zarr_store("test-dataset-B", "test-version")
+    tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_backfill_jobs(
         final_store=store,  # Update parameter name
-        tmp_store=store,
+        tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
         all_data_vars=data_vars,
+        kubernetes_job_name="test-job",
     )
     # RegionJobA groups vars into batches of 3 -> [3,1] and then then max_backfill_jobs of 2 -> [2,1,1]
     # and shards of size 24 -> 2 shards
@@ -177,12 +181,14 @@ def test_get_backfill_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
 def test_get_backfill_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
     store = get_zarr_store("test-dataset-B", "test-version")
+    tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_backfill_jobs(
         final_store=store,  # Update parameter name
-        tmp_store=store,
+        tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
         all_data_vars=data_vars,
+        kubernetes_job_name="test-job",
         filter_variable_names=["var0", "var1", "var2"],
         filter_start=pd.Timestamp("2025-01-02T03"),
         filter_end=pd.Timestamp("2025-01-02T06"),
@@ -219,12 +225,14 @@ def test_get_backfill_jobs_grouping_filters_and_worker_index(
 ) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
     store = get_zarr_store("test-dataset-B", "test-version")
+    tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_backfill_jobs(
         final_store=store,  # Update parameter name
-        tmp_store=store,
+        tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
         all_data_vars=data_vars,
+        kubernetes_job_name="test-job",
         filter_variable_names=["var0", "var1", "var2"],
         filter_start=pd.Timestamp("2025-01-02T03"),
         filter_end=pd.Timestamp("2025-01-02T06"),
