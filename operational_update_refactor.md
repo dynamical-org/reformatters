@@ -125,16 +125,15 @@ This maximizes resource utilization and minimizes total processing time.
 **Goal**: Implement the main operational update orchestration in `DynamicalDataset`.
 
 **Changes needed**:
-- Add `DynamicalDataset._tmp_store()` method that returns `get_local_tmp_store()`
 - Implement `DynamicalDataset.reformat_operational_update()` method that:
-  1. Calls `RegionJob.operational_update_jobs()` to determine what needs processing
-  2. For each region job:
-     a. Creates region job with both final_store and tmp_store
+  1. Calls `RegionJob.operational_update_append_dim_end()`, passing the result into `self._template_ds` to get template_ds.
+  2. Calls `RegionJob.operational_update_jobs()` to determine what needs processing
+  3. For each region job:
      b. Calls `region_job.process()` to get processing results
      c. Calls `region_job.update_template_with_results()` to get updated template
      d. Writes updated metadata to tmp_store using `template_utils.write_metadata`
      e. Copies updated metadata to final_store using `copy_zarr_metadata`
-  3. Handles cleanup of temporary stores
+  4. Handles cleanup of temporary stores
 - Ensure incremental metadata updates happen after each region job
 - Add test for simple path of this to `dynamical_dataset_test.py`
 
