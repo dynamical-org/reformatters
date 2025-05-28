@@ -45,7 +45,7 @@ The temporary store pattern is essential for maintaining dataset validity:
 Within `RegionJob.process()`, the three main steps should be pipelined:
 - While variable N is uploading chunk data to final_store
 - Variable N+1 should be reading/compressing/writing to tmp_store
-- Variable N+2 should be downloading source files
+- Variable group N+2 should be downloading source files
 
 This maximizes resource utilization and minimizes total processing time.
 
@@ -64,7 +64,7 @@ This maximizes resource utilization and minimizes total processing time.
   4. Pipeline the upload step with processing of subsequent variables
 - Update `RegionJob._write_shards()` to write to tmp_store instead of final_store
 - Add pipelining logic using `ThreadPoolExecutor` for concurrent upload while processing next variable
-- **TODO: Integrate UpdateProgressTracker into RegionJob.process for resumption support**
+- Integrate UpdateProgressTracker into RegionJob.process for resumption support
 
 **Key considerations**:
 - Use `get_local_tmp_store()` from `reformatters.common.zarr` for temporary storage
@@ -73,7 +73,7 @@ This maximizes resource utilization and minimizes total processing time.
 
 ### Phase 2: Operational update job determination
 
-**Goal**: Add class method to determine which region jobs need processing for operational updates.
+**Goal**: Add base class method to determine which region jobs need processing for operational updates.
 
 **Changes needed**:
 - Add `RegionJob.operational_update_jobs()` class method with signature:
@@ -87,17 +87,18 @@ This maximizes resource utilization and minimizes total processing time.
       all_data_vars: Sequence[DATA_VAR],
   ) -> Sequence["RegionJob[DATA_VAR, SOURCE_FILE_COORD]"]:
   ```
-- Implement base logic that:
+- Subclassers must implement their own logic that does something like this:
   1. Reads existing data from final_store to determine what's already processed
   2. Determines what new data is available (dataset-specific logic)
   3. Optionally identifies recent incomplete data for reprocessing
   4. Returns appropriate `RegionJob` instances
+- In this implementation phase, just implement the base class method that raises NotImplementedError
 - Update all method signatures to use `final_store` consistently instead of `store`
 - Subclasses can override this method for dataset-specific logic (e.g., GEFS analysis vs forecast_35_day have different update patterns)
 
 ### Phase 3: Template update interface
 
-**Goal**: Add interface for updating template dataset based on processing results.
+**Goal**: Add base class interface for updating template dataset based on processing results.
 
 **Changes needed**:
 - Modify `RegionJob.process()` return type to `dict[str, Sequence[SOURCE_FILE_COORD]]`
@@ -110,14 +111,14 @@ This maximizes resource utilization and minimizes total processing time.
       process_results: dict[str, Sequence[SOURCE_FILE_COORD]]
   ) -> xr.Dataset:
   ```
-- This method should:
+- Subclassers of this this method should:
   1. Make a copy of `self.template_ds`
   2. Apply dataset-specific adjustments based on `process_results`
   3. Examples of adjustments:
      - Trim dataset along append_dim to only include successfully processed data (GEFS analysis pattern)
      - Load existing coordinate values from `self.final_store`, update them based on results (GEFS forecast_35_day `ingested_forecast_length` pattern)
   4. Return the updated template dataset
-- Implement base logic that subclasses can extend
+- Base class should raise NotImplementedError
 
 ### Phase 4: DynamicalDataset operational update orchestration
 
@@ -126,23 +127,16 @@ This maximizes resource utilization and minimizes total processing time.
 **Changes needed**:
 - Add `DynamicalDataset._tmp_store()` method that returns `get_local_tmp_store()`
 - Implement `DynamicalDataset.reformat_operational_update()` method that:
-  1. Gets existing dataset from final_store
-  2. Calls `RegionJob.operational_update_jobs()` to determine what needs processing
-  3. For each region job:
+  1. Calls `RegionJob.operational_update_jobs()` to determine what needs processing
+  2. For each region job:
      a. Creates region job with both final_store and tmp_store
      b. Calls `region_job.process()` to get processing results
      c. Calls `region_job.update_template_with_results()` to get updated template
      d. Writes updated metadata to tmp_store using `template_utils.write_metadata`
      e. Copies updated metadata to final_store using `copy_zarr_metadata`
-  4. Handles cleanup of temporary stores
-- Add proper error handling and logging
+  3. Handles cleanup of temporary stores
 - Ensure incremental metadata updates happen after each region job
-
-**Key patterns from existing implementations**:
-- Use `ThreadPoolExecutor` for concurrent upload while processing next job
-- Track maximum processed coordinates for metadata updates
-- Handle progress tracking and resumption
-- Trim datasets to only include successfully processed data
+- Add test for simple path of this to `dynamical_dataset_test.py`
 
 ### Phase 5: Migration of existing datasets
 
@@ -161,21 +155,9 @@ This maximizes resource utilization and minimizes total processing time.
 
 ## Technical Details
 
-### Existing Code Patterns to Preserve
-
-From `src/reformatters/noaa/gefs/analysis/reformat.py`:
-- Use `get_latest_processed_time()` to determine what was actually processed
-- Trim template dataset to `max_processed_time - 1` to handle incomplete final steps
-- Use `UpdateProgressTracker` for resumption support
-
-From `src/reformatters/noaa/gefs/forecast_35_day/reformat.py`:
-- Update `ingested_forecast_length` coordinate based on processing results
-- Reprocess recent incomplete init_times (last 4 days) in addition to new data
-- Handle ensemble member dimension in metadata updates
-
 ### Error Handling
 
-- Download failures should be logged but not stop processing (existing pattern)
+- Download failures should be logged (and status should be updated in source file coords) but not stop processing (existing pattern)
 - Read failures should be logged but not stop processing (existing pattern)
 - Use Sentry monitoring decorators for operational update functions
 - Ensure proper cleanup of temporary files and stores
