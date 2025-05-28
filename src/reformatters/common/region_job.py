@@ -364,17 +364,16 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         with (
             make_shared_buffer(processing_region_ds) as shared_buffer,
-            ThreadPoolExecutor(
-                max_workers=(os.cpu_count() or 1) * 2
-            ) as upload_executor,
+            ThreadPoolExecutor(max_workers=1) as download_executor,
+            ThreadPoolExecutor(max_workers=2) as upload_executor,
         ):
             for data_var_group in data_var_groups:
                 source_file_coords = self.generate_source_file_coords(
                     processing_region_ds,
                     data_var_group,
                 )
+                # Put this in the download executor and process downloaded data var groups as they are completed AI!
                 source_file_coords = self._download_processing_group(source_file_coords)
-
                 for data_var in data_var_group:
                     # Copy so we have a unique status per variable, not per group
                     data_var_source_file_coords = deepcopy(source_file_coords)
