@@ -346,10 +346,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         results: dict[str, Sequence[SOURCE_FILE_COORD]] = {}
         upload_futures: list[Any] = []
-        
-        with make_shared_buffer(processing_region_ds) as shared_buffer, ThreadPoolExecutor(
-            max_workers=(os.cpu_count() or 1) * 2
-        ) as upload_executor:
+
+        with (
+            make_shared_buffer(processing_region_ds) as shared_buffer,
+            ThreadPoolExecutor(
+                max_workers=(os.cpu_count() or 1) * 2
+            ) as upload_executor,
+        ):
             for data_var_group in data_var_groups:
                 source_file_coords = self.generate_source_file_coords(
                     processing_region_ds,
