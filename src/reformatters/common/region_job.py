@@ -26,6 +26,7 @@ from reformatters.common.reformat_utils import (
 from reformatters.common.shared_memory_utils import make_shared_buffer, write_shards
 from reformatters.common.template_utils import write_metadata
 from reformatters.common.types import AppendDim, ArrayFloat32, Dim, Timestamp
+from reformatters.common.update_progress_tracker import UpdateProgressTracker
 from reformatters.common.zarr import copy_data_var, get_mode
 
 logger = get_logger(__name__)
@@ -381,15 +382,17 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     )
 
                     # Pipeline upload with processing of next variable
+                    tmp_store_path = self.tmp_store if isinstance(self.tmp_store, Path) else Path(str(self.tmp_store))
+                    progress_tracker = UpdateProgressTracker(tmp_store_path / "progress")
                     upload_future = upload_executor.submit(
                         copy_data_var,
                         data_var.name,
                         self.region,
                         self.template_ds,
                         self.append_dim,
-                        self.tmp_store,
+                        tmp_store_path,
                         self.final_store,
-                        None,  # progress_tracker - not used in backfill case
+                        progress_tracker,
                     )
                     upload_futures.append(upload_future)
 
@@ -504,12 +507,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         store: zarr.abc.store.Store | Path,
     ) -> None:
         with ProcessPoolExecutor(max_workers=os.cpu_count() or 1) as process_executor:
+            zarr_store = store if isinstance(store, zarr.abc.store.Store) else zarr.storage.FSStore(str(store))
             write_shards(
                 processing_region_da_template,
                 shared_buffer,
                 self.append_dim,
                 output_region_ds,
-                store,
+                zarr_store,
                 process_executor,
             )
 
