@@ -382,8 +382,14 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     )
 
                     # Pipeline upload with processing of next variable
-                    tmp_store_path = self.tmp_store if isinstance(self.tmp_store, Path) else Path(str(self.tmp_store))
-                    progress_tracker = UpdateProgressTracker(tmp_store_path / "progress")
+                    tmp_store_path = (
+                        self.tmp_store
+                        if isinstance(self.tmp_store, Path)
+                        else Path(str(self.tmp_store))
+                    )
+                    progress_tracker = UpdateProgressTracker(
+                        tmp_store_path / "progress"
+                    )
                     upload_future = upload_executor.submit(
                         copy_data_var,
                         data_var.name,
@@ -507,7 +513,11 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         store: zarr.abc.store.Store | Path,
     ) -> None:
         with ProcessPoolExecutor(max_workers=os.cpu_count() or 1) as process_executor:
-            zarr_store = store if isinstance(store, zarr.abc.store.Store) else zarr.storage.FSStore(str(store))
+            zarr_store = (
+                store
+                if isinstance(store, zarr.abc.store.Store)
+                else zarr.storage.FSStore(str(store))
+            )
             write_shards(
                 processing_region_da_template,
                 shared_buffer,
