@@ -22,7 +22,7 @@ class UpdateProgressTracker:
 
     def __init__(
         self,
-        store: zarr.storage.FsspecStore,
+        store: zarr.abc.store.Store,
         job_name: str,
         time_i_slice_start: int,
     ):
@@ -30,6 +30,8 @@ class UpdateProgressTracker:
         self.job_name = job_name
         self.time_i_slice_start = time_i_slice_start
         self.queue: queue.Queue[str] = queue.Queue()
+
+        # set fs and path AI!
 
         try:
             file_content = fsspec_apply(self.store.fs, "cat_file", self._get_path())
@@ -52,9 +54,9 @@ class UpdateProgressTracker:
         # Method used by pre-RegionJob reformatters.
         return [v for v in all_vars if v not in self.processed_variables]
 
-    def get_unprocessed[T: INTERNAL_ATTRS](
-        self, all_vars: Iterable[DataVar[T]]
-    ) -> list[DataVar[T]]:
+    def get_unprocessed(
+        self, all_vars: Iterable[DataVar[INTERNAL_ATTRS]]
+    ) -> list[DataVar[INTERNAL_ATTRS]]:
         return [v for v in all_vars if v.name not in self.processed_variables]
 
     def close(self) -> None:
