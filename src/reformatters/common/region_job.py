@@ -386,21 +386,23 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     )
 
                     # Pipeline upload with processing of next variable
-                    upload_future = upload_executor.submit(
-                        copy_data_var,
-                        data_var.name,
-                        self.region,
-                        self.template_ds,
-                        self.append_dim,
-                        self.tmp_store,
-                        self.final_store,
+                    upload_futures.append(
+                        upload_executor.submit(
+                            copy_data_var,
+                            data_var.name,
+                            self.region,
+                            self.template_ds,
+                            self.append_dim,
+                            self.tmp_store,
+                            self.final_store,
+                        )
                     )
-                    upload_futures.append(upload_future)
 
                     results[data_var.name] = data_var_source_file_coords
                 self._cleanup_local_files(source_file_coords)
 
-            # Wait for all uploads to complete and handle exceptions
+            # is there a more concise way to do this? AI!
+            concurrent.futures.wait(upload_futures, return_when="FIRST_EXCEPTION")
             for future in upload_futures:
                 if (e := future.exception()) is not None:
                     raise e
