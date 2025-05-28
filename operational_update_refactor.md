@@ -27,33 +27,165 @@ For each region job:
 1. **Download** source files (concurrent)
 2. **Read/Compress/Write** to tmp_store (concurrent with upload of previous variable)
 3. **Upload** chunk data to final_store (concurrent with read/compress of next variable)
-4. **Update metadata** incrementally after each job.
+4. **Update metadata** incrementally after each job
 
 Step 4 only happens in the operational update case and is orchestrated by DynamicalDataset, while steps 1, 2 and 3 happen in RegionJob.process.
+
+### Temporary Store Pattern
+
+The temporary store pattern is essential for maintaining dataset validity:
+- Write full metadata (including updated dataset size) to tmp_store for zarr's `region="auto"` to work
+- Process all data variables and write chunk data to tmp_store
+- Upload only chunk data (not metadata) from tmp_store to final_store
+- Only after all chunk data is uploaded, copy the updated metadata to final_store
+- This ensures readers always see a valid view of the dataset during updates
+
+### Pipelining for Performance
+
+Within `RegionJob.process()`, the three main steps should be pipelined:
+- While variable N is uploading chunk data to final_store
+- Variable N+1 should be reading/compressing/writing to tmp_store
+- Variable N+2 should be downloading source files
+
+This maximizes resource utilization and minimizes total processing time.
 
 ## Implementation Phases
 
 ### Phase 1: Enhanced RegionJob.process with tmp_store support
-- Add `tmp_store` parameter to `RegionJob`
-- Modify `RegionJob.process()` to write to tmp_store first
-- Implement pipelined upload of chunk data to final_store
-- Add concurrent processing: download → read/compress/write → upload
+
+**Goal**: Modify `RegionJob.process()` to write to a temporary store first, then upload chunk data to the final store with pipelining.
+
+**Changes needed**:
+- Add `tmp_store: zarr.abc.store.Store | Path` parameter to `RegionJob.__init__()`
+- Modify `RegionJob.process()` to:
+  1. Write zarr metadata to tmp_store (using `template_utils.write_metadata`)
+  2. Process data variables and write chunk data to tmp_store
+  3. Upload chunk data (not metadata) from tmp_store to final_store using `copy_data_var` from `reformatters.common.zarr`
+  4. Pipeline the upload step with processing of subsequent variables
+- Update `RegionJob._write_shards()` to write to tmp_store instead of final_store
+- Add pipelining logic using `ThreadPoolExecutor` for concurrent upload while processing next variable
 - **TODO: Integrate UpdateProgressTracker into RegionJob.process for resumption support**
 
+**Key considerations**:
+- Use `get_local_tmp_store()` from `reformatters.common.zarr` for temporary storage
+- Use `copy_data_var()` to upload only chunk data, not metadata
+- Ensure proper cleanup of temporary files
+
 ### Phase 2: Operational update job determination
-- Add `RegionJob.operational_update_jobs()` class method
-- Update method signatures to use `final_store` consistently
+
+**Goal**: Add class method to determine which region jobs need processing for operational updates.
+
+**Changes needed**:
+- Add `RegionJob.operational_update_jobs()` class method with signature:
+  ```python
+  @classmethod
+  def operational_update_jobs(
+      cls,
+      final_store: zarr.abc.store.Store,
+      template_ds: xr.Dataset,
+      append_dim: AppendDim,
+      all_data_vars: Sequence[DATA_VAR],
+  ) -> Sequence["RegionJob[DATA_VAR, SOURCE_FILE_COORD]"]:
+  ```
+- Implement base logic that:
+  1. Reads existing data from final_store to determine what's already processed
+  2. Determines what new data is available (dataset-specific logic)
+  3. Optionally identifies recent incomplete data for reprocessing
+  4. Returns appropriate `RegionJob` instances
+- Update all method signatures to use `final_store` consistently instead of `store`
+- Subclasses can override this method for dataset-specific logic (e.g., GEFS analysis vs forecast_35_day have different update patterns)
 
 ### Phase 3: Template update interface
-- Add `RegionJob.update_template_with_results()` instance method
-- Modify `RegionJob.process()` to return `dict[str, Sequence[SOURCE_FILE_COORD]]`
-- Implement base template update logic
+
+**Goal**: Add interface for updating template dataset based on processing results.
+
+**Changes needed**:
+- Modify `RegionJob.process()` return type to `dict[str, Sequence[SOURCE_FILE_COORD]]`
+  - Key: variable name
+  - Value: sequence of source file coords with their final processing status
+- Add `RegionJob.update_template_with_results()` instance method:
+  ```python
+  def update_template_with_results(
+      self, 
+      process_results: dict[str, Sequence[SOURCE_FILE_COORD]]
+  ) -> xr.Dataset:
+  ```
+- This method should:
+  1. Make a copy of `self.template_ds`
+  2. Apply dataset-specific adjustments based on `process_results`
+  3. Examples of adjustments:
+     - Trim dataset along append_dim to only include successfully processed data (GEFS analysis pattern)
+     - Load existing coordinate values from `self.final_store`, update them based on results (GEFS forecast_35_day `ingested_forecast_length` pattern)
+  4. Return the updated template dataset
+- Implement base logic that subclasses can extend
 
 ### Phase 4: DynamicalDataset operational update orchestration
-- Add `DynamicalDataset._tmp_store()` method
-- Implement `DynamicalDataset.reformat_operational_update()`
-- Integrate incremental metadata updates
-- Handle temporary store cleanup
+
+**Goal**: Implement the main operational update orchestration in `DynamicalDataset`.
+
+**Changes needed**:
+- Add `DynamicalDataset._tmp_store()` method that returns `get_local_tmp_store()`
+- Implement `DynamicalDataset.reformat_operational_update()` method that:
+  1. Gets existing dataset from final_store
+  2. Calls `RegionJob.operational_update_jobs()` to determine what needs processing
+  3. For each region job:
+     a. Creates region job with both final_store and tmp_store
+     b. Calls `region_job.process()` to get processing results
+     c. Calls `region_job.update_template_with_results()` to get updated template
+     d. Writes updated metadata to tmp_store using `template_utils.write_metadata`
+     e. Copies updated metadata to final_store using `copy_zarr_metadata`
+  4. Handles cleanup of temporary stores
+- Add proper error handling and logging
+- Ensure incremental metadata updates happen after each region job
+
+**Key patterns from existing implementations**:
+- Use `ThreadPoolExecutor` for concurrent upload while processing next job
+- Track maximum processed coordinates for metadata updates
+- Handle progress tracking and resumption
+- Trim datasets to only include successfully processed data
+
+### Phase 5: Migration of existing datasets
+
+**Goal**: Migrate existing GEFS datasets to use the new interface and remove old code.
+
+**Changes needed**:
+- Create GEFS-specific `RegionJob` subclasses that implement:
+  - `operational_update_jobs()` with GEFS-specific logic from existing `reformat_operational_update` functions
+  - `update_template_with_results()` with GEFS-specific metadata update logic
+- Update GEFS `DynamicalDataset` subclasses to use new operational update interface
+- Remove old `reformat_operational_update` functions from:
+  - `src/reformatters/noaa/gefs/analysis/reformat.py`
+  - `src/reformatters/noaa/gefs/forecast_35_day/reformat.py`
+- Update CLI interfaces to use new `DynamicalDataset.reformat_operational_update()`
+- Update Kubernetes cron job definitions to use new interface
+
+## Technical Details
+
+### Existing Code Patterns to Preserve
+
+From `src/reformatters/noaa/gefs/analysis/reformat.py`:
+- Use `get_latest_processed_time()` to determine what was actually processed
+- Trim template dataset to `max_processed_time - 1` to handle incomplete final steps
+- Use `UpdateProgressTracker` for resumption support
+
+From `src/reformatters/noaa/gefs/forecast_35_day/reformat.py`:
+- Update `ingested_forecast_length` coordinate based on processing results
+- Reprocess recent incomplete init_times (last 4 days) in addition to new data
+- Handle ensemble member dimension in metadata updates
+
+### Error Handling
+
+- Download failures should be logged but not stop processing (existing pattern)
+- Read failures should be logged but not stop processing (existing pattern)
+- Use Sentry monitoring decorators for operational update functions
+- Ensure proper cleanup of temporary files and stores
+
+### Performance Considerations
+
+- Pipeline download → read/compress/write → upload steps for maximum throughput
+- Use appropriate thread pool sizes for I/O vs CPU-bound operations
+- Minimize memory usage by processing variables sequentially within region jobs
+- Use shared memory buffers for efficient data transfer between processes
 
 ## Notes
 
@@ -61,3 +193,5 @@ Step 4 only happens in the operational update case and is orchestrated by Dynami
 - Pipelining is critical for performance: while variable N is uploading, variable N+1 should be reading/compressing
 - Progress tracking allows resumption if operational update jobs are interrupted
 - Incremental metadata updates make data available to readers as quickly as possible
+- All existing operational update logic should be preserved, just refactored into the new interface
+- The `RegionJob` interface should be flexible enough to handle different dataset patterns (analysis vs forecast, different file structures, etc.)
