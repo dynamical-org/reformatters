@@ -145,7 +145,7 @@ def test_reformat_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
         "get_template",
         lambda self, end: xr.Dataset(attrs={"cool": "weather"}),
     )
-    monkeypatch.setattr(ExampleDataset, "_store", lambda _self: tmp_path)
+    monkeypatch.setattr(ExampleDataset, "_final_store", lambda _self: tmp_path)
     process_region_jobs_mock = Mock()
     monkeypatch.setattr(ExampleDataset, "process_region_jobs", process_region_jobs_mock)
 
@@ -161,6 +161,7 @@ def test_reformat_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
         pd.Timestamp("2000-01-02"),
         worker_index=0,
         workers_total=1,
+        kubernetes_job_name="local",
         filter_start=None,
         filter_end=None,
         filter_variable_names=None,
