@@ -26,8 +26,8 @@ from reformatters.common.reformat_utils import (
 from reformatters.common.shared_memory_utils import make_shared_buffer, write_shards
 from reformatters.common.template_utils import write_metadata
 from reformatters.common.types import AppendDim, ArrayFloat32, Dim, Timestamp
-from reformatters.common.zarr import copy_data_var, get_mode
 from reformatters.common.update_progress_tracker import UpdateProgressTracker
+from reformatters.common.zarr import copy_data_var, get_mode
 
 logger = get_logger(__name__)
 
