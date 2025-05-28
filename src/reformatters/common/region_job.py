@@ -1,3 +1,4 @@
+import concurrent.futures
 import os
 from collections.abc import Iterable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
@@ -401,9 +402,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     results[data_var.name] = data_var_source_file_coords
                 self._cleanup_local_files(source_file_coords)
 
-            # is there a more concise way to do this? AI!
-            concurrent.futures.wait(upload_futures, return_when="FIRST_EXCEPTION")
-            for future in upload_futures:
+            # Wait for all uploads to complete and handle exceptions
+            for future in concurrent.futures.as_completed(upload_futures):
                 if (e := future.exception()) is not None:
                     raise e
 
