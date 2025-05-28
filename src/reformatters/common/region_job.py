@@ -368,23 +368,25 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             ThreadPoolExecutor(max_workers=2) as upload_executor,
         ):
             # Submit all download tasks to the executor
-            download_futures = []
+            download_futures = {}
             for data_var_group in data_var_groups:
                 source_file_coords = self.generate_source_file_coords(
-                    processing_region_ds,
-                    data_var_group,
+                    processing_region_ds, data_var_group
                 )
                 download_future = download_executor.submit(
                     self._download_processing_group, source_file_coords
                 )
-                download_futures.append((data_var_group, download_future))
+                download_futures[download_future] = data_var_group
 
             # Process downloaded data var groups as they complete
-            for data_var_group, download_future in download_futures:
+            for download_future in concurrent.futures.as_completed(download_futures):
+                data_var_group = download_futures[download_future]
                 source_file_coords = download_future.result()
 
+                # Process one data variable at a time to ensure a single user of
+                # the shared buffer at a time and to reduce peak memory usage
                 for data_var in data_var_group:
-                    # Copy so we have a unique status per variable, not per group
+                    # Copy so we have a unique status per variable, not per variable group
                     data_var_source_file_coords = deepcopy(source_file_coords)
 
                     data_array, data_array_template = create_data_array_and_template(
