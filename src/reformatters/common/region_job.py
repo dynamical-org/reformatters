@@ -382,7 +382,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             # Process downloaded data var groups as they complete
             for data_var_group, download_future in download_futures:
                 source_file_coords = download_future.result()
-                
+
                 for data_var in data_var_group:
                     # Copy so we have a unique status per variable, not per group
                     data_var_source_file_coords = deepcopy(source_file_coords)
