@@ -28,6 +28,7 @@ from reformatters.common.reformat_utils import (
 from reformatters.common.shared_memory_utils import make_shared_buffer, write_shards
 from reformatters.common.template_config import template_utils
 from reformatters.common.types import AppendDim, ArrayFloat32, Dim, Timestamp
+from reformatters.common.update_progress_tracker import UpdateProgressTracker
 from reformatters.common.zarr import copy_data_var, get_mode
 
 logger = get_logger(__name__)
@@ -340,7 +341,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         processing_region_ds, output_region_ds = self._get_region_datasets()
 
-        # initialize progress tracker AI!
+        progress_tracker = UpdateProgressTracker(
+            self.final_store, self.kubernetes_job_name, self.region.start
+        )
 
         data_var_groups = self.source_groups(self.data_vars)
         if self.max_vars_per_download_group is not None:
@@ -403,6 +406,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                             self.append_dim,
                             self.tmp_store,
                             self.final_store,
+                            progress_tracker,
                         )
                     )
 
@@ -413,6 +417,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 if (e := future.exception()) is not None:
                     raise e
 
+        progress_tracker.close()
         return results
 
     def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
