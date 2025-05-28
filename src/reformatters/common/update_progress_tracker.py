@@ -5,8 +5,8 @@ from collections.abc import Iterable
 
 import zarr.storage
 
-from reformatters.common.config_models import DataVar
 from reformatters.common.config_models import INTERNAL_ATTRS as INTERNAL_ATTRS_BOUND
+from reformatters.common.config_models import DataVar
 from reformatters.common.fsspec import fsspec_apply
 from reformatters.common.logging import get_logger
 from reformatters.common.zarr import _get_fs_and_path
