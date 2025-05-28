@@ -5,6 +5,7 @@ from collections.abc import Iterable
 
 import zarr.storage
 
+from reformatters.common.config_models import INTERNAL_ATTRS, DataVar
 from reformatters.common.fsspec import fsspec_apply
 from reformatters.common.logging import get_logger
 
@@ -47,8 +48,15 @@ class UpdateProgressTracker:
     def record_completion(self, var: str) -> None:
         self.queue.put(var)
 
-    def get_unprocessed(self, all_vars: Iterable[str]) -> list[str]:
+    def get_unprocessed_str(self, all_vars: Iterable[str]) -> list[str]:
+        # Method used by pre-RegionJob reformatters.
         return [v for v in all_vars if v not in self.processed_variables]
+
+    # Fix this signature to take and return DataVar[INTERNAL_ATTRS] AI!
+    def get_unprocessed[T: INTERNAL_ATTRS](
+        self, all_vars: Iterable[DataVar[T]]
+    ) -> list[DataVar[T]]:
+        return [v for v in all_vars if v.name not in self.processed_variables]
 
     def close(self) -> None:
         try:
