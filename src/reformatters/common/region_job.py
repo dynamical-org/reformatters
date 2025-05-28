@@ -332,7 +332,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         Orchestrate the full region job processing pipeline.
 
         1. Group data variables for efficient processing (e.g., by file type or batch size).
-        2. For each group of data variables:
+        2. Write zarr metadata to tmp store for region="auto" support
+        3. For each group of data variables:
             a. Download all required source files
             b. For each variable in the group:
                 i.   Read data from source files into the shared array
@@ -354,7 +355,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 data_var_groups, self.max_vars_per_download_group
             )
 
-        # Write metadata to tmp_store for region="auto" support
         template_utils.write_metadata(
             self.template_ds, self.tmp_store, get_mode(self.tmp_store)
         )
@@ -413,7 +413,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         )
                     )
 
-                    progress_tracker.record_completion(data_var.name)
                     results[data_var.name] = data_var_source_file_coords
 
                 self._cleanup_local_files(source_file_coords)  # after _group_ is done
