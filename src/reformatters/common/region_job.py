@@ -5,6 +5,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import suppress
 from copy import deepcopy
 from enum import Enum, auto
+from functools import partial
 from itertools import batched
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
@@ -28,6 +29,7 @@ from reformatters.common.reformat_utils import (
 )
 from reformatters.common.shared_memory_utils import make_shared_buffer, write_shards
 from reformatters.common.types import AppendDim, ArrayFloat32, Dim, Timestamp
+from reformatters.common.update_progress_tracker import UpdateProgressTracker
 from reformatters.common.zarr import copy_data_var, get_mode
 
 logger = get_logger(__name__)
@@ -407,7 +409,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                             self.append_dim,
                             self.tmp_store,
                             self.final_store,
-                            progress_tracker,
+                            partial(progress_tracker.record_completion, data_var.name),
                         )
                     )
 
