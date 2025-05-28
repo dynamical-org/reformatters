@@ -8,6 +8,7 @@ import zarr.storage
 from reformatters.common.config_models import INTERNAL_ATTRS, DataVar
 from reformatters.common.fsspec import fsspec_apply
 from reformatters.common.logging import get_logger
+from reformatters.common.zarr import _get_fs_and_path
 
 log = get_logger(__name__)
 
@@ -32,13 +33,7 @@ class UpdateProgressTracker:
         self.queue: queue.Queue[str] = queue.Queue()
 
         # Extract filesystem and path from store
-        # use _get_fs_and_path() from zarr.py AI!
-        self.fs = getattr(store, "fs", None)
-        if self.fs is None:
-            raise ValueError("Store must have an fs attribute")
-        self.path = getattr(store, "path", None)
-        if self.path is None:
-            raise ValueError("Store must have a path attribute")
+        self.fs, self.path = _get_fs_and_path(store)
 
         try:
             file_content = fsspec_apply(self.fs, "cat_file", self._get_path())
