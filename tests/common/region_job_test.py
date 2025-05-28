@@ -113,6 +113,7 @@ def test_region_job(template_ds: xr.Dataset) -> None:
 
     job = ExampleRegionJob(
         store=store,
+        tmp_store=store,
         template_ds=template_ds,
         data_vars=[ExampleDataVar(name=name) for name in template_ds.data_vars.keys()],
         append_dim="time",
