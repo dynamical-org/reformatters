@@ -220,7 +220,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     @classmethod
     def get_backfill_jobs(
         cls,
-        store: zarr.abc.store.Store,
+        final_store: zarr.abc.store.Store,
         tmp_store: zarr.abc.store.Store | Path,  # Add this parameter
         template_ds: xr.Dataset,
         append_dim: AppendDim,
@@ -243,8 +243,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         Parameters
         ----------
-        store : zarr.abc.store.Store
-            The Zarr store to write into.
+        final_store : zarr.abc.store.Store
+            The destination Zarr store to write into.
+        tmp_store : zarr.abc.store.Store | Path
+            The temporary Zarr store to write into while processing.
         template_ds : xr.Dataset
             Dataset template defining structure and metadata.
         append_dim : AppendDim
