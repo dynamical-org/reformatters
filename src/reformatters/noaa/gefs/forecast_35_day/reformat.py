@@ -222,7 +222,9 @@ def reformat_operational_update(job_name: str) -> None:
         progress_tracker = UpdateProgressTracker(
             final_store, job_name, init_time_i_slice.start
         )
-        vars_to_process = progress_tracker.get_unprocessed(template_ds.data_vars.keys())
+        vars_to_process = progress_tracker.get_unprocessed_str(
+            list(template_ds.data_vars.keys())
+        )
 
         data_var_upload_futures = []
         for data_var, max_lead_times in reformat_init_time_i_slices(

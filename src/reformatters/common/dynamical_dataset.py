@@ -58,6 +58,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         self.process_region_jobs(
             append_dim_end,
+            kubernetes_job_name="local",
             worker_index=0,
             workers_total=1,
             filter_start=filter_start,
@@ -69,6 +70,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def process_region_jobs(
         self,
         append_dim_end: DatetimeLike,
+        kubernetes_job_name: str,
         *,
         worker_index: int,
         workers_total: int,
@@ -84,6 +86,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             template_ds=self._template_ds(append_dim_end),
             append_dim=self.template_config.append_dim,
             all_data_vars=self.template_config.data_vars,
+            kubernetes_job_name=kubernetes_job_name,
             worker_index=worker_index,
             workers_total=workers_total,
             filter_start=pd.Timestamp(filter_start) if filter_start else None,

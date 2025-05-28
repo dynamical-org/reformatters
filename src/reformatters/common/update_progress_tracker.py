@@ -1,12 +1,11 @@
 import json
 import queue
 import threading
-from collections.abc import Iterable
+from collections.abc import Sequence
 
 import zarr.storage
 
-from reformatters.common.config_models import INTERNAL_ATTRS as INTERNAL_ATTRS_BOUND
-from reformatters.common.config_models import DataVar
+from reformatters.common.config_models import BaseInternalAttrs, DataVar
 from reformatters.common.fsspec import fsspec_apply
 from reformatters.common.logging import get_logger
 from reformatters.common.zarr import _get_fs_and_path
@@ -50,14 +49,24 @@ class UpdateProgressTracker:
     def record_completion(self, var: str) -> None:
         self.queue.put(var)
 
-    def get_unprocessed_str(self, all_vars: Iterable[str]) -> list[str]:
+    def get_unprocessed_str(self, all_vars: Sequence[str]) -> list[str]:
         # Method used by pre-RegionJob reformatters.
-        return [v for v in all_vars if v not in self.processed_variables]
+        unprocessed = [v for v in all_vars if v not in self.processed_variables]
+        # Edge case: if all variables have been processed, but the job failed on writing metadata,
+        # reprocess (any) one variable to ensure metadata is written.
+        if len(unprocessed) == 0:
+            return [all_vars[0]]
+        return unprocessed
 
-    def get_unprocessed[T: INTERNAL_ATTRS_BOUND](
-        self, all_vars: Iterable[DataVar[T]]
+    def get_unprocessed[T: BaseInternalAttrs](
+        self, all_vars: Sequence[DataVar[T]]
     ) -> list[DataVar[T]]:
-        return [v for v in all_vars if v.name not in self.processed_variables]
+        # Edge case: if all variables have been processed, but the job failed on writing metadata,
+        # reprocess (any) one variable to ensure metadata is written.
+        unprocessed = [v for v in all_vars if v.name not in self.processed_variables]
+        if len(unprocessed) == 0:
+            return [all_vars[0]]
+        return unprocessed
 
     def close(self) -> None:
         try:

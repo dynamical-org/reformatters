@@ -344,8 +344,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         progress_tracker = UpdateProgressTracker(
             self.final_store, self.kubernetes_job_name, self.region.start
         )
-        data_vars_to_process = progress_tracker.get_unprocessed(self.data_vars)
-
+        data_vars_to_process: Sequence[DATA_VAR] = progress_tracker.get_unprocessed(
+            self.data_vars
+        )  # type: ignore  # Cast shouldn't be needed but can't get mypy to be happy
         data_var_groups = self.source_groups(data_vars_to_process)
         if self.max_vars_per_download_group is not None:
             data_var_groups = self._maybe_split_groups(
@@ -411,14 +412,17 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         )
                     )
 
+                    progress_tracker.record_completion(data_var.name)
                     results[data_var.name] = data_var_source_file_coords
-                self._cleanup_local_files(source_file_coords)
 
-            for future in concurrent.futures.as_completed(upload_futures):
-                if (e := future.exception()) is not None:
-                    raise e
+                self._cleanup_local_files(source_file_coords)  # after _group_ is done
+
+        for future in concurrent.futures.as_completed(upload_futures):
+            if (e := future.exception()) is not None:
+                raise e
 
         progress_tracker.close()
+
         return results
 
     def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
