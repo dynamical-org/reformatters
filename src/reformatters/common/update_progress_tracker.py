@@ -5,7 +5,8 @@ from collections.abc import Iterable
 
 import zarr.storage
 
-from reformatters.common.config_models import INTERNAL_ATTRS, DataVar
+from reformatters.common.config_models import DataVar
+from reformatters.common.config_models import INTERNAL_ATTRS as INTERNAL_ATTRS_BOUND
 from reformatters.common.fsspec import fsspec_apply
 from reformatters.common.logging import get_logger
 from reformatters.common.zarr import _get_fs_and_path
@@ -53,7 +54,7 @@ class UpdateProgressTracker:
         # Method used by pre-RegionJob reformatters.
         return [v for v in all_vars if v not in self.processed_variables]
 
-    def get_unprocessed[T: INTERNAL_ATTRS](
+    def get_unprocessed[T: INTERNAL_ATTRS_BOUND](
         self, all_vars: Iterable[DataVar[T]]
     ) -> list[DataVar[T]]:
         return [v for v in all_vars if v.name not in self.processed_variables]
