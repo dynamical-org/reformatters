@@ -89,7 +89,7 @@ def region_slice(s: slice) -> slice:
 
 
 class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
-    store: zarr.abc.store.Store
+    final_store: zarr.abc.store.Store  # Rename from 'store'
     tmp_store: zarr.abc.store.Store | Path
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
@@ -303,8 +303,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         all_jobs = [
             cls(
-                store=store,
-                tmp_store=tmp_store,  # Add this line
+                final_store=final_store,  # Update parameter name
+                tmp_store=tmp_store,
                 template_ds=template_ds,
                 data_vars=data_var_group,
                 append_dim=append_dim,
@@ -478,7 +478,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 shared_buffer,
                 self.append_dim,
                 output_region_ds,
-                store,
+                store,  # This parameter will be updated in the next step
                 process_executor,
             )
 
