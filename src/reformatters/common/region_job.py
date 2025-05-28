@@ -27,6 +27,7 @@ from reformatters.common.shared_memory_utils import make_shared_buffer, write_sh
 from reformatters.common.template_utils import write_metadata
 from reformatters.common.types import AppendDim, ArrayFloat32, Dim, Timestamp
 from reformatters.common.zarr import copy_data_var, get_mode
+from reformatters.common.update_progress_tracker import UpdateProgressTracker
 
 logger = get_logger(__name__)
 
@@ -387,15 +388,25 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     )
 
                     # Pipeline upload with processing of next variable
+                    tmp_store_path = (
+                        self.tmp_store
+                        if isinstance(self.tmp_store, Path)
+                        else Path(str(self.tmp_store))
+                    )
+                    # For backfill jobs, we don't need progress tracking
+                    # Create a dummy progress tracker that does nothing
+                    dummy_progress_tracker = UpdateProgressTracker(
+                        self.final_store, "backfill", 0
+                    )
                     upload_future = upload_executor.submit(
                         copy_data_var,
                         data_var.name,
                         self.region,
                         self.template_ds,
                         self.append_dim,
-                        self.tmp_store,
+                        tmp_store_path,
                         self.final_store,
-                        None,  # No progress tracker needed for backfill jobs
+                        dummy_progress_tracker,
                     )
                     upload_futures.append(upload_future)
 
@@ -521,7 +532,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             zarr_store = (
                 store
                 if isinstance(store, zarr.abc.store.Store)
-                else zarr.storage.FSStore(str(store))
+                else zarr.storage.FsspecStore(str(store))
             )
             write_shards(
                 processing_region_da_template,
