@@ -141,11 +141,12 @@ def test_source_file_coord_out_loc_default_impl() -> None:
     assert coord.out_loc() == {"time": pd.Timestamp("2025-01-01T00")}
 
 
-def test_get_backfill_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
+def test_get_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
     store = get_zarr_store("test-dataset-B", "test-version")
     tmp_store = get_local_tmp_store()
-    jobs = ExampleRegionJob.get_backfill_jobs(
+    jobs = ExampleRegionJob.get_jobs(
+        kind="backfill",
         final_store=store,
         tmp_store=tmp_store,
         template_ds=template_ds,
@@ -178,11 +179,12 @@ def test_get_backfill_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
     ]
 
 
-def test_get_backfill_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
+def test_get_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
     store = get_zarr_store("test-dataset-B", "test-version")
     tmp_store = get_local_tmp_store()
-    jobs = ExampleRegionJob.get_backfill_jobs(
+    jobs = ExampleRegionJob.get_jobs(
+        kind="backfill",
         final_store=store,
         tmp_store=tmp_store,
         template_ds=template_ds,
@@ -220,13 +222,14 @@ def test_get_backfill_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
     )
 
 
-def test_get_backfill_jobs_grouping_filters_and_worker_index(
+def test_get_jobs_grouping_filters_and_worker_index(
     template_ds: xr.Dataset,
 ) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
     store = get_zarr_store("test-dataset-B", "test-version")
     tmp_store = get_local_tmp_store()
-    jobs = ExampleRegionJob.get_backfill_jobs(
+    jobs = ExampleRegionJob.get_jobs(
+        kind="backfill",
         final_store=store,
         tmp_store=tmp_store,
         template_ds=template_ds,

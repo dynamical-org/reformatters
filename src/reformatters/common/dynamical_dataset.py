@@ -80,7 +80,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> None:
         """Orchestrate running RegionJob instances."""
 
-        region_jobs = self.region_job_class.get_backfill_jobs(
+        region_jobs = self.region_job_class.get_jobs(
+            kind="backfill",
             final_store=self._final_store(),
             tmp_store=self._tmp_store(),
             template_ds=self._template_ds(append_dim_end),

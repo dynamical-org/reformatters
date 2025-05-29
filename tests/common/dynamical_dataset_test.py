@@ -112,7 +112,7 @@ def test_process_region_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_job1.summary = lambda: "job1-summary"
     monkeypatch.setattr(
         ExampleRegionJob,
-        "get_backfill_jobs",
+        "get_jobs",
         classmethod(lambda cls, *args, **kwargs: [mock_job0, mock_job1]),
     )
     monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
@@ -137,7 +137,7 @@ def test_reformat_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
     mock_job0.summary = lambda: "job0-summary"
     monkeypatch.setattr(
         ExampleRegionJob,
-        "get_backfill_jobs",
+        "get_jobs",
         classmethod(lambda cls, *args, **kwargs: [mock_job0]),
     )
     monkeypatch.setattr(

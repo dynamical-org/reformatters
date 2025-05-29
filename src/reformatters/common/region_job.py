@@ -9,7 +9,7 @@ from functools import partial
 from itertools import batched
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Generic, TypeVar
+from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar
 
 import numpy as np
 import pandas as pd
@@ -189,8 +189,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         rounding to float32 arrays if `data_var.internal_attrs.keep_mantissa_bits` is set.
 
         Subclasses may override this method to implement additional transformations such as
-        deaccumulation, interpolation, or other custom logic. All transformations should be
-        performed in-place (i.e., do not copy data_array).
+        deaccumulation, interpolation or other custom logic. All transformations should be
+        performed in-place (don't copy `data_array`, it's large).
 
         Parameters
         ----------
@@ -206,23 +206,19 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 data_array.values, keep_mantissa_bits=keep_mantissa_bits
             )
 
-    def summarize_processing_state(
-        self,
-        data_var: DATA_VAR,
-        source_file_coords: Sequence[SOURCE_FILE_COORD],
-    ) -> Any:
-        return None
+    @classmethod
+    def operational_update_append_dim_end(cls) -> Timestamp:
+        """
+        Return the end date of the operational update. Often this is the current time or a
+        few hours in the future. The return value is passed to get_template()
+        to get the template_ds for the operational update.
 
-    # ----- Most subclasses will not need to override the attributes and methods below -----
-
-    model_config = pydantic.ConfigDict(
-        arbitrary_types_allowed=True, frozen=True, strict=True
-    )
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def dataset_id(self) -> str:
-        return str(self.template_ds.attrs["dataset_id"])
+        Returns
+        -------
+        Timestamp
+            The end date of the operational update.
+        """
+        return pd.Timestamp.now()
 
     @classmethod
     def operational_update_jobs(
@@ -235,12 +231,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         kubernetes_job_name: str,
     ) -> Sequence["RegionJob[DATA_VAR, SOURCE_FILE_COORD]"]:
         """
-        Return a sequence of RegionJob instances for operational update processing.
+        Return the sequence of RegionJob instances necessary to update the dataset
+        from its current state to include the latest available data.
 
-        The exact logic is dataset-specific, but in general jobs do the steps from this which are applicable:
+        The exact logic is dataset-specific, but it generally follows these steps:
         1. Read existing data from final_store to determine what's already processed
-        2. Optionally identify recent incomplete data for reprocessing
-        3. Return appropriate RegionJob instances, often by calling cls.get_backfill_jobs(..., filter_start=...)
+        2. Optionally identify recent incomplete/non-final data for reprocessing
+        3. Create RegionJob instances by calling cls.get_jobs(..., filter_start=...)
 
         Parameters
         ----------
@@ -266,17 +263,21 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             "Subclasses implement operational_update_jobs() with dataset-specific logic"
         )
 
-    @classmethod
-    def operational_update_append_dim_end(cls, template_ds: xr.Dataset) -> Timestamp:
-        """
-        Return the end date of the operational update. Often this is the current time or a
-        few hours in the future.
-        """
-        return pd.Timestamp.now()
+    # ----- Most subclasses will not need to override the attributes and methods below -----
+
+    model_config = pydantic.ConfigDict(
+        arbitrary_types_allowed=True, frozen=True, strict=True
+    )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def dataset_id(self) -> str:
+        return str(self.template_ds.attrs["dataset_id"])
 
     @classmethod
-    def get_backfill_jobs(
+    def get_jobs(
         cls,
+        kind: Literal["backfill", "operational-update"],
         final_store: zarr.abc.store.Store,
         tmp_store: Path,
         template_ds: xr.Dataset,
@@ -338,7 +339,11 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             data_vars = all_data_vars
 
         data_var_groups = cls.source_groups(data_vars)
-        if cls.max_vars_per_backfill_job is not None:
+        # If kind == "operational-update" we need all variables in one job
+        # so we don't extend the dataset before all variables are processed.
+        # If kind == "backfill" it can be useful to make smaller jobs for more parallelism
+        # and granular progress tracking at the kubernetes job level.
+        if kind == "backfill" and cls.max_vars_per_backfill_job is not None:
             data_var_groups = cls._maybe_split_groups(
                 data_var_groups, cls.max_vars_per_backfill_job
             )
