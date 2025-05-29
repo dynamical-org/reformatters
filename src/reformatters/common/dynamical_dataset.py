@@ -15,7 +15,7 @@ from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike
-from reformatters.common.zarr import get_local_tmp_store, get_mode, get_zarr_store
+from reformatters.common.zarr import get_local_tmp_store, get_mode, get_zarr_store, copy_zarr_metadata
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
@@ -41,6 +41,29 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def reformat_kubernetes(self) -> None:
         """Run dataset reformatting using Kubernetes index jobs."""
         pass
+
+    def reformat_operational_update(self) -> None:
+        """Run operational update of the dataset locally."""
+        end = self.region_job_class.operational_update_append_dim_end()
+        template_ds = self._template_ds(end)
+        final_store = self._final_store()
+        tmp_store = self._tmp_store()
+        # Write initial metadata to tmp_store
+        template_utils.write_metadata(template_ds, tmp_store, get_mode(tmp_store))
+        jobs = self.region_job_class.operational_update_jobs(
+            final_store=final_store,
+            tmp_store=tmp_store,
+            template_ds=template_ds,
+            append_dim=self.template_config.append_dim,
+            all_data_vars=self.template_config.data_vars,
+            kubernetes_job_name="operational-update",
+        )
+        for job in jobs:
+            process_results = job.process()
+            updated_template = job.update_template_with_results(process_results)
+            template_utils.write_metadata(updated_template, tmp_store, get_mode(tmp_store))
+            copy_zarr_metadata(tmp_store, final_store)
+        logger.info(f"Done operational update writing to {final_store}")
 
     def reformat_local(
         self,
