@@ -1,10 +1,11 @@
+from datetime import datetime
 from typing import Annotated, Literal, get_args
 
 import numpy as np
 import pandas as pd
 import pydantic
 
-type DatetimeLike = pd.Timestamp | np.datetime64 | str
+type DatetimeLike = pd.Timestamp | np.datetime64 | datetime | str
 type Timestamp = Annotated[
     pd.Timestamp,
     pydantic.PlainValidator(pd.Timestamp),
