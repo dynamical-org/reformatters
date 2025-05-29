@@ -35,10 +35,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def reformat_local(
         self,
-        append_dim_end: DatetimeLike,
+        append_dim_end: str,
         *,
-        filter_start: DatetimeLike | None = None,
-        filter_end: DatetimeLike | None = None,
+        filter_start: str | None = None,
+        filter_end: str | None = None,
         filter_variable_names: list[str] | None = None,
     ) -> None:
         """Run dataset reformatting locally in this process."""
