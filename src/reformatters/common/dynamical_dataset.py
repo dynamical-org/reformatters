@@ -15,7 +15,12 @@ from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike
-from reformatters.common.zarr import get_local_tmp_store, get_mode, get_zarr_store, copy_zarr_metadata
+from reformatters.common.zarr import (
+    copy_zarr_metadata,
+    get_local_tmp_store,
+    get_mode,
+    get_zarr_store,
+)
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
@@ -61,7 +66,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         for job in jobs:
             process_results = job.process()
             updated_template = job.update_template_with_results(process_results)
-            template_utils.write_metadata(updated_template, tmp_store, get_mode(tmp_store))
+            template_utils.write_metadata(
+                updated_template, tmp_store, get_mode(tmp_store)
+            )
             copy_zarr_metadata(tmp_store, final_store)
         logger.info(f"Done operational update writing to {final_store}")
 
