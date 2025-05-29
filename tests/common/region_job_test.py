@@ -157,7 +157,7 @@ def test_update_template_with_results(template_ds: xr.Dataset) -> None:
     )
 
     # Mock process results
-    process_results = {
+    process_results: dict[str, Sequence[ExampleSourceFileCoords]] = {
         "var0": [ExampleSourceFileCoords(time=pd.Timestamp("2025-01-01T00"))],
         "var1": [ExampleSourceFileCoords(time=pd.Timestamp("2025-01-01T01"))],
     }
