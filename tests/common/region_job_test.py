@@ -77,6 +77,12 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoords]):
             raise ValueError("Test error")  # simulate a read error
         return np.ones((10, 15), dtype=np.float32)
 
+    def update_template_with_results(
+        self, process_results: dict[str, Sequence[ExampleSourceFileCoords]]
+    ) -> xr.Dataset:
+        # Example implementation: return template unchanged
+        return self.template_ds
+
 
 @pytest.fixture
 def template_ds() -> xr.Dataset:
@@ -134,6 +140,32 @@ def test_region_job(template_ds: xr.Dataset) -> None:
     expected_values[6, :, :] = np.nan
     for data_var in region_ds.data_vars.values():
         np.testing.assert_array_equal(data_var.values, expected_values)
+
+
+def test_update_template_with_results(template_ds: xr.Dataset) -> None:
+    store = get_zarr_store("test-dataset-C", "test-version")
+    tmp_store = get_local_tmp_store()
+
+    job = ExampleRegionJob(
+        final_store=store,
+        tmp_store=tmp_store,
+        template_ds=template_ds,
+        data_vars=[ExampleDataVar(name=name) for name in template_ds.data_vars.keys()],
+        append_dim="time",
+        region=slice(0, 18),
+        kubernetes_job_name="test-job",
+    )
+
+    # Mock process results
+    process_results = {
+        "var0": [ExampleSourceFileCoords(time=pd.Timestamp("2025-01-01T00"))],
+        "var1": [ExampleSourceFileCoords(time=pd.Timestamp("2025-01-01T01"))],
+    }
+
+    updated_template = job.update_template_with_results(process_results)
+    
+    # In this example implementation, template should be unchanged
+    assert updated_template is template_ds
 
 
 def test_source_file_coord_out_loc_default_impl() -> None:

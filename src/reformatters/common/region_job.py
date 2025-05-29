@@ -394,7 +394,12 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 i.   Read data from source files into the shared array
                 ii.  Apply any required data transformations (e.g., rounding, deaccumulation).
                 iii. Write output shards to the tmp_store in parallel.
-                iv.  Upload chunk data from tmp_store to final_store (pipelined with next variabl
+                iv.  Upload chunk data from tmp_store to final_store (pipelined with next variable)
+
+        Returns
+        -------
+        dict[str, Sequence[SOURCE_FILE_COORD]]
+            Dictionary mapping variable names to their source file coordinates with final processing status.
         """
         processing_region_ds, output_region_ds = self._get_region_datasets()
 
@@ -489,6 +494,32 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         progress_tracker.close()
 
         return results
+
+    def update_template_with_results(
+        self, process_results: dict[str, Sequence[SOURCE_FILE_COORD]]
+    ) -> xr.Dataset:
+        """
+        Update template dataset based on processing results.
+
+        Subclasses should implement this method to apply dataset-specific adjustments
+        based on the processing results. Examples include:
+        - Trimming dataset along append_dim to only include successfully processed data
+        - Loading existing coordinate values from final_store and updating them based on results
+        - Updating metadata based on what was actually processed vs what was planned
+
+        Parameters
+        ----------
+        process_results : dict[str, Sequence[SOURCE_FILE_COORD]]
+            Dictionary mapping variable names to their source file coordinates with final processing status.
+
+        Returns
+        -------
+        xr.Dataset
+            Updated template dataset reflecting the actual processing results.
+        """
+        raise NotImplementedError(
+            "Subclasses must implement update_template_with_results() with dataset-specific logic"
+        )
 
     def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
         ds = self.template_ds[[v.name for v in self.data_vars]]
