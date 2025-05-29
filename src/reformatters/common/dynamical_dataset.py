@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Generic, TypeVar
 
 import pandas as pd
@@ -42,10 +43,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def reformat_local(
         self,
-        append_dim_end: str,
+        append_dim_end: datetime,
         *,
-        filter_start: str | None = None,
-        filter_end: str | None = None,
+        filter_start: datetime | None = None,
+        filter_end: datetime | None = None,
         filter_variable_names: list[str] | None = None,
     ) -> None:
         """Run dataset reformatting locally in this process."""
