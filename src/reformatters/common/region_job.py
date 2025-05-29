@@ -6,7 +6,7 @@ from contextlib import suppress
 from copy import deepcopy
 from enum import Enum, auto
 from functools import partial
-from itertools import batched
+from itertools import batched, chain
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar
@@ -382,24 +382,24 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         return get_worker_jobs(all_jobs, worker_index, workers_total)
 
-    def process(self) -> dict[str, Sequence[SOURCE_FILE_COORD]]:
+    def process(self) -> Mapping[str, Sequence[SOURCE_FILE_COORD]]:
         """
         Orchestrate the full region job processing pipeline.
 
-        1. Group data variables for efficient processing (e.g., by file type or batch size).
+        1. Group data variables for efficient processing (e.g., by file type or batch size)
         2. Write zarr metadata to tmp store for region="auto" support
         3. For each group of data variables:
             a. Download all required source files
             b. For each variable in the group:
                 i.   Read data from source files into the shared array
-                ii.  Apply any required data transformations (e.g., rounding, deaccumulation).
-                iii. Write output shards to the tmp_store in parallel.
-                iv.  Upload chunk data from tmp_store to final_store (pipelined with next variable)
+                ii.  Apply any required data transformations (e.g., rounding, deaccumulation)
+                iii. Write output shards to the tmp_store
+                iv.  Upload chunk data from tmp_store to final_store
 
         Returns
         -------
-        dict[str, Sequence[SOURCE_FILE_COORD]]
-            Dictionary mapping variable names to their source file coordinates with final processing status.
+        Mapping[str, Sequence[SOURCE_FILE_COORD]]
+            Mapping from variable names to their source file coordinates with final processing status.
         """
         processing_region_ds, output_region_ds = self._get_region_datasets()
 
@@ -496,7 +496,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         return results
 
     def update_template_with_results(
-        self, process_results: dict[str, Sequence[SOURCE_FILE_COORD]]
+        self, process_results: Mapping[str, Sequence[SOURCE_FILE_COORD]]
     ) -> xr.Dataset:
         """
         Update template dataset based on processing results.
@@ -507,19 +507,37 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         - Loading existing coordinate values from final_store and updating them based on results
         - Updating metadata based on what was actually processed vs what was planned
 
+        The default implementation here trims along append_dim to end at the most recent
+        successfully processed time.
+
         Parameters
         ----------
-        process_results : dict[str, Sequence[SOURCE_FILE_COORD]]
-            Dictionary mapping variable names to their source file coordinates with final processing status.
+        process_results : Mapping[str, Sequence[SOURCE_FILE_COORD]]
+            Mapping from variable names to their source file coordinates with final processing status.
 
         Returns
         -------
         xr.Dataset
             Updated template dataset reflecting the actual processing results.
         """
-        raise NotImplementedError(
-            "Subclasses must implement update_template_with_results() with dataset-specific logic"
+        max_append_dim_processed = max(
+            (
+                c.out_loc()[self.append_dim]  # type: ignore[type-var]
+                for c in chain.from_iterable(process_results.values())
+                if c.status == SourceFileStatus.Succeeded
+            ),
+            default=None,
         )
+        if max_append_dim_processed is None:
+            # No data was processed, trim the template to stop before this job's region
+            # This is using isel's exclusive slice end behavior
+            return self.template_ds.isel(
+                {self.append_dim: slice(None, max(1, self.region.start))}
+            )
+        else:
+            return self.template_ds.sel(
+                {self.append_dim: slice(None, max_append_dim_processed)}
+            )
 
     def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
         ds = self.template_ds[[v.name for v in self.data_vars]]

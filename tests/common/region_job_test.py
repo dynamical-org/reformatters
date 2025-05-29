@@ -18,6 +18,7 @@ from reformatters.common.config_models import (
 from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
+    SourceFileStatus,
 )
 from reformatters.common.types import ArrayFloat32, Timestamp
 from reformatters.common.zarr import get_local_tmp_store, get_zarr_store
@@ -76,12 +77,6 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoords]):
         if coord.time == pd.Timestamp("2025-01-01T06"):
             raise ValueError("Test error")  # simulate a read error
         return np.ones((10, 15), dtype=np.float32)
-
-    def update_template_with_results(
-        self, process_results: dict[str, Sequence[ExampleSourceFileCoords]]
-    ) -> xr.Dataset:
-        # Example implementation: return template unchanged
-        return self.template_ds
 
 
 @pytest.fixture
@@ -157,15 +152,26 @@ def test_update_template_with_results(template_ds: xr.Dataset) -> None:
     )
 
     # Mock process results
-    process_results: dict[str, Sequence[ExampleSourceFileCoords]] = {
-        "var0": [ExampleSourceFileCoords(time=pd.Timestamp("2025-01-01T00"))],
-        "var1": [ExampleSourceFileCoords(time=pd.Timestamp("2025-01-01T01"))],
+    process_results = {
+        "var0": [
+            ExampleSourceFileCoords(
+                time=pd.Timestamp("2025-01-01T12"), status=SourceFileStatus.Succeeded
+            ),
+            ExampleSourceFileCoords(
+                time=pd.Timestamp("2025-01-02T12"),
+                status=SourceFileStatus.DownloadFailed,
+            ),
+        ],
+        "var1": [
+            ExampleSourceFileCoords(
+                time=pd.Timestamp("2025-01-02T00"), status=SourceFileStatus.Succeeded
+            )
+        ],
     }
 
     updated_template = job.update_template_with_results(process_results)
 
-    # In this example implementation, template should be unchanged
-    assert updated_template is template_ds
+    assert updated_template.time.max() == pd.Timestamp("2025-01-02T00")
 
 
 def test_source_file_coord_out_loc_default_impl() -> None:
