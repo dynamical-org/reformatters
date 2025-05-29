@@ -69,7 +69,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             template_utils.write_metadata(
                 updated_template, tmp_store, get_mode(tmp_store)
             )
-            copy_zarr_metadata(tmp_store, final_store)
+            copy_zarr_metadata(updated_template, tmp_store, final_store)
         logger.info(f"Done operational update writing to {final_store}")
 
     def reformat_local(
