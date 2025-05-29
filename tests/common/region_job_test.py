@@ -163,7 +163,7 @@ def test_update_template_with_results(template_ds: xr.Dataset) -> None:
     }
 
     updated_template = job.update_template_with_results(process_results)
-    
+
     # In this example implementation, template should be unchanged
     assert updated_template is template_ds
 
