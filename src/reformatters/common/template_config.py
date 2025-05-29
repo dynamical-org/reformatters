@@ -110,6 +110,10 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
             derive_coordinates_fn=self.derive_coordinates,
         )
 
+        # Ensure attributes have not been changed without calling update_template()
+        assert ds.attrs["dataset_id"] == self.dataset_id
+        assert ds.attrs["dataset_version"] == self.version
+
         # Coordinates which are dask arrays are not written with .to_zarr(store, compute=False)
         # We want to write all coords when writing metadata, so ensure they are loaded as numpy arrays.
         for coordinate in ds.coords.values():
