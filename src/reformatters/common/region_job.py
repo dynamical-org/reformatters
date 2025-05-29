@@ -206,6 +206,50 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 data_array.values, keep_mantissa_bits=keep_mantissa_bits
             )
 
+    def update_template_with_results(
+        self, process_results: Mapping[str, Sequence[SOURCE_FILE_COORD]]
+    ) -> xr.Dataset:
+        """
+        Update template dataset based on processing results.
+
+        Subclasses should implement this method to apply dataset-specific adjustments
+        based on the processing results. Examples include:
+        - Trimming dataset along append_dim to only include successfully processed data
+        - Loading existing coordinate values from final_store and updating them based on results
+        - Updating metadata based on what was actually processed vs what was planned
+
+        The default implementation here trims along append_dim to end at the most recent
+        successfully processed time.
+
+        Parameters
+        ----------
+        process_results : Mapping[str, Sequence[SOURCE_FILE_COORD]]
+            Mapping from variable names to their source file coordinates with final processing status.
+
+        Returns
+        -------
+        xr.Dataset
+            Updated template dataset reflecting the actual processing results.
+        """
+        max_append_dim_processed = max(
+            (
+                c.out_loc()[self.append_dim]  # type: ignore[type-var]
+                for c in chain.from_iterable(process_results.values())
+                if c.status == SourceFileStatus.Succeeded
+            ),
+            default=None,
+        )
+        if max_append_dim_processed is None:
+            # No data was processed, trim the template to stop before this job's region
+            # This is using isel's exclusive slice end behavior
+            return self.template_ds.isel(
+                {self.append_dim: slice(None, max(1, self.region.start))}
+            )
+        else:
+            return self.template_ds.sel(
+                {self.append_dim: slice(None, max_append_dim_processed)}
+            )
+
     @classmethod
     def operational_update_append_dim_end(cls) -> Timestamp:
         """
@@ -494,50 +538,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         progress_tracker.close()
 
         return results
-
-    def update_template_with_results(
-        self, process_results: Mapping[str, Sequence[SOURCE_FILE_COORD]]
-    ) -> xr.Dataset:
-        """
-        Update template dataset based on processing results.
-
-        Subclasses should implement this method to apply dataset-specific adjustments
-        based on the processing results. Examples include:
-        - Trimming dataset along append_dim to only include successfully processed data
-        - Loading existing coordinate values from final_store and updating them based on results
-        - Updating metadata based on what was actually processed vs what was planned
-
-        The default implementation here trims along append_dim to end at the most recent
-        successfully processed time.
-
-        Parameters
-        ----------
-        process_results : Mapping[str, Sequence[SOURCE_FILE_COORD]]
-            Mapping from variable names to their source file coordinates with final processing status.
-
-        Returns
-        -------
-        xr.Dataset
-            Updated template dataset reflecting the actual processing results.
-        """
-        max_append_dim_processed = max(
-            (
-                c.out_loc()[self.append_dim]  # type: ignore[type-var]
-                for c in chain.from_iterable(process_results.values())
-                if c.status == SourceFileStatus.Succeeded
-            ),
-            default=None,
-        )
-        if max_append_dim_processed is None:
-            # No data was processed, trim the template to stop before this job's region
-            # This is using isel's exclusive slice end behavior
-            return self.template_ds.isel(
-                {self.append_dim: slice(None, max(1, self.region.start))}
-            )
-        else:
-            return self.template_ds.sel(
-                {self.append_dim: slice(None, max_append_dim_processed)}
-            )
 
     def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
         ds = self.template_ds[[v.name for v in self.data_vars]]
