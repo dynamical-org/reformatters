@@ -6,9 +6,13 @@ import reformatters.noaa.gefs.analysis.cli as noaa_gefs_analysis
 import reformatters.noaa.gefs.forecast_35_day.cli as noaa_gefs_forecast_35_day
 import reformatters.noaa.gfs.forecast.cli as noaa_gfs_forecast
 import reformatters.noaa.hrrr.forecast_48_hour.cli as noaa_hrrr_forecast_48_hour
-import reformatters.u_arizona.swann as u_arizona_swann
 from reformatters.common import deploy
 from reformatters.common.config import Config
+from reformatters.u_arizona.swann import SWANNDataset
+
+DYNAMICAL_DATASETS = [
+    SWANNDataset(),
+]
 
 if Config.is_sentry_enabled:
     sentry_sdk.init(
@@ -30,7 +34,9 @@ app.add_typer(noaa_gfs_forecast.app, name=noaa_gfs_forecast.DATASET_ID)
 app.add_typer(
     noaa_hrrr_forecast_48_hour.app, name=noaa_hrrr_forecast_48_hour.DATASET_ID
 )
-app.add_typer(u_arizona_swann.app, name=u_arizona_swann.DATASET_ID)
+
+for dataset in DYNAMICAL_DATASETS:
+    app.add_typer(dataset.create_cli(), name=dataset.id)
 
 
 @app.command()

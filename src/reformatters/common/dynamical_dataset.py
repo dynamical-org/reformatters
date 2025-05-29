@@ -1,8 +1,10 @@
 from typing import Any, Generic, TypeVar
 
 import pandas as pd
+import typer
 import xarray as xr
 import zarr
+from pydantic import computed_field
 
 from reformatters.common import template_utils
 from reformatters.common.config_models import DataVar
@@ -24,6 +26,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     template_config: TemplateConfig[DATA_VAR]
     region_job_class: type[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def id(self) -> str:
+        return self.template_config.dataset_id
 
     def update_template(self) -> None:
         """Generate and persist the dataset template using the template_config."""
@@ -87,6 +94,16 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
         for region_job in region_jobs:
             region_job.process()
+
+    def create_cli(
+        self,
+    ) -> typer.Typer:
+        """Create a CLI app with dataset commands"""
+        app = typer.Typer()
+        app.command()(self.update_template)
+        app.command()(self.reformat_local)
+        app.command()(self.reformat_kubernetes)
+        return app
 
     def _store(self) -> zarr.abc.store.Store:
         return get_zarr_store(
