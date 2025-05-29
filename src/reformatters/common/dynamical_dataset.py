@@ -48,21 +48,19 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         pass
 
     def reformat_operational_update(self) -> None:
-        """Run operational update of the dataset locally."""
-        end = self.region_job_class.operational_update_append_dim_end()
-        template_ds = self._template_ds(end)
+        """Update an existing dataset with the latest data."""
         final_store = self._final_store()
         tmp_store = self._tmp_store()
-        # Write initial metadata to tmp_store
-        template_utils.write_metadata(template_ds, tmp_store, get_mode(tmp_store))
-        jobs = self.region_job_class.operational_update_jobs(
+
+        jobs, template_ds = self.region_job_class.operational_update_jobs(
             final_store=final_store,
             tmp_store=tmp_store,
-            template_ds=template_ds,
+            get_template_fn=self._get_template,
             append_dim=self.template_config.append_dim,
             all_data_vars=self.template_config.data_vars,
             kubernetes_job_name="operational-update",
         )
+        template_utils.write_metadata(template_ds, tmp_store, get_mode(tmp_store))
         for job in jobs:
             process_results = job.process()
             updated_template = job.update_template_with_results(process_results)
@@ -70,6 +68,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 updated_template, tmp_store, get_mode(tmp_store)
             )
             copy_zarr_metadata(updated_template, tmp_store, final_store)
+
         logger.info(f"Done operational update writing to {final_store}")
 
     def reformat_local(
@@ -81,7 +80,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         filter_variable_names: list[str] | None = None,
     ) -> None:
         """Run dataset reformatting locally in this process."""
-        template_ds = self._template_ds(append_dim_end)
+        template_ds = self._get_template(append_dim_end)
         final_store = self._final_store()
 
         template_utils.write_metadata(template_ds, final_store, get_mode(final_store))
@@ -114,7 +113,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             kind="backfill",
             final_store=self._final_store(),
             tmp_store=self._tmp_store(),
-            template_ds=self._template_ds(append_dim_end),
+            template_ds=self._get_template(append_dim_end),
             append_dim=self.template_config.append_dim,
             all_data_vars=self.template_config.data_vars,
             kubernetes_job_name=kubernetes_job_name,
@@ -150,5 +149,5 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def _tmp_store(self) -> Path:
         return get_local_tmp_store()
 
-    def _template_ds(self, append_dim_end: DatetimeLike) -> xr.Dataset:
+    def _get_template(self, append_dim_end: DatetimeLike) -> xr.Dataset:
         return self.template_config.get_template(pd.Timestamp(append_dim_end))

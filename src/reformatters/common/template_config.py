@@ -95,7 +95,7 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         Returns a template dataset expanded to the given end time.
 
         Args:
-            end_time (pd.Timestamp): End time for the append dimension
+            end_time (pd.Timestamp): End time (exclusive) for the append dimension
 
         Returns:
             xr.Dataset: Template dataset with dimension coordinates

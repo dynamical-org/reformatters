@@ -1,6 +1,6 @@
 import concurrent.futures
 import os
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import suppress
 from copy import deepcopy
@@ -28,7 +28,13 @@ from reformatters.common.reformat_utils import (
     create_data_array_and_template,
 )
 from reformatters.common.shared_memory_utils import make_shared_buffer, write_shards
-from reformatters.common.types import AppendDim, ArrayFloat32, Dim, Timestamp
+from reformatters.common.types import (
+    AppendDim,
+    ArrayFloat32,
+    DatetimeLike,
+    Dim,
+    Timestamp,
+)
 from reformatters.common.update_progress_tracker import UpdateProgressTracker
 from reformatters.common.zarr import copy_data_var, get_mode
 
@@ -251,37 +257,30 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
 
     @classmethod
-    def operational_update_append_dim_end(cls) -> Timestamp:
-        """
-        Return the end date of the operational update. Often this is the current time or a
-        few hours in the future. The return value is passed to get_template()
-        to get the template_ds for the operational update.
-
-        Returns
-        -------
-        Timestamp
-            The end date of the operational update.
-        """
-        return pd.Timestamp.now()
-
-    @classmethod
     def operational_update_jobs(
         cls,
         final_store: zarr.abc.store.Store,
         tmp_store: Path,
-        template_ds: xr.Dataset,
+        get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
         all_data_vars: Sequence[DATA_VAR],
         kubernetes_job_name: str,
-    ) -> Sequence["RegionJob[DATA_VAR, SOURCE_FILE_COORD]"]:
+    ) -> tuple[Sequence["RegionJob[DATA_VAR, SOURCE_FILE_COORD]"], xr.Dataset]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset
         from its current state to include the latest available data.
 
-        The exact logic is dataset-specific, but it generally follows these steps:
-        1. Read existing data from final_store to determine what's already processed
-        2. Optionally identify recent incomplete/non-final data for reprocessing
-        3. Create RegionJob instances by calling cls.get_jobs(..., filter_start=...)
+        Also return the template_ds, expanded along append_dim through the end of
+        the data to process. The dataset returned here may extend beyond the
+        available data at the source, in which case `update_template_with_results`
+        will trim the dataset to the actual data processed.
+
+        The exact logic is dataset-specific, but it generally follows this pattern:
+        1. Figure range of time to process: append_dim_start (inclusive) and append_dim_end (exclusive)
+            a. Read existing data from final_store to determine what's already processed
+            b. Optionally identify recent incomplete/non-final data for reprocessing
+        2. Call get_template_fn(append_dim_end) to get the template_ds
+        3. Create RegionJob instances by calling cls.get_jobs(..., filter_start=append_dim_start)
 
         Parameters
         ----------
@@ -289,8 +288,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             The destination Zarr store to read existing data from and write updates to.
         tmp_store : zarr.abc.store.Store | Path
             The temporary Zarr store to write into while processing.
-        template_ds : xr.Dataset
-            Dataset template defining structure and metadata.
+        get_template_fn : Callable[[DatetimeLike], xr.Dataset]
+            Function to get the template_ds for the operational update.
         append_dim : AppendDim
             The dimension along which data is appended (e.g., "time").
         all_data_vars : Sequence[DATA_VAR]
@@ -302,6 +301,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         -------
         Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
             RegionJob instances that need processing for operational updates.
+        xr.Dataset
+            The template_ds for the operational update.
         """
         raise NotImplementedError(
             "Subclasses implement operational_update_jobs() with dataset-specific logic"
