@@ -33,7 +33,9 @@ class UpdateProgressTracker:
         self.fs, self.path = _get_fs_and_path(store)
 
         try:
-            file_content = fsspec_apply(self.fs, "cat_file", self._get_path())
+            file_content = fsspec_apply(
+                self.fs, "cat_file", self._get_path(), max_attempts=1
+            )
             self.processed_variables: set[str] = set(
                 json.loads(file_content.decode("utf-8"))[PROCESSED_VARIABLES_KEY]
             )
@@ -70,7 +72,7 @@ class UpdateProgressTracker:
 
     def close(self) -> None:
         try:
-            fsspec_apply(self.fs, "rm", self._get_path())
+            fsspec_apply(self.fs, "rm", self._get_path(), max_attempts=1)
         except Exception as e:
             log.warning(f"Could not delete progress file: {e}")
 
