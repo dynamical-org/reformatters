@@ -39,7 +39,7 @@ app.add_typer(
 )
 
 for dataset in DYNAMICAL_DATASETS:
-    app.add_typer(dataset.create_cli(), name=dataset.id)
+    app.add_typer(dataset.get_cli(), name=dataset.dataset_id)
 
 
 @app.command()

@@ -30,7 +30,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def id(self) -> str:
+    def dataset_id(self) -> str:
         return self.template_config.dataset_id
 
     def update_template(self) -> None:
@@ -96,7 +96,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         for region_job in region_jobs:
             region_job.process()
 
-    def create_cli(
+    def get_cli(
         self,
     ) -> typer.Typer:
         """Create a CLI app with dataset commands"""
