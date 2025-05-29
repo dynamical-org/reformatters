@@ -10,9 +10,9 @@ from reformatters.common import deploy
 from reformatters.common.config import Config
 from reformatters.u_arizona.swann import SWANNDataset
 
-# Datasets that have been implemented in the new DynamicalDataset pattern are included here
-# These have a create_cli method on them that can be used to automatically generate a CLI
-# interface.
+# Registry of all DynamicalDatasets.
+# Datasets that have not yet been ported over to the new DynamicalDataset pattern
+# are excluded here until they are refactored.
 DYNAMICAL_DATASETS = [
     SWANNDataset(),
 ]
