@@ -108,7 +108,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     append_dim: AppendDim
     # integer slice along append_dim
     region: Annotated[slice, AfterValidator(region_slice)]
-    kubernetes_job_name: str
+    reformat_job_name: str
 
     # Limit the number of variables processed in each backfill job if set.
     max_vars_per_backfill_job: ClassVar[int | None] = None
@@ -264,7 +264,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
         all_data_vars: Sequence[DATA_VAR],
-        kubernetes_job_name: str,
+        reformat_job_name: str,
     ) -> tuple[Sequence["RegionJob[DATA_VAR, SOURCE_FILE_COORD]"], xr.Dataset]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset
@@ -294,8 +294,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             The dimension along which data is appended (e.g., "time").
         all_data_vars : Sequence[DATA_VAR]
             Sequence of all data variable configs for this dataset.
-        kubernetes_job_name : str
-            The name of the Kubernetes job, used for progress tracking.
+        reformat_job_name : str
+            The name of the reformatting job, used for progress tracking.
+            This is often the name of the Kubernetes job, or "local".
 
         Returns
         -------
@@ -328,7 +329,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         template_ds: xr.Dataset,
         append_dim: AppendDim,
         all_data_vars: Sequence[DATA_VAR],
-        kubernetes_job_name: str,
+        reformat_job_name: str,
         worker_index: int = 0,
         workers_total: int = 1,
         filter_start: Timestamp | None = None,
@@ -358,8 +359,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         all_data_vars : Sequence[DATA_VAR]
             Sequence of all data variable configs for this dataset.
             Provided so that grouping and RegionJob made access DataVar.internal_attrs.
-        kubernetes_job_name : str
-            The name of the Kubernetes job, used for progress tracking.
+        reformat_job_name : str
+            The name of the reformatting job, used for progress tracking.
+            This is often the name of the Kubernetes job, or "local".
 
         worker_index : int, default 0
         workers_total : int, default 1
@@ -419,7 +421,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 data_vars=data_var_group,
                 append_dim=append_dim,
                 region=region,
-                kubernetes_job_name=kubernetes_job_name,
+                reformat_job_name=reformat_job_name,
             )
             for region in regions
             for data_var_group in data_var_groups
@@ -449,7 +451,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         processing_region_ds, output_region_ds = self._get_region_datasets()
 
         progress_tracker = UpdateProgressTracker(
-            self.final_store, self.kubernetes_job_name, self.region.start
+            self.final_store, self.reformat_job_name, self.region.start
         )
         data_vars_to_process: Sequence[DATA_VAR] = progress_tracker.get_unprocessed(
             self.data_vars
@@ -613,12 +615,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         def _read_and_write_one(coord: SOURCE_FILE_COORD) -> SOURCE_FILE_COORD:
             try:
                 out.loc[coord.out_loc()] = self.read_data(coord, data_var)
-                new_status = (
-                    SourceFileStatus.Succeeded
-                    if coord.status == SourceFileStatus.Processing
-                    else coord.status
-                )
-                return replace(coord, status=new_status)
+                return replace(coord, status=SourceFileStatus.Succeeded)
             except Exception:
                 logger.exception(f"Read failed {coord.downloaded_path}")
                 return replace(coord, status=SourceFileStatus.ReadFailed)

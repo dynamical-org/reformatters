@@ -120,7 +120,7 @@ def test_region_job(template_ds: xr.Dataset) -> None:
         data_vars=[ExampleDataVar(name=name) for name in template_ds.data_vars.keys()],
         append_dim="time",
         region=slice(0, 18),
-        kubernetes_job_name="test-job",
+        reformat_job_name="test-job",
     )
 
     job.process()
@@ -148,7 +148,7 @@ def test_update_template_with_results(template_ds: xr.Dataset) -> None:
         data_vars=[ExampleDataVar(name=name) for name in template_ds.data_vars.keys()],
         append_dim="time",
         region=slice(0, 18),
-        kubernetes_job_name="test-job",
+        reformat_job_name="test-job",
     )
 
     # Mock process results
@@ -190,7 +190,7 @@ def test_get_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
         template_ds=template_ds,
         append_dim="time",
         all_data_vars=data_vars,
-        kubernetes_job_name="test-job",
+        reformat_job_name="test-job",
     )
     # RegionJobA groups vars into batches of 3 -> [3,1] and then then max_backfill_jobs of 2 -> [2,1,1]
     # and shards of size 24 -> 2 shards
@@ -228,7 +228,7 @@ def test_get_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
         template_ds=template_ds,
         append_dim="time",
         all_data_vars=data_vars,
-        kubernetes_job_name="test-job",
+        reformat_job_name="test-job",
         filter_variable_names=["var0", "var1", "var2"],
         filter_start=pd.Timestamp("2025-01-02T03"),
         filter_end=pd.Timestamp("2025-01-02T06"),
@@ -273,7 +273,7 @@ def test_get_jobs_grouping_filters_and_worker_index(
         template_ds=template_ds,
         append_dim="time",
         all_data_vars=data_vars,
-        kubernetes_job_name="test-job",
+        reformat_job_name="test-job",
         filter_variable_names=["var0", "var1", "var2"],
         filter_start=pd.Timestamp("2025-01-02T03"),
         filter_end=pd.Timestamp("2025-01-02T06"),

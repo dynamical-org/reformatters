@@ -24,10 +24,10 @@ class UpdateProgressTracker:
     def __init__(
         self,
         store: zarr.abc.store.Store,
-        job_name: str,
+        reformat_job_name: str,
         time_i_slice_start: int,
     ):
-        self.job_name = job_name
+        self.reformat_job_name = reformat_job_name
         self.time_i_slice_start = time_i_slice_start
         self.queue: queue.Queue[str] = queue.Queue()
         self.fs, self.path = _get_fs_and_path(store)
@@ -77,7 +77,7 @@ class UpdateProgressTracker:
             log.warning(f"Could not delete progress file: {e}")
 
     def _get_path(self) -> str:
-        return f"{self.path}/_internal_update_progress_{self.job_name}_{self.time_i_slice_start}.json"
+        return f"{self.path}/_internal_update_progress_{self.reformat_job_name}_{self.time_i_slice_start}.json"
 
     def _process_queue(self) -> None:
         """Run as a background thread to process variables from the queue and record progress."""

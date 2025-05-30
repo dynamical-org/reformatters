@@ -58,7 +58,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             get_template_fn=self._get_template,
             append_dim=self.template_config.append_dim,
             all_data_vars=self.template_config.data_vars,
-            kubernetes_job_name="operational-update",
+            reformat_job_name="operational-update",
         )
         template_utils.write_metadata(template_ds, tmp_store, get_mode(tmp_store))
         for job in jobs:
@@ -69,7 +69,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
             copy_zarr_metadata(updated_template, tmp_store, final_store)
 
-        logger.info(f"Done operational update writing to {final_store}")
+        logger.info(f"Operational update complete. Wrote to store: {final_store}")
 
     def reformat_local(
         self,
@@ -87,7 +87,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         self.process_region_jobs(
             append_dim_end,
-            kubernetes_job_name="local",
+            reformat_job_name="local",
             worker_index=0,
             workers_total=1,
             filter_start=filter_start,
@@ -99,7 +99,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def process_region_jobs(
         self,
         append_dim_end: DatetimeLike,
-        kubernetes_job_name: str,
+        reformat_job_name: str,
         *,
         worker_index: int,
         workers_total: int,
@@ -116,7 +116,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             template_ds=self._get_template(append_dim_end),
             append_dim=self.template_config.append_dim,
             all_data_vars=self.template_config.data_vars,
-            kubernetes_job_name=kubernetes_job_name,
+            reformat_job_name=reformat_job_name,
             worker_index=worker_index,
             workers_total=workers_total,
             filter_start=pd.Timestamp(filter_start) if filter_start else None,

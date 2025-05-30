@@ -161,7 +161,7 @@ def test_reformat_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
         pd.Timestamp("2000-01-02"),
         worker_index=0,
         workers_total=1,
-        kubernetes_job_name="local",
+        reformat_job_name="local",
         filter_start=None,
         filter_end=None,
         filter_variable_names=None,
