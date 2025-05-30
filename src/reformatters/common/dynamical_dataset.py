@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Generic, TypeVar
 
 import pandas as pd
@@ -14,7 +15,12 @@ from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike
-from reformatters.common.zarr import get_mode, get_zarr_store
+from reformatters.common.zarr import (
+    copy_zarr_metadata,
+    get_local_tmp_store,
+    get_mode,
+    get_zarr_store,
+)
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
@@ -41,6 +47,30 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """Run dataset reformatting using Kubernetes index jobs."""
         pass
 
+    def reformat_operational_update(self) -> None:
+        """Update an existing dataset with the latest data."""
+        final_store = self._final_store()
+        tmp_store = self._tmp_store()
+
+        jobs, template_ds = self.region_job_class.operational_update_jobs(
+            final_store=final_store,
+            tmp_store=tmp_store,
+            get_template_fn=self._get_template,
+            append_dim=self.template_config.append_dim,
+            all_data_vars=self.template_config.data_vars,
+            reformat_job_name="operational-update",
+        )
+        template_utils.write_metadata(template_ds, tmp_store, get_mode(tmp_store))
+        for job in jobs:
+            process_results = job.process()
+            updated_template = job.update_template_with_results(process_results)
+            template_utils.write_metadata(
+                updated_template, tmp_store, get_mode(tmp_store)
+            )
+            copy_zarr_metadata(updated_template, tmp_store, final_store)
+
+        logger.info(f"Operational update complete. Wrote to store: {final_store}")
+
     def reformat_local(
         self,
         append_dim_end: datetime,
@@ -50,24 +80,26 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         filter_variable_names: list[str] | None = None,
     ) -> None:
         """Run dataset reformatting locally in this process."""
-        template_ds = self._template_ds(append_dim_end)
-        store = self._store()
+        template_ds = self._get_template(append_dim_end)
+        final_store = self._final_store()
 
-        template_utils.write_metadata(template_ds, store, get_mode(store))
+        template_utils.write_metadata(template_ds, final_store, get_mode(final_store))
 
         self.process_region_jobs(
             append_dim_end,
+            reformat_job_name="local",
             worker_index=0,
             workers_total=1,
             filter_start=filter_start,
             filter_end=filter_end,
             filter_variable_names=filter_variable_names,
         )
-        logger.info(f"Done writing to {store}")
+        logger.info(f"Done writing to {final_store}")
 
     def process_region_jobs(
         self,
         append_dim_end: DatetimeLike,
+        reformat_job_name: str,
         *,
         worker_index: int,
         workers_total: int,
@@ -77,11 +109,14 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> None:
         """Orchestrate running RegionJob instances."""
 
-        region_jobs = self.region_job_class.get_backfill_jobs(
-            store=self._store(),
-            template_ds=self._template_ds(append_dim_end),
+        region_jobs = self.region_job_class.get_jobs(
+            kind="backfill",
+            final_store=self._final_store(),
+            tmp_store=self._tmp_store(),
+            template_ds=self._get_template(append_dim_end),
             append_dim=self.template_config.append_dim,
             all_data_vars=self.template_config.data_vars,
+            reformat_job_name=reformat_job_name,
             worker_index=worker_index,
             workers_total=workers_total,
             filter_start=pd.Timestamp(filter_start) if filter_start else None,
@@ -106,10 +141,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         app.command()(self.reformat_kubernetes)
         return app
 
-    def _store(self) -> zarr.abc.store.Store:
+    def _final_store(self) -> zarr.abc.store.Store:
         return get_zarr_store(
             self.template_config.dataset_id, self.template_config.version
         )
 
-    def _template_ds(self, append_dim_end: DatetimeLike) -> xr.Dataset:
+    def _tmp_store(self) -> Path:
+        return get_local_tmp_store()
+
+    def _get_template(self, append_dim_end: DatetimeLike) -> xr.Dataset:
         return self.template_config.get_template(pd.Timestamp(append_dim_end))

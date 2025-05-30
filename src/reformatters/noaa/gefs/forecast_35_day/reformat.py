@@ -5,6 +5,7 @@ import subprocess
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from functools import partial
 from itertools import product, starmap
 
 import numpy as np
@@ -222,7 +223,9 @@ def reformat_operational_update(job_name: str) -> None:
         progress_tracker = UpdateProgressTracker(
             final_store, job_name, init_time_i_slice.start
         )
-        vars_to_process = progress_tracker.get_unprocessed(template_ds.data_vars.keys())
+        vars_to_process = progress_tracker.get_unprocessed_str(
+            list(template_ds.data_vars.keys())
+        )
 
         data_var_upload_futures = []
         for data_var, max_lead_times in reformat_init_time_i_slices(
@@ -242,7 +245,7 @@ def reformat_operational_update(job_name: str) -> None:
                     template.APPEND_DIMENSION,
                     tmp_store,
                     final_store,
-                    progress_tracker,
+                    partial(progress_tracker.record_completion, data_var.name),
                 )
             )
             for (init_time, ensemble_member), max_lead_time in max_lead_times.items():
