@@ -95,7 +95,7 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         Returns a template dataset expanded to the given end time.
 
         Args:
-            end_time (pd.Timestamp): End time for the append dimension
+            end_time (pd.Timestamp): End time (exclusive) for the append dimension
 
         Returns:
             xr.Dataset: Template dataset with dimension coordinates
@@ -109,6 +109,10 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
             self.append_dim_coordinates(end_time),
             derive_coordinates_fn=self.derive_coordinates,
         )
+
+        # Ensure attributes have not been changed without calling update_template()
+        assert ds.attrs["dataset_id"] == self.dataset_id
+        assert ds.attrs["dataset_version"] == self.version
 
         # Coordinates which are dask arrays are not written with .to_zarr(store, compute=False)
         # We want to write all coords when writing metadata, so ensure they are loaded as numpy arrays.

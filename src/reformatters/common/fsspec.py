@@ -9,6 +9,7 @@ def fsspec_apply(
     fs: fsspec.AbstractFileSystem,
     method: str,
     *args: object,
+    max_attempts: int = 6,
     **kwargs: object,
 ) -> Any:
     """
@@ -23,9 +24,9 @@ def fsspec_apply(
         fs: The filesystem to apply the method to
         method: Name of the method to call on the filesystem
         *args: Arguments to pass to the method
+        max_attempts: Maximum number of time to try to complete the operation
         **kwargs: Keyword arguments to pass to the method
     """
-    max_attempts = 6
     for attempt in range(max_attempts):
         try:
             if hasattr(fs, f"_{method}"):
@@ -35,9 +36,8 @@ def fsspec_apply(
                 )
             else:
                 return getattr(fs, method)(*args, **kwargs)
-            break
         except Exception:
             if attempt == max_attempts - 1:  # Last attempt failed
                 raise
-            time.sleep(1)
+            time.sleep(attempt)
             continue

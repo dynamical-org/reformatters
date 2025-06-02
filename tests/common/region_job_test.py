@@ -18,9 +18,10 @@ from reformatters.common.config_models import (
 from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
+    SourceFileStatus,
 )
 from reformatters.common.types import ArrayFloat32, Timestamp
-from reformatters.common.zarr import get_zarr_store
+from reformatters.common.zarr import get_local_tmp_store, get_zarr_store
 
 
 class ExampleDataVar(DataVar[BaseInternalAttrs]):
@@ -107,16 +108,19 @@ def template_ds() -> xr.Dataset:
 )
 def test_region_job(template_ds: xr.Dataset) -> None:
     store = get_zarr_store("test-dataset-A", "test-version")
+    tmp_store = get_local_tmp_store()
 
     # Write zarr metadata for this RegionJob to write into
     template_utils.write_metadata(template_ds, store, mode="w")
 
     job = ExampleRegionJob(
-        store=store,
+        final_store=store,
+        tmp_store=tmp_store,
         template_ds=template_ds,
         data_vars=[ExampleDataVar(name=name) for name in template_ds.data_vars.keys()],
         append_dim="time",
         region=slice(0, 18),
+        reformat_job_name="test-job",
     )
 
     job.process()
@@ -133,19 +137,60 @@ def test_region_job(template_ds: xr.Dataset) -> None:
         np.testing.assert_array_equal(data_var.values, expected_values)
 
 
+def test_update_template_with_results(template_ds: xr.Dataset) -> None:
+    store = get_zarr_store("test-dataset-C", "test-version")
+    tmp_store = get_local_tmp_store()
+
+    job = ExampleRegionJob(
+        final_store=store,
+        tmp_store=tmp_store,
+        template_ds=template_ds,
+        data_vars=[ExampleDataVar(name=name) for name in template_ds.data_vars.keys()],
+        append_dim="time",
+        region=slice(0, 18),
+        reformat_job_name="test-job",
+    )
+
+    # Mock process results
+    process_results = {
+        "var0": [
+            ExampleSourceFileCoords(
+                time=pd.Timestamp("2025-01-01T12"), status=SourceFileStatus.Succeeded
+            ),
+            ExampleSourceFileCoords(
+                time=pd.Timestamp("2025-01-02T12"),
+                status=SourceFileStatus.DownloadFailed,
+            ),
+        ],
+        "var1": [
+            ExampleSourceFileCoords(
+                time=pd.Timestamp("2025-01-02T00"), status=SourceFileStatus.Succeeded
+            )
+        ],
+    }
+
+    updated_template = job.update_template_with_results(process_results)
+
+    assert updated_template.time.max() == pd.Timestamp("2025-01-02T00")
+
+
 def test_source_file_coord_out_loc_default_impl() -> None:
     coord = ExampleSourceFileCoords(time=pd.Timestamp("2025-01-01T00"))
     assert coord.out_loc() == {"time": pd.Timestamp("2025-01-01T00")}
 
 
-def test_get_backfill_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
+def test_get_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
     store = get_zarr_store("test-dataset-B", "test-version")
-    jobs = ExampleRegionJob.get_backfill_jobs(
-        store=store,
+    tmp_store = get_local_tmp_store()
+    jobs = ExampleRegionJob.get_jobs(
+        kind="backfill",
+        final_store=store,
+        tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
         all_data_vars=data_vars,
+        reformat_job_name="test-job",
     )
     # RegionJobA groups vars into batches of 3 -> [3,1] and then then max_backfill_jobs of 2 -> [2,1,1]
     # and shards of size 24 -> 2 shards
@@ -172,14 +217,18 @@ def test_get_backfill_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
     ]
 
 
-def test_get_backfill_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
+def test_get_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
     store = get_zarr_store("test-dataset-B", "test-version")
-    jobs = ExampleRegionJob.get_backfill_jobs(
-        store=store,
+    tmp_store = get_local_tmp_store()
+    jobs = ExampleRegionJob.get_jobs(
+        kind="backfill",
+        final_store=store,
+        tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
         all_data_vars=data_vars,
+        reformat_job_name="test-job",
         filter_variable_names=["var0", "var1", "var2"],
         filter_start=pd.Timestamp("2025-01-02T03"),
         filter_end=pd.Timestamp("2025-01-02T06"),
@@ -211,16 +260,20 @@ def test_get_backfill_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
     )
 
 
-def test_get_backfill_jobs_grouping_filters_and_worker_index(
+def test_get_jobs_grouping_filters_and_worker_index(
     template_ds: xr.Dataset,
 ) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
     store = get_zarr_store("test-dataset-B", "test-version")
-    jobs = ExampleRegionJob.get_backfill_jobs(
-        store=store,
+    tmp_store = get_local_tmp_store()
+    jobs = ExampleRegionJob.get_jobs(
+        kind="backfill",
+        final_store=store,
+        tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
         all_data_vars=data_vars,
+        reformat_job_name="test-job",
         filter_variable_names=["var0", "var1", "var2"],
         filter_start=pd.Timestamp("2025-01-02T03"),
         filter_end=pd.Timestamp("2025-01-02T06"),

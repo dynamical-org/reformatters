@@ -84,7 +84,6 @@ class SWANNRegionJob(RegionJob[SWANNDataVar, SWANNSourceFileCoord]):
         coord: SWANNSourceFileCoord,
         data_var: SWANNDataVar,
     ) -> ArrayFloat32:
-
         var_name = data_var.internal_attrs.netcdf_var_name
         netcdf_path = f"netcdf:{coord.downloaded_path}:{var_name}"
         band = 1  # because rasterio netcdf requires selecting the band in the file path we always want band 1
