@@ -1,9 +1,11 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import ClassVar
 
 import numpy as np
+import pandas as pd
 import xarray as xr
+import zarr
 from pydantic import Field
 from rasterio import rasterio  # type: ignore
 
@@ -13,7 +15,14 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
 )
-from reformatters.common.types import Array2D, ArrayFloat32, Dim, Timestamp
+from reformatters.common.types import (
+    AppendDim,
+    Array2D,
+    ArrayFloat32,
+    DatetimeLike,
+    Dim,
+    Timestamp,
+)
 
 from .template_config import SWANNDataVar
 
@@ -62,6 +71,34 @@ class SWANNSourceFileCoord(SourceFileCoord):
 class SWANNRegionJob(RegionJob[SWANNDataVar, SWANNSourceFileCoord]):
     # Be gentle to UA HTTP servers
     download_parallelism: int = 2
+
+    @classmethod
+    def operational_update_jobs(
+        cls,
+        final_store: zarr.abc.store.Store,
+        tmp_store: Path,
+        get_template_fn: Callable[[DatetimeLike], xr.Dataset],
+        append_dim: AppendDim,
+        all_data_vars: Sequence[SWANNDataVar],
+        reformat_job_name: str,
+    ) -> tuple[Sequence[RegionJob[SWANNDataVar, SWANNSourceFileCoord]], xr.Dataset]:
+        append_dim_end = pd.Timestamp.now()
+        template_ds = get_template_fn(append_dim_end)
+        existing_ds = xr.open_zarr(final_store)
+        # UArizona updates the data, renamining files to reflect their status (early, provisional, stable)
+        # We go back a year to try to pull in the latest stable data.
+        append_dim_start = existing_ds["time"].max() - pd.Timedelta(days=1)
+        jobs = cls.get_jobs(
+            kind="operational-update",
+            final_store=final_store,
+            tmp_store=tmp_store,
+            template_ds=template_ds,
+            append_dim=append_dim,
+            all_data_vars=all_data_vars,
+            reformat_job_name=reformat_job_name,
+            filter_start=append_dim_start,
+        )
+        return jobs, template_ds
 
     def generate_source_file_coords(
         self,
