@@ -24,7 +24,7 @@ def fsspec_apply(
         fs: The filesystem to apply the method to
         method: Name of the method to call on the filesystem
         *args: Arguments to pass to the method
-        max_attempts: Maximum number of attempts to make
+        max_attempts: Maximum number of time to try to complete the operation
         **kwargs: Keyword arguments to pass to the method
     """
     for attempt in range(max_attempts):
