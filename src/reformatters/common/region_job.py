@@ -249,7 +249,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             # No data was processed, trim the template to stop before this job's region
             # This is using isel's exclusive slice end behavior
             return self.template_ds.isel(
-                {self.append_dim: slice(None, max(1, self.region.start))}
+                {self.append_dim: slice(None, self.region.start)}
             )
         else:
             return self.template_ds.sel(
