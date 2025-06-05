@@ -1,6 +1,6 @@
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Generic, TypeVar
+from typing import Annotated, Any, Generic, TypeVar
 
 import pandas as pd
 import typer
@@ -47,7 +47,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """Run dataset reformatting using Kubernetes index jobs."""
         pass
 
-    def reformat_operational_update(self) -> None:
+    def reformat_operational_update(
+        self,
+        job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
+    ) -> None:
         """Update an existing dataset with the latest data."""
         final_store = self._final_store()
         tmp_store = self._tmp_store()
@@ -58,7 +61,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             get_template_fn=self._get_template,
             append_dim=self.template_config.append_dim,
             all_data_vars=self.template_config.data_vars,
-            reformat_job_name="operational-update",
+            reformat_job_name=job_name,
         )
         template_utils.write_metadata(template_ds, tmp_store, get_mode(tmp_store))
         for job in jobs:
@@ -98,13 +101,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def process_region_jobs(
         self,
-        append_dim_end: DatetimeLike,
-        reformat_job_name: str,
+        append_dim_end: datetime,
+        reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
         *,
         worker_index: int,
         workers_total: int,
-        filter_start: DatetimeLike | None = None,
-        filter_end: DatetimeLike | None = None,
+        filter_start: datetime | None = None,
+        filter_end: datetime | None = None,
         filter_variable_names: list[str] | None = None,
     ) -> None:
         """Orchestrate running RegionJob instances."""
@@ -124,7 +127,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             filter_variable_names=filter_variable_names,
         )
 
-        jobs_summary = ", ".join(j.summary() for j in region_jobs)
+        jobs_summary = ", ".join(repr(j) for j in region_jobs)
         logger.info(
             f"This is {worker_index = }, {workers_total = }, {len(region_jobs)} jobs, {jobs_summary}"
         )
@@ -139,6 +142,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         app.command()(self.update_template)
         app.command()(self.reformat_local)
         app.command()(self.reformat_kubernetes)
+        app.command()(self.reformat_operational_update)
+        app.command()(self.process_region_jobs)
         return app
 
     def _final_store(self) -> zarr.abc.store.Store:

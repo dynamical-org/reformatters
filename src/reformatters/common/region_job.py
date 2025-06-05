@@ -1,6 +1,6 @@
 import concurrent.futures
 import os
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import suppress
 from copy import deepcopy
@@ -474,6 +474,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             ThreadPoolExecutor(max_workers=1) as download_executor,
             ThreadPoolExecutor(max_workers=2) as upload_executor,
         ):
+            logger.info(f"Starting {repr(self)}")
+
             # Submit all download tasks to the executor
             download_futures = {}
             for data_var_group in data_var_groups:
@@ -489,6 +491,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             for download_future in concurrent.futures.as_completed(download_futures):
                 data_var_group = download_futures[download_future]
                 source_file_coords = download_future.result()
+                logger.info(f"Downloaded: {[v.name for v in data_var_group]}")
 
                 # Process one data variable at a time to ensure a single user of
                 # the shared buffer at a time and to reduce peak memory usage
@@ -561,7 +564,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         ]
 
     def _download_processing_group(
-        self, source_file_coords: Iterable[SOURCE_FILE_COORD]
+        self, source_file_coords: Sequence[SOURCE_FILE_COORD]
     ) -> list[SOURCE_FILE_COORD]:
         """
         Download specified source files in parallel.
@@ -573,6 +576,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
 
         def _call_download_file(coord: SOURCE_FILE_COORD) -> SOURCE_FILE_COORD:
+            # TODO: move exception handling to the download_file method
             try:
                 path = self.download_file(coord)
                 return replace(coord, downloaded_path=path)
@@ -652,5 +656,5 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 with suppress(FileNotFoundError):
                     coord.downloaded_path.unlink()
 
-    def summary(self) -> str:
-        return f"({self.region.start} - {self.region.stop}) {[d.name for d in self.data_vars]}"
+    def __repr__(self) -> str:
+        return f"RegionJob(region=({self.region.start}, {self.region.stop}), data_vars={[v.name for v in self.data_vars]})"
