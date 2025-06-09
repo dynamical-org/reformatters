@@ -1,15 +1,15 @@
 import json
 import subprocess
-from typing import Any, Dict
+from typing import Any
 
 from reformatters.common import deploy
 
 
 class DummyJob:
     def __init__(self) -> None:
-        self.obj: Dict[str, Any] = {"metadata": {"name": "dummy-job"}, "spec": {}}
+        self.obj: dict[str, Any] = {"metadata": {"name": "dummy-job"}, "spec": {}}
 
-    def as_kubernetes_object(self) -> Dict[str, Any]:
+    def as_kubernetes_object(self) -> dict[str, Any]:
         return self.obj
 
 
