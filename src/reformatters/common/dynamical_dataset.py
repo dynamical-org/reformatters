@@ -131,6 +131,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         for region_job in region_jobs:
             region_job.process()
 
+    # make a not implemented interface and docstring for validate_zarr that raises NotImplementedError AI!
+
     def get_cli(
         self,
     ) -> typer.Typer:
