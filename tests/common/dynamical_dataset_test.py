@@ -1,3 +1,5 @@
+import subprocess
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import ClassVar
 from unittest.mock import Mock
@@ -8,6 +10,7 @@ import pytest
 import xarray as xr
 from pydantic import computed_field
 
+from reformatters.common import template_utils
 from reformatters.common.config_models import (
     BaseInternalAttrs,
     DataVar,
@@ -18,10 +21,6 @@ from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
-import subprocess
-import json
-from datetime import datetime, timedelta
-from reformatters.common import template_utils
 
 
 class ExampleDataVar(DataVar[BaseInternalAttrs]):
@@ -77,7 +76,6 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
     region_job_class: type[ExampleRegionJob] = ExampleRegionJob
 
     def operational_kubernetes_resources(self, image_tag: str):
-        from datetime import timedelta
         from reformatters.common.kubernetes import ReformatCronJob
 
         return [
