@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Generic, TypeVar
@@ -10,6 +11,7 @@ from pydantic import computed_field
 
 from reformatters.common import template_utils
 from reformatters.common.config_models import DataVar
+from reformatters.common.kubernetes import Job
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.region_job import RegionJob, SourceFileCoord
@@ -33,6 +35,63 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     template_config: TemplateConfig[DATA_VAR]
     region_job_class: type[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
+
+    def validate_zarr(self) -> None:
+        """
+        Validate the zarr dataset, raising an exception if the zarr is invalid.
+
+        See common/validation.py for existing utilities.
+        Implementions should look similar this:
+        ```
+        validation.validate_zarr(
+            self._final_store(),
+            validators=(
+                validation.check_analysis_current_data,
+                validation.check_analysis_recent_nans,
+            ),
+        )
+        ```
+        """
+        raise NotImplementedError(
+            f"Implement validate_zarr on {self.__class__.__name__}"
+        )
+
+    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[Job]:
+        """
+        Return the kubernetes cron job definitions to operationally
+        update and validate this dataset.
+
+        Most implementations will look similar to this:
+        ```
+        operational_update_cron_job = ReformatCronJob(
+            name=f"{self.dataset_id}-operational-update",
+            schedule=_OPERATIONAL_CRON_SCHEDULE,
+            pod_active_deadline=timedelta(minutes=30),
+            image=image_tag,
+            dataset"_id=self.dataset_id,
+            cpu="14",
+            memory="30G",
+            shared_memory="12G",
+            ephemeral_storage="30G",
+        )
+        validation_cron_job = ValidationCronJob(
+            name=f"{self.dataset_id}-validation",
+            schedule=_VALIDATION_CRON_SCHEDULE,
+            pod_active_deadline=timedelta(minutes=10),
+            image=image_tag,
+            dataset_id=self.dataset_id,
+            cpu="1.3",
+            memory="7G",
+        )
+
+        return [operational_update_cron_job, validation_cron_job]
+        ```
+        """
+        raise NotImplementedError(
+            f"Implement operational_kubernetes_resources on {self.__class__.__name__}"
+        )
+
+    # ----- Most subclasses will not need to override the attributes and methods below -----
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -131,10 +190,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         for region_job in region_jobs:
             region_job.process()
 
-    def validate_zarr(self) -> None:
-        """Validate the zarr dataset. This method is not implemented in the base DynamicalDataset."""
-        raise NotImplementedError("validate_zarr must be implemented by subclasses")
-
     def get_cli(
         self,
     ) -> typer.Typer:
@@ -143,6 +198,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         app.command()(self.update_template)
         app.command()(self.reformat_local)
         app.command()(self.reformat_kubernetes)
+        app.command()(self.validate_zarr)
         return app
 
     def _final_store(self) -> zarr.abc.store.Store:
