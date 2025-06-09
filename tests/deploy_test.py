@@ -1,30 +1,51 @@
 import json
 import subprocess
-from typing import Any, cast
+from collections.abc import Iterable
+from datetime import timedelta
+from typing import Any
 
 import pytest
 
 from reformatters.common import deploy
-from reformatters.common.dynamical_dataset import DynamicalDataset
+from reformatters.common.kubernetes import Job, ReformatCronJob, ValidationCronJob
 
 
-class DummyJob:
-    def __init__(self) -> None:
-        self.obj: dict[str, Any] = {"metadata": {"name": "dummy-job"}, "spec": {}}
+class ExampleDataset1:
+    dataset_id: str = "example-dataset-1"
 
-    def as_kubernetes_object(self) -> dict[str, Any]:
-        return self.obj
+    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[Job]:
+        operational_update_cron_job = ReformatCronJob(
+            name=f"{self.dataset_id}-operational-update",
+            schedule="",
+            pod_active_deadline=timedelta(minutes=30),
+            image=image_tag,
+            dataset_id=self.dataset_id,
+            cpu="14",
+            memory="30G",
+            shared_memory="12G",
+            ephemeral_storage="30G",
+        )
+        validation_cron_job = ValidationCronJob(
+            name=f"{self.dataset_id}-validation",
+            schedule="",
+            pod_active_deadline=timedelta(minutes=10),
+            image=image_tag,
+            dataset_id=self.dataset_id,
+            cpu="1.3",
+            memory="7G",
+        )
+
+        return [operational_update_cron_job, validation_cron_job]
 
 
-class DummyDataset:
-    def operational_kubernetes_resources(self, image_tag: str) -> list[DummyJob]:
-        assert image_tag == "test-image-tag"
-        return [DummyJob()]
+class ExampleDataset2(ExampleDataset1):
+    dataset_id: str = "example-dataset-2"
 
 
 def test_deploy_operational_updates(monkeypatch: pytest.MonkeyPatch) -> None:
     # Prevent legacy resources from polluting test
     monkeypatch.setattr(deploy, "LEGACY_OPERATIONAL_RESOURCE_FNS", ())
+    # Use unitest.Mock or similar instead to capture calls AI!
     # Capture subprocess.run calls
     calls: list[dict[str, Any]] = []
 
@@ -34,7 +55,7 @@ def test_deploy_operational_updates(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(subprocess, "run", fake_run)
     # Invoke deploy with our dummy dataset and image tag
     deploy.deploy_operational_updates(
-        cast(list[DynamicalDataset[Any, Any]], [DummyDataset()]),
+        [ExampleDataset1(), ExampleDataset2()],  # type: ignore[list-item]
         docker_image="test-image-tag",
     )
     # Verify subprocess.run was called exactly once
@@ -42,7 +63,7 @@ def test_deploy_operational_updates(monkeypatch: pytest.MonkeyPatch) -> None:
     call = calls[0]
     assert call["cmd"] == ["/usr/bin/kubectl", "apply", "-f", "-"]
     # Parse JSON payload
-    payload = json.loads(cast(str, call["input"]))
+    payload = json.loads(call["input"])
     assert payload["apiVersion"] == "v1"
     assert payload["kind"] == "List"
     # Verify that our DummyJob's object appears in items
