@@ -75,7 +75,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
     template_config: ExampleConfig = ExampleConfig()
     region_job_class: type[ExampleRegionJob] = ExampleRegionJob
 
-    def operational_kubernetes_resources(self, image_tag: str):
+    def operational_kubernetes_resources(self, image_tag: str) -> list:
         from reformatters.common.kubernetes import ReformatCronJob
 
         return [
