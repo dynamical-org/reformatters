@@ -105,6 +105,30 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """Generate and persist the dataset template using the template_config."""
         self.template_config.update_template()
 
+    def reformat_operational_update(self) -> None:
+        """Update an existing dataset with the latest data."""
+        final_store = self._final_store()
+        tmp_store = self._tmp_store()
+
+        jobs, template_ds = self.region_job_class.operational_update_jobs(
+            final_store=final_store,
+            tmp_store=tmp_store,
+            get_template_fn=self._get_template,
+            append_dim=self.template_config.append_dim,
+            all_data_vars=self.template_config.data_vars,
+            reformat_job_name="operational-update",
+        )
+        template_utils.write_metadata(template_ds, tmp_store, get_mode(tmp_store))
+        for job in jobs:
+            process_results = job.process()
+            updated_template = job.update_template_with_results(process_results)
+            template_utils.write_metadata(
+                updated_template, tmp_store, get_mode(tmp_store)
+            )
+            copy_zarr_metadata(updated_template, tmp_store, final_store)
+
+        logger.info(f"Operational update complete. Wrote to store: {final_store}")
+
     def reformat_kubernetes(
         self,
         append_dim_end: datetime,
@@ -190,30 +214,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
 
         logger.info(f"Submitted kubernetes job {kubernetes_job.job_name}")
-
-    def reformat_operational_update(self) -> None:
-        """Update an existing dataset with the latest data."""
-        final_store = self._final_store()
-        tmp_store = self._tmp_store()
-
-        jobs, template_ds = self.region_job_class.operational_update_jobs(
-            final_store=final_store,
-            tmp_store=tmp_store,
-            get_template_fn=self._get_template,
-            append_dim=self.template_config.append_dim,
-            all_data_vars=self.template_config.data_vars,
-            reformat_job_name="operational-update",
-        )
-        template_utils.write_metadata(template_ds, tmp_store, get_mode(tmp_store))
-        for job in jobs:
-            process_results = job.process()
-            updated_template = job.update_template_with_results(process_results)
-            template_utils.write_metadata(
-                updated_template, tmp_store, get_mode(tmp_store)
-            )
-            copy_zarr_metadata(updated_template, tmp_store, final_store)
-
-        logger.info(f"Operational update complete. Wrote to store: {final_store}")
 
     def reformat_local(
         self,
