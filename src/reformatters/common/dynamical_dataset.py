@@ -131,7 +131,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         for region_job in region_jobs:
             region_job.process()
 
-    # make a not implemented interface and docstring for validate_zarr that raises NotImplementedError AI!
+    def validate_zarr(self) -> None:
+        """Validate the zarr dataset. This method is not implemented in the base DynamicalDataset."""
+        raise NotImplementedError("validate_zarr must be implemented by subclasses")
 
     def get_cli(
         self,

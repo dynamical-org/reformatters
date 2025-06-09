@@ -309,7 +309,6 @@ def get_latest_processed_time(
         "timezone": "UTC",
     },
 )
-# Example validate zarr call here AI
 def validate_zarr() -> None:
     validation.validate_zarr(
         get_store(),
