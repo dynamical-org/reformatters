@@ -1,8 +1,11 @@
 import json
 import subprocess
-from typing import Any
+
+import pytest
+from typing import Any, cast
 
 from reformatters.common import deploy
+from reformatters.common.dynamical_dataset import DynamicalDataset
 
 
 class DummyJob:
@@ -19,11 +22,11 @@ class DummyDataset:
         return [DummyJob()]
 
 
-def test_deploy_operational_updates(monkeypatch) -> None:
+def test_deploy_operational_updates(monkeypatch: pytest.MonkeyPatch) -> None:
     # Prevent legacy resources from polluting test
     monkeypatch.setattr(deploy, "LEGACY_OPERATIONAL_RESOURCE_FNS", ())
     # Capture subprocess.run calls
-    calls: list[dict[str, object]] = []
+    calls: list[dict[str, Any]] = []
 
     def fake_run(cmd: list[str], input: str, text: bool, check: bool) -> None:
         calls.append({"cmd": cmd, "input": input, "text": text, "check": check})
