@@ -1,8 +1,8 @@
 import json
 import subprocess
+from typing import Any, cast
 
 import pytest
-from typing import Any, cast
 
 from reformatters.common import deploy
 from reformatters.common.dynamical_dataset import DynamicalDataset
