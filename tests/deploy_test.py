@@ -2,12 +2,21 @@ import json
 import subprocess
 from collections.abc import Iterable
 from datetime import timedelta
-from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
+from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common import deploy
 from reformatters.common.kubernetes import Job, ReformatCronJob, ValidationCronJob
+
+
+class ExampleDatasetInDevelopment:
+    dataset_id: str = "example-dataset-in-dev"
+
+    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[Job]:
+        # This should not be deployed, nor cause issues with other deploys
+        raise NotImplementedError("this dataset is in development")
 
 
 class ExampleDataset1:
@@ -16,7 +25,7 @@ class ExampleDataset1:
     def operational_kubernetes_resources(self, image_tag: str) -> Iterable[Job]:
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-operational-update",
-            schedule="",
+            schedule="0 0 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -27,7 +36,7 @@ class ExampleDataset1:
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validation",
-            schedule="",
+            schedule="0 0 * * *",
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -43,29 +52,44 @@ class ExampleDataset2(ExampleDataset1):
 
 
 def test_deploy_operational_updates(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Prevent legacy resources from polluting test
-    monkeypatch.setattr(deploy, "LEGACY_OPERATIONAL_RESOURCE_FNS", ())
-    # Capture subprocess.run calls with a Mock
-    from unittest.mock import Mock
-
     mock_run = Mock()
     monkeypatch.setattr(subprocess, "run", mock_run)
-    # Invoke deploy with our dummy dataset and image tag
-    deploy.deploy_operational_updates(
-        [ExampleDataset1(), ExampleDataset2()],  # type: ignore[list-item]
-        docker_image="test-image-tag",
-    )
-    # Verify subprocess.run was called exactly once
+
+    example_datasets = [
+        ExampleDatasetInDevelopment(),
+        ExampleDataset1(),
+        ExampleDataset2(),
+    ]
+
+    # Also add in the real datasets to test they don't cause errors.
+    # They are last in the list so their results don't impact the indexes we verify below.
+    test_datasets = example_datasets + DYNAMICAL_DATASETS
+
+    deploy.deploy_operational_updates(test_datasets, docker_image="test-image-tag")  # type: ignore[arg-type]
+
     assert mock_run.call_count == 1
     args, kwargs = mock_run.call_args
     assert args[0] == ["/usr/bin/kubectl", "apply", "-f", "-"]
-    # Parse JSON payload
-    payload = json.loads(kwargs["input"])
-    assert payload["apiVersion"] == "v1"
-    assert payload["kind"] == "List"
-    # Verify that jobs from both datasets appear in items
-    expected: list[dict[str, Any]] = []
-    for ds in (ExampleDataset1(), ExampleDataset2()):
-        for job in ds.operational_kubernetes_resources("test-image-tag"):
-            expected.append(job.as_kubernetes_object())
-    assert payload["items"] == expected
+
+    resources = json.loads(kwargs["input"])
+    assert resources["apiVersion"] == "v1"
+    assert resources["kind"] == "List"
+
+    # Dataset 1
+    assert resources["items"][0]["kind"] == "CronJob"
+    assert (
+        resources["items"][0]["metadata"]["name"]
+        == "example-dataset-1-operational-update"
+    )
+    container_spec = resources["items"][0]["spec"]["jobTemplate"]["spec"]["template"][
+        "spec"
+    ]["containers"][0]
+    assert container_spec["resources"] == {"requests": {"cpu": "14", "memory": "30G"}}
+    assert container_spec["image"] == "test-image-tag"
+
+    # Dataset 2
+    assert resources["items"][2]["kind"] == "CronJob"
+    assert (
+        resources["items"][2]["metadata"]["name"]
+        == "example-dataset-2-operational-update"
+    )

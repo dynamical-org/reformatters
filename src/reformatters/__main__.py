@@ -46,7 +46,7 @@ for dataset in DYNAMICAL_DATASETS:
 def deploy_operational_updates(
     docker_image: str | None = None,
 ) -> None:
-    deploy.deploy_operational_updates(docker_image=docker_image)
+    deploy.deploy_operational_updates(DYNAMICAL_DATASETS, docker_image)
 
 
 if __name__ == "__main__":
