@@ -45,26 +45,27 @@ class ExampleDataset2(ExampleDataset1):
 def test_deploy_operational_updates(monkeypatch: pytest.MonkeyPatch) -> None:
     # Prevent legacy resources from polluting test
     monkeypatch.setattr(deploy, "LEGACY_OPERATIONAL_RESOURCE_FNS", ())
-    # Use unitest.Mock or similar instead to capture calls AI!
-    # Capture subprocess.run calls
-    calls: list[dict[str, Any]] = []
+    # Capture subprocess.run calls with a Mock
+    from unittest.mock import Mock
 
-    def fake_run(cmd: list[str], input: str, text: bool, check: bool) -> None:
-        calls.append({"cmd": cmd, "input": input, "text": text, "check": check})
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    mock_run = Mock()
+    monkeypatch.setattr(subprocess, "run", mock_run)
     # Invoke deploy with our dummy dataset and image tag
     deploy.deploy_operational_updates(
         [ExampleDataset1(), ExampleDataset2()],  # type: ignore[list-item]
         docker_image="test-image-tag",
     )
     # Verify subprocess.run was called exactly once
-    assert len(calls) == 1
-    call = calls[0]
-    assert call["cmd"] == ["/usr/bin/kubectl", "apply", "-f", "-"]
+    assert mock_run.call_count == 1
+    args, kwargs = mock_run.call_args
+    assert args[0] == ["/usr/bin/kubectl", "apply", "-f", "-"]
     # Parse JSON payload
-    payload = json.loads(call["input"])
+    payload = json.loads(kwargs["input"])
     assert payload["apiVersion"] == "v1"
     assert payload["kind"] == "List"
-    # Verify that our DummyJob's object appears in items
-    assert payload["items"] == [DummyJob().as_kubernetes_object()]
+    # Verify that jobs from both datasets appear in items
+    expected: list[dict[str, Any]] = []
+    for ds in (ExampleDataset1(), ExampleDataset2()):
+        for job in ds.operational_kubernetes_resources("test-image-tag"):
+            expected.append(job.as_kubernetes_object())
+    assert payload["items"] == expected
