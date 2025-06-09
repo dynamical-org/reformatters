@@ -147,7 +147,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         if filter_start is not None:
             command.append(f"--filter-start={filter_start.isoformat()}")
         if filter_end is not None:
-            command.append(f"--filter-end={filter_end}")
+            command.append(f"--filter-end={filter_end.isoformat()}")
         if filter_variable_names is not None:
             for variable_name in filter_variable_names:
                 command.append(f"--filter-variable-names={variable_name}")
