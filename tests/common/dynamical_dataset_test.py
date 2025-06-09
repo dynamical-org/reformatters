@@ -21,6 +21,7 @@ from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.kubernetes import ReformatCronJob
 
 
 class ExampleDataVar(DataVar[BaseInternalAttrs]):
@@ -75,7 +76,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
     template_config: ExampleConfig = ExampleConfig()
     region_job_class: type[ExampleRegionJob] = ExampleRegionJob
 
-    def operational_kubernetes_resources(self, image_tag: str) -> list:
+    def operational_kubernetes_resources(self, image_tag: str) -> list[ReformatCronJob]:
         from reformatters.common.kubernetes import ReformatCronJob
 
         return [
