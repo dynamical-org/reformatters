@@ -33,13 +33,16 @@ def test_deploy_operational_updates(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(subprocess, "run", fake_run)
     # Invoke deploy with our dummy dataset and image tag
-    deploy.deploy_operational_updates([DummyDataset()], docker_image="test-image-tag")  # type: ignore[arg-type]
+    deploy.deploy_operational_updates(
+        cast(list[DynamicalDataset[Any, Any]], [DummyDataset()]),
+        docker_image="test-image-tag",
+    )
     # Verify subprocess.run was called exactly once
     assert len(calls) == 1
     call = calls[0]
     assert call["cmd"] == ["/usr/bin/kubectl", "apply", "-f", "-"]
     # Parse JSON payload
-    payload = json.loads(call["input"])
+    payload = json.loads(cast(str, call["input"]))
     assert payload["apiVersion"] == "v1"
     assert payload["kind"] == "List"
     # Verify that our DummyJob's object appears in items
