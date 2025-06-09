@@ -41,7 +41,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def validate_zarr(self) -> None:
         """
-        Validate the zarr dataset, raising an exception if the zarr is invalid.
+        Validate the dataset, raising an exception if it is invalid.
 
         See common/validation.py for existing utilities.
         Implementions should look similar this:
@@ -64,7 +64,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         Return the kubernetes cron job definitions to operationally
         update and validate this dataset.
 
-        Most implementations will look similar to this:
+        Implementions should look similar this:
         ```
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-operational-update",
