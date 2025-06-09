@@ -18,6 +18,10 @@ from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+import subprocess
+import json
+from datetime import datetime, timedelta
+from reformatters.common import template_utils
 
 
 class ExampleDataVar(DataVar[BaseInternalAttrs]):
@@ -71,6 +75,24 @@ class ExampleConfig(TemplateConfig[ExampleDataVar]):
 class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
     template_config: ExampleConfig = ExampleConfig()
     region_job_class: type[ExampleRegionJob] = ExampleRegionJob
+
+    def operational_kubernetes_resources(self, image_tag: str):
+        from datetime import timedelta
+        from reformatters.common.kubernetes import ReformatCronJob
+
+        return [
+            ReformatCronJob(
+                name=f"{self.dataset_id}-operational-update",
+                schedule="0 0 * * *",
+                pod_active_deadline=timedelta(minutes=30),
+                image=image_tag,
+                dataset_id=self.dataset_id,
+                cpu="1",
+                memory="1G",
+                shared_memory="1G",
+                ephemeral_storage="1G",
+            )
+        ]
 
 
 def test_dynamical_dataset_methods_exist() -> None:
@@ -166,3 +188,52 @@ def test_reformat_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
         filter_end=None,
         filter_variable_names=None,
     )
+
+
+def test_reformat_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Setup subprocess mock
+    mock_run = Mock()
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    # Simulate 5 backfill jobs
+    monkeypatch.setattr(
+        ExampleRegionJob,
+        "get_jobs",
+        classmethod(lambda cls, *args, **kwargs: [object()] * 5),
+    )
+    # Mock template retrieval and metadata writing
+    monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
+    monkeypatch.setattr(ExampleDataset, "_final_store", lambda self: tmp_path)
+    monkeypatch.setattr(template_utils, "write_metadata", lambda *args, **kwargs: None)
+
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(),
+        region_job_class=ExampleRegionJob,
+    )
+    filter_start = datetime(2020, 1, 1)
+    filter_end = datetime(2020, 1, 2)
+    # Call reformat_kubernetes with filters and custom image
+    dataset.reformat_kubernetes(
+        append_dim_end=filter_end,
+        jobs_per_pod=2,
+        max_parallelism=10,
+        filter_start=filter_start,
+        filter_end=filter_end,
+        filter_variable_names=["a", "b"],
+        docker_image="my-image",
+    )
+
+    # Ensure kubectl apply was invoked once
+    assert mock_run.call_count == 1
+    _, kwargs = mock_run.call_args
+    input_str = kwargs["input"]
+
+    # workers_total = ceil(5/2) == 3
+    assert '"workers_total": 3' in input_str
+    # Command and filters
+    assert '"process-region-jobs"' in input_str
+    assert "--filter-start=2020-01-01T00:00:00" in input_str
+    assert "--filter-end=2020-01-02T00:00:00" in input_str
+    assert "--filter-variable-names=a" in input_str
+    assert "--filter-variable-names=b" in input_str
+    # Docker image
+    assert '"my-image"' in input_str
