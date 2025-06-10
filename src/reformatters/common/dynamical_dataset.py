@@ -271,7 +271,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         for region_job in region_jobs:
             region_job.process()
 
-    def validate_zarr(self) -> None:
+    def validate_zarr(
+        self,
+        reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
+    ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
         validation.validate_zarr(self._final_store(), validators=self.validators())
 
