@@ -252,7 +252,7 @@ def test_validate_zarr_calls_validators_and_uses_final_store(
         region_job_class=ExampleRegionJob,
     )
 
-    dataset.validate_zarr()
+    dataset.validate_zarr("example-job-name")
 
     # Ensure validate_zarr was called with correct arguments
     # this implies
