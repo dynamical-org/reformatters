@@ -1,6 +1,7 @@
 from itertools import product
 
 import pandas as pd
+import numpy as np
 
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.noaa.gfs.read_data import (
@@ -59,7 +60,7 @@ class GFSRegionJob(RegionJob[NOAADataVar, GFSSourceFileCoord]):
 
     def read_data(
         self, coord: GFSSourceFileCoord, data_var: NOAADataVar
-    ) -> "numpy.ndarray[float32]":
+    ) -> np.ndarray:
         path = coord.downloaded_path
         assert path is not None, "read_data called on missing file"
 
