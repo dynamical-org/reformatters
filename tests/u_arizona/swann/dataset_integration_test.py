@@ -34,13 +34,13 @@ def test_reformat_operational_update(monkeypatch: MonkeyPatch, tmp_path: Path) -
 
     monkeypatch.setattr(
         dataset.region_job_class,
-        "_operational_append_dim_end",
+        "_update_append_dim_end",
         lambda: pd.Timestamp("1981-10-04"),
     )
 
     monkeypatch.setattr(
         dataset.region_job_class,
-        "_operational_append_dim_start",
+        "_update_append_dim_start",
         lambda existing_ds: pd.Timestamp(existing_ds.time.max().item()),
     )
 
@@ -67,13 +67,13 @@ def test_reformat_operational_update_template_trimming(
 
     monkeypatch.setattr(
         dataset.region_job_class,
-        "_operational_append_dim_end",
+        "_update_append_dim_end",
         lambda: pd.Timestamp("1981-10-04"),
     )
 
     monkeypatch.setattr(
         dataset.region_job_class,
-        "_operational_append_dim_start",
+        "_update_append_dim_start",
         lambda existing_ds: pd.Timestamp(existing_ds.time.max().item()),
     )
 
