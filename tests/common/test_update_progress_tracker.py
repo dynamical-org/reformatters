@@ -28,7 +28,6 @@ def test_update_progress_tracker_close_with_local_store(
     progress_file.parent.mkdir(parents=True, exist_ok=True)
     progress_file.write_text(json.dumps({"processed_variables": ["existing_var"]}))
 
-    # Create tracker - should load existing progress using fsspec_apply cat_file
     tracker = UpdateProgressTracker(store, "test-job", 0)
     tracker.close()
 
@@ -55,7 +54,6 @@ def test_update_progress_tracker_close_with_async_store(
     progress_file.parent.mkdir(parents=True, exist_ok=True)
     progress_file.write_text(json.dumps({"processed_variables": ["existing_var"]}))
 
-    # Create tracker - should load existing progress using fsspec_apply cat_file
     tracker = UpdateProgressTracker(store, "test-job", 0)
     tracker.close()
 
