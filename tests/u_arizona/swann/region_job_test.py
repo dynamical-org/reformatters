@@ -1,7 +1,9 @@
 import pandas as pd
 import pytest
+import xarray as xr
 
 from reformatters.u_arizona.swann.region_job import (
+    SWANNRegionJob,
     SWANNSourceFileCoord,
 )
 
@@ -61,3 +63,10 @@ def test_source_file_coord_data_status() -> None:
         coord.get_url()
         == "https://climate.arizona.edu/data/UA_SWE/DailyData_4km/WY2024/UA_SWE_Depth_4km_v1_20231001_provisional.nc"
     )
+
+
+def test_update_append_dim_start() -> None:
+    """Test the update_append_dim_start method."""
+    existing_ds = xr.Dataset(coords={"time": pd.date_range("2023-10-01", "2025-01-03")})
+    expected_start = pd.Timestamp("2024-01-04")
+    assert SWANNRegionJob._update_append_dim_start(existing_ds) == expected_start

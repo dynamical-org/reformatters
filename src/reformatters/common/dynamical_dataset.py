@@ -105,7 +105,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """Generate and persist the dataset template using the template_config."""
         self.template_config.update_template()
 
-    def reformat_operational_update(self) -> None:
+    def reformat_operational_update(
+        self,
+        job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
+    ) -> None:
         """Update an existing dataset with the latest data."""
         final_store = self._final_store()
         tmp_store = self._tmp_store()
@@ -116,7 +119,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             get_template_fn=self._get_template,
             append_dim=self.template_config.append_dim,
             all_data_vars=self.template_config.data_vars,
-            reformat_job_name="operational-update",
+            reformat_job_name=job_name,
         )
         template_utils.write_metadata(template_ds, tmp_store, get_mode(tmp_store))
         for job in jobs:
@@ -268,7 +271,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             filter_variable_names=filter_variable_names,
         )
 
-        jobs_summary = ", ".join(j.summary() for j in region_jobs)
+        jobs_summary = ", ".join(repr(j) for j in region_jobs)
         logger.info(
             f"This is {worker_index = }, {workers_total = }, {len(region_jobs)} jobs, {jobs_summary}"
         )
