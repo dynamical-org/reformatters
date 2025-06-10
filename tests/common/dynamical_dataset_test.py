@@ -11,7 +11,7 @@ import pytest
 import xarray as xr
 from pydantic import computed_field
 
-from reformatters.common import template_utils
+from reformatters.common import template_utils, validation
 from reformatters.common.config_models import (
     BaseInternalAttrs,
     DataVar,
@@ -23,7 +23,6 @@ from reformatters.common.kubernetes import Job, ReformatCronJob
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
-from reformatters.common import validation
 
 
 class ExampleDataVar(DataVar[BaseInternalAttrs]):
@@ -224,7 +223,10 @@ def test_reformat_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     _, kwargs = mock_run.call_args
     input_str = kwargs["input"]
 
-def test_validate_zarr_calls_validators_and_uses_final_store(monkeypatch, tmp_path: Path) -> None:
+
+def test_validate_zarr_calls_validators_and_uses_final_store(
+    monkeypatch, tmp_path: Path
+) -> None:
     # Set up mock validators list
     mock_validators = [Mock(), Mock()]
     monkeypatch.setattr(ExampleDataset, "validators", lambda self: mock_validators)
