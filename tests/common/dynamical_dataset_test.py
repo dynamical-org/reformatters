@@ -223,28 +223,6 @@ def test_reformat_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     _, kwargs = mock_run.call_args
     input_str = kwargs["input"]
 
-
-def test_validate_zarr_calls_validators_and_uses_final_store(
-    monkeypatch, tmp_path: Path
-) -> None:
-    # Set up mock validators list
-    mock_validators = [Mock(), Mock()]
-    monkeypatch.setattr(ExampleDataset, "validators", lambda self: mock_validators)
-    # Set up mock final store
-    mock_store = tmp_path / "zarr_store"
-    monkeypatch.setattr(ExampleDataset, "_final_store", lambda self: mock_store)
-    # Mock validation.validate_zarr
-    mock_validate = Mock()
-    monkeypatch.setattr(validation, "validate_zarr", mock_validate)
-    # Instantiate dataset and call validate_zarr
-    dataset = ExampleDataset(
-        template_config=ExampleConfig(),
-        region_job_class=ExampleRegionJob,
-    )
-    dataset.validate_zarr()
-    # Ensure validate_zarr was called with correct arguments
-    mock_validate.assert_called_once_with(mock_store, validators=mock_validators)
-
     # workers_total = ceil(5/2) == 3
     assert '"completions": 3' in input_str
     # Command and filters
@@ -255,3 +233,29 @@ def test_validate_zarr_calls_validators_and_uses_final_store(
     assert "--filter-variable-names=b" in input_str
     # Docker image
     assert '"my-docker-image"' in input_str
+
+
+def test_validate_zarr_calls_validators_and_uses_final_store(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    mock_validators = [Mock(), Mock()]
+    monkeypatch.setattr(ExampleDataset, "validators", lambda self: mock_validators)
+
+    mock_store = Mock()
+    monkeypatch.setattr(ExampleDataset, "_final_store", lambda self: mock_store)
+
+    mock_validate = Mock()
+    monkeypatch.setattr(validation, "validate_zarr", mock_validate)
+
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(),
+        region_job_class=ExampleRegionJob,
+    )
+
+    dataset.validate_zarr()
+
+    # Ensure validate_zarr was called with correct arguments
+    # this implies
+    # - self._final_store() was called and returned our mock_store
+    # - self.validators() was called and returned our mock_validators
+    mock_validate.assert_called_once_with(mock_store, validators=mock_validators)
