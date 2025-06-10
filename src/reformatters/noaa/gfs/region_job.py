@@ -2,15 +2,14 @@ from itertools import product
 
 import numpy as np
 import pandas as pd
+import xarray as xr
 
+from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.noaa.gfs.read_data import (
     GFS_ACCUMULATION_RESET_FREQUENCY,
     GFS_ACCUMULATION_RESET_HOURS,
     read_rasterio,
-)
-from reformatters.noaa.gfs.read_data import (
-    SourceFileCoords as _GfsCoords,
 )
 from reformatters.noaa.gfs.read_data import (
     download_file as _gfs_download,
@@ -19,13 +18,10 @@ from reformatters.noaa.noaa_config_models import NOAADataVar
 
 
 class GFSSourceFileCoord(SourceFileCoord):
-    """Coordinates for a single GFS .idx/.grb2 request."""
-
     init_time: pd.Timestamp
     lead_time: pd.Timedelta
 
     def get_url(self) -> str:
-        # reconstruct the NOAA OPeNDAP URL for debugging/logging
         hrs = int(self.lead_time.total_seconds() / 3600)
         d = self.init_time.strftime("%Y%m%d")
         h = self.init_time.strftime("%H")
@@ -51,11 +47,7 @@ class GFSRegionJob(RegionJob[NOAADataVar, GFSSourceFileCoord]):
 
     def download_file(self, coord: GFSSourceFileCoord) -> pd.PathLike:
         # reuse existing function: returns (coords_dict, Path|None)
-        coords_dict: _GfsCoords = {
-            "init_time": coord.init_time,
-            "lead_time": coord.lead_time,
-        }
-        _, local_path = _gfs_download(coords_dict, self.data_vars)
+        _, local_path = _gfs_download(coord.out_loc(), self.data_vars)
         return local_path  # may be None, RegionJob will set status accordingly
 
     def read_data(self, coord: GFSSourceFileCoord, data_var: NOAADataVar) -> np.ndarray:
@@ -88,11 +80,11 @@ class GFSRegionJob(RegionJob[NOAADataVar, GFSSourceFileCoord]):
             out_crs,
         )
 
-    def apply_data_transformations(self, data_array, data_var: NOAADataVar) -> None:
+    def apply_data_transformations(
+        self, data_array: xr.DataArray, data_var: NOAADataVar
+    ) -> None:
         # first deaccumulate if requested
         if data_var.internal_attrs.deaccumulate_to_rates:
-            from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
-
             deaccumulate_to_rates_inplace(
                 data_array,
                 dim="lead_time",
