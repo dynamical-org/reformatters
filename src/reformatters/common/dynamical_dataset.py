@@ -1,6 +1,6 @@
 import json
 import subprocess
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Generic, TypeVar
@@ -12,7 +12,7 @@ import xarray as xr
 import zarr
 from pydantic import computed_field
 
-from reformatters.common import docker, template_utils
+from reformatters.common import docker, template_utils, validation
 from reformatters.common.config_models import DataVar
 from reformatters.common.kubernetes import Job, ReformatCronJob
 from reformatters.common.logging import get_logger
@@ -38,26 +38,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     template_config: TemplateConfig[DATA_VAR]
     region_job_class: type[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
-
-    def validate_zarr(self) -> None:
-        """
-        Validate the dataset, raising an exception if it is invalid.
-
-        See common/validation.py for existing utilities.
-        Implementions should look similar this:
-        ```
-        validation.validate_zarr(
-            self._final_store(),
-            validators=(
-                validation.check_analysis_current_data,
-                validation.check_analysis_recent_nans,
-            ),
-        )
-        ```
-        """
-        raise NotImplementedError(
-            f"Implement validate_zarr on {self.__class__.__name__}"
-        )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Iterable[Job]:
         """
@@ -91,7 +71,23 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         ```
         """
         raise NotImplementedError(
-            f"Implement operational_kubernetes_resources on {self.__class__.__name__}"
+            f"Implement `operational_kubernetes_resources` on {self.__class__.__name__}"
+        )
+
+    def validators(self) -> Sequence[validation.DataValidator]:
+        """
+        Return a sequence of DataValidators to run on this dataset.
+
+        Implementions should look similar this:
+        ```
+        return (
+            validation.check_analysis_current_data,
+            validation.check_analysis_recent_nans,
+        )
+        ```
+        """
+        raise NotImplementedError(
+            f"Implement `validators` on {self.__class__.__name__}"
         )
 
     # ----- Most subclasses will not need to override the attributes and methods below -----
@@ -277,6 +273,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
         for region_job in region_jobs:
             region_job.process()
+
+    def validate_zarr(
+        self,
+        reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
+    ) -> None:
+        """Validate the dataset, raising an exception if it is invalid."""
+        validation.validate_zarr(self._final_store(), validators=self.validators())
 
     def get_cli(
         self,
