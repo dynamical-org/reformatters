@@ -82,12 +82,10 @@ class SWANNRegionJob(RegionJob[SWANNDataVar, SWANNSourceFileCoord]):
         all_data_vars: Sequence[SWANNDataVar],
         reformat_job_name: str,
     ) -> tuple[Sequence[RegionJob[SWANNDataVar, SWANNSourceFileCoord]], xr.Dataset]:
-        append_dim_end = cls._operational_append_dim_end()
-
-        template_ds = get_template_fn(append_dim_end)
         existing_ds = xr.open_zarr(final_store)
-
-        append_dim_start = cls._operational_append_dim_start(existing_ds)
+        append_dim_start = cls._update_append_dim_start(existing_ds)
+        append_dim_end = cls._update_append_dim_end()
+        template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
             kind="operational-update",
@@ -132,11 +130,11 @@ class SWANNRegionJob(RegionJob[SWANNDataVar, SWANNSourceFileCoord]):
             return result
 
     @classmethod
-    def _operational_append_dim_end(cls) -> pd.Timestamp:
+    def _update_append_dim_end(cls) -> pd.Timestamp:
         return pd.Timestamp.now()
 
     @classmethod
-    def _operational_append_dim_start(cls, existing_ds: xr.Dataset) -> pd.Timestamp:
+    def _update_append_dim_start(cls, existing_ds: xr.Dataset) -> pd.Timestamp:
         ds_max_time = existing_ds["time"].max().item()
         # UArizona updates the data, renamining files to reflect their status (early, provisional, stable)
         # We go back a year to try to pull in the latest stable data.
