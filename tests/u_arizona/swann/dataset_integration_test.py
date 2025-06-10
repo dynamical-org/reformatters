@@ -49,6 +49,11 @@ def test_reformat_operational_update(monkeypatch: MonkeyPatch, tmp_path: Path) -
     np.testing.assert_array_equal(
         updated_ds.time, pd.date_range("1981-10-01", "1981-10-03")
     )
+    subset_ds = updated_ds.sel(latitude=48.583335, longitude=-94, method="nearest")
+    np.testing.assert_array_equal(subset_ds.snow_depth.values, [190.0, 163.0, 135.0])
+    np.testing.assert_array_equal(
+        subset_ds.snow_water_equivalent.values, [35.0, 33.0, 29.0]
+    )
 
 
 def test_reformat_operational_update_template_trimming(
@@ -89,3 +94,6 @@ def test_reformat_operational_update_template_trimming(
     np.testing.assert_array_equal(
         updated_ds.time, pd.date_range("1981-10-01", "1981-10-02")
     )
+    subset_ds = updated_ds.sel(latitude=48.583335, longitude=-94, method="nearest")
+    np.testing.assert_array_equal(subset_ds.snow_depth.values, [190.0, 163.0])
+    np.testing.assert_array_equal(subset_ds.snow_water_equivalent.values, [35.0, 33.0])
