@@ -6,10 +6,16 @@ import pytest
 import xarray as xr
 from _pytest.monkeypatch import MonkeyPatch
 
+from reformatters.common import zarr as common_zarr_module
 from reformatters.u_arizona.swann import SWANNDataset
 from reformatters.u_arizona.swann.region_job import SWANNRegionJob, SWANNSourceFileCoord
 
 pytestmark = pytest.mark.slow
+
+
+@pytest.fixture(autouse=True)
+def set_test_final_store(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(common_zarr_module, "_LOCAL_ZARR_STORE_BASE_PATH", tmp_path)
 
 
 def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
