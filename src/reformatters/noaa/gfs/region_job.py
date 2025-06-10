@@ -1,20 +1,25 @@
 from itertools import product
+
 import pandas as pd
 
 from reformatters.common.region_job import RegionJob, SourceFileCoord
-from reformatters.common.types import DatetimeLike
-from reformatters.noaa.noaa_config_models import NOAADataVar
 from reformatters.noaa.gfs.read_data import (
-    SourceFileCoords as _GfsCoords,
-    download_file as _gfs_download,
-    read_rasterio,
     GFS_ACCUMULATION_RESET_FREQUENCY,
     GFS_ACCUMULATION_RESET_HOURS,
+    read_rasterio,
 )
+from reformatters.noaa.gfs.read_data import (
+    SourceFileCoords as _GfsCoords,
+)
+from reformatters.noaa.gfs.read_data import (
+    download_file as _gfs_download,
+)
+from reformatters.noaa.noaa_config_models import NOAADataVar
 
 
 class GFSSourceFileCoord(SourceFileCoord):
     """Coordinates for a single GFS .idx/.grb2 request."""
+
     init_time: pd.Timestamp
     lead_time: pd.Timedelta
 
@@ -84,9 +89,7 @@ class GFSRegionJob(RegionJob[NOAADataVar, GFSSourceFileCoord]):
             out_crs,
         )
 
-    def apply_data_transformations(
-        self, data_array, data_var: NOAADataVar
-    ) -> None:
+    def apply_data_transformations(self, data_array, data_var: NOAADataVar) -> None:
         # first deaccumulate if requested
         if data_var.internal_attrs.deaccumulate_to_rates:
             from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
