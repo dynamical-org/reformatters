@@ -108,8 +108,8 @@ def reformat_kubernetes(
         dataset_id=dataset_id,
         workers_total=workers_total,
         parallelism=parallelism,
-        cpu="6",  # fit on 8 vCPU node
-        memory="14G",  # fit on 16GB node
+        cpu="14",  # fit on 16 vCPU node
+        memory="30G",  # fit on 32GB node
         shared_memory="12G",
         ephemeral_storage="30G",
         command=command,
@@ -326,8 +326,8 @@ def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
         pod_active_deadline=timedelta(hours=1),
         image=image_tag,
         dataset_id=template.DATASET_ID,
-        cpu="6",  # fit on 8 vCPU node
-        memory="14G",  # fit on 16GB node
+        cpu="14",  # fit on 16 vCPU node
+        memory="30G",  # fit on 32GB node
         shared_memory="12G",
         ephemeral_storage="30G",
     )
