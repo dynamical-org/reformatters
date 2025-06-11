@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import timedelta
 from typing import Protocol
 
@@ -125,19 +125,36 @@ def check_analysis_current_data(ds: xr.Dataset) -> ValidationResult:
     )
 
 
-def check_analysis_recent_nans(
-    ds: xr.Dataset, max_nan_percentage: float = 5
-) -> ValidationResult:
-    """Check for NaN values in the most recent day of data. Fails if more than max_nan_percentage of sampled data is NaN."""
-
+def default_sample_ds_fn(ds: xr.Dataset) -> xr.Dataset:
+    """Sample a random location from the dataset."""
     now = pd.Timestamp.now()
-
     lon, lat = np.random.uniform(-180, 179), np.random.uniform(-90, 89)
-    sample_ds = ds.sel(
+    return ds.sel(
         time=slice(now - timedelta(hours=12), None),
         latitude=slice(lat, lat - 2),
         longitude=slice(lon, lon + 2),
     )
+
+
+def check_analysis_recent_nans(
+    ds: xr.Dataset,
+    max_nan_percentage: float = 5,
+    sample_ds_fn: Callable[[xr.Dataset], xr.Dataset] = default_sample_ds_fn,
+) -> ValidationResult:
+    """Check for NaN values in the most recent day of data. Fails if more than max_nan_percentage of sampled data is NaN.
+
+    Parameters
+    ----------
+    ds: xr.Dataset
+        The dataset to check.
+    max_nan_percentage: float
+        The maximum percentage of NaN values allowed in the sampled data. Default is 5%.
+    sample_ds_fn: Callable[[xr.Dataset], xr.Dataset]
+        A function that takes a dataset and returns a sample dataset to use for validation.
+        Default is a dataset within the last 12 hours at a random point in the dataset.
+    """
+
+    sample_ds = sample_ds_fn(ds)
 
     problem_vars = []
     for var_name, da in sample_ds.data_vars.items():
