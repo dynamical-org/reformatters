@@ -29,8 +29,7 @@ def fsspec_apply(
     """
     for attempt in range(max_attempts):
         try:
-            if hasattr(fs, f"_{method}"):
-                # Zarr's FsspecStore creates async fsspec filesystems, so use their sync method
+            if fs.async_impl:
                 return zarr.core.sync.sync(
                     getattr(fs, f"_{method}")(*args, **kwargs), timeout=120
                 )
