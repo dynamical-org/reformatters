@@ -29,8 +29,8 @@ from reformatters.common.zarr import (
 
 class ExampleInternalAttrs(BaseInternalAttrs):
     """
-    Variable specific attributes used internally to drive processing,
-    not written to the dataset.
+    Variable specific attributes used internally to drive processing.
+    Not written to the dataset.
     """
 
     # grib_element: str
@@ -91,9 +91,12 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         self, ds: xr.Dataset
     ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
         """
-        Return a dictionary of non-derived coordinates for the dataset.
+        Return a dictionary of non-dimension coordinates for the dataset.
         Called whenever len(ds.append_dim) changes.
         """
+        # Non-dimension coordinates are additional labels for data along
+        # one or more dimensions. Use them to make it easier to use and
+        # understand your dataset.
         # return {
         #     "valid_time": ds["init_time"] + ds["lead_time"],
         #     "ingested_forecast_length": (
