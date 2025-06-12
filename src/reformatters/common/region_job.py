@@ -111,7 +111,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     reformat_job_name: str
 
     # Limit the number of variables processed in each backfill job if set.
+    # Rule of thumb: leave unset unless a job takes > 15 minutes.
     max_vars_per_backfill_job: ClassVar[int | None] = None
+
     # Limit the number of variables processed in each download group if set.
     # If value is less than len(data_vars), downloading, reading/recompressing, and writing steps
     # will be pipelined within a region job.
