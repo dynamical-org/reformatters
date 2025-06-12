@@ -32,7 +32,11 @@ class SWANNSourceFileCoord(SourceFileCoord):
     # most stable available version of the data for a single day. Mechanically, we optimistically
     # start with the most stable version first and rely on the `.get_url()` caller to call
     # `advance_data_status()` if a file is not found at the previously returned url.
-    possible_data_statuses: ClassVar[tuple[str, ...]] = ("stable", "provisional")
+    possible_data_statuses: ClassVar[tuple[str, ...]] = (
+        "stable",
+        "provisional",
+        "early",
+    )
 
     remaining_data_statuses: list[str] = Field(
         default_factory=lambda: list(SWANNSourceFileCoord.possible_data_statuses)
