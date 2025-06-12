@@ -56,12 +56,19 @@ def test_source_file_coord_data_status() -> None:
         == "https://climate.arizona.edu/data/UA_SWE/DailyData_4km/WY2024/UA_SWE_Depth_4km_v1_20231001_provisional.nc"
     )
 
+    assert coord.advance_data_status() is True
+    assert coord.get_data_status() == "early"
+    assert (
+        coord.get_url()
+        == "https://climate.arizona.edu/data/UA_SWE/DailyData_4km/WY2024/UA_SWE_Depth_4km_v1_20231001_early.nc"
+    )
+
     # Test final status advancement
     assert coord.advance_data_status() is False
     # Should still return the last attempted status URL
     assert (
         coord.get_url()
-        == "https://climate.arizona.edu/data/UA_SWE/DailyData_4km/WY2024/UA_SWE_Depth_4km_v1_20231001_provisional.nc"
+        == "https://climate.arizona.edu/data/UA_SWE/DailyData_4km/WY2024/UA_SWE_Depth_4km_v1_20231001_early.nc"
     )
 
 

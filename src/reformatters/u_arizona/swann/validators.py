@@ -34,7 +34,7 @@ def check_latest_time_nans(ds: xr.Dataset) -> validation.ValidationResult:
     for the latest time step.
     """
     sample_ds = ds.isel(time=-1)
-    return _check_nans_in_ds("nans_at_latest_time", sample_ds)
+    return _check_nans_in_ds("check_latest_time_nans", sample_ds)
 
 
 def check_random_time_within_last_year_nans(
@@ -47,7 +47,7 @@ def check_random_time_within_last_year_nans(
     """
     random_time_index = np.random.choice(365)
     sample_ds = ds.isel(time=slice(random_time_index, random_time_index + 1))
-    return _check_nans_in_ds("nans_at_random_time_within_last_year", sample_ds)
+    return _check_nans_in_ds("check_random_time_within_last_year_nans", sample_ds)
 
 
 def _check_nans_in_ds(
