@@ -6,7 +6,6 @@ import pytest
 import xarray as xr
 from pytest import MonkeyPatch
 
-from reformatters.common import zarr
 from reformatters.noaa.gfs.forecast import (
     cli,
     reformat,
@@ -37,8 +36,7 @@ def test_update_template(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     )
 
 
-def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(zarr, "_LOCAL_ZARR_STORE_BASE_PATH", tmp_path)
+def test_reformat_local() -> None:
     init_time_start = GFS_FORECAST_TEMPLATE_CONFIG.append_dim_start
     init_time_end = init_time_start + timedelta(days=1)
 

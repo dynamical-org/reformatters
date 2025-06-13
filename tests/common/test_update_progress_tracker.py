@@ -2,20 +2,14 @@ import json
 from pathlib import Path
 
 import zarr
-from pytest import MonkeyPatch
 
-from reformatters.common import zarr as common_zarr_module
 from reformatters.common.update_progress_tracker import UpdateProgressTracker
 from reformatters.common.zarr import get_zarr_store
 
 
-def test_update_progress_tracker_close_with_local_store(
-    monkeypatch: MonkeyPatch,
-    tmp_path: Path,
-) -> None:
+def test_update_progress_tracker_close_with_local_store(tmp_path: Path) -> None:
     """Test UpdateProgressTracker loads existing progress with LocalStore (sync filesystem)"""
-    monkeypatch.setattr(common_zarr_module, "_LOCAL_ZARR_STORE_BASE_PATH", tmp_path)
-    store = get_zarr_store("test", "dev")
+    store = get_zarr_store("test", "test-version")
     assert not store.fs.async_impl
 
     # Create an existing progress file
@@ -34,13 +28,9 @@ def test_update_progress_tracker_close_with_local_store(
     assert not progress_file.exists()
 
 
-def test_update_progress_tracker_close_with_async_store(
-    monkeypatch: MonkeyPatch,
-    tmp_path: Path,
-) -> None:
+def test_update_progress_tracker_close_with_async_store(tmp_path: Path) -> None:
     """Test UpdateProgressTracker loads existing progress with FsspecStore (async filesystem)"""
-    monkeypatch.setattr(common_zarr_module, "_LOCAL_ZARR_STORE_BASE_PATH", tmp_path)
-    store = get_zarr_store("test", "dev")
+    store = get_zarr_store("test", "test-version")
     store = zarr.storage.FsspecStore.from_url(store.path)
     assert store.fs.async_impl
 
