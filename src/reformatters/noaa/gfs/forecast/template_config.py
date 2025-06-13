@@ -6,7 +6,6 @@ import pandas as pd
 import xarray as xr
 from pydantic import computed_field
 
-from reformatters.common.config import Config
 from reformatters.common.config_models import (
     Coordinate,
     CoordinateAttrs,
@@ -19,7 +18,7 @@ from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
     TemplateConfig,
 )
-from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
@@ -27,7 +26,7 @@ from reformatters.common.zarr import (
 from reformatters.noaa.noaa_config_models import NoaaDataVar, NoaaInternalAttrs
 
 
-class GFSForecastTemplateConfig(TemplateConfig[NoaaDataVar]):
+class NoaaGfsForecastTemplateConfig(TemplateConfig[NoaaDataVar]):
     dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = pd.Timestamp("2021-05-01T00:00")
@@ -647,40 +646,37 @@ class GFSForecastTemplateConfig(TemplateConfig[NoaaDataVar]):
             ),
         ]
 
-    def get_template(self, end_time: DatetimeLike) -> xr.Dataset:
-        ds = super().get_template(end_time)
+    # def get_template(self, end_time: DatetimeLike) -> xr.Dataset:
+    #     ds = super().get_template(end_time)
 
-        if not Config.is_prod:
-            # Include a variable with:
-            # - avg step_type
-            # - instant step_type
-            # - max step_type
-            # - min step_type
-            # - () in the grib_index_level
-            ds = ds[
-                [
-                    "precipitation_surface",
-                    "temperature_2m",
-                    "maximum_temperature_2m",
-                    "minimum_temperature_2m",
-                    "precipitable_water_atmosphere",
-                ]
-            ].sel(
-                lead_time=[
-                    "0h",
-                    "1h",
-                    "2h",
-                    "6h",
-                    "7h",
-                    "12h",
-                    "120h",
-                    "123h",
-                    "126h",
-                    "129h",
-                ]
-            )
+    #     if not Config.is_prod:
+    #         # Include a variable with:
+    #         # - avg step_type
+    #         # - instant step_type
+    #         # - max step_type
+    #         # - min step_type
+    #         # - () in the grib_index_level
+    #         ds = ds[
+    #             [
+    #                 "precipitation_surface",
+    #                 "temperature_2m",
+    #                 "maximum_temperature_2m",
+    #                 "minimum_temperature_2m",
+    #                 "precipitable_water_atmosphere",
+    #             ]
+    #         ].sel(
+    #             lead_time=[
+    #                 "0h",
+    #                 "1h",
+    #                 "2h",
+    #                 "6h",
+    #                 "7h",
+    #                 "12h",
+    #                 "120h",
+    #                 "123h",
+    #                 "126h",
+    #                 "129h",
+    #             ]
+    #         )
 
-        return ds
-
-
-GFS_FORECAST_TEMPLATE_CONFIG = GFSForecastTemplateConfig()
+    #     return ds
