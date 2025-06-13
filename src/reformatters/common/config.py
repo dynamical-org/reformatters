@@ -7,6 +7,7 @@ import pydantic
 class Env(str, Enum):
     dev = "dev"
     prod = "prod"
+    test = "test"
 
 
 class SourceCoopConfig(pydantic.BaseModel):
@@ -43,6 +44,10 @@ class DynamicalConfig(pydantic.BaseModel):
                     "aws_access_key_id and aws_secret_access_key are required in prod environment"
                 )
         return self
+
+    @property
+    def is_test(self) -> bool:
+        return self.env == Env.test
 
     @property
     def is_dev(self) -> bool:
