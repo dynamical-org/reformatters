@@ -27,9 +27,9 @@ From a terminal in the root of this repository, run these commands to copy a tem
 DATASET_ID="<provider>-<model>-<variant>"
 DATASET_PATH="<provider>/<model>/<variant>"
 mkdir -p src/reformatters/$DATASET_PATH
-cp -r src/reformatters/example/ src/reformatters/$DATASET_PATH
+cp -r src/reformatters/example/* src/reformatters/$DATASET_PATH
 mkdir -p tests/$DATASET_PATH
-cp -r tests/example tests/$DATASET_PATH
+cp -r tests/example/* tests/$DATASET_PATH
 ```
 
 #### Rename
