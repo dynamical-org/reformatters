@@ -13,7 +13,7 @@ There are three core base classes to subclass.
 * **Provider** - the agency or organization that publishes the source data. e.g. ECMWF
 * **Model** - the model or system that produced the data. e.g. GFS
 * **Variant** - the specific subset and structure of data from the model. e.g. forecast, analysis, climatology. Variant may include any other information needed to distinquish datasets from the same model.
-* **Dataset** - a specific provider-model-variant. e.g. `noaa-gfs-forecast`
+* **Dataset** - a specific provider-model-variant. e.g. noaa-gfs-forecast
 
 
 
@@ -60,14 +60,14 @@ DYNAMICAL_DATASETS = [
 
 ### 3. Implement `TemplateConfig` subclass
 
-Work through `src/reforamtters/$DATASET_PATH/template_config.py`, setting the attributes and method definitions to describe the structure of your dataset.
+Work through `src/reformatters/$DATASET_PATH/template_config.py`, setting the attributes and method definitions to describe the structure of your dataset.
 
 Hint: providing an AI/LLM with 1) the example template config code to edit, 2) output of running `gdal-info <example source data file>` and 3) any dataset documentation will help it give you a decent first implementation of your `TemplateConfig` subclass.
 
-Using the information in the TemplateConfig, `reformatters` writes the Zarr metadata for your dataset to `src/reforamtters/$DATASET_PATH/templates/latest.zarr`.  Run this command in your terminal to create or update the template based on the your `TemplateConfig` subclass:
+Using the information in the TemplateConfig, `reformatters` writes the Zarr metadata for your dataset to `src/reformatters/$DATASET_PATH/templates/latest.zarr`.  Run this command in your terminal to create or update the template based on the your `TemplateConfig` subclass:
 ```bash
 uv run main $DATASET_ID update-template
-git add src/reforamtters/$DATASET_PATH/templates/latest.zarr
+git add src/reformatters/$DATASET_PATH/templates/latest.zarr
 ```
 Tracking the template in git lets us review diffs of any changes to the structure of our dataset.
 
@@ -78,7 +78,7 @@ uv run pytest tests/$DATASET_PATH/template_config_test.py
 
 ### 4. Implement `RegionJob` subclass
 
-Work through `src/reforamtters/$DATASET_PATH/region_job.py`, implementing the attributes and method definitions based on the unique structure and processing required for your dataset.
+Work through `src/reformatters/$DATASET_PATH/region_job.py`, implementing the attributes and method definitions based on the unique structure and processing required for your dataset.
 
 There are four required methods:
 * `generate_source_file_coords` lists all the files of source data that will be processed to complete the `RegionJob`.
@@ -95,9 +95,9 @@ uv run pytest tests/$DATASET_PATH/region_job_test.py
 
 You've reached the point where you can run the reformatter locally!
 ```bash
-uv run main $DATASET_ID reformat-local <append-dim-end> --filter-data-var <data var name>
+uv run main $DATASET_ID reformat-local <append_dim_end> --filter-variable-names <data var name>
 ```
-Reformatting locally can be slow. Choosing an `<append-dim-end>` not long after your template's `append_dim_start` and selecting a single variable to process with `--filter-data-var` can limit the amount of work.
+Reformatting locally can be slow. Choosing an `<append_dim_end>` not long after your template's `append_dim_start` and selecting a single variable to process with `--filter-variable-names` can limit the amount of work.
 
 
 ### 5. Implement `DynamicalDataset` subclass
