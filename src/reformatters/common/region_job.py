@@ -111,7 +111,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     reformat_job_name: str
 
     # Limit the number of variables processed in each backfill job if set.
+    # Rule of thumb: leave unset unless a job takes > 15 minutes.
     max_vars_per_backfill_job: ClassVar[int | None] = None
+
     # Limit the number of variables processed in each download group if set.
     # If value is less than len(data_vars), downloading, reading/recompressing, and writing steps
     # will be pipelined within a region job.
@@ -216,7 +218,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         self, process_results: Mapping[str, Sequence[SOURCE_FILE_COORD]]
     ) -> xr.Dataset:
         """
-        Update template dataset based on processing results.
+        Update template dataset based on processing results. This method is called
+        during operational updates.
 
         Subclasses should implement this method to apply dataset-specific adjustments
         based on the processing results. Examples include:
@@ -276,7 +279,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         will trim the dataset to the actual data processed.
 
         The exact logic is dataset-specific, but it generally follows this pattern:
-        1. Figure range of time to process: append_dim_start (inclusive) and append_dim_end (exclusive)
+        1. Figure out the range of time to process: append_dim_start (inclusive) and append_dim_end (exclusive)
             a. Read existing data from final_store to determine what's already processed
             b. Optionally identify recent incomplete/non-final data for reprocessing
         2. Call get_template_fn(append_dim_end) to get the template_ds
