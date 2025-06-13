@@ -14,7 +14,7 @@ import xarray as xr
 from reformatters.common.config import Config
 from reformatters.common.download import download_to_disk, http_store
 from reformatters.common.types import Array2D
-from reformatters.noaa.noaa_config_models import NOAADataVar
+from reformatters.noaa.noaa_config_models import NoaaDataVar
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
 DOWNLOAD_DIR = Path("data/download/")
@@ -36,7 +36,7 @@ class SourceFileCoords(TypedDict):
 
 def download_file(
     coords: SourceFileCoords,
-    gfs_idx_data_vars: Iterable[NOAADataVar],
+    gfs_idx_data_vars: Iterable[NoaaDataVar],
 ) -> tuple[SourceFileCoords, Path | None]:
     init_time = coords["init_time"]
     lead_time = coords["lead_time"]
@@ -111,7 +111,7 @@ def digest(data: str | Iterable[str], length: int = 8) -> str:
 
 def parse_index_byte_ranges(
     idx_local_path: Path,
-    gfs_idx_data_vars: Iterable[NOAADataVar],
+    gfs_idx_data_vars: Iterable[NoaaDataVar],
     lead_time_hours: int,
 ) -> tuple[list[int], list[int]]:
     with open(idx_local_path) as index_file:
@@ -171,7 +171,7 @@ def read_into(
     out: xr.DataArray,
     coords: SourceFileCoords,
     path: os.PathLike[str] | None,
-    data_var: NOAADataVar,
+    data_var: NoaaDataVar,
 ) -> None:
     if path is None:
         return  # in rare case file is missing there's nothing to do

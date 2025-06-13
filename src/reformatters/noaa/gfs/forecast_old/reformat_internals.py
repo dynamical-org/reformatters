@@ -21,14 +21,14 @@ from reformatters.common.reformat_utils import (
     create_shared_buffer,
     write_shards,
 )
-from reformatters.noaa.gfs.forecast.template_config import GFS_FORECAST_TEMPLATE_CONFIG
+from reformatters.noaa.gfs.forecast.template_config import NoaaGfsForecastTemplateConfig
 from reformatters.noaa.gfs.read_data import (
     GFS_ACCUMULATION_RESET_FREQUENCY,
     SourceFileCoords,
     download_file,
     read_into,
 )
-from reformatters.noaa.noaa_config_models import NOAADataVar
+from reformatters.noaa.noaa_config_models import NoaaDataVar
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
 logger = get_logger(__name__)
@@ -36,13 +36,15 @@ logger = get_logger(__name__)
 type CoordAndPath = tuple[SourceFileCoords, Path | None]
 type CoordsAndPaths = list[CoordAndPath]
 
+GFS_FORECAST_TEMPLATE_CONFIG = NoaaGfsForecastTemplateConfig()
+
 
 def reformat_time_i_slices(
     jobs: Sequence[tuple[slice, list[str]]],
     template_ds: xr.Dataset,
     store: zarr.storage.FsspecStore | Path,
     var_download_group_size: int,
-) -> Generator[tuple[NOAADataVar, dict[pd.Timestamp, pd.Timedelta]], None, None]:
+) -> Generator[tuple[NoaaDataVar, dict[pd.Timestamp, pd.Timedelta]], None, None]:
     # The only effective way we've found to fully utilize cpu resources
     # while writing to zarr is to parallelize across processes (not threads).
     # Use shared memory to avoid pickling large arrays to share between processes.
@@ -146,7 +148,7 @@ def get_max_lead_times(
 
 
 def filter_coords_and_paths(
-    data_var: NOAADataVar, coords_and_paths: CoordsAndPaths
+    data_var: NoaaDataVar, coords_and_paths: CoordsAndPaths
 ) -> CoordsAndPaths:
     # Skip reading the 0-hour for accumulated or last N hours avg values
     if not has_hour_0_values(data_var):
@@ -161,7 +163,7 @@ def filter_coords_and_paths(
 
 def read_into_data_array(
     out: xr.DataArray,
-    data_var: NOAADataVar,
+    data_var: NoaaDataVar,
     var_coords_and_paths: CoordsAndPaths,
     cpu_executor: ThreadPoolExecutor,
 ) -> None:
@@ -215,7 +217,7 @@ def generate_chunk_coordinates(
 
 
 def download_var_group_files(
-    idx_data_vars: Iterable[NOAADataVar],
+    idx_data_vars: Iterable[NoaaDataVar],
     chunk_coords: Iterable[SourceFileCoords],
     io_executor: ThreadPoolExecutor,
 ) -> list[tuple[SourceFileCoords, Path | None]]:
@@ -242,7 +244,7 @@ def download_var_group_files(
 
 type DownloadVarGroupFutures = dict[
     Future[list[tuple[SourceFileCoords, Path | None]]],
-    tuple[NOAADataVar, ...],
+    tuple[NoaaDataVar, ...],
 ]
 
 
