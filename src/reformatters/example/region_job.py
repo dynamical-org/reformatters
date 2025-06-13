@@ -47,13 +47,13 @@ class ExampleSourceFileCoord(SourceFileCoord):
 
 
 class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
-    # Optionally, limit the number of variables processed in each download group.
-    # If value is less than len(data_vars) then downloading, reading/recompressing,
+    # Optionally, limit the number of variables downloaded together.
+    # If set to a value less than len(data_vars), downloading, reading/recompressing,
     # and uploading steps will be pipelined within a region job.
     # 5 is a reasonable default if it is possible to download less than all
     # variables in a single file (e.g. you have a grib index).
     # Leave unset if you have to download a whole file to get one variable out
-    # and therefore should avoid re-downloading the same file multiple times.
+    # to avoid re-downloading the same file multiple times.
     #
     # max_vars_per_download_group: ClassVar[int | None] = None
 
@@ -72,8 +72,9 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
     #         grouped[data_var.internal_attrs.file_type].append(data_var)
     #     return list(grouped.values())
 
-    # Implement this method only if specific post processing in this dataset requires data
-    # from outside the region defined by self.region, e.g. for deaccumulation or interpolation.
+    # Implement this method only if specific post processing in this dataset
+    # requires data from outside the region defined by self.region,
+    # e.g. for deaccumulation or interpolation along append_dim in an analysis dataset.
     #
     # def get_processing_region(self) -> slice:
     #     """
@@ -160,7 +161,8 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
         self, process_results: Mapping[str, Sequence[ExampleSourceFileCoord]]
     ) -> xr.Dataset:
         """
-        Update template dataset based on processing results.
+        Update template dataset based on processing results. This method is called
+        during operational updates.
 
         Subclasses should implement this method to apply dataset-specific adjustments
         based on the processing results. Examples include:
@@ -168,7 +170,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
         - Loading existing coordinate values from final_store and updating them based on results
         - Updating metadata based on what was actually processed vs what was planned
 
-        The default implementation here trims along append_dim to end at the most recent
+        The default implementation trims along append_dim to end at the most recent
         successfully processed coordinate (timestamp).
 
         Parameters
@@ -231,7 +233,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
         will trim the dataset to the actual data processed.
 
         The exact logic is dataset-specific, but it generally follows this pattern:
-        1. Figure out range of time to process: append_dim_start (inclusive) and append_dim_end (exclusive)
+        1. Figure out the range of time to process: append_dim_start (inclusive) and append_dim_end (exclusive)
             a. Read existing data from final_store to determine what's already processed
             b. Optionally identify recent incomplete/non-final data for reprocessing
         2. Call get_template_fn(append_dim_end) to get the template_ds

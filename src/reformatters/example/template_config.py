@@ -33,11 +33,8 @@ class ExampleInternalAttrs(BaseInternalAttrs):
     Not written to the dataset.
     """
 
+    # For example,
     # grib_element: str
-    # grib_comment: str
-    # grib_index_level: str
-    # index_position: int
-    # include_lead_time_suffix: bool = False
     # deaccumulate_to_rates: bool = False
 
 
@@ -260,7 +257,7 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         """Define metadata and encoding for each data variable."""
         # # Data variable chunking and sharding
         # #
-        # # Aim for
+        # # Aim for one of these roughly equivalent quantities:
         # # 1-2mb chunks compressed
         # # 4-8mb uncompressed
         # # 4-8 million float32 values
@@ -270,7 +267,7 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #     "latitude": 121,
         #     "longitude": 121,
         # }
-        # # Aim for
+        # # Aim for one of these roughly equivalent quantities:
         # # 64-256MB shards compressed
         # # 256-1024MB uncompressed
         # # 256 million to 1 billion float32 values
