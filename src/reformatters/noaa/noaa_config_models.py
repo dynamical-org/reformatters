@@ -1,7 +1,7 @@
 from reformatters.common.config_models import BaseInternalAttrs, DataVar
 
 
-class NOAAInternalAttrs(BaseInternalAttrs):
+class NoaaInternalAttrs(BaseInternalAttrs):
     grib_element: str
     grib_description: str
     grib_index_level: str
@@ -10,5 +10,5 @@ class NOAAInternalAttrs(BaseInternalAttrs):
     deaccumulate_to_rates: bool = False
 
 
-class NOAADataVar(DataVar[NOAAInternalAttrs]):
+class NoaaDataVar(DataVar[NoaaInternalAttrs]):
     pass

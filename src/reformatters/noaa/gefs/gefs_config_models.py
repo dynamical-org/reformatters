@@ -3,7 +3,7 @@ from typing import Literal
 import pandas as pd
 
 from reformatters.common.config_models import DataVar
-from reformatters.noaa.noaa_config_models import NOAAInternalAttrs
+from reformatters.noaa.noaa_config_models import NoaaInternalAttrs
 
 # We pull data from 3 types of source files: `a`, `b` and `s`.
 # Selected variables are available in `s` at higher resolution (0.25 vs 0.5 deg)
@@ -14,7 +14,7 @@ GEFS_S_FILE_MAX = pd.Timedelta(hours=240)
 GEFS_B22_TRANSITION_DATE = pd.Timestamp("2022-10-18T12:00")
 
 
-class GEFSInternalAttrs(NOAAInternalAttrs):
+class GEFSInternalAttrs(NoaaInternalAttrs):
     gefs_file_type: GEFSFileType
 
 
