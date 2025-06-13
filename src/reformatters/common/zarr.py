@@ -35,7 +35,7 @@ BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE = zarr.codecs.BloscCodec(
 
 def get_zarr_store(dataset_id: str, version: str) -> zarr.storage.FsspecStore:
     if not Config.is_prod:
-        version = "dev"
+        version = "dev" if Config.is_dev else version
 
         # This should work, but it gives FileNotFoundError when it should be creating a new zarr.
         # return zarr.storage.FsspecStore.from_url(
