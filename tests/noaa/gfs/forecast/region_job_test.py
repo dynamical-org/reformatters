@@ -10,7 +10,9 @@ from reformatters.noaa.gfs.forecast.template_config import NoaaGfsForecastTempla
 
 
 def test_source_file_coord_get_url() -> None:
-    coord = NoaaGfsSourceFileCoord(init_time=pd.Timestamp("2000-01-01T00:00"), lead_time=pd.Timedelta(hours=0))
+    coord = NoaaGfsSourceFileCoord(
+        init_time=pd.Timestamp("2000-01-01T00:00"), lead_time=pd.Timedelta(hours=0)
+    )
     expected = "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20000101/00/atmos/gfs.t00z.pgrb2.0p25.f000"
     assert coord.get_url() == expected
 
