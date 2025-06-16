@@ -21,7 +21,7 @@ def test_region_job_generete_source_file_coords() -> None:
     template_config = NoaaGfsForecastTemplateConfig()
     template_ds = template_config.get_template(pd.Timestamp("2000-01-23"))
 
-    region_job = NoaaGfsForecastRegionJob(
+    region_job = NoaaGfsForecastRegionJob.model_construct(
         final_store=Mock(),
         tmp_store=Mock(),
         template_ds=template_ds,
