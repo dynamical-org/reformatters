@@ -30,24 +30,12 @@ class NoaaGfsSourceFileCoord(SourceFileCoord):
     lead_time: Timedelta
 
     def get_url(self) -> str:
-        raise NotImplementedError("Return the URL of the source file.")
+        init_date_str = self.init_time.strftime("%Y%m%d")
+        init_hour_str = self.init_time.strftime("%H")
+        lead_hours = int(self.lead_time.total_seconds() / 3600)
+        base_path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_hours:03d}"
+        return f"https://noaa-gfs-bdp-pds.s3.amazonaws.com/{base_path}"
 
-    def out_loc(
-        self,
-    ) -> Mapping[Dim, CoordinateValueOrRange]:
-        """
-        Returns a data array indexer which identifies the region in the output dataset
-        to write the data from the source file. The indexer is a dict from dimension
-        names to coordinate values or slices.
-        """
-        # If the names of the coordinate attributes of your SourceFileCoord subclass are also all
-        # dimension names in the output dataset (e.g. init_time and lead_time),
-        # delete this implementation and use the default implementation of this method.
-        #
-        # Examples where you would override this method:
-        # - An analysis dataset created from forecast data:
-        #   return {"time": self.init_time + self.lead_time}
-        return super().out_loc()
 
 
 class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
