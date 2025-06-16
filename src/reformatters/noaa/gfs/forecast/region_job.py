@@ -1,3 +1,4 @@
+import re
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from itertools import product
@@ -7,6 +8,7 @@ import pandas as pd
 import xarray as xr
 import zarr
 
+from reformatters.common.download import http_download_to_disk
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     RegionJob,
@@ -19,10 +21,6 @@ from reformatters.common.types import (
 from reformatters.noaa.gfs.models import NoaaGfsSourceFileCoord
 from reformatters.noaa.models import NoaaDataVar
 from reformatters.noaa.noaa_utils import has_hour_0_values
-
-import re
-from reformatters.common.download import http_download_to_disk
-from reformatters.common.config import Config
 
 # Accumulations reset every 6 hours
 GFS_ACCUMULATION_RESET_HOURS = 6
@@ -97,7 +95,11 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
                 hours_str_prefix = str(lead_hours)
             else:
                 diff = lead_hours % GFS_ACCUMULATION_RESET_HOURS
-                reset_hour = lead_hours - diff if diff != 0 else lead_hours - GFS_ACCUMULATION_RESET_HOURS
+                reset_hour = (
+                    lead_hours - diff
+                    if diff != 0
+                    else lead_hours - GFS_ACCUMULATION_RESET_HOURS
+                )
                 hours_str_prefix = f"{reset_hour}-{lead_hours}"
             var_match_str = re.escape(
                 f"{var.internal_attrs.grib_element}:{var.internal_attrs.grib_index_level}:{hours_str_prefix}"
