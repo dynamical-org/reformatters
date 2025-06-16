@@ -10,7 +10,7 @@ import pandas as pd
 import xarray as xr
 import zarr
 
-from reformatters.common.download import DOWNLOAD_DIR, download_to_disk, http_store
+from reformatters.common.download import DOWNLOAD_DIR, download_to_disk, http_store, http_download_to_disk
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     RegionJob,
@@ -124,19 +124,12 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
             ends.append(end)
 
         data_url = coord.get_url()
-        parsed_url = urlparse(data_url)
-        store = http_store(f"{parsed_url.scheme}://{parsed_url.netloc}")
-        filename = Path(parsed_url.path).name
-        suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=False))
-        filename_with_suffix = f"{filename}-{suffix}"
-        local_path = DOWNLOAD_DIR / self.dataset_id / parsed_url.path.removeprefix("/")
-        local_path = local_path.with_name(filename_with_suffix)
-        download_to_disk(
-            store,
-            parsed_url.path,
-            local_path,
-            overwrite_existing=True,
+        suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends))
+        local_path = http_download_to_disk(
+            data_url,
+            self.dataset_id,
             byte_ranges=(starts, ends),
+            local_path_suffix=f"-{suffix}",
         )
         return local_path
 
