@@ -4,13 +4,14 @@ from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from itertools import product
 from pathlib import Path
-from urllib.parse import urlparse
 
 import pandas as pd
 import xarray as xr
 import zarr
 
-from reformatters.common.download import DOWNLOAD_DIR, download_to_disk, http_store, http_download_to_disk
+from reformatters.common.download import (
+    http_download_to_disk,
+)
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     RegionJob,
@@ -124,7 +125,7 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
             ends.append(end)
 
         data_url = coord.get_url()
-        suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends))
+        suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=False))
         local_path = http_download_to_disk(
             data_url,
             self.dataset_id,
