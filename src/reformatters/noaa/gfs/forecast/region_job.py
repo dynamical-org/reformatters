@@ -37,6 +37,18 @@ def digest(data: Iterable[str], length: int = 8) -> str:
     return message.hexdigest()[:length]
 
 
+log = get_logger(__name__)
+
+
+class NoaaGfsForecastSourceFileCoord(NoaaGfsSourceFileCoord):
+    # We share the name attributes (init_time, lead_time) with
+    # NoaaGfsSourceFileCoord, and the same.
+    # The default out_loc implementation of
+    # {"init_time": self.init_time, "lead_time": self.lead_time}
+    # is correct for this dataset.
+    pass
+
+
 def parse_grib_index_byte_ranges(
     index_contents: str, coord: NoaaGfsForecastSourceFileCoord
 ) -> tuple[list[int], list[int]]:
@@ -76,18 +88,6 @@ def parse_grib_index_byte_ranges(
         ends.append(end)
 
     return starts, ends
-
-
-log = get_logger(__name__)
-
-
-class NoaaGfsForecastSourceFileCoord(NoaaGfsSourceFileCoord):
-    # We share the name attributes (init_time, lead_time) with
-    # NoaaGfsSourceFileCoord, and the same.
-    # The default out_loc implementation of
-    # {"init_time": self.init_time, "lead_time": self.lead_time}
-    # is correct for this dataset.
-    pass
 
 
 class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileCoord]):
