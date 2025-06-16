@@ -38,3 +38,4 @@ def test_region_job_generete_source_file_coords() -> None:
     )
 
     assert isinstance(source_file_coords, list)
+    breakpoint()
