@@ -90,6 +90,7 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
         index_contents = idx_local_path.read_text()
 
+        # Refactors grib index parsing into a function that takes the idx_local_path and returns the bytes ranges AI!
         lead_hours = int(coord.lead_time.total_seconds() / 3600)
 
         # Parse byte ranges from index
@@ -124,13 +125,13 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
             starts.append(start)
             ends.append(end)
 
-        data_url = coord.get_url()
-        suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=False))
+        vars_suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=False))
+
         local_path = http_download_to_disk(
-            data_url,
+            coord.get_url(),
             self.dataset_id,
             byte_ranges=(starts, ends),
-            local_path_suffix=f"-{suffix}",
+            local_path_suffix=f"-{vars_suffix}",
         )
         return local_path
 
