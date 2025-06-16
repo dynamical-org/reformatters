@@ -19,13 +19,14 @@ def test_source_file_coord_get_url() -> None:
 
 def test_region_job_generete_source_file_coords() -> None:
     template_config = NoaaGfsForecastTemplateConfig()
-    template_ds = template_config.get_template(pd.Timestamp("2000-01-23"))
+    template_ds = template_config.get_template(pd.Timestamp("2025-01-01"))
 
+    # use `model_construct` to skip pydantic validation so we can pass mock stores
     region_job = NoaaGfsForecastRegionJob.model_construct(
         final_store=Mock(),
         tmp_store=Mock(),
         template_ds=template_ds,
-        data_vars=[Mock(), Mock()],
+        data_vars=template_config.data_vars,
         append_dim=template_config.append_dim,
         region=slice(0, 10),
         reformat_job_name="test",
@@ -34,8 +35,19 @@ def test_region_job_generete_source_file_coords() -> None:
     processing_region_ds, output_region_ds = region_job._get_region_datasets()
 
     source_file_coords = region_job.generate_source_file_coords(
-        processing_region_ds, [Mock()]
+        processing_region_ds, region_job.data_vars
     )
 
     assert isinstance(source_file_coords, list)
-    breakpoint()
+    # 10 init_times * 209 lead_times
+    assert len(source_file_coords) == 10 * 209
+    assert len(source_file_coords) == (
+        region_job.region.stop - region_job.region.start
+    ) * len(template_config.dimension_coordinates()["lead_time"])
+
+    init_times = set(coord.init_time for coord in source_file_coords)
+    lead_times = set(coord.lead_time for coord in source_file_coords)
+    assert len(init_times) == 10
+    assert len(lead_times) == 209
+    assert processing_region_ds["init_time"].isin(init_times).all()
+    assert processing_region_ds["lead_time"].isin(lead_times).all()
