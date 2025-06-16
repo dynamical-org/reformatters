@@ -20,6 +20,13 @@ from reformatters.noaa.gfs.models import NoaaGfsSourceFileCoord
 from reformatters.noaa.models import NoaaDataVar
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
+import re
+from reformatters.common.download import http_download_to_disk
+from reformatters.common.config import Config
+
+# Accumulations reset every 6 hours
+GFS_ACCUMULATION_RESET_HOURS = 6
+
 log = get_logger(__name__)
 
 
@@ -65,12 +72,57 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
             )
         ]
 
-    def download_file(self, coord: NoaaGfsSourceFileCoord) -> Path:
+    def download_file(self, coord: NoaaGfsSourceFileCoord) -> Path | None:
         """Download the file for the given coordinate and return the local path."""
-        # return http_download_to_disk(coord.get_url(), self.dataset_id)
-        raise NotImplementedError(
-            "Download the file for the given coordinate and return the local path."
+        # Download index file first
+        idx_url = f"{coord.get_url()}.idx"
+        idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
+        index_contents = idx_local_path.read_text()
+
+        # Determine lead hours and filter variables
+        lead_hours = int(coord.lead_time.total_seconds() / 3600)
+        vars_to_download = (
+            [var for var in self.data_vars if has_hour_0_values(var)]
+            if lead_hours == 0
+            else list(self.data_vars)
         )
+
+        # Parse byte ranges from index
+        starts: list[int] = []
+        ends: list[int] = []
+        for var in vars_to_download:
+            if lead_hours == 0:
+                hours_str_prefix = ""
+            elif var.attrs.step_type == "instant":
+                hours_str_prefix = str(lead_hours)
+            else:
+                diff = lead_hours % GFS_ACCUMULATION_RESET_HOURS
+                reset_hour = lead_hours - diff if diff != 0 else lead_hours - GFS_ACCUMULATION_RESET_HOURS
+                hours_str_prefix = f"{reset_hour}-{lead_hours}"
+            var_match_str = re.escape(
+                f"{var.internal_attrs.grib_element}:{var.internal_attrs.grib_index_level}:{hours_str_prefix}"
+            )
+            matches = re.findall(
+                rf"\d+:(\d+):.+:{var_match_str}.+:(?:\n\d+:(\d+))?",
+                index_contents,
+            )
+            assert len(matches) == 1, (
+                f"Expected exactly 1 match, found {matches}, {var.name} {idx_url}"
+            )
+            m0, m1 = matches[0]
+            start = int(m0)
+            end = int(m1) if m1 else start + 10 * (2**30)
+            starts.append(start)
+            ends.append(end)
+
+        # Download only needed byte ranges
+        data_url = coord.get_url()
+        local_path = http_download_to_disk(
+            data_url,
+            self.dataset_id,
+            byte_ranges=(starts, ends),
+        )
+        return local_path
 
     def read_data(
         self,
