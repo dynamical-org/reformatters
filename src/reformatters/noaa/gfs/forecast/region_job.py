@@ -37,6 +37,7 @@ def digest(data: Iterable[str], length: int = 8) -> str:
     return message.hexdigest()[:length]
 
 
+# make this take a coord instead of data_vars and lead_hours AI!
 def parse_grib_index_byte_ranges(
     index_contents: str, data_vars: Sequence[NoaaDataVar], lead_hours: int
 ) -> tuple[list[int], list[int]]:
