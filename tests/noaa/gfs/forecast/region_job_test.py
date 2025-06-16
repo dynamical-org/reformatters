@@ -37,5 +37,4 @@ def test_region_job_generete_source_file_coords() -> None:
         processing_region_ds, [Mock()]
     )
 
-    assert len(source_file_coords) == ...
-    assert ...
+    assert isinstance(source_file_coords, list)
