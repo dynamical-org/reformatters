@@ -8,7 +8,9 @@ import pandas as pd
 import xarray as xr
 import zarr
 
-from reformatters.common.download import http_download_to_disk
+import hashlib
+from urllib.parse import urlparse
+from reformatters.common.download import http_store, download_to_disk, DOWNLOAD_DIR
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     RegionJob,
@@ -24,6 +26,13 @@ from reformatters.noaa.noaa_utils import has_hour_0_values
 
 # Accumulations reset every 6 hours
 GFS_ACCUMULATION_RESET_HOURS = 6
+
+def digest(data, length: int = 8) -> str:
+    """Consistent, likely collision-free string digest of one or more strings."""
+    message = hashlib.sha256()
+    for string in data:
+        message.update(string.encode())
+    return message.hexdigest()[:length]
 
 log = get_logger(__name__)
 
@@ -112,11 +121,19 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
             starts.append(start)
             ends.append(end)
 
-        # we need to disambiguate between the different data vars on disk based on the bytes ranges. Use the `digest` function on the bytes ranges to generate a unique file name AI!
         data_url = coord.get_url()
-        local_path = http_download_to_disk(
-            data_url,
-            self.dataset_id,
+        parsed_url = urlparse(data_url)
+        store = http_store(f"{parsed_url.scheme}://{parsed_url.netloc}")
+        filename = Path(parsed_url.path).name
+        suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends))
+        filename_with_suffix = f"{filename}-{suffix}"
+        local_path = DOWNLOAD_DIR / self.dataset_id / parsed_url.path.removeprefix("/")
+        local_path = local_path.with_name(filename_with_suffix)
+        download_to_disk(
+            store,
+            parsed_url.path,
+            local_path,
+            overwrite_existing=True,
             byte_ranges=(starts, ends),
         )
         return local_path
