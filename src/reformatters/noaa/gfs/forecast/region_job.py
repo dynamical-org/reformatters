@@ -1,3 +1,4 @@
+from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
@@ -7,77 +8,51 @@ import zarr
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     RegionJob,
-    SourceFileCoord,
 )
 from reformatters.common.types import (
     AppendDim,
     ArrayFloat32,
     DatetimeLike,
-    Timedelta,
-    Timestamp,
 )
-from reformatters.noaa.noaa_config_models import NoaaDataVar
+from reformatters.noaa.gfs.models import NoaaGfsSourceFileCoord
+from reformatters.noaa.models import NoaaDataVar
+from reformatters.noaa.noaa_utils import has_hour_0_values
 
 log = get_logger(__name__)
 
 
-class NoaaGfsSourceFileCoord(SourceFileCoord):
-    """Coordinates of a single source file to process."""
-
-    init_time: Timestamp
-    lead_time: Timedelta
-
-    def get_url(self) -> str:
-        init_date_str = self.init_time.strftime("%Y%m%d")
-        init_hour_str = self.init_time.strftime("%H")
-        lead_hours = int(self.lead_time.total_seconds() / 3600)
-        base_path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_hours:03d}"
-        return f"https://noaa-gfs-bdp-pds.s3.amazonaws.com/{base_path}"
+class NoaaGfsForecastSourceFileCoord(NoaaGfsSourceFileCoord):
+    # We share the name attributes (init_time, lead_time) with
+    # NoaaGfsSourceFileCoord, and the same.
+    # The default out_loc implementation of
+    # {"init_time": self.init_time, "lead_time": self.lead_time}
+    # is correct for this dataset.
+    pass
 
 
 class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
-    # Optionally, limit the number of variables downloaded together.
-    # If set to a value less than len(data_vars), downloading, reading/recompressing,
-    # and uploading steps will be pipelined within a region job.
-    # 5 is a reasonable default if it is possible to download less than all
-    # variables in a single file (e.g. you have a grib index).
-    # Leave unset if you have to download a whole file to get one variable out
-    # to avoid re-downloading the same file multiple times.
-    #
-    # max_vars_per_download_group: ClassVar[int | None] = None
+    @classmethod
+    def source_groups(
+        cls,
+        data_vars: Sequence[NoaaDataVar],
+    ) -> Sequence[Sequence[NoaaDataVar]]:
+        """
+        Return groups of variables, where all variables in a group can be retrieived from the same source file.
 
-    # Implement this method only if different variables must be retrieved from different urls
-    #
-    # # @classmethod
-    # def source_groups(
-    #     cls,
-    #     data_vars: Sequence[NoaaDataVar],
-    # ) -> Sequence[Sequence[NoaaDataVar]]:
-    #     """
-    #     Return groups of variables, where all variables in a group can be retrieived from the same source file.
-    #     """
-    #     grouped = defaultdict(list)
-    #     for data_var in data_vars:
-    #         grouped[data_var.internal_attrs.file_type].append(data_var)
-    #     return list(grouped.values())
-
-    # Implement this method only if specific post processing in this dataset
-    # requires data from outside the region defined by self.region,
-    # e.g. for deaccumulation or interpolation along append_dim in an analysis dataset.
-    #
-    # def get_processing_region(self) -> slice:
-    #     """
-    #     Return a slice of integer offsets into self.template_ds along self.append_dim that identifies
-    #     the region to process. In most cases this is exactly self.region, but if additional data outside
-    #     the region is required, for example for correct interpolation or deaccumulation, this method can
-    #     return a modified slice (e.g. `slice(self.region.start - 1, self.region.stop + 1)`).
-    #     """
-    #     return self.region
+        By separating variables that have hour 0 values from those that don't here,
+        generate_source_file coords can skip attempting to download hour 0 data,
+        reducing error log noise.
+        """
+        grouped = defaultdict(list)
+        for data_var in data_vars:
+            grouped[has_hour_0_values(data_var)].append(data_var)
+        return list(grouped.values())
 
     def generate_source_file_coords(
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[NoaaDataVar]
     ) -> Sequence[NoaaGfsSourceFileCoord]:
         """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
+        # implement this AI!
         # return [
         #     NoaaGfsSourceFileCoord(
         #         init_time=init_time,
