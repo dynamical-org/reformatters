@@ -37,15 +37,15 @@ def digest(data: Iterable[str], length: int = 8) -> str:
     return message.hexdigest()[:length]
 
 
-# make this take a coord instead of data_vars and lead_hours AI!
 def parse_grib_index_byte_ranges(
-    index_contents: str, data_vars: Sequence[NoaaDataVar], lead_hours: int
+    index_contents: str, coord: NoaaGfsForecastSourceFileCoord
 ) -> tuple[list[int], list[int]]:
-    """Parse byte ranges from GRIB index file for the given data variables."""
+    """Parse byte ranges from GRIB index file for the given coordinate."""
     starts: list[int] = []
     ends: list[int] = []
+    lead_hours = int(coord.lead_time.total_seconds() / 3600)
 
-    for var in data_vars:
+    for var in coord.data_vars:
         if lead_hours == 0:
             hours_str_prefix = ""
         elif var.attrs.step_type == "instant":
@@ -131,10 +131,7 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
         index_contents = idx_local_path.read_text()
 
-        lead_hours = int(coord.lead_time.total_seconds() / 3600)
-        starts, ends = parse_grib_index_byte_ranges(
-            index_contents, coord.data_vars, lead_hours
-        )
+        starts, ends = parse_grib_index_byte_ranges(index_contents, coord)
 
         vars_suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=False))
 
