@@ -4,6 +4,7 @@ from pathlib import Path
 
 import xarray as xr
 import zarr
+import pandas as pd
 
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
@@ -53,20 +54,16 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[NoaaDataVar]
     ) -> Sequence[NoaaGfsSourceFileCoord]:
         """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
-        # implement this AI!
-        # return [
-        #     NoaaGfsSourceFileCoord(
-        #         init_time=init_time,
-        #         lead_time=lead_time,
-        #     )
-        #     for init_time, lead_time in itertools.product(
-        #         processing_region_ds["init_time"].values,
-        #         processing_region_ds["lead_time"].values,
-        #     )
-        # ]
-        raise NotImplementedError(
-            "Return a sequence of SourceFileCoord objects, one for each source file required to process the data covered by processing_region_ds."
-        )
+        return [
+            NoaaGfsSourceFileCoord(
+                init_time=pd.Timestamp(init_time),
+                lead_time=pd.Timedelta(lead_time),
+            )
+            for init_time, lead_time in product(
+                processing_region_ds["init_time"].values,
+                processing_region_ds["lead_time"].values,
+            )
+        ]
 
     def download_file(self, coord: NoaaGfsSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
