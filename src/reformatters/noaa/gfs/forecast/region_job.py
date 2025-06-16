@@ -37,6 +37,46 @@ def digest(data: Iterable[str], length: int = 8) -> str:
     return message.hexdigest()[:length]
 
 
+def parse_grib_index_byte_ranges(
+    index_contents: str, data_vars: Sequence[NoaaDataVar], lead_hours: int
+) -> tuple[list[int], list[int]]:
+    """Parse byte ranges from GRIB index file for the given data variables."""
+    starts: list[int] = []
+    ends: list[int] = []
+    
+    for var in data_vars:
+        if lead_hours == 0:
+            hours_str_prefix = ""
+        elif var.attrs.step_type == "instant":
+            hours_str_prefix = str(lead_hours)
+        else:
+            diff = lead_hours % GFS_ACCUMULATION_RESET_HOURS
+            reset_hour = (
+                lead_hours - diff
+                if diff != 0
+                else lead_hours - GFS_ACCUMULATION_RESET_HOURS
+            )
+            hours_str_prefix = f"{reset_hour}-{lead_hours}"
+        
+        var_match_str = re.escape(
+            f"{var.internal_attrs.grib_element}:{var.internal_attrs.grib_index_level}:{hours_str_prefix}"
+        )
+        matches = re.findall(
+            rf"\d+:(\d+):.+:{var_match_str}.+:(?:\n\d+:(\d+))?",
+            index_contents,
+        )
+        assert len(matches) == 1, (
+            f"Expected exactly 1 match, found {matches}, {var.name}"
+        )
+        m0, m1 = matches[0]
+        start = int(m0)
+        end = int(m1) if m1 else start + 10 * (2**30)
+        starts.append(start)
+        ends.append(end)
+    
+    return starts, ends
+
+
 log = get_logger(__name__)
 
 
@@ -90,40 +130,10 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
         index_contents = idx_local_path.read_text()
 
-        # Refactors grib index parsing into a function that takes the idx_local_path and returns the bytes ranges AI!
         lead_hours = int(coord.lead_time.total_seconds() / 3600)
-
-        # Parse byte ranges from index
-        starts: list[int] = []
-        ends: list[int] = []
-        for var in coord.data_vars:
-            if lead_hours == 0:
-                hours_str_prefix = ""
-            elif var.attrs.step_type == "instant":
-                hours_str_prefix = str(lead_hours)
-            else:
-                diff = lead_hours % GFS_ACCUMULATION_RESET_HOURS
-                reset_hour = (
-                    lead_hours - diff
-                    if diff != 0
-                    else lead_hours - GFS_ACCUMULATION_RESET_HOURS
-                )
-                hours_str_prefix = f"{reset_hour}-{lead_hours}"
-            var_match_str = re.escape(
-                f"{var.internal_attrs.grib_element}:{var.internal_attrs.grib_index_level}:{hours_str_prefix}"
-            )
-            matches = re.findall(
-                rf"\d+:(\d+):.+:{var_match_str}.+:(?:\n\d+:(\d+))?",
-                index_contents,
-            )
-            assert len(matches) == 1, (
-                f"Expected exactly 1 match, found {matches}, {var.name} {idx_url}"
-            )
-            m0, m1 = matches[0]
-            start = int(m0)
-            end = int(m1) if m1 else start + 10 * (2**30)
-            starts.append(start)
-            ends.append(end)
+        starts, ends = parse_grib_index_byte_ranges(
+            index_contents, coord.data_vars, lead_hours
+        )
 
         vars_suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=False))
 
