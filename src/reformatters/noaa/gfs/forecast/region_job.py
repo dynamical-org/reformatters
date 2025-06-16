@@ -43,7 +43,7 @@ def parse_grib_index_byte_ranges(
     """Parse byte ranges from GRIB index file for the given data variables."""
     starts: list[int] = []
     ends: list[int] = []
-    
+
     for var in data_vars:
         if lead_hours == 0:
             hours_str_prefix = ""
@@ -57,7 +57,7 @@ def parse_grib_index_byte_ranges(
                 else lead_hours - GFS_ACCUMULATION_RESET_HOURS
             )
             hours_str_prefix = f"{reset_hour}-{lead_hours}"
-        
+
         var_match_str = re.escape(
             f"{var.internal_attrs.grib_element}:{var.internal_attrs.grib_index_level}:{hours_str_prefix}"
         )
@@ -73,7 +73,7 @@ def parse_grib_index_byte_ranges(
         end = int(m1) if m1 else start + 10 * (2**30)
         starts.append(start)
         ends.append(end)
-    
+
     return starts, ends
 
 
