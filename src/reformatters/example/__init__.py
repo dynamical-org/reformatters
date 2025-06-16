@@ -8,11 +8,6 @@ def _sanitize_identifier(s: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_]", "_", s)
 
 
-def _to_pascal_case(s: str) -> str:
-    """Convert snake_case to PascalCase."""
-    return "".join(word.capitalize() for word in s.split("_"))
-
-
 def new(provider: str, model: str, variant: str) -> None:
     """Create a new dataset integration from the example template.
 
