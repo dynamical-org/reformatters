@@ -15,6 +15,8 @@ from reformatters.common.types import (
     ArrayFloat32,
     DatetimeLike,
     Dim,
+    Timedelta,
+    Timestamp,
 )
 from reformatters.noaa.noaa_config_models import NoaaDataVar
 
@@ -23,6 +25,9 @@ log = get_logger(__name__)
 
 class NoaaGfsSourceFileCoord(SourceFileCoord):
     """Coordinates of a single source file to process."""
+
+    init_time: Timestamp
+    lead_time: Timedelta
 
     def get_url(self) -> str:
         raise NotImplementedError("Return the URL of the source file.")
