@@ -37,7 +37,7 @@ class NoaaGfsForecastSourceFileCoord(NoaaGfsSourceFileCoord):
     pass
 
 
-class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
+class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileCoord]):
     @classmethod
     def source_groups(
         cls,
@@ -57,12 +57,13 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
 
     def generate_source_file_coords(
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[NoaaDataVar]
-    ) -> Sequence[NoaaGfsSourceFileCoord]:
+    ) -> Sequence[NoaaGfsForecastSourceFileCoord]:
         """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
         return [
-            NoaaGfsSourceFileCoord(
+            NoaaGfsForecastSourceFileCoord(
                 init_time=pd.Timestamp(init_time),
                 lead_time=pd.Timedelta(lead_time),
+                data_vars=data_var_group,
             )
             for init_time, lead_time in product(
                 processing_region_ds["init_time"].values,
@@ -70,25 +71,19 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
             )
         ]
 
-    def download_file(self, coord: NoaaGfsSourceFileCoord) -> Path | None:
+    def download_file(self, coord: NoaaGfsForecastSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
-        # Download index file first
+        # Download grib index file
         idx_url = f"{coord.get_url()}.idx"
         idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
         index_contents = idx_local_path.read_text()
 
-        # Determine lead hours and filter variables
         lead_hours = int(coord.lead_time.total_seconds() / 3600)
-        vars_to_download = (
-            [var for var in self.data_vars if has_hour_0_values(var)]
-            if lead_hours == 0
-            else list(self.data_vars)
-        )
 
         # Parse byte ranges from index
         starts: list[int] = []
         ends: list[int] = []
-        for var in vars_to_download:
+        for var in coord.data_vars:
             if lead_hours == 0:
                 hours_str_prefix = ""
             elif var.attrs.step_type == "instant":
@@ -117,7 +112,7 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
             starts.append(start)
             ends.append(end)
 
-        # Download only needed byte ranges
+        # we need to disambiguate between the different data vars on disk based on the bytes ranges. Use the `digest` function on the bytes ranges to generate a unique file name AI!
         data_url = coord.get_url()
         local_path = http_download_to_disk(
             data_url,
@@ -236,7 +231,9 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
         append_dim: AppendDim,
         all_data_vars: Sequence[NoaaDataVar],
         reformat_job_name: str,
-    ) -> tuple[Sequence["RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]"], xr.Dataset]:
+    ) -> tuple[
+        Sequence["RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileCoord]"], xr.Dataset
+    ]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset
         from its current state to include the latest available data.
