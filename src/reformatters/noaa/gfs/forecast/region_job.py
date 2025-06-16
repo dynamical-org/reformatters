@@ -1,7 +1,7 @@
 import hashlib
 import re
 from collections import defaultdict
-from collections.abc import Callable, Mapping, Sequence, Iterable
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from itertools import product
 from pathlib import Path
 
