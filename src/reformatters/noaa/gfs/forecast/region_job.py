@@ -1,16 +1,16 @@
+import hashlib
 import re
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from itertools import product
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pandas as pd
 import xarray as xr
 import zarr
 
-import hashlib
-from urllib.parse import urlparse
-from reformatters.common.download import http_store, download_to_disk, DOWNLOAD_DIR
+from reformatters.common.download import DOWNLOAD_DIR, download_to_disk, http_store
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     RegionJob,
@@ -27,12 +27,14 @@ from reformatters.noaa.noaa_utils import has_hour_0_values
 # Accumulations reset every 6 hours
 GFS_ACCUMULATION_RESET_HOURS = 6
 
+
 def digest(data, length: int = 8) -> str:
     """Consistent, likely collision-free string digest of one or more strings."""
     message = hashlib.sha256()
     for string in data:
         message.update(string.encode())
     return message.hexdigest()[:length]
+
 
 log = get_logger(__name__)
 
@@ -125,7 +127,7 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         parsed_url = urlparse(data_url)
         store = http_store(f"{parsed_url.scheme}://{parsed_url.netloc}")
         filename = Path(parsed_url.path).name
-        suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends))
+        suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=False))
         filename_with_suffix = f"{filename}-{suffix}"
         local_path = DOWNLOAD_DIR / self.dataset_id / parsed_url.path.removeprefix("/")
         local_path = local_path.with_name(filename_with_suffix)
