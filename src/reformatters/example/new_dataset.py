@@ -54,7 +54,7 @@ def initialize_new_dataset(
     (test_path / "__init__.py").touch()
 
     # Perform renames in copied files
-    placeholder_to_actual_mappings = {
+    example_to_actual_mappings = {
         "ExampleDataset": f"{provider_pascal}{model_pascal}{variant_pascal}Dataset",
         "ExampleTemplateConfig": f"{provider_pascal}{model_pascal}{variant_pascal}TemplateConfig",
         "ExampleRegionJob": f"{provider_pascal}{model_pascal}{variant_pascal}RegionJob",
@@ -68,11 +68,11 @@ def initialize_new_dataset(
     for path in [src_path, test_path]:
         for file in path.glob("*.py"):
             content = file.read_text()
-            for old, new in placeholder_to_actual_mappings.items():
+            for old, new in example_to_actual_mappings.items():
                 content = content.replace(old, new)
             file.write_text(content)
 
-    dataset_class_name = placeholder_to_actual_mappings["ExampleDataset"]
+    dataset_class_name = example_to_actual_mappings["ExampleDataset"]
     (src_path / "__init__.py").write_text(
         f"from .dynamical_dataset import {dataset_class_name} as {dataset_class_name}"
     )
@@ -81,14 +81,12 @@ def initialize_new_dataset(
     print("\nNext steps:")
     print("1. Register your dataset in src/reformatters/__main__.py")
     print(
-        f"2. Implement your {placeholder_to_actual_mappings['ExampleTemplateConfig']} subclass"
+        f"2. Implement your {example_to_actual_mappings['ExampleTemplateConfig']} subclass"
     )
     print(
-        f"3. Implement your {placeholder_to_actual_mappings['ExampleRegionJob']} subclass"
+        f"3. Implement your {example_to_actual_mappings['ExampleRegionJob']} subclass"
     )
-    print(
-        f"4. Implement your {placeholder_to_actual_mappings['ExampleDataset']} subclass"
-    )
+    print(f"4. Implement your {example_to_actual_mappings['ExampleDataset']} subclass")
 
 
 def _sanitize_identifier(s: str) -> str:
