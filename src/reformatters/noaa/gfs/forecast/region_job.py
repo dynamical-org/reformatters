@@ -6,7 +6,6 @@ import zarr
 
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
     RegionJob,
     SourceFileCoord,
 )
@@ -14,7 +13,6 @@ from reformatters.common.types import (
     AppendDim,
     ArrayFloat32,
     DatetimeLike,
-    Dim,
     Timedelta,
     Timestamp,
 )
@@ -35,7 +33,6 @@ class NoaaGfsSourceFileCoord(SourceFileCoord):
         lead_hours = int(self.lead_time.total_seconds() / 3600)
         base_path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_hours:03d}"
         return f"https://noaa-gfs-bdp-pds.s3.amazonaws.com/{base_path}"
-
 
 
 class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
