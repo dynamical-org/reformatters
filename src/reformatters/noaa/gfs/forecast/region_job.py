@@ -41,49 +41,6 @@ class NoaaGfsForecastSourceFileCoord(NoaaGfsSourceFileCoord):
     pass
 
 
-# make this a method on NoaaGfsForecastRegionJob AI!
-def parse_grib_index_byte_ranges(
-    index_contents: str, coord: NoaaGfsForecastSourceFileCoord
-) -> tuple[list[int], list[int]]:
-    """Parse byte ranges from GRIB index file for the given coordinate."""
-    starts: list[int] = []
-    ends: list[int] = []
-    lead_hours = int(coord.lead_time.total_seconds() / 3600)
-
-    for var in coord.data_vars:
-        if lead_hours == 0:
-            hours_str_prefix = ""
-        elif var.attrs.step_type == "instant":
-            hours_str_prefix = str(lead_hours)
-        else:
-            diff = lead_hours % GFS_ACCUMULATION_RESET_HOURS
-            reset_hour = (
-                lead_hours - diff
-                if diff != 0
-                else lead_hours - GFS_ACCUMULATION_RESET_HOURS
-            )
-            hours_str_prefix = f"{reset_hour}-{lead_hours}"
-
-        var_match_str = re.escape(
-            f"{var.internal_attrs.grib_element}:{var.internal_attrs.grib_index_level}:{hours_str_prefix}"
-        )
-        matches = re.findall(
-            rf"\d+:(\d+):.+:{var_match_str}.+:(?:\n\d+:(\d+))?",
-            index_contents,
-        )
-        assert len(matches) == 1, (
-            f"Expected exactly 1 match, found {matches}, {var.name}"
-        )
-        m0, m1 = matches[0]
-        start = int(m0)
-        # Include my comment about last line and large end values here AI
-        end = int(m1) if m1 else start + 10 * (2**30)
-        starts.append(start)
-        ends.append(end)
-
-    return starts, ends
-
-
 class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileCoord]):
     @classmethod
     def source_groups(
@@ -101,6 +58,49 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         for data_var in data_vars:
             grouped[has_hour_0_values(data_var)].append(data_var)
         return list(grouped.values())
+
+    def _parse_grib_index_byte_ranges(
+        self, index_contents: str, coord: NoaaGfsForecastSourceFileCoord
+    ) -> tuple[list[int], list[int]]:
+        """Parse byte ranges from GRIB index file for the given coordinate."""
+        starts: list[int] = []
+        ends: list[int] = []
+        lead_hours = int(coord.lead_time.total_seconds() / 3600)
+
+        for var in coord.data_vars:
+            if lead_hours == 0:
+                hours_str_prefix = ""
+            elif var.attrs.step_type == "instant":
+                hours_str_prefix = str(lead_hours)
+            else:
+                diff = lead_hours % GFS_ACCUMULATION_RESET_HOURS
+                reset_hour = (
+                    lead_hours - diff
+                    if diff != 0
+                    else lead_hours - GFS_ACCUMULATION_RESET_HOURS
+                )
+                hours_str_prefix = f"{reset_hour}-{lead_hours}"
+
+            var_match_str = re.escape(
+                f"{var.internal_attrs.grib_element}:{var.internal_attrs.grib_index_level}:{hours_str_prefix}"
+            )
+            matches = re.findall(
+                rf"\d+:(\d+):.+:{var_match_str}.+:(?:\n\d+:(\d+))?",
+                index_contents,
+            )
+            assert len(matches) == 1, (
+                f"Expected exactly 1 match, found {matches}, {var.name}"
+            )
+            m0, m1 = matches[0]
+            start = int(m0)
+            # If this is the last message in the file, m1 will be empty.
+            # We use a large end value (10 GiB) since obstore doesn't support
+            # omitting the end byte but will return only available bytes.
+            end = int(m1) if m1 else start + 10 * (2**30)
+            starts.append(start)
+            ends.append(end)
+
+        return starts, ends
 
     def generate_source_file_coords(
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[NoaaDataVar]
@@ -125,7 +125,7 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
         index_contents = idx_local_path.read_text()
 
-        starts, ends = parse_grib_index_byte_ranges(index_contents, coord)
+        starts, ends = self._parse_grib_index_byte_ranges(index_contents, coord)
 
         vars_suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=False))
 
