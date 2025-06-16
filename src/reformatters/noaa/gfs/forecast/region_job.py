@@ -1,7 +1,6 @@
-import hashlib
 import re
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from itertools import product
 from pathlib import Path
 
@@ -12,6 +11,7 @@ import zarr
 from reformatters.common.download import (
     http_download_to_disk,
 )
+from reformatters.common.iterating import digest
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     RegionJob,
@@ -29,14 +29,6 @@ from reformatters.noaa.noaa_utils import has_hour_0_values
 GFS_ACCUMULATION_RESET_HOURS = 6
 
 
-def digest(data: Iterable[str], length: int = 8) -> str:
-    """Consistent, likely collision-free string digest of one or more strings."""
-    message = hashlib.sha256()
-    for string in data:
-        message.update(string.encode())
-    return message.hexdigest()[:length]
-
-
 log = get_logger(__name__)
 
 
@@ -49,6 +41,7 @@ class NoaaGfsForecastSourceFileCoord(NoaaGfsSourceFileCoord):
     pass
 
 
+# make this a method on NoaaGfsForecastRegionJob AI!
 def parse_grib_index_byte_ranges(
     index_contents: str, coord: NoaaGfsForecastSourceFileCoord
 ) -> tuple[list[int], list[int]]:
@@ -83,6 +76,7 @@ def parse_grib_index_byte_ranges(
         )
         m0, m1 = matches[0]
         start = int(m0)
+        # Include my comment about last line and large end values here AI
         end = int(m1) if m1 else start + 10 * (2**30)
         starts.append(start)
         ends.append(end)
