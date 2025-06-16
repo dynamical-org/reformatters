@@ -49,5 +49,6 @@ def test_region_job_generete_source_file_coords() -> None:
     lead_times = set(coord.lead_time for coord in source_file_coords)
     assert len(init_times) == 10
     assert len(lead_times) == 209
-    assert processing_region_ds["init_time"].isin(init_times).all()
-    assert processing_region_ds["lead_time"].isin(lead_times).all()
+    # confirm processing_region_ds coords match generated source_file_coords
+    assert set(pd.to_datetime(processing_region_ds["init_time"].values)) == init_times
+    assert set(pd.to_timedelta(processing_region_ds["lead_time"].values)) == lead_times
