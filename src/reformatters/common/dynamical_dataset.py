@@ -33,11 +33,20 @@ SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
 logger = get_logger(__name__)
 
 
+class DynamicalDatasetStorageConfig(FrozenBaseModel):
+    """Configuration for the storage of a dataset in production."""
+
+    base_path: str
+    k8s_secret_name: str
+
+
 class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     """Top level class managing a dataset configuration and processing."""
 
     template_config: TemplateConfig[DATA_VAR]
     region_job_class: type[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
+
+    storage_config: DynamicalDatasetStorageConfig
 
     def operational_kubernetes_resources(self, image_tag: str) -> Iterable[Job]:
         """
@@ -51,7 +60,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             schedule=_OPERATIONAL_CRON_SCHEDULE,
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
-            dataset"_id=self.dataset_id,
+            dataset_id=self.dataset_id,
             cpu="14",
             memory="30G",
             shared_memory="12G",
@@ -296,7 +305,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def _final_store(self) -> zarr.abc.store.Store:
         return get_zarr_store(
-            self.template_config.dataset_id, self.template_config.version
+            self.storage_config.base_path,
+            self.template_config.dataset_id,
+            self.template_config.version,
         )
 
     def _tmp_store(self) -> Path:

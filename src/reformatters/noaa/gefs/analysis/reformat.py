@@ -330,6 +330,7 @@ def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
         memory="30G",  # fit on 32GB node
         shared_memory="12G",
         ephemeral_storage="30G",
+        secret_names=["source-coop-key"],
     )
     validation_cron_job = ValidationCronJob(
         name=f"{template.DATASET_ID}-validation",
@@ -339,6 +340,7 @@ def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
         dataset_id=template.DATASET_ID,
         cpu="1.3",  # fit on 2 vCPU node
         memory="7G",  # fit on 8GB node
+        secret_names=["source-coop-key"],
     )
 
     return [operational_update_cron_job, validation_cron_job]
@@ -389,4 +391,8 @@ def all_jobs_ordered(
 
 
 def get_store() -> zarr.storage.FsspecStore:
-    return get_zarr_store(template.DATASET_ID, template.DATASET_VERSION)
+    return get_zarr_store(
+        "s3://us-west-2.opendata.source.coop/dynamical",
+        template.DATASET_ID,
+        template.DATASET_VERSION,
+    )
