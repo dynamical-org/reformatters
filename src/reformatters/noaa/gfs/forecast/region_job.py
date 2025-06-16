@@ -1,7 +1,7 @@
 import hashlib
 import re
 from collections import defaultdict
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence, Iterable
 from itertools import product
 from pathlib import Path
 
@@ -29,7 +29,7 @@ from reformatters.noaa.noaa_utils import has_hour_0_values
 GFS_ACCUMULATION_RESET_HOURS = 6
 
 
-def digest(data, length: int = 8) -> str:
+def digest(data: Iterable[str], length: int = 8) -> str:
     """Consistent, likely collision-free string digest of one or more strings."""
     message = hashlib.sha256()
     for string in data:
