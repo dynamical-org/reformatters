@@ -8,7 +8,7 @@ import reformatters.noaa.gfs.forecast.cli as noaa_gfs_forecast
 import reformatters.noaa.hrrr.forecast_48_hour.cli as noaa_hrrr_forecast_48_hour
 from reformatters.common import deploy
 from reformatters.common.config import Config
-from reformatters.example.new_dataset import initialize_new_dataset
+from reformatters.example.new_dataset import initialize_new_integration
 from reformatters.u_arizona.swann import SWANNDataset
 
 # Registry of all DynamicalDatasets.
@@ -32,7 +32,7 @@ if Config.is_sentry_enabled:
 
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
-app.command()(initialize_new_dataset)
+app.command()(initialize_new_integration)
 app.add_typer(noaa_gefs_forecast_35_day.app, name=noaa_gefs_forecast_35_day.DATASET_ID)
 app.add_typer(noaa_gefs_analysis.app, name=noaa_gefs_analysis.DATASET_ID)
 app.add_typer(noaa_gfs_forecast.app, name=noaa_gfs_forecast.DATASET_ID)

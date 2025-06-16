@@ -6,7 +6,7 @@ from typing import Annotated
 import typer
 
 
-def initialize_new_dataset(
+def initialize_new_integration(
     provider: Annotated[
         str, typer.Argument(help="The provider name in lowercase (e.g. 'noaa')")
     ],
