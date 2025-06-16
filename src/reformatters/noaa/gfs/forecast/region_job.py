@@ -1,10 +1,11 @@
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
+from itertools import product
 from pathlib import Path
 
+import pandas as pd
 import xarray as xr
 import zarr
-import pandas as pd
 
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
@@ -18,7 +19,6 @@ from reformatters.common.types import (
 from reformatters.noaa.gfs.models import NoaaGfsSourceFileCoord
 from reformatters.noaa.models import NoaaDataVar
 from reformatters.noaa.noaa_utils import has_hour_0_values
-from itertools import product
 
 log = get_logger(__name__)
 
