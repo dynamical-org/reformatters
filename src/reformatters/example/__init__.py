@@ -41,11 +41,11 @@ def new(provider: str, model: str, variant: str) -> None:
 
     for file in example_src.glob("*"):
         if file.is_file() and file.name != "__init__.py":  # Skip __init__.py
-            shutil.copy2(file, src_path / file.name)
+            shutil.copy(file, src_path / file.name)
 
     for file in example_test.glob("*"):
         if file.is_file():
-            shutil.copy2(file, test_path / file.name)
+            shutil.copy(file, test_path / file.name)
 
     # Create empty __init__.py
     (src_path / "__init__.py").touch()
