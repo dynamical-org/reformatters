@@ -24,7 +24,9 @@ There are three core base classes to subclass.
 ```bash
 uv run main initialize-new-dataset <provider> <model> <variant>
 ```
-This will add the a number of files within `src/reformatters/<provider>/<model>/<variant>` and `tests/<provider>/<model>/<variant>`
+This will add a number of files within `src/reformatters/<provider>/<model>/<variant>` and `tests/<provider>/<model>/<variant>`.
+These files will contain placeholder implementations of the subclasses referenced above. Follow the rest of this doc for guidance 
+on how to complete the implementations to integrate your new dataset.
 
 ### 2. Register your dataset
 
