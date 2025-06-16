@@ -17,6 +17,7 @@ from reformatters.common.types import (
 from reformatters.noaa.gfs.models import NoaaGfsSourceFileCoord
 from reformatters.noaa.models import NoaaDataVar
 from reformatters.noaa.noaa_utils import has_hour_0_values
+from itertools import product
 
 log = get_logger(__name__)
 
