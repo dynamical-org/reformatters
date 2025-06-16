@@ -37,7 +37,7 @@ class DynamicalDatasetStorageConfig(FrozenBaseModel):
     """Configuration for the storage of a dataset in production."""
 
     base_path: str
-    k8s_secret_name: str
+    k8s_secret_name: str | None = None
 
 
 class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):

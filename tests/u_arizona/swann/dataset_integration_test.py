@@ -16,7 +16,6 @@ pytestmark = pytest.mark.slow
 
 noop_storage_config = DynamicalDatasetStorageConfig(
     base_path="noop",
-    k8s_secret_name="noop",  # noqa: S106
 )
 
 
