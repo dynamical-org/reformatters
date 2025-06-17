@@ -60,7 +60,7 @@ def initialize_new_integration(
         "ExampleRegionJob": f"{provider_pascal}{model_pascal}{variant_pascal}RegionJob",
         "ExampleDataVar": f"{provider_pascal}{model_pascal}DataVar",
         "ExampleInternalAttrs": f"{provider_pascal}{model_pascal}InternalAttrs",
-        "ExampleSourceFileCoord": f"{provider_pascal}{model_pascal}SourceFileCoord",
+        "ExampleSourceFileCoord": f"{provider_pascal}{model_pascal}{variant_pascal}SourceFileCoord",
         "reformatters.example": f"reformatters.{provider}.{model}.{variant}",
     }
 
@@ -77,7 +77,7 @@ def initialize_new_integration(
         f"from .dynamical_dataset import {dataset_class_name} as {dataset_class_name}"
     )
 
-    print(f"Created new dataset integration at {dataset_path}")
+    print(f"Created new dataset integration at {src_path} and {test_path}")
     print("\nNext steps:")
     print("1. Register your dataset in src/reformatters/__main__.py")
     print(

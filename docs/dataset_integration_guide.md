@@ -19,10 +19,10 @@ There are three core base classes to subclass.
 
 ## Integration steps
 
-### 1. Initialize a new dataset
+### 1. Initialize a new integration
 
 ```bash
-uv run main initialize-new-dataset <provider> <model> <variant>
+uv run main initialize-new-integration <provider> <model> <variant>
 ```
 This will add a number of files within `src/reformatters/<provider>/<model>/<variant>` and `tests/<provider>/<model>/<variant>`.
 These files will contain placeholder implementations of the subclasses referenced above. Follow the rest of this doc for guidance 
