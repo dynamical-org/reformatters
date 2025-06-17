@@ -63,13 +63,13 @@ def item[T](iterable: Iterable[T]) -> T:
         result = next(iterator)
     except StopIteration:
         raise ValueError("Expected exactly one item, got zero") from None
-    
+
     try:
         next(iterator)
         raise ValueError("Expected exactly one item, got multiple")
     except StopIteration:
         pass
-    
+
     return result
 
 
