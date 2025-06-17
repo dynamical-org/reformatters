@@ -58,8 +58,19 @@ def consume[T](iterator: Iterable[T], n: int | None = None) -> None:
 
 def item[T](iterable: Iterable[T]) -> T:
     """Return the single item from the iterable."""
-    # error if there is more than one item AI!
-    return next(iter(iterable))
+    iterator = iter(iterable)
+    try:
+        result = next(iterator)
+    except StopIteration:
+        raise ValueError("Expected exactly one item, got zero") from None
+    
+    try:
+        next(iterator)
+        raise ValueError("Expected exactly one item, got multiple")
+    except StopIteration:
+        pass
+    
+    return result
 
 
 def digest(data: Iterable[str], length: int = 8) -> str:
