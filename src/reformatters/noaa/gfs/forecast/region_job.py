@@ -2,8 +2,11 @@ from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from itertools import product
 from pathlib import Path
+import warnings
 
+import numpy as np
 import pandas as pd
+import rasterio  # type: ignore
 import xarray as xr
 import zarr
 
@@ -27,7 +30,22 @@ from reformatters.noaa.gfs.gfs_common import (
 from reformatters.noaa.models import NoaaDataVar
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
+# Accumulations reset every 6 hours
+GFS_ACCUMULATION_RESET_HOURS = 6
+
 log = get_logger(__name__)
+
+
+def _get_grib_element_for_reading(data_var: NoaaDataVar, lead_time: pd.Timedelta) -> str:
+    """Get the GRIB element name for reading, including lead time suffix if needed."""
+    grib_element = data_var.internal_attrs.grib_element
+    if data_var.internal_attrs.include_lead_time_suffix:
+        lead_hours = int(lead_time.total_seconds() / 3600)
+        lead_hours_accum = lead_hours % GFS_ACCUMULATION_RESET_HOURS
+        if lead_hours_accum == 0:
+            lead_hours_accum = 6
+        grib_element += str(lead_hours_accum).zfill(2)
+    return grib_element
 
 
 class NoaaGfsForecastSourceFileCoord(NoaaGfsSourceFileCoord):
@@ -96,22 +114,33 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         data_var: NoaaDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
-        # Implement this based on read_data.py. Don't import from that file, copy what you need here. Create supporting functions as needed  AI!
-        # with rasterio.open(coord.downloaded_file_path) as reader:
-        #     TODO: make a band index based on tag matching utility function
-        #     matching_indexes = [
-        #         i
-        #         for i in range(reader.count)
-        #         if (tags := reader.tags(i))["GRIB_ELEMENT"]
-        #         == data_var.internal_attrs.grib_element
-        #         and tags["GRIB_COMMENT"] == data_var.internal_attrs.grib_comment
-        #     ]
-        #     assert len(matching_indexes) == 1, f"Expected exactly 1 matching band, found {matching_indexes}. {data_var.internal_attrs.grib_element=}, {data_var.internal_attrs.grib_description=}, {coord.downloaded_file_path=}"  # fmt: skip
-        #     rasterio_band_index = 1 + matching_indexes[0]  # rasterio is 1-indexed
-        #     return reader.read(rasterio_band_index, dtype=np.float32)
-        raise NotImplementedError(
-            "Read and return data for the given variable and source file coordinate."
-        )
+        if coord.downloaded_path is None:
+            raise ValueError("No downloaded file path available")
+
+        grib_element = _get_grib_element_for_reading(data_var, coord.lead_time)
+        grib_description = data_var.internal_attrs.grib_description
+
+        with warnings.catch_warnings(), rasterio.open(coord.downloaded_path) as reader:
+            warnings.simplefilter("ignore")
+            
+            matching_bands = [
+                rasterio_band_i
+                for band_i in range(reader.count)
+                if reader.descriptions[band_i] == grib_description
+                and reader.tags(rasterio_band_i := band_i + 1)["GRIB_ELEMENT"] == grib_element
+            ]
+
+            assert len(matching_bands) == 1, (
+                f"Expected exactly 1 matching band, found {matching_bands}. "
+                f"{grib_element=}, {grib_description=}, {coord.downloaded_path=}"
+            )
+            rasterio_band_index = matching_bands[0]
+
+            result: ArrayFloat32 = reader.read(
+                rasterio_band_index,
+                out_dtype=np.float32,
+            )
+            return result
 
     # Implement this to apply transformations to the array (e.g. deaccumulation)
     #
