@@ -8,12 +8,13 @@ from pytest import MonkeyPatch
 from reformatters.common import zarr
 from reformatters.noaa.gfs.forecast import NoaaGfsForecastDataset
 from reformatters.noaa.gfs.forecast.template_config import NoaaGfsForecastTemplateConfig
+from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 
 pytestmark = pytest.mark.slow
 
 
 def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    dataset = NoaaGfsForecastDataset()
+    dataset = NoaaGfsForecastDataset(storage_config=NOOP_STORAGE_CONFIG)
     monkeypatch.setattr(zarr, "_LOCAL_ZARR_STORE_BASE_PATH", tmp_path)
     init_time_start = NoaaGfsForecastTemplateConfig().append_dim_start
     init_time_end = init_time_start + timedelta(days=1)

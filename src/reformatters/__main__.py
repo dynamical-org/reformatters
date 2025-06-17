@@ -11,6 +11,7 @@ import reformatters.noaa.hrrr.forecast_48_hour.cli as noaa_hrrr_forecast_48_hour
 from reformatters.common import deploy
 from reformatters.common.config import Config
 from reformatters.common.dynamical_dataset import (
+    DynamicalDataset,
     DynamicalDatasetStorageConfig,
 )
 from reformatters.contrib.uarizona.swann.analysis import UarizonaSwannAnalysisDataset
@@ -28,13 +29,9 @@ class SourceCoopDatasetStorageConfig(DynamicalDatasetStorageConfig):
     k8s_secret_name: str = "source-coop-key"  # noqa: S105
 
 
-DYNAMICAL_DATASETS = [
-    UarizonaSwannAnalysisDataset(
-        storage_config=SourceCoopDatasetStorageConfig(),
-    ),
-    NoaaGfsForecastDataset(
-        storage_config=SourceCoopDatasetStorageConfig(),
-    ),
+DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
+    UarizonaSwannAnalysisDataset(storage_config=SourceCoopDatasetStorageConfig()),
+    NoaaGfsForecastDataset(storage_config=SourceCoopDatasetStorageConfig()),
 ]
 
 if Config.is_sentry_enabled:
