@@ -8,14 +8,25 @@ import reformatters.noaa.gfs.forecast.cli as noaa_gfs_forecast
 import reformatters.noaa.hrrr.forecast_48_hour.cli as noaa_hrrr_forecast_48_hour
 from reformatters.common import deploy
 from reformatters.common.config import Config
+from reformatters.common.dynamical_dataset import DynamicalDatasetStorageConfig
 from reformatters.example.new_dataset import initialize_new_integration
 from reformatters.u_arizona.swann import SWANNDataset
+
 
 # Registry of all DynamicalDatasets.
 # Datasets that have not yet been ported over to the new DynamicalDataset pattern
 # are excluded here until they are refactored.
+class SourceCoopDatasetStorageConfig(DynamicalDatasetStorageConfig):
+    """Configuration for the storage of a SourceCoop dataset."""
+
+    base_path: str = "s3://us-west-2.opendata.source.coop/dynamical"
+    k8s_secret_name: str = "source-coop-key"  # noqa: S105
+
+
 DYNAMICAL_DATASETS = [
-    SWANNDataset(),
+    SWANNDataset(
+        storage_config=SourceCoopDatasetStorageConfig(),
+    ),
 ]
 
 if Config.is_sentry_enabled:

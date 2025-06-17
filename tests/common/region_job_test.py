@@ -107,7 +107,7 @@ def template_ds() -> xr.Dataset:
     "ignore:This process .* is multi-threaded, use of fork.* may lead to deadlocks in the child"
 )
 def test_region_job(template_ds: xr.Dataset) -> None:
-    store = get_zarr_store("test-dataset-A", "test-version")
+    store = get_zarr_store("fake-prod-path", "test-dataset-A", "test-version")
     tmp_store = get_local_tmp_store()
 
     # Write zarr metadata for this RegionJob to write into
@@ -138,7 +138,7 @@ def test_region_job(template_ds: xr.Dataset) -> None:
 
 
 def test_update_template_with_results(template_ds: xr.Dataset) -> None:
-    store = get_zarr_store("test-dataset-C", "test-version")
+    store = get_zarr_store("fake-prod-path", "test-dataset-C", "test-version")
     tmp_store = get_local_tmp_store()
 
     job = ExampleRegionJob(
@@ -181,7 +181,7 @@ def test_source_file_coord_out_loc_default_impl() -> None:
 
 def test_get_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
-    store = get_zarr_store("test-dataset-B", "test-version")
+    store = get_zarr_store("fake-prod-path", "test-dataset-B", "test-version")
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
@@ -219,7 +219,7 @@ def test_get_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
 
 def test_get_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
-    store = get_zarr_store("test-dataset-B", "test-version")
+    store = get_zarr_store("fake-prod-path", "test-dataset-B", "test-version")
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
@@ -264,7 +264,7 @@ def test_get_jobs_grouping_filters_and_worker_index(
     template_ds: xr.Dataset,
 ) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
-    store = get_zarr_store("test-dataset-B", "test-version")
+    store = get_zarr_store("fake-prod-path", "test-dataset-B", "test-version")
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",

@@ -125,4 +125,8 @@ def all_jobs_ordered(
 
 
 def get_store() -> zarr.storage.FsspecStore:
-    return get_zarr_store(template.DATASET_ID, template.DATASET_VERSION)
+    return get_zarr_store(
+        "s3://us-west-2.opendata.source.coop/dynamical",
+        template.DATASET_ID,
+        template.DATASET_VERSION,
+    )

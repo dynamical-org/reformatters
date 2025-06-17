@@ -7,10 +7,16 @@ import xarray as xr
 from _pytest.monkeypatch import MonkeyPatch
 
 from reformatters.common import zarr as common_zarr_module
+from reformatters.common.dynamical_dataset import DynamicalDatasetStorageConfig
 from reformatters.u_arizona.swann import SWANNDataset
 from reformatters.u_arizona.swann.region_job import SWANNRegionJob, SWANNSourceFileCoord
 
 pytestmark = pytest.mark.slow
+
+
+noop_storage_config = DynamicalDatasetStorageConfig(
+    base_path="noop",
+)
 
 
 @pytest.fixture(autouse=True)
@@ -19,7 +25,7 @@ def set_test_final_store(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
 
 
 def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    dataset = SWANNDataset()
+    dataset = SWANNDataset(storage_config=noop_storage_config)
     # Dataset starts at 1981-10-01
     dataset.reformat_local(append_dim_end=pd.Timestamp("1981-10-02"))
     ds = xr.open_zarr(dataset._final_store(), chunks=None)
@@ -32,7 +38,7 @@ def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
 
 
 def test_reformat_operational_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    dataset = SWANNDataset()
+    dataset = SWANNDataset(storage_config=noop_storage_config)
     # Dataset starts at 1981-10-01
     dataset.reformat_local(append_dim_end=pd.Timestamp("1981-10-02"))
     ds = xr.open_zarr(dataset._final_store(), chunks=None)
@@ -65,7 +71,7 @@ def test_reformat_operational_update(monkeypatch: MonkeyPatch, tmp_path: Path) -
 def test_reformat_operational_update_template_trimming(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
-    dataset = SWANNDataset()
+    dataset = SWANNDataset(storage_config=noop_storage_config)
     # Dataset starts at 1981-10-01
     dataset.reformat_local(append_dim_end=pd.Timestamp("1981-10-02"))
     ds = xr.open_zarr(dataset._final_store(), chunks=None)

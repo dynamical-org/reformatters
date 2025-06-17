@@ -22,6 +22,8 @@ class Job(pydantic.BaseModel):
     ttl: timedelta = timedelta(days=1)
     pod_active_deadline: timedelta = timedelta(hours=6)
 
+    secret_names: list[str | None] = []
+
     @property
     def job_name(self) -> str:
         # Job names should be a valid DNS name, 63 characters or less
@@ -105,24 +107,11 @@ class Job(pydantic.BaseModel):
                                         "name": "WORKERS_TOTAL",
                                         "value": f"{self.workers_total}",
                                     },
-                                    {
-                                        "name": "DYNAMICAL_SOURCE_COOP_AWS_ACCESS_KEY_ID",
-                                        "valueFrom": {
-                                            "secretKeyRef": {
-                                                "key": "AWS_ACCESS_KEY_ID",
-                                                "name": "source-coop-key",
-                                            }
-                                        },
-                                    },
-                                    {
-                                        "name": "DYNAMICAL_SOURCE_COOP_AWS_SECRET_ACCESS_KEY",
-                                        "valueFrom": {
-                                            "secretKeyRef": {
-                                                "key": "AWS_SECRET_ACCESS_KEY",
-                                                "name": "source-coop-key",
-                                            }
-                                        },
-                                    },
+                                ],
+                                "envFrom": [
+                                    {"secretRef": {"name": secret_name}}
+                                    for secret_name in self.secret_names
+                                    if secret_name is not None
                                 ],
                                 "image": f"{self.image}",
                                 "name": "worker",
