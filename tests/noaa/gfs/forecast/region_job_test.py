@@ -61,7 +61,7 @@ def test_region_job_generete_source_file_coords() -> None:
 
 def test_region_job_download_file() -> None:
     template_config = NoaaGfsForecastTemplateConfig()
-    
+
     # Create a region job with mock stores
     region_job = NoaaGfsForecastRegionJob.model_construct(
         final_store=Mock(),
@@ -72,51 +72,55 @@ def test_region_job_download_file() -> None:
         region=slice(0, 1),
         reformat_job_name="test",
     )
-    
+
     coord = NoaaGfsForecastSourceFileCoord(
         init_time=pd.Timestamp("2025-01-01T00:00"),
         lead_time=pd.Timedelta(hours=6),
         data_vars=template_config.data_vars[:2],
     )
-    
+
     # Mock the http_download_to_disk function to avoid actual network calls
-    with patch("reformatters.noaa.gfs.forecast.region_job.http_download_to_disk") as mock_download:
+    with patch(
+        "reformatters.noaa.gfs.forecast.region_job.http_download_to_disk"
+    ) as mock_download:
         # Mock the index file content
         mock_index_path = Mock()
         mock_index_path.read_text.return_value = """1:0:d=2025010100:PRES:surface:0 hour fcst:
 2:123456:d=2025010100:TMP:2 m above ground:6 hour fcst:
 3:234567:d=2025010100:RH:2 m above ground:6 hour fcst:
 """
-        
+
         # Mock the data file path
         mock_data_path = Mock()
-        
+
         # Configure the mock to return different paths for index and data files
         def mock_download_side_effect(url, dataset_id, **kwargs):
             if url.endswith(".idx"):
                 return mock_index_path
             else:
                 return mock_data_path
-        
+
         mock_download.side_effect = mock_download_side_effect
-        
+
         # Mock parse_grib_index to return some byte ranges
-        with patch("reformatters.noaa.gfs.forecast.region_job.parse_grib_index") as mock_parse:
+        with patch(
+            "reformatters.noaa.gfs.forecast.region_job.parse_grib_index"
+        ) as mock_parse:
             mock_parse.return_value = ([123456, 234567], [234566, 345678])
-            
+
             result = region_job.download_file(coord)
-            
+
             # Verify the result
             assert result == mock_data_path
-            
+
             # Verify http_download_to_disk was called correctly
             assert mock_download.call_count == 2
-            
+
             # First call should be for the index file
             first_call = mock_download.call_args_list[0]
             assert first_call[0][0].endswith(".idx")
             assert first_call[0][1] == "noaa-gfs-forecast"
-            
+
             # Second call should be for the data file with byte ranges
             second_call = mock_download.call_args_list[1]
             assert not second_call[0][0].endswith(".idx")
