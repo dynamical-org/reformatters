@@ -29,7 +29,6 @@ from reformatters.common.types import Array1D, ArrayFloat32
 from reformatters.noaa.gefs.analysis import template
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
 from reformatters.noaa.gefs.read_data import (
-    GEFS_ACCUMULATION_RESET_FREQUENCY,
     GEFS_INIT_TIME_FREQUENCY,
     GEFS_REFORECAST_END,
     GEFS_REFORECAST_INIT_TIME_FREQUENCY,
@@ -435,13 +434,14 @@ def apply_data_transformations_inplace(
     data_array: xr.DataArray, data_var: DataVar[Any]
 ) -> None:
     expected_missing = ~is_available_time(pd.to_datetime(data_array["time"].values))
-    if data_var.internal_attrs.deaccumulate_to_rates:
+    accum_reset_freq = data_var.internal_attrs.deaccumulate_from_accumulation_frequency
+    if accum_reset_freq is not None:
         logger.info(f"Converting {data_var.name} from accumulations to rates")
         try:
             deaccumulate_to_rates_inplace(
                 data_array,
                 dim="time",
-                reset_frequency=GEFS_ACCUMULATION_RESET_FREQUENCY,
+                reset_frequency=accum_reset_freq,
                 skip_step=expected_missing,
             )
         except ValueError:

@@ -36,9 +36,12 @@ def parse_grib_index(
 
     lead_hours = whole_hours(coord.lead_time)
 
-    # All accumulation reset frequencies are the same for GFS, `item` will ensure that.
+    # All accumulation reset frequencies are the same for GFS, `item(set(...))` will ensure that
     reset_freq = item(
-        {v.internal_attrs.accumulation_reset_freq for v in coord.data_vars}
+        {
+            v.internal_attrs.deaccumulate_from_accumulation_frequency
+            for v in coord.data_vars
+        }
     )
     if reset_freq is not None:
         reset_hours = whole_hours(reset_freq)

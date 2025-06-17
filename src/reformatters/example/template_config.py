@@ -35,7 +35,6 @@ class ExampleInternalAttrs(BaseInternalAttrs):
 
     # For example,
     # grib_element: str
-    # deaccumulate_to_rates: bool = False
 
 
 class ExampleDataVar(DataVar[ExampleInternalAttrs]):
@@ -323,7 +322,7 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #             grib_index_level="surface",
         #             index_position=595,
         #             include_lead_time_suffix=True,
-        #             deaccumulate_to_rates=True,
+        #             deaccumulate_from_accumulation_frequency=pd.Timedelta("6h"),
         #             keep_mantissa_bits=default_keep_mantissa_bits,
         #         ),
         #     ),

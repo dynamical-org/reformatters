@@ -10,6 +10,8 @@ import rasterio  # type: ignore
 import xarray as xr
 import zarr
 
+from reformatters.common.binary_rounding import round_float32_inplace
+from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import (
     http_download_to_disk,
 )
@@ -101,9 +103,11 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
         grib_element = data_var.internal_attrs.grib_element
-        # GFS accumulations add an accumulation hours suffix to the grib element, e.g. "APCP04"
-        # This is only present in the grib element metadata, the grib index uses formatting like `:APCP:surface:0-4 hour acc fcst:`
-        accum_reset_freq = data_var.internal_attrs.accumulation_reset_freq
+        # GFS accumulations add a zero-padded accumulation hours suffix to the grib element, e.g. `APCP04`
+        # This is only present in the grib element metadata, the grib index looks like `:APCP:surface:0-4 hour acc fcst:`
+        accum_reset_freq = (
+            data_var.internal_attrs.deaccumulate_from_accumulation_frequency
+        )
         if accum_reset_freq is not None:
             lead_hours = whole_hours(coord.lead_time)
             accum_reset_hours = whole_hours(accum_reset_freq)
@@ -135,30 +139,28 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
             )
             return result
 
-    # Implement this to apply transformations to the array (e.g. deaccumulation)
-    #
-    # def apply_data_transformations(
-    #     self, data_array: xr.DataArray, data_var: NoaaDataVar
-    # ) -> None:
-    #     """
-    #     Apply in-place data transformations to the output data array for a given data variable.
+    def apply_data_transformations(
+        self, data_array: xr.DataArray, data_var: NoaaDataVar
+    ) -> None:
+        """Apply in-place data transformations to the output data array for a given data variable."""
+        accum_reset_freq = (
+            data_var.internal_attrs.deaccumulate_from_accumulation_frequency
+        )
+        if accum_reset_freq is not None:
+            log.info(f"Converting {data_var.name} from accumulations to rates")
+            try:
+                deaccumulate_to_rates_inplace(
+                    data_array,
+                    dim="lead_time",
+                    reset_frequency=accum_reset_freq,
+                )
+            except ValueError:
+                # Log exception so we are notified if deaccumulation errors are larger than expected.
+                log.exception(f"Error deaccumulating {data_var.name}")
 
-    #     This method is called after reading all data for a variable into the shared-memory array,
-    #     and before writing shards to the output store. The default implementation applies binary
-    #     rounding to float32 arrays if `data_var.internal_attrs.keep_mantissa_bits` is set.
-
-    #     Subclasses may override this method to implement additional transformations such as
-    #     deaccumulation, interpolation or other custom logic. All transformations should be
-    #     performed in-place (don't copy `data_array`, it's large).
-
-    #     Parameters
-    #     ----------
-    #     data_array : xr.DataArray
-    #         The output data array to be transformed in-place.
-    #     data_var : NoaaDataVar
-    #         The data variable metadata object, which may contain transformation parameters.
-    #     """
-    #     super().apply_data_transformations(data_array, data_var)
+        keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
+        if isinstance(keep_mantissa_bits, int):
+            round_float32_inplace(data_array.values, keep_mantissa_bits)
 
     def update_template_with_results(
         self, process_results: Mapping[str, Sequence[NoaaGfsSourceFileCoord]]

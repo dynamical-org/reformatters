@@ -181,7 +181,8 @@ def read_into_data_array(
 def apply_data_transformations_inplace(
     data_array: xr.DataArray, data_var: DataVar[Any]
 ) -> None:
-    if data_var.internal_attrs.deaccumulate_to_rates:
+    accum_reset_freq = data_var.internal_attrs.deaccumulate_from_accumulation_frequency
+    if accum_reset_freq is not None:
         raise NotImplementedError("Deaccumulation not implemented for HRRR")
         # TODO: build deaccumulation?
         # logger.info(f"Converting {data_var.name} from accumulations to rates")

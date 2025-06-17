@@ -128,16 +128,7 @@ class Coordinate(FrozenBaseModel):
 
 class BaseInternalAttrs(FrozenBaseModel):
     keep_mantissa_bits: int | Literal["no-rounding"]
-    deaccumulate_to_rates: bool = False
-    accumulation_reset_freq: Timedelta | None = None
-
-    @pydantic.model_validator(mode="after")
-    def validate_accumulation_reset_freq(self) -> "BaseInternalAttrs":
-        if self.deaccumulate_to_rates and self.accumulation_reset_freq is None:
-            raise ValueError(
-                "accumulation_reset_freq must be provided when deaccumulate_to_rates is True"
-            )
-        return self
+    deaccumulate_from_accumulation_frequency: Timedelta | None = None
 
 
 INTERNAL_ATTRS = TypeVar("INTERNAL_ATTRS", bound=BaseInternalAttrs)
