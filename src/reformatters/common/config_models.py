@@ -131,7 +131,13 @@ class BaseInternalAttrs(FrozenBaseModel):
     deaccumulate_to_rates: bool = False
     accumulation_reset_freq: Timedelta | None = None
 
-    # make a pydantic validator that checks that accumulation_reset_freq is a Timedelta if deaccumulate_to_rates is True AI!
+    @pydantic.model_validator(mode="after")
+    def validate_accumulation_reset_freq(self) -> "BaseInternalAttrs":
+        if self.deaccumulate_to_rates and self.accumulation_reset_freq is None:
+            raise ValueError(
+                "accumulation_reset_freq must be provided when deaccumulate_to_rates is True"
+            )
+        return self
 
 
 INTERNAL_ATTRS = TypeVar("INTERNAL_ATTRS", bound=BaseInternalAttrs)
