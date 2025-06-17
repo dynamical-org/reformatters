@@ -43,7 +43,7 @@ class UarizonaSwannAnalysisTemplateConfig(TemplateConfig[UarizonaSwannDataVar]):
     @property
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
-            dataset_id="u-arizona-swann",
+            dataset_id="u-arizona-swann-analysis",
             dataset_version="0.1.0",
             name="University of Arizona SWANN Snow",
             description="Daily 4 km Gridded SWE and Snow Depth from Assimilated In-Situ and Modeled Data over the Conterminous US, Version 1",
