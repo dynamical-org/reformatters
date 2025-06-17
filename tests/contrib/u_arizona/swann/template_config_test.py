@@ -6,18 +6,18 @@ import pandas as pd
 import pytest
 
 from reformatters.contrib.u_arizona.swann.analysis.template_config import (
-    SWANNTemplateConfig,
+    UarizonaSwannAnalysisTemplateConfig,
 )
 
 
 def test_update_template(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    template_config = SWANNTemplateConfig()
+    template_config = UarizonaSwannAnalysisTemplateConfig()
     with open(template_config.template_path() / "zarr.json") as f:
         existing_template = json.load(f)
 
     test_template_path = tmp_path / "latest.zarr"
     monkeypatch.setattr(
-        SWANNTemplateConfig,
+        UarizonaSwannAnalysisTemplateConfig,
         "template_path",
         lambda _self: test_template_path,
     )
@@ -31,7 +31,7 @@ def test_update_template(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Non
 
 
 def test_get_template_spatial_ref() -> None:
-    template_config = SWANNTemplateConfig()
+    template_config = UarizonaSwannAnalysisTemplateConfig()
     ds = template_config.get_template(
         template_config.append_dim_start + pd.Timedelta(days=5)
     )

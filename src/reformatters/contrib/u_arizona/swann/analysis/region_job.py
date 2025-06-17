@@ -24,11 +24,11 @@ from reformatters.common.types import (
     Timestamp,
 )
 
-from .template_config import SWANNDataVar
+from .template_config import UarizonaSwannDataVar
 
 
-class SWANNSourceFileCoord(SourceFileCoord):
-    # SWANN data is revised over time and a single SWANNSourceFileCoord represents the
+class UarizonaSwannAnalysisSourceFileCoord(SourceFileCoord):
+    # SWANN data is revised over time and a single UarizonaSwannAnalysisSourceFileCoord represents the
     # most stable available version of the data for a single day. Mechanically, we optimistically
     # start with the most stable version first and rely on the `.get_url()` caller to call
     # `advance_data_status()` if a file is not found at the previously returned url.
@@ -39,7 +39,9 @@ class SWANNSourceFileCoord(SourceFileCoord):
     )
 
     remaining_data_statuses: list[str] = Field(
-        default_factory=lambda: list(SWANNSourceFileCoord.possible_data_statuses)
+        default_factory=lambda: list(
+            UarizonaSwannAnalysisSourceFileCoord.possible_data_statuses
+        )
     )
 
     time: Timestamp
@@ -52,7 +54,9 @@ class SWANNSourceFileCoord(SourceFileCoord):
             data_status = self.get_data_status()
         except IndexError:
             # Allow get_url calls to return a URL for the last attempted status, even if it failed
-            data_status = SWANNSourceFileCoord.possible_data_statuses[-1]
+            data_status = UarizonaSwannAnalysisSourceFileCoord.possible_data_statuses[
+                -1
+            ]
 
         return f"https://climate.arizona.edu/data/UA_SWE/DailyData_4km/WY{water_year}/UA_SWE_Depth_4km_v1_{year_month_day}_{data_status}.nc"
 
@@ -72,7 +76,9 @@ class SWANNSourceFileCoord(SourceFileCoord):
         return len(self.remaining_data_statuses) > 0
 
 
-class SWANNRegionJob(RegionJob[SWANNDataVar, SWANNSourceFileCoord]):
+class UarizonaSwannAnalysisRegionJob(
+    RegionJob[UarizonaSwannDataVar, UarizonaSwannAnalysisSourceFileCoord]
+):
     # Be gentle to UA HTTP servers
     download_parallelism: int = 2
 
@@ -83,9 +89,12 @@ class SWANNRegionJob(RegionJob[SWANNDataVar, SWANNSourceFileCoord]):
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
-        all_data_vars: Sequence[SWANNDataVar],
+        all_data_vars: Sequence[UarizonaSwannDataVar],
         reformat_job_name: str,
-    ) -> tuple[Sequence[RegionJob[SWANNDataVar, SWANNSourceFileCoord]], xr.Dataset]:
+    ) -> tuple[
+        Sequence[RegionJob[UarizonaSwannDataVar, UarizonaSwannAnalysisSourceFileCoord]],
+        xr.Dataset,
+    ]:
         existing_ds = xr.open_zarr(final_store)
         append_dim_start = cls._update_append_dim_start(existing_ds)
         append_dim_end = cls._update_append_dim_end()
@@ -106,12 +115,12 @@ class SWANNRegionJob(RegionJob[SWANNDataVar, SWANNSourceFileCoord]):
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
-        data_var_group: Sequence[SWANNDataVar],
-    ) -> Sequence[SWANNSourceFileCoord]:
+        data_var_group: Sequence[UarizonaSwannDataVar],
+    ) -> Sequence[UarizonaSwannAnalysisSourceFileCoord]:
         times = processing_region_ds["time"].values
-        return [SWANNSourceFileCoord(time=t) for t in times]
+        return [UarizonaSwannAnalysisSourceFileCoord(time=t) for t in times]
 
-    def download_file(self, coord: SWANNSourceFileCoord) -> Path:
+    def download_file(self, coord: UarizonaSwannAnalysisSourceFileCoord) -> Path:
         while True:
             try:
                 return http_download_to_disk(coord.get_url(), self.dataset_id)
@@ -121,8 +130,8 @@ class SWANNRegionJob(RegionJob[SWANNDataVar, SWANNSourceFileCoord]):
 
     def read_data(
         self,
-        coord: SWANNSourceFileCoord,
-        data_var: SWANNDataVar,
+        coord: UarizonaSwannAnalysisSourceFileCoord,
+        data_var: UarizonaSwannDataVar,
     ) -> ArrayFloat32:
         var_name = data_var.internal_attrs.netcdf_var_name
         netcdf_path = f"netcdf:{coord.downloaded_path}:{var_name}"

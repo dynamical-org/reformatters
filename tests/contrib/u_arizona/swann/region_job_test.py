@@ -3,8 +3,8 @@ import pytest
 import xarray as xr
 
 from reformatters.contrib.u_arizona.swann.analysis.region_job import (
-    SWANNRegionJob,
-    SWANNSourceFileCoord,
+    UarizonaSwannAnalysisRegionJob,
+    UarizonaSwannAnalysisSourceFileCoord,
 )
 
 pytestmark = pytest.mark.slow
@@ -31,7 +31,7 @@ def test_source_file_coord_url_generation(
     expected_url: str,
 ) -> None:
     """Test URL generation and water year calculation for different times."""
-    coord = SWANNSourceFileCoord(time=time)
+    coord = UarizonaSwannAnalysisSourceFileCoord(time=time)
     assert coord.get_water_year() == expected_water_year
     assert coord.get_url() == expected_url
 
@@ -39,7 +39,7 @@ def test_source_file_coord_url_generation(
 def test_source_file_coord_data_status() -> None:
     """Test data status handling and advancement."""
     time = pd.Timestamp("2023-10-01")
-    coord = SWANNSourceFileCoord(time=time)
+    coord = UarizonaSwannAnalysisSourceFileCoord(time=time)
 
     # Test initial status
     assert coord.get_data_status() == "stable"
@@ -76,4 +76,7 @@ def test_update_append_dim_start() -> None:
     """Test the update_append_dim_start method."""
     existing_ds = xr.Dataset(coords={"time": pd.date_range("2023-10-01", "2025-01-03")})
     expected_start = pd.Timestamp("2024-01-04")
-    assert SWANNRegionJob._update_append_dim_start(existing_ds) == expected_start
+    assert (
+        UarizonaSwannAnalysisRegionJob._update_append_dim_start(existing_ds)
+        == expected_start
+    )
