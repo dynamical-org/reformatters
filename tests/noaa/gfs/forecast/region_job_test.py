@@ -87,9 +87,7 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_data_path = Mock()
 
     # Configure the mock to return different paths for index and data files
-    def mock_download_side_effect(
-        url: str, dataset_id: str, **kwargs: object
-    ) -> Mock:
+    def mock_download_side_effect(url: str, dataset_id: str, **kwargs: object) -> Mock:
         if url.endswith(".idx"):
             return mock_index_path
         else:
