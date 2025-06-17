@@ -1,44 +1,73 @@
-# from pathlib import Path
+from datetime import timedelta
+from pathlib import Path
 
-# import numpy as np
-# import pandas as pd
-# import pytest
-# import xarray as xr
+import pytest
+import xarray as xr
+from pytest import MonkeyPatch
 
-# from reformatters.noaa.gfs.forecast.dynamical_dataset import NoaaGfsForecastDataset
+from reformatters.common import zarr
+from reformatters.noaa.gfs.forecast import NoaaGfsForecastDataset
+from reformatters.noaa.gfs.forecast.template_config import NoaaGfsForecastTemplateConfig
 
-# pytestmark = pytest.mark.slow
+pytestmark = pytest.mark.slow
 
 
-# def test_reformat_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) -> None:
-#     dataset = NoaaGfsForecastDataset()
+def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+    dataset = NoaaGfsForecastDataset()
+    monkeypatch.setattr(zarr, "_LOCAL_ZARR_STORE_BASE_PATH", tmp_path)
+    init_time_start = NoaaGfsForecastTemplateConfig().append_dim_start
+    init_time_end = init_time_start + timedelta(days=1)
 
-#     # Local backfill reformat
-#     dataset.reformat_local(append_dim_end=pd.Timestamp("2000-01-02"))
-#     ds = xr.open_zarr(dataset._final_store(), chunks=None)
-#     assert ds.time.max() == pd.Timestamp("2000-01-01")
+    # 1. Backfill archive
+    dataset.reformat_local(append_dim_end=init_time_end)
+    original_ds = xr.open_zarr(
+        dataset._final_store(), decode_timedelta=True, chunks=None
+    )
 
-#     # Operational update
-#     monkeypatch.setattr(
-#         dataset.region_job_class,
-#         "_update_append_dim_end",
-#         lambda: pd.Timestamp("2000-01-03"),
-#     )
-#     monkeypatch.setattr(
-#         dataset.region_job_class,
-#         "_update_append_dim_start",
-#         lambda existing_ds: pd.Timestamp(existing_ds.time.max().item()),
-#     )
+    space_subset_ds = original_ds.sel(latitude=slice(10, 0), longitude=slice(0, 10))
 
-#     dataset.reformat_operational_update("test-reformat-operational-update")
+    # These variables are present at all lead times
+    assert (
+        (
+            space_subset_ds[["temperature_2m", "precipitable_water_atmosphere"]]
+            .isnull()
+            .mean()
+            == 0
+        )
+        .all()
+        .to_array()
+        .all()
+    )
 
-#     # Check resulting dataset
-#     updated_ds = xr.open_zarr(dataset._final_store(), chunks=None)
+    # These variables are not present at hour 0
+    assert (
+        (
+            space_subset_ds[
+                [
+                    "precipitation_surface",
+                    "maximum_temperature_2m",
+                    "minimum_temperature_2m",
+                ]
+            ]
+            .sel(lead_time=slice("1h", None))
+            .isnull()
+            .mean()
+            == 0
+        )
+        .all()
+        .to_array()
+        .all()
+    )
 
-#     np.testing.assert_array_equal(
-#         updated_ds.time, pd.date_range("1981-10-01", "1981-10-03")
-#     )
-#     subset_ds = updated_ds.sel(latitude=48.583335, longitude=-94, method="nearest")
-#     np.testing.assert_array_equal(
-#         subset_ds["your_variable"].values, [190.0, 163.0, 135.0]
-#     )
+    point_ds = original_ds.sel(
+        latitude=0,
+        longitude=0,
+        init_time=init_time_start,
+        lead_time="2h",
+    )
+
+    assert point_ds["temperature_2m"] == 27.875
+    assert point_ds["maximum_temperature_2m"] == 28.125
+    assert point_ds["minimum_temperature_2m"] == 27.875
+    assert point_ds["precipitation_surface"] == 1.7404556e-05
+    assert point_ds["precipitable_water_atmosphere"] == 56.5

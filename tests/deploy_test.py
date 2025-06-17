@@ -2,12 +2,14 @@ import json
 import subprocess
 from collections.abc import Iterable
 from datetime import timedelta
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common import deploy
+from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import Job, ReformatCronJob, ValidationCronJob
 
 
@@ -63,9 +65,11 @@ def test_deploy_operational_updates(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # Also add in the real datasets to test they don't cause errors.
     # They are last in the list so their results don't impact the indexes we verify below.
-    test_datasets = example_datasets + DYNAMICAL_DATASETS
+    test_datasets: list[DynamicalDataset[Any, Any]] = example_datasets + list(
+        DYNAMICAL_DATASETS
+    )  # type: ignore[assignment]
 
-    deploy.deploy_operational_updates(test_datasets, docker_image="test-image-tag")  # type: ignore[arg-type]
+    deploy.deploy_operational_updates(test_datasets, docker_image="test-image-tag")
 
     assert mock_run.call_count == 1
     args, kwargs = mock_run.call_args

@@ -5,11 +5,13 @@ from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import Job
 from reformatters.noaa.models import NoaaDataVar
 
-from .region_job import NoaaGfsForecastRegionJob, NoaaGfsSourceFileCoord
+from .region_job import NoaaGfsForecastRegionJob, NoaaGfsForecastSourceFileCoord
 from .template_config import NoaaGfsForecastTemplateConfig
 
 
-class NoaaGfsForecastDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoord]):
+class NoaaGfsForecastDataset(
+    DynamicalDataset[NoaaDataVar, NoaaGfsForecastSourceFileCoord]
+):
     template_config: NoaaGfsForecastTemplateConfig = NoaaGfsForecastTemplateConfig()
     region_job_class: type[NoaaGfsForecastRegionJob] = NoaaGfsForecastRegionJob
 
