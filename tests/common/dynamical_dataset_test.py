@@ -18,11 +18,19 @@ from reformatters.common.config_models import (
     DataVarAttrs,
     Encoding,
 )
-from reformatters.common.dynamical_dataset import DynamicalDataset
+from reformatters.common.dynamical_dataset import (
+    DynamicalDataset,
+    DynamicalDatasetStorageConfig,
+)
 from reformatters.common.kubernetes import Job, ReformatCronJob
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+
+
+class ExampleDatasetStorageConfig(DynamicalDatasetStorageConfig):
+    base_path: str = "s3://some-bucket/path"
+    k8s_secret_name: str = "k8s-secret-name"  # noqa: S105
 
 
 class ExampleDataVar(DataVar[BaseInternalAttrs]):
@@ -76,6 +84,7 @@ class ExampleConfig(TemplateConfig[ExampleDataVar]):
 class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
     template_config: ExampleConfig = ExampleConfig()
     region_job_class: type[ExampleRegionJob] = ExampleRegionJob
+    storage_config: ExampleDatasetStorageConfig = ExampleDatasetStorageConfig()
 
     def operational_kubernetes_resources(self, image_tag: str) -> Iterable[Job]:
         return [

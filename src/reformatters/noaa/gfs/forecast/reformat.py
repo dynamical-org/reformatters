@@ -130,6 +130,7 @@ def all_jobs_ordered(
 
 def get_store() -> zarr.storage.FsspecStore:
     return get_zarr_store(
+        "s3://us-west-2.opendata.source.coop/dynamical",
         GFS_FORECAST_TEMPLATE_CONFIG.dataset_id,
         GFS_FORECAST_TEMPLATE_CONFIG.dataset_attributes.dataset_version,
     )

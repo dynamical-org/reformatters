@@ -9,7 +9,7 @@ from reformatters.common.zarr import get_zarr_store
 
 def test_update_progress_tracker_close_with_local_store(tmp_path: Path) -> None:
     """Test UpdateProgressTracker loads existing progress with LocalStore (sync filesystem)"""
-    store = get_zarr_store("test", "test-version")
+    store = get_zarr_store("fake-prod-path", "test", "dev")
     assert not store.fs.async_impl
 
     # Create an existing progress file
@@ -30,7 +30,7 @@ def test_update_progress_tracker_close_with_local_store(tmp_path: Path) -> None:
 
 def test_update_progress_tracker_close_with_async_store(tmp_path: Path) -> None:
     """Test UpdateProgressTracker loads existing progress with FsspecStore (async filesystem)"""
-    store = get_zarr_store("test", "test-version")
+    store = get_zarr_store("fake-prod-path", "test", "dev")
     store = zarr.storage.FsspecStore.from_url(store.path)
     assert store.fs.async_impl
 

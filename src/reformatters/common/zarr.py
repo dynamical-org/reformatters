@@ -33,7 +33,9 @@ BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE = zarr.codecs.BloscCodec(
 ).to_dict()
 
 
-def get_zarr_store(dataset_id: str, version: str) -> zarr.storage.FsspecStore:
+def get_zarr_store(
+    prod_base_path: str, dataset_id: str, version: str
+) -> zarr.storage.FsspecStore:
     if not Config.is_prod:
         version = "dev" if Config.is_dev else version
 
@@ -58,11 +60,7 @@ def get_zarr_store(dataset_id: str, version: str) -> zarr.storage.FsspecStore:
         return store  # type: ignore[return-value]
 
     return zarr.storage.FsspecStore.from_url(
-        f"s3://us-west-2.opendata.source.coop/dynamical/{dataset_id}/v{version}.zarr",
-        storage_options={
-            "key": Config.source_coop.aws_access_key_id,
-            "secret": Config.source_coop.aws_secret_access_key,
-        },
+        f"{prod_base_path}/{dataset_id}/v{version}.zarr"
     )
 
 

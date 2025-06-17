@@ -11,19 +11,16 @@ from reformatters.common.zarr import get_mode, get_zarr_store
 @pytest.mark.skip_set_local_zarr_store_base_path
 def test_get_zarr_store_dev(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setattr(Config, "env", Env.dev)
-    store = get_zarr_store("test-dataset", "1.0.0")
+    store = get_zarr_store("fake-prod-path", "test-dataset", "1.0.0")
     assert isinstance(store, zarr.storage.LocalStore)
     assert store.path == str(Path("data/output/test-dataset/vdev.zarr").absolute())
 
 
 def test_get_zarr_store_prod(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setattr(Config, "env", Env.prod)
-    store = get_zarr_store("test-dataset", "1.0.0")
+    store = get_zarr_store("s3://fake-prod-path", "test-dataset", "1.0.0")
     assert isinstance(store, zarr.storage.FsspecStore)
-    assert (
-        store.path
-        == "us-west-2.opendata.source.coop/dynamical/test-dataset/v1.0.0.zarr"
-    )
+    assert store.path == "fake-prod-path/test-dataset/v1.0.0.zarr"
 
 
 def test_get_mode() -> None:
