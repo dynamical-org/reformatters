@@ -30,9 +30,6 @@ from reformatters.noaa.gfs.gfs_common import (
 from reformatters.noaa.models import NoaaDataVar
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
-# Accumulations reset every 6 hours
-GFS_ACCUMULATION_RESET_HOURS = 6
-
 log = get_logger(__name__)
 
 
@@ -116,15 +113,11 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         data_var: NoaaDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
-        if coord.downloaded_path is None:
-            raise ValueError("No downloaded file path available")
-
         grib_element = _get_grib_element_for_reading(data_var, coord.lead_time)
+        # inline the grib element for reading logic here  AI!
         grib_description = data_var.internal_attrs.grib_description
 
         with warnings.catch_warnings(), rasterio.open(coord.downloaded_path) as reader:
-            warnings.simplefilter("ignore")
-
             matching_bands = [
                 rasterio_band_i
                 for band_i in range(reader.count)
