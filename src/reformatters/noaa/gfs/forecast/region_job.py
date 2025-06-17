@@ -1,8 +1,8 @@
+import warnings
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from itertools import product
 from pathlib import Path
-import warnings
 
 import numpy as np
 import pandas as pd
@@ -36,7 +36,9 @@ GFS_ACCUMULATION_RESET_HOURS = 6
 log = get_logger(__name__)
 
 
-def _get_grib_element_for_reading(data_var: NoaaDataVar, lead_time: pd.Timedelta) -> str:
+def _get_grib_element_for_reading(
+    data_var: NoaaDataVar, lead_time: pd.Timedelta
+) -> str:
     """Get the GRIB element name for reading, including lead time suffix if needed."""
     grib_element = data_var.internal_attrs.grib_element
     if data_var.internal_attrs.include_lead_time_suffix:
@@ -122,12 +124,13 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
 
         with warnings.catch_warnings(), rasterio.open(coord.downloaded_path) as reader:
             warnings.simplefilter("ignore")
-            
+
             matching_bands = [
                 rasterio_band_i
                 for band_i in range(reader.count)
                 if reader.descriptions[band_i] == grib_description
-                and reader.tags(rasterio_band_i := band_i + 1)["GRIB_ELEMENT"] == grib_element
+                and reader.tags(rasterio_band_i := band_i + 1)["GRIB_ELEMENT"]
+                == grib_element
             ]
 
             assert len(matching_bands) == 1, (
