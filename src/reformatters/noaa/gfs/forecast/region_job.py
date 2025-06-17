@@ -33,8 +33,6 @@ from reformatters.noaa.noaa_utils import has_hour_0_values
 log = get_logger(__name__)
 
 
-
-
 class NoaaGfsForecastSourceFileCoord(NoaaGfsSourceFileCoord):
     # We share the name attributes (init_time, lead_time) with
     # NoaaGfsSourceFileCoord, and the same.
@@ -108,7 +106,7 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
             if lead_hours_accum == 0:
                 lead_hours_accum = 6
             grib_element += str(lead_hours_accum).zfill(2)
-        
+
         grib_description = data_var.internal_attrs.grib_description
 
         with warnings.catch_warnings(), rasterio.open(coord.downloaded_path) as reader:
