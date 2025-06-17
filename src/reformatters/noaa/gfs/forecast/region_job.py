@@ -33,18 +33,6 @@ from reformatters.noaa.noaa_utils import has_hour_0_values
 log = get_logger(__name__)
 
 
-def _get_grib_element_for_reading(
-    data_var: NoaaDataVar, lead_time: pd.Timedelta
-) -> str:
-    """Get the GRIB element name for reading, including lead time suffix if needed."""
-    grib_element = data_var.internal_attrs.grib_element
-    if data_var.internal_attrs.include_lead_time_suffix:
-        lead_hours = int(lead_time.total_seconds() / 3600)
-        lead_hours_accum = lead_hours % GFS_ACCUMULATION_RESET_HOURS
-        if lead_hours_accum == 0:
-            lead_hours_accum = 6
-        grib_element += str(lead_hours_accum).zfill(2)
-    return grib_element
 
 
 class NoaaGfsForecastSourceFileCoord(NoaaGfsSourceFileCoord):
@@ -113,8 +101,14 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         data_var: NoaaDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
-        grib_element = _get_grib_element_for_reading(data_var, coord.lead_time)
-        # inline the grib element for reading logic here  AI!
+        grib_element = data_var.internal_attrs.grib_element
+        if data_var.internal_attrs.include_lead_time_suffix:
+            lead_hours = int(coord.lead_time.total_seconds() / 3600)
+            lead_hours_accum = lead_hours % GFS_ACCUMULATION_RESET_HOURS
+            if lead_hours_accum == 0:
+                lead_hours_accum = 6
+            grib_element += str(lead_hours_accum).zfill(2)
+        
         grib_description = data_var.internal_attrs.grib_description
 
         with warnings.catch_warnings(), rasterio.open(coord.downloaded_path) as reader:
