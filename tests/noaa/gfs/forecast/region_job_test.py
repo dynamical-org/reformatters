@@ -67,7 +67,7 @@ def test_region_job_download_file() -> None:
         final_store=Mock(),
         tmp_store=Mock(),
         template_ds=template_config.get_template(pd.Timestamp("2025-01-01")),
-        data_vars=template_config.data_vars[:2],  # Use just 2 variables for testing
+        data_vars=template_config.data_vars[:2],
         append_dim=template_config.append_dim,
         region=slice(0, 1),
         reformat_job_name="test",
@@ -76,21 +76,17 @@ def test_region_job_download_file() -> None:
     coord = NoaaGfsForecastSourceFileCoord(
         init_time=pd.Timestamp("2025-01-01T00:00"),
         lead_time=pd.Timedelta(hours=6),
-        data_vars=template_config.data_vars[:2],
+        data_vars=region_job.data_vars,
     )
 
+    # replace the `patch` calls in this function with use of monkeypatch.setattr AI!
     # Mock the http_download_to_disk function to avoid actual network calls
     with patch(
         "reformatters.noaa.gfs.forecast.region_job.http_download_to_disk"
     ) as mock_download:
-        # Mock the index file content
         mock_index_path = Mock()
-        mock_index_path.read_text.return_value = """1:0:d=2025010100:PRES:surface:0 hour fcst:
-2:123456:d=2025010100:TMP:2 m above ground:6 hour fcst:
-3:234567:d=2025010100:RH:2 m above ground:6 hour fcst:
-"""
+        mock_index_path.read_text.return_value = "ignored"
 
-        # Mock the data file path
         mock_data_path = Mock()
 
         # Configure the mock to return different paths for index and data files
@@ -127,5 +123,5 @@ def test_region_job_download_file() -> None:
             second_call = mock_download.call_args_list[1]
             assert not second_call[0][0].endswith(".idx")
             assert second_call[0][1] == "noaa-gfs-forecast"
-            assert "byte_ranges" in second_call[1]
+            assert second_call[1]["byte_ranges"] == ([123456, 234567], [234566, 345678])
             assert "local_path_suffix" in second_call[1]
