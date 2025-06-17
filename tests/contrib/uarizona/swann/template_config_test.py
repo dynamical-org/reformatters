@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from reformatters.contrib.u_arizona.swann.analysis.template_config import (
+from reformatters.contrib.uarizona.swann.analysis.template_config import (
     UarizonaSwannAnalysisTemplateConfig,
 )
 

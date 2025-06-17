@@ -7,8 +7,8 @@ import xarray as xr
 from _pytest.monkeypatch import MonkeyPatch
 
 from reformatters.common.dynamical_dataset import DynamicalDatasetStorageConfig
-from reformatters.contrib.u_arizona.swann.analysis import UarizonaSwannAnalysisDataset
-from reformatters.contrib.u_arizona.swann.analysis.region_job import (
+from reformatters.contrib.uarizona.swann.analysis import UarizonaSwannAnalysisDataset
+from reformatters.contrib.uarizona.swann.analysis.region_job import (
     UarizonaSwannAnalysisRegionJob,
     UarizonaSwannAnalysisSourceFileCoord,
 )

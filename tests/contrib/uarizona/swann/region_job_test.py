@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from reformatters.contrib.u_arizona.swann.analysis.region_job import (
+from reformatters.contrib.uarizona.swann.analysis.region_job import (
     UarizonaSwannAnalysisRegionJob,
     UarizonaSwannAnalysisSourceFileCoord,
 )
