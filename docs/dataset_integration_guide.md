@@ -19,32 +19,14 @@ There are three core base classes to subclass.
 
 ## Integration steps
 
-### 1. Set up template
+### 1. Initialize a new integration
 
-#### Copy template
-From a terminal in the root of this repository, run these commands to copy a template of dataset integration code and tests.
 ```bash
-DATASET_ID="<provider>-<model>-<variant>"
-DATASET_PATH="<provider>/<model>/<variant>"
-mkdir -p src/reformatters/$DATASET_PATH
-cp -r src/reformatters/example/* src/reformatters/$DATASET_PATH
-mkdir -p tests/$DATASET_PATH
-cp -r tests/example/* tests/$DATASET_PATH
+uv run main initialize-new-integration <provider> <model> <variant>
 ```
-
-#### Rename
-Run the following find/replaces. Follow PEP 8 on abbreviation capitalization in class names, e.g. `NoaaGfsForecastDataset`.
-
-Find and replace within `src/reformatters/$DATASET_PATH` and `tests/$DATASET_PATH`:
-1. `ExampleDataset` -> `<Producer><Model><Variant>Dataset`
-1. `ExampleTemplateConfig` -> `<Producer><Model><Variant>TemplateConfig`
-1. `ExampleRegionJob` -> `<Producer><Model><Variant>RegionJob`
-1. `ExampleDataVar` -> `<Producer>[<model>]DataVar`
-1. `ExampleInternalAttrs` -> `<Producer>[<model>]DataVar`
-1. `ExampleSourceFileCoord` -> `<Producer><Model>SourceFileCoord`
-1. `reformatters.example` -> `reformatters.<producer>.<model>.<variant>` (imports in tests)
-
-DataVar, InternalAttrs, and SourceFileCoord definitions can often be shared among mutiple datasets from the same producer.
+This will add a number of files within `src/reformatters/<provider>/<model>/<variant>` and `tests/<provider>/<model>/<variant>`.
+These files will contain placeholder implementations of the subclasses referenced above. Follow the rest of this doc for guidance 
+on how to complete the implementations to integrate your new dataset.
 
 ### 2. Register your dataset
 
