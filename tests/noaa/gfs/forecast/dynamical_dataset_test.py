@@ -9,7 +9,7 @@ from pytest import MonkeyPatch
 from reformatters.common import zarr
 from reformatters.noaa.gfs.forecast import NoaaGfsForecastDataset
 from reformatters.noaa.gfs.forecast.template_config import NoaaGfsForecastTemplateConfig
-from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+from ....common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 
 pytestmark = pytest.mark.slow
 
