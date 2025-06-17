@@ -23,7 +23,7 @@ def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     # Patch generate_source_file_coords to filter out long lead times for faster testing
     original_generate = dataset.region_job_class.generate_source_file_coords
 
-    def filtered_generate(self, processing_region_ds, data_var_group):
+    def filtered_generate(self, processing_region_ds, data_var_group):  # type: ignore
         coords = original_generate(self, processing_region_ds, data_var_group)
         return [coord for coord in coords if coord.lead_time <= pd.Timedelta(hours=12)]
 
