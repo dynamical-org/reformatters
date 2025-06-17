@@ -163,7 +163,7 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
             round_float32_inplace(data_array.values, keep_mantissa_bits)
 
     def update_template_with_results(
-        self, process_results: Mapping[str, Sequence[NoaaGfsSourceFileCoord]]
+        self, process_results: Mapping[str, Sequence[NoaaGfsForecastSourceFileCoord]]
     ) -> xr.Dataset:
         """
         Update template dataset based on processing results. This method is called
@@ -188,33 +188,8 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         xr.Dataset
             Updated template dataset reflecting the actual processing results.
         """
-        # The super() implementation looks like this:
-        #
-        # max_append_dim_processed = max(
-        #     (
-        #         c.out_loc()[self.append_dim]  # type: ignore[type-var]
-        #         for c in chain.from_iterable(process_results.values())
-        #         if c.status == SourceFileStatus.Succeeded
-        #     ),
-        #     default=None,
-        # )
-        # if max_append_dim_processed is None:
-        #     # No data was processed, trim the template to stop before this job's region
-        #     # This is using isel's exclusive slice end behavior
-        #     return self.template_ds.isel(
-        #         {self.append_dim: slice(None, self.region.start)}
-        #     )
-        # else:
-        #     return self.template_ds.sel(
-        #         {self.append_dim: slice(None, max_append_dim_processed)}
-        #     )
-        #
-        # If you like the above behavior, skip implementing this method.
-        # If you need to customize the behavior, implement this method.
-
-        raise NotImplementedError(
-            "Subclasses implement update_template_with_results() with dataset-specific logic"
-        )
+        # TODO: add ingested forecast length coord
+        return super().update_template_with_results(process_results)
 
     @classmethod
     def operational_update_jobs(
