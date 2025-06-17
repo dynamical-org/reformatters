@@ -7,8 +7,11 @@ import xarray as xr
 from _pytest.monkeypatch import MonkeyPatch
 
 from reformatters.common.dynamical_dataset import DynamicalDatasetStorageConfig
-from reformatters.u_arizona.swann import SWANNDataset
-from reformatters.u_arizona.swann.region_job import SWANNRegionJob, SWANNSourceFileCoord
+from reformatters.contrib.u_arizona.swann.analysis import SWANNDataset
+from reformatters.contrib.u_arizona.swann.analysis.region_job import (
+    SWANNRegionJob,
+    SWANNSourceFileCoord,
+)
 
 pytestmark = pytest.mark.slow
 

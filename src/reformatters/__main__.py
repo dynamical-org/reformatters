@@ -9,8 +9,8 @@ import reformatters.noaa.hrrr.forecast_48_hour.cli as noaa_hrrr_forecast_48_hour
 from reformatters.common import deploy
 from reformatters.common.config import Config
 from reformatters.common.dynamical_dataset import DynamicalDatasetStorageConfig
+from reformatters.contrib.u_arizona.swann.analysis import SWANNDataset
 from reformatters.example.new_dataset import initialize_new_integration
-from reformatters.u_arizona.swann import SWANNDataset
 
 
 # Registry of all DynamicalDatasets.

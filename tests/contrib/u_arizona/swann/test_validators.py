@@ -3,7 +3,7 @@ import pandas as pd
 import xarray as xr
 from pytest import MonkeyPatch
 
-from reformatters.u_arizona.swann.validators import (
+from reformatters.contrib.u_arizona.swann.analysis.validators import (
     check_data_is_current,
     check_latest_time_nans,
 )

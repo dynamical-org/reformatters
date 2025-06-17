@@ -5,7 +5,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from reformatters.u_arizona.swann.template_config import SWANNTemplateConfig
+from reformatters.contrib.u_arizona.swann.analysis.template_config import (
+    SWANNTemplateConfig,
+)
 
 
 def test_update_template(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
