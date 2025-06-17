@@ -7,8 +7,11 @@ import xarray as xr
 from _pytest.monkeypatch import MonkeyPatch
 
 from reformatters.common.dynamical_dataset import DynamicalDatasetStorageConfig
-from reformatters.u_arizona.swann import SWANNDataset
-from reformatters.u_arizona.swann.region_job import SWANNRegionJob, SWANNSourceFileCoord
+from reformatters.contrib.uarizona.swann.analysis import UarizonaSwannAnalysisDataset
+from reformatters.contrib.uarizona.swann.analysis.region_job import (
+    UarizonaSwannAnalysisRegionJob,
+    UarizonaSwannAnalysisSourceFileCoord,
+)
 
 pytestmark = pytest.mark.slow
 
@@ -19,7 +22,7 @@ noop_storage_config = DynamicalDatasetStorageConfig(
 
 
 def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    dataset = SWANNDataset(storage_config=noop_storage_config)
+    dataset = UarizonaSwannAnalysisDataset(storage_config=noop_storage_config)
     # Dataset starts at 1981-10-01
     dataset.reformat_local(append_dim_end=pd.Timestamp("1981-10-02"))
     ds = xr.open_zarr(dataset._final_store(), chunks=None)
@@ -32,7 +35,7 @@ def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
 
 
 def test_reformat_operational_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    dataset = SWANNDataset(storage_config=noop_storage_config)
+    dataset = UarizonaSwannAnalysisDataset(storage_config=noop_storage_config)
     # Dataset starts at 1981-10-01
     dataset.reformat_local(append_dim_end=pd.Timestamp("1981-10-02"))
     ds = xr.open_zarr(dataset._final_store(), chunks=None)
@@ -65,7 +68,7 @@ def test_reformat_operational_update(monkeypatch: MonkeyPatch, tmp_path: Path) -
 def test_reformat_operational_update_template_trimming(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
-    dataset = SWANNDataset(storage_config=noop_storage_config)
+    dataset = UarizonaSwannAnalysisDataset(storage_config=noop_storage_config)
     # Dataset starts at 1981-10-01
     dataset.reformat_local(append_dim_end=pd.Timestamp("1981-10-02"))
     ds = xr.open_zarr(dataset._final_store(), chunks=None)
@@ -85,7 +88,10 @@ def test_reformat_operational_update_template_trimming(
 
     original_download_file = dataset.region_job_class.download_file
 
-    def mock_download_file(self: SWANNRegionJob, coord: SWANNSourceFileCoord) -> Path:
+    def mock_download_file(
+        self: UarizonaSwannAnalysisRegionJob,
+        coord: UarizonaSwannAnalysisSourceFileCoord,
+    ) -> Path:
         # Simulate download failure for 1981-10-03 (the last day we're trying to process)
         if coord.time == pd.Timestamp("1981-10-03"):
             raise FileNotFoundError(f"File not found for {coord.time}")

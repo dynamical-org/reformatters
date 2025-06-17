@@ -25,15 +25,15 @@ from reformatters.common.zarr import (
 )
 
 
-class SWANNInternalAttrs(BaseInternalAttrs):
+class UarizonaSwannInternalAttrs(BaseInternalAttrs):
     netcdf_var_name: str
 
 
-class SWANNDataVar(DataVar[SWANNInternalAttrs]):
+class UarizonaSwannDataVar(DataVar[UarizonaSwannInternalAttrs]):
     pass
 
 
-class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
+class UarizonaSwannAnalysisTemplateConfig(TemplateConfig[UarizonaSwannDataVar]):
     dims: tuple[Dim, ...] = ("time", "latitude", "longitude")
     append_dim: AppendDim = "time"
     append_dim_start: Timestamp = pd.Timestamp("1981-10-01")
@@ -43,7 +43,7 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
     @property
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
-            dataset_id="u-arizona-swann",
+            dataset_id="u-arizona-swann-analysis",
             dataset_version="0.1.0",
             name="University of Arizona SWANN Snow",
             description="Daily 4 km Gridded SWE and Snow Depth from Assimilated In-Situ and Modeled Data over the Conterminous US, Version 1",
@@ -181,7 +181,7 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def data_vars(self) -> Sequence[SWANNDataVar]:
+    def data_vars(self) -> Sequence[UarizonaSwannDataVar]:
         # Chunking selected to target ~1.5mb compressed chunks (we are assuming ~20% compression)
         var_chunks: dict[Dim, int] = {
             "time": 365,
@@ -206,7 +206,7 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
         default_keep_mantissa_bits = 8
 
         return [
-            SWANNDataVar(
+            UarizonaSwannDataVar(
                 name="snow_water_equivalent",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -216,12 +216,12 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
                     units="mm h20",
                     step_type="instant",
                 ),
-                internal_attrs=SWANNInternalAttrs(
+                internal_attrs=UarizonaSwannInternalAttrs(
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     netcdf_var_name="SWE",
                 ),
             ),
-            SWANNDataVar(
+            UarizonaSwannDataVar(
                 name="snow_depth",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -231,7 +231,7 @@ class SWANNTemplateConfig(TemplateConfig[SWANNDataVar]):
                     units="mm snow thickness",
                     step_type="instant",
                 ),
-                internal_attrs=SWANNInternalAttrs(
+                internal_attrs=UarizonaSwannInternalAttrs(
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     netcdf_var_name="DEPTH",
                 ),

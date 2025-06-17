@@ -3,8 +3,11 @@ from collections.abc import Sequence
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 
-from .region_job import SWANNRegionJob, SWANNSourceFileCoord
-from .template_config import SWANNDataVar, SWANNTemplateConfig
+from .region_job import (
+    UarizonaSwannAnalysisRegionJob,
+    UarizonaSwannAnalysisSourceFileCoord,
+)
+from .template_config import UarizonaSwannAnalysisTemplateConfig, UarizonaSwannDataVar
 from .validators import (
     check_data_is_current,
     check_latest_time_nans,
@@ -15,9 +18,15 @@ _OPERATIONAL_CRON_SCHEDULE = "0 0 * * *"
 _VALIDATION_CRON_SCHEDULE = "0 0 * * *"
 
 
-class SWANNDataset(DynamicalDataset[SWANNDataVar, SWANNSourceFileCoord]):
-    template_config: SWANNTemplateConfig = SWANNTemplateConfig()
-    region_job_class: type[SWANNRegionJob] = SWANNRegionJob
+class UarizonaSwannAnalysisDataset(
+    DynamicalDataset[UarizonaSwannDataVar, UarizonaSwannAnalysisSourceFileCoord]
+):
+    template_config: UarizonaSwannAnalysisTemplateConfig = (
+        UarizonaSwannAnalysisTemplateConfig()
+    )
+    region_job_class: type[UarizonaSwannAnalysisRegionJob] = (
+        UarizonaSwannAnalysisRegionJob
+    )
 
     def validators(self) -> Sequence[validation.DataValidator]:
         return (
