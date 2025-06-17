@@ -1,6 +1,7 @@
 from datetime import timedelta
 from pathlib import Path
 
+import pandas as pd
 import pytest
 import xarray as xr
 from pytest import MonkeyPatch
@@ -19,7 +20,21 @@ def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     init_time_start = NoaaGfsForecastTemplateConfig().append_dim_start
     init_time_end = init_time_start + timedelta(hours=12)
 
-    # patch dataset.region_job_class's generate_source_file_coords to run the original function but filter all coords with a lead_time > 12 hours AI!
+    # Patch generate_source_file_coords to filter out long lead times for faster testing
+    original_generate = dataset.region_job_class.generate_source_file_coords
+    
+    def filtered_generate(self, processing_region_ds, data_var_group):
+        coords = original_generate(self, processing_region_ds, data_var_group)
+        return [
+            coord for coord in coords 
+            if coord.lead_time <= pd.Timedelta(hours=12)
+        ]
+    
+    monkeypatch.setattr(
+        dataset.region_job_class, 
+        "generate_source_file_coords", 
+        filtered_generate
+    )
 
     # 1. Backfill archive
     dataset.reformat_local(
