@@ -3,6 +3,7 @@ from collections.abc import Sequence
 
 from reformatters.common.iterating import item
 from reformatters.common.region_job import SourceFileCoord
+from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     Timedelta,
     Timestamp,
@@ -20,8 +21,7 @@ class NoaaGfsSourceFileCoord(SourceFileCoord):
     def get_url(self) -> str:
         init_date_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")
-        assert self.lead_time.total_seconds() % 3600 == 0
-        lead_hours = int(self.lead_time.total_seconds() / 3600)
+        lead_hours = whole_hours(self.lead_time)
         base_path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_hours:03d}"
         return f"https://noaa-gfs-bdp-pds.s3.amazonaws.com/{base_path}"
 
@@ -34,16 +34,14 @@ def parse_grib_index(
     starts: list[int] = []
     ends: list[int] = []
 
-    assert coord.lead_time.total_seconds() % 3600 == 0
-    lead_hours = int(coord.lead_time.total_seconds() / 3600)
+    lead_hours = whole_hours(coord.lead_time)
 
     # All accumulation reset frequencies are the same for GFS, `item` will ensure that.
     reset_freq = item(
         {v.internal_attrs.accumulation_reset_freq for v in coord.data_vars}
     )
     if reset_freq is not None:
-        assert reset_freq.total_seconds() % 3600 == 0
-        reset_hours = int(reset_freq.total_seconds() / 3600)
+        reset_hours = whole_hours(reset_freq)
     else:
         reset_hours = None
 

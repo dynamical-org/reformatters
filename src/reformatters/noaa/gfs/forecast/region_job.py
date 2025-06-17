@@ -18,6 +18,7 @@ from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     RegionJob,
 )
+from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     AppendDim,
     ArrayFloat32,
@@ -104,10 +105,8 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         # This is only present in the grib element metadata, the grib index uses formatting like `:APCP:surface:0-4 hour acc fcst:`
         accum_reset_freq = data_var.internal_attrs.accumulation_reset_freq
         if accum_reset_freq is not None:
-            assert coord.lead_time.total_seconds() % 3600 == 0
-            lead_hours = int(coord.lead_time.total_seconds() / 3600)
-            assert accum_reset_freq.total_seconds() % 3600 == 0
-            accum_reset_hours = int(accum_reset_freq.total_seconds() / 3600)
+            lead_hours = whole_hours(coord.lead_time)
+            accum_reset_hours = whole_hours(accum_reset_freq)
             lead_hours_accum = lead_hours % accum_reset_hours
             if lead_hours_accum == 0:
                 lead_hours_accum = accum_reset_hours
