@@ -17,10 +17,15 @@ def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     dataset = NoaaGfsForecastDataset(storage_config=NOOP_STORAGE_CONFIG)
     monkeypatch.setattr(zarr, "_LOCAL_ZARR_STORE_BASE_PATH", tmp_path)
     init_time_start = NoaaGfsForecastTemplateConfig().append_dim_start
-    init_time_end = init_time_start + timedelta(days=1)
+    init_time_end = init_time_start + timedelta(hours=12)
+
+    # patch dataset.region_job_class's generate_source_file_coords to run the original function but filter all coords with a lead_time > 12 hours AI!
 
     # 1. Backfill archive
-    dataset.reformat_local(append_dim_end=init_time_end)
+    dataset.reformat_local(
+        append_dim_end=init_time_end,
+        filter_variable_names=["temperature_2m", "precipitation_surface"],
+    )
     original_ds = xr.open_zarr(
         dataset._final_store(), decode_timedelta=True, chunks=None
     )
