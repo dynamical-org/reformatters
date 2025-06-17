@@ -7,12 +7,17 @@ import pydantic
 class Env(StrEnum):
     dev = "dev"
     prod = "prod"
+    test = "test"
 
 
 class DynamicalConfig(pydantic.BaseModel):
     env: Env = Env(os.getenv("DYNAMICAL_ENV", "dev"))
 
     sentry_dsn: str | None = os.getenv("DYNAMICAL_SENTRY_DSN")
+
+    @property
+    def is_test(self) -> bool:
+        return self.env == Env.test
 
     @property
     def is_dev(self) -> bool:

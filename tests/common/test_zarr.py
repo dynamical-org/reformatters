@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 import zarr
 from pytest import MonkeyPatch
 
@@ -7,6 +8,7 @@ from reformatters.common.config import Config, Env
 from reformatters.common.zarr import get_mode, get_zarr_store
 
 
+@pytest.mark.skip_set_local_zarr_store_base_path
 def test_get_zarr_store_dev(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setattr(Config, "env", Env.dev)
     store = get_zarr_store("fake-prod-path", "test-dataset", "1.0.0")

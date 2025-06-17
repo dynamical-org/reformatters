@@ -37,7 +37,7 @@ def get_zarr_store(
     prod_base_path: str, dataset_id: str, version: str
 ) -> zarr.storage.FsspecStore:
     if not Config.is_prod:
-        version = "dev"
+        version = "dev" if Config.is_dev else version
 
         # This should work, but it gives FileNotFoundError when it should be creating a new zarr.
         # return zarr.storage.FsspecStore.from_url(
