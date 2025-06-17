@@ -23,7 +23,7 @@ from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
-from reformatters.noaa.noaa_config_models import NoaaDataVar, NoaaInternalAttrs
+from reformatters.noaa.models import NoaaDataVar, NoaaInternalAttrs
 
 
 class NoaaGfsForecastTemplateConfig(TemplateConfig[NoaaDataVar]):
@@ -468,8 +468,8 @@ class NoaaGfsForecastTemplateConfig(TemplateConfig[NoaaDataVar]):
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
                     index_position=595,
-                    include_lead_time_suffix=True,
                     deaccumulate_to_rates=True,
+                    accumulation_reset_freq=pd.Timedelta("6h"),
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),

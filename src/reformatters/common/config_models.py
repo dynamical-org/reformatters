@@ -5,7 +5,7 @@ import numcodecs  # type: ignore
 import pydantic
 
 from reformatters.common.pydantic import FrozenBaseModel
-from reformatters.common.types import TimedeltaUnits, TimestampUnits
+from reformatters.common.types import Timedelta, TimedeltaUnits, TimestampUnits
 
 
 class DatasetAttributes(FrozenBaseModel):
@@ -128,6 +128,8 @@ class Coordinate(FrozenBaseModel):
 
 class BaseInternalAttrs(FrozenBaseModel):
     keep_mantissa_bits: int | Literal["no-rounding"]
+    deaccumulate_to_rates: bool = False
+    accumulation_reset_freq: Timedelta | None = None
 
 
 INTERNAL_ATTRS = TypeVar("INTERNAL_ATTRS", bound=BaseInternalAttrs)

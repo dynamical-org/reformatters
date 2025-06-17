@@ -3,7 +3,7 @@ from typing import Literal
 import pandas as pd
 
 from reformatters.common.config_models import DataVar
-from reformatters.noaa.noaa_config_models import NoaaInternalAttrs
+from reformatters.noaa.models import NoaaInternalAttrs
 
 # We pull data from 3 types of source files: `a`, `b` and `s`.
 # Selected variables are available in `s` at higher resolution (0.25 vs 0.5 deg)

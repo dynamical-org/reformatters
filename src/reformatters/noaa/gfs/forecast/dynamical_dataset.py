@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import Job
-from reformatters.noaa.noaa_config_models import NoaaDataVar
+from reformatters.noaa.models import NoaaDataVar
 
 from .region_job import NoaaGfsForecastRegionJob, NoaaGfsSourceFileCoord
 from .template_config import NoaaGfsForecastTemplateConfig

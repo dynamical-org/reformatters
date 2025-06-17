@@ -1,7 +1,7 @@
 from typing import Literal
 
 from reformatters.common.config_models import DataVar
-from reformatters.noaa.noaa_config_models import NoaaInternalAttrs
+from reformatters.noaa.models import NoaaInternalAttrs
 
 type HRRRDomain = Literal["alaska", "conus"]
 

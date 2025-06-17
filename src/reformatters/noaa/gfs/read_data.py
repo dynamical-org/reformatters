@@ -14,7 +14,7 @@ import xarray as xr
 from reformatters.common.config import Config
 from reformatters.common.download import download_to_disk, http_store
 from reformatters.common.types import Array2D
-from reformatters.noaa.noaa_config_models import NoaaDataVar
+from reformatters.noaa.models import NoaaDataVar
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
 DOWNLOAD_DIR = Path("data/download/")

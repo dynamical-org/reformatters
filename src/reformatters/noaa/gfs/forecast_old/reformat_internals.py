@@ -28,7 +28,7 @@ from reformatters.noaa.gfs.read_data import (
     download_file,
     read_into,
 )
-from reformatters.noaa.noaa_config_models import NoaaDataVar
+from reformatters.noaa.models import NoaaDataVar
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
 logger = get_logger(__name__)
