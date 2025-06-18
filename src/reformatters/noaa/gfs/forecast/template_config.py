@@ -655,38 +655,3 @@ class NoaaGfsForecastTemplateConfig(TemplateConfig[NoaaDataVar]):
                 ),
             ),
         ]
-
-    # def get_template(self, end_time: DatetimeLike) -> xr.Dataset:
-    #     ds = super().get_template(end_time)
-
-    #     if not Config.is_prod:
-    #         # Include a variable with:
-    #         # - avg step_type
-    #         # - instant step_type
-    #         # - max step_type
-    #         # - min step_type
-    #         # - () in the grib_index_level
-    #         ds = ds[
-    #             [
-    #                 "precipitation_surface",
-    #                 "temperature_2m",
-    #                 "maximum_temperature_2m",
-    #                 "minimum_temperature_2m",
-    #                 "precipitable_water_atmosphere",
-    #             ]
-    #         ].sel(
-    #             lead_time=[
-    #                 "0h",
-    #                 "1h",
-    #                 "2h",
-    #                 "6h",
-    #                 "7h",
-    #                 "12h",
-    #                 "120h",
-    #                 "123h",
-    #                 "126h",
-    #                 "129h",
-    #             ]
-    #         )
-
-    #     return ds

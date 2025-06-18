@@ -164,30 +164,8 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
     def update_template_with_results(
         self, process_results: Mapping[str, Sequence[NoaaGfsForecastSourceFileCoord]]
     ) -> xr.Dataset:
-        """
-        Update template dataset based on processing results. This method is called
-        during operational updates.
-
-        Subclasses should implement this method to apply dataset-specific adjustments
-        based on the processing results. Examples include:
-        - Trimming dataset along append_dim to only include successfully processed data
-        - Loading existing coordinate values from final_store and updating them based on results
-        - Updating metadata based on what was actually processed vs what was planned
-
-        The default implementation trims along append_dim to end at the most recent
-        successfully processed coordinate (timestamp).
-
-        Parameters
-        ----------
-        process_results : Mapping[str, Sequence[NoaaGfsSourceFileCoord]]
-            Mapping from variable names to their source file coordinates with final processing status.
-
-        Returns
-        -------
-        xr.Dataset
-            Updated template dataset reflecting the actual processing results.
-        """
-        # TODO: add ingested forecast length coord
+        """Update template dataset based on processing results."""
+        # TODO: add and update ingested forecast length coord
         return super().update_template_with_results(process_results)
 
     @classmethod
@@ -205,59 +183,7 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         """
         Return the sequence of RegionJob instances necessary to update the dataset
         from its current state to include the latest available data.
-
-        Also return the template_ds, expanded along append_dim through the end of
-        the data to process. The dataset returned here may extend beyond the
-        available data at the source, in which case `update_template_with_results`
-        will trim the dataset to the actual data processed.
-
-        The exact logic is dataset-specific, but it generally follows this pattern:
-        1. Figure out the range of time to process: append_dim_start (inclusive) and append_dim_end (exclusive)
-            a. Read existing data from final_store to determine what's already processed
-            b. Optionally identify recent incomplete/non-final data for reprocessing
-        2. Call get_template_fn(append_dim_end) to get the template_ds
-        3. Create RegionJob instances by calling cls.get_jobs(..., filter_start=append_dim_start)
-
-        Parameters
-        ----------
-        final_store : zarr.abc.store.Store
-            The destination Zarr store to read existing data from and write updates to.
-        tmp_store : zarr.abc.store.Store | Path
-            The temporary Zarr store to write into while processing.
-        get_template_fn : Callable[[DatetimeLike], xr.Dataset]
-            Function to get the template_ds for the operational update.
-        append_dim : AppendDim
-            The dimension along which data is appended (e.g., "time").
-        all_data_vars : Sequence[NoaaDataVar]
-            Sequence of all data variable configs for this dataset.
-        reformat_job_name : str
-            The name of the reformatting job, used for progress tracking.
-            This is often the name of the Kubernetes job, or "local".
-
-        Returns
-        -------
-        Sequence[RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]]
-            RegionJob instances that need processing for operational updates.
-        xr.Dataset
-            The template_ds for the operational update.
         """
-        # existing_ds = xr.open_zarr(final_store)
-        # append_dim_start = existing_ds[append_dim].max()
-        # append_dim_end = pd.Timestamp.now()
-        # template_ds = get_template_fn(append_dim_end)
-
-        # jobs = cls.get_jobs(
-        #     kind="operational-update",
-        #     final_store=final_store,
-        #     tmp_store=tmp_store,
-        #     template_ds=template_ds,
-        #     append_dim=append_dim,
-        #     all_data_vars=all_data_vars,
-        #     reformat_job_name=reformat_job_name,
-        #     filter_start=append_dim_start,
-        # )
-        # return jobs, temoplate_ds
-
         raise NotImplementedError(
             "Subclasses implement operational_update_jobs() with dataset-specific logic"
         )

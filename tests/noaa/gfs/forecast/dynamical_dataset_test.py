@@ -34,9 +34,9 @@ def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
         filter_variable_names=[
             "temperature_2m",  # instantaneous
             "precipitation_surface",  # accumulation we deaccumulate
-            "precipitable_water_atmosphere",  # average
-            "maximum_temperature_2m",  # average
-            "minimum_temperature_2m",  # average
+            "precipitable_water_atmosphere",  # average over window
+            "maximum_temperature_2m",  # max over window
+            "minimum_temperature_2m",  # min over window
         ],
     )
     original_ds = xr.open_zarr(
