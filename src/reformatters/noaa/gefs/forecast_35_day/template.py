@@ -55,9 +55,14 @@ def get_template(init_time_end: DatetimeLike) -> xr.Dataset:
         coordinate.load()
 
     if not Config.is_prod:
-        ds = ds[["wind_u_100m", "temperature_2m"]].sel(
-            ensemble_member=slice(2), lead_time=["0h", "840h"]
-        )
+        ds = ds[
+            [
+                "wind_u_100m",  # b file, instantaneous
+                "temperature_2m",  # a file, instantaneous
+                "precipitation_surface",  # deaccumulation
+                "maximum_temperature_2m",  # accumulated value w/o deaccumulation
+            ]
+        ].sel(ensemble_member=slice(2), lead_time=["0h", "3h", "6h", "9h", "840h"])
 
     return ds
 

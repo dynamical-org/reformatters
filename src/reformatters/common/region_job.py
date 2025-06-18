@@ -207,7 +207,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         data_var : DATA_VAR
             The data variable metadata object, which may contain transformation parameters.
         """
-
         keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
         if isinstance(keep_mantissa_bits, int):
             round_float32_inplace(

@@ -11,7 +11,7 @@ from reformatters.contrib.uarizona.swann.analysis.validators import (
 
 def test_check_latest_time_nans_success() -> None:
     """Test passes when most recent time step has low NaN percentage."""
-    times = pd.date_range("2024-01-01", periods=3, freq="6H")
+    times = pd.date_range("2024-01-01", periods=3, freq="6h")
 
     # Create data where only the last time step has NaNs
     data = np.ones((3, 3, 3))
@@ -30,7 +30,7 @@ def test_check_latest_time_nans_success() -> None:
 
 def test_check_latest_time_nans_failure() -> None:
     """Test passes when most recent time step has low NaN percentage."""
-    times = pd.date_range("2024-01-01", periods=3, freq="6H")
+    times = pd.date_range("2024-01-01", periods=3, freq="6h")
 
     data = np.ones((3, 3, 3))
     data[-1, :, :] = np.nan  # Last time step all NaN

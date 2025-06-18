@@ -1,7 +1,7 @@
 from typing import Literal
 
 from reformatters.common.config_models import DataVar
-from reformatters.noaa.noaa_config_models import NOAAInternalAttrs
+from reformatters.noaa.models import NoaaInternalAttrs
 
 type HRRRDomain = Literal["alaska", "conus"]
 
@@ -13,7 +13,7 @@ type HRRRDomain = Literal["alaska", "conus"]
 type HRRRFileType = Literal["prs", "nat", "sfc", "subh"]
 
 
-class HRRRInternalAttrs(NOAAInternalAttrs):
+class HRRRInternalAttrs(NoaaInternalAttrs):
     hrrr_file_type: HRRRFileType
 
 

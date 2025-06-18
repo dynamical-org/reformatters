@@ -1,4 +1,3 @@
-import json
 from datetime import timedelta
 from pathlib import Path
 
@@ -6,43 +5,43 @@ import pytest
 import xarray as xr
 from pytest import MonkeyPatch
 
-from reformatters.noaa.gfs.forecast import (
-    cli,
-    reformat,
-)
-from reformatters.noaa.gfs.forecast.template_config import GFS_FORECAST_TEMPLATE_CONFIG
+from reformatters.common import zarr
+from reformatters.noaa.gfs.forecast import NoaaGfsForecastDataset
+from reformatters.noaa.gfs.forecast.template_config import NoaaGfsForecastTemplateConfig
+from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 
 pytestmark = pytest.mark.slow
 
 
-def test_update_template(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    with open(GFS_FORECAST_TEMPLATE_CONFIG.template_path() / "zarr.json") as latest_f:
-        template_consolidated_metadata = json.load(latest_f)
+def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+    dataset = NoaaGfsForecastDataset(storage_config=NOOP_STORAGE_CONFIG)
+    init_time_start = NoaaGfsForecastTemplateConfig().append_dim_start
+    init_time_end = init_time_start + timedelta(hours=12)
 
-    test_template_path = tmp_path / "latest.zarr"
+    monkeypatch.setattr(zarr, "_LOCAL_ZARR_STORE_BASE_PATH", tmp_path)
+    orig_get_template = NoaaGfsForecastTemplateConfig.get_template
     monkeypatch.setattr(
-        type(GFS_FORECAST_TEMPLATE_CONFIG),
-        "template_path",
-        lambda _self: test_template_path,
+        NoaaGfsForecastTemplateConfig,
+        "get_template",
+        lambda self, end_time: orig_get_template(self, end_time).sel(
+            lead_time=slice("0h", "12h")
+        ),
     )
-
-    cli.update_template()
-
-    with open(test_template_path / "zarr.json") as test_f:
-        updated_consolidated_metadata = json.load(test_f)
-
-    assert json.dumps(updated_consolidated_metadata) == json.dumps(
-        template_consolidated_metadata
-    )
-
-
-def test_reformat_local() -> None:
-    init_time_start = GFS_FORECAST_TEMPLATE_CONFIG.append_dim_start
-    init_time_end = init_time_start + timedelta(days=1)
 
     # 1. Backfill archive
-    cli.reformat_local(init_time_end=init_time_end.isoformat())
-    original_ds = xr.open_zarr(reformat.get_store(), decode_timedelta=True, chunks=None)
+    dataset.reformat_local(
+        append_dim_end=init_time_end,
+        filter_variable_names=[
+            "temperature_2m",  # instantaneous
+            "precipitation_surface",  # accumulation we deaccumulate
+            "precipitable_water_atmosphere",  # average over window
+            "maximum_temperature_2m",  # max over window
+            "minimum_temperature_2m",  # min over window
+        ],
+    )
+    original_ds = xr.open_zarr(
+        dataset._final_store(), decode_timedelta=True, chunks=None
+    )
 
     space_subset_ds = original_ds.sel(latitude=slice(10, 0), longitude=slice(0, 10))
 

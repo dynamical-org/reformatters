@@ -6,7 +6,6 @@ import pandas as pd
 import xarray as xr
 from pydantic import computed_field
 
-from reformatters.common.config import Config
 from reformatters.common.config_models import (
     Coordinate,
     CoordinateAttrs,
@@ -19,15 +18,15 @@ from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
     TemplateConfig,
 )
-from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
-from reformatters.noaa.noaa_config_models import NOAADataVar, NOAAInternalAttrs
+from reformatters.noaa.models import NoaaDataVar, NoaaInternalAttrs
 
 
-class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
+class NoaaGfsForecastTemplateConfig(TemplateConfig[NoaaDataVar]):
     dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = pd.Timestamp("2021-05-01T00:00")
@@ -38,7 +37,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
             dataset_id="noaa-gfs-forecast",
-            dataset_version="0.1.0",
+            dataset_version="0.2.0",
             name="NOAA GFS forecast",
             description="Weather forecasts from the Global Forecast System (GFS) operated by NOAA NWS NCEP.",
             attribution="NOAA NWS NCEP GFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
@@ -252,7 +251,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def data_vars(self) -> Sequence[NOAADataVar]:
+    def data_vars(self) -> Sequence[NoaaDataVar]:
         var_chunks: dict[Dim, int] = {
             "init_time": 1,
             "lead_time": 105,
@@ -274,10 +273,11 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
 
+        default_window_reset_frequency = pd.Timedelta("6h")
         default_keep_mantissa_bits = 7
 
         return [
-            NOAADataVar(
+            NoaaDataVar(
                 name="pressure_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -287,7 +287,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     step_type="instant",
                     standard_name="surface_air_pressure",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="PRES",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
@@ -295,7 +295,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     keep_mantissa_bits=10,
                 ),
             ),
-            NOAADataVar(
+            NoaaDataVar(
                 name="temperature_2m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -305,7 +305,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     step_type="instant",
                     standard_name="air_temperature",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="TMP",
                     grib_description='2[m] HTGL="Specified height level above ground"',
                     grib_index_level="2 m above ground",
@@ -313,7 +313,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
-            NOAADataVar(
+            NoaaDataVar(
                 name="relative_humidity_2m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -323,7 +323,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     step_type="instant",
                     standard_name="relative_humidity",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="RH",
                     grib_description='2[m] HTGL="Specified height level above ground"',
                     grib_index_level="2 m above ground",
@@ -331,7 +331,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
-            NOAADataVar(
+            NoaaDataVar(
                 name="maximum_temperature_2m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -340,15 +340,16 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     units="C",
                     step_type="max",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="TMAX",
                     grib_description='2[m] HTGL="Specified height level above ground"',
                     grib_index_level="2 m above ground",
                     index_position=585,
+                    window_reset_frequency=default_window_reset_frequency,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
-            NOAADataVar(
+            NoaaDataVar(
                 name="minimum_temperature_2m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -357,15 +358,16 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     units="C",
                     step_type="min",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="TMIN",
                     grib_description='2[m] HTGL="Specified height level above ground"',
                     grib_index_level="2 m above ground",
                     index_position=586,
+                    window_reset_frequency=default_window_reset_frequency,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
-            NOAADataVar(
+            NoaaDataVar(
                 name="wind_u_10m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -375,7 +377,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     step_type="instant",
                     standard_name="eastward_wind",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="UGRD",
                     grib_description='10[m] HTGL="Specified height level above ground"',
                     grib_index_level="10 m above ground",
@@ -383,7 +385,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     keep_mantissa_bits=6,
                 ),
             ),
-            NOAADataVar(
+            NoaaDataVar(
                 name="wind_v_10m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -393,7 +395,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     step_type="instant",
                     standard_name="northward_wind",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="VGRD",
                     grib_description='10[m] HTGL="Specified height level above ground"',
                     grib_index_level="10 m above ground",
@@ -401,7 +403,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     keep_mantissa_bits=6,
                 ),
             ),
-            NOAADataVar(
+            NoaaDataVar(
                 name="wind_u_100m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -411,7 +413,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     units="m/s",
                     step_type="instant",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="UGRD",
                     grib_description='100[m] HTGL="Specified height level above ground"',
                     grib_index_level="100 m above ground",
@@ -419,7 +421,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     keep_mantissa_bits=6,
                 ),
             ),
-            NOAADataVar(
+            NoaaDataVar(
                 name="wind_v_100m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -429,7 +431,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     step_type="instant",
                     standard_name="northward_wind",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="VGRD",
                     grib_index_level="100 m above ground",
                     grib_description='100[m] HTGL="Specified height level above ground"',
@@ -437,7 +439,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     keep_mantissa_bits=6,
                 ),
             ),
-            NOAADataVar(
+            NoaaDataVar(
                 name="percent_frozen_precipitation_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -446,7 +448,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     units="%",
                     step_type="instant",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="CPOFP",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
@@ -454,7 +456,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
-            NOAADataVar(
+            NoaaDataVar(
                 name="precipitation_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -464,17 +466,17 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     comment="Average precipitation rate since the previous forecast step.",
                     step_type="avg",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="APCP",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
                     index_position=595,
-                    include_lead_time_suffix=True,
-                    deaccumulate_to_rates=True,
+                    deaccumulate_to_rate=True,
+                    window_reset_frequency=default_window_reset_frequency,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
-            NOAADataVar(
+            NoaaDataVar(
                 name="categorical_snow_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -483,15 +485,16 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     units="0=no; 1=yes",
                     step_type="avg",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="CSNOW",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
                     index_position=604,
+                    window_reset_frequency=default_window_reset_frequency,
                     keep_mantissa_bits="no-rounding",
                 ),
             ),
-            NOAADataVar(
+            NoaaDataVar(
                 name="categorical_ice_pellets_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -500,15 +503,16 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     units="0=no; 1=yes",
                     step_type="avg",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="CICEP",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
                     index_position=605,
+                    window_reset_frequency=default_window_reset_frequency,
                     keep_mantissa_bits="no-rounding",
                 ),
             ),
-            NOAADataVar(
+            NoaaDataVar(
                 name="categorical_freezing_rain_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -517,15 +521,16 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     units="0=no; 1=yes",
                     step_type="avg",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="CFRZR",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
                     index_position=606,
+                    window_reset_frequency=default_window_reset_frequency,
                     keep_mantissa_bits="no-rounding",
                 ),
             ),
-            NOAADataVar(
+            NoaaDataVar(
                 name="categorical_rain_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -534,15 +539,16 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     units="0=no; 1=yes",
                     step_type="avg",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="CRAIN",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
                     index_position=607,
+                    window_reset_frequency=default_window_reset_frequency,
                     keep_mantissa_bits="no-rounding",
                 ),
             ),
-            NOAADataVar(
+            NoaaDataVar(
                 name="precipitable_water_atmosphere",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -551,7 +557,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     units="kg/(m^2)",
                     step_type="instant",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="PWAT",
                     grib_description='0[-] EATM="Entire atmosphere (considered as a single layer)"',
                     grib_index_level="entire atmosphere (considered as a single layer)",
@@ -559,7 +565,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
-            NOAADataVar(
+            NoaaDataVar(
                 name="total_cloud_cover_atmosphere",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -568,15 +574,16 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     units="%",
                     step_type="avg",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="TCDC",
                     grib_description='0[-] EATM="Entire Atmosphere"',
                     grib_index_level="entire atmosphere",
                     index_position=635,
+                    window_reset_frequency=default_window_reset_frequency,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
-            NOAADataVar(
+            NoaaDataVar(
                 name="geopotential_height_cloud_ceiling",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -586,7 +593,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     step_type="instant",
                     standard_name="geopotential_height",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="HGT",
                     grib_description='0[-] CEIL="Cloud ceiling"',
                     grib_index_level="cloud ceiling",
@@ -594,7 +601,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     keep_mantissa_bits=8,
                 ),
             ),
-            NOAADataVar(
+            NoaaDataVar(
                 name="downward_short_wave_radiation_flux_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -603,15 +610,16 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     units="W/(m^2)",
                     step_type="avg",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="DSWRF",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
                     index_position=652,
+                    window_reset_frequency=default_window_reset_frequency,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
-            NOAADataVar(
+            NoaaDataVar(
                 name="downward_long_wave_radiation_flux_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -620,15 +628,16 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     units="W/(m^2)",
                     step_type="avg",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="DLWRF",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
                     index_position=653,
+                    window_reset_frequency=default_window_reset_frequency,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
-            NOAADataVar(
+            NoaaDataVar(
                 name="pressure_reduced_to_mean_sea_level",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -637,7 +646,7 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                     units="Pa",
                     step_type="instant",
                 ),
-                internal_attrs=NOAAInternalAttrs(
+                internal_attrs=NoaaInternalAttrs(
                     grib_element="PRMSL",
                     grib_description='0[-] MSL="Mean sea level"',
                     grib_index_level="mean sea level",
@@ -646,41 +655,3 @@ class GFSForecastTemplateConfig(TemplateConfig[NOAADataVar]):
                 ),
             ),
         ]
-
-    def get_template(self, end_time: DatetimeLike) -> xr.Dataset:
-        ds = super().get_template(end_time)
-
-        if not Config.is_prod:
-            # Include a variable with:
-            # - avg step_type
-            # - instant step_type
-            # - max step_type
-            # - min step_type
-            # - () in the grib_index_level
-            ds = ds[
-                [
-                    "precipitation_surface",
-                    "temperature_2m",
-                    "maximum_temperature_2m",
-                    "minimum_temperature_2m",
-                    "precipitable_water_atmosphere",
-                ]
-            ].sel(
-                lead_time=[
-                    "0h",
-                    "1h",
-                    "2h",
-                    "6h",
-                    "7h",
-                    "12h",
-                    "120h",
-                    "123h",
-                    "126h",
-                    "129h",
-                ]
-            )
-
-        return ds
-
-
-GFS_FORECAST_TEMPLATE_CONFIG = GFSForecastTemplateConfig()

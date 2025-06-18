@@ -27,6 +27,10 @@ from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 
+NOOP_STORAGE_CONFIG = DynamicalDatasetStorageConfig(
+    base_path="noop",
+)
+
 
 class ExampleDatasetStorageConfig(DynamicalDatasetStorageConfig):
     base_path: str = "s3://some-bucket/path"

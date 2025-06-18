@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from typing import Any, Literal
 
 import numpy as np
+import pandas as pd
 
 from reformatters.common.config_models import (
     Coordinate,
@@ -304,7 +305,8 @@ def get_shared_data_var_configs(
                 gefs_file_type="s+a",
                 index_position=18,
                 include_lead_time_suffix=True,
-                deaccumulate_to_rates=True,
+                deaccumulate_to_rate=True,
+                window_reset_frequency=pd.Timedelta("6h"),
                 keep_mantissa_bits=keep_mantissa_bits_default,
             ),
         ),

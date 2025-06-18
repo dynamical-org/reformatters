@@ -77,10 +77,26 @@ def http_store(base_url: str) -> obstore.store.HTTPStore:
     )
 
 
-def http_download_to_disk(url: str, dataset_id: str) -> Path:
+def http_download_to_disk(
+    url: str,
+    dataset_id: str,
+    byte_ranges: tuple[Sequence[int], Sequence[int]] | None = None,
+    local_path_suffix: str = "",
+) -> Path:
     parsed_url = urlparse(url)
     base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
     store = http_store(base_url)
-    local_path = DOWNLOAD_DIR / dataset_id / parsed_url.path.removeprefix("/")
-    download_to_disk(store, parsed_url.path, local_path, overwrite_existing=True)
+    base_local = DOWNLOAD_DIR / dataset_id / parsed_url.path.removeprefix("/")
+    local_path = (
+        base_local.with_name(base_local.name + local_path_suffix)
+        if local_path_suffix
+        else base_local
+    )
+    download_to_disk(
+        store,
+        parsed_url.path,
+        local_path,
+        overwrite_existing=True,
+        byte_ranges=byte_ranges,
+    )
     return local_path

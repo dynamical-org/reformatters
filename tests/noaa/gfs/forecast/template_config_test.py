@@ -1,15 +1,58 @@
+import json
 import re
+from copy import deepcopy
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
 
 from reformatters.common.template_config import SPATIAL_REF_COORDS
-from reformatters.noaa.gfs.forecast.template_config import GFS_FORECAST_TEMPLATE_CONFIG
+from reformatters.noaa.gfs.forecast.template_config import NoaaGfsForecastTemplateConfig
+
+
+def test_update_template(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """
+    Ensure that `uv run main <dataset-id> update-template` has been run and
+    all changes to NoaaGfsForecastTemplateConfig are reflected in the on-disk Zarr template.
+    """
+    template_config = NoaaGfsForecastTemplateConfig()
+    with open(template_config.template_path() / "zarr.json") as f:
+        existing_template = json.load(f)
+
+    test_template_path = tmp_path / "latest.zarr"
+    monkeypatch.setattr(
+        NoaaGfsForecastTemplateConfig,
+        "template_path",
+        lambda _self: test_template_path,
+    )
+
+    template_config.update_template()
+
+    with open(template_config.template_path() / "zarr.json") as f:
+        updated_template = json.load(f)
+
+    assert existing_template == updated_template
+
+
+def test_get_template_spatial_ref() -> None:
+    """Ensure the spatial reference system in the template matched our expectation."""
+    template_config = NoaaGfsForecastTemplateConfig()
+    ds = template_config.get_template(
+        template_config.append_dim_start + pd.Timedelta(days=10)
+    )
+    original_attrs = deepcopy(ds.spatial_ref.attrs)
+
+    expected_crs = "+proj=longlat +a=6371229 +b=6371229 +no_defs +type=crs"
+    calculated_spatial_ref_attrs = ds.rio.write_crs(expected_crs).spatial_ref.attrs
+    assert set(original_attrs) - set(calculated_spatial_ref_attrs) == {"comment"}
+    original_attrs.pop("comment")
+    assert original_attrs == calculated_spatial_ref_attrs
 
 
 def test_dataset_attributes() -> None:
-    cfg = GFS_FORECAST_TEMPLATE_CONFIG
+    cfg = NoaaGfsForecastTemplateConfig()
     attrs = cfg.dataset_attributes
     assert attrs.dataset_id == "noaa-gfs-forecast"
     assert re.match(r"\d+\.\d+\.\d+", attrs.dataset_version) is not None
@@ -20,7 +63,7 @@ def test_dataset_attributes() -> None:
 
 
 def test_dimension_coordinates_shapes_and_values() -> None:
-    cfg = GFS_FORECAST_TEMPLATE_CONFIG
+    cfg = NoaaGfsForecastTemplateConfig()
     dc = cfg.dimension_coordinates()
     # must have exactly these four dims
     assert set(dc) == {"init_time", "lead_time", "latitude", "longitude"}
@@ -51,7 +94,7 @@ def test_dimension_coordinates_shapes_and_values() -> None:
 
 
 def test_derive_coordinates_and_spatial_ref() -> None:
-    cfg = GFS_FORECAST_TEMPLATE_CONFIG
+    cfg = NoaaGfsForecastTemplateConfig()
     dc = cfg.dimension_coordinates()
     ds = xr.Dataset(coords=dc)
     derived = cfg.derive_coordinates(ds)
@@ -84,7 +127,7 @@ def test_derive_coordinates_and_spatial_ref() -> None:
 
 
 def test_coords_property_order_and_names() -> None:
-    cfg = GFS_FORECAST_TEMPLATE_CONFIG
+    cfg = NoaaGfsForecastTemplateConfig()
     names = [c.name for c in cfg.coords]
     assert names == [
         "init_time",

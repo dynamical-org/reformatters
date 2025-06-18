@@ -28,7 +28,6 @@ from reformatters.common.types import ArrayFloat32
 from reformatters.noaa.gefs.forecast_35_day import template
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
 from reformatters.noaa.gefs.read_data import (
-    GEFS_ACCUMULATION_RESET_FREQUENCY,
     ChunkCoordinates,
     EnsembleSourceFileCoords,
     SourceFileCoords,
@@ -383,13 +382,13 @@ def read_into_data_array(
 def apply_data_transformations_inplace(
     data_array: xr.DataArray, data_var: DataVar[Any]
 ) -> None:
-    if data_var.internal_attrs.deaccumulate_to_rates:
+    if data_var.internal_attrs.deaccumulate_to_rate:
         logger.info(f"Converting {data_var.name} from accumulations to rates")
         try:
             deaccumulate_to_rates_inplace(
                 data_array,
                 dim="lead_time",
-                reset_frequency=GEFS_ACCUMULATION_RESET_FREQUENCY,
+                reset_frequency=data_var.internal_attrs.window_reset_frequency,
             )
         except ValueError:
             # Log exception so we are notified if deaccumulation errors are larger than expected.

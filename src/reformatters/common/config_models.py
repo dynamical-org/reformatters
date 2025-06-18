@@ -128,6 +128,7 @@ class Coordinate(FrozenBaseModel):
 
 class BaseInternalAttrs(FrozenBaseModel):
     keep_mantissa_bits: int | Literal["no-rounding"]
+    deaccumulate_to_rate: bool = False
 
 
 INTERNAL_ATTRS = TypeVar("INTERNAL_ATTRS", bound=BaseInternalAttrs)

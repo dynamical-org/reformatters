@@ -35,7 +35,6 @@ class ExampleInternalAttrs(BaseInternalAttrs):
 
     # For example,
     # grib_element: str
-    # deaccumulate_to_rates: bool = False
 
 
 class ExampleDataVar(DataVar[ExampleInternalAttrs]):
@@ -323,7 +322,8 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #             grib_index_level="surface",
         #             index_position=595,
         #             include_lead_time_suffix=True,
-        #             deaccumulate_to_rates=True,
+        #             deaccumulate_to_rate=True,
+        #             window_reset_frequency=pd.Timedelta("6h"),
         #             keep_mantissa_bits=default_keep_mantissa_bits,
         #         ),
         #     ),
@@ -359,6 +359,7 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #             grib_comment='0[-] SFC="Ground or water surface"',
         #             grib_index_level="surface",
         #             index_position=604,
+        #             window_reset_frequency=pd.Timedelta("6h"),
         #             keep_mantissa_bits="no-rounding",
         #         ),
         #     ),
@@ -376,6 +377,7 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #             grib_comment='0[-] EATM="Entire Atmosphere"',
         #             grib_index_level="entire atmosphere",
         #             index_position=635,
+        #             window_reset_frequency=pd.Timedelta("6h"),
         #             keep_mantissa_bits=default_keep_mantissa_bits,
         #         ),
         #     ),

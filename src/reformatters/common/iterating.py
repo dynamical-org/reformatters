@@ -1,3 +1,4 @@
+import hashlib
 from collections import deque
 from collections.abc import Iterable, Sequence
 from itertools import islice, pairwise, product, starmap
@@ -53,3 +54,28 @@ def consume[T](iterator: Iterable[T], n: int | None = None) -> None:
         deque(iterator, maxlen=0)
     else:
         next(islice(iterator, n, n), None)
+
+
+def item[T](iterable: Iterable[T]) -> T:
+    """Return the single item from the iterable."""
+    iterator = iter(iterable)
+    try:
+        result = next(iterator)
+    except StopIteration:
+        raise ValueError("Expected exactly one item, got zero") from None
+
+    try:
+        next(iterator)
+        raise ValueError("Expected exactly one item, got multiple")
+    except StopIteration:
+        pass
+
+    return result
+
+
+def digest(data: Iterable[str], length: int = 8) -> str:
+    """Consistent, likely collision-free string digest of one or more strings."""
+    message = hashlib.sha256()
+    for string in data:
+        message.update(string.encode())
+    return message.hexdigest()[:length]
