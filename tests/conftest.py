@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-# Ensure project root is on sys.path so `tests` is importable
+# Make tests able to import from other files in tests/
 sys.path.append(str(Path(__file__).parent.parent))
 
 # This needs to run before any application imports to ensure that
