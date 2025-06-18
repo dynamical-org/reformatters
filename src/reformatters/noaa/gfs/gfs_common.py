@@ -1,10 +1,11 @@
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from reformatters.common.iterating import item
-from reformatters.common.region_job import SourceFileCoord
+from reformatters.common.region_job import CoordinateValueOrRange, SourceFileCoord
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
+    Dim,
     Timedelta,
     Timestamp,
 )
@@ -24,6 +25,9 @@ class NoaaGfsSourceFileCoord(SourceFileCoord):
         lead_hours = whole_hours(self.lead_time)
         base_path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_hours:03d}"
         return f"https://noaa-gfs-bdp-pds.s3.amazonaws.com/{base_path}"
+
+    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+        return {"init_time": self.init_time, "lead_time": self.lead_time}
 
 
 def parse_grib_index(
@@ -59,7 +63,7 @@ def parse_grib_index(
             reset_hour = lead_hours - diff if diff != 0 else lead_hours - reset_hours
             hours_str_prefix = f"{reset_hour}-{lead_hours}"
         else:
-            raise ValueError(f"Unhandled grib lead/accumulation hours: {var}")
+            raise ValueError(f"Unhandled grib lead/accumulation hours: {var.name}")
 
         var_match_str = re.escape(
             f"{var.internal_attrs.grib_element}:{var.internal_attrs.grib_index_level}:{hours_str_prefix}"

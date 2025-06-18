@@ -17,9 +17,7 @@ from reformatters.common.download import (
 )
 from reformatters.common.iterating import digest
 from reformatters.common.logging import get_logger
-from reformatters.common.region_job import (
-    RegionJob,
-)
+from reformatters.common.region_job import RegionJob
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     AppendDim,
@@ -37,9 +35,8 @@ log = get_logger(__name__)
 
 
 class NoaaGfsForecastSourceFileCoord(NoaaGfsSourceFileCoord):
-    # We share the name attributes (init_time, lead_time) with
-    # NoaaGfsSourceFileCoord, and the same.
-    # The default out_loc implementation of
+    # We share the name attributes (init_time, lead_time, data_vars) with
+    # NoaaGfsSourceFileCoord, and the default out_loc implementation of
     # {"init_time": self.init_time, "lead_time": self.lead_time}
     # is correct for this dataset.
     pass
@@ -93,7 +90,7 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
             coord.get_url(),
             self.dataset_id,
             byte_ranges=(starts, ends),
-            local_path_suffix=vars_suffix,
+            local_path_suffix=f"-{vars_suffix}",
         )
 
     def read_data(
