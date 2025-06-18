@@ -19,9 +19,6 @@ from reformatters.example.new_dataset import initialize_new_integration
 from reformatters.noaa.gfs.forecast import NoaaGfsForecastDataset
 
 
-# Registry of all DynamicalDatasets.
-# Datasets that have not yet been ported over to the new DynamicalDataset pattern
-# are excluded here until they are refactored.
 class SourceCoopDatasetStorageConfig(DynamicalDatasetStorageConfig):
     """Configuration for the storage of a SourceCoop dataset."""
 
@@ -29,6 +26,9 @@ class SourceCoopDatasetStorageConfig(DynamicalDatasetStorageConfig):
     k8s_secret_name: str = "source-coop-key"  # noqa: S105
 
 
+# Registry of all DynamicalDatasets.
+# Datasets that have not yet been ported over to the new DynamicalDataset pattern
+# are excluded here until they are refactored.
 DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     UarizonaSwannAnalysisDataset(storage_config=SourceCoopDatasetStorageConfig()),
     NoaaGfsForecastDataset(storage_config=SourceCoopDatasetStorageConfig()),

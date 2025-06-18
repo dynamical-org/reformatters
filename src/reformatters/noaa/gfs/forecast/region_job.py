@@ -15,7 +15,7 @@ from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import (
     http_download_to_disk,
 )
-from reformatters.common.iterating import digest
+from reformatters.common.iterating import digest, item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob
 from reformatters.common.time_utils import whole_hours
@@ -64,6 +64,10 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[NoaaDataVar]
     ) -> Sequence[NoaaGfsForecastSourceFileCoord]:
         """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
+        var_has_hour_0_values = item({has_hour_0_values(v) for v in data_var_group})
+        if not var_has_hour_0_values:
+            processing_region_ds = processing_region_ds.sel(lead_time=slice("1h", None))
+
         return [
             NoaaGfsForecastSourceFileCoord(
                 init_time=pd.Timestamp(init_time),
@@ -102,16 +106,16 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         grib_element = data_var.internal_attrs.grib_element
         # GFS accumulations add a zero-padded accumulation hours suffix to the grib element, e.g. `APCP04`
         # This is only present in the grib element metadata, the grib index looks like `:APCP:surface:0-4 hour acc fcst:`
-        accum_reset_freq = (
-            data_var.internal_attrs.deaccumulate_from_accumulation_frequency
-        )
-        if accum_reset_freq is not None:
+        if data_var.internal_attrs.deaccumulate_to_rate:
+            assert data_var.internal_attrs.window_reset_frequency is not None
             lead_hours = whole_hours(coord.lead_time)
-            accum_reset_hours = whole_hours(accum_reset_freq)
-            lead_hours_accum = lead_hours % accum_reset_hours
-            if lead_hours_accum == 0:
-                lead_hours_accum = accum_reset_hours
-            grib_element += str(lead_hours_accum).zfill(2)
+            window_reset_hours = whole_hours(
+                data_var.internal_attrs.window_reset_frequency
+            )
+            lead_hours_window = lead_hours % window_reset_hours
+            if lead_hours_window == 0:
+                lead_hours_window = window_reset_hours
+            grib_element += str(lead_hours_window).zfill(2)
 
         grib_description = data_var.internal_attrs.grib_description
 
@@ -140,16 +144,14 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         self, data_array: xr.DataArray, data_var: NoaaDataVar
     ) -> None:
         """Apply in-place data transformations to the output data array for a given data variable."""
-        accum_reset_freq = (
-            data_var.internal_attrs.deaccumulate_from_accumulation_frequency
-        )
-        if accum_reset_freq is not None:
+        if data_var.internal_attrs.deaccumulate_to_rate:
+            assert data_var.internal_attrs.window_reset_frequency is not None
             log.info(f"Converting {data_var.name} from accumulations to rates")
             try:
                 deaccumulate_to_rates_inplace(
                     data_array,
                     dim="lead_time",
-                    reset_frequency=accum_reset_freq,
+                    reset_frequency=data_var.internal_attrs.window_reset_frequency,
                 )
             except ValueError:
                 # Log exception so we are notified if deaccumulation errors are larger than expected.

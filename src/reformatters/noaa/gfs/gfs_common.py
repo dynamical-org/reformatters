@@ -42,10 +42,7 @@ def parse_grib_index(
 
     # All accumulation reset frequencies are the same for GFS, `item(set(...))` will ensure that
     reset_freq = item(
-        {
-            v.internal_attrs.deaccumulate_from_accumulation_frequency
-            for v in coord.data_vars
-        }
+        {v.internal_attrs.window_reset_frequency for v in coord.data_vars}
     )
     if reset_freq is not None:
         reset_hours = whole_hours(reset_freq)
@@ -55,13 +52,18 @@ def parse_grib_index(
     for var in coord.data_vars:
         # Handle how the lead time or accumulation time is included in the element name in the grib index file
         if lead_hours == 0:
-            hours_str_prefix = ""
+            hours_str_prefix = "anl"
         elif var.attrs.step_type == "instant":
-            hours_str_prefix = str(lead_hours)
+            hours_str_prefix = f"{lead_hours} hour fcst"
         elif reset_hours is not None:
             diff = lead_hours % reset_hours
             reset_hour = lead_hours - diff if diff != 0 else lead_hours - reset_hours
-            hours_str_prefix = f"{reset_hour}-{lead_hours}"
+            step_type = (
+                "acc"
+                if var.internal_attrs.deaccumulate_to_rate
+                else var.attrs.step_type
+            )
+            hours_str_prefix = f"{reset_hour}-{lead_hours} hour {step_type} fcst"
         else:
             raise ValueError(f"Unhandled grib lead/accumulation hours: {var.name}")
 
@@ -69,12 +71,13 @@ def parse_grib_index(
             f"{var.internal_attrs.grib_element}:{var.internal_attrs.grib_index_level}:{hours_str_prefix}"
         )
         matches = re.findall(
-            rf"\d+:(\d+):.+:{var_match_str}.+:(?:\n\d+:(\d+))?",
+            rf"\d+:(\d+):.+:{var_match_str}:(?:\n\d+:(\d+))?",
             index_contents,
         )
         assert len(matches) == 1, (
             f"Expected exactly 1 match, found {matches}, {var.name}"
         )
+
         m0, m1 = matches[0]
         start = int(m0)
         # If this is the last message in the file, m1 will be empty.

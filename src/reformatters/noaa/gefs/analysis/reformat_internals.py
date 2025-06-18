@@ -434,14 +434,13 @@ def apply_data_transformations_inplace(
     data_array: xr.DataArray, data_var: DataVar[Any]
 ) -> None:
     expected_missing = ~is_available_time(pd.to_datetime(data_array["time"].values))
-    accum_reset_freq = data_var.internal_attrs.deaccumulate_from_accumulation_frequency
-    if accum_reset_freq is not None:
+    if data_var.internal_attrs.deaccumulate_to_rate:
         logger.info(f"Converting {data_var.name} from accumulations to rates")
         try:
             deaccumulate_to_rates_inplace(
                 data_array,
                 dim="time",
-                reset_frequency=accum_reset_freq,
+                reset_frequency=data_var.internal_attrs.window_reset_frequency,
                 skip_step=expected_missing,
             )
         except ValueError:
