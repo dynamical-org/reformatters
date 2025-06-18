@@ -90,3 +90,6 @@ def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     assert point_ds["minimum_temperature_2m"] == 27.875
     assert point_ds["precipitation_surface"] == 1.7404556e-05
     assert point_ds["precipitable_water_atmosphere"] == 56.5
+
+
+# add test for operational_kubernetes_resources and validate AI!
