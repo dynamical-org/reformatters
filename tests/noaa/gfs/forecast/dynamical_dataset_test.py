@@ -12,6 +12,8 @@ from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 
 pytestmark = pytest.mark.slow
 
+import reformatters.common.validation as validation
+
 
 def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     dataset = NoaaGfsForecastDataset(storage_config=NOOP_STORAGE_CONFIG)
@@ -92,4 +94,26 @@ def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     assert point_ds["precipitable_water_atmosphere"] == 56.5
 
 
-# add test for operational_kubernetes_resources and validate AI!
+def test_operational_kubernetes_resources_and_validators() -> None:
+    dataset = NoaaGfsForecastDataset(storage_config=NOOP_STORAGE_CONFIG)
+    image_tag = "test-image"
+    jobs = dataset.operational_kubernetes_resources(image_tag)
+    assert len(jobs) == 2
+    update_job, validation_job = jobs
+    assert update_job.name == f"{dataset.dataset_id}-operational-update"
+    assert update_job.schedule == "0 0 * * *"
+    assert update_job.image == image_tag
+    assert update_job.cpu == "3.5"
+    assert update_job.memory == "7G"
+    assert update_job.shared_memory == "1.5G"
+    assert update_job.ephemeral_storage == "20G"
+    assert validation_job.name == f"{dataset.dataset_id}-validation"
+    assert validation_job.schedule == "30 0 * * *"
+    assert validation_job.image == image_tag
+    assert validation_job.cpu == "1.3"
+    assert validation_job.memory == "7G"
+    # validate validators
+    assert tuple(dataset.validators()) == (
+        validation.check_forecast_current_data,
+        validation.check_forecast_recent_nans,
+    )
