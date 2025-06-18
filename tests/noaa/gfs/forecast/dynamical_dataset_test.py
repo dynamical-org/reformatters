@@ -1,7 +1,6 @@
 from datetime import timedelta
 from pathlib import Path
 
-import pandas as pd
 import pytest
 import xarray as xr
 from pytest import MonkeyPatch
@@ -24,7 +23,9 @@ def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(
         NoaaGfsForecastTemplateConfig,
         "get_template",
-        lambda self, end_time: orig_get_template(self, end_time).sel(lead_time=slice("0h", "12h")),
+        lambda self, end_time: orig_get_template(self, end_time).sel(
+            lead_time=slice("0h", "12h")
+        ),
     )
 
     # 1. Backfill archive
