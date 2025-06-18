@@ -1,3 +1,6 @@
+import multiprocessing
+multiprocessing.set_start_method("spawn", force=True)
+
 from collections.abc import Sequence
 from typing import Any
 
