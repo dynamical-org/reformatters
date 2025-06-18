@@ -16,25 +16,22 @@ pytestmark = pytest.mark.slow
 
 def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     dataset = NoaaGfsForecastDataset(storage_config=NOOP_STORAGE_CONFIG)
-    monkeypatch.setattr(zarr, "_LOCAL_ZARR_STORE_BASE_PATH", tmp_path)
     init_time_start = NoaaGfsForecastTemplateConfig().append_dim_start
     init_time_end = init_time_start + timedelta(hours=12)
 
-    # Patch generate_source_file_coords to filter out long lead times for faster testing
-    original_generate = dataset.region_job_class.generate_source_file_coords
-
-    def filtered_generate(self, processing_region_ds, data_var_group):  # type: ignore
-        coords = original_generate(self, processing_region_ds, data_var_group)
-        return [coord for coord in coords if coord.lead_time <= pd.Timedelta(hours=12)]
-
-    monkeypatch.setattr(
-        dataset.region_job_class, "generate_source_file_coords", filtered_generate
-    )
+    monkeypatch.setattr(zarr, "_LOCAL_ZARR_STORE_BASE_PATH", tmp_path)
+    # monkeypatch NoaaGfsForecastTemplateConfig.get_template to call the original method but then return template_ds.sel(lead_time=slice(0, 12)) AI!
 
     # 1. Backfill archive
     dataset.reformat_local(
         append_dim_end=init_time_end,
-        filter_variable_names=["temperature_2m", "precipitation_surface"],
+        filter_variable_names=[
+            "temperature_2m",  # instantaneous
+            "precipitation_surface",  # accumulation we deaccumulate
+            "precipitable_water_atmosphere",  # average
+            "maximum_temperature_2m",  # average
+            "minimum_temperature_2m",  # average
+        ],
     )
     original_ds = xr.open_zarr(
         dataset._final_store(), decode_timedelta=True, chunks=None
