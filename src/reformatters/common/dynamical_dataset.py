@@ -14,7 +14,7 @@ from pydantic import computed_field
 
 from reformatters.common import docker, template_utils, validation
 from reformatters.common.config_models import DataVar
-from reformatters.common.kubernetes import Job, ReformatCronJob
+from reformatters.common.kubernetes import CronJob, Job, ReformatCronJob
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.region_job import RegionJob, SourceFileCoord
@@ -48,7 +48,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     storage_config: DynamicalDatasetStorageConfig
 
-    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[Job]:
+    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
         """
         Return the kubernetes cron job definitions to operationally
         update and validate this dataset.
