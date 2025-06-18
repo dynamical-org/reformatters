@@ -20,7 +20,12 @@ def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     init_time_end = init_time_start + timedelta(hours=12)
 
     monkeypatch.setattr(zarr, "_LOCAL_ZARR_STORE_BASE_PATH", tmp_path)
-    # monkeypatch NoaaGfsForecastTemplateConfig.get_template to call the original method but then return template_ds.sel(lead_time=slice(0, 12)) AI!
+    orig_get_template = NoaaGfsForecastTemplateConfig.get_template
+    monkeypatch.setattr(
+        NoaaGfsForecastTemplateConfig,
+        "get_template",
+        lambda self, end_time: orig_get_template(self, end_time).sel(lead_time=slice("0h", "12h")),
+    )
 
     # 1. Backfill archive
     dataset.reformat_local(
