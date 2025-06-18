@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 import numpy as np
 import pandas as pd
@@ -20,6 +20,7 @@ class ValidationResult(pydantic.BaseModel):
     message: str
 
 
+@runtime_checkable
 class DataValidator(Protocol):
     """Protocol for validation functions."""
 
