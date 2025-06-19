@@ -39,9 +39,9 @@ def test_reformat_local(
         filter_variable_names=[
             "temperature_2m",  # instantaneous
             "precipitation_surface",  # accumulation we deaccumulate
-            "precipitable_water_atmosphere",  # average over window
             "maximum_temperature_2m",  # max over window
             "minimum_temperature_2m",  # min over window
+            "categorical_freezing_rain_surface",  # average over window
         ],
     )
     original_ds = xr.open_zarr(
@@ -52,12 +52,7 @@ def test_reformat_local(
 
     # These variables are present at all lead times
     assert (
-        (
-            space_subset_ds[["temperature_2m", "precipitable_water_atmosphere"]]
-            .isnull()
-            .mean()
-            == 0
-        )
+        (space_subset_ds[["temperature_2m"]].isnull().mean() == 0)
         .all()
         .to_array()
         .all()
@@ -71,6 +66,7 @@ def test_reformat_local(
                     "precipitation_surface",
                     "maximum_temperature_2m",
                     "minimum_temperature_2m",
+                    "categorical_freezing_rain_surface",
                 ]
             ]
             .sel(lead_time=slice("1h", None))
@@ -94,7 +90,7 @@ def test_reformat_local(
     assert point_ds["maximum_temperature_2m"] == 28.125
     assert point_ds["minimum_temperature_2m"] == 27.875
     assert point_ds["precipitation_surface"] == 1.7404556e-05
-    assert point_ds["precipitable_water_atmosphere"] == 56.5
+    assert point_ds["categorical_freezing_rain_surface"] == 0.0
 
 
 def test_operational_kubernetes_resources(
