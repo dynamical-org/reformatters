@@ -387,15 +387,23 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         else:
             data_vars = all_data_vars
 
-        data_var_groups = cls.source_groups(data_vars)
         # If kind == "operational-update" we need all variables in one job
         # so we don't extend the dataset before all variables are processed.
         # If kind == "backfill" it can be useful to make smaller jobs for more parallelism
         # and granular progress tracking at the kubernetes job level.
         if kind == "backfill" and cls.max_vars_per_backfill_job is not None:
+            # split by source groups first as those are efficient groupings
+            data_var_groups = cls.source_groups(data_vars)
             data_var_groups = cls._maybe_split_groups(
                 data_var_groups, cls.max_vars_per_backfill_job
             )
+        else:
+            # In operational update we must have all variables in one job.
+            # In backfill without max_vars_per_backfill_job set we also want all variables in one job.
+            data_var_groups = [data_vars]
+
+        if kind == "operational-update":
+            assert len(data_var_groups) == 1
 
         # Regions along append dimension
         regions = dimension_slices(template_ds, append_dim, kind="shards")
