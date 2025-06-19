@@ -125,3 +125,6 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
     assert second_call[0][1] == "noaa-gfs-forecast"
     assert second_call[1]["byte_ranges"] == ([123456, 234567], [234566, 345678])
     assert "local_path_suffix" in second_call[1]
+
+
+# test for operational update jobs. monkeypatch pd.Timestamp.now as 2025-01-01T12:34 and _get_append_dim_start as 2025-01-01T06 to be AI!
