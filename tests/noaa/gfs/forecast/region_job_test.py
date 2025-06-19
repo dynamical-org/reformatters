@@ -130,14 +130,23 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_operational_update_jobs(monkeypatch):
     template_config = NoaaGfsForecastTemplateConfig()
     # monkeypatch Timestamp.now
-    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda cls: pd.Timestamp("2025-01-01T12:34")))
+    monkeypatch.setattr(
+        pd.Timestamp, "now", classmethod(lambda cls: pd.Timestamp("2025-01-01T12:34"))
+    )
     # monkeypatch _get_append_dim_start
     start = pd.Timestamp("2025-01-01T06:00")
-    monkeypatch.setattr(NoaaGfsForecastRegionJob, "_get_append_dim_start", classmethod(lambda cls, ds, append_dim: start))
+    monkeypatch.setattr(
+        NoaaGfsForecastRegionJob,
+        "_get_append_dim_start",
+        classmethod(lambda cls, ds, append_dim: start),
+    )
     # monkeypatch xr.open_zarr to return a ds
     final_store = Mock()
     existing_ds = template_config.get_template(start)
-    monkeypatch.setattr("reformatters.noaa.gfs.forecast.region_job.xr.open_zarr", lambda store: existing_ds)
+    monkeypatch.setattr(
+        "reformatters.noaa.gfs.forecast.region_job.xr.open_zarr",
+        lambda store: existing_ds,
+    )
     jobs, template_ds = NoaaGfsForecastRegionJob.operational_update_jobs(
         final_store=final_store,
         tmp_store=Mock(),
@@ -147,8 +156,11 @@ def test_operational_update_jobs(monkeypatch):
         reformat_job_name="test_job",
     )
     # template_ds should use end time from mocked now
-    expected_template_ds = template_config.get_template(pd.Timestamp("2025-01-01T12:34"))
+    expected_template_ds = template_config.get_template(
+        pd.Timestamp("2025-01-01T12:34")
+    )
     import xarray as xr
+
     xr.testing.assert_equal(template_ds, expected_template_ds)
     # jobs should be RegionJob instances covering all data_vars
     assert jobs
