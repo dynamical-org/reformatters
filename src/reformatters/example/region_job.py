@@ -277,7 +277,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
         #     reformat_job_name=reformat_job_name,
         #     filter_start=append_dim_start,
         # )
-        # return jobs, temoplate_ds
+        # return jobs, template_ds
 
         raise NotImplementedError(
             "Subclasses implement operational_update_jobs() with dataset-specific logic"
