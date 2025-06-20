@@ -50,7 +50,7 @@ class UarizonaSwannAnalysisDataset(
             dataset_id=self.dataset_id,
             cpu="4",
             memory="14G",
-            shared_memory="6GiB",
+            shared_memory="6Gi",
             ephemeral_storage="10G",
             secret_names=[self.storage_config.k8s_secret_name],
         )
