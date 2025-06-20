@@ -2,6 +2,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 import xarray as xr
 from pytest import MonkeyPatch
@@ -17,7 +18,7 @@ def dataset() -> NoaaGfsForecastDataset:
 
 
 @pytest.mark.slow
-def test_reformat_local(
+def test_reformat_local_and_operational_update(
     dataset: NoaaGfsForecastDataset, monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
     init_time_start = dataset.template_config.append_dim_start
@@ -104,8 +105,12 @@ def test_reformat_local(
         ),
     )
 
-    # 2. Operational update - append a second init_time step
-    # Monkey-patch get_jobs to only process specified variables
+    # 2. Operational update
+    # Set "now" to just past the 12 UTC init time so we add a third init_time step
+    monkeypatch.setattr(
+        pd.Timestamp, "now", classmethod(lambda cls: pd.Timestamp("2021-05-01T14:00"))
+    )
+    # Dataset updates always update all variables. For the test we hook into get_jobs to limit vars.
     orig_get_jobs = dataset.region_job_class.get_jobs
     monkeypatch.setattr(
         dataset.region_job_class,
@@ -114,33 +119,36 @@ def test_reformat_local(
             *args, **{**kwargs, "filter_variable_names": filter_variable_names}
         ),
     )
+
     dataset.reformat_operational_update(job_name="test-op")
+
     updated_ds = xr.open_zarr(
         dataset._final_store(), decode_timedelta=True, chunks=None
     )
 
     np.testing.assert_array_equal(
-        original_ds.init_time.values,
+        updated_ds.init_time.values,
         np.array(
             [
                 "2021-05-01T00:00:00.000000000",
                 "2021-05-01T06:00:00.000000000",
+                "2021-05-01T12:00:00.000000000",
             ],
             dtype="datetime64[ns]",
         ),
     )
-
     point_ds2 = updated_ds.sel(
         latitude=0,
         longitude=0,
         init_time=init_time_end,
-        lead_time="2h",
+        lead_time="3h",
     )
-    assert point_ds2["temperature_2m"] is None
-    assert point_ds2["maximum_temperature_2m"] is None
-    assert point_ds2["minimum_temperature_2m"] is None
-    assert point_ds2["precipitation_surface"] is None
-    assert point_ds2["categorical_freezing_rain_surface"] is None
+
+    assert point_ds2["temperature_2m"] == 28.375
+    assert point_ds2["maximum_temperature_2m"] == 28.5
+    assert point_ds2["minimum_temperature_2m"] == 28.25
+    assert point_ds2["precipitation_surface"] == 0.000347137451171875
+    assert point_ds2["categorical_freezing_rain_surface"] == 0.0
 
 
 def test_operational_kubernetes_resources(

@@ -184,7 +184,7 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         Return the sequence of RegionJob instances necessary to update the dataset
         from its current state to include the latest available data.
         """
-        existing_ds = xr.open_zarr(final_store)
+        existing_ds = xr.open_zarr(final_store, decode_timedelta=True, chunks=None)
         # Start by reprocessing the most recent forecast already in the dataset; it may be incomplete.
         append_dim_start = existing_ds[append_dim].max()
         append_dim_end = pd.Timestamp.now()

@@ -40,7 +40,7 @@ class NoaaGfsForecastDataset(
             memory="7G",
             secret_names=[self.storage_config.k8s_secret_name],
         )
-        #
+
         return [operational_update_cron_job, validation_cron_job]
 
     def validators(self) -> Sequence[validation.DataValidator]:
