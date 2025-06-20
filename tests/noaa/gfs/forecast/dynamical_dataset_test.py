@@ -15,7 +15,6 @@ def dataset() -> NoaaGfsForecastDataset:
     return NoaaGfsForecastDataset(storage_config=NOOP_STORAGE_CONFIG)
 
 
-# Expand this test to run a reformat_operational_update to expand the dataset created by the existing code and test the output AI!
 @pytest.mark.slow
 def test_reformat_local(
     dataset: NoaaGfsForecastDataset, monkeypatch: MonkeyPatch, tmp_path: Path
@@ -92,6 +91,25 @@ def test_reformat_local(
     assert point_ds["minimum_temperature_2m"] == 27.875
     assert point_ds["precipitation_surface"] == 1.7404556e-05
     assert point_ds["categorical_freezing_rain_surface"] == 0.0
+
+    # 2. Operational update - append a second init_time step
+    dataset.reformat_operational_update(job_name="test-op")
+    updated_ds = xr.open_zarr(
+        dataset._final_store(), decode_timedelta=True, chunks=None
+    )
+    # Check that new init_time coordinate is present
+    assert init_time_end in updated_ds.init_time.values
+    point_ds2 = updated_ds.sel(
+        latitude=0,
+        longitude=0,
+        init_time=init_time_end,
+        lead_time="2h",
+    )
+    assert point_ds2["temperature_2m"] == None
+    assert point_ds2["maximum_temperature_2m"] == None
+    assert point_ds2["minimum_temperature_2m"] == None
+    assert point_ds2["precipitation_surface"] == None
+    assert point_ds2["categorical_freezing_rain_surface"] == None
 
 
 def test_operational_kubernetes_resources(
