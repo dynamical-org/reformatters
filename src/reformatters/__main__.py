@@ -30,7 +30,15 @@ class SourceCoopDatasetStorageConfig(DynamicalDatasetStorageConfig):
 # Datasets that have not yet been ported over to the new DynamicalDataset pattern
 # are excluded here until they are refactored.
 DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
-    UarizonaSwannAnalysisDataset(storage_config=SourceCoopDatasetStorageConfig()),
+    UarizonaSwannAnalysisDataset(
+        storage_config=DynamicalDatasetStorageConfig(
+            # This bucket is actually an R2 bucket.
+            # The R2 endpoint URL is stored within our k8s secret and will be set
+            # when it's imported into the env.
+            base_path="s3://upstream-gridded-zarrs",
+            k8s_secret_name="upstream-gridded-zarrs-key",  # noqa: S106
+        )
+    ),
     NoaaGfsForecastDataset(storage_config=SourceCoopDatasetStorageConfig()),
 ]
 
