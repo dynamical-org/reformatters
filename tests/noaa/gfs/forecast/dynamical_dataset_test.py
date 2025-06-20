@@ -1,6 +1,7 @@
 from datetime import timedelta
 from pathlib import Path
 
+import numpy as np
 import pytest
 import xarray as xr
 from pytest import MonkeyPatch
@@ -33,16 +34,17 @@ def test_reformat_local(
         ),
     )
 
+    filter_variable_names = [
+        "temperature_2m",  # instantaneous
+        "precipitation_surface",  # accumulation we deaccumulate
+        "maximum_temperature_2m",  # max over window
+        "minimum_temperature_2m",  # min over window
+        "categorical_freezing_rain_surface",  # average over window
+    ]
+
     # 1. Backfill archive
     dataset.reformat_local(
-        append_dim_end=init_time_end,
-        filter_variable_names=[
-            "temperature_2m",  # instantaneous
-            "precipitation_surface",  # accumulation we deaccumulate
-            "maximum_temperature_2m",  # max over window
-            "minimum_temperature_2m",  # min over window
-            "categorical_freezing_rain_surface",  # average over window
-        ],
+        append_dim_end=init_time_end, filter_variable_names=filter_variable_names
     )
     original_ds = xr.open_zarr(
         dataset._final_store(), decode_timedelta=True, chunks=None
@@ -91,14 +93,35 @@ def test_reformat_local(
     assert point_ds["minimum_temperature_2m"] == 27.875
     assert point_ds["precipitation_surface"] == 1.7404556e-05
     assert point_ds["categorical_freezing_rain_surface"] == 0.0
+    np.testing.assert_array_equal(
+        original_ds.init_time.values,
+        np.array(
+            [
+                "2021-05-01T00:00:00.000000000",
+                "2021-05-01T06:00:00.000000000",
+            ],
+            dtype="datetime64[ns]",
+        ),
+    )
 
     # 2. Operational update - append a second init_time step
+    # monkey patch dataset.region_job_class.get_jobs to a new function that passes through all args and kwargs but overrides filter_variable_names to just the variables processed in this test AI!
     dataset.reformat_operational_update(job_name="test-op")
     updated_ds = xr.open_zarr(
         dataset._final_store(), decode_timedelta=True, chunks=None
     )
-    # Check that new init_time coordinate is present
-    assert init_time_end in updated_ds.init_time.values
+
+    np.testing.assert_array_equal(
+        original_ds.init_time.values,
+        np.array(
+            [
+                "2021-05-01T00:00:00.000000000",
+                "2021-05-01T06:00:00.000000000",
+            ],
+            dtype="datetime64[ns]",
+        ),
+    )
+
     point_ds2 = updated_ds.sel(
         latitude=0,
         longitude=0,
