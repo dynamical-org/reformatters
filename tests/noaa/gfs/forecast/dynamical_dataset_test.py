@@ -15,6 +15,7 @@ def dataset() -> NoaaGfsForecastDataset:
     return NoaaGfsForecastDataset(storage_config=NOOP_STORAGE_CONFIG)
 
 
+# Expand this test to run a reformat_operational_update to expand the dataset created by the existing code and test the output AI!
 @pytest.mark.slow
 def test_reformat_local(
     dataset: NoaaGfsForecastDataset, monkeypatch: MonkeyPatch, tmp_path: Path
