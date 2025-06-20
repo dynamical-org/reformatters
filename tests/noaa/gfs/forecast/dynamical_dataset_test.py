@@ -105,7 +105,15 @@ def test_reformat_local(
     )
 
     # 2. Operational update - append a second init_time step
-    # monkey patch dataset.region_job_class.get_jobs to a new function that passes through all args and kwargs but overrides filter_variable_names to just the variables processed in this test AI!
+    # Monkey-patch get_jobs to only process specified variables
+    orig_get_jobs = dataset.region_job_class.get_jobs
+    monkeypatch.setattr(
+        dataset.region_job_class,
+        "get_jobs",
+        lambda *args, **kwargs: orig_get_jobs(
+            *args, **{**kwargs, "filter_variable_names": filter_variable_names}
+        ),
+    )
     dataset.reformat_operational_update(job_name="test-op")
     updated_ds = xr.open_zarr(
         dataset._final_store(), decode_timedelta=True, chunks=None
@@ -128,11 +136,11 @@ def test_reformat_local(
         init_time=init_time_end,
         lead_time="2h",
     )
-    assert point_ds2["temperature_2m"] == None
-    assert point_ds2["maximum_temperature_2m"] == None
-    assert point_ds2["minimum_temperature_2m"] == None
-    assert point_ds2["precipitation_surface"] == None
-    assert point_ds2["categorical_freezing_rain_surface"] == None
+    assert point_ds2["temperature_2m"] is None
+    assert point_ds2["maximum_temperature_2m"] is None
+    assert point_ds2["minimum_temperature_2m"] is None
+    assert point_ds2["precipitation_surface"] is None
+    assert point_ds2["categorical_freezing_rain_surface"] is None
 
 
 def test_operational_kubernetes_resources(
