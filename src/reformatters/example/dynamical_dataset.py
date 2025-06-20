@@ -2,7 +2,7 @@ from collections.abc import Sequence
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import Job
+from reformatters.common.kubernetes import CronJob
 
 from .region_job import ExampleRegionJob, ExampleSourceFileCoord
 from .template_config import ExampleDataVar, ExampleTemplateConfig
@@ -12,7 +12,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
     template_config: ExampleTemplateConfig = ExampleTemplateConfig()
     region_job_class: type[ExampleRegionJob] = ExampleRegionJob
 
-    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[Job]:
+    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
         # operational_update_cron_job = ReformatCronJob(
         #     name=f"{self.dataset_id}-operational-update",

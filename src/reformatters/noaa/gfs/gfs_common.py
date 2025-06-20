@@ -58,11 +58,14 @@ def parse_grib_index(
         elif reset_hours is not None:
             diff = lead_hours % reset_hours
             reset_hour = lead_hours - diff if diff != 0 else lead_hours - reset_hours
-            step_type = (
-                "acc"
-                if var.internal_attrs.deaccumulate_to_rate
-                else var.attrs.step_type
-            )
+
+            if var.internal_attrs.deaccumulate_to_rate:
+                step_type = "acc"
+            elif var.attrs.step_type == "avg":
+                step_type = "ave"  # yep
+            else:
+                step_type = var.attrs.step_type
+
             hours_str_prefix = f"{reset_hour}-{lead_hours} hour {step_type} fcst"
         else:
             raise ValueError(f"Unhandled grib lead/accumulation hours: {var.name}")

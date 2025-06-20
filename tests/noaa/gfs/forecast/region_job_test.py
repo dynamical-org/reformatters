@@ -1,8 +1,11 @@
+from pathlib import Path
 from unittest.mock import Mock
 
 import pandas as pd
 import pytest
+import zarr
 
+from reformatters.common import template_utils
 from reformatters.noaa.gfs.forecast.region_job import (
     NoaaGfsForecastRegionJob,
     NoaaGfsForecastSourceFileCoord,
@@ -125,3 +128,37 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
     assert second_call[0][1] == "noaa-gfs-forecast"
     assert second_call[1]["byte_ranges"] == ([123456, 234567], [234566, 345678])
     assert "local_path_suffix" in second_call[1]
+
+
+def test_operational_update_jobs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    template_config = NoaaGfsForecastTemplateConfig()
+
+    # Set the append_dim_end for the update
+    monkeypatch.setattr(
+        pd.Timestamp, "now", classmethod(lambda cls: pd.Timestamp("2025-01-01T12:34"))
+    )
+    # Set the append_dim_start for the update
+    # Use a template_ds as a lightweight way to create a mock dataset with a known max append dim coordinate
+    existing_ds = template_config.get_template(
+        pd.Timestamp("2025-01-01T06:01")  # 06 will be max existing init time
+    )
+    final_store = zarr.storage.LocalStore(tmp_path / "existing_ds.zarr")
+    template_utils.write_metadata(existing_ds, final_store, mode="w-")
+
+    jobs, template_ds = NoaaGfsForecastRegionJob.operational_update_jobs(
+        final_store=final_store,
+        tmp_store=tmp_path / "tmp_ds.zarr",
+        get_template_fn=template_config.get_template,
+        append_dim=template_config.append_dim,
+        all_data_vars=template_config.data_vars,
+        reformat_job_name="test_job",
+    )
+
+    assert template_ds.init_time.max() == pd.Timestamp("2025-01-01T12:00")
+
+    assert len(jobs) == 2  # 06 and 12 UTC init times
+    for job in jobs:
+        assert isinstance(job, NoaaGfsForecastRegionJob)
+        assert job.data_vars == template_config.data_vars
