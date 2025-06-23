@@ -3,10 +3,11 @@ import subprocess
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any, Generic, TypeVar
+from typing import Annotated, Any, Generic, Literal, TypeVar
 
 import numpy as np
 import pandas as pd
+import sentry_sdk
 import typer
 import xarray as xr
 import zarr
@@ -14,7 +15,13 @@ from pydantic import computed_field
 
 from reformatters.common import docker, template_utils, validation
 from reformatters.common.config_models import DataVar
-from reformatters.common.kubernetes import CronJob, Job, ReformatCronJob
+from reformatters.common.iterating import item
+from reformatters.common.kubernetes import (
+    CronJob,
+    Job,
+    ReformatCronJob,
+    ValidationCronJob,
+)
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.region_job import RegionJob, SourceFileCoord
@@ -114,9 +121,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def reformat_operational_update(
         self,
-        job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
+        reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
         """Update an existing dataset with the latest data."""
+        self._sentry_check_in(ReformatCronJob, reformat_job_name, "in_progress")
+
         final_store = self._final_store()
         tmp_store = self._tmp_store()
 
@@ -126,7 +135,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             get_template_fn=self._get_template,
             append_dim=self.template_config.append_dim,
             all_data_vars=self.template_config.data_vars,
-            reformat_job_name=job_name,
+            reformat_job_name=reformat_job_name,
         )
         template_utils.write_metadata(template_ds, tmp_store, get_mode(tmp_store))
         for job in jobs:
@@ -137,6 +146,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
             copy_zarr_metadata(updated_template, tmp_store, final_store)
 
+        self._sentry_check_in(ReformatCronJob, reformat_job_name, "ok")
         logger.info(f"Operational update complete. Wrote to store: {final_store}")
 
     def reformat_kubernetes(
@@ -291,7 +301,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
-        validation.validate_zarr(self._final_store(), validators=self.validators())
+        self._sentry_check_in(ValidationCronJob, reformat_job_name, "in_progress")
+        store = self._final_store()
+        validation.validate_zarr(store, validators=self.validators())
+        self._sentry_check_in(ValidationCronJob, reformat_job_name, "ok")
+        logger.info(f"Done validating {store}")
 
     def get_cli(
         self,
@@ -318,3 +332,30 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def _get_template(self, append_dim_end: DatetimeLike) -> xr.Dataset:
         return self.template_config.get_template(pd.Timestamp(append_dim_end))
+
+    def _sentry_check_in(
+        self,
+        cron_type: type[CronJob],
+        job_name: str,
+        status: Literal["ok", "in_progress", "error"],
+    ) -> None:
+        cron_jobs = self.operational_kubernetes_resources("placeholder-image-tag")
+        cron_job = item(c for c in cron_jobs if isinstance(c, cron_type))
+
+        sentry_sdk.crons.capture_checkin(
+            monitor_slug=cron_job.name,
+            check_in_id=job_name,  # use the job name so retried pods from the same job are all associated with the same run
+            status=status,
+            monitor_config={
+                "schedule": {"type": "crontab", "value": cron_job.schedule},
+                "timezone": "UTC",
+                # If an expected check-in doesn't come in `checkin_margin` minutes, it'll be considered missed
+                "checkin_margin": 10,
+                # The check-in is allowed to run for `max_runtime` minutes before it's considered failed
+                "max_runtime": int(cron_job.pod_active_deadline.total_seconds() / 60),
+                # It'll take `failure_issue_threshold` consecutive failed check-ins to create an issue
+                "failure_issue_threshold": 1,
+                # It'll take `recovery_threshold` OK check-ins to resolve an issue
+                "recovery_threshold": 1,
+            },
+        )
