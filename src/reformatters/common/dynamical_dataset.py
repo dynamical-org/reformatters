@@ -14,7 +14,7 @@ from pydantic import computed_field
 
 from reformatters.common import docker, template_utils, validation
 from reformatters.common.config_models import DataVar
-from reformatters.common.kubernetes import Job, ReformatCronJob
+from reformatters.common.kubernetes import CronJob, Job, ReformatCronJob
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.region_job import RegionJob, SourceFileCoord
@@ -48,7 +48,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     storage_config: DynamicalDatasetStorageConfig
 
-    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[Job]:
+    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
         """
         Return the kubernetes cron job definitions to operationally
         update and validate this dataset.
@@ -65,6 +65,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             memory="30G",
             shared_memory="12G",
             ephemeral_storage="30G",
+            secret_names=[self.storage_config.k8s_secret_name],
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validation",
@@ -74,6 +75,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             dataset_id=self.dataset_id,
             cpu="1.3",
             memory="7G",
+            secret_names=[self.storage_config.k8s_secret_name],
         )
 
         return [operational_update_cron_job, validation_cron_job]
@@ -213,6 +215,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     "pod_active_deadline",
                 }
             ),
+            secret_names=[self.storage_config.k8s_secret_name],
         )
         subprocess.run(  # noqa: S603
             ["/usr/bin/kubectl", "apply", "-f", "-"],

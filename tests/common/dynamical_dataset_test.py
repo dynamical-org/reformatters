@@ -22,13 +22,14 @@ from reformatters.common.dynamical_dataset import (
     DynamicalDataset,
     DynamicalDatasetStorageConfig,
 )
-from reformatters.common.kubernetes import Job, ReformatCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 
 NOOP_STORAGE_CONFIG = DynamicalDatasetStorageConfig(
     base_path="noop",
+    k8s_secret_name="noop-secret",  # noqa: S106
 )
 
 
@@ -90,7 +91,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
     region_job_class: type[ExampleRegionJob] = ExampleRegionJob
     storage_config: ExampleDatasetStorageConfig = ExampleDatasetStorageConfig()
 
-    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[Job]:
+    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
         return [
             ReformatCronJob(
                 name=f"{self.dataset_id}-operational-update",
@@ -102,6 +103,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
                 memory="1G",
                 shared_memory="1G",
                 ephemeral_storage="1G",
+                secret_names=[self.storage_config.k8s_secret_name],
             )
         ]
 

@@ -184,6 +184,20 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         Return the sequence of RegionJob instances necessary to update the dataset
         from its current state to include the latest available data.
         """
-        raise NotImplementedError(
-            "Subclasses implement operational_update_jobs() with dataset-specific logic"
+        existing_ds = xr.open_zarr(final_store, decode_timedelta=True, chunks=None)
+        # Start by reprocessing the most recent forecast already in the dataset; it may be incomplete.
+        append_dim_start = existing_ds[append_dim].max()
+        append_dim_end = pd.Timestamp.now()
+        template_ds = get_template_fn(append_dim_end)
+
+        jobs = cls.get_jobs(
+            kind="operational-update",
+            final_store=final_store,
+            tmp_store=tmp_store,
+            template_ds=template_ds,
+            append_dim=append_dim,
+            all_data_vars=all_data_vars,
+            reformat_job_name=reformat_job_name,
+            filter_start=append_dim_start,
         )
+        return jobs, template_ds
