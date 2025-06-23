@@ -35,7 +35,7 @@ class UarizonaSwannAnalysisDataset(
             check_random_time_within_last_year_nans,
         )
 
-    # def operational_kubernetes_resources(self, image_tag: str) -> Iterable[Job]:
+    # def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
     #    operational_update_cron_job = ReformatCronJob(
     #        name=f"{self.dataset_id}-operational-update",
     #        schedule=_OPERATIONAL_CRON_SCHEDULE,

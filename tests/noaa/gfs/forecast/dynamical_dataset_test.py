@@ -7,7 +7,7 @@ import pytest
 import xarray as xr
 from pytest import MonkeyPatch
 
-from reformatters.common import validation, zarr
+from reformatters.common import validation
 from reformatters.noaa.gfs.forecast import NoaaGfsForecastDataset
 from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 
@@ -24,7 +24,6 @@ def test_reformat_local_and_operational_update(
     init_time_start = dataset.template_config.append_dim_start
     init_time_end = init_time_start + timedelta(hours=12)
 
-    monkeypatch.setattr(zarr, "_LOCAL_ZARR_STORE_BASE_PATH", tmp_path)
     # Trim to first 12 hours of lead time dimension to speed up test
     orig_get_template = dataset.template_config.get_template
     monkeypatch.setattr(
