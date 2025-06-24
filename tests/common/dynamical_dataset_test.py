@@ -292,7 +292,7 @@ def test_validate_zarr_calls_validators_and_uses_final_store(
 def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> None:
     import sentry_sdk
 
-    monkeypatch.setattr(Config, "is_sentry_enabled", True)
+    monkeypatch.setattr(type(Config), "is_sentry_enabled", True, raising=False)
 
     # Prepare dataset instance
     dataset = ExampleDataset(
@@ -323,7 +323,7 @@ def test_monitor_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
     # Test that it's ok to not define operational_kubernetes_resources if sentry reporting is disabled
 
     # disable sentry reporting
-    monkeypatch.setattr(Config, "is_sentry_enabled", False)
+    monkeypatch.setattr(type(Config), "is_sentry_enabled", False, raising=False)
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
