@@ -15,6 +15,7 @@ import zarr
 from pydantic import computed_field
 
 from reformatters.common import docker, template_utils, validation
+from reformatters.common.config import Config
 from reformatters.common.config_models import DataVar
 from reformatters.common.iterating import digest, item
 from reformatters.common.kubernetes import (
@@ -338,6 +339,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         cron_type: type[CronJob],
         reformat_job_name: str,
     ) -> Iterator[None]:
+        # Don't require operational_kubernetes_resources to be defined unless sentry reporting is enabled
+        if not Config.is_sentry_enabled:
+            yield
+            return
+
         cron_jobs = self.operational_kubernetes_resources("placeholder-image-tag")
         cron_job = item(c for c in cron_jobs if isinstance(c, cron_type))
 
