@@ -20,8 +20,8 @@ class NoaaGfsForecastDataset(
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-operational-update",
-            schedule="0 0 * * *",
-            pod_active_deadline=timedelta(minutes=30),
+            schedule="30 5,11,17,23 * * *",
+            pod_active_deadline=timedelta(minutes=120),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3.5",
@@ -32,7 +32,7 @@ class NoaaGfsForecastDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validation",
-            schedule="30 0 * * *",
+            schedule="0 6,12,18,0 * * *",
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
