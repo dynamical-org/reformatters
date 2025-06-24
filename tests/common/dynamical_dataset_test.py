@@ -2,7 +2,7 @@ import subprocess
 from collections.abc import Iterable
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import ClassVar
 from unittest.mock import Mock
 
 import numpy as np
