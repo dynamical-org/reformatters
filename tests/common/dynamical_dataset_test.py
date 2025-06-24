@@ -333,7 +333,9 @@ def test_monitor_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
     def fail_resources(image_tag: str) -> None:
         raise RuntimeError("operational_kubernetes_resources should not be called")
 
-    monkeypatch.setattr(ExampleDataset, "operational_kubernetes_resources", fail_resources)
+    monkeypatch.setattr(
+        ExampleDataset, "operational_kubernetes_resources", fail_resources
+    )
 
     # this should not raise
     with dataset._monitor(ReformatCronJob, "job"):
