@@ -1,6 +1,7 @@
 import json
 import subprocess
 from collections.abc import Iterable, Sequence
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Generic, Literal, TypeVar
@@ -11,7 +12,6 @@ import sentry_sdk
 import typer
 import xarray as xr
 import zarr
-from contextlib import contextmanager
 from pydantic import computed_field
 
 from reformatters.common import docker, template_utils, validation
@@ -349,7 +349,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     "schedule": {"type": "crontab", "value": cron_job.schedule},
                     "timezone": "UTC",
                     "checkin_margin": 10,
-                    "max_runtime": int(cron_job.pod_active_deadline.total_seconds() / 60),
+                    "max_runtime": int(
+                        cron_job.pod_active_deadline.total_seconds() / 60
+                    ),
                     "failure_issue_threshold": 1,
                     "recovery_threshold": 1,
                 },
