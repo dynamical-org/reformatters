@@ -21,7 +21,7 @@ class NoaaGfsForecastDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-operational-update",
             schedule="30 5,11,17,23 * * *",
-            pod_active_deadline=timedelta(minutes=120),
+            pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3.5",
