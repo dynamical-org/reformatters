@@ -22,7 +22,7 @@ from reformatters.common.dynamical_dataset import (
     DynamicalDataset,
     DynamicalDatasetStorageConfig,
 )
-from reformatters.common.kubernetes import CronJob, ReformatCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
@@ -104,7 +104,19 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
                 shared_memory="1G",
                 ephemeral_storage="1G",
                 secret_names=[self.storage_config.k8s_secret_name],
-            )
+            ),
+            ValidationCronJob(
+                name=f"{self.dataset_id}-validation",
+                schedule="0 0 * * *",
+                pod_active_deadline=timedelta(minutes=30),
+                image=image_tag,
+                dataset_id=self.dataset_id,
+                cpu="1",
+                memory="1G",
+                shared_memory="1G",
+                ephemeral_storage="1G",
+                secret_names=[self.storage_config.k8s_secret_name],
+            ),
         ]
 
 
