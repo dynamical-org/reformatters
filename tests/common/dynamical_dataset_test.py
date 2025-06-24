@@ -291,6 +291,8 @@ def test_validate_zarr_calls_validators_and_uses_final_store(
 def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> None:
     import sentry_sdk
 
+    # monkeypatch Config.is_sentry_enabled to True so we can test the sentry reporting AI!
+
     # Prepare dataset instance
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
@@ -303,6 +305,7 @@ def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> N
     def fake_capture_checkin(*, status: str, **kwargs: Any) -> None:
         calls.append(status)
 
+    # Use a real Mock() to capture and verify calls AI!
     monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", fake_capture_checkin)
 
     # Success case: should record "in_progress" then "ok"
@@ -316,3 +319,6 @@ def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> N
         with dataset._monitor(ReformatCronJob, "job-name"):
             raise ValueError("failure")
     assert calls == ["in_progress", "error"]
+
+
+# Add another test here to check that operation_kubernetes_resources is not required if sentry reporting is disabled AI!
