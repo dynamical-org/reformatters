@@ -125,7 +125,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
         """Update an existing dataset with the latest data."""
-        with self._sentry_monitor(ReformatCronJob, reformat_job_name):
+        with self._monitor(ReformatCronJob, reformat_job_name):
             final_store = self._final_store()
             tmp_store = self._tmp_store()
 
@@ -300,10 +300,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
-        with self._sentry_monitor(ValidationCronJob, reformat_job_name):
+        with self._monitor(ValidationCronJob, reformat_job_name):
             store = self._final_store()
             validation.validate_zarr(store, validators=self.validators())
-            logger.info(f"Done validating {store}")
+
+        logger.info(f"Done validating {store}")
 
     def get_cli(
         self,
@@ -332,7 +333,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         return self.template_config.get_template(pd.Timestamp(append_dim_end))
 
     @contextmanager
-    def _sentry_monitor(
+    def _monitor(
         self,
         cron_type: type[CronJob],
         reformat_job_name: str,
@@ -340,7 +341,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         cron_jobs = self.operational_kubernetes_resources("placeholder-image-tag")
         cron_job = item(c for c in cron_jobs if isinstance(c, cron_type))
 
-        def _capture(status: Literal["ok", "in_progress", "error"]) -> None:
+        def capture_checkin(status: Literal["ok", "in_progress", "error"]) -> None:
             sentry_sdk.crons.capture_checkin(
                 monitor_slug=cron_job.name,
                 check_in_id=digest(reformat_job_name, length=32),
@@ -357,11 +358,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 },
             )
 
-        _capture("in_progress")
+        capture_checkin("in_progress")
         try:
             yield
         except Exception:
-            _capture("error")
+            capture_checkin("error")
             raise
         else:
-            _capture("ok")
+            capture_checkin("ok")
