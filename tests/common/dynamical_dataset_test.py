@@ -330,7 +330,7 @@ def test_monitor_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     # make operational_kubernetes_resources raise if called
-    def fail_resources(image_tag: str):
+    def fail_resources(image_tag: str) -> None:
         raise RuntimeError("operational_kubernetes_resources should not be called")
 
     monkeypatch.setattr(dataset, "operational_kubernetes_resources", fail_resources)
