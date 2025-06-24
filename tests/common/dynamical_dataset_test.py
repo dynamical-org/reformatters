@@ -2,7 +2,7 @@ import subprocess
 from collections.abc import Iterable
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 from unittest.mock import Mock
 
 import numpy as np
@@ -288,7 +288,7 @@ def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> N
     # Mock capture_checkin to record statuses
     calls: list[str] = []
 
-    def fake_capture_checkin(*, status, **kwargs):
+    def fake_capture_checkin(*, status: str, **kwargs: Any) -> None:
         calls.append(status)
 
     monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", fake_capture_checkin)
