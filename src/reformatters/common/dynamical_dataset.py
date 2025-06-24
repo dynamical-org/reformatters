@@ -11,6 +11,7 @@ import sentry_sdk
 import typer
 import xarray as xr
 import zarr
+from contextlib import contextmanager
 from pydantic import computed_field
 
 from reformatters.common import docker, template_utils, validation
@@ -124,29 +125,27 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
         """Update an existing dataset with the latest data."""
-        self._sentry_check_in(ReformatCronJob, reformat_job_name, "in_progress")
+        with self._sentry_check_in(ReformatCronJob, reformat_job_name):
+            final_store = self._final_store()
+            tmp_store = self._tmp_store()
 
-        final_store = self._final_store()
-        tmp_store = self._tmp_store()
-
-        jobs, template_ds = self.region_job_class.operational_update_jobs(
-            final_store=final_store,
-            tmp_store=tmp_store,
-            get_template_fn=self._get_template,
-            append_dim=self.template_config.append_dim,
-            all_data_vars=self.template_config.data_vars,
-            reformat_job_name=reformat_job_name,
-        )
-        template_utils.write_metadata(template_ds, tmp_store, get_mode(tmp_store))
-        for job in jobs:
-            process_results = job.process()
-            updated_template = job.update_template_with_results(process_results)
-            template_utils.write_metadata(
-                updated_template, tmp_store, get_mode(tmp_store)
+            jobs, template_ds = self.region_job_class.operational_update_jobs(
+                final_store=final_store,
+                tmp_store=tmp_store,
+                get_template_fn=self._get_template,
+                append_dim=self.template_config.append_dim,
+                all_data_vars=self.template_config.data_vars,
+                reformat_job_name=reformat_job_name,
             )
-            copy_zarr_metadata(updated_template, tmp_store, final_store)
+            template_utils.write_metadata(template_ds, tmp_store, get_mode(tmp_store))
+            for job in jobs:
+                process_results = job.process()
+                updated_template = job.update_template_with_results(process_results)
+                template_utils.write_metadata(
+                    updated_template, tmp_store, get_mode(tmp_store)
+                )
+                copy_zarr_metadata(updated_template, tmp_store, final_store)
 
-        self._sentry_check_in(ReformatCronJob, reformat_job_name, "ok")
         logger.info(f"Operational update complete. Wrote to store: {final_store}")
 
     def reformat_kubernetes(
@@ -301,16 +300,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
-        self._sentry_check_in(ValidationCronJob, reformat_job_name, "in_progress")
-        try:
+        with self._sentry_check_in(ValidationCronJob, reformat_job_name):
             store = self._final_store()
             validation.validate_zarr(store, validators=self.validators())
-
-            self._sentry_check_in(ValidationCronJob, reformat_job_name, "ok")
             logger.info(f"Done validating {store}")
-        except Exception as e:
-            self._sentry_check_in(ValidationCronJob, reformat_job_name, "error")
-            raise e
 
     def get_cli(
         self,
