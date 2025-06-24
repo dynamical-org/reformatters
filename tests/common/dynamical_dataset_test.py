@@ -26,6 +26,7 @@ from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationC
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.config import Config
 
 NOOP_STORAGE_CONFIG = DynamicalDatasetStorageConfig(
     base_path="noop",
@@ -291,7 +292,7 @@ def test_validate_zarr_calls_validators_and_uses_final_store(
 def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> None:
     import sentry_sdk
 
-    # monkeypatch Config.is_sentry_enabled to True so we can test the sentry reporting AI!
+    monkeypatch.setattr(Config, "is_sentry_enabled", True)
 
     # Prepare dataset instance
     dataset = ExampleDataset(
@@ -305,7 +306,6 @@ def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> N
     def fake_capture_checkin(*, status: str, **kwargs: Any) -> None:
         calls.append(status)
 
-    # Use a real Mock() to capture and verify calls AI!
     monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", fake_capture_checkin)
 
     # Success case: should record "in_progress" then "ok"
@@ -321,4 +321,17 @@ def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> N
     assert calls == ["in_progress", "error"]
 
 
-# Add another test here to check that operation_kubernetes_resources is not required if sentry reporting is disabled AI!
+def test_monitor_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
+    # disable sentry reporting
+    monkeypatch.setattr(Config, "is_sentry_enabled", False)
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(),
+        region_job_class=ExampleRegionJob,
+    )
+    # make operational_kubernetes_resources raise if called
+    def fail_resources(image_tag: str):
+        raise RuntimeError("operational_kubernetes_resources should not be called")
+    monkeypatch.setattr(dataset, "operational_kubernetes_resources", fail_resources)
+    # this should not raise
+    with dataset._monitor(ReformatCronJob, "job"):
+        pass
