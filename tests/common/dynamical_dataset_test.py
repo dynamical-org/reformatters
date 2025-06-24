@@ -274,3 +274,32 @@ def test_validate_zarr_calls_validators_and_uses_final_store(
     # - self._final_store() was called and returned our mock_store
     # - self.validators() was called and returned our mock_validators
     mock_validate.assert_called_once_with(mock_store, validators=mock_validators)
+
+
+def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    import sentry_sdk
+
+    # Prepare dataset instance
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(),
+        region_job_class=ExampleRegionJob,
+    )
+
+    # Mock capture_checkin to record statuses
+    calls: list[str] = []
+    def fake_capture_checkin(*, status, **kwargs):
+        calls.append(status)
+
+    monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", fake_capture_checkin)
+
+    # Success case: should record "in_progress" then "ok"
+    with dataset._monitor(ReformatCronJob, "job-name"):
+        pass
+    assert calls == ["in_progress", "ok"]
+
+    # Error case: should record "in_progress" then "error"
+    calls.clear()
+    with pytest.raises(ValueError):
+        with dataset._monitor(ReformatCronJob, "job-name"):
+            raise ValueError("failure")
+    assert calls == ["in_progress", "error"]
