@@ -287,6 +287,7 @@ def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> N
 
     # Mock capture_checkin to record statuses
     calls: list[str] = []
+
     def fake_capture_checkin(*, status, **kwargs):
         calls.append(status)
 
