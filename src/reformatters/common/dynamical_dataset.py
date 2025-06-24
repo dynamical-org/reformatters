@@ -4,7 +4,7 @@ from collections.abc import Iterable, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any, Generic, Literal, TypeVar
+from typing import Annotated, Any, Generic, Literal, TypeVar, Iterator
 
 import numpy as np
 import pandas as pd
@@ -336,7 +336,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         self,
         cron_type: type[CronJob],
         reformat_job_name: str,
-    ):
+    ) -> Iterator[None]:
         cron_jobs = self.operational_kubernetes_resources("placeholder-image-tag")
         cron_job = item(c for c in cron_jobs if isinstance(c, cron_type))
 
