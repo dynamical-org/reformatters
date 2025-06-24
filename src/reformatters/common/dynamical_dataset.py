@@ -15,7 +15,7 @@ from pydantic import computed_field
 
 from reformatters.common import docker, template_utils, validation
 from reformatters.common.config_models import DataVar
-from reformatters.common.iterating import item
+from reformatters.common.iterating import digest, item
 from reformatters.common.kubernetes import (
     CronJob,
     Job,
@@ -302,10 +302,15 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
         self._sentry_check_in(ValidationCronJob, reformat_job_name, "in_progress")
-        store = self._final_store()
-        validation.validate_zarr(store, validators=self.validators())
-        self._sentry_check_in(ValidationCronJob, reformat_job_name, "ok")
-        logger.info(f"Done validating {store}")
+        try:
+            store = self._final_store()
+            validation.validate_zarr(store, validators=self.validators())
+
+            self._sentry_check_in(ValidationCronJob, reformat_job_name, "ok")
+            logger.info(f"Done validating {store}")
+        except Exception as e:
+            self._sentry_check_in(ValidationCronJob, reformat_job_name, "error")
+            raise e
 
     def get_cli(
         self,
@@ -336,7 +341,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def _sentry_check_in(
         self,
         cron_type: type[CronJob],
-        job_name: str,
+        reformat_job_name: str,
         status: Literal["ok", "in_progress", "error"],
     ) -> None:
         cron_jobs = self.operational_kubernetes_resources("placeholder-image-tag")
@@ -344,7 +349,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         sentry_sdk.crons.capture_checkin(
             monitor_slug=cron_job.name,
-            check_in_id=job_name,  # use the job name so retried pods from the same job are all associated with the same run
+            # Using the job name associates all pods, including retries, with the same cron "run"
+            # Sentry expects a 32 character uuid-like string (no dashes) so we hash and truncate
+            check_in_id=digest(reformat_job_name, length=32),
             status=status,
             monitor_config={
                 "schedule": {"type": "crontab", "value": cron_job.schedule},
