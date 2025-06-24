@@ -303,6 +303,7 @@ def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> N
     # Mock capture_checkin to record statuses
     calls: list[str] = []
 
+    # use a Mock() object to capture and verify calls AI!
     def fake_capture_checkin(*, status: str, **kwargs: Any) -> None:
         calls.append(status)
 
@@ -322,6 +323,8 @@ def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def test_monitor_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Test that it's ok to not define operational_kubernetes_resources if sentry reporting is disabled
+
     # disable sentry reporting
     monkeypatch.setattr(Config, "is_sentry_enabled", False)
     dataset = ExampleDataset(
@@ -334,6 +337,7 @@ def test_monitor_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
         raise RuntimeError("operational_kubernetes_resources should not be called")
 
     monkeypatch.setattr(dataset, "operational_kubernetes_resources", fail_resources)
+
     # this should not raise
     with dataset._monitor(ReformatCronJob, "job"):
         pass
