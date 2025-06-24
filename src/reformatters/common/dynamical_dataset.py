@@ -1,10 +1,10 @@
 import json
 import subprocess
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any, Generic, Literal, TypeVar, Iterator
+from typing import Annotated, Any, Generic, Literal, TypeVar
 
 import numpy as np
 import pandas as pd
