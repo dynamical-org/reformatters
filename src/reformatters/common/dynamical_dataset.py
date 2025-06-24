@@ -1,20 +1,29 @@
 import json
 import subprocess
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any, Generic, TypeVar
+from typing import Annotated, Any, Generic, Literal, TypeVar
 
 import numpy as np
 import pandas as pd
+import sentry_sdk
 import typer
 import xarray as xr
 import zarr
 from pydantic import computed_field
 
 from reformatters.common import docker, template_utils, validation
+from reformatters.common.config import Config
 from reformatters.common.config_models import DataVar
-from reformatters.common.kubernetes import CronJob, Job, ReformatCronJob
+from reformatters.common.iterating import digest, item
+from reformatters.common.kubernetes import (
+    CronJob,
+    Job,
+    ReformatCronJob,
+    ValidationCronJob,
+)
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.region_job import RegionJob, SourceFileCoord
@@ -114,28 +123,29 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def reformat_operational_update(
         self,
-        job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
+        reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
         """Update an existing dataset with the latest data."""
-        final_store = self._final_store()
-        tmp_store = self._tmp_store()
+        with self._monitor(ReformatCronJob, reformat_job_name):
+            final_store = self._final_store()
+            tmp_store = self._tmp_store()
 
-        jobs, template_ds = self.region_job_class.operational_update_jobs(
-            final_store=final_store,
-            tmp_store=tmp_store,
-            get_template_fn=self._get_template,
-            append_dim=self.template_config.append_dim,
-            all_data_vars=self.template_config.data_vars,
-            reformat_job_name=job_name,
-        )
-        template_utils.write_metadata(template_ds, tmp_store, get_mode(tmp_store))
-        for job in jobs:
-            process_results = job.process()
-            updated_template = job.update_template_with_results(process_results)
-            template_utils.write_metadata(
-                updated_template, tmp_store, get_mode(tmp_store)
+            jobs, template_ds = self.region_job_class.operational_update_jobs(
+                final_store=final_store,
+                tmp_store=tmp_store,
+                get_template_fn=self._get_template,
+                append_dim=self.template_config.append_dim,
+                all_data_vars=self.template_config.data_vars,
+                reformat_job_name=reformat_job_name,
             )
-            copy_zarr_metadata(updated_template, tmp_store, final_store)
+            template_utils.write_metadata(template_ds, tmp_store, get_mode(tmp_store))
+            for job in jobs:
+                process_results = job.process()
+                updated_template = job.update_template_with_results(process_results)
+                template_utils.write_metadata(
+                    updated_template, tmp_store, get_mode(tmp_store)
+                )
+                copy_zarr_metadata(updated_template, tmp_store, final_store)
 
         logger.info(f"Operational update complete. Wrote to store: {final_store}")
 
@@ -291,7 +301,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
-        validation.validate_zarr(self._final_store(), validators=self.validators())
+        with self._monitor(ValidationCronJob, reformat_job_name):
+            store = self._final_store()
+            validation.validate_zarr(store, validators=self.validators())
+
+        logger.info(f"Done validating {store}")
 
     def get_cli(
         self,
@@ -318,3 +332,43 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def _get_template(self, append_dim_end: DatetimeLike) -> xr.Dataset:
         return self.template_config.get_template(pd.Timestamp(append_dim_end))
+
+    @contextmanager
+    def _monitor(
+        self,
+        cron_type: type[CronJob],
+        reformat_job_name: str,
+    ) -> Iterator[None]:
+        # Don't require operational_kubernetes_resources to be defined unless sentry reporting is enabled
+        if not Config.is_sentry_enabled:
+            yield
+            return
+
+        cron_jobs = self.operational_kubernetes_resources("placeholder-image-tag")
+        cron_job = item(c for c in cron_jobs if isinstance(c, cron_type))
+
+        def capture_checkin(status: Literal["ok", "in_progress", "error"]) -> None:
+            sentry_sdk.crons.capture_checkin(
+                monitor_slug=cron_job.name,
+                check_in_id=digest(reformat_job_name, length=32),
+                status=status,
+                monitor_config={
+                    "schedule": {"type": "crontab", "value": cron_job.schedule},
+                    "timezone": "UTC",
+                    "checkin_margin": 10,
+                    "max_runtime": int(
+                        cron_job.pod_active_deadline.total_seconds() / 60
+                    ),
+                    "failure_issue_threshold": 1,
+                    "recovery_threshold": 1,
+                },
+            )
+
+        capture_checkin("in_progress")
+        try:
+            yield
+        except Exception:
+            capture_checkin("error")
+            raise
+        else:
+            capture_checkin("ok")

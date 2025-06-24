@@ -12,6 +12,7 @@ import xarray as xr
 from pydantic import computed_field
 
 from reformatters.common import template_utils, validation
+from reformatters.common.config import Config
 from reformatters.common.config_models import (
     BaseInternalAttrs,
     DataVar,
@@ -22,7 +23,7 @@ from reformatters.common.dynamical_dataset import (
     DynamicalDataset,
     DynamicalDatasetStorageConfig,
 )
-from reformatters.common.kubernetes import CronJob, ReformatCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
@@ -104,7 +105,19 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
                 shared_memory="1G",
                 ephemeral_storage="1G",
                 secret_names=[self.storage_config.k8s_secret_name],
-            )
+            ),
+            ValidationCronJob(
+                name=f"{self.dataset_id}-validation",
+                schedule="0 0 * * *",
+                pod_active_deadline=timedelta(minutes=30),
+                image=image_tag,
+                dataset_id=self.dataset_id,
+                cpu="1",
+                memory="1G",
+                shared_memory="1G",
+                ephemeral_storage="1G",
+                secret_names=[self.storage_config.k8s_secret_name],
+            ),
         ]
 
 
@@ -274,3 +287,55 @@ def test_validate_zarr_calls_validators_and_uses_final_store(
     # - self._final_store() was called and returned our mock_store
     # - self.validators() was called and returned our mock_validators
     mock_validate.assert_called_once_with(mock_store, validators=mock_validators)
+
+
+def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    import sentry_sdk
+
+    monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
+
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(),
+        region_job_class=ExampleRegionJob,
+    )
+
+    # Mock capture_checkin to record statuses
+    mock_capture = Mock()
+    monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", mock_capture)
+
+    # Success case: should record "in_progress" then "ok"
+    with dataset._monitor(ReformatCronJob, "job-name"):
+        pass
+    statuses = [c.kwargs["status"] for c in mock_capture.call_args_list]
+    assert statuses == ["in_progress", "ok"]
+
+    # Error case: should record "in_progress" then "error"
+    mock_capture.reset_mock()
+    with pytest.raises(ValueError):
+        with dataset._monitor(ReformatCronJob, "job-name"):
+            raise ValueError("failure")
+    statuses = [c.kwargs["status"] for c in mock_capture.call_args_list]
+    assert statuses == ["in_progress", "error"]
+
+
+def test_monitor_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Test that it's ok to not define operational_kubernetes_resources if sentry reporting is disabled
+
+    # disable sentry reporting
+    monkeypatch.setattr(type(Config), "is_sentry_enabled", False)
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(),
+        region_job_class=ExampleRegionJob,
+    )
+
+    # make operational_kubernetes_resources raise if called
+    def fail_resources(image_tag: str) -> None:
+        raise RuntimeError("operational_kubernetes_resources should not be called")
+
+    monkeypatch.setattr(
+        ExampleDataset, "operational_kubernetes_resources", fail_resources
+    )
+
+    # this should not raise
+    with dataset._monitor(ReformatCronJob, "job"):
+        pass
