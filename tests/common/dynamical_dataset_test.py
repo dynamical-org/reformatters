@@ -301,25 +301,22 @@ def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> N
     )
 
     # Mock capture_checkin to record statuses
-    calls: list[str] = []
-
-    # use a Mock() object to capture and verify calls AI!
-    def fake_capture_checkin(*, status: str, **kwargs: Any) -> None:
-        calls.append(status)
-
-    monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", fake_capture_checkin)
+    mock_capture = Mock()
+    monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", mock_capture)
 
     # Success case: should record "in_progress" then "ok"
     with dataset._monitor(ReformatCronJob, "job-name"):
         pass
-    assert calls == ["in_progress", "ok"]
+    statuses = [c.kwargs["status"] for c in mock_capture.call_args_list]
+    assert statuses == ["in_progress", "ok"]
 
     # Error case: should record "in_progress" then "error"
     calls.clear()
     with pytest.raises(ValueError):
         with dataset._monitor(ReformatCronJob, "job-name"):
             raise ValueError("failure")
-    assert calls == ["in_progress", "error"]
+    statuses = [c.kwargs["status"] for c in mock_capture.call_args_list]
+    assert statuses == ["in_progress", "error"]
 
 
 def test_monitor_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
