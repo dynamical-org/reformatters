@@ -12,6 +12,7 @@ import xarray as xr
 from pydantic import computed_field
 
 from reformatters.common import template_utils, validation
+from reformatters.common.config import Config
 from reformatters.common.config_models import (
     BaseInternalAttrs,
     DataVar,
@@ -26,7 +27,6 @@ from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationC
 from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
-from reformatters.common.config import Config
 
 NOOP_STORAGE_CONFIG = DynamicalDatasetStorageConfig(
     base_path="noop",
@@ -328,9 +328,11 @@ def test_monitor_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
     )
+
     # make operational_kubernetes_resources raise if called
     def fail_resources(image_tag: str):
         raise RuntimeError("operational_kubernetes_resources should not be called")
+
     monkeypatch.setattr(dataset, "operational_kubernetes_resources", fail_resources)
     # this should not raise
     with dataset._monitor(ReformatCronJob, "job"):
