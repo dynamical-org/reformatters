@@ -331,31 +331,35 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def _get_template(self, append_dim_end: DatetimeLike) -> xr.Dataset:
         return self.template_config.get_template(pd.Timestamp(append_dim_end))
 
+    @contextmanager
     def _sentry_check_in(
         self,
         cron_type: type[CronJob],
         reformat_job_name: str,
-        status: Literal["ok", "in_progress", "error"],
-    ) -> None:
+    ):
         cron_jobs = self.operational_kubernetes_resources("placeholder-image-tag")
         cron_job = item(c for c in cron_jobs if isinstance(c, cron_type))
 
-        sentry_sdk.crons.capture_checkin(
-            monitor_slug=cron_job.name,
-            # Using the job name associates all pods, including retries, with the same cron "run"
-            # Sentry expects a 32 character uuid-like string (no dashes) so we hash and truncate
-            check_in_id=digest(reformat_job_name, length=32),
-            status=status,
-            monitor_config={
-                "schedule": {"type": "crontab", "value": cron_job.schedule},
-                "timezone": "UTC",
-                # If an expected check-in doesn't come in `checkin_margin` minutes, it'll be considered missed
-                "checkin_margin": 10,
-                # The check-in is allowed to run for `max_runtime` minutes before it's considered failed
-                "max_runtime": int(cron_job.pod_active_deadline.total_seconds() / 60),
-                # It'll take `failure_issue_threshold` consecutive failed check-ins to create an issue
-                "failure_issue_threshold": 1,
-                # It'll take `recovery_threshold` OK check-ins to resolve an issue
-                "recovery_threshold": 1,
-            },
-        )
+        def _capture(status: Literal["ok", "in_progress", "error"]) -> None:
+            sentry_sdk.crons.capture_checkin(
+                monitor_slug=cron_job.name,
+                check_in_id=digest(reformat_job_name, length=32),
+                status=status,
+                monitor_config={
+                    "schedule": {"type": "crontab", "value": cron_job.schedule},
+                    "timezone": "UTC",
+                    "checkin_margin": 10,
+                    "max_runtime": int(cron_job.pod_active_deadline.total_seconds() / 60),
+                    "failure_issue_threshold": 1,
+                    "recovery_threshold": 1,
+                },
+            )
+
+        _capture("in_progress")
+        try:
+            yield
+        except Exception:
+            _capture("error")
+            raise
+        else:
+            _capture("ok")
