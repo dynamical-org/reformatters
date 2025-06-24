@@ -125,7 +125,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
         """Update an existing dataset with the latest data."""
-        with self._sentry_check_in(ReformatCronJob, reformat_job_name):
+        with self._sentry_monitor(ReformatCronJob, reformat_job_name):
             final_store = self._final_store()
             tmp_store = self._tmp_store()
 
@@ -300,7 +300,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
-        with self._sentry_check_in(ValidationCronJob, reformat_job_name):
+        with self._sentry_monitor(ValidationCronJob, reformat_job_name):
             store = self._final_store()
             validation.validate_zarr(store, validators=self.validators())
             logger.info(f"Done validating {store}")
@@ -332,7 +332,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         return self.template_config.get_template(pd.Timestamp(append_dim_end))
 
     @contextmanager
-    def _sentry_check_in(
+    def _sentry_monitor(
         self,
         cron_type: type[CronJob],
         reformat_job_name: str,
