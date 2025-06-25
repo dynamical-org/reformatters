@@ -598,11 +598,11 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 append_dim_coord = getattr(coord, self.append_dim, pd.Timestamp.min)
                 if isinstance(append_dim_coord, slice):
                     append_dim_coord = append_dim_coord.start
-                day_ago = pd.Timestamp.now() - pd.Timedelta(hours=24)
+                two_days_ago = pd.Timestamp.now() - pd.Timedelta(hours=48)
                 if (
                     isinstance(e, FileNotFoundError)
                     and isinstance(append_dim_coord, np.datetime64 | pd.Timestamp)
-                    and append_dim_coord > day_ago
+                    and append_dim_coord > two_days_ago
                 ):
                     log.info(" ".join(str(e).split("\n")[:2]))
                 else:
