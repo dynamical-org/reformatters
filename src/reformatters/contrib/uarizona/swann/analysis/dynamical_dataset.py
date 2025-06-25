@@ -16,9 +16,6 @@ from .validators import (
     check_random_time_within_last_year_nans,
 )
 
-_OPERATIONAL_CRON_SCHEDULE = "0 0 * * *"
-_VALIDATION_CRON_SCHEDULE = "0 1 * * *"
-
 
 class UarizonaSwannAnalysisDataset(
     DynamicalDataset[UarizonaSwannDataVar, UarizonaSwannAnalysisSourceFileCoord]
@@ -40,7 +37,7 @@ class UarizonaSwannAnalysisDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-operational-update",
-            schedule=_OPERATIONAL_CRON_SCHEDULE,
+            schedule="0 0 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -52,7 +49,7 @@ class UarizonaSwannAnalysisDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validation",
-            schedule=_VALIDATION_CRON_SCHEDULE,
+            schedule="0 1 * * *",
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
