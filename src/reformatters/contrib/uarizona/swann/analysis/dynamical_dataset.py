@@ -37,7 +37,7 @@ class UarizonaSwannAnalysisDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-operational-update",
-            schedule="0 22 * * *",
+            schedule="30 16 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
