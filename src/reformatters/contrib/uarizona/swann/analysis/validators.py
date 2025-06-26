@@ -15,7 +15,9 @@ def check_data_is_current(ds: xr.Dataset) -> validation.ValidationResult:
     """
     Check that the data is current within the last 48 hours.
     """
-    now = pd.Timestamp.now()
+    # All times in the dataset are set to start of day, so we need to check
+    # that there is `time` that is within 48 hours from start of day.
+    now = pd.Timestamp.now().floor("D")
     latest_init_time_ds = ds.sel(time=slice(now - pd.Timedelta(hours=48), None))
     if latest_init_time_ds.sizes["time"] == 0:
         return validation.ValidationResult(
