@@ -236,7 +236,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         logger.info(f"Submitted kubernetes job {kubernetes_job.job_name}")
 
-    def reformat_local(
+    def backfill_local(
         self,
         append_dim_end: datetime,
         *,
@@ -315,7 +315,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         app.command()(self.update_template)
         app.command()(self.update)
         app.command()(self.backfill_kubernetes)
-        app.command()(self.reformat_local)
+        app.command()(self.backfill_local)
         app.command()(self.process_region_jobs)
         app.command()(self.validate_zarr)
         return app

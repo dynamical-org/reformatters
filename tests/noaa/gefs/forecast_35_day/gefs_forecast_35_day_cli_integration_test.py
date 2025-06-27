@@ -33,12 +33,12 @@ def test_update_template(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     )
 
 
-def test_reformat_local_and_operational_update(monkeypatch: MonkeyPatch) -> None:
+def test_backfill_local_and_operational_update(monkeypatch: MonkeyPatch) -> None:
     init_time_start = template_config.INIT_TIME_START
     init_time_end = init_time_start + timedelta(days=1)
 
     # 1. Backfill archive
-    cli.reformat_local(init_time_end=init_time_end.isoformat())
+    cli.backfill_local(init_time_end=init_time_end.isoformat())
     original_ds = xr.open_zarr(reformat.get_store(), decode_timedelta=True, chunks=None)
 
     space_subset_ds = original_ds.sel(latitude=slice(10, 0), longitude=slice(0, 10))

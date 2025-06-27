@@ -21,10 +21,10 @@ noop_storage_config = DynamicalDatasetStorageConfig(
 )
 
 
-def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+def test_backfill_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     dataset = UarizonaSwannAnalysisDataset(storage_config=noop_storage_config)
     # Dataset starts at 1981-10-01
-    dataset.reformat_local(append_dim_end=pd.Timestamp("1981-10-02"))
+    dataset.backfill_local(append_dim_end=pd.Timestamp("1981-10-02"))
     ds = xr.open_zarr(dataset._final_store(), chunks=None)
     assert ds.snow_depth.mean() == 0.23608214
     assert ds.snow_water_equivalent.mean() == 0.0433126
@@ -37,7 +37,7 @@ def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
 def test_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     dataset = UarizonaSwannAnalysisDataset(storage_config=noop_storage_config)
     # Dataset starts at 1981-10-01
-    dataset.reformat_local(append_dim_end=pd.Timestamp("1981-10-02"))
+    dataset.backfill_local(append_dim_end=pd.Timestamp("1981-10-02"))
     ds = xr.open_zarr(dataset._final_store(), chunks=None)
     assert ds.time.max() == pd.Timestamp("1981-10-01")
 
@@ -68,7 +68,7 @@ def test_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
 def test_update_template_trimming(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     dataset = UarizonaSwannAnalysisDataset(storage_config=noop_storage_config)
     # Dataset starts at 1981-10-01
-    dataset.reformat_local(append_dim_end=pd.Timestamp("1981-10-02"))
+    dataset.backfill_local(append_dim_end=pd.Timestamp("1981-10-02"))
     ds = xr.open_zarr(dataset._final_store(), chunks=None)
     assert ds.time.max() == pd.Timestamp("1981-10-01")
 

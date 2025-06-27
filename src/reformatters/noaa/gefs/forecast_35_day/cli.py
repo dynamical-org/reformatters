@@ -15,7 +15,7 @@ def update_template() -> None:
 
 
 @app.command()
-def reformat_local(
+def backfill_local(
     init_time_end: str,
     filter_init_time_start: str | None = None,
     filter_init_time_end: str | None = None,

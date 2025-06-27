@@ -125,7 +125,7 @@ def test_dynamical_dataset_methods_exist() -> None:
     methods = [
         "update_template",
         "backfill_kubernetes",
-        "reformat_local",
+        "backfill_local",
         "process_region_jobs",
         "update",
         "validate_zarr",
@@ -182,7 +182,7 @@ def test_process_region_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_job1.process.assert_called_once()
 
 
-def test_reformat_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     mock_job0 = Mock()
     mock_job0.summary = lambda: "job0-summary"
     monkeypatch.setattr(
@@ -204,7 +204,7 @@ def test_reformat_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
         region_job_class=ExampleRegionJob,
     )
 
-    dataset.reformat_local(pd.Timestamp("2000-01-02"))
+    dataset.backfill_local(pd.Timestamp("2000-01-02"))
 
     assert xr.open_zarr(tmp_path).attrs["cool"] == "weather"
     process_region_jobs_mock.assert_called_once_with(

@@ -40,12 +40,12 @@ def test_update_template(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     )
 
 
-def test_reformat_local_reforecast_period() -> None:
+def test_backfill_local_reforecast_period() -> None:
     time_start = template_config.TIME_START
     time_end = time_start + pd.Timedelta(days=1)
 
     # 1. Backfill archive
-    cli.reformat_local(time_end=time_end.isoformat())
+    cli.backfill_local(time_end=time_end.isoformat())
     original_ds = xr.open_zarr(reformat.get_store(), decode_timedelta=True, chunks=None)
 
     space_subset_ds = original_ds.sel(latitude=slice(10, 0), longitude=slice(0, 10))
@@ -72,7 +72,7 @@ def test_reformat_local_reforecast_period() -> None:
     assert np.isclose(point_ds["wind_u_100m"], 4.0)
 
 
-def test_reformat_local_reforecast_to_pre_v12_transition_period(
+def test_backfill_local_reforecast_to_pre_v12_transition_period(
     monkeypatch: MonkeyPatch,
 ) -> None:
     time_start = pd.Timestamp("2019-12-31T00:00")
@@ -85,7 +85,7 @@ def test_reformat_local_reforecast_to_pre_v12_transition_period(
     cli.update_template()
 
     # 1. Backfill archive
-    cli.reformat_local(time_end=time_end.isoformat())
+    cli.backfill_local(time_end=time_end.isoformat())
     original_ds = xr.open_zarr(reformat.get_store(), decode_timedelta=True, chunks=None)
 
     # We're starting in the middle of the available data so no time steps are null
@@ -122,7 +122,7 @@ def test_reformat_local_reforecast_to_pre_v12_transition_period(
     )
 
 
-def test_reformat_local_pre_v12_to_v12_transition_period_and_operational_update(
+def test_backfill_local_pre_v12_to_v12_transition_period_and_operational_update(
     monkeypatch: MonkeyPatch,
 ) -> None:
     time_start = pd.Timestamp("2020-09-22T00:00")
@@ -133,7 +133,7 @@ def test_reformat_local_pre_v12_to_v12_transition_period_and_operational_update(
     cli.update_template()
 
     # 1. Backfill archive
-    cli.reformat_local(time_end=time_end.isoformat())
+    cli.backfill_local(time_end=time_end.isoformat())
     original_ds = xr.open_zarr(reformat.get_store(), decode_timedelta=True, chunks=None)
 
     # We're starting in the middle of the available data so no time steps are null
