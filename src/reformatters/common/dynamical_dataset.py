@@ -250,7 +250,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         template_utils.write_metadata(template_ds, final_store, get_mode(final_store))
 
-        self.process_region_jobs(
+        self.process_backfill_region_jobs(
             append_dim_end,
             reformat_job_name="local",
             worker_index=0,
@@ -261,7 +261,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
         logger.info(f"Done writing to {final_store}")
 
-    def process_region_jobs(
+    def process_backfill_region_jobs(
         self,
         append_dim_end: datetime,
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
@@ -316,7 +316,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         app.command()(self.update)
         app.command()(self.backfill_kubernetes)
         app.command()(self.backfill_local)
-        app.command()(self.process_region_jobs)
+        app.command()(self.process_backfill_region_jobs)
         app.command()(self.validate_zarr)
         return app
 

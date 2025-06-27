@@ -126,7 +126,7 @@ def test_dynamical_dataset_methods_exist() -> None:
         "update_template",
         "backfill_kubernetes",
         "backfill_local",
-        "process_region_jobs",
+        "process_backfill_region_jobs",
         "update",
         "validate_zarr",
     ]
@@ -155,7 +155,7 @@ def test_update_template(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_update_template.assert_called_once()
 
 
-def test_process_region_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_process_backfill_region_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_job0 = Mock()
     mock_job0.summary = lambda: "job0-summary"
     mock_job1 = Mock()
@@ -171,7 +171,7 @@ def test_process_region_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
         region_job_class=ExampleRegionJob,
     )
 
-    dataset.process_region_jobs(
+    dataset.process_backfill_region_jobs(
         pd.Timestamp("2000-01-02"),
         "test-job-name",
         worker_index=0,
@@ -196,8 +196,12 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
         lambda self, end: xr.Dataset(attrs={"cool": "weather"}),
     )
     monkeypatch.setattr(ExampleDataset, "_final_store", lambda _self: tmp_path)
-    process_region_jobs_mock = Mock()
-    monkeypatch.setattr(ExampleDataset, "process_region_jobs", process_region_jobs_mock)
+    process_backfill_region_jobs_mock = Mock()
+    monkeypatch.setattr(
+        ExampleDataset,
+        "process_backfill_region_jobs",
+        process_backfill_region_jobs_mock,
+    )
 
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
@@ -207,7 +211,7 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
     dataset.backfill_local(pd.Timestamp("2000-01-02"))
 
     assert xr.open_zarr(tmp_path).attrs["cool"] == "weather"
-    process_region_jobs_mock.assert_called_once_with(
+    process_backfill_region_jobs_mock.assert_called_once_with(
         pd.Timestamp("2000-01-02"),
         worker_index=0,
         workers_total=1,
