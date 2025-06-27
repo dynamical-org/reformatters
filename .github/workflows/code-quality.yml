@@ -1,39 +1,65 @@
 name: Code Quality
 
+permissions:
+  contents: read
+
 on:
   pull_request:
     branches: [ main ]
 
 jobs:
   quality:
-    name: Code Quality
-    runs-on: ubuntu-latest
-    
+    name: Code Quality (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+
     steps:
-      - uses: actions/checkout@v4
-      
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
       - name: "Set up Python"
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version-file: ".python-version"
 
+      - name: Install Arm Build Dependencies
+        if: matrix.arch == 'arm64'
+        run: sudo apt-get install -qyy -o APT::Install-Suggests=false libgdal-dev
+
       - name: Install dependencies
+        # Needed to be able to compile dependencies on ARM64
+        env:
+          DISABLE_NUMCODECS_SSE2: 1
+          DISABLE_NUMCODECS_AVX2: 1
+          CFLAGS: "-Wno-implicit-function-declaration" 
         run: uv sync --all-extras --dev
 
       - name: Install this project
         run: "uv pip install -e ."
 
       - name: Run Ruff
-        run: uv run ruff check 
+        run: uv run ruff check --output-format=github
+
+      - name: Check code format
+        run: uv run ruff format --check
 
       - name: Run Mypy
-        run: uv run mypy 
+        run: uv run mypy
 
       - name: Run Pytest
         run: uv run pytest
+
+      - name: Ensure SHA pinned actions
+        uses: zgosalvez/github-actions-ensure-sha-pinned-actions@fc87bb5b5a97953d987372e74478de634726b3e5 # v3
