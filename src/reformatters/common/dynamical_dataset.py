@@ -299,14 +299,14 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         for region_job in region_jobs:
             region_job.process()
 
-    def validate_zarr(
+    def validate_dataset(
         self,
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
         with self._monitor(ValidationCronJob, reformat_job_name):
             store = self._final_store()
-            validation.validate_zarr(store, validators=self.validators())
+            validation.validate_dataset(store, validators=self.validators())
 
         logger.info(f"Done validating {store}")
 
@@ -320,7 +320,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         app.command()(self.backfill_kubernetes)
         app.command()(self.backfill_local)
         app.command()(self.process_backfill_region_jobs)
-        app.command()(self.validate_zarr)
+        app.command("validate")(self.validate_dataset)
         return app
 
     def _final_store(self) -> zarr.abc.store.Store:

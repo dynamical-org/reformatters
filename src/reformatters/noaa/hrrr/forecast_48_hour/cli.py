@@ -43,8 +43,8 @@ def update() -> None:
 
 
 @app.command()
-def validate_zarr() -> None:
-    raise NotImplementedError("validate_zarr not implemented")
+def validate_dataset() -> None:
+    raise NotImplementedError("validate_dataset not implemented")
 
 
 if __name__ == "__main__":

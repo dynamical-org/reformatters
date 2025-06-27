@@ -128,7 +128,7 @@ def test_dynamical_dataset_methods_exist() -> None:
         "backfill_local",
         "process_backfill_region_jobs",
         "update",
-        "validate_zarr",
+        "validate_dataset",
     ]
     for method in methods:
         assert hasattr(DynamicalDataset, method), f"{method} missing"
@@ -272,7 +272,7 @@ def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     assert '"my-docker-image"' in input_str
 
 
-def test_validate_zarr_calls_validators_and_uses_final_store(
+def test_validate_dataset_calls_validators_and_uses_final_store(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     mock_validators = [Mock(), Mock()]
@@ -282,16 +282,16 @@ def test_validate_zarr_calls_validators_and_uses_final_store(
     monkeypatch.setattr(ExampleDataset, "_final_store", lambda self: mock_store)
 
     mock_validate = Mock()
-    monkeypatch.setattr(validation, "validate_zarr", mock_validate)
+    monkeypatch.setattr(validation, "validate_dataset", mock_validate)
 
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
     )
 
-    dataset.validate_zarr("example-job-name")
+    dataset.validate_dataset("example-job-name")
 
-    # Ensure validate_zarr was called with correct arguments
+    # Ensure validate_dataset was called with correct arguments
     # this implies
     # - self._final_store() was called and returned our mock_store
     # - self.validators() was called and returned our mock_validators

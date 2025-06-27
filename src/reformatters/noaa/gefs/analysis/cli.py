@@ -86,8 +86,8 @@ def update(
 
 
 @app.command()
-def validate_zarr() -> None:
-    reformat.validate_zarr()
+def validate_dataset() -> None:
+    reformat.validate_dataset()
 
 
 if __name__ == "__main__":
