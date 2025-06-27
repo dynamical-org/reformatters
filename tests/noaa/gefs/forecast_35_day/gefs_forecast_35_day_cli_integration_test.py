@@ -94,7 +94,7 @@ def test_reformat_local_and_operational_update(monkeypatch: MonkeyPatch) -> None
         lambda: init_time_end + timedelta(days=1),
     )
 
-    cli.reformat_operational_update(job_name="test")
+    cli.update(job_name="test")
     updated_ds = xr.open_zarr(reformat.get_store(), decode_timedelta=True, chunks=None)
 
     assert len(updated_ds.init_time) == 2

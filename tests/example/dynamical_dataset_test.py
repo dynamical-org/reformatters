@@ -29,7 +29,7 @@
 #         lambda existing_ds: pd.Timestamp(existing_ds.time.max().item()),
 #     )
 
-#     dataset.reformat_operational_update("test-reformat-operational-update")
+#     dataset.update("test-reformat-operational-update")
 
 #     # Check resulting dataset
 #     updated_ds = xr.open_zarr(dataset._final_store(), chunks=None)

@@ -121,7 +121,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """Generate and persist the dataset template using the template_config."""
         self.template_config.update_template()
 
-    def reformat_operational_update(
+    def update(
         self,
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
@@ -313,7 +313,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """Create a CLI app with dataset commands"""
         app = typer.Typer()
         app.command()(self.update_template)
-        app.command()(self.reformat_operational_update)
+        app.command()(self.update)
         app.command()(self.reformat_kubernetes)
         app.command()(self.reformat_local)
         app.command()(self.process_region_jobs)

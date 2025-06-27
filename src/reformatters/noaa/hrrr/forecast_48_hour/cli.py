@@ -38,8 +38,8 @@ def reformat_chunks(
 
 
 @app.command()
-def reformat_operational_update() -> None:
-    raise NotImplementedError("reformat_operational_update not implemented")
+def update() -> None:
+    raise NotImplementedError("update not implemented")
 
 
 @app.command()

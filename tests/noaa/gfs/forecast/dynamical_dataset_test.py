@@ -119,7 +119,7 @@ def test_reformat_local_and_operational_update(
         ),
     )
 
-    dataset.reformat_operational_update("test-update-job-name")
+    dataset.update("test-update-job-name")
 
     updated_ds = xr.open_zarr(
         dataset._final_store(), decode_timedelta=True, chunks=None
