@@ -86,7 +86,7 @@ Reformatting locally can be slow. Choosing an `<append_dim_end>` not long after 
 
 To operationalize your dataset and have the `update` and `validate` Kubernetes cron jobs be deployed automatically by GitHub CI, implement the two methods in `src/reformatters/$DATASET_PATH/dynamical_dataset.py`
 
-In `dynamical_dataset_test.py` create a test that runs `reformat_local` followed by `reformat_operational_update` for a couple data variables.
+In `dynamical_dataset_test.py` create a test that runs `backfill_local` followed by `update` for a couple data variables.
 ```bash
 uv run pytest tests/$DATASET_PATH/dynamical_dataset_test.py
 ```
