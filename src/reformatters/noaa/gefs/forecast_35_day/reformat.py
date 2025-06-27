@@ -306,8 +306,8 @@ def _get_recent_init_times_for_reprocessing(ds: xr.Dataset) -> Array1D[np.dateti
         "timezone": "UTC",
     },
 )
-def validate_zarr() -> None:
-    validation.validate_zarr(
+def validate_dataset() -> None:
+    validation.validate_dataset(
         get_store(),
         validators=(
             validation.check_forecast_current_data,

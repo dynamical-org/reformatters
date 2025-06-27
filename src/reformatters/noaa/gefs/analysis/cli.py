@@ -15,7 +15,7 @@ def update_template() -> None:
 
 
 @app.command()
-def reformat_local(
+def backfill_local(
     time_end: str,
     filter_time_start: str | None = None,
     filter_time_end: str | None = None,
@@ -33,7 +33,7 @@ def reformat_local(
 
 
 @app.command()
-def reformat_kubernetes(
+def backfill_kubernetes(
     time_end: str,
     jobs_per_pod: int = 1,
     max_parallelism: int = 32,
@@ -79,15 +79,15 @@ def reformat_chunks(
 
 
 @app.command()
-def reformat_operational_update(
+def update(
     job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
 ) -> None:
     reformat.reformat_operational_update(job_name)
 
 
 @app.command()
-def validate_zarr() -> None:
-    reformat.validate_zarr()
+def validate() -> None:
+    reformat.validate_dataset()
 
 
 if __name__ == "__main__":

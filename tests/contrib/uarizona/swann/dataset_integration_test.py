@@ -21,10 +21,10 @@ noop_storage_config = DynamicalDatasetStorageConfig(
 )
 
 
-def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+def test_backfill_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     dataset = UarizonaSwannAnalysisDataset(storage_config=noop_storage_config)
     # Dataset starts at 1981-10-01
-    dataset.reformat_local(append_dim_end=pd.Timestamp("1981-10-02"))
+    dataset.backfill_local(append_dim_end=pd.Timestamp("1981-10-02"))
     ds = xr.open_zarr(dataset._final_store(), chunks=None)
     assert ds.snow_depth.mean() == 0.23608214
     assert ds.snow_water_equivalent.mean() == 0.0433126
@@ -34,10 +34,10 @@ def test_reformat_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     assert subset_ds.snow_water_equivalent.values == 35.0
 
 
-def test_reformat_operational_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+def test_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     dataset = UarizonaSwannAnalysisDataset(storage_config=noop_storage_config)
     # Dataset starts at 1981-10-01
-    dataset.reformat_local(append_dim_end=pd.Timestamp("1981-10-02"))
+    dataset.backfill_local(append_dim_end=pd.Timestamp("1981-10-02"))
     ds = xr.open_zarr(dataset._final_store(), chunks=None)
     assert ds.time.max() == pd.Timestamp("1981-10-01")
 
@@ -53,7 +53,7 @@ def test_reformat_operational_update(monkeypatch: MonkeyPatch, tmp_path: Path) -
         lambda existing_ds: pd.Timestamp(existing_ds.time.max().item()),
     )
 
-    dataset.reformat_operational_update("test-reformat-operational-update")
+    dataset.update("test-update")
     updated_ds = xr.open_zarr(dataset._final_store(), chunks=None)
     np.testing.assert_array_equal(
         updated_ds.time, pd.date_range("1981-10-01", "1981-10-03")
@@ -65,12 +65,10 @@ def test_reformat_operational_update(monkeypatch: MonkeyPatch, tmp_path: Path) -
     )
 
 
-def test_reformat_operational_update_template_trimming(
-    monkeypatch: MonkeyPatch, tmp_path: Path
-) -> None:
+def test_update_template_trimming(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     dataset = UarizonaSwannAnalysisDataset(storage_config=noop_storage_config)
     # Dataset starts at 1981-10-01
-    dataset.reformat_local(append_dim_end=pd.Timestamp("1981-10-02"))
+    dataset.backfill_local(append_dim_end=pd.Timestamp("1981-10-02"))
     ds = xr.open_zarr(dataset._final_store(), chunks=None)
     assert ds.time.max() == pd.Timestamp("1981-10-01")
 
@@ -99,7 +97,7 @@ def test_reformat_operational_update_template_trimming(
 
     monkeypatch.setattr(dataset.region_job_class, "download_file", mock_download_file)
 
-    dataset.reformat_operational_update("test-reformat-operational-update")
+    dataset.update("test-update")
     updated_ds = xr.open_zarr(dataset._final_store(), chunks=None)
 
     # The dataset should only extend to 1981-10-02 because 1981-10-03 failed to download

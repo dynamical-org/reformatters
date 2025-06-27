@@ -309,8 +309,8 @@ def get_latest_processed_time(
         "timezone": "UTC",
     },
 )
-def validate_zarr() -> None:
-    validation.validate_zarr(
+def validate_dataset() -> None:
+    validation.validate_dataset(
         get_store(),
         validators=(
             validation.check_analysis_current_data,

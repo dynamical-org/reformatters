@@ -121,7 +121,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """Generate and persist the dataset template using the template_config."""
         self.template_config.update_template()
 
-    def reformat_operational_update(
+    def update(
         self,
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
@@ -149,7 +149,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         logger.info(f"Operational update complete. Wrote to store: {final_store}")
 
-    def reformat_kubernetes(
+    def backfill_kubernetes(
         self,
         append_dim_end: datetime,
         jobs_per_pod: int,
@@ -187,7 +187,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         workers_total = int(np.ceil(num_jobs / jobs_per_pod))
         parallelism = min(workers_total, max_parallelism)
 
-        command = ["process-region-jobs", pd.Timestamp(append_dim_end).isoformat()]
+        command = [
+            "process-backfill-region-jobs",
+            pd.Timestamp(append_dim_end).isoformat(),
+        ]
         if filter_start is not None:
             command.append(f"--filter-start={filter_start.isoformat()}")
         if filter_end is not None:
@@ -236,7 +239,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         logger.info(f"Submitted kubernetes job {kubernetes_job.job_name}")
 
-    def reformat_local(
+    def backfill_local(
         self,
         append_dim_end: datetime,
         *,
@@ -250,7 +253,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         template_utils.write_metadata(template_ds, final_store, get_mode(final_store))
 
-        self.process_region_jobs(
+        self.process_backfill_region_jobs(
             append_dim_end,
             reformat_job_name="local",
             worker_index=0,
@@ -261,7 +264,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
         logger.info(f"Done writing to {final_store}")
 
-    def process_region_jobs(
+    def process_backfill_region_jobs(
         self,
         append_dim_end: datetime,
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
@@ -296,14 +299,14 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         for region_job in region_jobs:
             region_job.process()
 
-    def validate_zarr(
+    def validate_dataset(
         self,
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
         with self._monitor(ValidationCronJob, reformat_job_name):
             store = self._final_store()
-            validation.validate_zarr(store, validators=self.validators())
+            validation.validate_dataset(store, validators=self.validators())
 
         logger.info(f"Done validating {store}")
 
@@ -313,11 +316,12 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """Create a CLI app with dataset commands"""
         app = typer.Typer()
         app.command()(self.update_template)
-        app.command()(self.reformat_operational_update)
-        app.command()(self.reformat_kubernetes)
-        app.command()(self.reformat_local)
-        app.command()(self.process_region_jobs)
-        app.command()(self.validate_zarr)
+        app.command()(self.update)
+        app.command()(self.backfill_kubernetes)
+        app.command()(self.backfill_local)
+        app.command()(self.process_backfill_region_jobs)
+        # Avoid method name conflict with pydantic's validate while keeping cli commands consistent
+        app.command("validate")(self.validate_dataset)
         return app
 
     def _final_store(self) -> zarr.abc.store.Store:
