@@ -320,6 +320,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         app.command()(self.backfill_kubernetes)
         app.command()(self.backfill_local)
         app.command()(self.process_backfill_region_jobs)
+        # Avoid method name conflict with pydantic's validate while keeping cli commands consistent
         app.command("validate")(self.validate_dataset)
         return app
 

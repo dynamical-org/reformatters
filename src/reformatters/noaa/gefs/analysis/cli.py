@@ -86,7 +86,7 @@ def update(
 
 
 @app.command()
-def validate_dataset() -> None:
+def validate() -> None:
     reformat.validate_dataset()
 
 

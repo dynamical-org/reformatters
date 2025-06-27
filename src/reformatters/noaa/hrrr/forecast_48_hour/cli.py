@@ -43,8 +43,8 @@ def update() -> None:
 
 
 @app.command()
-def validate_dataset() -> None:
-    raise NotImplementedError("validate_dataset not implemented")
+def validate() -> None:
+    raise NotImplementedError("validate not implemented")
 
 
 if __name__ == "__main__":
