@@ -187,7 +187,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         workers_total = int(np.ceil(num_jobs / jobs_per_pod))
         parallelism = min(workers_total, max_parallelism)
 
-        command = ["process-region-jobs", pd.Timestamp(append_dim_end).isoformat()]
+        command = [
+            "process-backfill-region-jobs",
+            pd.Timestamp(append_dim_end).isoformat(),
+        ]
         if filter_start is not None:
             command.append(f"--filter-start={filter_start.isoformat()}")
         if filter_end is not None:

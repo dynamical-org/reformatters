@@ -19,7 +19,7 @@ We use
 
 * `uv run main --help`
 * `uv run main <DATASET_ID> update-template`
-* `uv run main <DATASET_ID> reformat-local <INIT_TIME_END>`
+* `uv run main <DATASET_ID> backfill-local <INIT_TIME_END>`
 
 ### Development commands
 * Add dependency: `uv add <package> [--dev]`. Use `--dev` to add a development only dependency.
@@ -45,4 +45,4 @@ We use
 
 
 ### Development commands
-1. `DYNAMICAL_ENV=prod uv run main <DATASET_ID> reformat-kubernetes <INIT_TIME_END> [--jobs-per-pod <int>] [--max-parallelism <int>]`
+1. `DYNAMICAL_ENV=prod uv run main <DATASET_ID> backfill-kubernetes <INIT_TIME_END> [--jobs-per-pod <int>] [--max-parallelism <int>]`

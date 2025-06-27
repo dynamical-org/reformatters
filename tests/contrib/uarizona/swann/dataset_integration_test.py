@@ -53,7 +53,7 @@ def test_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
         lambda existing_ds: pd.Timestamp(existing_ds.time.max().item()),
     )
 
-    dataset.update("test-reformat-operational-update")
+    dataset.update("test-update")
     updated_ds = xr.open_zarr(dataset._final_store(), chunks=None)
     np.testing.assert_array_equal(
         updated_ds.time, pd.date_range("1981-10-01", "1981-10-03")
@@ -97,7 +97,7 @@ def test_update_template_trimming(monkeypatch: MonkeyPatch, tmp_path: Path) -> N
 
     monkeypatch.setattr(dataset.region_job_class, "download_file", mock_download_file)
 
-    dataset.update("test-reformat-operational-update")
+    dataset.update("test-update")
     updated_ds = xr.open_zarr(dataset._final_store(), chunks=None)
 
     # The dataset should only extend to 1981-10-02 because 1981-10-03 failed to download

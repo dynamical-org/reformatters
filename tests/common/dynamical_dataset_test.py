@@ -260,7 +260,10 @@ def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     # workers_total = ceil(5/2) == 3
     assert '"completions": 3' in input_str
     # Command and filters
-    assert '"example-dataset", "process-region-jobs", "2025-01-01T00:00:00' in input_str
+    assert (
+        '"example-dataset", "process-backfill-region-jobs", "2025-01-01T00:00:00'
+        in input_str
+    )
     assert "--filter-start=2000-01-01T00:00:00" in input_str
     assert "--filter-end=2020-01-01T00:00:00" in input_str
     assert "--filter-variable-names=a" in input_str

@@ -77,7 +77,7 @@ uv run pytest tests/$DATASET_PATH/region_job_test.py
 
 You've reached the point where you can run the reformatter locally!
 ```bash
-uv run main $DATASET_ID reformat-local <append_dim_end> --filter-variable-names <data var name>
+uv run main $DATASET_ID backfill-local <append_dim_end> --filter-variable-names <data var name>
 ```
 Reformatting locally can be slow. Choosing an `<append_dim_end>` not long after your template's `append_dim_start` and selecting a single variable to process with `--filter-variable-names` can limit the amount of work.
 
@@ -98,5 +98,5 @@ The details here depend on the computing resources and the Zarr storage location
 
 Complete the steps in README.md > Deploying to the cloud > Setup.
 
-1. Run a backfill: `DYNAMICAL_ENV=prod uv run main $DATASET_ID reformat-kubernetes <append-dim-end> --max-parallelism N`.
+1. Run a backfill: `DYNAMICAL_ENV=prod uv run main $DATASET_ID backfill-kubernetes <append-dim-end> --max-parallelism N`.
 1. Make sure CI deployed the operational cronjobs and check their schedule: `kubectl get cronjobs`
