@@ -33,7 +33,7 @@ def reformat_local(
 
 
 @app.command()
-def reformat_kubernetes(
+def backfill_kubernetes(
     time_end: str,
     jobs_per_pod: int = 1,
     max_parallelism: int = 32,

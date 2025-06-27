@@ -149,7 +149,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         logger.info(f"Operational update complete. Wrote to store: {final_store}")
 
-    def reformat_kubernetes(
+    def backfill_kubernetes(
         self,
         append_dim_end: datetime,
         jobs_per_pod: int,
@@ -314,7 +314,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         app = typer.Typer()
         app.command()(self.update_template)
         app.command()(self.update)
-        app.command()(self.reformat_kubernetes)
+        app.command()(self.backfill_kubernetes)
         app.command()(self.reformat_local)
         app.command()(self.process_region_jobs)
         app.command()(self.validate_zarr)

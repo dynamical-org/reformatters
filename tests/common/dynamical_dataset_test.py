@@ -124,9 +124,11 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
 def test_dynamical_dataset_methods_exist() -> None:
     methods = [
         "update_template",
-        "reformat_kubernetes",
+        "backfill_kubernetes",
         "reformat_local",
         "process_region_jobs",
+        "update",
+        "validate_zarr",
     ]
     for method in methods:
         assert hasattr(DynamicalDataset, method), f"{method} missing"
@@ -216,7 +218,7 @@ def test_reformat_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
     )
 
 
-def test_reformat_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     mock_run = Mock()
     monkeypatch.setattr(subprocess, "run", mock_run)
 
@@ -237,7 +239,7 @@ def test_reformat_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
         region_job_class=ExampleRegionJob,
     )
 
-    dataset.reformat_kubernetes(
+    dataset.backfill_kubernetes(
         append_dim_end=datetime(2025, 1, 1),
         jobs_per_pod=2,
         max_parallelism=10,
