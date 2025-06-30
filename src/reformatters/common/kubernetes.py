@@ -22,7 +22,7 @@ class Job(pydantic.BaseModel):
     ttl: timedelta = timedelta(days=1)
     pod_active_deadline: timedelta = timedelta(hours=6)
 
-    secret_names: list[str | None] = []
+    secret_names: Sequence[str] = []
 
     @property
     def job_name(self) -> str:
@@ -111,7 +111,6 @@ class Job(pydantic.BaseModel):
                                 "envFrom": [
                                     {"secretRef": {"name": secret_name}}
                                     for secret_name in self.secret_names
-                                    if secret_name is not None
                                 ],
                                 "image": f"{self.image}",
                                 "name": "worker",

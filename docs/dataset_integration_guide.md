@@ -36,9 +36,10 @@ from reformatters.provider.model.variant import ProviderModelVariantDataset
 
 DYNAMICAL_DATASETS = [
     ...,
-    ProviderModelVariantDataset(),
+    ProviderModelVariantDataset(storage_config=SourceCoopDatasetStorageConfig()),
 ]
 ```
+If you plan to write this dataset to a location not maintained by dynamical.org, you can instantiate and pass your own StorageConfig, contact feedback@dynamical.org for support.
 
 ### 3. Implement `TemplateConfig` subclass
 
@@ -94,7 +95,7 @@ uv run pytest tests/$DATASET_PATH/dynamical_dataset_test.py
 
 ### 6. Deployment
 
-The details here depend on the computing resources and the Zarr storage location you'll be using. Get in touch with the dynamical.org team for support at this point if you haven't already.
+The details here depend on the computing resources and the Zarr storage location you'll be using. Get in touch with feedback@dynamical.org for support at this point if you haven't already.
 
 Complete the steps in README.md > Deploying to the cloud > Setup.
 

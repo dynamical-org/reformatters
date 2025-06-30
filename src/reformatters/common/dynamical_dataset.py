@@ -46,7 +46,7 @@ class DynamicalDatasetStorageConfig(FrozenBaseModel):
     """Configuration for the storage of a dataset in production."""
 
     base_path: str
-    k8s_secret_name: str | None = None
+    k8s_secret_names: Sequence[str] = []
 
 
 class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
@@ -74,7 +74,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             memory="30G",
             shared_memory="12G",
             ephemeral_storage="30G",
-            secret_names=[self.storage_config.k8s_secret_name],
+            secret_names=self.storage_config.k8s_secret_names,
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validation",
@@ -84,7 +84,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             dataset_id=self.dataset_id,
             cpu="1.3",
             memory="7G",
-            secret_names=[self.storage_config.k8s_secret_name],
+            secret_names=self.storage_config.k8s_secret_names,
         )
 
         return [operational_update_cron_job, validation_cron_job]
@@ -228,7 +228,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     "pod_active_deadline",
                 }
             ),
-            secret_names=[self.storage_config.k8s_secret_name],
+            secret_names=self.storage_config.k8s_secret_names,
         )
         subprocess.run(  # noqa: S603
             ["/usr/bin/kubectl", "apply", "-f", "-"],
