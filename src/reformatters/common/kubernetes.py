@@ -194,13 +194,13 @@ class CronJob(Job):
 
 
 class ReformatCronJob(CronJob):
-    command: Sequence[str] = ["reformat-operational-update"]
+    command: Sequence[str] = ["update"]
     # Operational updates expect a single worker
     workers_total: int = 1
     parallelism: int = 1
 
 
 class ValidationCronJob(CronJob):
-    command: Sequence[str] = ["validate-zarr"]
+    command: Sequence[str] = ["validate"]
     workers_total: int = 1
     parallelism: int = 1

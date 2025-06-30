@@ -27,7 +27,7 @@ class DataValidator(Protocol):
     def __call__(self, ds: xr.Dataset) -> ValidationResult: ...
 
 
-def validate_zarr(
+def validate_dataset(
     store: zarr.storage.StoreLike, validators: Sequence[DataValidator]
 ) -> None:
     """

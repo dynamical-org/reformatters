@@ -9,11 +9,11 @@
 # from reformatters.example.dynamical_dataset import ExampleDataset
 
 # @pytest.mark.slow
-# def test_reformat_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) -> None:
+# def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) -> None:
 #     dataset = ExampleDataset()
 
 #     # Local backfill reformat
-#     dataset.reformat_local(append_dim_end=pd.Timestamp("2000-01-02"))
+#     dataset.backfill_local(append_dim_end=pd.Timestamp("2000-01-02"))
 #     ds = xr.open_zarr(dataset._final_store(), chunks=None)
 #     assert ds.time.max() == pd.Timestamp("2000-01-01")
 
@@ -29,7 +29,7 @@
 #         lambda existing_ds: pd.Timestamp(existing_ds.time.max().item()),
 #     )
 
-#     dataset.reformat_operational_update("test-reformat-operational-update")
+#     dataset.update("test-update")
 
 #     # Check resulting dataset
 #     updated_ds = xr.open_zarr(dataset._final_store(), chunks=None)

@@ -124,9 +124,11 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
 def test_dynamical_dataset_methods_exist() -> None:
     methods = [
         "update_template",
-        "reformat_kubernetes",
-        "reformat_local",
-        "process_region_jobs",
+        "backfill_kubernetes",
+        "backfill_local",
+        "process_backfill_region_jobs",
+        "update",
+        "validate_dataset",
     ]
     for method in methods:
         assert hasattr(DynamicalDataset, method), f"{method} missing"
@@ -153,7 +155,7 @@ def test_update_template(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_update_template.assert_called_once()
 
 
-def test_process_region_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_process_backfill_region_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_job0 = Mock()
     mock_job0.summary = lambda: "job0-summary"
     mock_job1 = Mock()
@@ -169,7 +171,7 @@ def test_process_region_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
         region_job_class=ExampleRegionJob,
     )
 
-    dataset.process_region_jobs(
+    dataset.process_backfill_region_jobs(
         pd.Timestamp("2000-01-02"),
         "test-job-name",
         worker_index=0,
@@ -180,7 +182,7 @@ def test_process_region_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_job1.process.assert_called_once()
 
 
-def test_reformat_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     mock_job0 = Mock()
     mock_job0.summary = lambda: "job0-summary"
     monkeypatch.setattr(
@@ -194,18 +196,22 @@ def test_reformat_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
         lambda self, end: xr.Dataset(attrs={"cool": "weather"}),
     )
     monkeypatch.setattr(ExampleDataset, "_final_store", lambda _self: tmp_path)
-    process_region_jobs_mock = Mock()
-    monkeypatch.setattr(ExampleDataset, "process_region_jobs", process_region_jobs_mock)
+    process_backfill_region_jobs_mock = Mock()
+    monkeypatch.setattr(
+        ExampleDataset,
+        "process_backfill_region_jobs",
+        process_backfill_region_jobs_mock,
+    )
 
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
     )
 
-    dataset.reformat_local(pd.Timestamp("2000-01-02"))
+    dataset.backfill_local(pd.Timestamp("2000-01-02"))
 
     assert xr.open_zarr(tmp_path).attrs["cool"] == "weather"
-    process_region_jobs_mock.assert_called_once_with(
+    process_backfill_region_jobs_mock.assert_called_once_with(
         pd.Timestamp("2000-01-02"),
         worker_index=0,
         workers_total=1,
@@ -216,7 +222,7 @@ def test_reformat_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
     )
 
 
-def test_reformat_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     mock_run = Mock()
     monkeypatch.setattr(subprocess, "run", mock_run)
 
@@ -237,7 +243,7 @@ def test_reformat_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
         region_job_class=ExampleRegionJob,
     )
 
-    dataset.reformat_kubernetes(
+    dataset.backfill_kubernetes(
         append_dim_end=datetime(2025, 1, 1),
         jobs_per_pod=2,
         max_parallelism=10,
@@ -254,7 +260,10 @@ def test_reformat_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     # workers_total = ceil(5/2) == 3
     assert '"completions": 3' in input_str
     # Command and filters
-    assert '"example-dataset", "process-region-jobs", "2025-01-01T00:00:00' in input_str
+    assert (
+        '"example-dataset", "process-backfill-region-jobs", "2025-01-01T00:00:00'
+        in input_str
+    )
     assert "--filter-start=2000-01-01T00:00:00" in input_str
     assert "--filter-end=2020-01-01T00:00:00" in input_str
     assert "--filter-variable-names=a" in input_str
@@ -263,7 +272,7 @@ def test_reformat_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     assert '"my-docker-image"' in input_str
 
 
-def test_validate_zarr_calls_validators_and_uses_final_store(
+def test_validate_dataset_calls_validators_and_uses_final_store(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     mock_validators = [Mock(), Mock()]
@@ -273,16 +282,16 @@ def test_validate_zarr_calls_validators_and_uses_final_store(
     monkeypatch.setattr(ExampleDataset, "_final_store", lambda self: mock_store)
 
     mock_validate = Mock()
-    monkeypatch.setattr(validation, "validate_zarr", mock_validate)
+    monkeypatch.setattr(validation, "validate_dataset", mock_validate)
 
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
     )
 
-    dataset.validate_zarr("example-job-name")
+    dataset.validate_dataset("example-job-name")
 
-    # Ensure validate_zarr was called with correct arguments
+    # Ensure validate_dataset was called with correct arguments
     # this implies
     # - self._final_store() was called and returned our mock_store
     # - self.validators() was called and returned our mock_validators

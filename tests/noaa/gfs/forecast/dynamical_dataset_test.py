@@ -18,7 +18,7 @@ def dataset() -> NoaaGfsForecastDataset:
 
 
 @pytest.mark.slow
-def test_reformat_local_and_operational_update(
+def test_backfill_local_and_operational_update(
     dataset: NoaaGfsForecastDataset, monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
     init_time_start = dataset.template_config.append_dim_start
@@ -43,7 +43,7 @@ def test_reformat_local_and_operational_update(
     ]
 
     # 1. Backfill archive
-    dataset.reformat_local(
+    dataset.backfill_local(
         append_dim_end=init_time_end, filter_variable_names=filter_variable_names
     )
     original_ds = xr.open_zarr(
@@ -119,7 +119,7 @@ def test_reformat_local_and_operational_update(
         ),
     )
 
-    dataset.reformat_operational_update("test-update-job-name")
+    dataset.update("test-update-job-name")
 
     updated_ds = xr.open_zarr(
         dataset._final_store(), decode_timedelta=True, chunks=None

@@ -14,18 +14,18 @@ def update_template() -> None:
 
 
 @app.command()
-def reformat_local(init_time_end: str) -> None:
+def backfill_local(init_time_end: str) -> None:
     reformat.reformat_local(init_time_end)
 
 
 @app.command()
-def reformat_kubernetes(
+def backfill_kubernetes(
     init_time_end: str,
     jobs_per_pod: int = 10,
     max_parallelism: int = 32,
     docker_image: str | None = None,
 ) -> None:
-    raise NotImplementedError("reformat_kubernetes not implemented")
+    raise NotImplementedError("backfill_kubernetes not implemented")
 
 
 @app.command()
@@ -38,13 +38,13 @@ def reformat_chunks(
 
 
 @app.command()
-def reformat_operational_update() -> None:
-    raise NotImplementedError("reformat_operational_update not implemented")
+def update() -> None:
+    raise NotImplementedError("update not implemented")
 
 
 @app.command()
-def validate_zarr() -> None:
-    raise NotImplementedError("validate_zarr not implemented")
+def validate() -> None:
+    raise NotImplementedError("validate not implemented")
 
 
 if __name__ == "__main__":
