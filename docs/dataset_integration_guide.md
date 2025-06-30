@@ -19,6 +19,8 @@ There are three core base classes to subclass.
 
 ## Integration steps
 
+Before getting started, follow the brief setup steps in README.md > Local development > Setup.
+
 ### 1. Initialize a new integration
 
 ```bash
