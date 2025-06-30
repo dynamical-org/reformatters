@@ -97,7 +97,11 @@ uv run pytest tests/$DATASET_PATH/dynamical_dataset_test.py
 
 The details here depend on the computing resources and the Zarr storage location you'll be using. Get in touch with feedback@dynamical.org for support at this point if you haven't already.
 
-Complete the steps in README.md > Deploying to the cloud > Setup.
 
-1. Run a backfill: `DYNAMICAL_ENV=prod uv run main $DATASET_ID backfill-kubernetes <append-dim-end> --max-parallelism N`.
-1. Make sure CI deployed the operational cronjobs and check their schedule: `kubectl get cronjobs`
+1. Run a backfill on your local computer: `DYNAMICAL_ENV=prod uv run main $DATASET_ID backfill-local <append-dim-end>`. If this is fast enough and you have the disk space, it is a nice and simple approach.
+1. Run a backfill on a kubernetes cluster:
+    - This supports parallelism across servers to process much larger datasets.
+    - Complete the steps in README.md > Deploying to the cloud > Setup.
+    - `DYNAMICAL_ENV=prod uv run main $DATASET_ID backfill-kubernetes <append-dim-end> --max-parallelism N`, then track the job with `kubectl get jobs`.
+1. See operational cronjobs in your kubernetes cluster and check their schedule: `kubectl get cronjobs`.
+1. To enable issue reporting and cron monitoring with the error reporting service Sentry, create a secret in your kubernetes cluster with your Sentry account's DSN: `kubectl create secret generic sentry --from-literal='DYNAMICAL_SENTRY_DSN=xxx'`.
