@@ -1,6 +1,8 @@
 # dynamical.org reformatters
 Reformat weather datasets into zarr.
 
+See the [dataset integration guide](docs/dataset_integration_guide.md) to integrate a new dataset to be reformatted.
+
 ## Local development
 
 We use 
