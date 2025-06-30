@@ -23,7 +23,7 @@ class SourceCoopDatasetStorageConfig(DynamicalDatasetStorageConfig):
     """Configuration for the storage of a SourceCoop dataset."""
 
     base_path: str = "s3://us-west-2.opendata.source.coop/dynamical"
-    k8s_secret_name: str = "source-coop-key"  # noqa: S105
+    k8s_secret_names: Sequence[str] = ["source-coop-key"]
 
 
 # Registry of all DynamicalDatasets.
@@ -36,7 +36,7 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
             # The R2 endpoint URL is stored within our k8s secret and will be set
             # when it's imported into the env.
             base_path="s3://upstream-gridded-zarrs",
-            k8s_secret_name="upstream-gridded-zarrs-key",  # noqa: S106
+            k8s_secret_names=["upstream-gridded-zarrs-key"],
         )
     ),
     NoaaGfsForecastDataset(storage_config=SourceCoopDatasetStorageConfig()),

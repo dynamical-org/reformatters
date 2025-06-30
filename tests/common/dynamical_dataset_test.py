@@ -1,5 +1,5 @@
 import subprocess
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import ClassVar
@@ -30,13 +30,13 @@ from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 
 NOOP_STORAGE_CONFIG = DynamicalDatasetStorageConfig(
     base_path="noop",
-    k8s_secret_name="noop-secret",  # noqa: S106
+    k8s_secret_names=["noop-secret"],
 )
 
 
 class ExampleDatasetStorageConfig(DynamicalDatasetStorageConfig):
     base_path: str = "s3://some-bucket/path"
-    k8s_secret_name: str = "k8s-secret-name"  # noqa: S105
+    k8s_secret_names: Sequence[str] = ["k8s-secret-name"]
 
 
 class ExampleDataVar(DataVar[BaseInternalAttrs]):
@@ -104,7 +104,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
                 memory="1G",
                 shared_memory="1G",
                 ephemeral_storage="1G",
-                secret_names=[self.storage_config.k8s_secret_name],
+                secret_names=self.storage_config.k8s_secret_names,
             ),
             ValidationCronJob(
                 name=f"{self.dataset_id}-validation",
@@ -116,7 +116,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
                 memory="1G",
                 shared_memory="1G",
                 ephemeral_storage="1G",
-                secret_names=[self.storage_config.k8s_secret_name],
+                secret_names=self.storage_config.k8s_secret_names,
             ),
         ]
 

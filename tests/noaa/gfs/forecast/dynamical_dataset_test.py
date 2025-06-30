@@ -159,8 +159,8 @@ def test_operational_kubernetes_resources(
     update_cron_job, validation_cron_job = cron_jobs
     assert update_cron_job.name == f"{dataset.dataset_id}-operational-update"
     assert validation_cron_job.name == f"{dataset.dataset_id}-validation"
-    assert update_cron_job.secret_names == [dataset.storage_config.k8s_secret_name]
-    assert validation_cron_job.secret_names == [dataset.storage_config.k8s_secret_name]
+    assert update_cron_job.secret_names == dataset.storage_config.k8s_secret_names
+    assert validation_cron_job.secret_names == dataset.storage_config.k8s_secret_names
 
 
 def test_validators(dataset: NoaaGfsForecastDataset) -> None:

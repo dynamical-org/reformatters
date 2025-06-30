@@ -24,7 +24,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
         #     memory="30G",
         #     shared_memory="12G",
         #     ephemeral_storage="30G",
-        #     secret_names=[self.storage_config.k8s_secret_name],
+        #     secret_names=self.storage_config.k8s_secret_names,
         # )
         # validation_cron_job = ValidationCronJob(
         #     name=f"{self.dataset_id}-validation",
@@ -34,7 +34,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
         #     dataset_id=self.dataset_id,
         #     cpu="1.3",
         #     memory="7G",
-        #     secret_names=[self.storage_config.k8s_secret_name],
+        #     secret_names=self.storage_config.k8s_secret_names,
         # )
 
         # return [operational_update_cron_job, validation_cron_job]
