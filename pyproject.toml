@@ -39,7 +39,7 @@ dev-dependencies = [
     "pre-commit>=3.8.0",
     "pyqt6>=6.7.1",
     "pytest>=8.3.4",
-    "ruff==0.9.6",
+    "ruff==0.12.1",
     "types-requests>=2.32.0.20240914",
 ]
 
@@ -61,6 +61,8 @@ ignore = [
     "S101",  # disallow asserts
     "E501",  # line too long
     "W293",  # black line contains whitespace
+    "UP046", # non-pep695-generic-class - mypy doesn't support this yet
+    "UP047", # non-pep695-generic-function - mypy doesn't support this yet
 ]
 
 
@@ -68,7 +70,6 @@ ignore = [
 files = "."
 strict = true
 plugins = ["pydantic.mypy", "numpy.typing.mypy_plugin"]
-enable_incomplete_feature = "NewGenericSyntax"
 
 [tool.pydantic-mypy]
 init_forbid_extra = true
