@@ -24,9 +24,9 @@ def initialize_new_integration(
     variant = _sanitize_identifier(variant)
 
     # Convert to PascalCase for class names
-    provider_pascal = provider.capitalize()
-    model_pascal = model.capitalize()
-    variant_pascal = variant.capitalize()
+    provider_pascal = _pascal_case(provider)
+    model_pascal = _pascal_case(model)
+    variant_pascal = _pascal_case(variant)
 
     # Set up paths
     dataset_path = f"{provider}/{model}/{variant}"
@@ -92,3 +92,8 @@ def initialize_new_integration(
 def _sanitize_identifier(s: str) -> str:
     """Convert string to valid Python identifier by replacing invalid chars with underscore."""
     return re.sub(r"[^a-zA-Z0-9_]", "_", s)
+
+
+def _pascal_case(s: str) -> str:
+    """Convert string to PascalCase."""
+    return s.replace("_", " ").title().replace(" ", "")
