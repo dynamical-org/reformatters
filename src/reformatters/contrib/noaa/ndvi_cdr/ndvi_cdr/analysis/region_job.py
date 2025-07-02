@@ -106,13 +106,9 @@ class NoaaNdviCdrAnalysisRegionJob(
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
         var_name = data_var.internal_attrs.netcdf_var_name
+        dtype = data_var.encoding.dtype
         netcdf_path = f"netcdf:{coord.downloaded_path}:{var_name}"
         band = 1  # because rasterio netcdf requires selecting the band in the file path we always want band 1
-        print("Opening netcdf file", netcdf_path)
         with rasterio.open(netcdf_path) as reader:
-            print("Beginning read", netcdf_path)
-            result: Array2D[np.float32] = reader.read(band, out_dtype=np.float32)
-            print("Got Result", netcdf_path)
-            result[result == data_var.internal_attrs.fill_value] = np.nan
-            assert result.shape == (3600, 7200)
+            result: Array2D[np.float32] = reader.read(band, out_dtype=dtype)
             return result
