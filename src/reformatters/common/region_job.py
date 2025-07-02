@@ -517,6 +517,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         processing_region_ds,
                         data_var.name,
                         shared_buffer,
+                        fill_value=data_var.encoding.fill_value,
                     )
                     print("Created data array and template")
                     data_var_source_file_coords = self._read_into_data_array(

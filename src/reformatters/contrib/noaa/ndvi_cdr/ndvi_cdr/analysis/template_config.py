@@ -199,6 +199,14 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
 
+        encoding_int16_default = Encoding(
+            dtype="int16",
+            fill_value=-32767,
+            chunks=tuple(var_chunks[d] for d in self.dims),
+            shards=tuple(var_shards[d] for d in self.dims),
+            compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
+        )
+
         default_keep_mantissa_bits = 8
         return [
             NoaaNdviCdrDataVar(
@@ -218,7 +226,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
             ),
             NoaaNdviCdrDataVar(
                 name="quality_assurance",
-                encoding=encoding_float32_default,
+                encoding=encoding_int16_default,
                 attrs=DataVarAttrs(
                     short_name="qa",
                     long_name="quality_assurance",
@@ -228,7 +236,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                 internal_attrs=NoaaNdviCdrInternalAttrs(
                     keep_mantissa_bits="no-rounding",
                     netcdf_var_name="QA",
-                    fill_value=-32767.0,
+                    fill_value=-32767,
                 ),
             ),
         ]

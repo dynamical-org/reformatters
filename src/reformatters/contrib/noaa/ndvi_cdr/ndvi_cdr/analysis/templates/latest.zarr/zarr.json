@@ -210,7 +210,7 @@
           3600,
           7200
         ],
-        "data_type": "float32",
+        "data_type": "int16",
         "chunk_grid": {
           "name": "regular",
           "configuration": {
@@ -227,7 +227,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": 0,
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -275,8 +275,7 @@
           "short_name": "qa",
           "units": "categorical",
           "step_type": "instant",
-          "coordinates": "spatial_ref",
-          "_FillValue": "AAAAAAAA+H8="
+          "coordinates": "spatial_ref"
         },
         "dimension_names": [
           "time",
