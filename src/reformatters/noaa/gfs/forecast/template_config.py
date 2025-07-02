@@ -339,6 +339,7 @@ class NoaaGfsForecastTemplateConfig(TemplateConfig[NoaaDataVar]):
                     long_name="Maximum temperature",
                     units="C",
                     step_type="max",
+                    comment="Maximum over the previous 1–6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
                 ),
                 internal_attrs=NoaaInternalAttrs(
                     grib_element="TMAX",
@@ -357,6 +358,7 @@ class NoaaGfsForecastTemplateConfig(TemplateConfig[NoaaDataVar]):
                     long_name="Minimum temperature",
                     units="C",
                     step_type="min",
+                    comment="Minimum over the previous 1–6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
                 ),
                 internal_attrs=NoaaInternalAttrs(
                     grib_element="TMIN",
@@ -484,6 +486,7 @@ class NoaaGfsForecastTemplateConfig(TemplateConfig[NoaaDataVar]):
                     long_name="Categorical snow",
                     units="0=no; 1=yes",
                     step_type="avg",
+                    comment="Presence/absence over the previous 1–6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
                 ),
                 internal_attrs=NoaaInternalAttrs(
                     grib_element="CSNOW",
@@ -502,6 +505,7 @@ class NoaaGfsForecastTemplateConfig(TemplateConfig[NoaaDataVar]):
                     long_name="Categorical ice pellets",
                     units="0=no; 1=yes",
                     step_type="avg",
+                    comment="Presence/absence over the previous 1–6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
                 ),
                 internal_attrs=NoaaInternalAttrs(
                     grib_element="CICEP",
@@ -520,6 +524,7 @@ class NoaaGfsForecastTemplateConfig(TemplateConfig[NoaaDataVar]):
                     long_name="Categorical freezing rain",
                     units="0=no; 1=yes",
                     step_type="avg",
+                    comment="Presence/absence over the previous 1–6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
                 ),
                 internal_attrs=NoaaInternalAttrs(
                     grib_element="CFRZR",
@@ -538,6 +543,7 @@ class NoaaGfsForecastTemplateConfig(TemplateConfig[NoaaDataVar]):
                     long_name="Categorical rain",
                     units="0=no; 1=yes",
                     step_type="avg",
+                    comment="Presence/absence over the previous 1–6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
                 ),
                 internal_attrs=NoaaInternalAttrs(
                     grib_element="CRAIN",
@@ -573,6 +579,7 @@ class NoaaGfsForecastTemplateConfig(TemplateConfig[NoaaDataVar]):
                     long_name="Total Cloud Cover",
                     units="%",
                     step_type="avg",
+                    comment="Average over the previous 1–6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
                 ),
                 internal_attrs=NoaaInternalAttrs(
                     grib_element="TCDC",
@@ -609,6 +616,7 @@ class NoaaGfsForecastTemplateConfig(TemplateConfig[NoaaDataVar]):
                     long_name="Surface downward short-wave radiation flux",
                     units="W/(m^2)",
                     step_type="avg",
+                    comment="Average over the previous 1–6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
                 ),
                 internal_attrs=NoaaInternalAttrs(
                     grib_element="DSWRF",
@@ -627,6 +635,7 @@ class NoaaGfsForecastTemplateConfig(TemplateConfig[NoaaDataVar]):
                     long_name="Surface downward long-wave radiation flux",
                     units="W/(m^2)",
                     step_type="avg",
+                    comment="Average over the previous 1–6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
                 ),
                 internal_attrs=NoaaInternalAttrs(
                     grib_element="DLWRF",
