@@ -325,7 +325,10 @@ def test_get_jobs_grouping_filter_contains(template_ds: xr.Dataset) -> None:
         slice(0, 24),
     ]
 
-def test_get_jobs_grouping_filter_contains_second_shard(template_ds: xr.Dataset) -> None:
+
+def test_get_jobs_grouping_filter_contains_second_shard(
+    template_ds: xr.Dataset,
+) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
     store = get_zarr_store("fake-prod-path", "test-dataset-B", "test-version")
     tmp_store = get_local_tmp_store()
