@@ -96,7 +96,7 @@ def http_download_to_disk(
         store,
         parsed_url.path,
         local_path,
-        overwrite_existing=False,
+        overwrite_existing=True,
         byte_ranges=byte_ranges,
     )
     return local_path
