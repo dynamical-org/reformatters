@@ -355,3 +355,40 @@ def test_get_jobs_grouping_filter_contains_second_shard(
         slice(24, 48),
         slice(24, 48),
     ]
+
+
+def test_get_jobs_grouping_filter_contains_all_shards(
+    template_ds: xr.Dataset,
+) -> None:
+    data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
+    store = get_zarr_store("fake-prod-path", "test-dataset-B", "test-version")
+    tmp_store = get_local_tmp_store()
+    jobs = ExampleRegionJob.get_jobs(
+        kind="backfill",
+        final_store=store,
+        tmp_store=tmp_store,
+        template_ds=template_ds,
+        append_dim="time",
+        all_data_vars=data_vars,
+        reformat_job_name="test-job",
+        filter_contains=[pd.Timestamp("2025-01-01T12"), pd.Timestamp("2025-01-02T06")],
+    )
+    # Only the second shard [24,48)
+    assert all(a.region.start <= b.region.start for a, b in pairwise(jobs))
+    assert len(jobs) == 6
+    assert [j.data_vars for j in jobs] == [
+        (data_vars[0], data_vars[1]),
+        (data_vars[2],),
+        (data_vars[3],),
+        (data_vars[0], data_vars[1]),
+        (data_vars[2],),
+        (data_vars[3],),
+    ]
+    assert [j.region for j in jobs] == [
+        slice(0, 24),
+        slice(0, 24),
+        slice(0, 24),
+        slice(24, 48),
+        slice(24, 48),
+        slice(24, 48),
+    ]
