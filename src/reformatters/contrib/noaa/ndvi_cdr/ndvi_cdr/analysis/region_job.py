@@ -85,6 +85,9 @@ class NoaaNdviCdrAnalysisRegionJob(
                     filename = Path(filepath).name
                     url = f"{public_base_url}/{year}/{filename}"
                     return url
+            # TODO: Should we rethink this? This kind of preemptively handles the dataset truncation
+            # which would otherwise happen during operational update. It means we fail if our append_dim end date
+            # is too far in the future.
             raise ValueError(f"No file found for {time}")
 
         print("Returning source file coords")
