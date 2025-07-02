@@ -35,6 +35,7 @@ def make_shared_buffer(ds: xr.Dataset) -> Generator[SharedMemory, None, None]:
     """
     buffer_size = max(data_var.nbytes for data_var in ds.data_vars.values())
 
+    logger.info(f"Creating shared memory buffer of size {buffer_size / 10**9} GB")
     shared_memory = SharedMemory(create=True, size=buffer_size)
     try:
         yield shared_memory

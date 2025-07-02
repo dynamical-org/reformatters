@@ -1,0 +1,395 @@
+{
+  "attributes": {
+    "dataset_id": "noaa-ndvi-analysis",
+    "dataset_version": "0.1.0",
+    "name": "NOAA Normalized Difference Vegetation Index CDR",
+    "description": "Daily Normalized Difference Vegetation Index (NDVI) derived from NOAA Climate Data Record (CDR) using AVHRR (1981-2014) and VIIRS (2014-present) satellite data",
+    "attribution": "NOAA Climate Data Record (CDR) of Normalized Difference Vegetation Index processed by dynamical.org from NOAA NCEI",
+    "spatial_domain": "Global",
+    "spatial_resolution": "0.05 degrees (~5km)",
+    "time_domain": "1981-06-24 to Present",
+    "time_resolution": "Daily"
+  },
+  "zarr_format": 3,
+  "consolidated_metadata": {
+    "kind": "inline",
+    "must_understand": false,
+    "metadata": {
+      "latitude": {
+        "shape": [
+          3600
+        ],
+        "data_type": "float64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              3600
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": 0.0,
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "blosc",
+            "configuration": {
+              "typesize": 8,
+              "cname": "zstd",
+              "clevel": 3,
+              "shuffle": "shuffle",
+              "blocksize": 0
+            }
+          }
+        ],
+        "attributes": {
+          "units": "degrees_north",
+          "statistics_approximate": {
+            "min": -89.97499084472712,
+            "max": 89.9749984741211
+          },
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "latitude"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "longitude": {
+        "shape": [
+          7200
+        ],
+        "data_type": "float64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              7200
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": 0.0,
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "blosc",
+            "configuration": {
+              "typesize": 8,
+              "cname": "zstd",
+              "clevel": 3,
+              "shuffle": "shuffle",
+              "blocksize": 0
+            }
+          }
+        ],
+        "attributes": {
+          "units": "degrees_east",
+          "statistics_approximate": {
+            "min": -179.97500610351562,
+            "max": 179.97500610351912
+          },
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "longitude"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "normalized_difference_vegetation_index": {
+        "shape": [
+          1,
+          3600,
+          7200
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1825,
+              480,
+              480
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": 0.0,
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                365,
+                32,
+                32
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "normalized_difference_vegetation_index",
+          "short_name": "ndvi",
+          "units": "1",
+          "step_type": "instant",
+          "coordinates": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "time",
+          "latitude",
+          "longitude"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "quality_assurance": {
+        "shape": [
+          1,
+          3600,
+          7200
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1825,
+              480,
+              480
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": 0.0,
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                365,
+                32,
+                32
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "quality_assurance",
+          "short_name": "qa",
+          "units": "categorical",
+          "step_type": "instant",
+          "coordinates": "spatial_ref",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "time",
+          "latitude",
+          "longitude"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "spatial_ref": {
+        "shape": [],
+        "data_type": "int64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": []
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": 0,
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "zstd",
+            "configuration": {
+              "level": 0,
+              "checksum": false
+            }
+          }
+        ],
+        "attributes": {
+          "comment": "EPSG:4326 - WGS 84 Geographic Coordinate System",
+          "crs_wkt": "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AXIS[\"Latitude\",NORTH],AXIS[\"Longitude\",EAST],AUTHORITY[\"EPSG\",\"4326\"]]",
+          "semi_major_axis": 6378137.0,
+          "semi_minor_axis": 6356752.314245179,
+          "inverse_flattening": 298.257223563,
+          "reference_ellipsoid_name": "WGS 84",
+          "longitude_of_prime_meridian": 0.0,
+          "prime_meridian_name": "Greenwich",
+          "geographic_crs_name": "WGS 84",
+          "horizontal_datum_name": "World Geodetic System 1984",
+          "grid_mapping_name": "latitude_longitude",
+          "spatial_ref": "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AXIS[\"Latitude\",NORTH],AXIS[\"Longitude\",EAST],AUTHORITY[\"EPSG\",\"4326\"]]"
+        },
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "time": {
+        "shape": [
+          1
+        ],
+        "data_type": "int64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              21535
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": 0,
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "blosc",
+            "configuration": {
+              "typesize": 8,
+              "cname": "zstd",
+              "clevel": 3,
+              "shuffle": "shuffle",
+              "blocksize": 0
+            }
+          }
+        ],
+        "attributes": {
+          "statistics_approximate": {
+            "min": "1981-06-24T00:00:00",
+            "max": "Present"
+          },
+          "units": "seconds since 1970-01-01",
+          "calendar": "proleptic_gregorian"
+        },
+        "dimension_names": [
+          "time"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      }
+    }
+  },
+  "node_type": "group"
+}

@@ -123,6 +123,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     # This particularly useful of the data source cannot handle a large number of concurrent requests
     download_parallelism: int = (os.cpu_count() or 1) * 2
 
+    # Subclasses can override this to control read parallelism
+    # This is useful in cases where many threads using reading data into shared memory cause deadlocks
+    read_parallelism: int = os.cpu_count() or 1
+
     @classmethod
     def source_groups(
         cls,
@@ -506,30 +510,33 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 # Process one data variable at a time to ensure a single user of
                 # the shared buffer at a time and to reduce peak memory usage
                 for data_var in data_var_group:
+                    print("Beginning processing", data_var.name)
                     # Copy so we have a unique status per variable, not per variable group
                     data_var_source_file_coords = deepcopy(source_file_coords)
-
                     data_array, data_array_template = create_data_array_and_template(
                         processing_region_ds,
                         data_var.name,
                         shared_buffer,
                     )
+                    print("Created data array and template")
                     data_var_source_file_coords = self._read_into_data_array(
                         data_array,
                         data_var,
                         data_var_source_file_coords,
                     )
+                    print("Read into data array")
                     self.apply_data_transformations(
                         data_array,
                         data_var,
                     )
+                    print("Applied data transformations")
                     self._write_shards(
                         data_array_template,
                         shared_buffer,
                         output_region_ds,
                         self.tmp_store,
                     )
-
+                    print("Wrote shards")
                     upload_futures.append(
                         upload_executor.submit(
                             copy_data_var,
@@ -542,6 +549,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                             partial(progress_tracker.record_completion, data_var.name),
                         )
                     )
+                    print(f"Finished processing {data_var.name}")
 
                     results[data_var.name] = data_var_source_file_coords
 
@@ -638,7 +646,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         read_coords = (
             c for c in source_file_coords if c.status == SourceFileStatus.Processing
         )
-        with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as executor:
+        with ThreadPoolExecutor(max_workers=self.read_parallelism) as executor:
             return list(executor.map(_read_and_write_one, read_coords))
 
     def _write_shards(

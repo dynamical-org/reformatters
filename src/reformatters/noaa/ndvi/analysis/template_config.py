@@ -25,68 +25,55 @@ from reformatters.common.zarr import (
 )
 
 
-class UarizonaSwannInternalAttrs(BaseInternalAttrs):
+class NoaaNdviInternalAttrs(BaseInternalAttrs):
     netcdf_var_name: str
+    fill_value: float
 
 
-class UarizonaSwannDataVar(DataVar[UarizonaSwannInternalAttrs]):
+class NoaaNdviDataVar(DataVar[NoaaNdviInternalAttrs]):
     pass
 
 
-class UarizonaSwannAnalysisTemplateConfig(TemplateConfig[UarizonaSwannDataVar]):
+class NoaaNdviAnalysisTemplateConfig(TemplateConfig[NoaaNdviDataVar]):
     dims: tuple[Dim, ...] = ("time", "latitude", "longitude")
     append_dim: AppendDim = "time"
-    append_dim_start: Timestamp = pd.Timestamp("1981-10-01")
+    append_dim_start: Timestamp = pd.Timestamp("1981-06-24")
     append_dim_frequency: Timedelta = pd.Timedelta("1D")
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
-            dataset_id="u-arizona-swann-analysis",
+            dataset_id="noaa-ndvi-analysis",  # TODO: Include "CDR" and rename classes
             dataset_version="0.1.0",
-            name="University of Arizona SWANN Snow",
-            description="Daily 4 km Gridded SWE and Snow Depth from Assimilated In-Situ and Modeled Data over the Conterminous US, Version 1",
-            attribution=(
-                "Broxton, P., X. Zeng, and N. Dawson. 2019. "
-                "Daily 4 km Gridded SWE and Snow Depth from Assimilated In-Situ and Modeled Data over the Conterminous US, Version 1. "
-                "Boulder, Colorado USA. NASA  National Snow and Ice Data Center Distributed Active Archive Center. "
-                "https://doi.org/10.5067/0GGPB220EX6A."
-            ),
-            spatial_domain="Conterminous US",
-            spatial_resolution="4 km",
-            time_domain="1981-10-01 to Present",
+            name="NOAA Normalized Difference Vegetation Index CDR",
+            description="Daily Normalized Difference Vegetation Index (NDVI) derived from NOAA Climate Data Record (CDR) using AVHRR (1981-2014) and VIIRS (2014-present) satellite data",
+            attribution="NOAA Climate Data Record (CDR) of Normalized Difference Vegetation Index processed by dynamical.org from NOAA NCEI",
+            spatial_domain="Global",
+            spatial_resolution="0.05 degrees (~5km)",
+            time_domain="1981-06-24 to Present",
             time_resolution="Daily",
             forecast_domain=None,
             forecast_resolution=None,
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
-        # Pixel sizes from GDAL info for the 4km SWE/Depth dataset
-        # These values come from the NetCDF file's GeoTransform:
-        # > gdalinfo "netcdf:UA_SWE_Depth_4km_v1_20241001_stable.nc:SWE" | grep "Pixel Size"
-        # > Pixel Size = (0.041666666666667,-0.041666667692123)
-        lon_pixel_size = 0.041666666666667
-        lat_pixel_size = -0.041666667692123  # negative because latitude decreases
+        """
+        Returns a dictionary of dimension names to coordinates for the dataset.
+        """
+        # Calculate coordinates based on gdalinfo geotransform
+        origin_lon = -180.000006104363450
+        origin_lat = 89.999998472637188
+        pixel_size_lon = 0.050000001695657
+        pixel_size_lat = -0.049999997032189
 
-        latitude_max = 49.91666793823242
-        latitude_min = 24.08333396911621
-        longitude_max = -66.5
-        longitude_min = -125.0
-
-        epsilon = 1e-5
-
-        # Generate coordinate arrays using the actual data boundaries from the NetCDF file
-        # These values come from the actual data coordinates in the NetCDF file:
-        # - lat: 24.08333396911621 to 49.91666793823242
-        # - lon: -125.0 to -66.5
-        # We use these exact values to ensure our zarr output matches the source data
-        latitude = np.arange(latitude_max, latitude_min - epsilon, lat_pixel_size)
-        longitude = np.arange(longitude_min, longitude_max + epsilon, lon_pixel_size)
+        # Generate pixel center coordinates
+        longitude = origin_lon + (np.arange(7200) + 0.5) * pixel_size_lon
+        latitude = origin_lat + (np.arange(3600) + 0.5) * pixel_size_lat
 
         return {
             self.append_dim: self.append_dim_coordinates(
-                self.append_dim_start + pd.Timedelta(days=1)
+                self.append_dim_start + self.append_dim_frequency
             ),
             "latitude": latitude,
             "longitude": longitude,
@@ -95,8 +82,10 @@ class UarizonaSwannAnalysisTemplateConfig(TemplateConfig[UarizonaSwannDataVar]):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def coords(self) -> Sequence[Coordinate]:
+        """Define metadata and encoding for each coordinate."""
         dim_coords = self.dimension_coordinates()
         append_dim_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
+
         return [
             Coordinate(
                 name=self.append_dim,
@@ -112,7 +101,7 @@ class UarizonaSwannAnalysisTemplateConfig(TemplateConfig[UarizonaSwannDataVar]):
                 attrs=CoordinateAttrs(
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
-                        min=pd.Timestamp(self.append_dim_start).isoformat(),
+                        min=self.append_dim_start.isoformat(),
                         max="Present",
                     ),
                 ),
@@ -159,30 +148,31 @@ class UarizonaSwannAnalysisTemplateConfig(TemplateConfig[UarizonaSwannDataVar]):
                     chunks=(),
                     shards=None,
                 ),
+                # The following were obtained by running ds.rio.write_crs("EPSG:4326").crs.attrs, see test_get_template_spatial_ref.
                 attrs=CoordinateAttrs(
                     units=None,
                     statistics_approximate=None,
-                    # The following were obtained by running ds.rio.write_crs("EPSG:4269"), see test_get_template_spatial_ref.
-                    crs_wkt='GEOGCS["NAD83",DATUM["North_American_Datum_1983",SPHEROID["GRS 1980",6378137,298.257222101,AUTHORITY["EPSG","7019"]],AUTHORITY["EPSG","6269"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST],AUTHORITY["EPSG","4269"]]',
-                    semi_major_axis=6378137.0,
-                    semi_minor_axis=6356752.314140356,
-                    inverse_flattening=298.257222101,
-                    reference_ellipsoid_name="GRS 1980",
+                    crs_wkt='GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST],AUTHORITY["EPSG","4326"]]',
+                    geographic_crs_name="WGS 84",
+                    grid_mapping_name="latitude_longitude",
+                    horizontal_datum_name="World Geodetic System 1984",
+                    inverse_flattening=298.257223563,
                     longitude_of_prime_meridian=0.0,
                     prime_meridian_name="Greenwich",
-                    geographic_crs_name="NAD83",
-                    horizontal_datum_name="North American Datum 1983",
-                    grid_mapping_name="latitude_longitude",
-                    spatial_ref='GEOGCS["NAD83",DATUM["North_American_Datum_1983",SPHEROID["GRS 1980",6378137,298.257222101,AUTHORITY["EPSG","7019"]],AUTHORITY["EPSG","6269"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST],AUTHORITY["EPSG","4269"]]',
-                    comment="EPSG:4269",
+                    reference_ellipsoid_name="WGS 84",
+                    semi_major_axis=6378137.0,
+                    semi_minor_axis=6356752.314245179,
+                    spatial_ref='GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST],AUTHORITY["EPSG","4326"]]',
+                    comment="EPSG:4326 - WGS 84 Geographic Coordinate System",
                 ),
             ),
         ]
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def data_vars(self) -> Sequence[UarizonaSwannDataVar]:
-        # Chunking selected to target ~1.5mb uncompressed chunks
+    def data_vars(self) -> Sequence[NoaaNdviDataVar]:
+        """Define metadata and encoding for each data variable."""
+        # Chunking selected to target ~1mb uncompressed chunks
         var_chunks: dict[Dim, int] = {
             "time": 365,
             "latitude": 32,
@@ -206,34 +196,34 @@ class UarizonaSwannAnalysisTemplateConfig(TemplateConfig[UarizonaSwannDataVar]):
         default_keep_mantissa_bits = 8
 
         return [
-            UarizonaSwannDataVar(
-                name="snow_water_equivalent",
+            NoaaNdviDataVar(
+                name="normalized_difference_vegetation_index",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="snow_water_equivalent",
-                    long_name="Snow water equivalent",
-                    standard_name="lwe_thickness_of_surface_snow_amount",
-                    units="mm h20",
+                    short_name="ndvi",
+                    long_name="normalized_difference_vegetation_index",
+                    units="1",  # TODO: This is what gdalinfo gives back, is it right?
                     step_type="instant",
                 ),
-                internal_attrs=UarizonaSwannInternalAttrs(
+                internal_attrs=NoaaNdviInternalAttrs(
                     keep_mantissa_bits=default_keep_mantissa_bits,
-                    netcdf_var_name="SWE",
+                    netcdf_var_name="NDVI",
+                    fill_value=-9999.0,
                 ),
             ),
-            UarizonaSwannDataVar(
-                name="snow_depth",
+            NoaaNdviDataVar(
+                name="quality_assurance",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="snow_depth",
-                    long_name="Snow depth",
-                    standard_name="surface_snow_thickness",
-                    units="mm snow thickness",
+                    short_name="qa",
+                    long_name="quality_assurance",
+                    units="categorical",  # TODO: Double check if this makes sense?
                     step_type="instant",
                 ),
-                internal_attrs=UarizonaSwannInternalAttrs(
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                    netcdf_var_name="DEPTH",
+                internal_attrs=NoaaNdviInternalAttrs(
+                    keep_mantissa_bits="no-rounding",
+                    netcdf_var_name="QA",
+                    fill_value=-32767.0,
                 ),
             ),
         ]

@@ -79,7 +79,7 @@ class Encoding(pydantic.BaseModel):
 
     # Could be any np.typing.DTypeLike but that type is loose and allows any string.
     # It's fine to add any valid dtype string to this literal.
-    dtype: Literal["float32", "float64", "uint16", "int64", "bool"]
+    dtype: Literal["float32", "float64", "uint16", "int64", "int32", "bool"]
     chunks: tuple[int, ...] | int
     shards: tuple[int, ...] | int | None  # We don't shard coordinate arrays
 
