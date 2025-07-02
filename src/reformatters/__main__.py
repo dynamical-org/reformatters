@@ -14,6 +14,9 @@ from reformatters.common.dynamical_dataset import (
     DynamicalDataset,
     DynamicalDatasetStorageConfig,
 )
+from reformatters.contrib.noaa.ndvi_cdr.ndvi_cdr.analysis import (
+    NoaaNdviCdrAnalysisDataset,
+)
 from reformatters.contrib.uarizona.swann.analysis import UarizonaSwannAnalysisDataset
 from reformatters.example.new_dataset import initialize_new_integration
 from reformatters.noaa.gfs.forecast import NoaaGfsForecastDataset
@@ -40,6 +43,7 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         )
     ),
     NoaaGfsForecastDataset(storage_config=SourceCoopDatasetStorageConfig()),
+    NoaaNdviCdrAnalysisDataset(storage_config=SourceCoopDatasetStorageConfig()),
 ]
 
 if Config.is_sentry_enabled:
