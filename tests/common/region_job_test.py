@@ -297,4 +297,58 @@ def test_get_jobs_grouping_filters_and_worker_index(
     ]
 
 
-# Add a couple tests for the filter_contains argument AI!
+def test_get_jobs_grouping_filter_contains(template_ds: xr.Dataset) -> None:
+    data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
+    store = get_zarr_store("fake-prod-path", "test-dataset-B", "test-version")
+    tmp_store = get_local_tmp_store()
+    jobs = ExampleRegionJob.get_jobs(
+        kind="backfill",
+        final_store=store,
+        tmp_store=tmp_store,
+        template_ds=template_ds,
+        append_dim="time",
+        all_data_vars=data_vars,
+        reformat_job_name="test-job",
+        filter_contains=[pd.Timestamp("2025-01-01T05")],
+    )
+    # Only the first shard (0-24)
+    assert all(a.region.start <= b.region.start for a, b in pairwise(jobs))
+    assert len(jobs) == 3
+    assert [j.data_vars for j in jobs] == [
+        (data_vars[0], data_vars[1]),
+        (data_vars[2],),
+        (data_vars[3],),
+    ]
+    assert [j.region for j in jobs] == [
+        slice(0, 24),
+        slice(0, 24),
+        slice(0, 24),
+    ]
+
+def test_get_jobs_grouping_filter_contains_second_shard(template_ds: xr.Dataset) -> None:
+    data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
+    store = get_zarr_store("fake-prod-path", "test-dataset-B", "test-version")
+    tmp_store = get_local_tmp_store()
+    jobs = ExampleRegionJob.get_jobs(
+        kind="backfill",
+        final_store=store,
+        tmp_store=tmp_store,
+        template_ds=template_ds,
+        append_dim="time",
+        all_data_vars=data_vars,
+        reformat_job_name="test-job",
+        filter_contains=[pd.Timestamp("2025-01-02T00")],
+    )
+    # Only the second shard (24-48)
+    assert all(a.region.start <= b.region.start for a, b in pairwise(jobs))
+    assert len(jobs) == 3
+    assert [j.data_vars for j in jobs] == [
+        (data_vars[0], data_vars[1]),
+        (data_vars[2],),
+        (data_vars[3],),
+    ]
+    assert [j.region for j in jobs] == [
+        slice(24, 48),
+        slice(24, 48),
+        slice(24, 48),
+    ]
