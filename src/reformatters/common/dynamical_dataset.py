@@ -156,6 +156,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         max_parallelism: int,
         filter_start: datetime | None = None,
         filter_end: datetime | None = None,
+        filter_contains: list[datetime] | None = None,
         filter_variable_names: list[str] | None = None,
         docker_image: str | None = None,
     ) -> None:
@@ -181,6 +182,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 reformat_job_name="placeholder",
                 filter_start=pd.Timestamp(filter_start) if filter_start else None,
                 filter_end=pd.Timestamp(filter_end) if filter_end else None,
+                filter_contains=(
+                    [pd.Timestamp(t) for t in filter_contains]
+                    if filter_contains
+                    else None
+                ),
                 filter_variable_names=filter_variable_names,
             )
         )
@@ -195,6 +201,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             command.append(f"--filter-start={filter_start.isoformat()}")
         if filter_end is not None:
             command.append(f"--filter-end={filter_end.isoformat()}")
+        if filter_contains is not None:
+            for timestamp in filter_contains:
+                command.append(f"--filter-contains={timestamp.isoformat()}")
         if filter_variable_names is not None:
             for variable_name in filter_variable_names:
                 command.append(f"--filter-variable-names={variable_name}")
@@ -245,6 +254,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         *,
         filter_start: datetime | None = None,
         filter_end: datetime | None = None,
+        filter_contains: list[datetime] | None = None,
         filter_variable_names: list[str] | None = None,
     ) -> None:
         """Run dataset reformatting locally in this process."""
@@ -260,6 +270,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             workers_total=1,
             filter_start=filter_start,
             filter_end=filter_end,
+            filter_contains=filter_contains,
             filter_variable_names=filter_variable_names,
         )
         logger.info(f"Done writing to {final_store}")
@@ -273,6 +284,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         workers_total: Annotated[int, typer.Argument(envvar="WORKERS_TOTAL")],
         filter_start: datetime | None = None,
         filter_end: datetime | None = None,
+        filter_contains: list[datetime] | None = None,
         filter_variable_names: list[str] | None = None,
     ) -> None:
         """Orchestrate running RegionJob instances."""
@@ -289,6 +301,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             workers_total=workers_total,
             filter_start=pd.Timestamp(filter_start) if filter_start else None,
             filter_end=pd.Timestamp(filter_end) if filter_end else None,
+            filter_contains=(
+                [pd.Timestamp(t) for t in filter_contains] if filter_contains else None
+            ),
             filter_variable_names=filter_variable_names,
         )
 

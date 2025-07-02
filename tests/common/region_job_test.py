@@ -311,7 +311,7 @@ def test_get_jobs_grouping_filter_contains(template_ds: xr.Dataset) -> None:
         reformat_job_name="test-job",
         filter_contains=[pd.Timestamp("2025-01-01T05")],
     )
-    # Only the first shard (0-24)
+    # Only the first shard [0,24)
     assert all(a.region.start <= b.region.start for a, b in pairwise(jobs))
     assert len(jobs) == 3
     assert [j.data_vars for j in jobs] == [
@@ -342,7 +342,7 @@ def test_get_jobs_grouping_filter_contains_second_shard(
         reformat_job_name="test-job",
         filter_contains=[pd.Timestamp("2025-01-02T00")],
     )
-    # Only the second shard (24-48)
+    # Only the second shard [24,48)
     assert all(a.region.start <= b.region.start for a, b in pairwise(jobs))
     assert len(jobs) == 3
     assert [j.data_vars for j in jobs] == [

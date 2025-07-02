@@ -336,6 +336,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         workers_total: int = 1,
         filter_start: Timestamp | None = None,
         filter_end: Timestamp | None = None,
+        filter_contains: list[Timestamp] | None = None,
         filter_variable_names: list[str] | None = None,
     ) -> Sequence["RegionJob[DATA_VAR, SOURCE_FILE_COORD]"]:
         """
@@ -345,8 +346,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         filtered to only include jobs which should be processed by `worker_index`.
 
         If any of the `filter_*` arguments are provided, the returned jobs are filtered
-        to only include jobs which intersect the filter. Complete jobs are always returned,
-        so regions may extend outside `filter_start` and `filter_end`.
+        to only include jobs which intersect all provided filters. Complete jobs are always
+        returned, so regions may extend outside `filter_start` and `filter_end` and include
+        values in addition to those in `filter_contains`.
 
         Parameters
         ----------
@@ -370,6 +372,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         filter_start : Timestamp | None, default None
         filter_end : Timestamp | None, default None
+        filter_contains : list[Timestamp] | None, default None
         filter_variable_names : list[str] | None, default None
 
         Returns
@@ -408,7 +411,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         # Regions along append dimension
         regions = dimension_slices(template_ds, append_dim, kind="shards")
 
-        # Filter regions
+        # Filter regions - Note: these operations could be optimized significantly
         append_dim_coords = template_ds.coords[append_dim]
         if filter_start is not None:
             regions = [
@@ -421,6 +424,15 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 region
                 for region in regions
                 if append_dim_coords[region].min() < filter_end  # type: ignore[operator]
+            ]
+        if filter_contains is not None:
+            regions = [
+                region
+                for region in regions
+                if any(
+                    timestamp in append_dim_coords[region]
+                    for timestamp in filter_contains
+                )
             ]
 
         all_jobs = [
