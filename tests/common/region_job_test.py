@@ -295,3 +295,6 @@ def test_get_jobs_grouping_filters_and_worker_index(
     assert [j.region for j in jobs] == [
         slice(24, 48),
     ]
+
+
+# Add a couple tests for the filter_contains argument AI!
