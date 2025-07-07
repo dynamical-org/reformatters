@@ -21,6 +21,7 @@ from reformatters.common.template_config import (
 )
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 from reformatters.common.zarr import (
+    BLOSC_2BYTE_ZSTD_LEVEL3_SHUFFLE,  # noqa: F401
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,  # noqa: F401
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,  # noqa: F401
 )
@@ -38,6 +39,12 @@ class NoaaNdviCdrInternalAttrs(BaseInternalAttrs):
 
 class NoaaNdviCdrDataVar(DataVar[NoaaNdviCdrInternalAttrs]):
     pass
+
+
+class NoaaNdviCdrDataVarAttrs(DataVarAttrs):
+    scale_factor: float
+    add_offset: float
+    valid_range: tuple[float, float]
 
 
 class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
@@ -204,7 +211,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
             fill_value=-32767,
             chunks=tuple(var_chunks[d] for d in self.dims),
             shards=tuple(var_shards[d] for d in self.dims),
-            compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
+            compressors=[BLOSC_2BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
 
         default_keep_mantissa_bits = 8
@@ -212,11 +219,14 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
             NoaaNdviCdrDataVar(
                 name="normalized_difference_vegetation_index",
                 encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
+                attrs=NoaaNdviCdrDataVarAttrs(
                     short_name="ndvi",
                     long_name="normalized_difference_vegetation_index",
                     units="1",  # TODO: This is what gdalinfo gives back, is it right?
                     step_type="instant",
+                    scale_factor=0.0001,
+                    add_offset=0.0,
+                    valid_range=(-1000, 10000),
                 ),
                 internal_attrs=NoaaNdviCdrInternalAttrs(
                     keep_mantissa_bits=default_keep_mantissa_bits,

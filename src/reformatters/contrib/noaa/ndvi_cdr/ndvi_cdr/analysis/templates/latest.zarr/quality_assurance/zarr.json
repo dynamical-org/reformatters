@@ -41,7 +41,7 @@
           {
             "name": "blosc",
             "configuration": {
-              "typesize": 4,
+              "typesize": 2,
               "cname": "zstd",
               "clevel": 3,
               "shuffle": "shuffle",
