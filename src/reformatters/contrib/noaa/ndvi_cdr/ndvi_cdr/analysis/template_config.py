@@ -35,16 +35,13 @@ class NoaaNdviCdrInternalAttrs(BaseInternalAttrs):
 
     netcdf_var_name: str
     fill_value: float
+    scale_factor: float | None = None
+    add_offset: float | None = None
+    valid_range: tuple[float, float] | None = None
 
 
 class NoaaNdviCdrDataVar(DataVar[NoaaNdviCdrInternalAttrs]):
     pass
-
-
-class NoaaNdviCdrDataVarAttrs(DataVarAttrs):
-    scale_factor: float
-    add_offset: float
-    valid_range: tuple[float, float]
 
 
 class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
@@ -215,23 +212,24 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
         )
 
         default_keep_mantissa_bits = 8
+
         return [
             NoaaNdviCdrDataVar(
                 name="normalized_difference_vegetation_index",
                 encoding=encoding_float32_default,
-                attrs=NoaaNdviCdrDataVarAttrs(
+                attrs=DataVarAttrs(
                     short_name="ndvi",
                     long_name="normalized_difference_vegetation_index",
                     units="1",  # TODO: This is what gdalinfo gives back, is it right?
                     step_type="instant",
-                    scale_factor=0.0001,
-                    add_offset=0.0,
-                    valid_range=(-1000, 10000),
                 ),
                 internal_attrs=NoaaNdviCdrInternalAttrs(
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     netcdf_var_name="NDVI",
                     fill_value=-9999.0,
+                    scale_factor=0.0001,
+                    add_offset=0.0,
+                    valid_range=(-1000, 10000),
                 ),
             ),
             NoaaNdviCdrDataVar(

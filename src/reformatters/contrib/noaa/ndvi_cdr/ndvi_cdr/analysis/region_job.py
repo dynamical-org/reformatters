@@ -1,4 +1,4 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 import fsspec  # type: ignore[import-untyped]
@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import rasterio  # type: ignore[import-untyped]
 import xarray as xr
+import zarr
 
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.logging import get_logger
@@ -15,8 +16,10 @@ from reformatters.common.region_job import (
     SourceFileCoord,
 )
 from reformatters.common.types import (
+    AppendDim,
     Array2D,
     ArrayFloat32,
+    DatetimeLike,
     Dim,
     Timestamp,
 )
@@ -106,9 +109,56 @@ class NoaaNdviCdrAnalysisRegionJob(
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
         var_name = data_var.internal_attrs.netcdf_var_name
+        scale_factor = data_var.internal_attrs.scale_factor
+        add_offset = data_var.internal_attrs.add_offset
+        valid_range = data_var.internal_attrs.valid_range
+
         dtype = data_var.encoding.dtype
+        encoding_fill_value = data_var.encoding.fill_value
+
         netcdf_path = f"netcdf:{coord.downloaded_path}:{var_name}"
         band = 1  # because rasterio netcdf requires selecting the band in the file path we always want band 1
+
         with rasterio.open(netcdf_path) as reader:
-            result: Array2D[np.float32] = reader.read(band, out_dtype=dtype)
+            masked_result = reader.read(band, out_dtype=dtype, masked=True)
+            result: Array2D[np.float32] = masked_result.filled(encoding_fill_value)
+
+            if valid_range:
+                assert np.nanmin(result) >= valid_range[0]
+                assert np.nanmax(result) <= valid_range[1]
+
+            if scale_factor is not None and add_offset is not None:
+                result = result * scale_factor + add_offset
+
+            assert result.shape == (3600, 7200)
             return result
+
+    @classmethod
+    def operational_update_jobs(
+        cls,
+        final_store: zarr.abc.store.Store,
+        tmp_store: Path,
+        get_template_fn: Callable[[DatetimeLike], xr.Dataset],
+        append_dim: AppendDim,
+        all_data_vars: Sequence[NoaaNdviCdrDataVar],
+        reformat_job_name: str,
+    ) -> tuple[
+        Sequence["RegionJob[NoaaNdviCdrDataVar, NoaaNdviCdrAnalysisSourceFileCoord]"],
+        xr.Dataset,
+    ]:
+        existing_ds = xr.open_zarr(final_store)
+        append_dim_start = existing_ds[append_dim].max()
+        append_dim_end = pd.Timestamp.now()
+        template_ds = get_template_fn(append_dim_end)
+
+        jobs = cls.get_jobs(
+            kind="operational-update",
+            final_store=final_store,
+            tmp_store=tmp_store,
+            template_ds=template_ds,
+            append_dim=append_dim,
+            all_data_vars=all_data_vars,
+            reformat_job_name=reformat_job_name,
+            filter_start=append_dim_start,
+        )
+        return jobs, template_ds
