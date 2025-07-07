@@ -41,7 +41,7 @@ class NoaaNdviCdrInternalAttrs(BaseInternalAttrs):
 
 
 class NoaaNdviCdrDataVar(DataVar[NoaaNdviCdrInternalAttrs]):
-    pass
+    attrs: DataVarAttrs
 
 
 class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
@@ -215,13 +215,14 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
 
         return [
             NoaaNdviCdrDataVar(
-                name="normalized_difference_vegetation_index",
+                name="ndvi_raw",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="ndvi",
+                    short_name="ndvi_raw",
                     long_name="normalized_difference_vegetation_index",
                     units="1",  # TODO: This is what gdalinfo gives back, is it right?
                     step_type="instant",
+                    comment="Raw NDVI values from the NOAA CDR",
                 ),
                 internal_attrs=NoaaNdviCdrInternalAttrs(
                     keep_mantissa_bits=default_keep_mantissa_bits,
@@ -233,7 +234,26 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                 ),
             ),
             NoaaNdviCdrDataVar(
-                name="quality_assurance",
+                name="ndvi_usable",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="ndvi_usable",
+                    long_name="normalized_difference_vegetation_index",
+                    units="1",  # TODO: This is what gdalinfo gives back, is it right?
+                    step_type="instant",
+                    comment="NDVI values that have been quality checked",
+                ),
+                internal_attrs=NoaaNdviCdrInternalAttrs(
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    netcdf_var_name="NDVI",
+                    fill_value=-9999.0,
+                    scale_factor=0.0001,
+                    add_offset=0.0,
+                    valid_range=(-1000, 10000),
+                ),
+            ),
+            NoaaNdviCdrDataVar(
+                name="qa",
                 encoding=encoding_int16_default,
                 attrs=DataVarAttrs(
                     short_name="qa",
