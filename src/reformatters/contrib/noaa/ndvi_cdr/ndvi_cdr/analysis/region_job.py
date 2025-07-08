@@ -126,9 +126,13 @@ class NoaaNdviCdrAnalysisRegionJob(
             result: Array2D[np.float32 | np.int16] = masked_result.filled(
                 encoding_fill_value
             )
+
             assert result.shape == (3600, 7200)
 
-            if var_name != "QA":
+            if var_name == "QA":
+                assert result.dtype == np.int16
+                return cast(ArrayInt16, result)
+            else:
                 assert scale_factor is not None
                 assert add_offset is not None
                 assert valid_range is not None
@@ -143,13 +147,7 @@ class NoaaNdviCdrAnalysisRegionJob(
                 result = cast(Array2D[np.float32], result)
                 result *= scale_factor
                 result += add_offset
-
-            if var_name == "QA":
-                assert result.dtype == np.int16
-                return cast(ArrayInt16, result)
-            else:
-                assert result.dtype == np.float32
-                return cast(ArrayFloat32, result)
+                return result
 
     @classmethod
     def operational_update_jobs(
