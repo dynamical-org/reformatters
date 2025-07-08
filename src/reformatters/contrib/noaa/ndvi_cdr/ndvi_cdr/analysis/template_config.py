@@ -185,14 +185,14 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
         # Chunking selected to target ~1mb uncompressed chunks
         var_chunks: dict[Dim, int] = {
             "time": 365,
-            "latitude": 32,
-            "longitude": 32,
+            "latitude": 100,
+            "longitude": 100,
         }
         # Sharding selected to target ~300mb compressed shards (we are assuming ~20% compression)
         var_shards: dict[Dim, int] = {
             "time": var_chunks["time"] * 5,
-            "latitude": var_chunks["latitude"] * 15,
-            "longitude": var_chunks["longitude"] * 15,
+            "latitude": var_chunks["latitude"] * 5,
+            "longitude": var_chunks["longitude"] * 5,
         }
 
         encoding_float32_default = Encoding(
@@ -220,7 +220,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="ndvi_raw",
                     long_name="normalized_difference_vegetation_index",
-                    units="1",  # TODO: This is what gdalinfo gives back, is it right?
+                    units="unitless",
                     step_type="instant",
                     comment="Raw NDVI values from the NOAA CDR",
                 ),
@@ -239,7 +239,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="ndvi_usable",
                     long_name="normalized_difference_vegetation_index",
-                    units="1",  # TODO: This is what gdalinfo gives back, is it right?
+                    units="unitless",
                     step_type="instant",
                     comment="NDVI values that have been quality checked",
                 ),
@@ -258,7 +258,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="qa",
                     long_name="quality_assurance",
-                    units="categorical",  # TODO: Double check if this makes sense?
+                    units="categorical",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaNdviCdrInternalAttrs(
