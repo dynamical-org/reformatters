@@ -10,8 +10,8 @@
     "configuration": {
       "chunk_shape": [
         1825,
-        480,
-        480
+        500,
+        500
       ]
     }
   },
@@ -28,8 +28,8 @@
       "configuration": {
         "chunk_shape": [
           365,
-          32,
-          32
+          100,
+          100
         ],
         "codecs": [
           {
