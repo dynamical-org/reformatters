@@ -1,5 +1,6 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from typing import cast
 
 import fsspec  # type: ignore[import-untyped]
 import numpy as np
@@ -19,6 +20,7 @@ from reformatters.common.types import (
     AppendDim,
     Array2D,
     ArrayFloat32,
+    ArrayInt16,
     DatetimeLike,
     Dim,
     Timestamp,
@@ -106,7 +108,7 @@ class NoaaNdviCdrAnalysisRegionJob(
         self,
         coord: NoaaNdviCdrAnalysisSourceFileCoord,
         data_var: NoaaNdviCdrDataVar,
-    ) -> ArrayFloat32:
+    ) -> ArrayFloat32 | ArrayInt16:
         """Read and return an array of data for the given variable and source file coordinate."""
         var_name = data_var.internal_attrs.netcdf_var_name
         scale_factor = data_var.internal_attrs.scale_factor
@@ -121,17 +123,33 @@ class NoaaNdviCdrAnalysisRegionJob(
 
         with rasterio.open(netcdf_path) as reader:
             masked_result = reader.read(band, out_dtype=dtype, masked=True)
-            result: Array2D[np.float32] = masked_result.filled(encoding_fill_value)
-
-            if valid_range:
-                assert np.nanmin(result) >= valid_range[0]
-                assert np.nanmax(result) <= valid_range[1]
-
-            if scale_factor is not None and add_offset is not None:
-                result = result * scale_factor + add_offset
-
+            result: Array2D[np.float32 | np.int16] = masked_result.filled(
+                encoding_fill_value
+            )
             assert result.shape == (3600, 7200)
-            return result
+
+            if var_name != "QA":
+                assert scale_factor is not None
+                assert add_offset is not None
+                assert valid_range is not None
+                assert (
+                    np.nanmin(result) >= valid_range[0]
+                    and np.nanmax(result) <= valid_range[1]
+                )
+
+                assert result.dtype == np.float32, (
+                    f"Expected float32, got {result.dtype}"
+                )
+                result = cast(Array2D[np.float32], result)
+                result *= scale_factor
+                result += add_offset
+
+            if var_name == "QA":
+                assert result.dtype == np.int16
+                return cast(ArrayInt16, result)
+            else:
+                assert result.dtype == np.float32
+                return cast(ArrayFloat32, result)
 
     @classmethod
     def operational_update_jobs(

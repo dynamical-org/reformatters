@@ -31,6 +31,7 @@ from reformatters.common.shared_memory_utils import make_shared_buffer, write_sh
 from reformatters.common.types import (
     AppendDim,
     ArrayFloat32,
+    ArrayInt16,
     DatetimeLike,
     Dim,
     Timestamp,
@@ -166,7 +167,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         self,
         coord: SOURCE_FILE_COORD,
         data_var: DATA_VAR,
-    ) -> ArrayFloat32:
+    ) -> ArrayFloat32 | ArrayInt16:
         """
         Read and return the data chunk for the given variable and source file coordinate.
 
@@ -183,7 +184,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         Returns
         -------
-        ArrayFloat32
+        ArrayFloat32 | ArrayInt16
             The loaded data.
         """
         raise NotImplementedError(
@@ -510,7 +511,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 # Process one data variable at a time to ensure a single user of
                 # the shared buffer at a time and to reduce peak memory usage
                 for data_var in data_var_group:
-                    print("Beginning processing", data_var.name)
                     # Copy so we have a unique status per variable, not per variable group
                     data_var_source_file_coords = deepcopy(source_file_coords)
                     data_array, data_array_template = create_data_array_and_template(
@@ -519,25 +519,22 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         shared_buffer,
                         fill_value=data_var.encoding.fill_value,
                     )
-                    print("Created data array and template")
                     data_var_source_file_coords = self._read_into_data_array(
                         data_array,
                         data_var,
                         data_var_source_file_coords,
                     )
-                    print("Read into data array")
                     self.apply_data_transformations(
                         data_array,
                         data_var,
                     )
-                    print("Applied data transformations")
                     self._write_shards(
                         data_array_template,
                         shared_buffer,
                         output_region_ds,
                         self.tmp_store,
                     )
-                    print("Wrote shards")
+
                     upload_futures.append(
                         upload_executor.submit(
                             copy_data_var,
@@ -550,7 +547,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                             partial(progress_tracker.record_completion, data_var.name),
                         )
                     )
-                    print(f"Finished processing {data_var.name}")
 
                     results[data_var.name] = data_var_source_file_coords
 
