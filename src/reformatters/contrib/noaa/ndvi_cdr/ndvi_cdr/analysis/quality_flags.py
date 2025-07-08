@@ -22,9 +22,8 @@ References:
 """
 
 import numpy as np
-import pandas as pd
 
-from reformatters.common.types import Array2D, ArrayFloat32
+from reformatters.common.types import Array2D
 
 # VIIRS quality flag bit positions
 VIIRS_CLOUD_STATE_CLOUDY = 1 << 1  # Probably or confident cloudy
@@ -58,7 +57,7 @@ AVHRR_POLAR_FLAG = 1 << 15  # Appears as -32768 in int16
 FILL_VALUE = -32767  # Common fill value for both AVHRR and VIIRS
 
 
-def _get_avhrr_mask(qa_array: Array2D[np.int16]) -> Array2D[np.bool_]:
+def get_avhrr_mask(qa_array: Array2D[np.int16]) -> Array2D[np.bool_]:
     """Generate bad quality mask for AVHRR data.
 
     Masks pixels with cloud, shadow, water, sunglint, or invalid channels.
@@ -95,7 +94,7 @@ def _get_avhrr_mask(qa_array: Array2D[np.int16]) -> Array2D[np.bool_]:
     return bad_quality | is_fill  # type: ignore
 
 
-def _get_viirs_mask(qa_array: Array2D[np.int16]) -> Array2D[np.bool_]:
+def get_viirs_mask(qa_array: Array2D[np.int16]) -> Array2D[np.bool_]:
     """Generate bad quality mask for VIIRS data.
 
     Masks pixels with cloud, shadow, water, or insufficient aerosol quality.
@@ -125,22 +124,3 @@ def _get_viirs_mask(qa_array: Array2D[np.int16]) -> Array2D[np.bool_]:
 
     # Fill values are always bad quality
     return bad_quality | is_fill  # type: ignore
-
-
-def apply_quality_mask(
-    ndvi_array: ArrayFloat32,
-    qa_array: Array2D[np.int16],
-    timestamp: pd.Timestamp,
-    fill_value: float = np.nan,
-) -> ArrayFloat32:
-    """Apply quality filtering to NDVI data based on timestamp.
-
-    Uses AVHRR mask for timestamps before 2014-01-01, VIIRS mask after.
-    """
-    if timestamp < pd.Timestamp("2014-01-01"):
-        bad_values_mask = _get_avhrr_mask(qa_array)
-    else:
-        bad_values_mask = _get_viirs_mask(qa_array)
-
-    ndvi_array[bad_values_mask] = fill_value
-    return ndvi_array
