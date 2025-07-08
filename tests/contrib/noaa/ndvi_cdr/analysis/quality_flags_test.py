@@ -3,7 +3,6 @@ Tests for quality flag processing in NOAA NDVI CDR data.
 """
 
 import numpy as np
-import pandas as pd
 import pytest
 
 from reformatters.contrib.noaa.ndvi_cdr.ndvi_cdr.analysis.quality_flags import (
@@ -20,9 +19,8 @@ from reformatters.contrib.noaa.ndvi_cdr.ndvi_cdr.analysis.quality_flags import (
     VIIRS_INLAND_WATER,
     VIIRS_LAND_NO_DESERT,
     VIIRS_SEA_WATER,
-    _get_avhrr_mask,
-    _get_viirs_mask,
-    apply_quality_mask,
+    get_avhrr_mask,
+    get_viirs_mask,
 )
 
 
@@ -52,7 +50,7 @@ from reformatters.contrib.noaa.ndvi_cdr.ndvi_cdr.analysis.quality_flags import (
 def test_avhrr_quality_flags(qa_value: int, expected_mask_value: bool) -> None:
     """Test AVHRR quality flag processing."""
     qa_array = np.array([qa_value], dtype=np.int16)
-    result = _get_avhrr_mask(qa_array)
+    result = get_avhrr_mask(qa_array)
     assert result[0] == expected_mask_value
 
 
@@ -93,36 +91,5 @@ def test_viirs_quality_flags(qa_value: int, expected_mask_value: bool) -> None:
     """Test VIIRS quality flag processing."""
     qa_array = np.array([qa_value], dtype=np.int16)
 
-    result = _get_viirs_mask(qa_array)
+    result = get_viirs_mask(qa_array)
     assert result[0] == expected_mask_value
-
-
-def test_apply_quality_mask() -> None:
-    """Test that correct algorithm is selected based on timestamp."""
-    ndvi_array = np.array([0.5, 0.6, 0.7], dtype=np.float32)
-
-    # Use QA values that mean different things in each system
-    qa_array = np.array(
-        [
-            64,  # AVHRR: night flag (bad), VIIRS: aerosol_quality_ok (good)
-            2,  # Cloudy in both systems (bad)
-            72,  # AVHRR: water+night (bad), VIIRS: land_no_desert+aerosol (good)
-        ],
-        dtype=np.int16,
-    )
-
-    # AVHRR: 64=night (bad), 2=cloudy (bad), 72=water+night (bad)
-    result_avhrr = apply_quality_mask(
-        ndvi_array.copy(), qa_array, pd.Timestamp("2013-12-31")
-    )
-    assert not np.isnan(result_avhrr[0])  # night preserved
-    assert np.isnan(result_avhrr[1])  # cloudy masked
-    assert np.isnan(result_avhrr[2])  # water+night masked
-
-    # VIIRS: 64=aerosol_quality_ok (good), 2=probably_cloudy (bad), 72=land_no_desert+aerosol (good)
-    result_viirs = apply_quality_mask(
-        ndvi_array.copy(), qa_array, pd.Timestamp("2014-01-01")
-    )
-    assert not np.isnan(result_viirs[0])  # aerosol quality preserved
-    assert np.isnan(result_viirs[1])  # cloudy masked
-    assert not np.isnan(result_viirs[2])  # land_no_desert+aerosol preserved

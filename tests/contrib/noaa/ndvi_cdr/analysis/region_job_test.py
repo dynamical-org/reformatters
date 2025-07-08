@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import Mock
 
 import numpy as np
@@ -5,6 +6,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.common.types import ArrayFloat32, ArrayInt16
 from reformatters.common.zarr import get_zarr_store
 from reformatters.contrib.noaa.ndvi_cdr.ndvi_cdr.analysis.region_job import (
     NoaaNdviCdrAnalysisRegionJob,
@@ -166,3 +168,136 @@ def test_region_job_generate_source_file_coords_file_not_found(
         region_job.generate_source_file_coords(
             processing_region_ds, template_config.data_vars[:1]
         )
+
+
+def test_read_usable_ndvi_avhrr_era(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that _read_usable_ndvi applies AVHRR masking correctly for 2013 data."""
+    template_config = NoaaNdviCdrAnalysisTemplateConfig()
+
+    region_job = NoaaNdviCdrAnalysisRegionJob.model_construct(
+        final_store=get_zarr_store("fake-prod-path", "test-dataset", "test-version"),
+        tmp_store=Mock(),
+        template_ds=Mock(),
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 10),
+        reformat_job_name="test",
+    )
+
+    coord = NoaaNdviCdrAnalysisSourceFileCoord(
+        time=pd.Timestamp("2013-12-31"),  # AVHRR era
+        url="test_url",
+    )
+
+    # Same NDVI data for both tests
+    ndvi_data = np.array(
+        [[0.5, 0.6, 0.7], [0.8, 0.9, 0.1], [0.2, 0.3, 0.4]], dtype=np.float32
+    )
+
+    # QA values that mean different things in each system
+    qa_data = np.array(
+        [
+            [64, 2, 72],  # AVHRR: night (preserved), cloudy (bad), water+night (bad)
+            [0, 64, 2],  # AVHRR: good, night (preserved), cloudy (bad)
+            [72, 0, 0],  # AVHRR: water+night (bad), good, good
+        ],
+        dtype=np.int16,
+    )
+
+    # Mock the netcdf data reading to return our test data
+    def mock_read_netcdf_data(
+        coord: NoaaNdviCdrAnalysisSourceFileCoord,
+        **kwargs: Any,
+    ) -> ArrayFloat32 | ArrayInt16:
+        if kwargs.get("var_name") == "NDVI":
+            return ndvi_data
+        elif kwargs.get("var_name") == "QA":
+            return qa_data
+        raise ValueError(f"Unknown variable: {kwargs.get('var_name')}")
+
+    monkeypatch.setattr(region_job, "_read_netcdf_data", mock_read_netcdf_data)
+
+    result = region_job._read_usable_ndvi(
+        coord, template_config.data_vars[1]
+    )  # ndvi_usable
+
+    # AVHRR behavior: 64=night (preserved), 2=cloudy (bad), 72=water+night (bad)
+    assert result[0, 0] == 0.5  # night flag preserved
+    assert np.isnan(result[0, 1])  # cloudy masked
+    assert np.isnan(result[0, 2])  # water+night masked
+
+    assert result[1, 0] == 0.8  # good pixel
+    assert result[1, 1] == 0.9  # night flag preserved
+    assert np.isnan(result[1, 2])  # cloudy masked
+
+    assert np.isnan(result[2, 0])  # water+night masked
+    assert result[2, 1] == 0.3  # good pixel
+    assert result[2, 2] == 0.4  # good pixel
+
+
+def test_read_usable_ndvi_viirs_era(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that _read_usable_ndvi applies VIIRS masking correctly for 2014 data."""
+    template_config = NoaaNdviCdrAnalysisTemplateConfig()
+
+    region_job = NoaaNdviCdrAnalysisRegionJob.model_construct(
+        final_store=get_zarr_store("fake-prod-path", "test-dataset", "test-version"),
+        tmp_store=Mock(),
+        template_ds=Mock(),
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 10),
+        reformat_job_name="test",
+    )
+
+    coord = NoaaNdviCdrAnalysisSourceFileCoord(
+        time=pd.Timestamp("2014-01-01"),  # VIIRS era
+        url="test_url",
+    )
+
+    # Same NDVI data as AVHRR test
+    ndvi_data = np.array(
+        [[0.5, 0.6, 0.7], [0.8, 0.9, 0.1], [0.2, 0.3, 0.4]], dtype=np.float32
+    )
+
+    # Same QA values that mean different things in each system
+    qa_data = np.array(
+        [
+            # aerosol_quality_ok (good), probably_cloudy (bad), land_no_desert+aerosol (good)
+            [64, 2, 72],
+            # no aerosol (bad), aerosol_quality_ok (good), probably_cloudy (bad)
+            [0, 64, 2],
+            # land_no_desert+aerosol (good), no aerosol (bad), no aerosol (bad)
+            [72, 0, 0],
+        ],
+        dtype=np.int16,
+    )
+
+    # Mock the netcdf data reading to return our test data
+    def mock_read_netcdf_data(
+        coord: NoaaNdviCdrAnalysisSourceFileCoord,
+        **kwargs: Any,
+    ) -> ArrayFloat32 | ArrayInt16:
+        if kwargs.get("var_name") == "NDVI":
+            return ndvi_data
+        elif kwargs.get("var_name") == "QA":
+            return qa_data
+        raise ValueError(f"Unknown variable: {kwargs.get('var_name')}")
+
+    monkeypatch.setattr(region_job, "_read_netcdf_data", mock_read_netcdf_data)
+
+    result = region_job._read_usable_ndvi(
+        coord, template_config.data_vars[1]
+    )  # ndvi_usable
+
+    # VIIRS behavior: 64=aerosol_quality_ok (good), 2=probably_cloudy (bad), 72=land_no_desert+aerosol (good)
+    assert result[0, 0] == 0.5  # aerosol quality preserved
+    assert np.isnan(result[0, 1])  # cloudy masked
+    assert result[0, 2] == 0.7  # land_no_desert+aerosol preserved
+
+    assert np.isnan(result[1, 0])  # no aerosol quality masked
+    assert result[1, 1] == 0.9  # aerosol quality preserved
+    assert np.isnan(result[1, 2])  # cloudy masked
+
+    assert result[2, 0] == 0.2  # land_no_desert+aerosol preserved
+    assert np.isnan(result[2, 1])  # no aerosol quality masked
+    assert np.isnan(result[2, 2])  # no aerosol quality masked
