@@ -33,7 +33,10 @@ from reformatters.contrib.noaa.ndvi_cdr.ndvi_cdr.analysis.quality_flags import (
         (AVHRR_CLOUD_SHADOW, True),
         (AVHRR_WATER, True),
         (AVHRR_CH1_INVALID, True),
-        (AVHRR_BRDF_CORR_PROBLEM, True),
+        (
+            AVHRR_BRDF_CORR_PROBLEM,
+            False,
+        ),  # Masking BRDF_CORR_PROBLEM  is too aggressive and we get very little data
         (-32768, False),  # AVHRR_POLAR_FLAG as it appears in int16
     ],
     ids=[

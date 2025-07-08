@@ -25,11 +25,23 @@ def test_backfill_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     dataset.backfill_local(append_dim_end=pd.Timestamp("1981-06-25"))
     ds = xr.open_zarr(dataset._final_store(), chunks=None)
 
-    assert np.isclose(ds.ndvi_raw.mean().item(), 0.1766624)
-    assert np.count_nonzero(ds.ndvi_raw.isnull()) == 25007972
-
-    assert np.isclose(
+    # Check ndvi_raw values
+    np.testing.assert_allclose(ds.ndvi_raw.mean().item(), 0.1766624, rtol=1e-06)
+    np.testing.assert_equal(np.count_nonzero(ds.ndvi_raw.isnull()), 25007972)
+    np.testing.assert_allclose(
         ds.sel(latitude=59.98, longitude=105.61, method="nearest").ndvi_raw.item(),
         0.22558,
         rtol=1e-4,
+    )
+
+    # Check qa value
+    # 4820.94356451 is the mean of the QA array
+    np.testing.assert_allclose(ds.qa.mean().item(), 4820.94356451, rtol=1e-08)
+    np.testing.assert_equal(
+        ds.sel(latitude=89.93, longitude=-180, method="nearest").qa.item(),
+        -24438,
+    )
+    np.testing.assert_equal(
+        ds.sel(latitude=59.98, longitude=105.61, method="nearest").qa.item(),
+        24706,
     )
