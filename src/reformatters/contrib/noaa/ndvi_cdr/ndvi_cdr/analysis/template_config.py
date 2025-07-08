@@ -26,6 +26,11 @@ from reformatters.common.zarr import (
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,  # noqa: F401
 )
 
+# Constants for QA data variable
+QA_NETCDF_VAR_NAME = "QA"
+QA_FILL_VALUE = -32767
+QA_ENCODING_FILL_VALUE = -32767
+
 
 class NoaaNdviCdrInternalAttrs(BaseInternalAttrs):
     """
@@ -205,7 +210,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
 
         encoding_int16_default = Encoding(
             dtype="int16",
-            fill_value=-32767,
+            fill_value=QA_ENCODING_FILL_VALUE,
             chunks=tuple(var_chunks[d] for d in self.dims),
             shards=tuple(var_shards[d] for d in self.dims),
             compressors=[BLOSC_2BYTE_ZSTD_LEVEL3_SHUFFLE],
@@ -263,8 +268,8 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                 ),
                 internal_attrs=NoaaNdviCdrInternalAttrs(
                     keep_mantissa_bits="no-rounding",
-                    netcdf_var_name="QA",
-                    fill_value=-32767,
+                    netcdf_var_name=QA_NETCDF_VAR_NAME,
+                    fill_value=QA_FILL_VALUE,
                 ),
             ),
         ]
