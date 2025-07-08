@@ -26,9 +26,17 @@ from reformatters.common.types import (
     Timestamp,
 )
 
-from .template_config import NoaaNdviCdrDataVar
+from . import quality_flags
+from .template_config import (
+    QA_ENCODING_FILL_VALUE,
+    QA_FILL_VALUE,
+    QA_NETCDF_VAR_NAME,
+    NoaaNdviCdrDataVar,
+)
 
 log = get_logger(__name__)
+
+VIIRS_START_DATE = pd.Timestamp("2014-01-01")
 
 
 class NoaaNdviCdrAnalysisSourceFileCoord(SourceFileCoord):
@@ -75,7 +83,6 @@ class NoaaNdviCdrAnalysisRegionJob(
         times = processing_region_ds["time"].values
 
         years = {pd.Timestamp(t).year for t in times}
-        print("Listing files for Years", years)
         available_files_by_year = {
             year: fs.ls(f"noaa-cdr-ndvi-pds/data/{year}") for year in years
         }
@@ -95,7 +102,6 @@ class NoaaNdviCdrAnalysisRegionJob(
             # is too far in the future.
             raise ValueError(f"No file found for {time}")
 
-        print("Returning source file coords")
         return [
             NoaaNdviCdrAnalysisSourceFileCoord(time=t, url=_get_url(t)) for t in times
         ]
@@ -110,44 +116,99 @@ class NoaaNdviCdrAnalysisRegionJob(
         data_var: NoaaNdviCdrDataVar,
     ) -> ArrayFloat32 | ArrayInt16:
         """Read and return an array of data for the given variable and source file coordinate."""
-        var_name = data_var.internal_attrs.netcdf_var_name
-        scale_factor = data_var.internal_attrs.scale_factor
-        add_offset = data_var.internal_attrs.add_offset
-        valid_range = data_var.internal_attrs.valid_range
-
-        dtype = data_var.encoding.dtype
-        encoding_fill_value = data_var.encoding.fill_value
-
-        netcdf_path = f"netcdf:{coord.downloaded_path}:{var_name}"
-        band = 1  # because rasterio netcdf requires selecting the band in the file path we always want band 1
-
-        with rasterio.open(netcdf_path) as reader:
-            masked_result = reader.read(band, out_dtype=dtype, masked=True)
-            result: Array2D[np.float32 | np.int16] = masked_result.filled(
-                encoding_fill_value
+        if data_var.name == "ndvi_usable":
+            return self._read_usable_ndvi(coord, data_var)
+        elif data_var.name == "ndvi_raw":
+            return self._read_netcdf_data(
+                coord,
+                var_name=data_var.internal_attrs.netcdf_var_name,
+                dtype=data_var.encoding.dtype,
+                netcdf_fill_value=data_var.internal_attrs.fill_value,
+                encoding_fill_value=data_var.encoding.fill_value,
+                scale_factor=data_var.internal_attrs.scale_factor,
+                add_offset=data_var.internal_attrs.add_offset,
             )
+        elif data_var.name == "qa":
+            return self._read_netcdf_data(
+                coord,
+                var_name=data_var.internal_attrs.netcdf_var_name,
+                dtype=data_var.encoding.dtype,
+                netcdf_fill_value=data_var.internal_attrs.fill_value,
+                encoding_fill_value=data_var.encoding.fill_value,
+            )
+        else:
+            raise ValueError(f"Unknown data variable: {data_var.name}")
+
+    def _read_netcdf_data(
+        self,
+        coord: NoaaNdviCdrAnalysisSourceFileCoord,
+        *,
+        var_name: str,
+        dtype: str,
+        netcdf_fill_value: float | int,
+        encoding_fill_value: float | int,
+        scale_factor: float | None = None,
+        add_offset: float | None = None,
+    ) -> ArrayFloat32 | ArrayInt16:
+        """Read data from NetCDF file."""
+        netcdf_path = f"netcdf:{coord.downloaded_path}:{var_name}"
+        with rasterio.open(netcdf_path) as reader:
+            masked_result = reader.read(1, out_dtype=dtype, masked=True)
+            result = masked_result.filled(netcdf_fill_value)
 
             assert result.shape == (3600, 7200)
+            assert result.dtype == np.dtype(dtype)
 
-            if var_name == "QA":
-                assert result.dtype == np.int16
-                return cast(ArrayInt16, result)
-            else:
+            # Set invalid values to NaN before scaling (for float data)
+            if var_name != QA_NETCDF_VAR_NAME:
+                result[result == netcdf_fill_value] = encoding_fill_value
+
                 assert scale_factor is not None
                 assert add_offset is not None
-                assert valid_range is not None
-                assert (
-                    np.nanmin(result) >= valid_range[0]
-                    and np.nanmax(result) <= valid_range[1]
-                )
-
-                assert result.dtype == np.float32, (
-                    f"Expected float32, got {result.dtype}"
-                )
-                result = cast(Array2D[np.float32], result)
                 result *= scale_factor
                 result += add_offset
-                return result
+
+                assert result.dtype == np.float32
+                return cast(ArrayFloat32, result)
+            else:
+                assert result.dtype == np.int16
+                return cast(ArrayInt16, result)
+
+    def _read_usable_ndvi(
+        self,
+        coord: NoaaNdviCdrAnalysisSourceFileCoord,
+        data_var: NoaaNdviCdrDataVar,
+    ) -> ArrayFloat32:
+        """Read NDVI data and apply quality filtering."""
+        ndvi_data = self._read_netcdf_data(
+            coord,
+            var_name=data_var.internal_attrs.netcdf_var_name,
+            dtype=data_var.encoding.dtype,
+            netcdf_fill_value=data_var.internal_attrs.fill_value,
+            encoding_fill_value=data_var.encoding.fill_value,
+            scale_factor=data_var.internal_attrs.scale_factor,
+            add_offset=data_var.internal_attrs.add_offset,
+        )
+        qa_data = self._read_netcdf_data(
+            coord,
+            var_name=QA_NETCDF_VAR_NAME,
+            dtype="int16",
+            netcdf_fill_value=QA_FILL_VALUE,
+            encoding_fill_value=QA_ENCODING_FILL_VALUE,
+        )
+        assert qa_data.dtype == np.int16
+        qa_data = cast(Array2D[np.int16], qa_data)
+
+        timestamp = pd.Timestamp(coord.time)
+
+        # Apply quality filtering based on timestamp
+        if timestamp < VIIRS_START_DATE:
+            bad_values_mask = quality_flags.get_avhrr_mask(qa_data)
+        else:
+            bad_values_mask = quality_flags.get_viirs_mask(qa_data)
+
+        ndvi_data[bad_values_mask] = np.nan
+        return cast(ArrayFloat32, ndvi_data)
 
     @classmethod
     def operational_update_jobs(
