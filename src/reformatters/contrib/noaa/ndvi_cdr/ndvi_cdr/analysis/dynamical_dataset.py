@@ -6,7 +6,7 @@ from reformatters.common.kubernetes import CronJob
 
 from .region_job import NoaaNdviCdrAnalysisRegionJob, NoaaNdviCdrAnalysisSourceFileCoord
 from .template_config import NoaaNdviCdrAnalysisTemplateConfig, NoaaNdviCdrDataVar
-from .validators import check_data_is_current
+from .validators import check_data_is_current, check_latest_ndvi_usable_nan_percentage
 
 
 class NoaaNdviCdrAnalysisDataset(
@@ -49,4 +49,7 @@ class NoaaNdviCdrAnalysisDataset(
 
     def validators(self) -> Sequence[validation.DataValidator]:
         """Return a sequence of DataValidators to run on this dataset."""
-        return (check_data_is_current,)
+        return (
+            check_data_is_current,
+            check_latest_ndvi_usable_nan_percentage,
+        )
