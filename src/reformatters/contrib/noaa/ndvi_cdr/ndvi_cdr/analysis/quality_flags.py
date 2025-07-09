@@ -16,7 +16,7 @@ flag_masks={32768,32768,1024,1024,512,512,256,256,192,192,192,192,56,56,56,56,56
 flag_meanings=snow-ice_flag_snow-ice snow-ice_flag_no_snow-ice cloud_flag_cloud cloud_flag_no_cloud thin_cirrus_emissive_yes thin_cirrus_emissive_no thin_cirrus_reflective_yes thin_cirrus_reflective_no aerosol_quantity:_level_of_uncertainty_in_aerosol_correction_climatology aerosol_quantity:_level_of_uncertainty_in_aerosol_correction_low aerosol_quantity:_level_of_uncertainty_in_aerosol_correction_average aerosol_quantity:_level_of_uncertainty_in_aerosol_correction_high land-water_flag_land_and_desert land-water_flag_land_no_desert land-water_flag_inland_water land-water_flag_sea_water land-water_flag_coastal cloud_shadow_yes cloud_shadow_no cloud_state_confident_clear cloud_state_probably_clear cloud_state_probably_cloudy cloud_state_confident_cloudy
 flag_values={32768,0,1024,0,512,0,256,0,0,64,128,192,0,8,16,24,40,4,0,0,1,2,3}
 
-References:
+Docs (see section 5.3 in the AVHRR doc and section 4.3 in the VIIRS doc for QA flag details):
 - AVHRR: https://www.ncei.noaa.gov/pub/data/sds/cdr/CDRs/Normalized_Difference_Vegetation_Index/AVHRR/AlgorithmDescriptionAVHRR_01B-20b.pdf
 - VIIRS: https://www.ncei.noaa.gov/pub/data/sds/cdr/CDRs/Normalized_Difference_Vegetation_Index/VIIRS/AlgorithmDescriptionVIIRS_01B-20b.pdf
 """
@@ -79,8 +79,7 @@ def get_avhrr_mask(qa_array: Array2D[np.int16]) -> Array2D[np.bool_]:
         | AVHRR_CH2_INVALID
         | AVHRR_CH3_INVALID
         | AVHRR_CH4_INVALID
-        | AVHRR_CH5_INVALID
-        | AVHRR_RHO3_INVALID,
+        | AVHRR_CH5_INVALID,
         dtype=np.uint16,
     )
 
@@ -108,7 +107,6 @@ def get_viirs_mask(qa_array: Array2D[np.int16]) -> Array2D[np.bool_]:
     bad_mask = np.array(
         VIIRS_CLOUD_STATE_CLOUDY
         | VIIRS_CLOUD_SHADOW
-        # Note: LAND_WATER_BIT_3 removed - allows "land no desert" to be good quality
         | VIIRS_LAND_WATER_BIT_4
         | VIIRS_LAND_WATER_BIT_5
         # Aerosol quality (we actually want this one set, 1 means OK)
