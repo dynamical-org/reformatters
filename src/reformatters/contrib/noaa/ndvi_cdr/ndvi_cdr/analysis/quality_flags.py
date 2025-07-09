@@ -28,16 +28,12 @@ from reformatters.common.types import Array2D
 # VIIRS quality flag bit positions
 VIIRS_CLOUD_STATE_CLOUDY = 1 << 1  # Probably or confident cloudy
 VIIRS_CLOUD_SHADOW = 1 << 2
-VIIRS_LAND_WATER_BIT_4 = 1 << 4  # Catches water flags (16, 24) and unused (48, 56)
-VIIRS_LAND_WATER_BIT_5 = 1 << 5  # Catches coastal (40) and unused (32, 48, 56)
-VIIRS_AEROSOL_QUALITY_OK = 1 << 6
-
-# VIIRS land/water flag values (bits 3-5 combinations)
-VIIRS_LAND_AND_DESERT = 0  # No bits 3-5 set
-VIIRS_LAND_NO_DESERT = 1 << 3  # Bit 3 only
-VIIRS_INLAND_WATER = 1 << 4  # Bit 4 only
+VIIRS_LAND_WATER_BIT_3 = 1 << 3
+VIIRS_LAND_WATER_BIT_4 = 1 << 4
+VIIRS_LAND_WATER_BIT_5 = 1 << 5
 VIIRS_SEA_WATER = (1 << 3) | (1 << 4)  # Bits 3+4
 VIIRS_COASTAL = (1 << 3) | (1 << 5)  # Bits 3+5
+VIIRS_AEROSOL_QUALITY_OK = 1 << 6
 
 # AVHRR quality flag bit positions
 AVHRR_CLOUDY = 1 << 1
