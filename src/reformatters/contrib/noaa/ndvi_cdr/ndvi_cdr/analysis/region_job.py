@@ -97,10 +97,8 @@ class NoaaNdviCdrAnalysisRegionJob(
                     filename = Path(filepath).name
                     url = f"{public_base_url}/{year}/{filename}"
                     return url
-            # TODO: Should we rethink this? This kind of preemptively handles the dataset truncation
-            # which would otherwise happen during operational update. It means we fail if our append_dim end date
-            # is too far in the future.
-            raise ValueError(f"No file found for {time}")
+
+            return "no-url"
 
         return [
             NoaaNdviCdrAnalysisSourceFileCoord(time=t, url=_get_url(t)) for t in times
@@ -108,7 +106,12 @@ class NoaaNdviCdrAnalysisRegionJob(
 
     def download_file(self, coord: NoaaNdviCdrAnalysisSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
-        return http_download_to_disk(coord.get_url(), self.dataset_id)
+        url = coord.get_url()
+        # We set a special value if, when generating the source file coords, we did not find
+        # an available file.
+        if url == "no-url":
+            raise FileNotFoundError(f"No file found for {coord.time}")
+        return http_download_to_disk(url, self.dataset_id)
 
     def read_data(
         self,

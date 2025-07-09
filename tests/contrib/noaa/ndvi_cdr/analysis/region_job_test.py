@@ -162,12 +162,10 @@ def test_region_job_generate_source_file_coords_file_not_found(
         }
     )
 
-    # This should raise a ValueError when no matching file is found
-    # TODO: See comment in generate_source_file_coords as we might want to rethink this
-    with pytest.raises(ValueError, match="No file found for"):
-        region_job.generate_source_file_coords(
-            processing_region_ds, template_config.data_vars[:1]
-        )
+    source_file_coords = region_job.generate_source_file_coords(
+        processing_region_ds, template_config.data_vars[:1]
+    )
+    assert source_file_coords[0].get_url() == "no-url"
 
 
 def test_read_usable_ndvi_avhrr_era(monkeypatch: pytest.MonkeyPatch) -> None:
