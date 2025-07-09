@@ -42,7 +42,6 @@ def test_get_template_spatial_ref() -> None:
     )
     original_attrs = deepcopy(ds.spatial_ref.attrs)
 
-    # TODO: Update to the CRS of your dataset. e.g. "EPSG:4269"
     expected_crs = "EPSG:4326"
     calculated_spatial_ref_attrs = ds.rio.write_crs(expected_crs).spatial_ref.attrs
     assert set(original_attrs) - set(calculated_spatial_ref_attrs) == {"comment"}
