@@ -19,7 +19,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
         #     schedule=_OPERATIONAL_CRON_SCHEDULE,
         #     pod_active_deadline=timedelta(minutes=30),
         #     image=image_tag,
-        #     dataset"_id=self.dataset_id,
+        #     dataset_id=self.dataset_id,
         #     cpu="14",
         #     memory="30G",
         #     shared_memory="12G",

@@ -20,26 +20,26 @@ class NoaaNdviCdrAnalysisDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
         # operational_update_cron_job = ReformatCronJob(
-        #     name=f"{self.dataset_id}-operational-update",
-        #     schedule=_OPERATIONAL_CRON_SCHEDULE,
-        #     pod_active_deadline=timedelta(minutes=30),
-        #     image=image_tag,
-        #     dataset"_id=self.dataset_id,
-        #     cpu="14",
-        #     memory="30G",
-        #     shared_memory="12G",
-        #     ephemeral_storage="30G",
-        #     secret_names=self.storage_config.k8s_secret_names,
+        #    name=f"{self.dataset_id}-operational-update",
+        #    schedule="0 20 * * *",
+        #    pod_active_deadline=timedelta(minutes=30),
+        #    image=image_tag,
+        #    dataset_id=self.dataset_id,
+        #    cpu="2",
+        #    memory="200G",
+        #    shared_memory="190Gi",
+        #    ephemeral_storage="30G",
+        #    secret_names=self.storage_config.k8s_secret_names,
         # )
         # validation_cron_job = ValidationCronJob(
-        #     name=f"{self.dataset_id}-validation",
-        #     schedule=_VALIDATION_CRON_SCHEDULE,
-        #     pod_active_deadline=timedelta(minutes=10),
-        #     image=image_tag,
-        #     dataset_id=self.dataset_id,
-        #     cpu="1.3",
-        #     memory="7G",
-        #     secret_names=self.storage_config.k8s_secret_names,
+        #    name=f"{self.dataset_id}-validation",
+        #    schedule="30 20 * * *",
+        #    pod_active_deadline=timedelta(minutes=10),
+        #    image=image_tag,
+        #    dataset_id=self.dataset_id,
+        #    cpu="1.3",
+        #    memory="7G",
+        #    secret_names=self.storage_config.k8s_secret_names,
         # )
 
         # return [operational_update_cron_job, validation_cron_job]
