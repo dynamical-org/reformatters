@@ -48,9 +48,7 @@ class NoaaNdviCdrAnalysisSourceFileCoord(SourceFileCoord):
     def get_url(self) -> str:
         return self.url
 
-    def out_loc(
-        self,
-    ) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
         return {"time": self.time}
 
 
