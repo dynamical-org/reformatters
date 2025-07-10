@@ -47,10 +47,10 @@ AVHRR_CH4_INVALID = 1 << 11
 AVHRR_CH5_INVALID = 1 << 12
 AVHRR_RHO3_INVALID = 1 << 13
 AVHRR_BRDF_CORR_PROBLEM = 1 << 14
-AVHRR_POLAR_FLAG = 1 << 15  # Appears as -32768 in int16
+AVHRR_POLAR_FLAG = np.int16(1) << 15
 
 # Common values
-FILL_VALUE = -32767  # Common fill value for both AVHRR and VIIRS
+FILL_VALUE = np.int16(-32767)  # Common fill value for both AVHRR and VIIRS
 
 
 def get_avhrr_mask(qa_array: Array2D[np.int16]) -> Array2D[np.bool_]:
@@ -66,11 +66,7 @@ def get_avhrr_mask(qa_array: Array2D[np.int16]) -> Array2D[np.bool_]:
     # Identify fill values before conversion
     is_fill = qa_array == FILL_VALUE
 
-    # Quality flags are stored as int16 in NetCDF but should be interpreted as unsigned
-    assert qa_array.dtype == np.int16, f"Expected int16 QA data, got {qa_array.dtype}"
-    qa_array = qa_array.astype(np.uint16)
-
-    # Build up uint16 mask of bits that indicate a bad value
+    # Build up int16 mask of bits that indicate a bad value
     bad_mask = np.array(
         AVHRR_CLOUDY
         | AVHRR_CLOUD_SHADOW
@@ -81,7 +77,7 @@ def get_avhrr_mask(qa_array: Array2D[np.int16]) -> Array2D[np.bool_]:
         | AVHRR_CH3_INVALID
         | AVHRR_CH4_INVALID
         | AVHRR_CH5_INVALID,
-        dtype=np.uint16,
+        dtype=np.int16,
     )
 
     # Bitwise AND the qa_array with the bad_mask. If any bit is set,
@@ -101,10 +97,6 @@ def get_viirs_mask(qa_array: Array2D[np.int16]) -> Array2D[np.bool_]:
     # Identify fill values before conversion
     is_fill = qa_array == FILL_VALUE
 
-    # Quality flags are stored as int16 in NetCDF but should be interpreted as unsigned
-    assert qa_array.dtype == np.int16, f"Expected int16 QA data, got {qa_array.dtype}"
-    qa_array = qa_array.astype(np.uint16)
-
     bad_mask = np.array(
         VIIRS_CLOUD_STATE_CLOUDY
         | VIIRS_CLOUD_SHADOW
@@ -112,7 +104,7 @@ def get_viirs_mask(qa_array: Array2D[np.int16]) -> Array2D[np.bool_]:
         | VIIRS_LAND_WATER_BIT_5
         # Aerosol quality (we actually want this one set, 1 means OK)
         | VIIRS_AEROSOL_QUALITY_OK,
-        dtype=np.uint16,
+        dtype=np.int16,
     )
 
     # The Aerosol bit is 1 if the quality is OK, all
