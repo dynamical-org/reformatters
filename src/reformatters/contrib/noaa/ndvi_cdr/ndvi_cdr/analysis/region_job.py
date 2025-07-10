@@ -83,28 +83,35 @@ class NoaaNdviCdrAnalysisRegionJob(
         public_base_url = "https://noaa-cdr-ndvi-pds.s3.amazonaws.com/data"
 
         times = processing_region_ds["time"].values
-
         years = {pd.Timestamp(t).year for t in times}
-        available_files_by_year = {
-            year: fs.ls(f"noaa-cdr-ndvi-pds/data/{year}") for year in years
-        }
 
-        def _get_url(time: Timestamp) -> str:
-            timestamp = pd.Timestamp(time)
-            year = timestamp.year
-            year_date_month_str = timestamp.strftime("%Y%m%d")
-            for filepath in available_files_by_year[year]:
-                _, date, _ = filepath.rsplit("_", 2)
-                if year_date_month_str == date:
+        # Build a mapping from date string to URL for all files in all relevant years
+        urls_by_time: dict[pd.Timestamp, str] = {}
+
+        for year in years:
+            for filepath in fs.ls(f"noaa-cdr-ndvi-pds/data/{year}"):
+                # Example filename: AVHRR-Land_v005_AVH13C1_NOAA-07_19810728_c20170610011910.nc
+                # We want to extract the date part (e.g., 19810728)
+                try:
+                    _, date_str, _ = filepath.rsplit("_", 2)
+                    # Parse date string to pd.Timestamp
+                    file_time = pd.Timestamp(date_str)
                     filename = Path(filepath).name
                     url = f"{public_base_url}/{year}/{filename}"
-                    return url
+                    urls_by_time[file_time] = url
+                except Exception as e:
+                    log.warning(f"Skipping file {filepath} due to error: {e}")
+                    continue  # skip files that don't match the expected pattern
 
-            return "no-url"
-
-        return [
-            NoaaNdviCdrAnalysisSourceFileCoord(time=t, url=_get_url(t)) for t in times
-        ]
+        coords = []
+        for t in times:
+            if (timestamp := pd.Timestamp(t)) in urls_by_time:
+                coords.append(
+                    NoaaNdviCdrAnalysisSourceFileCoord(
+                        time=t, url=urls_by_time[timestamp]
+                    )
+                )
+        return coords
 
     def download_file(self, coord: NoaaNdviCdrAnalysisSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""

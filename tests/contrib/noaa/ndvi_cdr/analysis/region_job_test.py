@@ -156,7 +156,7 @@ def test_region_job_generate_source_file_coords_file_not_found(
 
     processing_region_ds = xr.Dataset(
         coords={
-            "time": pd.date_range("2000-01-01", "2000-01-01", freq="D"),
+            "time": pd.date_range("2000-01-04", "2000-01-05", freq="D"),
             "latitude": np.linspace(89.999998472637188, -89.999998472637188, 10),
             "longitude": np.linspace(-180.000006104363450, 179.999993895636550, 7200),
         }
@@ -165,7 +165,11 @@ def test_region_job_generate_source_file_coords_file_not_found(
     source_file_coords = region_job.generate_source_file_coords(
         processing_region_ds, template_config.data_vars[:1]
     )
-    assert source_file_coords[0].get_url() == "no-url"
+    assert len(source_file_coords) == 1
+    assert (
+        source_file_coords[0].get_url()
+        == "https://noaa-cdr-ndvi-pds.s3.amazonaws.com/data/2000/AVHRR-Land_v005_AVH13C1_NOAA-15_20000105_c20170614232721.nc"
+    )
 
 
 def test_read_usable_ndvi_avhrr_era(monkeypatch: pytest.MonkeyPatch) -> None:
