@@ -7,6 +7,7 @@ from itertools import batched, groupby, product
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import xarray as xr
 import zarr
@@ -95,7 +96,10 @@ def reformat_time_i_slices(
                 # Write variable by variable to avoid blowing up memory usage
                 for data_var in completed_data_vars:
                     data_array, data_array_template = create_data_array_and_template(
-                        chunk_template_ds, data_var.name, shared_buffer
+                        chunk_template_ds,
+                        data_var.name,
+                        shared_buffer,
+                        fill_value=np.nan,
                     )
                     var_coords_and_paths = filter_coords_and_paths(
                         data_var, coords_and_paths
