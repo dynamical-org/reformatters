@@ -1,9 +1,9 @@
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
-import xarray as xr
 from pydantic import computed_field
 
 from reformatters.common.config_models import (
@@ -77,20 +77,22 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
         """
         Returns a dictionary of dimension names to coordinates for the dataset.
         """
-        # This file was created from one of the source NetCDF files:
+        # This file was created from the lat/lon values in one of the source NetCDF files:
         #   AVHRR-Land_v005_AVH13C1_NOAA-07_19810625_c20170610042839.nc
         # We have confirmed that the lat/lon values match the VIIRS NetCDF files.
         #
-        # We use a sample source file to set the latitude and longitude coordinates
-        # because the values in the NetCDF do not have a consistent delta
-        sample_nc = xr.open_dataset("./lat_lon_sample_avhrr_file.nc")
+        # We use values from a sample source file to set the latitude and longitude coordinates
+        # because the values in the NetCDF do not have a consistent delta.
+        lat_lon_values = np.load(
+            Path(__file__).parent / "./lat_lon_sample_avhrr_file.npz"
+        )
 
         return {
             self.append_dim: self.append_dim_coordinates(
                 self.append_dim_start + self.append_dim_frequency
             ),
-            "latitude": sample_nc.latitude.values,
-            "longitude": sample_nc.longitude.values,
+            "latitude": lat_lon_values["latitude"],
+            "longitude": lat_lon_values["longitude"],
         }
 
     @computed_field  # type: ignore[prop-decorator]
