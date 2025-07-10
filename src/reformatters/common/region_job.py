@@ -123,8 +123,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     # This particularly useful of the data source cannot handle a large number of concurrent requests
     download_parallelism: int = (os.cpu_count() or 1) * 2
 
-    # Subclasses can override this to control read parallelism
-    # This is useful in cases where many threads using reading data into shared memory cause deadlocks
+    # Subclasses can override this to control read parallelism.
+    # This is useful in cases where many threads reading data into shared memory
+    # causes deadlocks or resource contention.
     read_parallelism: int = os.cpu_count() or 1
 
     @classmethod
