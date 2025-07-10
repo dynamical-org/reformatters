@@ -182,7 +182,7 @@ class UarizonaSwannAnalysisTemplateConfig(TemplateConfig[UarizonaSwannDataVar]):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def data_vars(self) -> Sequence[UarizonaSwannDataVar]:
-        # Chunking selected to target ~1.5mb compressed chunks (we are assuming ~20% compression)
+        # Chunking selected to target ~1.5mb uncompressed chunks
         var_chunks: dict[Dim, int] = {
             "time": 365,
             "latitude": 32,

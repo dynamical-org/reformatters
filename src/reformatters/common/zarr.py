@@ -17,6 +17,13 @@ logger = get_logger(__name__)
 
 _LOCAL_ZARR_STORE_BASE_PATH = "data/output"
 
+BLOSC_2BYTE_ZSTD_LEVEL3_SHUFFLE = zarr.codecs.BloscCodec(
+    typesize=2,
+    cname="zstd",
+    clevel=3,
+    shuffle="shuffle",  # byte shuffle to improve compression
+).to_dict()
+
 
 BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE = zarr.codecs.BloscCodec(
     typesize=4,

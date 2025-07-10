@@ -15,6 +15,8 @@ type Timedelta = Annotated[
     pydantic.PlainValidator(pd.Timedelta),
 ]
 type ArrayFloat32 = np.ndarray[tuple[int, ...], np.dtype[np.float32]]
+type ArrayInt16 = np.ndarray[tuple[int, ...], np.dtype[np.int16]]
+type ArrayND[D: np.generic] = np.ndarray[tuple[int, ...], np.dtype[D]]
 type Array1D[D: np.generic] = np.ndarray[tuple[int], np.dtype[D]]
 type Array2D[D: np.generic] = np.ndarray[tuple[int, int], np.dtype[D]]
 

@@ -35,6 +35,7 @@ def make_shared_buffer(ds: xr.Dataset) -> Generator[SharedMemory, None, None]:
     """
     buffer_size = max(data_var.nbytes for data_var in ds.data_vars.values())
 
+    logger.info(f"Creating shared memory buffer of size {buffer_size / 10**9} GB")
     shared_memory = SharedMemory(create=True, size=buffer_size)
     try:
         yield shared_memory
@@ -47,6 +48,7 @@ def create_data_array_and_template(
     processing_region_ds: xr.Dataset,
     data_var_name: str,
     shared_buffer: SharedMemory,
+    fill_value: float | int | bool,
 ) -> tuple[xr.DataArray, xr.DataArray]:
     """
     Prepare an xarray.DataArray backed by shared memory for writing,
@@ -96,9 +98,9 @@ def create_data_array_and_template(
         buffer=shared_buffer.buf,
     )
     # Important:
-    # We rely on initializing with nans so failed reads (eg. corrupt source data)
-    # leave nan and to reuse the same shared buffer for each variable.
-    shared_array[:] = np.nan
+    # We rely on initializing with a fill value so failed reads (eg. corrupt source data)
+    # leave the fill value and to reuse the same shared buffer for each variable.
+    shared_array[:] = fill_value
     data_array.data = shared_array
 
     return data_array, data_array_template

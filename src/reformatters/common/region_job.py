@@ -30,7 +30,7 @@ from reformatters.common.reformat_utils import (
 from reformatters.common.shared_memory_utils import make_shared_buffer, write_shards
 from reformatters.common.types import (
     AppendDim,
-    ArrayFloat32,
+    ArrayND,
     DatetimeLike,
     Dim,
     Timestamp,
@@ -123,6 +123,11 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     # This particularly useful of the data source cannot handle a large number of concurrent requests
     download_parallelism: int = (os.cpu_count() or 1) * 2
 
+    # Subclasses can override this to control read parallelism.
+    # This is useful in cases where many threads reading data into shared memory
+    # causes deadlocks or resource contention.
+    read_parallelism: int = os.cpu_count() or 1
+
     @classmethod
     def source_groups(
         cls,
@@ -162,7 +167,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         self,
         coord: SOURCE_FILE_COORD,
         data_var: DATA_VAR,
-    ) -> ArrayFloat32:
+    ) -> ArrayND[np.generic]:
         """
         Read and return the data chunk for the given variable and source file coordinate.
 
@@ -179,7 +184,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         Returns
         -------
-        ArrayFloat32
+        ArrayFloat32 | ArrayInt16
             The loaded data.
         """
         raise NotImplementedError(
@@ -520,11 +525,11 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 for data_var in data_var_group:
                     # Copy so we have a unique status per variable, not per variable group
                     data_var_source_file_coords = deepcopy(source_file_coords)
-
                     data_array, data_array_template = create_data_array_and_template(
                         processing_region_ds,
                         data_var.name,
                         shared_buffer,
+                        fill_value=data_var.encoding.fill_value,
                     )
                     data_var_source_file_coords = self._read_into_data_array(
                         data_array,
@@ -650,7 +655,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         read_coords = (
             c for c in source_file_coords if c.status == SourceFileStatus.Processing
         )
-        with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as executor:
+        with ThreadPoolExecutor(max_workers=self.read_parallelism) as executor:
             return list(executor.map(_read_and_write_one, read_coords))
 
     def _write_shards(
