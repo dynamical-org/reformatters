@@ -84,7 +84,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
         # We use values from a sample source file to set the latitude and longitude coordinates
         # because the values in the NetCDF do not have a consistent delta.
         lat_lon_values = np.load(
-            Path(__file__).parent / "./lat_lon_sample_avhrr_file.npz"
+            Path(__file__).parent / "./source_lat_lon_coordinate_values.npz"
         )
 
         return {
