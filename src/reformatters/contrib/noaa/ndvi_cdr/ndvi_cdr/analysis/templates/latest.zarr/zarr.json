@@ -56,7 +56,7 @@
         "attributes": {
           "units": "degrees_north",
           "statistics_approximate": {
-            "min": -89.97499084472712,
+            "min": -89.97499084472656,
             "max": 89.9749984741211
           },
           "_FillValue": "AAAAAAAA+H8="
@@ -110,7 +110,7 @@
           "units": "degrees_east",
           "statistics_approximate": {
             "min": -179.97500610351562,
-            "max": 179.97500610351912
+            "max": 179.97500610351562
           },
           "_FillValue": "AAAAAAAA+H8="
         },

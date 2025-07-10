@@ -3,6 +3,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+import xarray as xr
 from pydantic import computed_field
 
 from reformatters.common.config_models import (
@@ -76,22 +77,20 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
         """
         Returns a dictionary of dimension names to coordinates for the dataset.
         """
-        # Calculate coordinates based on gdalinfo geotransform
-        origin_lon = -180.000006104363450
-        origin_lat = 89.999998472637188
-        pixel_size_lon = 0.050000001695657
-        pixel_size_lat = -0.049999997032189
-
-        # Generate pixel center coordinates
-        longitude = origin_lon + (np.arange(7200) + 0.5) * pixel_size_lon
-        latitude = origin_lat + (np.arange(3600) + 0.5) * pixel_size_lat
+        # This file was created from one of the source NetCDF files:
+        #   AVHRR-Land_v005_AVH13C1_NOAA-07_19810625_c20170610042839.nc
+        # We have confirmed that the lat/lon values match the VIIRS NetCDF files.
+        #
+        # We use a sample source file to set the latitude and longitude coordinates
+        # because the values in the NetCDF do not have a consistent delta
+        sample_nc = xr.open_dataset("./lat_lon_sample_avhrr_file.nc")
 
         return {
             self.append_dim: self.append_dim_coordinates(
                 self.append_dim_start + self.append_dim_frequency
             ),
-            "latitude": latitude,
-            "longitude": longitude,
+            "latitude": sample_nc.latitude.values,
+            "longitude": sample_nc.longitude.values,
         }
 
     @computed_field  # type: ignore[prop-decorator]

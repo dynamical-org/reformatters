@@ -83,5 +83,5 @@ def test_backfill_local_and_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
         updated_ds.sel(latitude=-37.83, longitude=141.4, method="nearest")
         .sel(time="1981-06-25")
         .ndvi_usable.item(),
-        0.927734375,
+        0.623046875,
     )
