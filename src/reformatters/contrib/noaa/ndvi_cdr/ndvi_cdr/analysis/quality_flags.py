@@ -54,13 +54,14 @@ FILL_VALUE = -32767  # Common fill value for both AVHRR and VIIRS
 
 
 def get_avhrr_mask(qa_array: Array2D[np.int16]) -> Array2D[np.bool_]:
-    """Generate bad quality mask for AVHRR data.
+    """
+    Generate "bad" quality mask for AVHRR data that is true where values should be ignored.
+
+    The flags we use and don't use here come from a practical balance of maintaining
+    enough decent quality data while removing values that clearly disrupt the NDVI signal.
 
     Masks pixels with cloud, shadow, water, sunglint, or invalid channels.
     Polar flag is NOT considered bad quality.
-
-    True in the return means bad quality.
-    False in the return means good quality.
     """
     # Identify fill values before conversion
     is_fill = qa_array == FILL_VALUE
