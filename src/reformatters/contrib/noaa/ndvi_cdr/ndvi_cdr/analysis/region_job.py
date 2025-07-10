@@ -55,7 +55,6 @@ class NoaaNdviCdrAnalysisSourceFileCoord(SourceFileCoord):
 class NoaaNdviCdrAnalysisRegionJob(
     RegionJob[NoaaNdviCdrDataVar, NoaaNdviCdrAnalysisSourceFileCoord]
 ):
-    download_parallelism: int = 2
     # We observed deadlocks when using more than 2 threads to read data into shared memory.
     read_parallelism: int = 1
 
