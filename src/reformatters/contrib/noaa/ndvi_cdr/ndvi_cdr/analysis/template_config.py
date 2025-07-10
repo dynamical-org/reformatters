@@ -187,7 +187,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
     @property
     def data_vars(self) -> Sequence[NoaaNdviCdrDataVar]:
         """Define metadata and encoding for each data variable."""
-        # Chunking selected to target ~1mb uncompressed chunks
+        # Chunking selected to target ~3mb compressed chunks
         var_chunks: dict[Dim, int] = {
             "time": 365,
             "latitude": 100,
