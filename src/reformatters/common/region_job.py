@@ -30,8 +30,7 @@ from reformatters.common.reformat_utils import (
 from reformatters.common.shared_memory_utils import make_shared_buffer, write_shards
 from reformatters.common.types import (
     AppendDim,
-    ArrayFloat32,
-    ArrayInt16,
+    ArrayND,
     DatetimeLike,
     Dim,
     Timestamp,
@@ -167,7 +166,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         self,
         coord: SOURCE_FILE_COORD,
         data_var: DATA_VAR,
-    ) -> ArrayFloat32 | ArrayInt16:
+    ) -> ArrayND[np.generic]:
         """
         Read and return the data chunk for the given variable and source file coordinate.
 
