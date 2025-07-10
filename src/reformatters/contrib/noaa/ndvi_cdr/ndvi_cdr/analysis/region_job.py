@@ -82,8 +82,8 @@ class NoaaNdviCdrAnalysisRegionJob(
         fs = fsspec.filesystem("s3", anon=True)
         public_base_url = "https://noaa-cdr-ndvi-pds.s3.amazonaws.com/data"
 
-        times = processing_region_ds["time"].values
-        years = {pd.Timestamp(t).year for t in times}
+        times = pd.to_datetime(processing_region_ds["time"].values)
+        years = set(times.year)
 
         # Build a mapping from date string to URL for all files in all relevant years
         urls_by_time: dict[pd.Timestamp, str] = {}
@@ -116,10 +116,6 @@ class NoaaNdviCdrAnalysisRegionJob(
     def download_file(self, coord: NoaaNdviCdrAnalysisSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
         url = coord.get_url()
-        # We set a special value if, when generating the source file coords, we did not find
-        # an available file.
-        if url == "no-url":
-            raise FileNotFoundError(f"No file found for {coord.time}")
         return http_download_to_disk(url, self.dataset_id)
 
     def read_data(
@@ -181,10 +177,8 @@ class NoaaNdviCdrAnalysisRegionJob(
         assert qa_data.dtype == np.int16
         qa_data = cast(Array2D[np.int16], qa_data)
 
-        timestamp = pd.Timestamp(coord.time)
-
         # Apply quality filtering based on timestamp
-        if timestamp < VIIRS_START_DATE:
+        if coord.time < VIIRS_START_DATE:
             bad_values_mask = quality_flags.get_avhrr_mask(qa_data)
         else:
             bad_values_mask = quality_flags.get_viirs_mask(qa_data)
