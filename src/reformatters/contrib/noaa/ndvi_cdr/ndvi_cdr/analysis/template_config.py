@@ -46,7 +46,7 @@ class NoaaNdviCdrInternalAttrs(BaseInternalAttrs):
 
 
 class NoaaNdviCdrDataVar(DataVar[NoaaNdviCdrInternalAttrs]):
-    attrs: DataVarAttrs
+    pass
 
 
 class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
