@@ -19,11 +19,13 @@ noop_storage_config = DynamicalDatasetStorageConfig(
 )
 
 
-def test_backfill_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+def test_backfill_local_and_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     dataset = NoaaNdviCdrAnalysisDataset(storage_config=noop_storage_config)
     # Dataset starts at 1981-06-24, test with a couple days after start
     dataset.backfill_local(append_dim_end=pd.Timestamp("1981-06-25"))
     ds = xr.open_zarr(dataset._final_store(), chunks=None)
+
+    assert ds.time.max() == pd.Timestamp("1981-06-24")
 
     # Check ndvi_raw values
     np.testing.assert_allclose(ds.ndvi_raw.mean().item(), 0.1766624, rtol=1e-06)
@@ -52,13 +54,8 @@ def test_backfill_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
         ds.sel(latitude=59.98, longitude=105.61, method="nearest").ndvi_usable.item()
     )
 
-
-def test_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    dataset = NoaaNdviCdrAnalysisDataset(storage_config=noop_storage_config)
-    # Dataset starts at 1981-06-24, test with initial data
-    dataset.backfill_local(append_dim_end=pd.Timestamp("1981-06-25"))
-    ds = xr.open_zarr(dataset._final_store(), chunks=None)
-    assert ds.time.max() == pd.Timestamp("1981-06-24")
+    # TEST NoaaNdviCdrAnalysisDataset.update()
+    # We roll this into this test because these tests are slow.
 
     # Mock pd.Timestamp.now() to control the update end date
     monkeypatch.setattr("pandas.Timestamp.now", lambda: pd.Timestamp("1981-06-26"))
