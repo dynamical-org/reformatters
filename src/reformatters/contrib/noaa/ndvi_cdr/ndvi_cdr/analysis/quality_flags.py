@@ -25,6 +25,8 @@ import numpy as np
 
 from reformatters.common.types import Array2D
 
+from .template_config import QA_FILL_VALUE
+
 # VIIRS quality flag bit positions
 VIIRS_CLOUD_STATE_CLOUDY = 1 << 1  # Probably or confident cloudy
 VIIRS_CLOUD_SHADOW = 1 << 2
@@ -49,9 +51,6 @@ AVHRR_RHO3_INVALID = 1 << 13
 AVHRR_BRDF_CORR_PROBLEM = 1 << 14
 AVHRR_POLAR_FLAG = np.int16(1) << 15
 
-# Common values
-FILL_VALUE = np.int16(-32767)  # Common fill value for both AVHRR and VIIRS
-
 
 def get_avhrr_mask(qa_array: Array2D[np.int16]) -> Array2D[np.bool_]:
     """
@@ -64,7 +63,7 @@ def get_avhrr_mask(qa_array: Array2D[np.int16]) -> Array2D[np.bool_]:
     Polar flag is NOT considered bad quality.
     """
     # Identify fill values before conversion
-    is_fill = qa_array == FILL_VALUE
+    is_fill = qa_array == np.int16(QA_FILL_VALUE)
 
     # Build up int16 mask of bits that indicate a bad value
     bad_mask = np.array(
@@ -95,7 +94,7 @@ def get_viirs_mask(qa_array: Array2D[np.int16]) -> Array2D[np.bool_]:
     Requires aerosol quality bit to be set (1) for good quality.
     """
     # Identify fill values before conversion
-    is_fill = qa_array == FILL_VALUE
+    is_fill = qa_array == np.int16(QA_FILL_VALUE)
 
     bad_mask = np.array(
         VIIRS_CLOUD_STATE_CLOUDY

@@ -11,7 +11,6 @@ from reformatters.contrib.noaa.ndvi_cdr.ndvi_cdr.analysis.quality_flags import (
     AVHRR_CLOUD_SHADOW,
     AVHRR_CLOUDY,
     AVHRR_WATER,
-    FILL_VALUE,
     VIIRS_AEROSOL_QUALITY_OK,
     VIIRS_CLOUD_SHADOW,
     VIIRS_CLOUD_STATE_CLOUDY,
@@ -22,12 +21,15 @@ from reformatters.contrib.noaa.ndvi_cdr.ndvi_cdr.analysis.quality_flags import (
     get_avhrr_mask,
     get_viirs_mask,
 )
+from reformatters.contrib.noaa.ndvi_cdr.ndvi_cdr.analysis.template_config import (
+    QA_FILL_VALUE,
+)
 
 
 @pytest.mark.parametrize(
     "qa_value,expected_mask_value",
     [
-        (FILL_VALUE, True),
+        (QA_FILL_VALUE, True),
         (0, False),
         (AVHRR_CLOUDY, True),
         (AVHRR_CLOUD_SHADOW, True),
@@ -60,7 +62,7 @@ def test_avhrr_quality_flags(qa_value: int, expected_mask_value: bool) -> None:
 @pytest.mark.parametrize(
     "qa_value,expected_mask_value",
     [
-        (FILL_VALUE, True),
+        (QA_FILL_VALUE, True),
         (VIIRS_LAND_WATER_BIT_4, True),
         (VIIRS_SEA_WATER, True),
         (VIIRS_COASTAL, True),
