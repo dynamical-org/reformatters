@@ -65,8 +65,8 @@ class NoaaNdviCdrAnalysisRegionJob(
     ) -> Sequence[NoaaNdviCdrAnalysisSourceFileCoord]:
         """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds.
 
-        The names for this dataset include the processing timestamp, which means that we cannot determine the filename and URL
-        ourselves. When generating SourceFileCoords we need to enumerate the available files and match them to each time we are
+        The source file names include the processing timestamp, which means that we cannot determine the filename and URL
+        just from a timestamp. When generating SourceFileCoords we need to enumerate the available files and match them to each time we are
         are attempting to process.
 
         The source data for this dataset is stored and available from a variety of sources. See the "Data Access" section of
