@@ -29,21 +29,27 @@ class SourceCoopDatasetStorageConfig(DynamicalDatasetStorageConfig):
     k8s_secret_names: Sequence[str] = ["source-coop-key"]
 
 
+class UpstreamGriddedZarrsDatasetStorageConfig(DynamicalDatasetStorageConfig):
+    """Configuration for storage in the Upstream gridded zarrs bucket."""
+
+    # This bucket is actually an R2 bucket.
+    # The R2 endpoint URL is stored within our k8s secret and will be set
+    # when it's imported into the env.
+    base_path: str = "s3://upstream-gridded-zarrs"
+    k8s_secret_names: Sequence[str] = ["upstream-gridded-zarrs-key"]
+
+
 # Registry of all DynamicalDatasets.
 # Datasets that have not yet been ported over to the new DynamicalDataset pattern
 # are excluded here until they are refactored.
 DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     UarizonaSwannAnalysisDataset(
-        storage_config=DynamicalDatasetStorageConfig(
-            # This bucket is actually an R2 bucket.
-            # The R2 endpoint URL is stored within our k8s secret and will be set
-            # when it's imported into the env.
-            base_path="s3://upstream-gridded-zarrs",
-            k8s_secret_names=["upstream-gridded-zarrs-key"],
-        )
+        storage_config=UpstreamGriddedZarrsDatasetStorageConfig()
+    ),
+    NoaaNdviCdrAnalysisDataset(
+        storage_config=UpstreamGriddedZarrsDatasetStorageConfig()
     ),
     NoaaGfsForecastDataset(storage_config=SourceCoopDatasetStorageConfig()),
-    NoaaNdviCdrAnalysisDataset(storage_config=SourceCoopDatasetStorageConfig()),
 ]
 
 if Config.is_sentry_enabled:
