@@ -10,6 +10,7 @@ import xarray as xr
 import zarr
 
 from reformatters.common.download import http_download_to_disk
+from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
@@ -28,11 +29,15 @@ from reformatters.common.types import (
 
 from . import quality_flags
 from .template_config import (
-    QA_ENCODING_FILL_VALUE,
-    QA_FILL_VALUE,
     QA_NETCDF_VAR_NAME,
+    NoaaNdviCdrAnalysisTemplateConfig,
     NoaaNdviCdrDataVar,
 )
+
+QA_DATA_VAR = item(
+    dv for dv in NoaaNdviCdrAnalysisTemplateConfig().data_vars if dv.name == "qa"
+)
+
 
 log = get_logger(__name__)
 
@@ -118,46 +123,29 @@ class NoaaNdviCdrAnalysisRegionJob(
         """Read and return an array of data for the given variable and source file coordinate."""
         if data_var.name == "ndvi_usable":
             return self._read_usable_ndvi(coord, data_var)
-        elif data_var.name == "ndvi_raw":
-            return self._read_netcdf_data(
-                coord,
-                var_name=data_var.internal_attrs.netcdf_var_name,
-                dtype=data_var.encoding.dtype,
-                netcdf_fill_value=data_var.internal_attrs.fill_value,
-                encoding_fill_value=data_var.encoding.fill_value,
-                scale_factor=data_var.internal_attrs.scale_factor,
-                add_offset=data_var.internal_attrs.add_offset,
-            )
-        elif data_var.name == "qa":
-            return self._read_netcdf_data(
-                coord,
-                var_name=data_var.internal_attrs.netcdf_var_name,
-                dtype=data_var.encoding.dtype,
-                netcdf_fill_value=data_var.internal_attrs.fill_value,
-                encoding_fill_value=data_var.encoding.fill_value,
-            )
         else:
-            raise ValueError(f"Unknown data variable: {data_var.name}")
+            return self._read_netcdf_data(coord, data_var)
 
     def _read_netcdf_data(
-        self,
-        coord: NoaaNdviCdrAnalysisSourceFileCoord,
-        *,
-        var_name: str,
-        dtype: str,
-        netcdf_fill_value: float | int,
-        encoding_fill_value: float | int,
-        scale_factor: float | None = None,
-        add_offset: float | None = None,
+        self, coord: NoaaNdviCdrAnalysisSourceFileCoord, data_var: NoaaNdviCdrDataVar
     ) -> ArrayFloat32 | ArrayInt16:
         """Read data from NetCDF file."""
+        out_dtype = data_var.encoding.dtype
+        encoding_fill_value = data_var.encoding.fill_value
+
+        var_name = data_var.internal_attrs.netcdf_var_name
+        netcdf_fill_value = data_var.internal_attrs.fill_value
+        scale_factor = data_var.internal_attrs.scale_factor
+        add_offset = data_var.internal_attrs.add_offset
+
         netcdf_path = f"netcdf:{coord.downloaded_path}:{var_name}"
+
         with rasterio.open(netcdf_path) as reader:
-            masked_result = reader.read(1, out_dtype=dtype, masked=True)
+            masked_result = reader.read(1, out_dtype=out_dtype, masked=True)
             result = masked_result.filled(netcdf_fill_value)
 
             assert result.shape == (3600, 7200)
-            assert result.dtype == np.dtype(dtype)
+            assert result.dtype == np.dtype(out_dtype)
 
             # Set invalid values to NaN before scaling (for float data)
             if var_name != QA_NETCDF_VAR_NAME:
@@ -180,22 +168,9 @@ class NoaaNdviCdrAnalysisRegionJob(
         data_var: NoaaNdviCdrDataVar,
     ) -> ArrayFloat32:
         """Read NDVI data and apply quality filtering."""
-        ndvi_data = self._read_netcdf_data(
-            coord,
-            var_name=data_var.internal_attrs.netcdf_var_name,
-            dtype=data_var.encoding.dtype,
-            netcdf_fill_value=data_var.internal_attrs.fill_value,
-            encoding_fill_value=data_var.encoding.fill_value,
-            scale_factor=data_var.internal_attrs.scale_factor,
-            add_offset=data_var.internal_attrs.add_offset,
-        )
-        qa_data = self._read_netcdf_data(
-            coord,
-            var_name=QA_NETCDF_VAR_NAME,
-            dtype="int16",
-            netcdf_fill_value=QA_FILL_VALUE,
-            encoding_fill_value=QA_ENCODING_FILL_VALUE,
-        )
+        ndvi_data = self._read_netcdf_data(coord, data_var)
+        qa_data = self._read_netcdf_data(coord, QA_DATA_VAR)
+
         assert qa_data.dtype == np.int16
         qa_data = cast(Array2D[np.int16], qa_data)
 

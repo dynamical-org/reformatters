@@ -1,4 +1,3 @@
-from typing import Any
 from unittest.mock import Mock
 
 import numpy as np
@@ -14,6 +13,7 @@ from reformatters.contrib.noaa.ndvi_cdr.ndvi_cdr.analysis.region_job import (
 )
 from reformatters.contrib.noaa.ndvi_cdr.ndvi_cdr.analysis.template_config import (
     NoaaNdviCdrAnalysisTemplateConfig,
+    NoaaNdviCdrDataVar,
 )
 
 
@@ -205,13 +205,12 @@ def test_read_usable_ndvi_avhrr_era(monkeypatch: pytest.MonkeyPatch) -> None:
     # Mock the netcdf data reading to return our test data
     def mock_read_netcdf_data(
         coord: NoaaNdviCdrAnalysisSourceFileCoord,
-        **kwargs: Any,
+        data_var: NoaaNdviCdrDataVar,
     ) -> ArrayFloat32 | ArrayInt16:
-        if kwargs.get("var_name") == "NDVI":
+        if data_var.internal_attrs.netcdf_var_name == "NDVI":
             return ndvi_data
-        elif kwargs.get("var_name") == "QA":
+        else:
             return qa_data
-        raise ValueError(f"Unknown variable: {kwargs.get('var_name')}")
 
     monkeypatch.setattr(region_job, "_read_netcdf_data", mock_read_netcdf_data)
 
@@ -273,13 +272,12 @@ def test_read_usable_ndvi_viirs_era(monkeypatch: pytest.MonkeyPatch) -> None:
     # Mock the netcdf data reading to return our test data
     def mock_read_netcdf_data(
         coord: NoaaNdviCdrAnalysisSourceFileCoord,
-        **kwargs: Any,
+        data_var: NoaaNdviCdrDataVar,
     ) -> ArrayFloat32 | ArrayInt16:
-        if kwargs.get("var_name") == "NDVI":
+        if data_var.internal_attrs.netcdf_var_name == "NDVI":
             return ndvi_data
-        elif kwargs.get("var_name") == "QA":
+        else:
             return qa_data
-        raise ValueError(f"Unknown variable: {kwargs.get('var_name')}")
 
     monkeypatch.setattr(region_job, "_read_netcdf_data", mock_read_netcdf_data)
 
