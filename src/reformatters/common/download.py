@@ -13,7 +13,7 @@ DOWNLOAD_DIR = Path("data/download/")
 
 
 def download_to_disk(
-    store: obstore.store.HTTPStore,
+    store: obstore.store.HTTPStore | obstore.store.S3Store,
     path: str,
     local_path: Path,
     *,
@@ -86,12 +86,7 @@ def http_download_to_disk(
     parsed_url = urlparse(url)
     base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
     store = http_store(base_url)
-    base_local = DOWNLOAD_DIR / dataset_id / parsed_url.path.removeprefix("/")
-    local_path = (
-        base_local.with_name(base_local.name + local_path_suffix)
-        if local_path_suffix
-        else base_local
-    )
+    local_path = get_local_path(dataset_id, parsed_url.path, local_path_suffix)
     download_to_disk(
         store,
         parsed_url.path,
@@ -100,3 +95,12 @@ def http_download_to_disk(
         byte_ranges=byte_ranges,
     )
     return local_path
+
+
+def get_local_path(dataset_id: str, path: str, local_path_suffix: str = "") -> Path:
+    base_local = DOWNLOAD_DIR / dataset_id / path.removeprefix("/")
+    return (
+        base_local.with_name(base_local.name + local_path_suffix)
+        if local_path_suffix
+        else base_local
+    )
