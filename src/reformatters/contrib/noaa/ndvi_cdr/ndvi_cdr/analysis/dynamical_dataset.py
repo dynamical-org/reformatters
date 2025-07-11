@@ -27,8 +27,8 @@ class NoaaNdviCdrAnalysisDataset(
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="2",
-            memory="250G",
-            shared_memory="190Gi",
+            memory="128G",
+            shared_memory="114Gi",
             ephemeral_storage="30G",
             secret_names=self.storage_config.k8s_secret_names,
         )

@@ -132,9 +132,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1825,
-              500,
-              500
+              1095,
+              600,
+              600
             ]
           }
         },
@@ -216,9 +216,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1825,
-              500,
-              500
+              1095,
+              600,
+              600
             ]
           }
         },
@@ -300,9 +300,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1825,
-              500,
-              500
+              1095,
+              600,
+              600
             ]
           }
         },
