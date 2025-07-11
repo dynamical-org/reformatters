@@ -2,16 +2,14 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import cast
 
-import boto3  # type: ignore[import-untyped]
 import numpy as np
+import obstore
 import pandas as pd
 import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 import zarr
-from botocore import UNSIGNED  # type: ignore[import-untyped]
-from botocore.client import Config  # type: ignore[import-untyped]
 
-from reformatters.common.download import http_download_to_disk
+from reformatters.common.download import download_to_disk, get_local_path
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
@@ -50,10 +48,10 @@ class NoaaNdviCdrAnalysisSourceFileCoord(SourceFileCoord):
     """Coordinates of a single source file to process."""
 
     time: Timestamp
-    url: str
+    object_key: str
 
     def get_url(self) -> str:
-        return self.url
+        return self.object_key
 
     def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
         return {"time": self.time}
@@ -62,10 +60,13 @@ class NoaaNdviCdrAnalysisSourceFileCoord(SourceFileCoord):
 class NoaaNdviCdrAnalysisRegionJob(
     RegionJob[NoaaNdviCdrDataVar, NoaaNdviCdrAnalysisSourceFileCoord]
 ):
-    download_parallelism: int = 4
+    download_parallelism: int = 12
 
     # We observed deadlocks when using more than 2 threads to read data into shared memory.
     read_parallelism: int = 1
+
+    s3_bucket_url: str = "s3://noaa-cdr-ndvi-pds"
+    s3_region: str = "us-east-1"
 
     def generate_source_file_coords(
         self,
@@ -82,19 +83,14 @@ class NoaaNdviCdrAnalysisRegionJob(
         https://www.ncei.noaa.gov/products/climate-data-records/normalized-difference-vegetation-index. We are currently using
         the NOAA S3 bucket.
         """
-        # set signature_version=UNSIGNED to not require AWS credentials, as this is a public bucket.
-        s3_client = boto3.client("s3", config=Config(signature_version=UNSIGNED))
-
-        public_base_url = "https://noaa-cdr-ndvi-pds.s3.amazonaws.com/data"
-
         times = pd.to_datetime(processing_region_ds["time"].values)
         years = set(times.year)
 
         # Build a mapping from date string to URL for all files in all relevant years
-        urls_by_time: dict[pd.Timestamp, str] = {}
+        object_keys_by_time: dict[pd.Timestamp, str] = {}
 
         for year in years:
-            for filepath in self._list_source_files(s3_client, year):
+            for filepath in self._list_source_files(year):
                 # Example filename: AVHRR-Land_v005_AVH13C1_NOAA-07_19810728_c20170610011910.nc
                 # We want to extract the date part (e.g., 19810728)
                 try:
@@ -102,26 +98,30 @@ class NoaaNdviCdrAnalysisRegionJob(
                     # Parse date string to pd.Timestamp
                     file_time = pd.Timestamp(date_str)
                     filename = Path(filepath).name
-                    url = f"{public_base_url}/{year}/{filename}"
-                    urls_by_time[file_time] = url
+                    object_key = f"data/{year}/{filename}"
+                    object_keys_by_time[file_time] = object_key
                 except Exception as e:
                     log.warning(f"Skipping file {filepath} due to error: {e}")
                     continue  # skip files that don't match the expected pattern
 
         coords = []
         for t in times:
-            if (timestamp := pd.Timestamp(t)) in urls_by_time:
+            if (timestamp := pd.Timestamp(t)) in object_keys_by_time:
                 coords.append(
                     NoaaNdviCdrAnalysisSourceFileCoord(
-                        time=t, url=urls_by_time[timestamp]
+                        time=t, object_key=object_keys_by_time[timestamp]
                     )
                 )
         return coords
 
     def download_file(self, coord: NoaaNdviCdrAnalysisSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
-        url = coord.get_url()
-        return http_download_to_disk(url, self.dataset_id)
+        object_key = coord.get_url()
+        local_path = get_local_path(self.dataset_id, object_key)
+        s3_store = self._s3_store()
+        print(f"Downloading {object_key} to {local_path}")
+        download_to_disk(s3_store, object_key, local_path, overwrite_existing=True)
+        return local_path
 
     def read_data(
         self,
@@ -191,12 +191,26 @@ class NoaaNdviCdrAnalysisRegionJob(
         ndvi_data[bad_values_mask] = np.nan
         return cast(ArrayFloat32, ndvi_data)
 
-    def _list_source_files(self, s3_client: boto3.client, year: int) -> list[str]:
-        response = s3_client.list_objects_v2(
-            Bucket="noaa-cdr-ndvi-pds",
-            Prefix=f"data/{year}",
+    def _list_source_files(self, year: int) -> list[str]:
+        store = self._s3_store()
+        results = list(obstore.list(store, f"data/{year}", chunk_size=366))
+        if len(results) == 0:
+            return []
+
+        assert len(results) == 1, (
+            "Got unexpected results. Expected 1 list of no more than 366 files"
         )
-        return [obj["Key"] for obj in response.get("Contents", [])]
+
+        return [result["path"] for result in results[0]]
+
+    def _s3_store(self) -> obstore.store.S3Store:
+        store = obstore.store.from_url(
+            self.s3_bucket_url,
+            region=self.s3_region,
+            skip_signature=True,
+        )
+        assert isinstance(store, obstore.store.S3Store)
+        return store
 
     @classmethod
     def operational_update_jobs(
