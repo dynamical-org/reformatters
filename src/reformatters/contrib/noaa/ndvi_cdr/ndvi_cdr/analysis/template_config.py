@@ -64,7 +64,11 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
             dataset_version="0.1.0",
             name="NOAA Normalized Difference Vegetation Index CDR",
             description="Daily Normalized Difference Vegetation Index (NDVI) derived from NOAA Climate Data Record (CDR) using AVHRR (1981-2014) and VIIRS (2014-present) satellite data",
-            attribution="NOAA Climate Data Record (CDR) of Normalized Difference Vegetation Index processed by dynamical.org from NOAA NCEI",
+            attribution=(
+                "Vermote, Eric; NOAA CDR Program. (2022): NOAA Climate Data Record (CDR) of VIIRS Normalized Difference Vegetation Index (NDVI), Version 1. "
+                "Vermote, Eric; NOAA CDR Program. (2019): NOAA Climate Data Record (CDR) of AVHRR Normalized Difference Vegetation Index (NDVI), Version 5. "
+                "NOAA National Centers for Environmental Information."
+            ),
             spatial_domain="Global",
             spatial_resolution="0.05 degrees (~5km)",
             time_domain="1981-06-24 to Present",
