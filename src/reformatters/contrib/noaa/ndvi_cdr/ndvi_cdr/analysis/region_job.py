@@ -2,12 +2,14 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import cast
 
-import fsspec  # type: ignore[import-untyped]
+import boto3  # type: ignore[import-untyped]
 import numpy as np
 import pandas as pd
 import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 import zarr
+from botocore import UNSIGNED  # type: ignore[import-untyped]
+from botocore.client import Config  # type: ignore[import-untyped]
 
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import item
@@ -78,8 +80,9 @@ class NoaaNdviCdrAnalysisRegionJob(
         https://www.ncei.noaa.gov/products/climate-data-records/normalized-difference-vegetation-index. We are currently using
         the NOAA S3 bucket.
         """
-        # set anon to True to not require AWS credentials, as this is a public bucket.
-        fs = fsspec.filesystem("s3", anon=True)
+        # set signature_version=UNSIGNED to not require AWS credentials, as this is a public bucket.
+        s3_client = boto3.client("s3", config=Config(signature_version=UNSIGNED))
+
         public_base_url = "https://noaa-cdr-ndvi-pds.s3.amazonaws.com/data"
 
         times = pd.to_datetime(processing_region_ds["time"].values)
@@ -89,7 +92,7 @@ class NoaaNdviCdrAnalysisRegionJob(
         urls_by_time: dict[pd.Timestamp, str] = {}
 
         for year in years:
-            for filepath in fs.ls(f"noaa-cdr-ndvi-pds/data/{year}"):
+            for filepath in self._list_source_files(s3_client, year):
                 # Example filename: AVHRR-Land_v005_AVH13C1_NOAA-07_19810728_c20170610011910.nc
                 # We want to extract the date part (e.g., 19810728)
                 try:
@@ -185,6 +188,13 @@ class NoaaNdviCdrAnalysisRegionJob(
 
         ndvi_data[bad_values_mask] = np.nan
         return cast(ArrayFloat32, ndvi_data)
+
+    def _list_source_files(self, s3_client: boto3.client, year: int) -> list[str]:
+        response = s3_client.list_objects_v2(
+            Bucket="noaa-cdr-ndvi-pds",
+            Prefix=f"data/{year}",
+        )
+        return [obj["Key"] for obj in response.get("Contents", [])]
 
     @classmethod
     def operational_update_jobs(

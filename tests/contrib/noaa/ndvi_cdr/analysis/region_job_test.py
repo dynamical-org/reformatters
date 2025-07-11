@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import Mock
 
 import numpy as np
@@ -43,26 +44,38 @@ def test_source_file_coord_out_loc() -> None:
 def test_region_job_generate_source_file_coords(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test the generation of source file coordinates with mocked S3 filesystem across multiple years."""
-    # Mock the filesystem and its ls method
-    mock_fs = Mock()
-    # Mock fsspec.filesystem to return our mock filesystem
-    monkeypatch.setattr("fsspec.filesystem", lambda *args, **kwargs: mock_fs)
+    """Test the generation of source file coordinates with mocked S3 client across multiple years."""
+    # Mock the S3 client and its list_objects_v2 method
+    mock_s3_client = Mock()
 
-    # Mock available files for multiple years
-    def mock_ls(path: str) -> list[str]:
-        if path == "noaa-cdr-ndvi-pds/data/1999":
-            return [
-                "noaa-cdr-ndvi-pds/data/1999/AVHRR-Land_v005_AVH13C1_NOAA-14_19991231_c20170614232721.nc",
-            ]
-        elif path == "noaa-cdr-ndvi-pds/data/2000":
-            return [
-                "noaa-cdr-ndvi-pds/data/2000/AVHRR-Land_v005_AVH13C1_NOAA-15_20000101_c20170614232721.nc",
-                "noaa-cdr-ndvi-pds/data/2000/AVHRR-Land_v005_AVH13C1_NOAA-15_20000102_c20170614232721.nc",
-            ]
-        return []
+    # Mock boto3.client to return our mock S3 client
+    monkeypatch.setattr("boto3.client", lambda *args, **kwargs: mock_s3_client)
 
-    mock_fs.ls.side_effect = mock_ls
+    # Mock available files for multiple years using the S3 response format
+    def mock_list_objects_v2(**kwargs: dict[str, Any]) -> dict[str, Any]:
+        prefix = kwargs.get("Prefix", "")
+        if prefix == "data/1999":
+            return {
+                "Contents": [
+                    {
+                        "Key": "data/1999/AVHRR-Land_v005_AVH13C1_NOAA-14_19991231_c20170614232721.nc"
+                    },
+                ]
+            }
+        elif prefix == "data/2000":
+            return {
+                "Contents": [
+                    {
+                        "Key": "data/2000/AVHRR-Land_v005_AVH13C1_NOAA-15_20000101_c20170614232721.nc"
+                    },
+                    {
+                        "Key": "data/2000/AVHRR-Land_v005_AVH13C1_NOAA-15_20000102_c20170614232721.nc"
+                    },
+                ]
+            }
+        return {"Contents": []}
+
+    mock_s3_client.list_objects_v2.side_effect = mock_list_objects_v2
 
     template_config = NoaaNdviCdrAnalysisTemplateConfig()
     # Create a template dataset with time coordinates spanning multiple years
@@ -119,21 +132,25 @@ def test_region_job_generate_source_file_coords(
         assert coord.get_url() == expected_urls[i]
 
     # Verify filesystem was called twice (once for each year: 1999 and 2000)
-    assert mock_fs.ls.call_count == 2
+    assert mock_s3_client.list_objects_v2.call_count == 2
 
 
 def test_region_job_generate_source_file_coords_file_not_found(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test error handling when no matching file is found for a given time."""
-    # Mock the filesystem
-    mock_fs = Mock()
-    monkeypatch.setattr("fsspec.filesystem", lambda *args, **kwargs: mock_fs)
+    # Mock the S3 client
+    mock_s3_client = Mock()
+    monkeypatch.setattr("boto3.client", lambda *args, **kwargs: mock_s3_client)
 
     # Mock available files that don't match our requested time
-    mock_fs.ls.return_value = [
-        "noaa-cdr-ndvi-pds/data/2000/AVHRR-Land_v005_AVH13C1_NOAA-15_20000105_c20170614232721.nc",
-    ]
+    mock_s3_client.list_objects_v2.return_value = {
+        "Contents": [
+            {
+                "Key": "data/2000/AVHRR-Land_v005_AVH13C1_NOAA-15_20000105_c20170614232721.nc"
+            },
+        ]
+    }
 
     template_config = NoaaNdviCdrAnalysisTemplateConfig()
     template_ds = xr.Dataset(
