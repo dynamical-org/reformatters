@@ -31,7 +31,7 @@ def fsspec_apply(
         try:
             if fs.async_impl:
                 return zarr.core.sync.sync(
-                    getattr(fs, f"_{method}")(*args, **kwargs), timeout=120
+                    getattr(fs, f"_{method}")(*args, **kwargs), timeout=500
                 )
             else:
                 return getattr(fs, method)(*args, **kwargs)
