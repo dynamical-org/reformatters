@@ -77,6 +77,33 @@ def http_store(base_url: str) -> obstore.store.HTTPStore:
     )
 
 
+@functools.cache
+def s3_store(
+    bucket_url: str, region: str, skip_signature: bool = True
+) -> obstore.store.S3Store:
+    store = obstore.store.from_url(
+        bucket_url,
+        region=region,
+        skip_signature=skip_signature,
+        client_options={
+            "connect_timeout": "4 seconds",
+            "timeout": "120 seconds",
+        },
+        retry_config={
+            "max_retries": 16,
+            "backoff": {
+                "base": 2,
+                "init_backoff": timedelta(seconds=1),
+                "max_backoff": timedelta(seconds=16),
+            },
+            # A backstop, shouldn't hit this with the above backoff settings
+            "retry_timeout": timedelta(minutes=5),
+        },
+    )
+    assert isinstance(store, obstore.store.S3Store)
+    return store
+
+
 def http_download_to_disk(
     url: str,
     dataset_id: str,
