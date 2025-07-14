@@ -10,7 +10,7 @@ import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 import zarr
 
-from reformatters.common.download import download_to_disk, get_local_path
+from reformatters.common.download import download_to_disk, get_local_path, s3_store
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
@@ -61,7 +61,7 @@ class NoaaNdviCdrAnalysisSourceFileCoord(SourceFileCoord):
 class NoaaNdviCdrAnalysisRegionJob(
     RegionJob[NoaaNdviCdrDataVar, NoaaNdviCdrAnalysisSourceFileCoord]
 ):
-    download_parallelism: int = 12
+    download_parallelism: int = 10
 
     # We observed deadlocks when using more than 2 threads to read data into shared memory.
     read_parallelism: int = 1
@@ -117,13 +117,14 @@ class NoaaNdviCdrAnalysisRegionJob(
 
     def download_file(self, coord: NoaaNdviCdrAnalysisSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
-        s3_store = self._s3_store()
+        store = s3_store(self.s3_bucket_url, self.s3_region, skip_signature=True)
 
         s3_url = coord.get_url()
         object_key = urlparse(s3_url).path.removeprefix("/")
         local_path = get_local_path(self.dataset_id, object_key)
 
-        download_to_disk(s3_store, object_key, local_path, overwrite_existing=True)
+        download_to_disk(store, object_key, local_path, overwrite_existing=True)
+        log.info(f"Downloaded {object_key} to {local_path}")
 
         return local_path
 
@@ -196,7 +197,7 @@ class NoaaNdviCdrAnalysisRegionJob(
         return cast(ArrayFloat32, ndvi_data)
 
     def _list_source_files(self, year: int) -> list[str]:
-        store = self._s3_store()
+        store = s3_store(self.s3_bucket_url, self.s3_region, skip_signature=True)
         results = list(obstore.list(store, f"data/{year}", chunk_size=366))
         if len(results) == 0:
             return []
@@ -206,15 +207,6 @@ class NoaaNdviCdrAnalysisRegionJob(
         )
 
         return [result["path"] for result in results[0]]
-
-    def _s3_store(self) -> obstore.store.S3Store:
-        store = obstore.store.from_url(
-            self.s3_bucket_url,
-            region=self.s3_region,
-            skip_signature=True,
-        )
-        assert isinstance(store, obstore.store.S3Store)
-        return store
 
     @classmethod
     def operational_update_jobs(
