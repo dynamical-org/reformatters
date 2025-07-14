@@ -27,14 +27,14 @@ class NoaaNdviCdrAnalysisDataset(
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="2",
-            memory="230G",
-            shared_memory="190Gi",
+            memory="100G",
+            shared_memory="76Gi",
             ephemeral_storage="150G",
             secret_names=self.storage_config.k8s_secret_names,
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validation",
-            schedule="30 20 * * *",
+            schedule="30 21 * * *",
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
