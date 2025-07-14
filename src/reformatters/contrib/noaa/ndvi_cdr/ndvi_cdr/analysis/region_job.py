@@ -1,6 +1,7 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import cast
+from urllib.parse import urlparse
 
 import numpy as np
 import obstore
@@ -48,10 +49,10 @@ class NoaaNdviCdrAnalysisSourceFileCoord(SourceFileCoord):
     """Coordinates of a single source file to process."""
 
     time: Timestamp
-    object_key: str
+    url: str
 
     def get_url(self) -> str:
-        return self.object_key
+        return self.url
 
     def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
         return {"time": self.time}
@@ -87,7 +88,7 @@ class NoaaNdviCdrAnalysisRegionJob(
         years = set(times.year)
 
         # Build a mapping from date string to URL for all files in all relevant years
-        object_keys_by_time: dict[pd.Timestamp, str] = {}
+        urls_by_time: dict[pd.Timestamp, str] = {}
 
         for year in years:
             for filepath in self._list_source_files(year):
@@ -98,29 +99,32 @@ class NoaaNdviCdrAnalysisRegionJob(
                     # Parse date string to pd.Timestamp
                     file_time = pd.Timestamp(date_str)
                     filename = Path(filepath).name
-                    object_key = f"data/{year}/{filename}"
-                    object_keys_by_time[file_time] = object_key
+                    url = f"{self.s3_bucket_url}/data/{year}/{filename}"
+                    urls_by_time[file_time] = url
                 except Exception as e:
                     log.warning(f"Skipping file {filepath} due to error: {e}")
                     continue  # skip files that don't match the expected pattern
 
         coords = []
         for t in times:
-            if (timestamp := pd.Timestamp(t)) in object_keys_by_time:
+            if (timestamp := pd.Timestamp(t)) in urls_by_time:
                 coords.append(
                     NoaaNdviCdrAnalysisSourceFileCoord(
-                        time=t, object_key=object_keys_by_time[timestamp]
+                        time=t, url=urls_by_time[timestamp]
                     )
                 )
         return coords
 
     def download_file(self, coord: NoaaNdviCdrAnalysisSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
-        object_key = coord.get_url()
-        local_path = get_local_path(self.dataset_id, object_key)
         s3_store = self._s3_store()
-        print(f"Downloading {object_key} to {local_path}")
+
+        s3_url = coord.get_url()
+        object_key = urlparse(s3_url).path.removeprefix("/")
+        local_path = get_local_path(self.dataset_id, object_key)
+
         download_to_disk(s3_store, object_key, local_path, overwrite_existing=True)
+
         return local_path
 
     def read_data(
