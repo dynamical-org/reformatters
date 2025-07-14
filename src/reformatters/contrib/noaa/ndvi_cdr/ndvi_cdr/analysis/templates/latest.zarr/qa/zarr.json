@@ -9,7 +9,7 @@
     "name": "regular",
     "configuration": {
       "chunk_shape": [
-        1825,
+        730,
         500,
         500
       ]
