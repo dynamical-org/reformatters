@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import contextlib
 import functools
 import os
@@ -5,15 +7,19 @@ import uuid
 from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 import obstore
+
+if TYPE_CHECKING:
+    from obstore.store import ObjectStore
 
 DOWNLOAD_DIR = Path("data/download/")
 
 
 def download_to_disk(
-    store: obstore.store.ObjectStore,
+    store: ObjectStore,
     path: str,
     local_path: Path,
     *,
