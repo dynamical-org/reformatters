@@ -124,7 +124,7 @@ class NoaaNdviCdrAnalysisRegionJob(
         local_path = get_local_path(self.dataset_id, object_key)
 
         download_to_disk(store, object_key, local_path, overwrite_existing=True)
-        log.info(f"Downloaded {object_key} to {local_path}")
+        log.debug(f"Downloaded {object_key} to {local_path}")
 
         return local_path
 

@@ -13,7 +13,7 @@ DOWNLOAD_DIR = Path("data/download/")
 
 
 def download_to_disk(
-    store: obstore.store.HTTPStore | obstore.store.S3Store,
+    store: obstore.store.ObjectStore,
     path: str,
     local_path: Path,
     *,
