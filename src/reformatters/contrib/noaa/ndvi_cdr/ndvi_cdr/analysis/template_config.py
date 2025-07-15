@@ -198,9 +198,11 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
             "latitude": 100,
             "longitude": 100,
         }
-        # Sharding selected to target ~350mb compressed shards (assuming compression to ~20%)
+        # Sharding selected to target ~140mb compressed shards (assuming compression to ~20%)
+        # Note: We previously targeted larger shards (time * 5), but had trouble getting jobs to
+        # on the larger nodes before they got evicted.
         var_shards: dict[Dim, int] = {
-            "time": var_chunks["time"] * 5,
+            "time": var_chunks["time"] * 2,
             "latitude": var_chunks["latitude"] * 5,
             "longitude": var_chunks["longitude"] * 5,
         }

@@ -1,7 +1,7 @@
-from typing import Any
 from unittest.mock import Mock
 
 import numpy as np
+import obstore
 import pandas as pd
 import pytest
 import xarray as xr
@@ -44,38 +44,35 @@ def test_source_file_coord_out_loc() -> None:
 def test_region_job_generate_source_file_coords(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test the generation of source file coordinates with mocked S3 client across multiple years."""
-    # Mock the S3 client and its list_objects_v2 method
-    mock_s3_client = Mock()
+    """Test the generation of source file coordinates with mocked obstore across multiple years."""
 
-    # Mock boto3.client to return our mock S3 client
-    monkeypatch.setattr("boto3.client", lambda *args, **kwargs: mock_s3_client)
-
-    # Mock available files for multiple years using the S3 response format
-    def mock_list_objects_v2(**kwargs: dict[str, Any]) -> dict[str, Any]:
-        prefix = kwargs.get("Prefix", "")
+    # Mock obstore.list to return the expected format
+    def mock_obstore_list(
+        store: obstore.store.S3Store, prefix: str, chunk_size: int = 366
+    ) -> list[list[dict[str, str]]]:
         if prefix == "data/1999":
-            return {
-                "Contents": [
+            return [
+                [
                     {
-                        "Key": "data/1999/AVHRR-Land_v005_AVH13C1_NOAA-14_19991231_c20170614232721.nc"
+                        "path": "data/1999/AVHRR-Land_v005_AVH13C1_NOAA-14_19991231_c20170614232721.nc"
                     },
                 ]
-            }
+            ]
         elif prefix == "data/2000":
-            return {
-                "Contents": [
+            return [
+                [
                     {
-                        "Key": "data/2000/AVHRR-Land_v005_AVH13C1_NOAA-15_20000101_c20170614232721.nc"
+                        "path": "data/2000/AVHRR-Land_v005_AVH13C1_NOAA-15_20000101_c20170614232721.nc"
                     },
                     {
-                        "Key": "data/2000/AVHRR-Land_v005_AVH13C1_NOAA-15_20000102_c20170614232721.nc"
+                        "path": "data/2000/AVHRR-Land_v005_AVH13C1_NOAA-15_20000102_c20170614232721.nc"
                     },
                 ]
-            }
-        return {"Contents": []}
+            ]
+        return [[]]
 
-    mock_s3_client.list_objects_v2.side_effect = mock_list_objects_v2
+    # Mock obstore.list
+    monkeypatch.setattr("obstore.list", mock_obstore_list)
 
     template_config = NoaaNdviCdrAnalysisTemplateConfig()
     # Create a template dataset with time coordinates spanning multiple years
@@ -115,9 +112,9 @@ def test_region_job_generate_source_file_coords(
 
     # Expected URLs based on the mocked file list spanning multiple years
     expected_urls = [
-        "https://noaa-cdr-ndvi-pds.s3.amazonaws.com/data/1999/AVHRR-Land_v005_AVH13C1_NOAA-14_19991231_c20170614232721.nc",
-        "https://noaa-cdr-ndvi-pds.s3.amazonaws.com/data/2000/AVHRR-Land_v005_AVH13C1_NOAA-15_20000101_c20170614232721.nc",
-        "https://noaa-cdr-ndvi-pds.s3.amazonaws.com/data/2000/AVHRR-Land_v005_AVH13C1_NOAA-15_20000102_c20170614232721.nc",
+        "s3://noaa-cdr-ndvi-pds/data/1999/AVHRR-Land_v005_AVH13C1_NOAA-14_19991231_c20170614232721.nc",
+        "s3://noaa-cdr-ndvi-pds/data/2000/AVHRR-Land_v005_AVH13C1_NOAA-15_20000101_c20170614232721.nc",
+        "s3://noaa-cdr-ndvi-pds/data/2000/AVHRR-Land_v005_AVH13C1_NOAA-15_20000102_c20170614232721.nc",
     ]
     expected_times = [
         pd.Timestamp("1999-12-31"),
@@ -131,26 +128,26 @@ def test_region_job_generate_source_file_coords(
         assert coord.time == expected_times[i]
         assert coord.get_url() == expected_urls[i]
 
-    # Verify filesystem was called twice (once for each year: 1999 and 2000)
-    assert mock_s3_client.list_objects_v2.call_count == 2
-
 
 def test_region_job_generate_source_file_coords_file_not_found(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test error handling when no matching file is found for a given time."""
-    # Mock the S3 client
-    mock_s3_client = Mock()
-    monkeypatch.setattr("boto3.client", lambda *args, **kwargs: mock_s3_client)
 
-    # Mock available files that don't match our requested time
-    mock_s3_client.list_objects_v2.return_value = {
-        "Contents": [
-            {
-                "Key": "data/2000/AVHRR-Land_v005_AVH13C1_NOAA-15_20000105_c20170614232721.nc"
-            },
+    # Mock obstore.list to return files that don't match our requested time
+    def mock_obstore_list(
+        store: obstore.store.S3Store, prefix: str, chunk_size: int = 366
+    ) -> list[list[dict[str, str]]]:
+        return [
+            [
+                {
+                    "path": "data/2000/AVHRR-Land_v005_AVH13C1_NOAA-15_20000105_c20170614232721.nc"
+                },
+            ]
         ]
-    }
+
+    # Mock obstore.list
+    monkeypatch.setattr("obstore.list", mock_obstore_list)
 
     template_config = NoaaNdviCdrAnalysisTemplateConfig()
     template_ds = xr.Dataset(
@@ -185,7 +182,7 @@ def test_region_job_generate_source_file_coords_file_not_found(
     assert len(source_file_coords) == 1
     assert (
         source_file_coords[0].get_url()
-        == "https://noaa-cdr-ndvi-pds.s3.amazonaws.com/data/2000/AVHRR-Land_v005_AVH13C1_NOAA-15_20000105_c20170614232721.nc"
+        == "s3://noaa-cdr-ndvi-pds/data/2000/AVHRR-Land_v005_AVH13C1_NOAA-15_20000105_c20170614232721.nc"
     )
 
 

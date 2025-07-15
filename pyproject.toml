@@ -17,10 +17,6 @@ dependencies = [
     "requests>=2.32.3",
     "rioxarray>=0.18.2",
     "s3fs>=2024.9.0",
-    # We ran into an issue when installing boto3 1.39.x, related to https://github.com/boto/boto3/issues/4462#issuecomment-2701723847
-    # Following the comments in that thread, we have pinned boto3 to 1.36.x. This allows it to match our 
-    # currently installed version of botocore (also 1.36.x)
-    "boto3~=1.36.0", 
     "sentry-sdk>=2.20.0",
     "typer>=0.12.5",
     "xarray>=2025.1.2",

@@ -1,17 +1,16 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import cast
+from urllib.parse import urlparse
 
-import boto3  # type: ignore[import-untyped]
 import numpy as np
+import obstore
 import pandas as pd
 import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 import zarr
-from botocore import UNSIGNED  # type: ignore[import-untyped]
-from botocore.client import Config  # type: ignore[import-untyped]
 
-from reformatters.common.download import http_download_to_disk
+from reformatters.common.download import download_to_disk, get_local_path, s3_store
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
@@ -62,10 +61,13 @@ class NoaaNdviCdrAnalysisSourceFileCoord(SourceFileCoord):
 class NoaaNdviCdrAnalysisRegionJob(
     RegionJob[NoaaNdviCdrDataVar, NoaaNdviCdrAnalysisSourceFileCoord]
 ):
-    download_parallelism: int = 4
+    download_parallelism: int = 10
 
     # We observed deadlocks when using more than 2 threads to read data into shared memory.
     read_parallelism: int = 1
+
+    s3_bucket_url: str = "s3://noaa-cdr-ndvi-pds"
+    s3_region: str = "us-east-1"
 
     def generate_source_file_coords(
         self,
@@ -82,11 +84,6 @@ class NoaaNdviCdrAnalysisRegionJob(
         https://www.ncei.noaa.gov/products/climate-data-records/normalized-difference-vegetation-index. We are currently using
         the NOAA S3 bucket.
         """
-        # set signature_version=UNSIGNED to not require AWS credentials, as this is a public bucket.
-        s3_client = boto3.client("s3", config=Config(signature_version=UNSIGNED))
-
-        public_base_url = "https://noaa-cdr-ndvi-pds.s3.amazonaws.com/data"
-
         times = pd.to_datetime(processing_region_ds["time"].values)
         years = set(times.year)
 
@@ -94,7 +91,7 @@ class NoaaNdviCdrAnalysisRegionJob(
         urls_by_time: dict[pd.Timestamp, str] = {}
 
         for year in years:
-            for filepath in self._list_source_files(s3_client, year):
+            for filepath in self._list_source_files(year):
                 # Example filename: AVHRR-Land_v005_AVH13C1_NOAA-07_19810728_c20170610011910.nc
                 # We want to extract the date part (e.g., 19810728)
                 try:
@@ -102,7 +99,7 @@ class NoaaNdviCdrAnalysisRegionJob(
                     # Parse date string to pd.Timestamp
                     file_time = pd.Timestamp(date_str)
                     filename = Path(filepath).name
-                    url = f"{public_base_url}/{year}/{filename}"
+                    url = f"{self.s3_bucket_url}/data/{year}/{filename}"
                     urls_by_time[file_time] = url
                 except Exception as e:
                     log.warning(f"Skipping file {filepath} due to error: {e}")
@@ -120,8 +117,16 @@ class NoaaNdviCdrAnalysisRegionJob(
 
     def download_file(self, coord: NoaaNdviCdrAnalysisSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
-        url = coord.get_url()
-        return http_download_to_disk(url, self.dataset_id)
+        store = s3_store(self.s3_bucket_url, self.s3_region, skip_signature=True)
+
+        s3_url = coord.get_url()
+        object_key = urlparse(s3_url).path.removeprefix("/")
+        local_path = get_local_path(self.dataset_id, object_key)
+
+        download_to_disk(store, object_key, local_path, overwrite_existing=True)
+        log.debug(f"Downloaded {object_key} to {local_path}")
+
+        return local_path
 
     def read_data(
         self,
@@ -191,12 +196,17 @@ class NoaaNdviCdrAnalysisRegionJob(
         ndvi_data[bad_values_mask] = np.nan
         return cast(ArrayFloat32, ndvi_data)
 
-    def _list_source_files(self, s3_client: boto3.client, year: int) -> list[str]:
-        response = s3_client.list_objects_v2(
-            Bucket="noaa-cdr-ndvi-pds",
-            Prefix=f"data/{year}",
+    def _list_source_files(self, year: int) -> list[str]:
+        store = s3_store(self.s3_bucket_url, self.s3_region, skip_signature=True)
+        results = list(obstore.list(store, f"data/{year}", chunk_size=366))
+        if len(results) == 0:
+            return []
+
+        assert len(results) == 1, (
+            "Got unexpected results. Expected 1 list of no more than 366 files"
         )
-        return [obj["Key"] for obj in response.get("Contents", [])]
+
+        return [result["path"] for result in results[0]]
 
     @classmethod
     def operational_update_jobs(
