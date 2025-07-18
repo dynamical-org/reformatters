@@ -4,7 +4,7 @@ import pytest
 import xarray as xr
 from pytest import MonkeyPatch
 
-from reformatters.contrib.noaa.ndvi_cdr.ndvi_cdr.analysis.validators import (
+from reformatters.contrib.noaa.ndvi_cdr.analysis.validators import (
     check_data_is_current,
     check_latest_ndvi_usable_nan_percentage,
 )
