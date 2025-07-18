@@ -31,7 +31,7 @@ Common utilities and conventions seek to reduce the amount of unique code requir
 
 ## Code Style
 * Write code that explains itself rather than needs comments
-* Add only extremely minimal code commends and no docstrings unless I ask for them
+* Add only extremely minimal code comments and no docstrings unless I ask for them
   * Add comments only when doing things out of the ordinary, to highlight gotchas, or if less clear code is required due to an optimization
 * Use Python 3.12+ features
 * Follow mypy strict mode. If you need to add an ignore, ignore a specific check like `# type: ignore[specific]`. Always annotate types on all function arguments and return types.

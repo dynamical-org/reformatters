@@ -12,7 +12,7 @@ There are three core base classes to subclass.
 ### Words
 * **Provider** - the agency or organization that publishes the source data. e.g. ECMWF
 * **Model** - the model or system that produced the data. e.g. GFS
-* **Variant** - the specific subset and structure of data from the model. e.g. forecast, analysis, climatology. Variant may include any other information needed to distinquish datasets from the same model.
+* **Variant** - the specific subset and structure of data from the model. e.g. forecast, analysis, climatology. Variant may include any other information needed to distinguish datasets from the same model.
 * **Dataset** - a specific provider-model-variant. e.g. noaa-gfs-forecast
 
 
@@ -27,6 +27,8 @@ Before getting started, follow the brief setup steps in README.md > Local develo
 uv run main initialize-new-integration <provider> <model> <variant>
 ```
 This will add a number of files within `src/reformatters/<provider>/<model>/<variant>` and `tests/<provider>/<model>/<variant>`.
+Please use lower case for the provider, model, and variant. Hyphens are acceptable for the provider
+or model (e.g. `icon-eu`).
 These files will contain placeholder implementations of the subclasses referenced above. Follow the rest of this doc for guidance 
 on how to complete the implementations to integrate your new dataset.
 
@@ -41,7 +43,7 @@ DYNAMICAL_DATASETS = [
     ProviderModelVariantDataset(storage_config=SourceCoopDatasetStorageConfig()),
 ]
 ```
-If you plan to write this dataset to a location not maintained by dynamical.org, you can instantiate and pass your own StorageConfig, contact feedback@dynamical.org for support.
+If you plan to write this dataset to a location not maintained by dynamical.org, you can instantiate and pass your own `StorageConfig`, contact feedback@dynamical.org for support.
 
 ### 3. Implement `TemplateConfig` subclass
 
@@ -49,7 +51,7 @@ Work through `src/reformatters/$DATASET_PATH/template_config.py`, setting the at
 
 Hint: providing an AI/LLM with 1) the example template config code to edit, 2) output of running `gdal-info <example source data file>` and 3) any dataset documentation will help it give you a decent first implementation of your `TemplateConfig` subclass.
 
-Using the information in the TemplateConfig, `reformatters` writes the Zarr metadata for your dataset to `src/reformatters/$DATASET_PATH/templates/latest.zarr`.  Run this command in your terminal to create or update the template based on the your `TemplateConfig` subclass:
+Using the information in the `TemplateConfig`, `reformatters` writes the Zarr metadata for your dataset to `src/reformatters/$DATASET_PATH/templates/latest.zarr`.  Run this command in your terminal to create or update the template based on the your `TemplateConfig` subclass:
 ```bash
 uv run main $DATASET_ID update-template
 git add src/reformatters/$DATASET_PATH/templates/latest.zarr
