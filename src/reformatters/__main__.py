@@ -14,7 +14,7 @@ from reformatters.common.dynamical_dataset import (
     DynamicalDataset,
     DynamicalDatasetStorageConfig,
 )
-from reformatters.contrib.noaa.ndvi_cdr.ndvi_cdr.analysis import (
+from reformatters.contrib.noaa.ndvi_cdr.analysis import (
     NoaaNdviCdrAnalysisDataset,
 )
 from reformatters.contrib.uarizona.swann.analysis import UarizonaSwannAnalysisDataset

@@ -8,11 +8,11 @@ import xarray as xr
 
 from reformatters.common.types import ArrayFloat32, ArrayInt16
 from reformatters.common.zarr import get_zarr_store
-from reformatters.contrib.noaa.ndvi_cdr.ndvi_cdr.analysis.region_job import (
+from reformatters.contrib.noaa.ndvi_cdr.analysis.region_job import (
     NoaaNdviCdrAnalysisRegionJob,
     NoaaNdviCdrAnalysisSourceFileCoord,
 )
-from reformatters.contrib.noaa.ndvi_cdr.ndvi_cdr.analysis.template_config import (
+from reformatters.contrib.noaa.ndvi_cdr.analysis.template_config import (
     NoaaNdviCdrAnalysisTemplateConfig,
     NoaaNdviCdrDataVar,
 )

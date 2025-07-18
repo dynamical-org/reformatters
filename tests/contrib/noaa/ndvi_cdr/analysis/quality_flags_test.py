@@ -5,7 +5,7 @@ Tests for quality flag processing in NOAA NDVI CDR data.
 import numpy as np
 import pytest
 
-from reformatters.contrib.noaa.ndvi_cdr.ndvi_cdr.analysis.quality_flags import (
+from reformatters.contrib.noaa.ndvi_cdr.analysis.quality_flags import (
     AVHRR_BRDF_CORR_PROBLEM,
     AVHRR_CH1_INVALID,
     AVHRR_CLOUD_SHADOW,
@@ -21,7 +21,7 @@ from reformatters.contrib.noaa.ndvi_cdr.ndvi_cdr.analysis.quality_flags import (
     get_avhrr_mask,
     get_viirs_mask,
 )
-from reformatters.contrib.noaa.ndvi_cdr.ndvi_cdr.analysis.template_config import (
+from reformatters.contrib.noaa.ndvi_cdr.analysis.template_config import (
     QA_FILL_VALUE,
 )
 

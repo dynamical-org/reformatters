@@ -7,7 +7,7 @@ import xarray as xr
 from _pytest.monkeypatch import MonkeyPatch
 
 from reformatters.common.dynamical_dataset import DynamicalDatasetStorageConfig
-from reformatters.contrib.noaa.ndvi_cdr.ndvi_cdr.analysis.dynamical_dataset import (
+from reformatters.contrib.noaa.ndvi_cdr.analysis.dynamical_dataset import (
     NoaaNdviCdrAnalysisDataset,
 )
 

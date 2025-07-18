@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from reformatters.contrib.noaa.ndvi_cdr.ndvi_cdr.analysis.template_config import (
+from reformatters.contrib.noaa.ndvi_cdr.analysis.template_config import (
     NoaaNdviCdrAnalysisTemplateConfig,
 )
 
