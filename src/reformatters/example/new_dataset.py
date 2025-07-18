@@ -74,7 +74,7 @@ def initialize_new_integration(
 
     dataset_class_name = example_to_actual_mappings["ExampleDataset"]
     (src_path / "__init__.py").write_text(
-        f"from .dynamical_dataset import {dataset_class_name} as {dataset_class_name}"
+        f"from .dynamical_dataset import {dataset_class_name} as {dataset_class_name}\n"
     )
 
     print(f"Created new dataset integration at {src_path} and {test_path}")
