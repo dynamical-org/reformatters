@@ -76,8 +76,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     pd.timedelta_range("81h", "120h", freq="3h")
                 )
             ),
-            # TODO: Continue checking Gemini's output from here (downwards):
-            "latitude": np.linspace(70.5, 29.5, 657),
+            "latitude": np.linspace(29.5, 70.5, 657),
             "longitude": np.linspace(-23.5, 62.5, 1377),
         }
 
