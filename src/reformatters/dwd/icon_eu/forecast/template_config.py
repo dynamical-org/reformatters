@@ -34,7 +34,6 @@ class DwdIconEuInternalAttrs(BaseInternalAttrs):
     """
 
     grib_element: str
-    grib_description: str
 
 
 class DwdIconEuDataVar(DataVar[DwdIconEuInternalAttrs]):
@@ -44,7 +43,9 @@ class DwdIconEuDataVar(DataVar[DwdIconEuInternalAttrs]):
 class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
     dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
     append_dim: AppendDim = "init_time"
-    append_dim_start: Timestamp = pd.Timestamp("2025-08-01T00:00")
+    append_dim_start: Timestamp = pd.Timestamp(
+        "2020-01-01T00:00"  # The start of OCF's ICON-EU archive on Hugging Face.
+    )
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
 
     @computed_field  # type: ignore[prop-decorator]
@@ -71,7 +72,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
             self.append_dim: self.append_dim_coordinates(
                 self.append_dim_start + self.append_dim_frequency
             ),
-            "lead_time": (
+            "lead_time": (  # Called "step" in the ICON-EU GRIB files.
                 pd.timedelta_range("0h", "78h", freq="1h").union(
                     pd.timedelta_range("81h", "120h", freq="3h")
                 )
@@ -254,7 +255,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
         # 4-8 million float32 values
         var_chunks: dict[Dim, int] = {
             "init_time": 1,
-            "lead_time": 121,
+            "lead_time": 120,
             "latitude": 73,
             "longitude": 153,
         }
@@ -264,7 +265,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
         # 256 million to 1 billion float32 values
         var_shards: dict[Dim, int] = {
             "init_time": 1,
-            "lead_time": 121,
+            "lead_time": 120,
             "latitude": 657,
             "longitude": 1377,
         }
@@ -281,246 +282,243 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
 
         return [
             DwdIconEuDataVar(
-                name="alb_rad",
+                name="downward_diffuse_short_wave_radiation_flux_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    long_name="Surface albedo",
-                    units="%",
+                    short_name="msdfswrf",  # From ECMWF parameter database.
+                    long_name="Downward diffusive short wave radiation flux at surface (mean over forecast time)",
+                    units="W m-2",
+                    step_type="avg",
+                    standard_name="Mean surface diffuse short-wave radiation flux",  # From ECMWF.
+                ),
+                internal_attrs=DwdIconEuInternalAttrs(
+                    grib_element="aswdifd_s",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
+            DwdIconEuDataVar(
+                name="downward_direct_short_wave_radiation_flux_surface",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="avg_sdirswrf",  # From ECMWF param DB.
+                    long_name="Downward direct short wave radiation flux at surface (mean over forecast time)",
+                    units="W m-2",
                     step_type="avg",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="ALB_RAD",
+                    grib_element="aswdir_s",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             DwdIconEuDataVar(
-                name="aswdifd_s",
+                name="convective_available_potential_energy",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    long_name="Surface downward diffuse short-wave radiation",
-                    units="W m**-2",
-                    step_type="avg",
-                ),
-                internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="ASWDIFD_S",
-                    deaccumulate_to_rate=True,
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                ),
-            ),
-            DwdIconEuDataVar(
-                name="aswdir_s",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    long_name="Surface downward direct short-wave radiation",
-                    units="W m**-2",
-                    step_type="avg",
-                ),
-                internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="ASWDIR_S",
-                    deaccumulate_to_rate=True,
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                ),
-            ),
-            DwdIconEuDataVar(
-                name="cape_con",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    long_name="Convective Available Potential Energy",
-                    units="J kg**-1",
+                    short_name="cape",
+                    long_name="Convective available potential energy",
+                    units="J kg-1",
                     step_type="instant",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="CAPE_CON",
+                    grib_element="cape_con",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             DwdIconEuDataVar(
-                name="clch",
+                name="high_cloud_cover",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    long_name="High cloud cover",
+                    short_name="hcc",
+                    long_name="Cloud Cover (0 - 400 hPa)",
                     units="%",
                     step_type="instant",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="CLCH",
+                    grib_element="clch",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             DwdIconEuDataVar(
-                name="clcl",
+                name="low_cloud_cover",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    long_name="Low cloud cover",
+                    short_name="lcc",
+                    long_name="Cloud Cover (800 hPa - Soil)",
                     units="%",
                     step_type="instant",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="CLCL",
+                    grib_element="clcl",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             DwdIconEuDataVar(
-                name="clcm",
+                name="medium_cloud_cover",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    long_name="Medium cloud cover",
+                    short_name="mcc",
+                    long_name="Cloud Cover (400 - 800 hPa)",
                     units="%",
                     step_type="instant",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="CLCM",
+                    grib_element="clcm",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             DwdIconEuDataVar(
-                name="clct",
+                name="total_cloud_cover",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
+                    short_name="tcc",
                     long_name="Total Cloud Cover",
                     units="%",
-                    step_type="avg",
-                    standard_name="cloud_area_fraction",
+                    step_type="instant",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="CLCT",
+                    grib_element="clct",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             DwdIconEuDataVar(
-                name="h_snow",
+                name="snow_depth",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    long_name="Snow depth",
+                    short_name="sde",
+                    long_name="lwe_thickness_of_surface_snow_amount",
                     units="m",
                     step_type="instant",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="H_SNOW",
+                    grib_element="h_snow",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             DwdIconEuDataVar(
-                name="pmsl",
+                name="pressure_reduced_to_msl",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    long_name="Mean sea level pressure",
+                    short_name="pmsl",
+                    long_name="Pressure reduced to mean sea level (MSL)",
                     units="Pa",
                     step_type="instant",
-                    standard_name="air_pressure_at_mean_sea_level",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="PMSL",
-                    keep_mantissa_bits=10,
+                    grib_element="pmsl",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             DwdIconEuDataVar(
-                name="relhum_2m",
+                name="relative_humidity",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    long_name="2m Relative Humidity",
+                    short_name="r",
+                    long_name="2 metre relative humidity",
                     units="%",
                     step_type="instant",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="RELHUM_2M",
+                    grib_element="relhum_2m",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             DwdIconEuDataVar(
-                name="runoff_g",
+                name="water_runoff",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    long_name="Grid-scale runoff",
+                    short_name="watr",
+                    long_name="Water Runoff",
+                    units="kg m-2",
+                    step_type="accum",
+                ),
+                internal_attrs=DwdIconEuInternalAttrs(
+                    grib_element="runoff_g",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
+            DwdIconEuDataVar(
+                name="temperature_2m",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="t2m",  # ECMWF calls this "2t". NOAA & DWD use "t2m".
+                    long_name="2 metre temperature",
+                    units="K",
+                    step_type="instant",
+                ),
+                internal_attrs=DwdIconEuInternalAttrs(
+                    grib_element="t_2m",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
+            DwdIconEuDataVar(
+                name="total_precipitation",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="tp",
+                    long_name="Total Precipitation",
                     units="kg m**-2",
                     step_type="accum",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="RUNOFF_G",
-                    deaccumulate_to_rate=True,
+                    grib_element="tot_prec",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             DwdIconEuDataVar(
-                name="t_2m",
+                name="wind_u_10",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    long_name="2 metre temperature",
-                    units="C",
-                    step_type="instant",
-                    standard_name="air_temperature",
-                ),
-                internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="T_2M",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                ),
-            ),
-            DwdIconEuDataVar(
-                name="tot_prec",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    long_name="Total Precipitation",
-                    units="mm/s",
-                    comment="Average precipitation rate since the previous forecast step.",
-                    step_type="avg",
-                ),
-                internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="TOT_PREC",
-                    deaccumulate_to_rate=True,
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                ),
-            ),
-            DwdIconEuDataVar(
-                name="u_10m",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    long_name="10 metre U wind component",
-                    units="m s**-1",
+                    short_name="u10",
+                    long_name="10 metre U wind component (eastward)",
+                    units="m/s",
                     step_type="instant",
                     standard_name="eastward_wind",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="U_10M",
+                    grib_element="u_10m",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             DwdIconEuDataVar(
-                name="v_10m",
+                name="wind_v_10",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    long_name="10 metre V wind component",
-                    units="m s**-1",
+                    short_name="v10",
+                    long_name="10 metre V wind component (northward)",
+                    units="m/s",
                     step_type="instant",
                     standard_name="northward_wind",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="V_10M",
+                    grib_element="v_10m",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             DwdIconEuDataVar(
-                name="vmax_10m",
+                name="maximum_wind_10m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    long_name="10m Wind Gust Speed",
-                    units="m s**-1",
+                    short_name="i10fg",
+                    long_name="Time-maximum instantaneous 10 metre wind gust",
+                    units="m/s",
                     step_type="max",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="VMAX_10M",
+                    grib_element="vmax_10m",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             DwdIconEuDataVar(
-                name="w_snow",
+                name="snow_depth_water_equivalent",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    long_name="Water equivalent of snow depth",
+                    short_name="sd",
+                    long_name="Snow depth water equivalent",
                     units="kg m**-2",
                     step_type="instant",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="W_SNOW",
+                    grib_element="w_snow",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
