@@ -290,6 +290,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     units="W m-2",
                     step_type="avg",
                     standard_name="Mean surface diffuse short-wave radiation flux",  # From ECMWF.
+                    comment="Downward solar diffuse radiation flux at the surface, averaged over forecast time.",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="aswdifd_s",
@@ -304,6 +305,12 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Downward direct short wave radiation flux at surface (mean over forecast time)",
                     units="W m-2",
                     step_type="avg",
+                    comment=(
+                        "Downward solar direct radiation flux at the surface, averaged over forecast time."
+                        " This quantity is not directly provided by the radiation scheme."
+                        " It is aposteriori diagnosed from the definition of the surface net"
+                        " shortwave radiation flux."
+                    ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="aswdir_s",
@@ -314,10 +321,11 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 name="convective_available_potential_energy",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="cape",
+                    short_name="cape_con",
                     long_name="Convective available potential energy",
                     units="J kg-1",
                     step_type="instant",
+                    comment="Convective available potential energy",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="cape_con",
@@ -329,9 +337,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="hcc",
-                    long_name="Cloud Cover (0 - 400 hPa)",
+                    long_name="High level clouds",
                     units="%",
                     step_type="instant",
+                    comment="Cloud Cover (0 - 400 hPa)",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="clch",
@@ -343,9 +352,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="lcc",
-                    long_name="Cloud Cover (800 hPa - Soil)",
+                    long_name="Low level clouds",
                     units="%",
                     step_type="instant",
+                    comment="Cloud Cover (800 hPa - Soil)",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="clcl",
@@ -357,9 +367,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="mcc",
-                    long_name="Cloud Cover (400 - 800 hPa)",
+                    long_name="Mid level clouds",
                     units="%",
                     step_type="instant",
+                    comment="Cloud Cover (400 - 800 hPa)",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="clcm",
@@ -374,6 +385,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Total Cloud Cover",
                     units="%",
                     step_type="instant",
+                    comment="Total cloud cover",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="clct",
@@ -388,6 +400,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="lwe_thickness_of_surface_snow_amount",
                     units="m",
                     step_type="instant",
+                    comment="Snow depth in m. It is diagnosed from RHO_SNOW and W_SNOW according to H_SNOW = W_SNOW / RHO_SNOW and is limited to H_SNOW <= 40 m.",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="h_snow",
@@ -402,6 +415,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Pressure reduced to mean sea level (MSL)",
                     units="Pa",
                     step_type="instant",
+                    comment="Surface pressure reduced to MSL",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="pmsl",
@@ -416,6 +430,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="2 metre relative humidity",
                     units="%",
                     step_type="instant",
+                    comment="Relative humidity at 2m above ground",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="relhum_2m",
@@ -423,16 +438,32 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
             ),
             DwdIconEuDataVar(
-                name="water_runoff",
+                name="soil_water_runoff",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="watr",
-                    long_name="Water Runoff",
+                    long_name="Soil water runoff",
                     units="kg m-2",
                     step_type="accum",
+                    comment="Soil water runoff (accumulated since model start)",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="runoff_g",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
+            DwdIconEuDataVar(
+                name="surface_water_runoff",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="watr",
+                    long_name="Surface water Runoff",
+                    units="kg m-2",
+                    step_type="accum",
+                    comment="Surface water runoff from interception and snow reservoir and from limited infiltration rate. Sum over forecast.",
+                ),
+                internal_attrs=DwdIconEuInternalAttrs(
+                    grib_element="runoff_s",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -444,6 +475,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="2 metre temperature",
                     units="K",
                     step_type="instant",
+                    comment="Temperature at 2m above ground. The average over all tiles of a grid point.",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="t_2m",
@@ -458,6 +490,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Total Precipitation",
                     units="kg m**-2",
                     step_type="accum",
+                    comment="Total precipitation accumulated since model start. TOT_PREC = RAIN_GSP + SNOW_GSP + RAIN_CON + SNOW_CON.",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="tot_prec",
@@ -473,6 +506,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     units="m/s",
                     step_type="instant",
                     standard_name="eastward_wind",
+                    comment="Zonal wind at 10m above ground",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="u_10m",
@@ -488,6 +522,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     units="m/s",
                     step_type="instant",
                     standard_name="northward_wind",
+                    comment="Meridional wind at 10m above ground",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="v_10m",
@@ -502,6 +537,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Time-maximum instantaneous 10 metre wind gust",
                     units="m/s",
                     step_type="max",
+                    comment="Maximum wind gust at 10 m above ground. It is diagnosed from the turbulence state in the atmospheric boundary layer, including a potential enhancement by the SSO parameterization over mountainous terrain. In the presence of deep convection, it contains an additional contribution due to convective gusts.",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="vmax_10m",
@@ -516,6 +552,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Snow depth water equivalent",
                     units="kg m**-2",
                     step_type="instant",
+                    comment="Snow depth water equivalent in kg/m2. Set to 0 above water surfaces and snow-free land points.",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="w_snow",
