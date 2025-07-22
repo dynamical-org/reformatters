@@ -283,6 +283,12 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
         return [
             # The `comment` text is taken from the DWD Database Reference PDF:
             # https://www.dwd.de/DWD/forschung/nwv/fepub/icon_database_main.pdf
+            #
+            # We don't include `alb_rad` (shortwave broadband albedo for
+            # diffuse radiation) in the Zarr because, to quote the DWD
+            # Database Reference: "Values over snow-free land points are based
+            # on a monthly mean MODIS climatology." It's much more data-efficient
+            # to just download those monthly means from DWD.
             DwdIconEuDataVar(
                 name="downward_diffuse_short_wave_radiation_flux_surface",
                 encoding=encoding_float32_default,
