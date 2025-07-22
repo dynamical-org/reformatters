@@ -281,6 +281,8 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
         default_keep_mantissa_bits = 7
 
         return [
+            # The `comment` text is taken from the DWD Database Reference PDF:
+            # https://www.dwd.de/DWD/forschung/nwv/fepub/icon_database_main.pdf
             DwdIconEuDataVar(
                 name="downward_diffuse_short_wave_radiation_flux_surface",
                 encoding=encoding_float32_default,
@@ -400,7 +402,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="lwe_thickness_of_surface_snow_amount",
                     units="m",
                     step_type="instant",
-                    comment="Snow depth in m. It is diagnosed from RHO_SNOW and W_SNOW according to H_SNOW = W_SNOW / RHO_SNOW and is limited to H_SNOW <= 40 m.",
+                    comment=(
+                        "Snow depth in m. It is diagnosed from RHO_SNOW and W_SNOW according to"
+                        " H_SNOW = W_SNOW / RHO_SNOW and is limited to H_SNOW <= 40 m."
+                    ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="h_snow",
@@ -460,7 +465,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Surface water Runoff",
                     units="kg m-2",
                     step_type="accum",
-                    comment="Surface water runoff from interception and snow reservoir and from limited infiltration rate. Sum over forecast.",
+                    comment=(
+                        "Surface water runoff from interception and snow reservoir and from"
+                        " limited infiltration rate. Sum over forecast."
+                    ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="runoff_s",
@@ -475,7 +483,9 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="2 metre temperature",
                     units="K",
                     step_type="instant",
-                    comment="Temperature at 2m above ground. The average over all tiles of a grid point.",
+                    comment=(
+                        "Temperature at 2m above ground, averaged over all tiles of a grid point."
+                    ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="t_2m",
@@ -490,7 +500,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Total Precipitation",
                     units="kg m**-2",
                     step_type="accum",
-                    comment="Total precipitation accumulated since model start. TOT_PREC = RAIN_GSP + SNOW_GSP + RAIN_CON + SNOW_CON.",
+                    comment=(
+                        "Total precipitation accumulated since model start."
+                        " TOT_PREC = RAIN_GSP + SNOW_GSP + RAIN_CON + SNOW_CON."
+                    ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="tot_prec",
@@ -537,7 +550,13 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Time-maximum instantaneous 10 metre wind gust",
                     units="m/s",
                     step_type="max",
-                    comment="Maximum wind gust at 10 m above ground. It is diagnosed from the turbulence state in the atmospheric boundary layer, including a potential enhancement by the SSO parameterization over mountainous terrain. In the presence of deep convection, it contains an additional contribution due to convective gusts.",
+                    comment=(
+                        "Maximum wind gust at 10 m above ground. It is diagnosed from the turbulence"
+                        " state in the atmospheric boundary layer, including a potential"
+                        " enhancement by the SSO parameterization over mountainous terrain."
+                        " In the presence of deep convection, it contains an additional"
+                        " contribution due to convective gusts."
+                    ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="vmax_10m",
@@ -552,7 +571,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Snow depth water equivalent",
                     units="kg m**-2",
                     step_type="instant",
-                    comment="Snow depth water equivalent in kg/m2. Set to 0 above water surfaces and snow-free land points.",
+                    comment=(
+                        "Snow depth water equivalent in kg/m2."
+                        " Set to 0 above water surfaces and snow-free land points."
+                    ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="w_snow",
