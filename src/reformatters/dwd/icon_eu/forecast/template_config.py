@@ -226,19 +226,23 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=CoordinateAttrs(
                     units=None,
                     statistics_approximate=None,
-                    # Deterived by running `ds.rio.write_crs("+proj=longlat +a=6371229 +b=6371229 +no_defs +type=crs")["spatial_ref"].attrs
-                    crs_wkt='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
+                    # Derived by installing xarray, cfgrib, and rioxarray, and then running:
+                    #     ds = xr.load_dataset(ICON_EU_GRIB_FILENAME_FROM_DWD, engine='cfgrib')
+                    #     from pyproj import CRS
+                    #     spherical_crs = CRS.from_wkt(WKT_STRING_EXTRACTED_FROM_ICON_EU_GRIB_BY_GDALINFO)
+                    #     ds.rio.write_crs(spherical_crs)["spatial_ref"].attrs
+                    crs_wkt='GEOGCS["Coordinate System imported from GRIB file",DATUM["unnamed",SPHEROID["Sphere",6371229,0]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST]]',
                     semi_major_axis=6371229.0,
                     semi_minor_axis=6371229.0,
                     inverse_flattening=0.0,
-                    reference_ellipsoid_name="unknown",
+                    reference_ellipsoid_name="Sphere",
                     longitude_of_prime_meridian=0.0,
                     prime_meridian_name="Greenwich",
-                    geographic_crs_name="unknown",
-                    horizontal_datum_name="unknown",
+                    geographic_crs_name="Coordinate System imported from GRIB file",
+                    horizontal_datum_name="unnamed",
                     grid_mapping_name="latitude_longitude",
-                    spatial_ref='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
-                    comment="This coordinate reference system matches the source data which follows WMO conventions of assuming the earth is a perfect sphere with a radius of 6,371,229m. It is similar to EPSG:4326, but EPSG:4326 uses a more accurate representation of the earth's shape.",
+                    spatial_ref='GEOGCS["Coordinate System imported from GRIB file",DATUM["unnamed",SPHEROID["Sphere",6371229,0]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST]]',
+                    comment="From the WKT string output by gdalinfo.",
                 ),
             ),
         ]
