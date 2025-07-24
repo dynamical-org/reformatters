@@ -501,7 +501,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             ThreadPoolExecutor(max_workers=1) as download_executor,
             ThreadPoolExecutor(max_workers=2) as upload_executor,
         ):
-            log.info(f"Starting {repr(self)}")
+            log.info(f"Starting {self!r}")
 
             # Submit all download tasks to the executor
             download_futures = {}

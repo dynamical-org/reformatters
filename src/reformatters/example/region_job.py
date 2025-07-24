@@ -125,7 +125,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
         #         == data_var.internal_attrs.grib_element
         #         and tags["GRIB_COMMENT"] == data_var.internal_attrs.grib_comment
         #     ]
-        #     assert len(matching_indexes) == 1, f"Expected exactly 1 matching band, found {matching_indexes}. {data_var.internal_attrs.grib_element=}, {data_var.internal_attrs.grib_description=}, {coord.downloaded_file_path=}"  # fmt: skip
+        #     assert len(matching_indexes) == 1, f"Expected exactly 1 matching band, found {matching_indexes}. {data_var.internal_attrs.grib_element=}, {data_var.internal_attrs.grib_description=}, {coord.downloaded_file_path=}"
         #     rasterio_band_index = 1 + matching_indexes[0]  # rasterio is 1-indexed
         #     return reader.read(rasterio_band_index, dtype=np.float32)
         raise NotImplementedError(

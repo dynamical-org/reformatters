@@ -90,7 +90,7 @@
           "long_name": "Categorical freezing rain",
           "short_name": "cfrzr",
           "units": "0=no; 1=yes",
-          "comment": "Presence/absence over the previous 1\u20136 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
+          "comment": "Presence/absence over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -178,7 +178,7 @@
           "long_name": "Categorical ice pellets",
           "short_name": "cicep",
           "units": "0=no; 1=yes",
-          "comment": "Presence/absence over the previous 1\u20136 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
+          "comment": "Presence/absence over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -266,7 +266,7 @@
           "long_name": "Categorical rain",
           "short_name": "crain",
           "units": "0=no; 1=yes",
-          "comment": "Presence/absence over the previous 1\u20136 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
+          "comment": "Presence/absence over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -354,7 +354,7 @@
           "long_name": "Categorical snow",
           "short_name": "csnow",
           "units": "0=no; 1=yes",
-          "comment": "Presence/absence over the previous 1\u20136 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
+          "comment": "Presence/absence over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -442,7 +442,7 @@
           "long_name": "Surface downward long-wave radiation flux",
           "short_name": "sdlwrf",
           "units": "W/(m^2)",
-          "comment": "Average over the previous 1\u20136 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
+          "comment": "Average over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -530,7 +530,7 @@
           "long_name": "Surface downward short-wave radiation flux",
           "short_name": "sdswrf",
           "units": "W/(m^2)",
-          "comment": "Average over the previous 1\u20136 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
+          "comment": "Average over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1021,7 +1021,7 @@
           "long_name": "Maximum temperature",
           "short_name": "tmax",
           "units": "C",
-          "comment": "Maximum over the previous 1\u20136 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
+          "comment": "Maximum over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
           "step_type": "max",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1109,7 +1109,7 @@
           "long_name": "Minimum temperature",
           "short_name": "tmin",
           "units": "C",
-          "comment": "Minimum over the previous 1\u20136 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
+          "comment": "Minimum over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
           "step_type": "min",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1859,7 +1859,7 @@
           "long_name": "Total Cloud Cover",
           "short_name": "tcc",
           "units": "%",
-          "comment": "Average over the previous 1\u20136 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
+          "comment": "Average over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
