@@ -69,10 +69,9 @@
   ],
   "attributes": {
     "long_name": "Downward diffusive short wave radiation flux at surface (mean over forecast time)",
-    "short_name": "msdfswrf",
+    "short_name": "aswdifd_s",
     "standard_name": "Mean surface diffuse short-wave radiation flux",
     "units": "W m-2",
-    "comment": "Downward solar diffuse radiation flux at the surface, averaged over forecast time.",
     "step_type": "avg",
     "coordinates": "ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

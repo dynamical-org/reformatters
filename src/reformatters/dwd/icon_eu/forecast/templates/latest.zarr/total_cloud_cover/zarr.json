@@ -69,9 +69,9 @@
   ],
   "attributes": {
     "long_name": "Total Cloud Cover",
-    "short_name": "tcc",
+    "short_name": "clct",
     "units": "%",
-    "comment": "Total cloud cover",
+    "comment": "Total cloud cover. Different agencies use different short_names for this same parameter: ECMWF: TCC; NOAA & WMO: TCDC.",
     "step_type": "instant",
     "coordinates": "ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

@@ -69,9 +69,10 @@
   ],
   "attributes": {
     "long_name": "2 metre relative humidity",
-    "short_name": "r",
+    "short_name": "r2",
+    "standard_name": "relative_humidity",
     "units": "%",
-    "comment": "Relative humidity at 2m above ground",
+    "comment": "Relative humidity at 2m above ground. Other short_names used for this parameter: rh, 2r, r.",
     "step_type": "instant",
     "coordinates": "ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

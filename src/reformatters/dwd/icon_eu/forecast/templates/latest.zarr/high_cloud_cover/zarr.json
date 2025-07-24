@@ -69,9 +69,9 @@
   ],
   "attributes": {
     "long_name": "High level clouds",
-    "short_name": "hcc",
+    "short_name": "clch",
     "units": "%",
-    "comment": "Cloud Cover (0 - 400 hPa)",
+    "comment": "Cloud Cover (0 - 400 hPa). Different agencies use different short_names for this same parameter: ECMWF: HCC; WMO GRIB table: HCDC.",
     "step_type": "instant",
     "coordinates": "ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

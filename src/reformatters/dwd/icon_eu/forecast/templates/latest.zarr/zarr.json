@@ -176,10 +176,9 @@
         ],
         "attributes": {
           "long_name": "Downward diffusive short wave radiation flux at surface (mean over forecast time)",
-          "short_name": "msdfswrf",
+          "short_name": "aswdifd_s",
           "standard_name": "Mean surface diffuse short-wave radiation flux",
           "units": "W m-2",
-          "comment": "Downward solar diffuse radiation flux at the surface, averaged over forecast time.",
           "step_type": "avg",
           "coordinates": "ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -265,7 +264,7 @@
         ],
         "attributes": {
           "long_name": "Downward direct short wave radiation flux at surface (mean over forecast time)",
-          "short_name": "avg_sdirswrf",
+          "short_name": "aswdir_s",
           "units": "W m-2",
           "comment": "Downward solar direct radiation flux at the surface, averaged over forecast time. This quantity is not directly provided by the radiation scheme. It is aposteriori diagnosed from the definition of the surface net shortwave radiation flux.",
           "step_type": "avg",
@@ -353,9 +352,9 @@
         ],
         "attributes": {
           "long_name": "High level clouds",
-          "short_name": "hcc",
+          "short_name": "clch",
           "units": "%",
-          "comment": "Cloud Cover (0 - 400 hPa)",
+          "comment": "Cloud Cover (0 - 400 hPa). Different agencies use different short_names for this same parameter: ECMWF: HCC; WMO GRIB table: HCDC.",
           "step_type": "instant",
           "coordinates": "ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -704,9 +703,9 @@
         ],
         "attributes": {
           "long_name": "Low level clouds",
-          "short_name": "lcc",
+          "short_name": "clcl",
           "units": "%",
-          "comment": "Cloud Cover (800 hPa - Soil)",
+          "comment": "Cloud Cover (800 hPa - Soil). Different agencies use different short_names for this same parameter: ECMWF: LCC; WMO GRIB table: LCDC.",
           "step_type": "instant",
           "coordinates": "ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -880,9 +879,9 @@
         ],
         "attributes": {
           "long_name": "Mid level clouds",
-          "short_name": "mcc",
+          "short_name": "clcm",
           "units": "%",
-          "comment": "Cloud Cover (400 - 800 hPa)",
+          "comment": "Cloud Cover (400 - 800 hPa). Different agencies use different short_names for this same parameter: ECMWF: MCC; WMO GRIB table: MCDC.",
           "step_type": "instant",
           "coordinates": "ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -968,7 +967,7 @@
         ],
         "attributes": {
           "long_name": "Pressure reduced to mean sea level (MSL)",
-          "short_name": "pmsl",
+          "short_name": "prmsl",
           "units": "Pa",
           "comment": "Surface pressure reduced to MSL",
           "step_type": "instant",
@@ -1056,9 +1055,10 @@
         ],
         "attributes": {
           "long_name": "2 metre relative humidity",
-          "short_name": "r",
+          "short_name": "r2",
+          "standard_name": "relative_humidity",
           "units": "%",
-          "comment": "Relative humidity at 2m above ground",
+          "comment": "Relative humidity at 2m above ground. Other short_names used for this parameter: rh, 2r, r.",
           "step_type": "instant",
           "coordinates": "ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1143,8 +1143,9 @@
           }
         ],
         "attributes": {
-          "long_name": "lwe_thickness_of_surface_snow_amount",
+          "long_name": "Snow depth",
           "short_name": "sde",
+          "standard_name": "lwe_thickness_of_surface_snow_amount",
           "units": "m",
           "comment": "Snow depth in m. It is diagnosed from RHO_SNOW and W_SNOW according to H_SNOW = W_SNOW / RHO_SNOW and is limited to H_SNOW <= 40 m.",
           "step_type": "instant",
@@ -1546,8 +1547,9 @@
         "attributes": {
           "long_name": "2 metre temperature",
           "short_name": "t2m",
+          "standard_name": "air_temperature",
           "units": "K",
-          "comment": "Temperature at 2m above ground, averaged over all tiles of a grid point.",
+          "comment": "Temperature at 2m above ground, averaged over all tiles of a grid point. Different agencies use different short_names for this parameter: ECMWF: 2t; NOAA & DWD: t2m.",
           "step_type": "instant",
           "coordinates": "ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1633,9 +1635,9 @@
         ],
         "attributes": {
           "long_name": "Total Cloud Cover",
-          "short_name": "tcc",
+          "short_name": "clct",
           "units": "%",
-          "comment": "Total cloud cover",
+          "comment": "Total cloud cover. Different agencies use different short_names for this same parameter: ECMWF: TCC; NOAA & WMO: TCDC.",
           "step_type": "instant",
           "coordinates": "ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

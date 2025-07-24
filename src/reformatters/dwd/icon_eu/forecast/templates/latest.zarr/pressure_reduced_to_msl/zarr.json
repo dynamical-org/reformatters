@@ -69,7 +69,7 @@
   ],
   "attributes": {
     "long_name": "Pressure reduced to mean sea level (MSL)",
-    "short_name": "pmsl",
+    "short_name": "prmsl",
     "units": "Pa",
     "comment": "Surface pressure reduced to MSL",
     "step_type": "instant",
