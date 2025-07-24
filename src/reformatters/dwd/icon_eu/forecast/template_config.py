@@ -31,6 +31,10 @@ class DwdIconEuInternalAttrs(BaseInternalAttrs):
     """Variable specific attributes used internally to drive processing.
 
     Not written to the dataset.
+
+    Attributes:
+        grib_element (str): The name used in ICON-EU's GRIB filename for this variable.
+            For example, `alb_rad` (for `surface_albedo`).
     """
 
     grib_element: str
@@ -227,9 +231,9 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     units=None,
                     statistics_approximate=None,
                     # Derived by installing xarray, cfgrib, and rioxarray, and then running:
-                    #     ds = xr.load_dataset(ICON_EU_GRIB_FILENAME_FROM_DWD, engine='cfgrib')
                     #     from pyproj import CRS
                     #     spherical_crs = CRS.from_wkt(WKT_STRING_EXTRACTED_FROM_ICON_EU_GRIB_BY_GDALINFO)
+                    #     ds = xr.load_dataset(ICON_EU_GRIB_FILENAME_FROM_DWD, engine='cfgrib')
                     #     ds.rio.write_crs(spherical_crs)["spatial_ref"].attrs
                     crs_wkt='GEOGCS["Coordinate System imported from GRIB file",DATUM["unnamed",SPHEROID["Sphere",6371229,0]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST]]',
                     semi_major_axis=6371229.0,
@@ -251,22 +255,12 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
     @property
     def data_vars(self) -> Sequence[DwdIconEuDataVar]:
         """Define metadata and encoding for each data variable."""
-        # Data variable chunking and sharding
-        #
-        # Aim for one of these roughly equivalent quantities:
-        # 1-2mb chunks compressed
-        # 4-8mb uncompressed
-        # 4-8 million float32 values
         var_chunks: dict[Dim, int] = {
             "init_time": 1,
             "lead_time": 120,
             "latitude": 73,
             "longitude": 153,
         }
-        # Aim for one of these roughly equivalent quantities:
-        # 64-256MB shards compressed
-        # 256-1024MB uncompressed
-        # 256 million to 1 billion float32 values
         var_shards: dict[Dim, int] = {
             "init_time": 1,
             "lead_time": 120,
@@ -285,7 +279,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
         default_keep_mantissa_bits = 7
 
         return [
-            # The `comment` text is taken from the DWD Database Reference PDF:
+            # Some of the `comment` text is taken from the DWD Database Reference PDF:
             # https://www.dwd.de/DWD/forschung/nwv/fepub/icon_database_main.pdf
             #
             # We don't include `alb_rad` (shortwave broadband albedo for
@@ -297,12 +291,11 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 name="downward_diffuse_short_wave_radiation_flux_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="msdfswrf",  # From ECMWF parameter database.
+                    short_name="aswdifd_s",
                     long_name="Downward diffusive short wave radiation flux at surface (mean over forecast time)",
                     units="W m-2",
                     step_type="avg",
                     standard_name="Mean surface diffuse short-wave radiation flux",  # From ECMWF.
-                    comment="Downward solar diffuse radiation flux at the surface, averaged over forecast time.",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="aswdifd_s",
@@ -313,7 +306,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 name="downward_direct_short_wave_radiation_flux_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="avg_sdirswrf",  # From ECMWF param DB.
+                    short_name="aswdir_s",
                     long_name="Downward direct short wave radiation flux at surface (mean over forecast time)",
                     units="W m-2",
                     step_type="avg",
@@ -348,11 +341,11 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 name="high_cloud_cover",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="hcc",
+                    short_name="clch",
                     long_name="High level clouds",
                     units="%",
                     step_type="instant",
-                    comment="Cloud Cover (0 - 400 hPa)",
+                    comment="Cloud Cover (0 - 400 hPa). Different agencies use different short_names for this same parameter: ECMWF: HCC; WMO GRIB table: HCDC.",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="clch",
@@ -363,11 +356,11 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 name="low_cloud_cover",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="lcc",
+                    short_name="clcl",
                     long_name="Low level clouds",
                     units="%",
                     step_type="instant",
-                    comment="Cloud Cover (800 hPa - Soil)",
+                    comment="Cloud Cover (800 hPa - Soil). Different agencies use different short_names for this same parameter: ECMWF: LCC; WMO GRIB table: LCDC.",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="clcl",
@@ -378,11 +371,11 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 name="medium_cloud_cover",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="mcc",
+                    short_name="clcm",
                     long_name="Mid level clouds",
                     units="%",
                     step_type="instant",
-                    comment="Cloud Cover (400 - 800 hPa)",
+                    comment="Cloud Cover (400 - 800 hPa). Different agencies use different short_names for this same parameter: ECMWF: MCC; WMO GRIB table: MCDC.",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="clcm",
@@ -393,11 +386,11 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 name="total_cloud_cover",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="tcc",
+                    short_name="clct",
                     long_name="Total Cloud Cover",
                     units="%",
                     step_type="instant",
-                    comment="Total cloud cover",
+                    comment="Total cloud cover. Different agencies use different short_names for this same parameter: ECMWF: TCC; NOAA & WMO: TCDC.",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="clct",
@@ -409,7 +402,8 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="sde",
-                    long_name="lwe_thickness_of_surface_snow_amount",
+                    long_name="Snow depth",
+                    standard_name="lwe_thickness_of_surface_snow_amount",
                     units="m",
                     step_type="instant",
                     comment=(
@@ -426,7 +420,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 name="pressure_reduced_to_msl",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="pmsl",
+                    short_name="prmsl",
                     long_name="Pressure reduced to mean sea level (MSL)",
                     units="Pa",
                     step_type="instant",
@@ -441,11 +435,12 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 name="relative_humidity",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="r",
+                    short_name="r2",
                     long_name="2 metre relative humidity",
                     units="%",
                     step_type="instant",
-                    comment="Relative humidity at 2m above ground",
+                    comment="Relative humidity at 2m above ground. Other short_names used for this parameter: rh, 2r, r.",
+                    standard_name="relative_humidity",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="relhum_2m",
@@ -465,6 +460,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="runoff_g",
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    deaccumulate_to_rate=True,
                 ),
             ),
             DwdIconEuDataVar(
@@ -483,19 +479,21 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="runoff_s",
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    deaccumulate_to_rate=True,
                 ),
             ),
             DwdIconEuDataVar(
                 name="temperature_2m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="t2m",  # ECMWF calls this "2t". NOAA & DWD use "t2m".
+                    short_name="t2m",
                     long_name="2 metre temperature",
                     units="K",
                     step_type="instant",
                     comment=(
-                        "Temperature at 2m above ground, averaged over all tiles of a grid point."
+                        "Temperature at 2m above ground, averaged over all tiles of a grid point. Different agencies use different short_names for this parameter: ECMWF: 2t; NOAA & DWD: t2m."
                     ),
+                    standard_name="air_temperature",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="t_2m",
@@ -518,6 +516,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 internal_attrs=DwdIconEuInternalAttrs(
                     grib_element="tot_prec",
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    deaccumulate_to_rate=True,
                 ),
             ),
             DwdIconEuDataVar(
