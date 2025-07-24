@@ -45,8 +45,7 @@ def download_to_disk(
 
     try:
         with open(temp_path, "wb") as file:
-            for buffer in response_buffers:
-                file.write(buffer)
+            file.writelines(response_buffers)
 
         temp_path.rename(local_path)
 

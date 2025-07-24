@@ -33,7 +33,7 @@ class ExampleDatasetAttributes(DatasetAttributes):
 
 
 class ExampleConfig(TemplateConfig[ExampleDataVar]):
-    """A minimal concrete implementation to test the happy‐path logic."""
+    """A minimal concrete implementation to test the happy-path logic."""
 
     dims: tuple[Dim, ...] = ("time",)
     append_dim: AppendDim = "time"
@@ -60,7 +60,7 @@ class ExampleConfig(TemplateConfig[ExampleDataVar]):
     def derive_coordinates(
         self, ds: xr.Dataset
     ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
-        # exercise the base‐class fallback (which only adds spatial_ref)
+        # exercise the base-class fallback (which only adds spatial_ref)
         return super().derive_coordinates(ds)
 
 

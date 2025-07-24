@@ -80,7 +80,7 @@ def reformat_kubernetes(
             pd.Timestamp(time_end).isoformat(),
         ],
     )
-    subprocess.run(  # noqa: S603
+    subprocess.run(
         ["/usr/bin/kubectl", "apply", "-f", "-"],
         input=json.dumps(kubernetes_job.as_kubernetes_object()),
         text=True,

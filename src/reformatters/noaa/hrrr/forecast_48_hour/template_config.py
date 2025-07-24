@@ -30,7 +30,7 @@ LEAD_TIME_FREQUENCY = pd.Timedelta("1h")
 #  Init cycles going to forecast hour 48 are 00, 06, 12, 18
 EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR = pd.Series(
     {
-        **{h: pd.Timedelta("18h") for h in range(0, 24)},
+        **{h: pd.Timedelta("18h") for h in range(24)},
         **{
             h: pd.Timedelta("48h") for h in range(0, 24, 6)
         },  # must be splatted last to overwrite 18h values

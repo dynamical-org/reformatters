@@ -55,7 +55,7 @@ def deploy_operational_updates(
         ],
     }
 
-    subprocess.run(  # noqa: S603
+    subprocess.run(
         ["/usr/bin/kubectl", "apply", "-f", "-"],
         input=json.dumps(k8s_resource_list),
         text=True,

@@ -79,13 +79,13 @@ def test_dimension_coordinates_shapes_and_values() -> None:
     assert pd.Timedelta("120h") in lt
     assert pd.Timedelta("123h") in lt
     assert pd.Timedelta("384h") == lt[-1]
-    # latitude flips from +90 to –90 in 0.25° steps
+    # latitude flips from +90 to -90 in 0.25° steps
     lat = dc["latitude"]
     assert isinstance(lat, np.ndarray)
     assert lat[0] == 90.0
     assert lat[-1] == -90.0
     assert len(lat) == 721
-    # longitude from –180 to +179.75
+    # longitude from -180 to +179.75
     lon = dc["longitude"]
     assert isinstance(lon, np.ndarray)
     assert lon[0] == -180.0

@@ -49,3 +49,10 @@ class NoaaGfsForecastDataset(
             validation.check_forecast_current_data,
             validation.check_forecast_recent_nans,
         )
+
+    def f(self) -> None:
+        import numpy as np
+
+        np.int16(1) << 15
+
+        return None
