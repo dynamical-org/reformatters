@@ -50,19 +50,19 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def dataset_attributes(self) -> DatasetAttributes:
-        return DatasetAttributes(
-            dataset_id="producer-model-variant",
-            dataset_version="0.1.0",
-            name="Producer Model Variant",
-            description="Weather data from the Model operated by Producer.",
-            attribution="Producer Model Variant data processed by dynamical.org from Producer Model.",
-            spatial_domain="Global",
-            spatial_resolution="0.25 degrees (~20km)",
-            time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
-            time_resolution=f"Forecasts initialized every {self.append_dim_frequency.total_seconds() / 3600:.0f} hours",
-            forecast_domain="Forecast lead time 0-384 hours (0-16 days) ahead",
-            forecast_resolution="Forecast step 0-120 hours: hourly, 123-384 hours: 3 hourly",
-        )
+        # return DatasetAttributes(
+        #     dataset_id="producer-model-variant",
+        #     dataset_version="0.1.0",
+        #     name="Producer Model Variant",
+        #     description="Weather data from the Model operated by Producer.",
+        #     attribution="Producer Model Variant data processed by dynamical.org from Producer Model.",
+        #     spatial_domain="Global",
+        #     spatial_resolution="0.25 degrees (~20km)",
+        #     time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
+        #     time_resolution=f"Forecasts initialized every {self.append_dim_frequency.total_seconds() / 3600:.0f} hours",
+        #     forecast_domain="Forecast lead time 0-384 hours (0-16 days) ahead",
+        #     forecast_resolution="Forecast step 0-120 hours: hourly, 123-384 hours: 3 hourly",
+        # )
         raise NotImplementedError("Subclasses implement `dataset_attributes`")
 
     def dimension_coordinates(self) -> dict[str, Any]:
