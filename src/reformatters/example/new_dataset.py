@@ -91,7 +91,7 @@ def initialize_new_integration(
 
 def _sanitize_identifier(s: str) -> str:
     """Convert string to valid Python identifier by replacing invalid chars with underscore."""
-    return re.sub(r"[^a-zA-Z0-9_]", "_", s)
+    return re.sub(r"[^a-zA-Z0-9_]", "_", s.lower())
 
 
 def _pascal_case(s: str) -> str:
