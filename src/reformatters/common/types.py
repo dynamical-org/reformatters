@@ -25,7 +25,14 @@ type TimedeltaUnits = Literal["seconds since 1970-01-01 00:00:00"]
 
 
 type Dim = Literal[
-    "time", "init_time", "ensemble_member", "lead_time", "latitude", "longitude"
+    "time",
+    "init_time",
+    "ensemble_member",
+    "lead_time",
+    "latitude",
+    "longitude",
+    "x",
+    "y",
 ]
 type AppendDim = Literal["init_time", "time"]
 assert set(get_args(AppendDim)) <= set(get_args(Dim))

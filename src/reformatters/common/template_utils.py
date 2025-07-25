@@ -29,6 +29,7 @@ def write_metadata(
             message="Consolidated metadata is currently not part in the Zarr format 3 specification",
             category=UserWarning,
         )
+        print(template_ds)
         template_ds.to_zarr(store, mode=mode, compute=False)  # type: ignore[call-overload]
 
     if isinstance(store, Path | str):
