@@ -13,20 +13,14 @@ Key features:
 - Integrates with the common RegionJob framework for parallelization and error handling
 """
 
-import re
-import warnings
 from collections.abc import Callable, Mapping, Sequence
 from itertools import product
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
-import rasterio  # type: ignore
 import xarray as xr
 import zarr
 
-from reformatters.common.config import Config
-from reformatters.common.download import download_to_disk, http_store
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
     RegionJob,
@@ -37,6 +31,7 @@ from reformatters.common.types import (
     ArrayFloat32,
     DatetimeLike,
     Dim,
+    Timedelta,
     Timestamp,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import (
@@ -44,6 +39,7 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
     HRRRDomain,
     HRRRFileType,
 )
+from reformatters.noaa.hrrr.read_data import download_hrrr_file, read_hrrr_data
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
 
@@ -51,7 +47,7 @@ class HRRRSourceFileCoord(SourceFileCoord):
     """Source file coordinate for HRRR forecast data."""
 
     init_time: Timestamp
-    lead_time: pd.Timedelta
+    lead_time: Timedelta
     domain: HRRRDomain
     file_type: HRRRFileType
 
@@ -178,17 +174,28 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
             # HRRR forecast data is available for CONUS domain
             domains: list[HRRRDomain] = ["conus"]
 
-            coords_for_var = [
-                HRRRSourceFileCoord(
-                    init_time=init_time,
-                    lead_time=lead_time,
-                    domain=domain,
-                    file_type=file_type,
-                )
-                for init_time, lead_time, domain in product(
-                    init_times, var_lead_times, domains
-                )
-            ]
+            coords_for_var = []
+            for init_time in init_times:
+                # Filter lead times based on init hour
+                # HRRR provides 48h forecasts for 00, 06, 12, 18 UTC; 18h for others
+                init_hour = init_time.hour
+                if init_hour in [0, 6, 12, 18]:
+                    max_lead_time = pd.Timedelta("48h")
+                else:
+                    max_lead_time = pd.Timedelta("18h")
+
+                # Filter lead times for this init_time
+                valid_lead_times = [lt for lt in var_lead_times if lt <= max_lead_time]
+
+                for lead_time, domain in product(valid_lead_times, domains):
+                    coords_for_var.append(
+                        HRRRSourceFileCoord(
+                            init_time=init_time,
+                            lead_time=lead_time,
+                            domain=domain,
+                            file_type=file_type,
+                        )
+                    )
             filtered_coords.extend(coords_for_var)
 
         # Remove duplicates while preserving order
@@ -209,67 +216,25 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
 
     def download_file(self, coord: HRRRSourceFileCoord) -> Path:
         """Download a HRRR file and return the local path."""
-        store = http_store("https://noaa-hrrr-bdp-pds.s3.amazonaws.com")
+        # Filter data_vars to only those matching this file type
+        relevant_vars = [
+            var
+            for var in self.data_vars
+            if var.internal_attrs.hrrr_file_type == coord.file_type
+        ]
 
-        # Generate local file paths
-        lead_time_hours = coord.lead_time.total_seconds() / (60 * 60)
-        init_date_str = coord.init_time.strftime("%Y%m%d")
-        init_hour_str = coord.init_time.strftime("%H")
+        if not relevant_vars:
+            # No variables for this file type, which shouldn't happen in normal operation
+            raise ValueError(f"No variables found for file type {coord.file_type}")
 
-        remote_path = f"hrrr.{init_date_str}/{coord.domain}/hrrr.t{init_hour_str}z.wrf{coord.file_type}f{int(lead_time_hours):02d}.grib2"
-        local_path_filename = remote_path.replace("/", "_")
-
-        # Ensure download directory exists
-        download_dir = Path("data/download/")
-        download_dir.mkdir(parents=True, exist_ok=True)
-
-        idx_remote_path = f"{remote_path}.idx"
-        idx_local_path = download_dir / f"{local_path_filename}.idx"
-        local_path = download_dir / local_path_filename
-
-        try:
-            # First download the index file
-            download_to_disk(
-                store,
-                idx_remote_path,
-                idx_local_path,
-                overwrite_existing=not Config.is_dev,  # Cache files during development
-            )
-
-            # Parse the index file to get byte ranges for our variables
-            # We need to filter data_vars to only those matching this file type
-            relevant_vars = [
-                var
-                for var in self.data_vars
-                if var.internal_attrs.hrrr_file_type == coord.file_type
-            ]
-
-            if not relevant_vars:
-                # No variables for this file type, which shouldn't happen in normal operation
-                raise ValueError(f"No variables found for file type {coord.file_type}")
-
-            byte_range_starts, byte_range_ends = self._parse_index_byte_ranges(
-                idx_local_path, relevant_vars
-            )
-
-            # Download the GRIB file with specific byte ranges
-            download_to_disk(
-                store,
-                remote_path,
-                local_path,
-                overwrite_existing=not Config.is_dev,
-                byte_ranges=(byte_range_starts, byte_range_ends),
-            )
-
-            return local_path
-
-        except Exception as e:
-            # In the original code, missing files return None and are handled gracefully
-            # Rather than failing the entire job, we'll log and re-raise so the base class
-            # can handle this appropriately
-            raise FileNotFoundError(
-                f"Failed to download HRRR file {remote_path}: {e}"
-            ) from e
+        # Use the standalone function for consistent download behavior
+        return download_hrrr_file(
+            init_time=coord.init_time,
+            lead_time=coord.lead_time,
+            domain=coord.domain,
+            file_type=coord.file_type,
+            data_vars=relevant_vars,
+        )
 
     def read_data(
         self,
@@ -280,86 +245,8 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
         if coord.downloaded_path is None:
             raise ValueError("File must be downloaded before reading")
 
-        grib_element = data_var.internal_attrs.grib_element
-        grib_description = data_var.internal_attrs.grib_description
-
-        try:
-            with (
-                warnings.catch_warnings(),
-                rasterio.open(coord.downloaded_path) as reader,
-            ):
-                # Find the matching band for this variable
-                matching_bands = [
-                    band_i + 1  # rasterio uses 1-based indexing
-                    for band_i in range(reader.count)
-                    if grib_description in reader.descriptions[band_i]
-                    and reader.tags(band_i + 1)["GRIB_ELEMENT"] == grib_element
-                ]
-
-                if len(matching_bands) != 1:
-                    raise ValueError(
-                        f"Expected exactly 1 matching band for {grib_element}, "
-                        f"found {len(matching_bands)} in {coord.downloaded_path}"
-                    )
-
-                rasterio_band_index = matching_bands[0]
-
-                # Read the data
-                result: ArrayFloat32 = reader.read(
-                    rasterio_band_index,
-                    out_dtype=np.float32,
-                )
-
-                # HRRR data comes in as (y, x) but we need to transpose to (x, y)
-                # to match our longitude, latitude dimension order
-                return result.T
-
-        except Exception as e:
-            raise ValueError(
-                f"Failed to read data from {coord.downloaded_path}: {e}"
-            ) from e
-
-    def _parse_index_byte_ranges(
-        self,
-        idx_local_path: Path,
-        data_vars: Sequence[HRRRDataVar],
-    ) -> tuple[list[int], list[int]]:
-        """Parse GRIB index file to get byte ranges for specific variables."""
-        with open(idx_local_path) as index_file:
-            index_contents = index_file.read()
-
-        byte_range_starts = []
-        byte_range_ends = []
-
-        for var_info in data_vars:
-            var_match_str = f"{var_info.internal_attrs.grib_element}:{var_info.internal_attrs.grib_index_level}"
-            var_match_str = re.escape(var_match_str)
-
-            matches = re.findall(
-                f"\\d+:(\\d+):.+:{var_match_str}:.+(\\n\\d+:(\\d+))?",
-                index_contents,
-            )
-
-            if len(matches) != 1:
-                raise ValueError(
-                    f"Expected exactly 1 match for {var_info.name}, "
-                    f"found {len(matches)} in {idx_local_path}"
-                )
-
-            match = matches[0]
-            start_byte = int(match[0])
-
-            if match[2] != "":
-                end_byte = int(match[2])
-            else:
-                # If no end byte specified, add a large offset
-                # (similar to existing logic in read_data.py)
-                end_byte = start_byte + (10 * (2**30))  # +10 GiB
-
-            byte_range_starts.append(start_byte)
-            byte_range_ends.append(end_byte)
-
-        return byte_range_starts, byte_range_ends
+        # Use the standalone function for consistent data reading
+        return read_hrrr_data(coord.downloaded_path, data_var)
 
     @classmethod
     def _update_append_dim_end(cls) -> pd.Timestamp:

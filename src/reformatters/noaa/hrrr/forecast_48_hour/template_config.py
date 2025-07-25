@@ -3,6 +3,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+import pyproj
 import xarray as xr
 from pydantic import computed_field
 
@@ -21,6 +22,7 @@ from reformatters.common.zarr import (
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import HRRRDataVar, HRRRInternalAttrs
+from reformatters.noaa.hrrr.read_data import download_hrrr_file
 
 #  All Standard Cycles go to forecast hour 18
 #  Init cycles going to forecast hour 48 are 00, 06, 12, 18
@@ -35,10 +37,8 @@ EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR = pd.Series(
 
 
 class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
-    # HRRR uses a projected coordinate system, but we'll use latitude/longitude
-    # as dimension names to conform with the common interface while
-    # maintaining x/y as non-dimension coordinates
-    dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
+    # HRRR uses a projected coordinate system with x/y dimensions
+    dims: tuple[Dim, ...] = ("init_time", "lead_time", "x", "y")
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = pd.Timestamp("2018-07-13T12:00")  # start of HRRR v3
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
@@ -61,51 +61,73 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
-        # HRRR uses projected coordinates but we map them to lat/lon dimensions
-        # TODO: These should be actual latitude/longitude arrays for the HRRR grid
         return {
             "init_time": self.append_dim_coordinates(
                 self.append_dim_start + self.append_dim_frequency
             ),
             "lead_time": pd.timedelta_range("0h", "48h", freq=pd.Timedelta("1h")),
-            "latitude": np.arange(1059),  # y-dimension mapped to latitude
-            "longitude": np.arange(1799),  # x-dimension mapped to longitude
+            "x": np.arange(1799),  # x-dimension for projected coordinates
+            "y": np.arange(1059),  # y-dimension for projected coordinates
         }
 
     def derive_coordinates(
         self, ds: xr.Dataset
     ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
         """Compute non-dimension coordinates."""
+        # Download a sample file to get spatial information
+        filepath = download_hrrr_file(
+            init_time=pd.Timestamp("2025-01-01T00:00:00"),
+            lead_time=pd.Timedelta("0h"),
+            domain="conus",
+            file_type="sfc",
+            data_vars=[
+                self.data_vars[0]
+            ],  # Use the first data var for bounds/resolution
+        )
+
+        hrrrds = xr.open_dataset(str(filepath), engine="rasterio")
+
+        # Get spatial information from the HRRR file
+        hrrrds_bounds = hrrrds.rio.bounds(recalc=True)
+        hrrrds_res = hrrrds.rio.resolution(recalc=True)
+        dx, dy = hrrrds_res[0], hrrrds_res[1]
+
+        proj_xcorner, proj_ycorner = hrrrds_bounds[0], hrrrds_bounds[3]
+        nx = ds.x.size
+        ny = ds.y.size
+
+        # Create projection coordinates
+        pj = pyproj.Proj(hrrrds.rio.crs.to_proj4())
+        # rio.bounds returns the lower left corner, but we want the center of the gridcell
+        # so we offset by half the gridcell size.
+        x_coords = (proj_xcorner + (0.5 * dx)) + np.arange(nx) * dx
+        y_coords = (proj_ycorner + (0.5 * dy)) + np.arange(ny) * dy
+
+        # Create 2D meshgrids for lat/lon conversion
+        xs, ys = np.meshgrid(x_coords, y_coords)
+        lons, lats = pj(xs, ys, inverse=True)
+
         # Calculate valid_time as init_time + lead_time
         valid_time = ds["init_time"] + ds["lead_time"]
 
-        # Calculate expected and ingested forecast lengths
-        init_hours = ds["init_time"].dt.hour
-        expected_lengths = xr.zeros_like(init_hours, dtype="timedelta64[ns]")
-        for hour in range(24):
-            if hour in [0, 6, 12, 18]:
-                expected_lengths = expected_lengths.where(
-                    init_hours != hour, pd.Timedelta("48h")
-                )
-            else:
-                expected_lengths = expected_lengths.where(
-                    init_hours != hour, pd.Timedelta("18h")
-                )
-
-        # Add x/y projected coordinates
-        x_coords = np.arange(1799)  # Original x coordinates
-        y_coords = np.arange(1059)  # Original y coordinates
+        # Expected forecast length based on initialization hour
+        expected_lengths = EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR.loc[
+            ds["init_time"].dt.hour
+        ]
 
         return {
-            **super().derive_coordinates(ds),
+            # Spatial reference (required by base class)
+            # Valid time coordinate
             "valid_time": valid_time,
-            "expected_forecast_length": (("init_time",), expected_lengths.data),
+            # Forecast length metadata
+            "expected_forecast_length": (("init_time",), expected_lengths.values),
             "ingested_forecast_length": (
                 ("init_time",),
-                expected_lengths.data,
-            ),  # Initial placeholder
-            "x": (("longitude",), x_coords),  # Map longitude dim to x coordinates
-            "y": (("latitude",), y_coords),  # Map latitude dim to y coordinates
+                expected_lengths.values,
+            ),
+            # Latitude and longitude as 2D coordinates over y,x
+            "latitude": (("y", "x"), lats),
+            "longitude": (("y", "x"), lons),
         }
 
     @computed_field  # type: ignore[prop-decorator]
@@ -157,14 +179,14 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     dtype="float64",
                     fill_value=np.nan,
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    chunks=len(dim_coords["longitude"]),
-                    shards=len(dim_coords["longitude"]),
+                    chunks=180,  # Smaller chunk size to avoid zarr sharding bug
+                    shards=180,  # Use same as chunks
                 ),
                 attrs=CoordinateAttrs(
-                    units="unitless",
+                    units="m",
                     statistics_approximate=StatisticsApproximate(
-                        min=0,
-                        max=1798,
+                        min=-2700000.0,
+                        max=2700000.0,
                     ),
                 ),
             ),
@@ -174,49 +196,14 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     dtype="float64",
                     fill_value=np.nan,
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    chunks=len(dim_coords["latitude"]),
-                    shards=len(dim_coords["latitude"]),
+                    chunks=180,  # Smaller chunk size to avoid zarr sharding bug
+                    shards=180,  # Use same as chunks
                 ),
                 attrs=CoordinateAttrs(
-                    units="unitless",
+                    units="m",
                     statistics_approximate=StatisticsApproximate(
-                        min=0,
-                        max=1058,
-                    ),
-                ),
-            ),
-            Coordinate(
-                name="latitude",
-                encoding=Encoding(
-                    dtype="float64",
-                    fill_value=np.nan,
-                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    chunks=len(dim_coords["latitude"]),
-                    shards=None,
-                ),
-                attrs=CoordinateAttrs(
-                    units="degrees_north",
-                    statistics_approximate=StatisticsApproximate(
-                        min=21.138123,
-                        max=52.615653,
-                    ),
-                ),
-            ),
-            Coordinate(
-                name="longitude",
-                encoding=Encoding(
-                    dtype="float64",
-                    fill_value=np.nan,
-                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    chunks=len(dim_coords["longitude"]),
-                    shards=None,
-                ),
-                attrs=CoordinateAttrs(
-                    units="degrees_east",
-                    # TODO: How to set these min/max values?
-                    statistics_approximate=StatisticsApproximate(
-                        min=-134.09548,
-                        max=-60.917192,
+                        min=-1600000.0,
+                        max=1600000.0,
                     ),
                 ),
             ),
@@ -280,19 +267,38 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     ),
                 ),
             ),
+            # Add latitude and longitude as non-dimension coordinates
             Coordinate(
-                name="spatial_ref",
+                name="latitude",
                 encoding=Encoding(
-                    dtype="int64",
-                    fill_value=0,
-                    chunks=(),  # Scalar coordinate
-                    shards=(),
+                    dtype="float64",
+                    fill_value=np.nan,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    chunks=(len(dim_coords["y"]), len(dim_coords["x"])),
+                    shards=(len(dim_coords["y"]), len(dim_coords["x"])),
                 ),
                 attrs=CoordinateAttrs(
-                    units="unitless",
+                    units="degrees_north",
                     statistics_approximate=StatisticsApproximate(
-                        min=0,
-                        max=0,
+                        min=21.138123,
+                        max=52.615653,
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="longitude",
+                encoding=Encoding(
+                    dtype="float64",
+                    fill_value=np.nan,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    chunks=(len(dim_coords["y"]), len(dim_coords["x"])),
+                    shards=(len(dim_coords["y"]), len(dim_coords["x"])),
+                ),
+                attrs=CoordinateAttrs(
+                    units="degrees_east",
+                    statistics_approximate=StatisticsApproximate(
+                        min=-134.09548,
+                        max=-60.917192,
                     ),
                 ),
             ),
@@ -305,16 +311,16 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
         var_chunks: dict[Dim, int] = {
             "init_time": 1,
             "lead_time": 49,
-            "latitude": 180,
-            "longitude": 180,
+            "x": 180,
+            "y": 180,
         }
 
         # TODO: About XXXMB compressed, about XXGB uncompressed
         var_shards: dict[Dim, int] = {
             "init_time": 1,
             "lead_time": 49,
-            "latitude": 180 * 3,  # 2 shards
-            "longitude": 180 * 3,  # 4 shards
+            "x": 180 * 3,  # 3 shards
+            "y": 180 * 3,  # 3 shards
         }
 
         encoding_float32_default = Encoding(
