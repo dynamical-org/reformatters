@@ -273,7 +273,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     horizontal_datum_name="unnamed",
                     grid_mapping_name="latitude_longitude",
                     spatial_ref='GEOGCS["Coordinate System imported from GRIB file",DATUM["unnamed",SPHEROID["Sphere",6371229,0]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST]]',
-                    comment="From the WKT string output by gdalinfo.",
+                    comment="A perfect sphere geographic CRS with a radius of 6,371,229m, extracted from grib.",
                 ),
             ),
         ]
