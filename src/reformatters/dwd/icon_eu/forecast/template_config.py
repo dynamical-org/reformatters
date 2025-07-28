@@ -284,13 +284,13 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
         """Define metadata and encoding for each data variable."""
         var_chunks: dict[Dim, int] = {
             "init_time": 1,
-            "lead_time": 120,
-            "latitude": 73,
-            "longitude": 153,
+            "lead_time": 93,
+            "latitude": 73,  # 73 = 657 / 9
+            "longitude": 153,  # 153 = 1377 / 9
         }
         var_shards: dict[Dim, int] = {
             "init_time": 1,
-            "lead_time": 120,
+            "lead_time": 93,
             "latitude": 657,
             "longitude": 1377,
         }
