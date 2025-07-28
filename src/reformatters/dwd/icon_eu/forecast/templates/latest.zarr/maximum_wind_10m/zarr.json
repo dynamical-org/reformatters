@@ -11,7 +11,7 @@
     "configuration": {
       "chunk_shape": [
         1,
-        120,
+        93,
         657,
         1377
       ]
@@ -30,8 +30,8 @@
       "configuration": {
         "chunk_shape": [
           1,
-          120,
-          73,
+          93,
+          219,
           153
         ],
         "codecs": [
@@ -73,7 +73,7 @@
     "units": "m/s",
     "comment": "Maximum wind gust at 10 m above ground. It is diagnosed from the turbulence state in the atmospheric boundary layer, including a potential enhancement by the SSO parameterization over mountainous terrain. In the presence of deep convection, it contains an additional contribution due to convective gusts.",
     "step_type": "max",
-    "coordinates": "ingested_forecast_length spatial_ref valid_time",
+    "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [

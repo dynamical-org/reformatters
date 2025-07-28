@@ -11,7 +11,7 @@
     "configuration": {
       "chunk_shape": [
         1,
-        120,
+        93,
         657,
         1377
       ]
@@ -30,8 +30,8 @@
       "configuration": {
         "chunk_shape": [
           1,
-          120,
-          73,
+          93,
+          219,
           153
         ],
         "codecs": [
@@ -68,13 +68,12 @@
     }
   ],
   "attributes": {
-    "long_name": "2 metre relative humidity",
-    "short_name": "r2",
-    "standard_name": "relative_humidity",
-    "units": "%",
-    "comment": "Relative humidity at 2m above ground. Other short_names used for this parameter: rh, 2r, r.",
-    "step_type": "instant",
-    "coordinates": "ingested_forecast_length spatial_ref valid_time",
+    "long_name": "Total Precipitation",
+    "short_name": "tp",
+    "units": "kg m**-2",
+    "comment": "Total precipitation accumulated since model start. TOT_PREC = RAIN_GSP + SNOW_GSP + RAIN_CON + SNOW_CON.",
+    "step_type": "accum",
+    "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [

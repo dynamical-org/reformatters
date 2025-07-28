@@ -282,11 +282,11 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
     @property
     def data_vars(self) -> Sequence[DwdIconEuDataVar]:
         """Define metadata and encoding for each data variable."""
-        # Roughly 3.4MB uncompressed, 1.9MB compressed
+        # Roughly 4.5MB uncompressed, 2.5MB compressed
         var_chunks: dict[Dim, int] = {
             "init_time": 1,
             "lead_time": 93,
-            "latitude": 165,  # 165 = 657 / 3.98...
+            "latitude": 219,  # 219 = 657 / 3
             "longitude": 153,  # 153 = 1377 / 9
         }
         # Roughly 337MB uncompressed, 67MB compressed

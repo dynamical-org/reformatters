@@ -11,7 +11,7 @@
     "configuration": {
       "chunk_shape": [
         1,
-        120,
+        93,
         657,
         1377
       ]
@@ -30,8 +30,8 @@
       "configuration": {
         "chunk_shape": [
           1,
-          120,
-          73,
+          93,
+          219,
           153
         ],
         "codecs": [
@@ -73,7 +73,7 @@
     "units": "%",
     "comment": "Total cloud cover. Different agencies use different short_names for this same parameter: ECMWF: TCC; NOAA & WMO: TCDC.",
     "step_type": "instant",
-    "coordinates": "ingested_forecast_length spatial_ref valid_time",
+    "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [
