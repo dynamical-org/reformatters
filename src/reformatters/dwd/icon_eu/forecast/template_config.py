@@ -289,6 +289,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
             "latitude": 165,  # 165 = 657 / 3.98...
             "longitude": 153,  # 153 = 1377 / 9
         }
+        # Roughly 337MB uncompressed, 67MB compressed
         var_shards: dict[Dim, int] = {
             "init_time": 1,
             "lead_time": 93,
