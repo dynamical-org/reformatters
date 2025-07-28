@@ -5,7 +5,7 @@ import numpy as np
 import rioxarray  # noqa: F401  Adds .rio accessor to datasets
 import xarray as xr
 
-from reformatters.common.config import Config  # noqa:F401
+from reformatters.common.config import Config
 from reformatters.common.logging import get_logger
 from reformatters.common.template_utils import (
     assign_var_metadata,

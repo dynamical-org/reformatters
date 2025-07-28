@@ -88,7 +88,7 @@ def get_mode(
     else:
         raise ValueError(f"Unexpected store type: {type(store)}")
 
-    if path_str.endswith("dev.zarr") or path_str.endswith("-tmp.zarr"):
+    if path_str.endswith(("dev.zarr", "-tmp.zarr")):
         return "w"  # Allow overwritting dev store
 
     return "w-"  # Safe default - don't overwrite

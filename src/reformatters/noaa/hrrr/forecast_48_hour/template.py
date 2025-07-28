@@ -7,7 +7,7 @@ import pyproj
 import rioxarray  # noqa: F401  Adds .rio accessor to datasets
 import xarray as xr
 
-from reformatters.common.config import Config  # noqa:F401
+from reformatters.common.config import Config
 from reformatters.common.template_utils import (
     assign_var_metadata,
     empty_copy_with_reindex,

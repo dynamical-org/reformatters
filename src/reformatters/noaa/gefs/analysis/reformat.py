@@ -115,7 +115,7 @@ def reformat_kubernetes(
         command=command,
         pod_active_deadline=timedelta(minutes=30),
     )
-    subprocess.run(  # noqa: S603
+    subprocess.run(
         ["/usr/bin/kubectl", "apply", "-f", "-"],
         input=json.dumps(kubernetes_job.as_kubernetes_object()),
         text=True,

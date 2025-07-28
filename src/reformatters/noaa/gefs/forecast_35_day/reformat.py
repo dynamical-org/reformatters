@@ -101,7 +101,7 @@ def reformat_kubernetes(
         command=command,
         pod_active_deadline=timedelta(hours=2),
     )
-    subprocess.run(  # noqa: S603
+    subprocess.run(
         ["/usr/bin/kubectl", "apply", "-f", "-"],
         input=json.dumps(kubernetes_job.as_kubernetes_object()),
         text=True,
@@ -182,7 +182,7 @@ def reformat_operational_update(job_name: str) -> None:
             slice,
             zip(
                 new_init_time_indices,
-                list(new_init_time_indices[1:]) + [None],
+                list(new_init_time_indices[1:]) + [None],  # noqa: RUF005 working and this code is going away when GEFS is refactored
                 strict=False,
             ),
         )

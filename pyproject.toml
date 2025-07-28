@@ -56,6 +56,10 @@ select = [
     "B",     # bugs
     "C4",    # comprehensions
     "T10",   # debugger
+    "RUF",   # ruff
+    "FURB",  # refurb
+    "INP",   # missing __init__.py
+    "PIE",   # misc flake8
 ]
 ignore = [
     "S101",  # disallow asserts

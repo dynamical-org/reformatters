@@ -3,13 +3,14 @@ from typing import Annotated, Any, Generic, Literal, TypeVar
 
 import numcodecs  # type: ignore
 import pydantic
+from pydantic import Field
 
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.types import TimedeltaUnits, TimestampUnits
 
 
 class DatasetAttributes(FrozenBaseModel):
-    dataset_id: str
+    dataset_id: str = Field(pattern=r"^[a-zA-Z0-9-]+$")
     dataset_version: str
     name: str
     description: str

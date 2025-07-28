@@ -239,7 +239,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             ),
             secret_names=self.storage_config.k8s_secret_names,
         )
-        subprocess.run(  # noqa: S603
+        subprocess.run(
             ["/usr/bin/kubectl", "apply", "-f", "-"],
             input=json.dumps(kubernetes_job.as_kubernetes_object()),
             text=True,
