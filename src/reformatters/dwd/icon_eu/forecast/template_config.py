@@ -459,7 +459,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
             ),
             DwdIconEuDataVar(
-                name="relative_humidity",
+                name="relative_humidity_2m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="r2",
