@@ -98,6 +98,14 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 (self.append_dim,),
                 np.full(ds[self.append_dim].size, np.timedelta64("NaT", "ns")),
             ),
+            "expected_forecast_length": (
+                (self.append_dim,),
+                np.full(
+                    ds[self.append_dim].size,
+                    ds["lead_time"].max(),
+                    dtype="timedelta64[ns]",
+                ),
+            ),
             "spatial_ref": SPATIAL_REF_COORDS,
         }
 
@@ -203,6 +211,24 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
             ),
             Coordinate(
                 name="ingested_forecast_length",
+                encoding=Encoding(
+                    dtype="int64",
+                    fill_value=-1,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    units="seconds",
+                    chunks=append_dim_coordinate_chunk_size,
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    units="seconds",
+                    statistics_approximate=StatisticsApproximate(
+                        min=str(dim_coords["lead_time"].min()),
+                        max=str(dim_coords["lead_time"].max()),
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="expected_forecast_length",
                 encoding=Encoding(
                     dtype="int64",
                     fill_value=-1,
