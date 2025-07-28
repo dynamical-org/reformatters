@@ -285,7 +285,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
         var_chunks: dict[Dim, int] = {
             "init_time": 1,
             "lead_time": 93,
-            "latitude": 73,  # 73 = 657 / 9
+            "latitude": 165,  # 165 = 657 / 3.98...
             "longitude": 153,  # 153 = 1377 / 9
         }
         var_shards: dict[Dim, int] = {
