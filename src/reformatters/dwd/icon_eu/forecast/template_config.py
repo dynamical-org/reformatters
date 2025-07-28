@@ -444,7 +444,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
             ),
             DwdIconEuDataVar(
-                name="pressure_reduced_to_msl",
+                name="pressure_reduced_to_mean_sea_level",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="prmsl",
