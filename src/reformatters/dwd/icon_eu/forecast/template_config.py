@@ -321,7 +321,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="aswdifd_s",
-                    long_name="Downward diffusive short wave radiation flux at surface (mean over forecast time)",
+                    long_name="Downward diffusive short wave radiation flux at surface",
                     units="W m-2",
                     step_type="avg",
                     standard_name="Mean surface diffuse short-wave radiation flux",  # From ECMWF.
@@ -336,7 +336,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="aswdir_s",
-                    long_name="Downward direct short wave radiation flux at surface (mean over forecast time)",
+                    long_name="Downward direct short wave radiation flux at surface",
                     units="W m-2",
                     step_type="avg",
                     comment=(
