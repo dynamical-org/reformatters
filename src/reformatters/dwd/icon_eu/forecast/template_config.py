@@ -56,7 +56,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
     @property
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
-            dataset_id="dwd-icon_eu-forecast",
+            dataset_id="dwd-icon-eu-forecast",
             dataset_version="0.1.0",
             name="DWD ICON-EU Forecast",
             description="High-resolution weather forecasts for Europe from the ICON-EU model operated by Deutscher Wetterdienst (DWD).",
