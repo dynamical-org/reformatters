@@ -48,7 +48,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
     dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = pd.Timestamp(
-        "2020-01-01T00:00"  # The start of OCF's ICON-EU archive on Hugging Face.
+        "2025-08-08T00:00"  # TODO: Update this when we actual deploy operationally.
     )
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
 
