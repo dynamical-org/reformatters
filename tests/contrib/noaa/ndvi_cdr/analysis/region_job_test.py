@@ -321,13 +321,12 @@ def test_read_usable_ndvi_viirs_era(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_generate_source_file_coords_uses_ncei_for_recent_year(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test that NCEI is used for recent years in generate_source_file_coords."""
+    """Test that NCEI is used for recent source files in generate_source_file_coords."""
 
     # Mock pd.Timestamp.now to return a date within 2 weeks of the test files
     monkeypatch.setattr("pandas.Timestamp.now", lambda: pd.Timestamp("2026-01-15"))
     monkeypatch.setattr("obstore.list", Mock())
 
-    # Mock requests.get to return HTML with VIIRS files (2025 uses NCEI)
     def mock_requests_get(url: str, **kwargs: Any) -> Mock:
         mock_response = Mock()
         mock_response.raise_for_status = Mock()
@@ -418,7 +417,7 @@ def test_list_source_files_routing_by_year(
         template_ds=Mock(),
         data_vars=template_config.data_vars,
         append_dim=template_config.append_dim,
-        region=slice(0, 10),
+        region=Mock(spec=slice),
         reformat_job_name="test",
     )
 
