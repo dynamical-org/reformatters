@@ -67,7 +67,7 @@ def http_store(base_url: str) -> obstore.store.HTTPStore:
         base_url,
         client_options={
             "connect_timeout": "4 seconds",
-            "timeout": "16 seconds",
+            "timeout": "120 seconds",
         },
         retry_config={
             "max_retries": 16,

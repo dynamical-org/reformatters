@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import Mock
 
 import numpy as np
@@ -315,3 +316,124 @@ def test_read_usable_ndvi_viirs_era(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result[2, 0] == 0.2  # land_no_desert+aerosol preserved
     assert np.isnan(result[2, 1])  # no aerosol quality masked
     assert np.isnan(result[2, 2])  # no aerosol quality masked
+
+
+def test_generate_source_file_coords_uses_ncei_for_recent_year(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that NCEI is used for recent source files in generate_source_file_coords."""
+
+    # Mock pd.Timestamp.now to return a date within 2 weeks of the test files
+    monkeypatch.setattr("pandas.Timestamp.now", lambda: pd.Timestamp("2026-01-15"))
+    monkeypatch.setattr("obstore.list", Mock())
+
+    def mock_requests_get(url: str, **kwargs: Any) -> Mock:
+        mock_response = Mock()
+        mock_response.raise_for_status = Mock()
+        if "2025" in url:
+            mock_response.text = """
+            <a href="VIIRS-Land_v001_JP113C1_NOAA-20_20251231_c20250102153009.nc">VIIRS-Land_v001_JP113C1_NOAA-20_20251231_c20250102153009.nc</a>
+            """
+        elif "2026" in url:
+            mock_response.text = """
+            <a href="VIIRS-Land_v001_JP113C1_NOAA-20_20260101_c20260103153010.nc">VIIRS-Land_v001_JP113C1_NOAA-20_20260101_c20260103153010.nc</a>
+            <a href="VIIRS-Land_v001_JP113C1_NOAA-20_20260102_c20260104153009.nc">VIIRS-Land_v001_JP113C1_NOAA-20_20260102_c20260104153009.nc</a>
+            """
+        else:
+            mock_response.text = ""
+        return mock_response
+
+    monkeypatch.setattr("requests.get", mock_requests_get)
+
+    template_config = NoaaNdviCdrAnalysisTemplateConfig()
+
+    template_ds = xr.Dataset(
+        coords={
+            "time": pd.date_range("2025-12-31", "2026-01-02", freq="D"),
+            "latitude": np.linspace(89.999998472637188, -89.999998472637188, 3600),
+            "longitude": np.linspace(-180.000006104363450, 179.999993895636550, 7200),
+        }
+    )
+
+    region_job = NoaaNdviCdrAnalysisRegionJob.model_construct(
+        final_store=get_zarr_store("prod-path", "test-dataset", "test-version"),
+        tmp_store=Mock(),
+        template_ds=template_ds,
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=Mock(spec=slice),
+        reformat_job_name="test",
+    )
+
+    processing_region_ds = template_ds.isel(latitude=slice(0, 10))
+    coords = region_job.generate_source_file_coords(
+        processing_region_ds, template_config.data_vars
+    )
+
+    assert len(coords) == 3
+    assert (
+        coords[0].get_url()
+        == "s3://noaa-cdr-ndvi-pds/data/2025/VIIRS-Land_v001_JP113C1_NOAA-20_20251231_c20250102153009.nc"
+    )
+    assert (
+        coords[1].get_url()
+        == "http://ncei.noaa.gov/data/land-normalized-difference-vegetation-index/access/2026/VIIRS-Land_v001_JP113C1_NOAA-20_20260101_c20260103153010.nc"
+    )
+    assert (
+        coords[2].get_url()
+        == "http://ncei.noaa.gov/data/land-normalized-difference-vegetation-index/access/2026/VIIRS-Land_v001_JP113C1_NOAA-20_20260102_c20260104153009.nc"
+    )
+
+
+@pytest.mark.parametrize(
+    "test_year,expected_source,expected_result",
+    [
+        (
+            2026,
+            "ncei",
+            ["ncei_file.nc"],
+        ),  # Current year -> NCEI (# current year mocked to 2026)
+        (2025, "ncei", ["ncei_file.nc"]),  # Previous year -> NCEI
+        (2024, "s3", ["s3_file.nc"]),  # 2+ years ago -> S3
+        (2020, "s3", ["s3_file.nc"]),  # Older year -> S3
+    ],
+)
+def test_list_source_files_routing_by_year(
+    monkeypatch: pytest.MonkeyPatch,
+    test_year: int,
+    expected_source: str,
+    expected_result: list[str],
+) -> None:
+    """Test that _list_source_files routes to NCEI for recent years and S3 for older years."""
+    # Mock current date to 2026
+    mock_now = Mock(return_value=pd.Timestamp("2026-06-15"))
+    monkeypatch.setattr("pandas.Timestamp.now", mock_now)
+
+    template_config = NoaaNdviCdrAnalysisTemplateConfig()
+
+    region_job = NoaaNdviCdrAnalysisRegionJob.model_construct(
+        final_store=get_zarr_store("prod-path", "test-dataset", "test-version"),
+        tmp_store=Mock(),
+        template_ds=Mock(),
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=Mock(spec=slice),
+        reformat_job_name="test",
+    )
+
+    # Mock both methods
+    mock_ncei = Mock(return_value=["ncei_file.nc"])
+    mock_s3 = Mock(return_value=["s3_file.nc"])
+    monkeypatch.setattr(region_job, "_list_ncei_source_files", mock_ncei)
+    monkeypatch.setattr(region_job, "_list_s3_source_files", mock_s3)
+
+    result = region_job._list_source_files(test_year)
+
+    assert result == expected_result
+
+    if expected_source == "ncei":
+        mock_ncei.assert_called_once_with(test_year)
+        mock_s3.assert_not_called()
+    else:
+        mock_s3.assert_called_once_with(test_year)
+        mock_ncei.assert_not_called()
