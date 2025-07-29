@@ -153,7 +153,7 @@ class NoaaNdviCdrAnalysisRegionJob(
         local_path = get_local_path(self.dataset_id, remote_path)
 
         download_to_disk(store, remote_path, local_path, overwrite_existing=True)
-        log.info(f"Downloaded {url} to {local_path}")
+        log.debug(f"Downloaded {url} to {local_path}")
 
         return local_path
 
