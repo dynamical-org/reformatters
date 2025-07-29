@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import cast
@@ -7,10 +8,16 @@ import numpy as np
 import obstore
 import pandas as pd
 import rasterio  # type: ignore[import-untyped]
+import requests
 import xarray as xr
 import zarr
 
-from reformatters.common.download import download_to_disk, get_local_path, s3_store
+from reformatters.common.download import (
+    download_to_disk,
+    get_local_path,
+    http_store,
+    s3_store,
+)
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
@@ -61,13 +68,17 @@ class NoaaNdviCdrAnalysisSourceFileCoord(SourceFileCoord):
 class NoaaNdviCdrAnalysisRegionJob(
     RegionJob[NoaaNdviCdrDataVar, NoaaNdviCdrAnalysisSourceFileCoord]
 ):
-    download_parallelism: int = 10
+    download_parallelism: int = 5
 
     # We observed deadlocks when using more than 2 threads to read data into shared memory.
     read_parallelism: int = 1
 
     s3_bucket_url: str = "s3://noaa-cdr-ndvi-pds"
     s3_region: str = "us-east-1"
+
+    root_nc_url: str = (
+        "http://ncei.noaa.gov/data/land-normalized-difference-vegetation-index/access"
+    )
 
     def generate_source_file_coords(
         self,
@@ -96,10 +107,18 @@ class NoaaNdviCdrAnalysisRegionJob(
                 # We want to extract the date part (e.g., 19810728)
                 try:
                     _, date_str, _ = filepath.rsplit("_", 2)
+
                     # Parse date string to pd.Timestamp
                     file_time = pd.Timestamp(date_str)
                     filename = Path(filepath).name
-                    url = f"{self.s3_bucket_url}/data/{year}/{filename}"
+
+                    # if file_time is within 2 weeks of today, fetch from ncei, otherwise fetch from s3
+                    today = pd.Timestamp.now().normalize()
+                    if abs((today - file_time).days) <= 14:
+                        url = f"{self.root_nc_url}/{year}/{filename}"
+                    else:
+                        url = f"{self.s3_bucket_url}/data/{year}/{filename}"
+
                     urls_by_time[file_time] = url
                 except Exception as e:
                     log.warning(f"Skipping file {filepath} due to error: {e}")
@@ -117,14 +136,20 @@ class NoaaNdviCdrAnalysisRegionJob(
 
     def download_file(self, coord: NoaaNdviCdrAnalysisSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
-        store = s3_store(self.s3_bucket_url, self.s3_region, skip_signature=True)
+        url = coord.get_url()
+        parsed_url = urlparse(url)
 
-        s3_url = coord.get_url()
-        object_key = urlparse(s3_url).path.removeprefix("/")
-        local_path = get_local_path(self.dataset_id, object_key)
+        store: obstore.store.HTTPStore | obstore.store.S3Store
+        if parsed_url.netloc == "ncei.noaa.gov":
+            store = http_store(f"https://{parsed_url.netloc}")
+        else:
+            store = s3_store(self.s3_bucket_url, self.s3_region, skip_signature=True)
 
-        download_to_disk(store, object_key, local_path, overwrite_existing=True)
-        log.debug(f"Downloaded {object_key} to {local_path}")
+        remote_path = urlparse(url).path.removeprefix("/")
+        local_path = get_local_path(self.dataset_id, remote_path)
+
+        download_to_disk(store, remote_path, local_path, overwrite_existing=True)
+        log.info(f"Downloaded {url} to {local_path}")
 
         return local_path
 
@@ -197,6 +222,17 @@ class NoaaNdviCdrAnalysisRegionJob(
         return cast(ArrayFloat32, ndvi_data)
 
     def _list_source_files(self, year: int) -> list[str]:
+        # We believe NCEI will have more recent files before S3 does.
+        # While this gap may only be a few weeks at most, we cannot enumerate
+        # files by a coarser granularity than a year. The reason we check <= 1
+        # is to be sure that we continue to check NCEI in January of the current year.
+
+        if pd.Timestamp.now().year - year > 1:
+            return self._list_s3_source_files(year)
+        else:
+            return self._list_ncei_source_files(year)
+
+    def _list_s3_source_files(self, year: int) -> list[str]:
         store = s3_store(self.s3_bucket_url, self.s3_region, skip_signature=True)
         results = list(obstore.list(store, f"data/{year}", chunk_size=366))
         if len(results) == 0:
@@ -207,6 +243,15 @@ class NoaaNdviCdrAnalysisRegionJob(
         )
 
         return [result["path"] for result in results[0]]
+
+    def _list_ncei_source_files(self, year: int) -> list[str]:
+        """List source files from NCEI."""
+        ncei_url = f"{self.root_nc_url}{year}/"
+        response = requests.get(ncei_url, timeout=15)
+        response.raise_for_status()
+        content = response.text
+        filenames = re.findall(r"href=\"(VIIRS-Land.+nc)\"", content)
+        return filenames
 
     @classmethod
     def operational_update_jobs(
