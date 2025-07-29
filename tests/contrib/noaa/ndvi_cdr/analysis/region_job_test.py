@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import Mock
 
 import numpy as np
@@ -324,12 +325,12 @@ def test_generate_source_file_coords_uses_ncei_for_recent_year(
 
     # Mock pd.Timestamp.now to return a date within 2 weeks of the test files
     monkeypatch.setattr("pandas.Timestamp.now", lambda: pd.Timestamp("2025-01-15"))
+    monkeypatch.setattr("obstore.list", Mock())
 
-    # Mock requests.get to return HTML with VIIRS files
-    def mock_requests_get(url: str) -> Mock:
+    # Mock requests.get to return HTML with VIIRS files (2025 uses NCEI)
+    def mock_requests_get(url: str, **kwargs: Any) -> Mock:
         mock_response = Mock()
         mock_response.raise_for_status = Mock()
-
         if "2024" in url:
             mock_response.text = """
             <a href="VIIRS-Land_v001_JP113C1_NOAA-20_20241231_c20250102153009.nc">VIIRS-Land_v001_JP113C1_NOAA-20_20241231_c20250102153009.nc</a>
@@ -341,7 +342,6 @@ def test_generate_source_file_coords_uses_ncei_for_recent_year(
             """
         else:
             mock_response.text = ""
-
         return mock_response
 
     monkeypatch.setattr("requests.get", mock_requests_get)
@@ -372,12 +372,10 @@ def test_generate_source_file_coords_uses_ncei_for_recent_year(
     )
 
     assert len(coords) == 3
-    # Older file gets S3 URL
     assert (
         coords[0].get_url()
         == "s3://noaa-cdr-ndvi-pds/data/2024/VIIRS-Land_v001_JP113C1_NOAA-20_20241231_c20250102153009.nc"
     )
-    # Recent files get NCEI URLs
     assert (
         coords[1].get_url()
         == "http://ncei.noaa.gov/data/land-normalized-difference-vegetation-index/access/2025/VIIRS-Land_v001_JP113C1_NOAA-20_20250101_c20250103153010.nc"
@@ -391,9 +389,13 @@ def test_generate_source_file_coords_uses_ncei_for_recent_year(
 @pytest.mark.parametrize(
     "test_year,expected_source,expected_result",
     [
-        (2023, "ncei", ["ncei_file.nc"]),  # Current year -> NCEI
-        (2022, "ncei", ["ncei_file.nc"]),  # Previous year -> NCEI
-        (2021, "s3", ["s3_file.nc"]),  # 2+ years ago -> S3
+        (
+            2026,
+            "ncei",
+            ["ncei_file.nc"],
+        ),  # Current year -> NCEI (# current year mocked to 2026)
+        (2025, "ncei", ["ncei_file.nc"]),  # Previous year -> NCEI
+        (2024, "s3", ["s3_file.nc"]),  # 2+ years ago -> S3
         (2020, "s3", ["s3_file.nc"]),  # Older year -> S3
     ],
 )
@@ -404,8 +406,8 @@ def test_list_source_files_routing_by_year(
     expected_result: list[str],
 ) -> None:
     """Test that _list_source_files routes to NCEI for recent years and S3 for older years."""
-    # Mock current date to 2023
-    mock_now = Mock(return_value=pd.Timestamp("2023-06-15"))
+    # Mock current date to 2026
+    mock_now = Mock(return_value=pd.Timestamp("2026-06-15"))
     monkeypatch.setattr("pandas.Timestamp.now", mock_now)
 
     template_config = NoaaNdviCdrAnalysisTemplateConfig()

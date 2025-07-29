@@ -112,9 +112,12 @@ class NoaaNdviCdrAnalysisRegionJob(
                     file_time = pd.Timestamp(date_str)
                     filename = Path(filepath).name
 
-                    # if file_time is within 2 weeks of today, fetch from ncei, otherwise fetch from s3
-                    today = pd.Timestamp.now().normalize()
-                    if abs((today - file_time).days) <= 14:
+                    # if file_time is within 2 weeks of today, fetch from ncei,
+                    # otherwise fetch from S3
+                    now = pd.Timestamp.now()
+                    two_weeks_ago = now - pd.Timedelta(days=14)
+                    is_within_last_2_weeks = two_weeks_ago <= file_time <= now
+                    if is_within_last_2_weeks:
                         url = f"{self.root_nc_url}/{year}/{filename}"
                     else:
                         url = f"{self.s3_bucket_url}/data/{year}/{filename}"
@@ -226,11 +229,11 @@ class NoaaNdviCdrAnalysisRegionJob(
         # While this gap may only be a few weeks at most, we cannot enumerate
         # files by a coarser granularity than a year. The reason we check <= 1
         # is to be sure that we continue to check NCEI in January of the current year.
-
-        if pd.Timestamp.now().year - year > 1:
-            return self._list_s3_source_files(year)
-        else:
+        current_year = pd.Timestamp.now().year
+        if year >= 2024 and year in (current_year, current_year - 1):
             return self._list_ncei_source_files(year)
+        else:
+            return self._list_s3_source_files(year)
 
     def _list_s3_source_files(self, year: int) -> list[str]:
         store = s3_store(self.s3_bucket_url, self.s3_region, skip_signature=True)
@@ -246,11 +249,26 @@ class NoaaNdviCdrAnalysisRegionJob(
 
     def _list_ncei_source_files(self, year: int) -> list[str]:
         """List source files from NCEI."""
-        ncei_url = f"{self.root_nc_url}{year}/"
+        ncei_url = f"{self.root_nc_url}/{year}/"
         response = requests.get(ncei_url, timeout=15)
         response.raise_for_status()
         content = response.text
         filenames = re.findall(r"href=\"(VIIRS-Land.+nc)\"", content)
+        filenames = list(set(filenames))
+
+        # Simple check: startswith, endswith, and only one .nc present
+        def is_valid_viirs_nc(fname: str) -> bool:
+            return (
+                fname.startswith("VIIRS-Land")
+                and fname.endswith(".nc")
+                and fname.count(".nc") == 1
+            )
+
+        assert all(is_valid_viirs_nc(fname) for fname in filenames), (
+            "Some filenames do not conform to expected structure: "
+            + str([fname for fname in filenames if not is_valid_viirs_nc(fname)])
+        )
+        filenames = [fname for fname in filenames if is_valid_viirs_nc(fname)]
         return filenames
 
     @classmethod
