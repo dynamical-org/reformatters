@@ -68,6 +68,8 @@ class NoaaNdviCdrAnalysisSourceFileCoord(SourceFileCoord):
 class NoaaNdviCdrAnalysisRegionJob(
     RegionJob[NoaaNdviCdrDataVar, NoaaNdviCdrAnalysisSourceFileCoord]
 ):
+    # Set lower than would be needed for fetching exclusively from S3
+    # to accomodate the cases where we are downloading from NCEI.
     download_parallelism: int = 5
 
     # We observed deadlocks when using more than 2 threads to read data into shared memory.
@@ -114,9 +116,8 @@ class NoaaNdviCdrAnalysisRegionJob(
 
                     # if file_time is within 2 weeks of today, fetch from ncei,
                     # otherwise fetch from S3
-                    now = pd.Timestamp.now()
-                    two_weeks_ago = now - pd.Timedelta(days=14)
-                    is_within_last_2_weeks = two_weeks_ago <= file_time <= now
+                    two_weeks_ago = pd.Timestamp.now() - pd.Timedelta(days=14)
+                    is_within_last_2_weeks = two_weeks_ago <= file_time
                     if is_within_last_2_weeks:
                         url = f"{self.root_nc_url}/{year}/{filename}"
                     else:
@@ -226,11 +227,16 @@ class NoaaNdviCdrAnalysisRegionJob(
 
     def _list_source_files(self, year: int) -> list[str]:
         # We believe NCEI will have more recent files before S3 does.
-        # While this gap may only be a few weeks at most, we cannot enumerate
-        # files by a coarser granularity than a year. The reason we check <= 1
-        # is to be sure that we continue to check NCEI in January of the current year.
+        # While this gap may only be a couple of weeks at most, we cannot enumerate
+        # files by a coarser granularity than a year. The reason we check if the requested
+        # year is the current or previous year is to be sure that we continue to check
+        # NCEI in early January of the current year. I.e., in Jan 2026, we should check
+        # NCEI for the 2025 files.
+        #
+        # We hardcode 2025 as the earliest year to check NCEI, since as of this writing,
+        # we know S3 is up to date through June 2025. Backfills should go through S3.
         current_year = pd.Timestamp.now().year
-        if year >= 2024 and year in (current_year, current_year - 1):
+        if year >= 2025 and year in (current_year, current_year - 1):
             return self._list_ncei_source_files(year)
         else:
             return self._list_s3_source_files(year)
@@ -248,10 +254,24 @@ class NoaaNdviCdrAnalysisRegionJob(
         return [result["path"] for result in results[0]]
 
     def _list_ncei_source_files(self, year: int) -> list[str]:
-        """List source files from NCEI."""
+        """List source files from NCEI.
+
+        The response text from NCEI is HTML with a table enumerating available files. Example:
+
+        <td><a href="VIIRS-Land_v001_JP113C1_NOAA-20_20250101_c20250103153010.nc">VIIRS-Land_v001_JP113C1_NOAA-20_20250101_c20250103153010.nc</a></td>
+        <td align="right">2025-01-05 15:40</td>
+        <td align="right">63914048</td>
+        <td></td>
+        </tr>
+        <tr>
+        <td><a href="VIIRS-Land_v001_JP113C1_NOAA-20_20250102_c20250104153009.nc">VIIRS-Land_v001_JP113C1_NOAA-20_20250102_c20250104153009.nc</a></td>
+        ...
+        """
         ncei_url = f"{self.root_nc_url}/{year}/"
+
         response = requests.get(ncei_url, timeout=15)
         response.raise_for_status()
+
         content = response.text
         filenames = re.findall(r"href=\"(VIIRS-Land.+nc)\"", content)
         filenames = list(set(filenames))
@@ -268,7 +288,7 @@ class NoaaNdviCdrAnalysisRegionJob(
             "Some filenames do not conform to expected structure: "
             + str([fname for fname in filenames if not is_valid_viirs_nc(fname)])
         )
-        filenames = [fname for fname in filenames if is_valid_viirs_nc(fname)]
+
         return filenames
 
     @classmethod

@@ -324,21 +324,21 @@ def test_generate_source_file_coords_uses_ncei_for_recent_year(
     """Test that NCEI is used for recent years in generate_source_file_coords."""
 
     # Mock pd.Timestamp.now to return a date within 2 weeks of the test files
-    monkeypatch.setattr("pandas.Timestamp.now", lambda: pd.Timestamp("2025-01-15"))
+    monkeypatch.setattr("pandas.Timestamp.now", lambda: pd.Timestamp("2026-01-15"))
     monkeypatch.setattr("obstore.list", Mock())
 
     # Mock requests.get to return HTML with VIIRS files (2025 uses NCEI)
     def mock_requests_get(url: str, **kwargs: Any) -> Mock:
         mock_response = Mock()
         mock_response.raise_for_status = Mock()
-        if "2024" in url:
+        if "2025" in url:
             mock_response.text = """
-            <a href="VIIRS-Land_v001_JP113C1_NOAA-20_20241231_c20250102153009.nc">VIIRS-Land_v001_JP113C1_NOAA-20_20241231_c20250102153009.nc</a>
+            <a href="VIIRS-Land_v001_JP113C1_NOAA-20_20251231_c20250102153009.nc">VIIRS-Land_v001_JP113C1_NOAA-20_20251231_c20250102153009.nc</a>
             """
-        elif "2025" in url:
+        elif "2026" in url:
             mock_response.text = """
-            <a href="VIIRS-Land_v001_JP113C1_NOAA-20_20250101_c20250103153010.nc">VIIRS-Land_v001_JP113C1_NOAA-20_20250101_c20250103153010.nc</a>
-            <a href="VIIRS-Land_v001_JP113C1_NOAA-20_20250102_c20250104153009.nc">VIIRS-Land_v001_JP113C1_NOAA-20_20250102_c20250104153009.nc</a>
+            <a href="VIIRS-Land_v001_JP113C1_NOAA-20_20260101_c20260103153010.nc">VIIRS-Land_v001_JP113C1_NOAA-20_20260101_c20260103153010.nc</a>
+            <a href="VIIRS-Land_v001_JP113C1_NOAA-20_20260102_c20260104153009.nc">VIIRS-Land_v001_JP113C1_NOAA-20_20260102_c20260104153009.nc</a>
             """
         else:
             mock_response.text = ""
@@ -350,7 +350,7 @@ def test_generate_source_file_coords_uses_ncei_for_recent_year(
 
     template_ds = xr.Dataset(
         coords={
-            "time": pd.date_range("2024-12-31", "2025-01-02", freq="D"),
+            "time": pd.date_range("2025-12-31", "2026-01-02", freq="D"),
             "latitude": np.linspace(89.999998472637188, -89.999998472637188, 3600),
             "longitude": np.linspace(-180.000006104363450, 179.999993895636550, 7200),
         }
@@ -374,15 +374,15 @@ def test_generate_source_file_coords_uses_ncei_for_recent_year(
     assert len(coords) == 3
     assert (
         coords[0].get_url()
-        == "s3://noaa-cdr-ndvi-pds/data/2024/VIIRS-Land_v001_JP113C1_NOAA-20_20241231_c20250102153009.nc"
+        == "s3://noaa-cdr-ndvi-pds/data/2025/VIIRS-Land_v001_JP113C1_NOAA-20_20251231_c20250102153009.nc"
     )
     assert (
         coords[1].get_url()
-        == "http://ncei.noaa.gov/data/land-normalized-difference-vegetation-index/access/2025/VIIRS-Land_v001_JP113C1_NOAA-20_20250101_c20250103153010.nc"
+        == "http://ncei.noaa.gov/data/land-normalized-difference-vegetation-index/access/2026/VIIRS-Land_v001_JP113C1_NOAA-20_20260101_c20260103153010.nc"
     )
     assert (
         coords[2].get_url()
-        == "http://ncei.noaa.gov/data/land-normalized-difference-vegetation-index/access/2025/VIIRS-Land_v001_JP113C1_NOAA-20_20250102_c20250104153009.nc"
+        == "http://ncei.noaa.gov/data/land-normalized-difference-vegetation-index/access/2026/VIIRS-Land_v001_JP113C1_NOAA-20_20260102_c20260104153009.nc"
     )
 
 
