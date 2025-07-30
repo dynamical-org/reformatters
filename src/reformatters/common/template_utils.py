@@ -5,11 +5,15 @@ from pathlib import Path
 from typing import Any, Literal
 
 import dask.array
+import icechunk
 import numpy as np
 import xarray as xr
 import zarr
 
 from reformatters.common.config_models import Coordinate, DataVar
+from reformatters.common.icechunk import (
+    get_icechunk_store_path,
+)
 from reformatters.common.logging import get_logger
 
 logger = get_logger(__name__)
@@ -19,6 +23,7 @@ def write_metadata(
     template_ds: xr.Dataset,
     store: zarr.storage.StoreLike,
     mode: Literal["w", "w-"],
+    write_icechunk: bool = False,
 ) -> None:
     logger.info(f"Writing metadata {store} with mode {mode}")
     with warnings.catch_warnings():
@@ -31,6 +36,14 @@ def write_metadata(
         )
         print(template_ds)
         template_ds.to_zarr(store, mode=mode, compute=False)  # type: ignore[call-overload]
+
+        if write_icechunk:
+            icechunk_path = get_icechunk_store_path(store.path)  # type: ignore
+            storage = icechunk.local_filesystem_storage(icechunk_path)
+            repo = icechunk.Repository.open_or_create(storage)
+            session = repo.writable_session("main")
+            template_ds.to_zarr(session.store, mode=mode, compute=True)  # type: ignore[call-overload]
+            session.commit(message="write_metadata")
 
     if isinstance(store, Path | str):
         sort_consolidated_metadata(Path(store) / "zarr.json")

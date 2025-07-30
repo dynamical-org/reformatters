@@ -5,6 +5,7 @@ from typing import Literal
 from uuid import uuid4
 
 import fsspec  # type: ignore
+import icechunk
 import xarray as xr
 import zarr
 from fsspec.implementations.local import LocalFileSystem  # type: ignore
@@ -102,6 +103,7 @@ def copy_data_var(
     tmp_store: Path,
     final_store: zarr.abc.store.Store,
     track_progress_callback: Callable[[], None] | None = None,
+    use_icechunk: bool = False,
 ) -> None:
     dim_index = template_ds[data_var_name].dims.index(append_dim)
     append_dim_shard_size = template_ds[data_var_name].encoding["shards"][dim_index]
@@ -122,6 +124,38 @@ def copy_data_var(
     source = f"{tmp_store / relative_dir}/"
     dest = f"{path}/{relative_dir}"
     fsspec_apply(fs, "put", source, dest, recursive=True, auto_mkdir=True)
+
+    # https://icechunk.io/en/latest/parallel/#uncooperative-distributed-writes
+    if use_icechunk:
+        while True:
+            try:
+                storage = icechunk.local_filesystem_storage(
+                    "/home/alex/repos/dynamical/reformatters/data/output/u-arizona-swann-analysis/vdev.ic.zarr"
+                )
+                repo = icechunk.Repository.open_or_create(storage)
+                ic_session = repo.writable_session("main")
+
+                ic_store = ic_session.store
+                for file in tmp_store.glob(f"{relative_dir}**/*"):
+                    if not file.is_file():
+                        continue
+                    print("syncing", file, str(file.relative_to(tmp_store)))
+                    zarr.core.sync.sync(
+                        ic_session.store.set(
+                            str(file.relative_to(tmp_store)),
+                            zarr.core.buffer.default_buffer_prototype().buffer.from_bytes(
+                                file.read_bytes()
+                            ),
+                        )
+                    )
+                ic_session.commit(message="copy_data_var")
+                print("success!")
+                break
+            except icechunk.ConflictError:
+                print("conflict")
+
+        ds = xr.open_zarr(ic_store)
+        print(ds.to_dataframe())
 
     if track_progress_callback is not None:
         track_progress_callback()

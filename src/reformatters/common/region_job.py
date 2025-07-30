@@ -102,6 +102,7 @@ def region_slice(s: slice) -> slice:
 
 class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     final_store: zarr.abc.store.Store
+    icechunk: bool = True
     tmp_store: Path
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
@@ -557,6 +558,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                             self.tmp_store,
                             self.final_store,
                             partial(progress_tracker.record_completion, data_var.name),
+                            self.icechunk,
                         )
                     )
 

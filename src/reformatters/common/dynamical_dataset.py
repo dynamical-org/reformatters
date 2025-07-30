@@ -47,6 +47,7 @@ class DynamicalDatasetStorageConfig(FrozenBaseModel):
 
     base_path: str
     k8s_secret_names: Sequence[str] = []
+    icechunk: bool = False
 
 
 class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
@@ -261,7 +262,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         template_ds = self._get_template(append_dim_end)
         final_store = self._final_store()
 
-        template_utils.write_metadata(template_ds, final_store, get_mode(final_store))
+        template_utils.write_metadata(
+            template_ds, final_store, get_mode(final_store), write_icechunk=True
+        )
 
         self.process_backfill_region_jobs(
             append_dim_end,
