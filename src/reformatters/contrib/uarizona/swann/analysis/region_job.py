@@ -91,6 +91,7 @@ class UarizonaSwannAnalysisRegionJob(
         append_dim: AppendDim,
         all_data_vars: Sequence[UarizonaSwannDataVar],
         reformat_job_name: str,
+        icechunk: bool = False,
     ) -> tuple[
         Sequence[RegionJob[UarizonaSwannDataVar, UarizonaSwannAnalysisSourceFileCoord]],
         xr.Dataset,
@@ -103,6 +104,7 @@ class UarizonaSwannAnalysisRegionJob(
         jobs = cls.get_jobs(
             kind="operational-update",
             final_store=final_store,
+            icechunk=icechunk,
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=append_dim,

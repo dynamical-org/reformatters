@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import icechunk
 import numpy as np
 import pandas as pd
 import pytest
@@ -107,3 +108,28 @@ def test_update_template_trimming(monkeypatch: MonkeyPatch, tmp_path: Path) -> N
     subset_ds = updated_ds.sel(latitude=48.583335, longitude=-94, method="nearest")
     np.testing.assert_array_equal(subset_ds.snow_depth.values, [190.0, 163.0])
     np.testing.assert_array_equal(subset_ds.snow_water_equivalent.values, [35.0, 33.0])
+
+
+##################### ICECHUNK #########################################################
+
+
+def test_backfill_local_icechunk(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+    dataset = UarizonaSwannAnalysisDataset(
+        storage_config=DynamicalDatasetStorageConfig(
+            base_path="noop",
+            icechunk=True,
+        )
+    )
+    # Dataset starts at 1981-10-01
+    dataset.backfill_local(append_dim_end=pd.Timestamp("1981-10-02"))
+    dataset_path = dataset._final_store().path  # type: ignore
+    storage = icechunk.local_filesystem_storage(dataset_path)
+    repo = icechunk.Repository.open(storage)
+    session = repo.readonly_session(branch="main")
+    ds = xr.open_zarr(session.store, chunks=None)
+    assert ds.snow_depth.mean() == 0.23608214
+    assert ds.snow_water_equivalent.mean() == 0.0433126
+
+    subset_ds = ds.sel(latitude=48.583335, longitude=-94, method="nearest")
+    assert subset_ds.snow_depth.values == 190.0
+    assert subset_ds.snow_water_equivalent.values == 35.0

@@ -20,7 +20,7 @@ def write_metadata(
     template_ds: xr.Dataset,
     store: zarr.storage.StoreLike,
     mode: Literal["w", "w-"],
-    write_icechunk: bool = True,
+    write_icechunk: bool = False,
 ) -> None:
     logger.info(f"Writing metadata {store} with mode {mode}")
     with warnings.catch_warnings():
@@ -33,8 +33,12 @@ def write_metadata(
         )
 
         if write_icechunk:
-            assert hasattr(store, "path")
-            session = get_writable_session(store.path)
+            if hasattr(store, "path"):
+                store_path = store.path
+            else:
+                store_path = store
+
+            session = get_writable_session(store_path)
             template_ds.to_zarr(session.store, mode=mode, compute=True)  # type: ignore[call-overload]
             session.commit(message="write_metadata")
         else:

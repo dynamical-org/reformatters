@@ -102,7 +102,7 @@ def region_slice(s: slice) -> slice:
 
 class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     final_store: zarr.abc.store.Store
-    icechunk: bool = True
+    icechunk: bool = False
     tmp_store: Path
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
@@ -273,6 +273,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         append_dim: AppendDim,
         all_data_vars: Sequence[DATA_VAR],
         reformat_job_name: str,
+        icechunk: bool = False,
     ) -> tuple[Sequence["RegionJob[DATA_VAR, SOURCE_FILE_COORD]"], xr.Dataset]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset
@@ -333,6 +334,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         cls,
         kind: Literal["backfill", "operational-update"],
         final_store: zarr.abc.store.Store,
+        icechunk: bool,
         tmp_store: Path,
         template_ds: xr.Dataset,
         append_dim: AppendDim,
@@ -444,6 +446,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         all_jobs = [
             cls(
                 final_store=final_store,
+                icechunk=icechunk,
                 tmp_store=tmp_store,
                 template_ds=template_ds,
                 data_vars=data_var_group,

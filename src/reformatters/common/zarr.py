@@ -153,6 +153,7 @@ def copy_data_var_to_icechunk(
             for file in tmp_store.glob(f"{tmp_store_relative_dir}**/*"):
                 if not file.is_file():
                     continue
+
                 zarr.core.sync.sync(
                     session.store.set(
                         str(file.relative_to(tmp_store)),

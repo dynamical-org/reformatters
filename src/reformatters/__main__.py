@@ -39,6 +39,7 @@ class UpstreamGriddedZarrsDatasetStorageConfig(DynamicalDatasetStorageConfig):
     # when it's imported into the env.
     base_path: str = "s3://upstream-gridded-zarrs"
     k8s_secret_names: Sequence[str] = ["upstream-gridded-zarrs-key"]
+    icechunk: bool = True
 
 
 # Registry of all DynamicalDatasets.

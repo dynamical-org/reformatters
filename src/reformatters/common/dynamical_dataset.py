@@ -133,6 +133,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
             jobs, template_ds = self.region_job_class.operational_update_jobs(
                 final_store=final_store,
+                icechunk=self.storage_config.icechunk,
                 tmp_store=tmp_store,
                 get_template_fn=self._get_template,
                 append_dim=self.template_config.append_dim,
@@ -174,6 +175,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             self.region_job_class.get_jobs(
                 kind="backfill",
                 final_store=final_store,
+                icechunk=self.storage_config.icechunk,
                 tmp_store=self._tmp_store(),
                 template_ds=template_ds,
                 append_dim=self.template_config.append_dim,
@@ -263,7 +265,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         final_store = self._final_store()
 
         template_utils.write_metadata(
-            template_ds, final_store, get_mode(final_store), write_icechunk=True
+            template_ds,
+            final_store,
+            get_mode(final_store),
+            write_icechunk=self.storage_config.icechunk,
         )
 
         self.process_backfill_region_jobs(
@@ -295,6 +300,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         region_jobs = self.region_job_class.get_jobs(
             kind="backfill",
             final_store=self._final_store(),
+            icechunk=self.storage_config.icechunk,
             tmp_store=self._tmp_store(),
             template_ds=self._get_template(append_dim_end),
             append_dim=self.template_config.append_dim,
