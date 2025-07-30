@@ -491,7 +491,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
 
         template_utils.write_metadata(
-            self.template_ds, self.tmp_store, get_mode(self.tmp_store)
+            self.template_ds,
+            self.tmp_store,
+            get_mode(self.tmp_store),
+            write_icechunk=False,
         )
 
         results: dict[str, Sequence[SOURCE_FILE_COORD]] = {}

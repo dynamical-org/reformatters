@@ -12,6 +12,7 @@ from fsspec.implementations.local import LocalFileSystem  # type: ignore
 
 from reformatters.common.config import Config
 from reformatters.common.fsspec import fsspec_apply
+from reformatters.common.icechunk import get_writable_session
 from reformatters.common.logging import get_logger
 
 logger = get_logger(__name__)
@@ -115,47 +116,18 @@ def copy_data_var(
         f"Copying data var chunks to final store ({final_store}) for {relative_dir}."
     )
 
-    fs, path = _get_fs_and_path(final_store)
-    fs.auto_mkdir = True
-
-    # We want to support local and s3fs filesystems. fsspec local filesystem is sync,
-    # but our s3fs from zarr.storage.FsspecStore is async and here we work around it.
-    # The AsyncFileSystem wrapper on LocalFilesystem raises NotImplementedError when _put is called.
-    source = f"{tmp_store / relative_dir}/"
-    dest = f"{path}/{relative_dir}"
-    fsspec_apply(fs, "put", source, dest, recursive=True, auto_mkdir=True)
-
-    # https://icechunk.io/en/latest/parallel/#uncooperative-distributed-writes
     if use_icechunk:
-        while True:
-            try:
-                storage = icechunk.local_filesystem_storage(
-                    "/home/alex/repos/dynamical/reformatters/data/output/u-arizona-swann-analysis/vdev.ic.zarr"
-                )
-                repo = icechunk.Repository.open_or_create(storage)
-                ic_session = repo.writable_session("main")
+        copy_data_var_to_icechunk(str(final_store.path), tmp_store, relative_dir)  # type: ignore[attr-defined]
+    else:
+        fs, path = _get_fs_and_path(final_store)
+        fs.auto_mkdir = True
 
-                ic_store = ic_session.store
-                for file in tmp_store.glob(f"{relative_dir}**/*"):
-                    if not file.is_file():
-                        continue
-                    print("syncing", file, str(file.relative_to(tmp_store)))
-                    zarr.core.sync.sync(
-                        ic_session.store.set(
-                            str(file.relative_to(tmp_store)),
-                            zarr.core.buffer.default_buffer_prototype().buffer.from_bytes(
-                                file.read_bytes()
-                            ),
-                        )
-                    )
-                ic_session.commit(message="copy_data_var")
-                print("success!")
-                break
-            except icechunk.ConflictError:
-                print("conflict")
-
-        ds = xr.open_zarr(ic_store)
-        print(ds.to_dataframe())
+        # We want to support local and s3fs filesystems. fsspec local filesystem is sync,
+        # but our s3fs from zarr.storage.FsspecStore is async and here we work around it.
+        # The AsyncFileSystem wrapper on LocalFilesystem raises NotImplementedError when _put is called.
+        source = f"{tmp_store / relative_dir}/"
+        dest = f"{path}/{relative_dir}"
+        fsspec_apply(fs, "put", source, dest, recursive=True, auto_mkdir=True)
 
     if track_progress_callback is not None:
         track_progress_callback()
@@ -167,6 +139,34 @@ def copy_data_var(
                 file.unlink()
     except Exception as e:
         logger.warning(f"Failed to delete chunk after upload: {e}")
+
+
+def copy_data_var_to_icechunk(
+    store_path: str, tmp_store: Path, tmp_store_relative_dir: str
+) -> None:
+    # TODO: make sure this doesn't loop forever?
+    # https://icechunk.io/en/latest/parallel/#uncooperative-distributed-writes
+    while True:
+        try:
+            session = get_writable_session(store_path)
+
+            for file in tmp_store.glob(f"{tmp_store_relative_dir}**/*"):
+                if not file.is_file():
+                    continue
+                zarr.core.sync.sync(
+                    session.store.set(
+                        str(file.relative_to(tmp_store)),
+                        # TODO: is this the best way to do this? I stole the pattern
+                        # from the Icechunk tests in their repo.
+                        zarr.core.buffer.default_buffer_prototype().buffer.from_bytes(
+                            file.read_bytes()
+                        ),
+                    )
+                )
+            session.commit(message="copy_data_var")
+            break
+        except icechunk.ConflictError:
+            print("conflict")
 
 
 def copy_zarr_metadata(

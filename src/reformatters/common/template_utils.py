@@ -5,15 +5,12 @@ from pathlib import Path
 from typing import Any, Literal
 
 import dask.array
-import icechunk
 import numpy as np
 import xarray as xr
 import zarr
 
 from reformatters.common.config_models import Coordinate, DataVar
-from reformatters.common.icechunk import (
-    get_icechunk_store_path,
-)
+from reformatters.common.icechunk import get_writable_session
 from reformatters.common.logging import get_logger
 
 logger = get_logger(__name__)
@@ -23,7 +20,7 @@ def write_metadata(
     template_ds: xr.Dataset,
     store: zarr.storage.StoreLike,
     mode: Literal["w", "w-"],
-    write_icechunk: bool = False,
+    write_icechunk: bool = True,
 ) -> None:
     logger.info(f"Writing metadata {store} with mode {mode}")
     with warnings.catch_warnings():
@@ -34,19 +31,18 @@ def write_metadata(
             message="Consolidated metadata is currently not part in the Zarr format 3 specification",
             category=UserWarning,
         )
-        print(template_ds)
-        template_ds.to_zarr(store, mode=mode, compute=False)  # type: ignore[call-overload]
 
         if write_icechunk:
-            icechunk_path = get_icechunk_store_path(store.path)  # type: ignore
-            storage = icechunk.local_filesystem_storage(icechunk_path)
-            repo = icechunk.Repository.open_or_create(storage)
-            session = repo.writable_session("main")
+            assert hasattr(store, "path")
+            session = get_writable_session(store.path)
             template_ds.to_zarr(session.store, mode=mode, compute=True)  # type: ignore[call-overload]
             session.commit(message="write_metadata")
+        else:
+            template_ds.to_zarr(store, mode=mode, compute=False)  # type: ignore[call-overload]
 
-    if isinstance(store, Path | str):
-        sort_consolidated_metadata(Path(store) / "zarr.json")
+            # TODO: do we need this for icechunk?
+            if isinstance(store, Path | str):
+                sort_consolidated_metadata(Path(store) / "zarr.json")
 
 
 def sort_consolidated_metadata(zarr_json_path: Path) -> None:
