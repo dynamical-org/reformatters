@@ -85,7 +85,7 @@ class UarizonaSwannAnalysisRegionJob(
     @classmethod
     def operational_update_jobs(
         cls,
-        final_store: zarr.abc.store.Store,
+        final_store_fn: Callable[[], zarr.abc.store.Store],
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
@@ -96,15 +96,16 @@ class UarizonaSwannAnalysisRegionJob(
         Sequence[RegionJob[UarizonaSwannDataVar, UarizonaSwannAnalysisSourceFileCoord]],
         xr.Dataset,
     ]:
+        final_store = final_store_fn()
         existing_ds = xr.open_zarr(final_store)
         append_dim_start = cls._update_append_dim_start(existing_ds)
+
         append_dim_end = cls._update_append_dim_end()
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
             kind="operational-update",
-            final_store=final_store,
-            icechunk=icechunk,
+            final_store_fn=final_store_fn,
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=append_dim,

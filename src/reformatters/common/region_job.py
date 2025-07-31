@@ -11,6 +11,7 @@ from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar
 
+import icechunk
 import numpy as np
 import pandas as pd
 import pydantic
@@ -101,8 +102,7 @@ def region_slice(s: slice) -> slice:
 
 
 class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
-    final_store: zarr.abc.store.Store
-    icechunk: bool = False
+    final_store_fn: Callable[[], zarr.abc.store.Store]
     tmp_store: Path
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
@@ -267,13 +267,12 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     @classmethod
     def operational_update_jobs(
         cls,
-        final_store: zarr.abc.store.Store,
+        final_store_fn: Callable[[], zarr.abc.store.Store],
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
         all_data_vars: Sequence[DATA_VAR],
         reformat_job_name: str,
-        icechunk: bool = False,
     ) -> tuple[Sequence["RegionJob[DATA_VAR, SOURCE_FILE_COORD]"], xr.Dataset]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset
@@ -293,8 +292,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         Parameters
         ----------
-        final_store : zarr.abc.store.Store
-            The destination Zarr store to read existing data from and write updates to.
+        final_store_fn : Callable[[], zarr.abc.store.Store]
+            A function that returns the destination Zarr store to read existing data from and write updates to.
         tmp_store : zarr.abc.store.Store | Path
             The temporary Zarr store to write into while processing.
         get_template_fn : Callable[[DatetimeLike], xr.Dataset]
@@ -333,8 +332,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def get_jobs(
         cls,
         kind: Literal["backfill", "operational-update"],
-        final_store: zarr.abc.store.Store,
-        icechunk: bool,
+        final_store_fn: Callable[[], zarr.abc.store.Store],
         tmp_store: Path,
         template_ds: xr.Dataset,
         append_dim: AppendDim,
@@ -360,8 +358,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         Parameters
         ----------
-        final_store : zarr.abc.store.Store
-            The destination Zarr store to write into.
+        final_store_fn : Callable[[], zarr.abc.store.Store]
+            A function that returns the destination Zarr store to write into.
         tmp_store : zarr.abc.store.Store | Path
             The temporary Zarr store to write into while processing.
         template_ds : xr.Dataset
@@ -445,8 +443,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         all_jobs = [
             cls(
-                final_store=final_store,
-                icechunk=icechunk,
+                final_store_fn=final_store_fn,
                 tmp_store=tmp_store,
                 template_ds=template_ds,
                 data_vars=data_var_group,
@@ -460,7 +457,12 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         return get_worker_jobs(all_jobs, worker_index, workers_total)
 
-    def process(self) -> Mapping[str, Sequence[SOURCE_FILE_COORD]]:
+    def process(
+        self,
+    ) -> tuple[
+        Mapping[str, Sequence[SOURCE_FILE_COORD]],
+        icechunk.session.Session | None,
+    ]:
         """
         Orchestrate the full region job processing pipeline.
 
@@ -481,8 +483,12 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         processing_region_ds, output_region_ds = self._get_region_datasets()
 
+        final_store = self.final_store_fn()
+
         progress_tracker = UpdateProgressTracker(
-            self.final_store, self.reformat_job_name, self.region.start
+            final_store,
+            self.reformat_job_name,
+            self.region.start,
         )
         data_vars_to_process: Sequence[DATA_VAR] = progress_tracker.get_unprocessed(
             self.data_vars
@@ -497,7 +503,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             self.template_ds,
             self.tmp_store,
             get_mode(self.tmp_store),
-            write_icechunk=False,
         )
 
         results: dict[str, Sequence[SOURCE_FILE_COORD]] = {}
@@ -562,9 +567,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                             self.template_ds,
                             self.append_dim,
                             self.tmp_store,
-                            self.final_store,
+                            final_store,
                             partial(progress_tracker.record_completion, data_var.name),
-                            self.icechunk,
                         )
                     )
 
@@ -578,7 +582,12 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         progress_tracker.close()
 
-        return results
+        if isinstance(final_store, icechunk.store.IcechunkStore):
+            icechunk_session = final_store.session
+        else:
+            icechunk_session = None
+
+        return results, icechunk_session
 
     def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
         ds = self.template_ds[[v.name for v in self.data_vars]]

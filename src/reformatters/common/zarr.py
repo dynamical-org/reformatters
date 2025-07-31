@@ -12,7 +12,6 @@ from fsspec.implementations.local import LocalFileSystem  # type: ignore
 
 from reformatters.common.config import Config
 from reformatters.common.fsspec import fsspec_apply
-from reformatters.common.icechunk import get_writable_session
 from reformatters.common.logging import get_logger
 
 logger = get_logger(__name__)
@@ -43,7 +42,7 @@ BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE = zarr.codecs.BloscCodec(
 
 
 def get_zarr_store(
-    prod_base_path: str, dataset_id: str, version: str
+    prod_base_path: str, dataset_id: str, version: str, icechunk_store: bool = False
 ) -> zarr.storage.FsspecStore:
     if not Config.is_prod:
         version = "dev" if Config.is_dev else version
@@ -59,14 +58,25 @@ def get_zarr_store(
             f"{_LOCAL_ZARR_STORE_BASE_PATH}/{dataset_id}/v{version}.zarr"
         ).absolute()
 
-        store = zarr.storage.LocalStore(local_path)
+        if icechunk_store:
+            storage = icechunk.local_filesystem_storage(str(local_path))
+            repo = icechunk.Repository.open_or_create(storage)
+            session = repo.writable_session("main")
 
-        fs = LocalFileSystem(auto_mkdir=True)
-        store.fs = fs  # type: ignore[attr-defined]
-        store.path = str(local_path)  # type: ignore[attr-defined]
+            # TODO: Get rid of this, this is just to make the UpdateTracker happy
+            store = session.store
+            store.fs = LocalFileSystem(auto_mkdir=True)  # type: ignore[attr-defined]
+            store.path = str(local_path)  #  type: ignore[attr-defined]
 
-        # We are duck typing this LocalStore as a FsspecStore
-        return store  # type: ignore[return-value]
+            return store  # type: ignore[return-value]
+        else:
+            store = zarr.storage.LocalStore(local_path)  # type: ignore[assignment]
+
+            fs = LocalFileSystem(auto_mkdir=True)
+            store.fs = fs  # type: ignore[attr-defined]
+            store.path = str(local_path)  # type: ignore[attr-defined]
+            # We are duck typing this LocalStore as a FsspecStore
+            return store  # type: ignore[return-value]
 
     return zarr.storage.FsspecStore.from_url(
         f"{prod_base_path}/{dataset_id}/v{version}.zarr"
@@ -81,6 +91,12 @@ def get_local_tmp_store() -> Path:
 def get_mode(
     store: zarr.abc.store.Store | Path,
 ) -> Literal["w-", "w"]:
+    if isinstance(store, icechunk.store.IcechunkStore):
+        if Config.is_prod:
+            return "w-"
+        else:
+            return "w"
+
     if isinstance(store, zarr.storage.FsspecStore):
         path_str = store.path
     elif isinstance(store, zarr.storage.LocalStore):
@@ -104,7 +120,6 @@ def copy_data_var(
     tmp_store: Path,
     final_store: zarr.abc.store.Store,
     track_progress_callback: Callable[[], None] | None = None,
-    use_icechunk: bool = False,
 ) -> None:
     dim_index = template_ds[data_var_name].dims.index(append_dim)
     append_dim_shard_size = template_ds[data_var_name].encoding["shards"][dim_index]
@@ -116,8 +131,8 @@ def copy_data_var(
         f"Copying data var chunks to final store ({final_store}) for {relative_dir}."
     )
 
-    if use_icechunk:
-        copy_data_var_to_icechunk(str(final_store.path), tmp_store, relative_dir)  # type: ignore[attr-defined]
+    if isinstance(final_store, icechunk.store.IcechunkStore):
+        copy_data_var_to_icechunk(final_store, tmp_store, relative_dir)
     else:
         fs, path = _get_fs_and_path(final_store)
         fs.auto_mkdir = True
@@ -142,32 +157,24 @@ def copy_data_var(
 
 
 def copy_data_var_to_icechunk(
-    store_path: str, tmp_store: Path, tmp_store_relative_dir: str
+    store: icechunk.store.IcechunkStore, tmp_store: Path, tmp_store_relative_dir: str
 ) -> None:
-    # TODO: make sure this doesn't loop forever?
-    # https://icechunk.io/en/latest/parallel/#uncooperative-distributed-writes
-    while True:
-        try:
-            session = get_writable_session(store_path)
+    session = store.session
 
-            for file in tmp_store.glob(f"{tmp_store_relative_dir}**/*"):
-                if not file.is_file():
-                    continue
+    for file in tmp_store.glob(f"{tmp_store_relative_dir}**/*"):
+        if not file.is_file():
+            continue
 
-                zarr.core.sync.sync(
-                    session.store.set(
-                        str(file.relative_to(tmp_store)),
-                        # TODO: is this the best way to do this? I stole the pattern
-                        # from the Icechunk tests in their repo.
-                        zarr.core.buffer.default_buffer_prototype().buffer.from_bytes(
-                            file.read_bytes()
-                        ),
-                    )
-                )
-            session.commit(message="copy_data_var")
-            break
-        except icechunk.ConflictError:
-            print("conflict")
+        zarr.core.sync.sync(
+            session.store.set(
+                str(file.relative_to(tmp_store)),
+                # TODO: is this the best way to do this? I stole the pattern
+                # from the Icechunk tests in their repo.
+                zarr.core.buffer.default_buffer_prototype().buffer.from_bytes(
+                    file.read_bytes()
+                ),
+            )
+        )
 
 
 def copy_zarr_metadata(

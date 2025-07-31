@@ -1,13 +1,15 @@
 import json
 import subprocess
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Generic, Literal, TypeVar
 
+import icechunk
 import numpy as np
 import pandas as pd
+import pydantic
 import sentry_sdk
 import typer
 import xarray as xr
@@ -42,7 +44,7 @@ SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
 logger = get_logger(__name__)
 
 
-class DynamicalDatasetStorageConfig(FrozenBaseModel):
+class DynamicalDatasetStorageConfig(pydantic.BaseModel):
     """Configuration for the storage of a dataset in production."""
 
     base_path: str
@@ -118,6 +120,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def dataset_id(self) -> str:
         return self.template_config.dataset_id
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def version(self) -> str:
+        return self.template_config.version
+
     def update_template(self) -> None:
         """Generate and persist the dataset template using the template_config."""
         self.template_config.update_template()
@@ -128,12 +135,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> None:
         """Update an existing dataset with the latest data."""
         with self._monitor(ReformatCronJob, reformat_job_name):
-            final_store = self._final_store()
+            final_store = self._get_final_store_fn()
             tmp_store = self._tmp_store()
 
             jobs, template_ds = self.region_job_class.operational_update_jobs(
-                final_store=final_store,
-                icechunk=self.storage_config.icechunk,
+                final_store_fn=self._get_final_store_fn,
                 tmp_store=tmp_store,
                 get_template_fn=self._get_template,
                 append_dim=self.template_config.append_dim,
@@ -142,12 +148,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
             template_utils.write_metadata(template_ds, tmp_store, get_mode(tmp_store))
             for job in jobs:
-                process_results = job.process()
+                process_results, icechunk_session = job.process()
                 updated_template = job.update_template_with_results(process_results)
                 template_utils.write_metadata(
                     updated_template, tmp_store, get_mode(tmp_store)
                 )
-                copy_zarr_metadata(updated_template, tmp_store, final_store)
+                if not isinstance(final_store, icechunk.store.IcechunkStore):
+                    copy_zarr_metadata(updated_template, tmp_store, final_store)
 
         logger.info(f"Operational update complete. Wrote to store: {final_store}")
 
@@ -166,16 +173,18 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         image_tag = docker_image or docker.build_and_push_image()
 
         template_ds = self._get_template(append_dim_end)
-        final_store = self._final_store()
-        logger.info(f"Writing zarr metadata to {final_store}")
 
-        template_utils.write_metadata(template_ds, final_store, get_mode(final_store))
+        final_store = self._get_final_store_fn()
+        template_utils.write_metadata(
+            template_ds,
+            final_store,
+            get_mode(final_store),
+        )
 
         num_jobs = len(
             self.region_job_class.get_jobs(
                 kind="backfill",
-                final_store=final_store,
-                icechunk=self.storage_config.icechunk,
+                final_store_fn=self._get_final_store_fn,
                 tmp_store=self._tmp_store(),
                 template_ds=template_ds,
                 append_dim=self.template_config.append_dim,
@@ -262,13 +271,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> None:
         """Run dataset reformatting locally in this process."""
         template_ds = self._get_template(append_dim_end)
-        final_store = self._final_store()
+
+        final_store = self._get_final_store_fn()
 
         template_utils.write_metadata(
             template_ds,
             final_store,
             get_mode(final_store),
-            write_icechunk=self.storage_config.icechunk,
         )
 
         self.process_backfill_region_jobs(
@@ -299,8 +308,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         region_jobs = self.region_job_class.get_jobs(
             kind="backfill",
-            final_store=self._final_store(),
-            icechunk=self.storage_config.icechunk,
+            final_store_fn=self._get_final_store_fn,
             tmp_store=self._tmp_store(),
             template_ds=self._get_template(append_dim_end),
             append_dim=self.template_config.append_dim,
@@ -321,15 +329,19 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             f"This is {worker_index = }, {workers_total = }, {len(region_jobs)} jobs, {jobs_summary}"
         )
         for region_job in region_jobs:
-            region_job.process()
+            _results, icechunk_session = region_job.process()
+            if icechunk_session is not None:
+                # TODO: Implement spin on trying to rebase and then commit
+                icechunk_session.commit(f"Wrote to {region_job}")
 
     def validate_dataset(
         self,
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
+
+        store = self._get_final_store_fn()
         with self._monitor(ValidationCronJob, reformat_job_name):
-            store = self._final_store()
             validation.validate_dataset(store, validators=self.validators())
 
         logger.info(f"Done validating {store}")
@@ -348,11 +360,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         app.command("validate")(self.validate_dataset)
         return app
 
-    def _final_store(self) -> zarr.abc.store.Store:
-        return get_zarr_store(
+    @property
+    def _get_final_store_fn(self) -> Callable[[], zarr.abc.store.Store]:
+        return lambda: get_zarr_store(
             self.storage_config.base_path,
             self.template_config.dataset_id,
             self.template_config.version,
+            icechunk_store=self.storage_config.icechunk,
         )
 
     def _tmp_store(self) -> Path:

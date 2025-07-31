@@ -8,9 +8,9 @@ import dask.array
 import numpy as np
 import xarray as xr
 import zarr
+from icechunk.store import IcechunkStore
 
 from reformatters.common.config_models import Coordinate, DataVar
-from reformatters.common.icechunk import get_writable_session
 from reformatters.common.logging import get_logger
 
 logger = get_logger(__name__)
@@ -20,7 +20,6 @@ def write_metadata(
     template_ds: xr.Dataset,
     store: zarr.storage.StoreLike,
     mode: Literal["w", "w-"],
-    write_icechunk: bool = False,
 ) -> None:
     logger.info(f"Writing metadata {store} with mode {mode}")
     with warnings.catch_warnings():
@@ -32,15 +31,9 @@ def write_metadata(
             category=UserWarning,
         )
 
-        if write_icechunk:
-            if hasattr(store, "path"):
-                store_path = store.path
-            else:
-                store_path = store
-
-            session = get_writable_session(store_path)
-            template_ds.to_zarr(session.store, mode=mode, compute=True)  # type: ignore[call-overload]
-            session.commit(message="write_metadata")
+        if isinstance(store, IcechunkStore):
+            template_ds.to_zarr(store, mode=mode, compute=True)  # type: ignore[call-overload]
+            store.session.commit(message="write_metadata")
         else:
             template_ds.to_zarr(store, mode=mode, compute=False)  # type: ignore[call-overload]
 
