@@ -2,7 +2,6 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 import xarray as xr
-import zarr
 
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
@@ -10,6 +9,7 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
 )
+from reformatters.common.storage import StoreFactory
 from reformatters.common.types import (
     AppendDim,
     ArrayFloat32,
@@ -167,7 +167,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
         Subclasses should implement this method to apply dataset-specific adjustments
         based on the processing results. Examples include:
         - Trimming dataset along append_dim to only include successfully processed data
-        - Loading existing coordinate values from final_store and updating them based on results
+        - Loading existing coordinate values from the primary store and updating them based on results
         - Updating metadata based on what was actually processed vs what was planned
 
         The default implementation trims along append_dim to end at the most recent
@@ -214,7 +214,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
     @classmethod
     def operational_update_jobs(
         cls,
-        final_store: zarr.abc.store.Store,
+        primary_store_factory: StoreFactory,
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
@@ -234,16 +234,16 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
 
         The exact logic is dataset-specific, but it generally follows this pattern:
         1. Figure out the range of time to process: append_dim_start (inclusive) and append_dim_end (exclusive)
-            a. Read existing data from final_store to determine what's already processed
+            a. Read existing data from the primary store to determine what's already processed
             b. Optionally identify recent incomplete/non-final data for reprocessing
         2. Call get_template_fn(append_dim_end) to get the template_ds
         3. Create RegionJob instances by calling cls.get_jobs(..., filter_start=append_dim_start)
 
         Parameters
         ----------
-        final_store : zarr.abc.store.Store
-            The destination Zarr store to read existing data from and write updates to.
-        tmp_store : zarr.abc.store.Store | Path
+        primary_store_factory : StoreFactory
+            The factory to get the primary store to read existing data from and write updates to.
+        tmp_store : Path
             The temporary Zarr store to write into while processing.
         get_template_fn : Callable[[DatetimeLike], xr.Dataset]
             Function to get the template_ds for the operational update.
@@ -262,14 +262,14 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
         xr.Dataset
             The template_ds for the operational update.
         """
-        # existing_ds = xr.open_zarr(final_store)
+        # existing_ds = xr.open_zarr(primary_store_factory.store())
         # append_dim_start = existing_ds[append_dim].max()
         # append_dim_end = pd.Timestamp.now()
         # template_ds = get_template_fn(append_dim_end)
 
         # jobs = cls.get_jobs(
         #     kind="operational-update",
-        #     final_store=final_store,
+        #     primary_store_factory=primary_store_factory,
         #     tmp_store=tmp_store,
         #     template_ds=template_ds,
         #     append_dim=append_dim,

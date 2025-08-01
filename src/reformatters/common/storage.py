@@ -27,7 +27,7 @@ class StorageConfig(FrozenBaseModel):
 class StoreFactory(FrozenBaseModel):
     storage_config: StorageConfig
     dataset_id: str
-    _template_config_version: str
+    template_config_version: str
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -36,7 +36,7 @@ class StoreFactory(FrozenBaseModel):
             case Env.dev:
                 return "dev"
             case Env.prod | Env.test:
-                return self._template_config_version
+                return self.template_config_version
             case _ as unreachable:
                 assert_never(unreachable)
 

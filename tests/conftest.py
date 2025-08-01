@@ -11,6 +11,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 # Config.env is set to test.
 os.environ["DYNAMICAL_ENV"] = "test"
 
+from reformatters.common import storage
 from reformatters.common import zarr as common_zarr_module
 
 
@@ -24,3 +25,4 @@ def set_local_zarr_store_base_path(
     ):
         return
     monkeypatch.setattr(common_zarr_module, "_LOCAL_ZARR_STORE_BASE_PATH", tmp_path)
+    monkeypatch.setattr(storage, "_LOCAL_ZARR_STORE_BASE_PATH", tmp_path)

@@ -148,10 +148,10 @@ def reformat_chunks(
     },
 )
 def reformat_operational_update(job_name: str) -> None:
-    final_store = get_store()
+    primary_store = get_store()
     tmp_store = get_local_tmp_store()
     # Get the dataset, check what data is already present
-    ds = xr.open_zarr(final_store, decode_timedelta=True)
+    ds = xr.open_zarr(primary_store, decode_timedelta=True)
     for coord in ds.coords.values():
         coord.load()
     last_existing_init_time = ds.init_time.max()
@@ -221,7 +221,7 @@ def reformat_operational_update(job_name: str) -> None:
         )
 
         progress_tracker = UpdateProgressTracker(
-            final_store, job_name, init_time_i_slice.start
+            primary_store, job_name, init_time_i_slice.start
         )
         vars_to_process = progress_tracker.get_unprocessed_str(
             list(template_ds.data_vars.keys())
@@ -244,7 +244,7 @@ def reformat_operational_update(job_name: str) -> None:
                     template_ds,
                     template.APPEND_DIMENSION,
                     tmp_store,
-                    final_store,
+                    primary_store,
                     partial(progress_tracker.record_completion, data_var.name),
                 )
             )
@@ -268,7 +268,7 @@ def reformat_operational_update(job_name: str) -> None:
             get_mode(tmp_store),
         )
         # Write the metadata last, the data must be written first
-        copy_zarr_metadata(truncated_template_ds, tmp_store, final_store)
+        copy_zarr_metadata(truncated_template_ds, tmp_store, primary_store)
 
 
 def _get_operational_update_init_time_end() -> pd.Timestamp:

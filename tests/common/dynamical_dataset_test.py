@@ -195,7 +195,6 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
         "get_template",
         lambda self, end: xr.Dataset(attrs={"cool": "weather"}),
     )
-    monkeypatch.setattr(ExampleDataset, "_final_store", lambda _self: tmp_path)
     process_backfill_region_jobs_mock = Mock()
     monkeypatch.setattr(
         ExampleDataset,
@@ -210,7 +209,9 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
 
     dataset.backfill_local(pd.Timestamp("2000-01-02"))
 
-    assert xr.open_zarr(tmp_path).attrs["cool"] == "weather"
+    assert (
+        xr.open_zarr(dataset.primary_store_factory.store()).attrs["cool"] == "weather"
+    )
     process_backfill_region_jobs_mock.assert_called_once_with(
         pd.Timestamp("2000-01-02"),
         worker_index=0,
@@ -236,13 +237,15 @@ def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
 
     # Mock template retrieval and metadata writing
     monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
-    monkeypatch.setattr(ExampleDataset, "_final_store", lambda self: tmp_path)
     monkeypatch.setattr(template_utils, "write_metadata", lambda *args, **kwargs: None)
 
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
     )
+    primary_store_factory = Mock()
+    monkeypatch.setattr(ExampleDataset, "primary_store_factory", primary_store_factory)
+    monkeypatch.setattr(primary_store_factory, "store", lambda: tmp_path)
 
     dataset.backfill_kubernetes(
         append_dim_end=datetime(2025, 1, 1),
@@ -273,14 +276,11 @@ def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     assert '"my-docker-image"' in input_str
 
 
-def test_validate_dataset_calls_validators_and_uses_final_store(
+def test_validate_dataset_calls_validators_and_uses_primary_store(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     mock_validators = [Mock(), Mock()]
     monkeypatch.setattr(ExampleDataset, "validators", lambda self: mock_validators)
-
-    mock_store = Mock()
-    monkeypatch.setattr(ExampleDataset, "_final_store", lambda self: mock_store)
 
     mock_validate = Mock()
     monkeypatch.setattr(validation, "validate_dataset", mock_validate)
@@ -289,12 +289,16 @@ def test_validate_dataset_calls_validators_and_uses_final_store(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
     )
+    primary_store_factory = Mock()
+    mock_store = Mock()
+    monkeypatch.setattr(ExampleDataset, "primary_store_factory", primary_store_factory)
+    monkeypatch.setattr(primary_store_factory, "store", lambda: mock_store)
 
     dataset.validate_dataset("example-job-name")
 
     # Ensure validate_dataset was called with correct arguments
     # this implies
-    # - self._final_store() was called and returned our mock_store
+    # - self.primary_store_factory.store() was called and returned our mock_store
     # - self.validators() was called and returned our mock_validators
     mock_validate.assert_called_once_with(mock_store, validators=mock_validators)
 

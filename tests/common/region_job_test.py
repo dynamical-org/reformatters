@@ -20,8 +20,9 @@ from reformatters.common.region_job import (
     SourceFileCoord,
     SourceFileStatus,
 )
+from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.common.types import ArrayFloat32, Timestamp
-from reformatters.common.zarr import get_local_tmp_store, get_zarr_store
+from reformatters.common.zarr import get_local_tmp_store
 
 
 class ExampleDataVar(DataVar[BaseInternalAttrs]):
@@ -80,6 +81,18 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoords]):
 
 
 @pytest.fixture
+def store_factory() -> StoreFactory:
+    return StoreFactory(
+        storage_config=StorageConfig(
+            base_path="fake-prod-path",
+            format=DatasetFormat.ZARR3,
+        ),
+        dataset_id="test-dataset-A",
+        template_config_version="test-version",
+    )
+
+
+@pytest.fixture
 def template_ds() -> xr.Dataset:
     num_time = 48
     return xr.Dataset(
@@ -106,15 +119,14 @@ def template_ds() -> xr.Dataset:
 @pytest.mark.filterwarnings(
     "ignore:This process .* is multi-threaded, use of fork.* may lead to deadlocks in the child"
 )
-def test_region_job(template_ds: xr.Dataset) -> None:
-    store = get_zarr_store("fake-prod-path", "test-dataset-A", "test-version")
+def test_region_job(template_ds: xr.Dataset, store_factory: StoreFactory) -> None:
     tmp_store = get_local_tmp_store()
 
     # Write zarr metadata for this RegionJob to write into
-    template_utils.write_metadata(template_ds, store, mode="w")
+    template_utils.write_metadata(template_ds, store_factory.store(), mode="w")
 
     job = ExampleRegionJob(
-        final_store=store,
+        primary_store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         data_vars=[ExampleDataVar(name=name) for name in template_ds.data_vars.keys()],
@@ -125,7 +137,7 @@ def test_region_job(template_ds: xr.Dataset) -> None:
 
     job.process()
 
-    ds = xr.open_zarr(store)
+    ds = xr.open_zarr(store_factory.store())
     region_template_ds = template_ds.isel({job.append_dim: job.region})
     region_ds = ds.isel({job.append_dim: job.region})
     assert np.array_equal(region_ds.time.values, region_template_ds.time.values)
@@ -137,12 +149,13 @@ def test_region_job(template_ds: xr.Dataset) -> None:
         np.testing.assert_array_equal(data_var.values, expected_values)
 
 
-def test_update_template_with_results(template_ds: xr.Dataset) -> None:
-    store = get_zarr_store("fake-prod-path", "test-dataset-C", "test-version")
+def test_update_template_with_results(
+    template_ds: xr.Dataset, store_factory: StoreFactory
+) -> None:
     tmp_store = get_local_tmp_store()
 
     job = ExampleRegionJob(
-        final_store=store,
+        primary_store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         data_vars=[ExampleDataVar(name=name) for name in template_ds.data_vars.keys()],
@@ -179,13 +192,14 @@ def test_source_file_coord_out_loc_default_impl() -> None:
     assert coord.out_loc() == {"time": pd.Timestamp("2025-01-01T00")}
 
 
-def test_get_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
+def test_get_jobs_grouping_no_filters(
+    template_ds: xr.Dataset, store_factory: StoreFactory
+) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
-    store = get_zarr_store("fake-prod-path", "test-dataset-B", "test-version")
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
-        final_store=store,
+        primary_store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -217,13 +231,14 @@ def test_get_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
     ]
 
 
-def test_get_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
+def test_get_jobs_grouping_filters(
+    template_ds: xr.Dataset, store_factory: StoreFactory
+) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
-    store = get_zarr_store("fake-prod-path", "test-dataset-B", "test-version")
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
-        final_store=store,
+        primary_store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -262,13 +277,13 @@ def test_get_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
 
 def test_get_jobs_grouping_filters_and_worker_index(
     template_ds: xr.Dataset,
+    store_factory: StoreFactory,
 ) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
-    store = get_zarr_store("fake-prod-path", "test-dataset-B", "test-version")
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
-        final_store=store,
+        primary_store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -297,13 +312,14 @@ def test_get_jobs_grouping_filters_and_worker_index(
     ]
 
 
-def test_get_jobs_grouping_filter_contains(template_ds: xr.Dataset) -> None:
+def test_get_jobs_grouping_filter_contains(
+    template_ds: xr.Dataset, store_factory: StoreFactory
+) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
-    store = get_zarr_store("fake-prod-path", "test-dataset-B", "test-version")
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
-        final_store=store,
+        primary_store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -328,13 +344,13 @@ def test_get_jobs_grouping_filter_contains(template_ds: xr.Dataset) -> None:
 
 def test_get_jobs_grouping_filter_contains_second_shard(
     template_ds: xr.Dataset,
+    store_factory: StoreFactory,
 ) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
-    store = get_zarr_store("fake-prod-path", "test-dataset-B", "test-version")
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
-        final_store=store,
+        primary_store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -359,13 +375,13 @@ def test_get_jobs_grouping_filter_contains_second_shard(
 
 def test_get_jobs_grouping_filter_contains_all_shards(
     template_ds: xr.Dataset,
+    store_factory: StoreFactory,
 ) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
-    store = get_zarr_store("fake-prod-path", "test-dataset-B", "test-version")
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
-        final_store=store,
+        primary_store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
