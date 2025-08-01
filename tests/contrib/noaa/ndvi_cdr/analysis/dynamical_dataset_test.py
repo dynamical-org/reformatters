@@ -6,7 +6,7 @@ import pytest
 import xarray as xr
 from _pytest.monkeypatch import MonkeyPatch
 
-from reformatters.common.dynamical_dataset import DynamicalDatasetStorageConfig
+from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.contrib.noaa.ndvi_cdr.analysis.dynamical_dataset import (
     NoaaNdviCdrAnalysisDataset,
 )
@@ -14,8 +14,9 @@ from reformatters.contrib.noaa.ndvi_cdr.analysis.dynamical_dataset import (
 pytestmark = pytest.mark.slow
 
 
-noop_storage_config = DynamicalDatasetStorageConfig(
+noop_storage_config = StorageConfig(
     base_path="noop",
+    format=DatasetFormat.ZARR3,
 )
 
 

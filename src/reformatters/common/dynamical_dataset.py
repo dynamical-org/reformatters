@@ -27,6 +27,7 @@ from reformatters.common.kubernetes import (
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.region_job import RegionJob, SourceFileCoord
+from reformatters.common.storage import StorageConfig
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike
 from reformatters.common.zarr import (
@@ -42,20 +43,13 @@ SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
 logger = get_logger(__name__)
 
 
-class DynamicalDatasetStorageConfig(FrozenBaseModel):
-    """Configuration for the storage of a dataset in production."""
-
-    base_path: str
-    k8s_secret_names: Sequence[str] = []
-
-
 class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     """Top level class managing a dataset configuration and processing."""
 
     template_config: TemplateConfig[DATA_VAR]
     region_job_class: type[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
 
-    storage_config: DynamicalDatasetStorageConfig
+    storage_config: StorageConfig
 
     def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
         """

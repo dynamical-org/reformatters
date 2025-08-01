@@ -19,24 +19,24 @@ from reformatters.common.config_models import (
     DataVarAttrs,
     Encoding,
 )
-from reformatters.common.dynamical_dataset import (
-    DynamicalDataset,
-    DynamicalDatasetStorageConfig,
-)
+from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.common.region_job import RegionJob, SourceFileCoord
+from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 
-NOOP_STORAGE_CONFIG = DynamicalDatasetStorageConfig(
+NOOP_STORAGE_CONFIG = StorageConfig(
     base_path="noop",
     k8s_secret_names=["noop-secret"],
+    format=DatasetFormat.ZARR3,
 )
 
 
-class ExampleDatasetStorageConfig(DynamicalDatasetStorageConfig):
+class ExampleDatasetStorageConfig(StorageConfig):
     base_path: str = "s3://some-bucket/path"
     k8s_secret_names: Sequence[str] = ["k8s-secret-name"]
+    format: DatasetFormat = DatasetFormat.ZARR3
 
 
 class ExampleDataVar(DataVar[BaseInternalAttrs]):
