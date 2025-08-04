@@ -2,7 +2,6 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 import xarray as xr
-import zarr
 
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
@@ -10,6 +9,7 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
 )
+from reformatters.common.storage import StoreFactory
 from reformatters.common.types import (
     AppendDim,
     ArrayFloat32,
@@ -31,11 +31,10 @@ class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
     def out_loc(
         self,
     ) -> Mapping[Dim, CoordinateValueOrRange]:
-        """Returns a data array indexer which identifies the region in the
-        output dataset to write the data from the source file.
-
-        The indexer is a dict from dimension names to coordinate values
-        or slices.
+        """
+        Returns a data array indexer which identifies the region in the output dataset
+        to write the data from the source file. The indexer is a dict from dimension
+        names to coordinate values or slices.
         """
         # If the names of the coordinate attributes of your SourceFileCoord subclass are also all
         # dimension names in the output dataset (e.g. init_time and lead_time),
@@ -93,8 +92,7 @@ class DwdIconEuForecastRegionJob(
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[DwdIconEuDataVar],
     ) -> Sequence[DwdIconEuForecastSourceFileCoord]:
-        """Return a sequence of coords, one for each source file required to
-        process the data covered by processing_region_ds."""
+        """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
         # return [
         #     DwdIconEuForecastSourceFileCoord(
         #         init_time=init_time,
@@ -110,8 +108,7 @@ class DwdIconEuForecastRegionJob(
         )
 
     def download_file(self, coord: DwdIconEuForecastSourceFileCoord) -> Path:
-        """Download the file for the given coordinate and return the local
-        path."""
+        """Download the file for the given coordinate and return the local path."""
         # return http_download_to_disk(coord.get_url(), self.dataset_id)
         raise NotImplementedError(
             "Download the file for the given coordinate and return the local path."
@@ -122,8 +119,7 @@ class DwdIconEuForecastRegionJob(
         coord: DwdIconEuForecastSourceFileCoord,
         data_var: DwdIconEuDataVar,
     ) -> ArrayFloat32:
-        """Read and return an array of data for the given variable and source
-        file coordinate."""
+        """Read and return an array of data for the given variable and source file coordinate."""
         # with rasterio.open(coord.downloaded_file_path) as reader:
         #     TODO: make a band index based on tag matching utility function
         #     matching_indexes = [
@@ -133,7 +129,7 @@ class DwdIconEuForecastRegionJob(
         #         == data_var.internal_attrs.grib_element
         #         and tags["GRIB_COMMENT"] == data_var.internal_attrs.grib_comment
         #     ]
-        #     assert len(matching_indexes) == 1, f"Expected exactly 1 matching band, found {matching_indexes}. {data_var.internal_attrs.grib_element=}, {data_var.internal_attrs.grib_description=}, {coord.downloaded_file_path=}"   fmt: skip
+        #     assert len(matching_indexes) == 1, f"Expected exactly 1 matching band, found {matching_indexes}. {data_var.internal_attrs.grib_element=}, {data_var.internal_attrs.grib_description=}, {coord.downloaded_file_path=}"
         #     rasterio_band_index = 1 + matching_indexes[0]  # rasterio is 1-indexed
         #     return reader.read(rasterio_band_index, dtype=np.float32)
         raise NotImplementedError(
@@ -168,13 +164,14 @@ class DwdIconEuForecastRegionJob(
     def update_template_with_results(
         self, process_results: Mapping[str, Sequence[DwdIconEuForecastSourceFileCoord]]
     ) -> xr.Dataset:
-        """Update template dataset based on processing results. This method is
-        called during operational updates.
+        """
+        Update template dataset based on processing results. This method is called
+        during operational updates.
 
         Subclasses should implement this method to apply dataset-specific adjustments
         based on the processing results. Examples include:
         - Trimming dataset along append_dim to only include successfully processed data
-        - Loading existing coordinate values from final_store and updating them based on results
+        - Loading existing coordinate values from the primary store and updating them based on results
         - Updating metadata based on what was actually processed vs what was planned
 
         The default implementation trims along append_dim to end at the most recent
@@ -221,7 +218,7 @@ class DwdIconEuForecastRegionJob(
     @classmethod
     def operational_update_jobs(
         cls,
-        final_store: zarr.abc.store.Store,
+        primary_store_factory: StoreFactory,
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
@@ -231,8 +228,9 @@ class DwdIconEuForecastRegionJob(
         Sequence["RegionJob[DwdIconEuDataVar, DwdIconEuForecastSourceFileCoord]"],
         xr.Dataset,
     ]:
-        """Return the sequence of RegionJob instances necessary to update the
-        dataset from its current state to include the latest available data.
+        """
+        Return the sequence of RegionJob instances necessary to update the dataset
+        from its current state to include the latest available data.
 
         Also return the template_ds, expanded along append_dim through the end of
         the data to process. The dataset returned here may extend beyond the
@@ -241,16 +239,16 @@ class DwdIconEuForecastRegionJob(
 
         The exact logic is dataset-specific, but it generally follows this pattern:
         1. Figure out the range of time to process: append_dim_start (inclusive) and append_dim_end (exclusive)
-            a. Read existing data from final_store to determine what's already processed
+            a. Read existing data from the primary store to determine what's already processed
             b. Optionally identify recent incomplete/non-final data for reprocessing
         2. Call get_template_fn(append_dim_end) to get the template_ds
         3. Create RegionJob instances by calling cls.get_jobs(..., filter_start=append_dim_start)
 
         Parameters
         ----------
-        final_store : zarr.abc.store.Store
-            The destination Zarr store to read existing data from and write updates to.
-        tmp_store : zarr.abc.store.Store | Path
+        primary_store_factory : StoreFactory
+            The factory to get the primary store to read existing data from and write updates to.
+        tmp_store : Path
             The temporary Zarr store to write into while processing.
         get_template_fn : Callable[[DatetimeLike], xr.Dataset]
             Function to get the template_ds for the operational update.
@@ -269,14 +267,14 @@ class DwdIconEuForecastRegionJob(
         xr.Dataset
             The template_ds for the operational update.
         """
-        # existing_ds = xr.open_zarr(final_store)
+        # existing_ds = xr.open_zarr(primary_store_factory.store())
         # append_dim_start = existing_ds[append_dim].max()
         # append_dim_end = pd.Timestamp.now()
         # template_ds = get_template_fn(append_dim_end)
 
         # jobs = cls.get_jobs(
         #     kind="operational-update",
-        #     final_store=final_store,
+        #     primary_store_factory=primary_store_factory,
         #     tmp_store=tmp_store,
         #     template_ds=template_ds,
         #     append_dim=append_dim,
