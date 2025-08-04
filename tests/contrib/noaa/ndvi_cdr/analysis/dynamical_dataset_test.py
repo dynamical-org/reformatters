@@ -6,7 +6,7 @@ import pytest
 import xarray as xr
 from _pytest.monkeypatch import MonkeyPatch
 
-from reformatters.common.dynamical_dataset import DynamicalDatasetStorageConfig
+from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.contrib.noaa.ndvi_cdr.analysis.dynamical_dataset import (
     NoaaNdviCdrAnalysisDataset,
 )
@@ -14,8 +14,9 @@ from reformatters.contrib.noaa.ndvi_cdr.analysis.dynamical_dataset import (
 pytestmark = pytest.mark.slow
 
 
-noop_storage_config = DynamicalDatasetStorageConfig(
+noop_storage_config = StorageConfig(
     base_path="noop",
+    format=DatasetFormat.ZARR3,
 )
 
 
@@ -23,7 +24,7 @@ def test_backfill_local_and_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
     dataset = NoaaNdviCdrAnalysisDataset(storage_config=noop_storage_config)
     # Dataset starts at 1981-06-24, test with a couple days after start
     dataset.backfill_local(append_dim_end=pd.Timestamp("1981-06-25"))
-    ds = xr.open_zarr(dataset._final_store(), chunks=None)
+    ds = xr.open_zarr(dataset.primary_store_factory.store(), chunks=None)
 
     assert ds.time.max() == pd.Timestamp("1981-06-24")
 
@@ -59,9 +60,9 @@ def test_backfill_local_and_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
 
     # Mock pd.Timestamp.now() to control the update end date
     monkeypatch.setattr("pandas.Timestamp.now", lambda: pd.Timestamp("1981-06-26"))
-
+    dataset = NoaaNdviCdrAnalysisDataset(storage_config=noop_storage_config)
     dataset.update("test-update")
-    updated_ds = xr.open_zarr(dataset._final_store(), chunks=None)
+    updated_ds = xr.open_zarr(dataset.primary_store_factory.store(), chunks=None)
     np.testing.assert_array_equal(
         updated_ds.time, pd.date_range("1981-06-24", "1981-06-25")
     )

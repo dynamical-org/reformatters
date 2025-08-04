@@ -174,16 +174,16 @@ def reformat_operational_update(job_name: str) -> None:
     #   track and skip variables that are already processed (if this pod restarted)
     #   process data chunks to local tmp store
     #   track max coordinates of processed data
-    #   upload from tmp store to final store
+    #   upload from tmp store to primary store
     #   modify template ds based on what was processed
-    #   write template ds and copy to final store
+    #   write template ds and copy to primary store
     #
     append_dim = template.APPEND_DIMENSION
 
-    final_store = get_store()
+    primary_store = get_store()
     tmp_store = get_local_tmp_store()
     # Get the dataset, check what data is already present
-    ds = xr.open_zarr(final_store, decode_timedelta=True)
+    ds = xr.open_zarr(primary_store, decode_timedelta=True)
     for coord in ds.coords.values():
         coord.load()
 
@@ -225,7 +225,7 @@ def reformat_operational_update(job_name: str) -> None:
         max_processed_time = pd.Timestamp.min
 
         progress_tracker = UpdateProgressTracker(
-            final_store, job_name, time_i_slice.start
+            primary_store, job_name, time_i_slice.start
         )
         vars_to_process = progress_tracker.get_unprocessed_str(
             list(template_ds.data_vars.keys())
@@ -250,7 +250,7 @@ def reformat_operational_update(job_name: str) -> None:
                     template_ds,
                     append_dim,
                     tmp_store,
-                    final_store,
+                    primary_store,
                     partial(progress_tracker.record_completion, data_var.name),
                 )
             )
@@ -282,8 +282,8 @@ def reformat_operational_update(job_name: str) -> None:
             get_mode(tmp_store),
         )
 
-        # Write the metadata to the final store last, the data must be written first
-        copy_zarr_metadata(truncated_template_ds, tmp_store, final_store)
+        # Write the metadata to the primary store last, the data must be written first
+        copy_zarr_metadata(truncated_template_ds, tmp_store, primary_store)
 
 
 def _get_operational_update_time_end() -> pd.Timestamp:

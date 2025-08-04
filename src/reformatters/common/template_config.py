@@ -152,7 +152,7 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
                 ds.coords[coord_config.name], coord_config
             )
 
-        template_utils.write_metadata(ds, self.template_path(), mode="w")
+        template_utils.write_metadata(ds, self.template_path())
 
     def append_dim_coordinate_chunk_size(self) -> int:
         """

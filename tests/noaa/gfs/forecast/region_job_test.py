@@ -3,14 +3,26 @@ from unittest.mock import Mock
 
 import pandas as pd
 import pytest
-import zarr
 
 from reformatters.common import template_utils
+from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.noaa.gfs.forecast.region_job import (
     NoaaGfsForecastRegionJob,
     NoaaGfsForecastSourceFileCoord,
 )
 from reformatters.noaa.gfs.forecast.template_config import NoaaGfsForecastTemplateConfig
+
+
+@pytest.fixture
+def store_factory() -> StoreFactory:
+    return StoreFactory(
+        storage_config=StorageConfig(
+            base_path="fake-prod-path",
+            format=DatasetFormat.ZARR3,
+        ),
+        dataset_id="test-dataset-A",
+        template_config_version="test-version",
+    )
 
 
 def test_source_file_coord_get_url() -> None:
@@ -29,7 +41,7 @@ def test_region_job_generete_source_file_coords() -> None:
 
     # use `model_construct` to skip pydantic validation so we can pass mock stores
     region_job = NoaaGfsForecastRegionJob.model_construct(
-        final_store=Mock(),
+        primary_store_factory=Mock(),
         tmp_store=Mock(),
         template_ds=template_ds,
         data_vars=template_config.data_vars[:3],
@@ -68,7 +80,7 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # Create a region job with mock stores
     region_job = NoaaGfsForecastRegionJob.model_construct(
-        final_store=Mock(),
+        primary_store_factory=Mock(),
         tmp_store=Mock(),
         template_ds=template_config.get_template(pd.Timestamp("2025-01-01")),
         data_vars=template_config.data_vars[:2],
@@ -134,6 +146,14 @@ def test_operational_update_jobs(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     template_config = NoaaGfsForecastTemplateConfig()
+    primary_store_factory = StoreFactory(
+        storage_config=StorageConfig(
+            base_path="fake-prod-path",
+            format=DatasetFormat.ZARR3,
+        ),
+        dataset_id="test-dataset-A",
+        template_config_version="test-version",
+    )
 
     # Set the append_dim_end for the update
     monkeypatch.setattr(
@@ -144,11 +164,10 @@ def test_operational_update_jobs(
     existing_ds = template_config.get_template(
         pd.Timestamp("2025-01-01T06:01")  # 06 will be max existing init time
     )
-    final_store = zarr.storage.LocalStore(tmp_path / "existing_ds.zarr")
-    template_utils.write_metadata(existing_ds, final_store, mode="w-")
+    template_utils.write_metadata(existing_ds, primary_store_factory)
 
     jobs, template_ds = NoaaGfsForecastRegionJob.operational_update_jobs(
-        final_store=final_store,
+        primary_store_factory=primary_store_factory,
         tmp_store=tmp_path / "tmp_ds.zarr",
         get_template_fn=template_config.get_template,
         append_dim=template_config.append_dim,

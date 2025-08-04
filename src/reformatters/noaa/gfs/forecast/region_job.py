@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 import rasterio  # type: ignore
 import xarray as xr
-import zarr
 
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
@@ -18,6 +17,7 @@ from reformatters.common.download import (
 from reformatters.common.iterating import digest, item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob
+from reformatters.common.storage import StoreFactory
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     AppendDim,
@@ -171,7 +171,7 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
     @classmethod
     def operational_update_jobs(
         cls,
-        final_store: zarr.abc.store.Store,
+        primary_store_factory: StoreFactory,
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
@@ -184,7 +184,9 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         Return the sequence of RegionJob instances necessary to update the dataset
         from its current state to include the latest available data.
         """
-        existing_ds = xr.open_zarr(final_store, decode_timedelta=True, chunks=None)
+        existing_ds = xr.open_zarr(
+            primary_store_factory.store(), decode_timedelta=True, chunks=None
+        )
         # Start by reprocessing the most recent forecast already in the dataset; it may be incomplete.
         append_dim_start = existing_ds[append_dim].max()
         append_dim_end = pd.Timestamp.now()
@@ -192,7 +194,7 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
 
         jobs = cls.get_jobs(
             kind="operational-update",
-            final_store=final_store,
+            primary_store_factory=primary_store_factory,
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=append_dim,

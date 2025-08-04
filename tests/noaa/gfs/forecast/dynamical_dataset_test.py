@@ -12,15 +12,12 @@ from reformatters.noaa.gfs.forecast import NoaaGfsForecastDataset
 from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 
 
-@pytest.fixture
-def dataset() -> NoaaGfsForecastDataset:
-    return NoaaGfsForecastDataset(storage_config=NOOP_STORAGE_CONFIG)
-
-
 @pytest.mark.slow
 def test_backfill_local_and_operational_update(
-    dataset: NoaaGfsForecastDataset, monkeypatch: MonkeyPatch, tmp_path: Path
+    monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
+    dataset = NoaaGfsForecastDataset(storage_config=NOOP_STORAGE_CONFIG)
+
     init_time_start = dataset.template_config.append_dim_start
     init_time_end = init_time_start + timedelta(hours=12)
 
@@ -47,7 +44,7 @@ def test_backfill_local_and_operational_update(
         append_dim_end=init_time_end, filter_variable_names=filter_variable_names
     )
     original_ds = xr.open_zarr(
-        dataset._final_store(), decode_timedelta=True, chunks=None
+        dataset.primary_store_factory.store(), decode_timedelta=True, chunks=None
     )
 
     space_subset_ds = original_ds.sel(latitude=slice(10, 0), longitude=slice(0, 10))
@@ -106,6 +103,7 @@ def test_backfill_local_and_operational_update(
 
     # 2. Operational update
     # Set "now" to just past the 12 UTC init time so we add a third init_time step
+    dataset = NoaaGfsForecastDataset(storage_config=NOOP_STORAGE_CONFIG)
     monkeypatch.setattr(
         pd.Timestamp, "now", classmethod(lambda cls: pd.Timestamp("2021-05-01T14:00"))
     )
@@ -122,7 +120,7 @@ def test_backfill_local_and_operational_update(
     dataset.update("test-update-job-name")
 
     updated_ds = xr.open_zarr(
-        dataset._final_store(), decode_timedelta=True, chunks=None
+        dataset.primary_store_factory.store(), decode_timedelta=True, chunks=None
     )
 
     np.testing.assert_array_equal(
@@ -150,9 +148,8 @@ def test_backfill_local_and_operational_update(
     assert point_ds2["categorical_freezing_rain_surface"] == 0.0
 
 
-def test_operational_kubernetes_resources(
-    dataset: NoaaGfsForecastDataset,
-) -> None:
+def test_operational_kubernetes_resources() -> None:
+    dataset = NoaaGfsForecastDataset(storage_config=NOOP_STORAGE_CONFIG)
     cron_jobs = dataset.operational_kubernetes_resources("test-image-tag")
 
     assert len(cron_jobs) == 2
@@ -163,7 +160,8 @@ def test_operational_kubernetes_resources(
     assert validation_cron_job.secret_names == dataset.storage_config.k8s_secret_names
 
 
-def test_validators(dataset: NoaaGfsForecastDataset) -> None:
+def test_validators() -> None:
+    dataset = NoaaGfsForecastDataset(storage_config=NOOP_STORAGE_CONFIG)
     validators = tuple(dataset.validators())
     assert len(validators) == 2
     assert all(isinstance(v, validation.DataValidator) for v in validators)
