@@ -1848,7 +1848,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "wind_u_10": {
+      "wind_u_10m": {
         "shape": [
           1,
           93,
