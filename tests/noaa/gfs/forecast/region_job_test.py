@@ -164,7 +164,7 @@ def test_operational_update_jobs(
     existing_ds = template_config.get_template(
         pd.Timestamp("2025-01-01T06:01")  # 06 will be max existing init time
     )
-    template_utils.write_metadata(existing_ds, primary_store_factory.store(), mode="w-")
+    template_utils.write_metadata(existing_ds, primary_store_factory)
 
     jobs, template_ds = NoaaGfsForecastRegionJob.operational_update_jobs(
         primary_store_factory=primary_store_factory,

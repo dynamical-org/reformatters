@@ -123,7 +123,7 @@ def test_region_job(template_ds: xr.Dataset, store_factory: StoreFactory) -> Non
     tmp_store = get_local_tmp_store()
 
     # Write zarr metadata for this RegionJob to write into
-    template_utils.write_metadata(template_ds, store_factory.store(), mode="w")
+    template_utils.write_metadata(template_ds, store_factory)
 
     job = ExampleRegionJob(
         primary_store_factory=store_factory,

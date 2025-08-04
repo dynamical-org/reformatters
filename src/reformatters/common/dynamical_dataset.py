@@ -137,14 +137,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 all_data_vars=self.template_config.data_vars,
                 reformat_job_name=reformat_job_name,
             )
-            first_write_mode: Literal["w", "w-"] = "w" if Config.is_test else "w-"
-            template_utils.write_metadata(template_ds, tmp_store, first_write_mode)
+            template_utils.write_metadata(template_ds, tmp_store)
 
             for job in jobs:
                 process_results = job.process()
                 updated_template = job.update_template_with_results(process_results)
                 # overwrite the tmp store metadata with updated template
-                template_utils.write_metadata(updated_template, tmp_store, "w")
+                template_utils.write_metadata(updated_template, tmp_store)
                 primary_store = self.primary_store_factory.store()
                 copy_zarr_metadata(updated_template, tmp_store, primary_store)
 
@@ -167,12 +166,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         image_tag = docker_image or docker.build_and_push_image()
 
         template_ds = self._get_template(append_dim_end)
-        primary_store = self.primary_store_factory.store()
-        logger.info(f"Writing zarr metadata to {primary_store}")
-
-        template_utils.write_metadata(
-            template_ds, primary_store, self.primary_store_factory.mode()
-        )
+        template_utils.write_metadata(template_ds, self.primary_store_factory)
 
         num_jobs = len(
             self.region_job_class.get_jobs(
@@ -264,13 +258,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> None:
         """Run dataset reformatting locally in this process."""
         template_ds = self._get_template(append_dim_end)
-        primary_store = self.primary_store_factory.store()
-
-        template_utils.write_metadata(
-            template_ds,
-            primary_store,
-            self.primary_store_factory.mode(),
-        )
+        template_utils.write_metadata(template_ds, self.primary_store_factory)
 
         self.process_backfill_region_jobs(
             append_dim_end,
@@ -282,7 +270,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             filter_contains=filter_contains,
             filter_variable_names=filter_variable_names,
         )
-        logger.info(f"Done writing to {primary_store}")
+        logger.info(f"Done writing to {self.primary_store_factory.store()}")
 
     def process_backfill_region_jobs(
         self,

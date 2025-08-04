@@ -11,16 +11,31 @@ import zarr
 
 from reformatters.common.config_models import Coordinate, DataVar
 from reformatters.common.logging import get_logger
+from reformatters.common.storage import StoreFactory
 
 logger = get_logger(__name__)
 
 
 def write_metadata(
     template_ds: xr.Dataset,
-    store: zarr.storage.StoreLike,
-    mode: Literal["w", "w-"],
+    storage: zarr.storage.StoreLike | StoreFactory,
+    mode: Literal["w", "w-"] | None = None,
 ) -> None:
-    logger.info(f"Writing metadata {store} with mode {mode}")
+    store: zarr.abc.store.Store | Path
+
+    if isinstance(storage, StoreFactory):
+        store = storage.store()
+        assert mode is None, "mode should not be provided if StoreFactory is provided"
+        mode = storage.mode()
+    else:
+        assert isinstance(storage, zarr.abc.store.Store) or isinstance(storage, Path)
+        store = storage
+        # respect mode if provided by legacy implementations
+        if mode is None:
+            assert isinstance(store, Path), f"Expected Path, got {type(store)}"
+            mode = _get_mode_from_path_store(store)
+
+    logger.info(f"Writing metadata to {store} with mode {mode}")
     with warnings.catch_warnings():
         # Unconsolidated metadata is also written so adding
         # consolidated metadata is unlikely to impact interoperability.
@@ -34,6 +49,18 @@ def write_metadata(
 
     if isinstance(store, Path | str):
         sort_consolidated_metadata(Path(store) / "zarr.json")
+
+
+def _get_mode_from_path_store(store: Path) -> Literal["w", "w-"]:
+    if store.parent.name == "templates":
+        path_str = f"templates/{store.name}"
+    else:
+        path_str = store.name
+
+    if path_str.endswith(("templates/latest.zarr", "dev.zarr", "-tmp.zarr")):
+        return "w"  # Allow overwritting dev store and template config latest.zarr
+
+    return "w-"  # Safe default - don't overwrite
 
 
 def sort_consolidated_metadata(zarr_json_path: Path) -> None:

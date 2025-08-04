@@ -492,7 +492,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
 
         # Hardcode w since many region jobs may write metadata to the same tmp store
-        template_utils.write_metadata(self.template_ds, self.tmp_store, "w")
+        template_utils.write_metadata(self.template_ds, self.tmp_store)
 
         results: dict[str, Sequence[SOURCE_FILE_COORD]] = {}
         upload_futures: list[Any] = []
