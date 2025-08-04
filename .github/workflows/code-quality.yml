@@ -36,7 +36,9 @@ jobs:
 
       - name: Install Arm Build Dependencies
         if: matrix.arch == 'arm64'
-        run: sudo apt-get install -qyy -o APT::Install-Suggests=false libgdal-dev
+        run: |
+          sudo apt-get update -qyy
+          sudo apt-get install -qyy -o APT::Install-Suggests=false libgdal-dev
 
       - name: Install dependencies
         # Needed to be able to compile dependencies on ARM64
