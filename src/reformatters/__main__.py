@@ -9,10 +9,8 @@ import reformatters.noaa.gefs.analysis.cli as noaa_gefs_analysis
 import reformatters.noaa.gefs.forecast_35_day.cli as noaa_gefs_forecast_35_day
 from reformatters.common import deploy
 from reformatters.common.config import Config
-from reformatters.common.dynamical_dataset import (
-    DynamicalDataset,
-    DynamicalDatasetStorageConfig,
-)
+from reformatters.common.dynamical_dataset import DynamicalDataset
+from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.contrib.noaa.ndvi_cdr.analysis import (
     NoaaNdviCdrAnalysisDataset,
 )
@@ -25,14 +23,15 @@ from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
 )
 
 
-class SourceCoopDatasetStorageConfig(DynamicalDatasetStorageConfig):
+class SourceCoopDatasetStorageConfig(StorageConfig):
     """Configuration for the storage of a SourceCoop dataset."""
 
     base_path: str = "s3://us-west-2.opendata.source.coop/dynamical"
     k8s_secret_names: Sequence[str] = ["source-coop-key"]
+    format: DatasetFormat = DatasetFormat.ZARR3
 
 
-class UpstreamGriddedZarrsDatasetStorageConfig(DynamicalDatasetStorageConfig):
+class UpstreamGriddedZarrsDatasetStorageConfig(StorageConfig):
     """Configuration for storage in the Upstream gridded zarrs bucket."""
 
     # This bucket is actually an R2 bucket.
@@ -40,6 +39,7 @@ class UpstreamGriddedZarrsDatasetStorageConfig(DynamicalDatasetStorageConfig):
     # when it's imported into the env.
     base_path: str = "s3://upstream-gridded-zarrs"
     k8s_secret_names: Sequence[str] = ["upstream-gridded-zarrs-key"]
+    format: DatasetFormat = DatasetFormat.ZARR3
 
 
 # Registry of all DynamicalDatasets.

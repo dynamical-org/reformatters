@@ -15,7 +15,6 @@ import numpy as np
 import pandas as pd
 import pydantic
 import xarray as xr
-import zarr
 from pydantic import AfterValidator, Field, computed_field
 
 from reformatters.common import template_utils
@@ -28,6 +27,7 @@ from reformatters.common.reformat_utils import (
     create_data_array_and_template,
 )
 from reformatters.common.shared_memory_utils import make_shared_buffer, write_shards
+from reformatters.common.storage import StoreFactory
 from reformatters.common.types import (
     AppendDim,
     ArrayND,
@@ -36,7 +36,7 @@ from reformatters.common.types import (
     Timestamp,
 )
 from reformatters.common.update_progress_tracker import UpdateProgressTracker
-from reformatters.common.zarr import copy_data_var, get_mode
+from reformatters.common.zarr import copy_data_var
 
 log = get_logger(__name__)
 
@@ -101,7 +101,7 @@ def region_slice(s: slice) -> slice:
 
 
 class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
-    final_store: zarr.abc.store.Store
+    primary_store_factory: StoreFactory
     tmp_store: Path
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
@@ -228,7 +228,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         Subclasses should implement this method to apply dataset-specific adjustments
         based on the processing results. Examples include:
         - Trimming dataset along append_dim to only include successfully processed data
-        - Loading existing coordinate values from final_store and updating them based on results
+        - Loading existing coordinate values from the primary store and updating them based on results
         - Updating metadata based on what was actually processed vs what was planned
 
         The default implementation here trims along append_dim to end at the most recent
@@ -266,7 +266,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     @classmethod
     def operational_update_jobs(
         cls,
-        final_store: zarr.abc.store.Store,
+        primary_store_factory: StoreFactory,
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
@@ -284,16 +284,16 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         The exact logic is dataset-specific, but it generally follows this pattern:
         1. Figure out the range of time to process: append_dim_start (inclusive) and append_dim_end (exclusive)
-            a. Read existing data from final_store to determine what's already processed
+            a. Read existing data from the primary store to determine what's already processed
             b. Optionally identify recent incomplete/non-final data for reprocessing
         2. Call get_template_fn(append_dim_end) to get the template_ds
         3. Create RegionJob instances by calling cls.get_jobs(..., filter_start=append_dim_start)
 
         Parameters
         ----------
-        final_store : zarr.abc.store.Store
-            The destination Zarr store to read existing data from and write updates to.
-        tmp_store : zarr.abc.store.Store | Path
+        primary_store_factory : StoreFactory
+            The factory to get the primary store to read existing data from and write updates to.
+        tmp_store : Path
             The temporary Zarr store to write into while processing.
         get_template_fn : Callable[[DatetimeLike], xr.Dataset]
             Function to get the template_ds for the operational update.
@@ -331,7 +331,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def get_jobs(
         cls,
         kind: Literal["backfill", "operational-update"],
-        final_store: zarr.abc.store.Store,
+        primary_store_factory: StoreFactory,
         tmp_store: Path,
         template_ds: xr.Dataset,
         append_dim: AppendDim,
@@ -357,9 +357,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         Parameters
         ----------
-        final_store : zarr.abc.store.Store
-            The destination Zarr store to write into.
-        tmp_store : zarr.abc.store.Store | Path
+        primary_store_factory : StoreFactory
+            The factory to get the primary store to read existing data from and write updates to.
+        tmp_store : Path
             The temporary Zarr store to write into while processing.
         template_ds : xr.Dataset
             Dataset template defining structure and metadata.
@@ -442,7 +442,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         all_jobs = [
             cls(
-                final_store=final_store,
+                primary_store_factory=primary_store_factory,
                 tmp_store=tmp_store,
                 template_ds=template_ds,
                 data_vars=data_var_group,
@@ -468,7 +468,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 i.   Read data from source files into the shared array
                 ii.  Apply any required data transformations (e.g., rounding, deaccumulation)
                 iii. Write output shards to the tmp_store
-                iv.  Upload chunk data from tmp_store to final_store
+                iv.  Upload chunk data from tmp_store to the primary store
 
         Returns
         -------
@@ -477,8 +477,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         processing_region_ds, output_region_ds = self._get_region_datasets()
 
+        primary_store = self.primary_store_factory.store()
+
         progress_tracker = UpdateProgressTracker(
-            self.final_store, self.reformat_job_name, self.region.start
+            primary_store, self.reformat_job_name, self.region.start
         )
         data_vars_to_process: Sequence[DATA_VAR] = progress_tracker.get_unprocessed(
             self.data_vars
@@ -489,9 +491,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 data_var_groups, self.max_vars_per_download_group
             )
 
-        template_utils.write_metadata(
-            self.template_ds, self.tmp_store, get_mode(self.tmp_store)
-        )
+        template_utils.write_metadata(self.template_ds, self.tmp_store)
 
         results: dict[str, Sequence[SOURCE_FILE_COORD]] = {}
         upload_futures: list[Any] = []
@@ -555,7 +555,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                             self.template_ds,
                             self.append_dim,
                             self.tmp_store,
-                            self.final_store,
+                            primary_store,
                             partial(progress_tracker.record_completion, data_var.name),
                         )
                     )

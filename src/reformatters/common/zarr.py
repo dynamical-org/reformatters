@@ -100,7 +100,7 @@ def copy_data_var(
     template_ds: xr.Dataset,
     append_dim: str,
     tmp_store: Path,
-    final_store: zarr.abc.store.Store,
+    primary_store: zarr.abc.store.Store,
     track_progress_callback: Callable[[], None] | None = None,
 ) -> None:
     dim_index = template_ds[data_var_name].dims.index(append_dim)
@@ -110,10 +110,10 @@ def copy_data_var(
     relative_dir = f"{data_var_name}/c/{shard_index}/"
 
     logger.info(
-        f"Copying data var chunks to final store ({final_store}) for {relative_dir}."
+        f"Copying data var chunks to primary store ({primary_store}) for {relative_dir}."
     )
 
-    fs, path = _get_fs_and_path(final_store)
+    fs, path = _get_fs_and_path(primary_store)
     fs.auto_mkdir = True
 
     # We want to support local and s3fs filesystems. fsspec local filesystem is sync,
@@ -136,9 +136,9 @@ def copy_data_var(
 
 
 def copy_zarr_metadata(
-    template_ds: xr.Dataset, tmp_store: Path, final_store: zarr.abc.store.Store
+    template_ds: xr.Dataset, tmp_store: Path, primary_store: zarr.abc.store.Store
 ) -> None:
-    logger.info(f"Copying metadata to final store ({final_store}) from {tmp_store}")
+    logger.info(f"Copying metadata to primary store ({primary_store}) from {tmp_store}")
 
     metadata_files: list[Path] = []
 
@@ -151,7 +151,7 @@ def copy_zarr_metadata(
     metadata_files.append(tmp_store / "zarr.json")
     metadata_files.extend(tmp_store.glob("*/zarr.json"))
 
-    fs, path = _get_fs_and_path(final_store)
+    fs, path = _get_fs_and_path(primary_store)
 
     # This could be partially parallelized BUT make sure to write the coords before the metadata.
     for file in metadata_files:
@@ -167,9 +167,9 @@ def _get_fs_and_path(
     fs = getattr(store, "fs", None)
     if not isinstance(fs, fsspec.AbstractFileSystem):
         raise ValueError(
-            "final_store must have an fs that is an instance of fsspec.AbstractFileSystem"
+            "primary_store must have an fs that is an instance of fsspec.AbstractFileSystem"
         )
     path = getattr(store, "path", None)
     if not isinstance(path, str):
-        raise ValueError("final_store must have a path attribute that is a string")
+        raise ValueError("primary_store must have a path attribute that is a string")
     return fs, path
