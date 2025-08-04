@@ -549,7 +549,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
             ),
             DwdIconEuDataVar(
-                name="wind_u_10",
+                name="wind_u_10m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="u10",
