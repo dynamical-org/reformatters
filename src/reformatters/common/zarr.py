@@ -10,7 +10,6 @@ import zarr
 from fsspec.implementations.local import LocalFileSystem  # type: ignore
 
 from reformatters.common.config import Config
-from reformatters.common.fsspec import fsspec_apply
 from reformatters.common.logging import get_logger
 
 logger = get_logger(__name__)
@@ -113,15 +112,11 @@ def copy_data_var(
         f"Copying data var chunks to primary store ({primary_store}) for {relative_dir}."
     )
 
-    fs, path = _get_fs_and_path(primary_store)
-    fs.auto_mkdir = True
-
-    # We want to support local and s3fs filesystems. fsspec local filesystem is sync,
-    # but our s3fs from zarr.storage.FsspecStore is async and here we work around it.
-    # The AsyncFileSystem wrapper on LocalFilesystem raises NotImplementedError when _put is called.
-    source = f"{tmp_store / relative_dir}/"
-    dest = f"{path}/{relative_dir}"
-    fsspec_apply(fs, "put", source, dest, recursive=True, auto_mkdir=True)
+    for file in tmp_store.glob(f"{relative_dir}**/*"):
+        if not file.is_file():
+            continue
+        key = str(file.relative_to(tmp_store))
+        sync_to_store(primary_store, key, file.read_bytes())
 
     if track_progress_callback is not None:
         track_progress_callback()
@@ -133,6 +128,16 @@ def copy_data_var(
                 file.unlink()
     except Exception as e:
         logger.warning(f"Failed to delete chunk after upload: {e}")
+
+
+def sync_to_store(store: zarr.abc.store.Store, key: str, data: bytes) -> None:
+    zarr.core.sync.sync(
+        store.set(
+            key,
+            # Should we use zarr.core.buffer.default_buffer_prototype().buffer.from_bytes( ?
+            zarr.core.buffer.cpu.Buffer.from_bytes(data),
+        )
+    )
 
 
 def copy_zarr_metadata(
@@ -151,13 +156,9 @@ def copy_zarr_metadata(
     metadata_files.append(tmp_store / "zarr.json")
     metadata_files.extend(tmp_store.glob("*/zarr.json"))
 
-    fs, path = _get_fs_and_path(primary_store)
-
-    # This could be partially parallelized BUT make sure to write the coords before the metadata.
     for file in metadata_files:
-        relative = file.relative_to(tmp_store)
-        dest = f"{path}/{relative}"
-        fsspec_apply(fs, "put_file", file, dest)
+        relative_path = str(file.relative_to(tmp_store))
+        sync_to_store(primary_store, relative_path, file.read_bytes())
 
 
 def _get_fs_and_path(
