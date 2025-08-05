@@ -60,13 +60,17 @@ select = [
     "FURB",  # refurb
     "INP",   # missing __init__.py
     "PIE",   # misc flake8
+    "PL",    # pylint
 ]
 ignore = [
-    "S101",  # disallow asserts
-    "E501",  # line too long
-    "W293",  # black line contains whitespace
-    "UP046", # non-pep695-generic-class - mypy doesn't support this yet
-    "UP047", # non-pep695-generic-function - mypy doesn't support this yet
+    "S101",    # disallow asserts
+    "E501",    # line too long
+    "W293",    # black line contains whitespace
+    "UP046",   # non-pep695-generic-class - mypy doesn't support this yet
+    "UP047",   # non-pep695-generic-function - mypy doesn't support this yet
+    "PLR0913", # pylint too many arguments
+    "PLR2004", # magic value used in comparison (not constant)
+    "PLC0414", # import alias doesn't rename
 ]
 
 
