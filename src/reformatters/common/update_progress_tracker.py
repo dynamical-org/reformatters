@@ -3,16 +3,31 @@ import queue
 import threading
 from collections.abc import Sequence
 
+import fsspec  # type: ignore
 import zarr.storage
 
 from reformatters.common.config_models import BaseInternalAttrs, DataVar
 from reformatters.common.fsspec import fsspec_apply
 from reformatters.common.logging import get_logger
-from reformatters.common.zarr import _get_fs_and_path
 
 log = get_logger(__name__)
 
 PROCESSED_VARIABLES_KEY = "processed_variables"
+
+
+def _get_fs_and_path(
+    store: zarr.abc.store.Store,
+) -> tuple[fsspec.AbstractFileSystem, str]:
+    """Gross work around to allow us to make other store types quack like FsspecStore."""
+    fs = getattr(store, "fs", None)
+    if not isinstance(fs, fsspec.AbstractFileSystem):
+        raise ValueError(
+            "primary_store must have an fs that is an instance of fsspec.AbstractFileSystem"
+        )
+    path = getattr(store, "path", None)
+    if not isinstance(path, str):
+        raise ValueError("primary_store must have a path attribute that is a string")
+    return fs, path
 
 
 class UpdateProgressTracker:
