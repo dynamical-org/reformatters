@@ -10,6 +10,7 @@ from fsspec.implementations.local import LocalFileSystem  # type: ignore
 
 from reformatters.common.config import Config
 from reformatters.common.logging import get_logger
+from reformatters.common.retry import retry
 
 logger = get_logger(__name__)
 
@@ -151,9 +152,12 @@ def copy_zarr_metadata(
 
 
 def sync_to_store(store: zarr.abc.store.Store, key: str, data: bytes) -> None:
-    zarr.core.sync.sync(
-        store.set(
-            key,
-            zarr.core.buffer.cpu.Buffer.from_bytes(data),
-        )
+    retry(
+        lambda: zarr.core.sync.sync(
+            store.set(
+                key,
+                zarr.core.buffer.default_buffer_prototype().buffer.from_bytes(data),
+            )
+        ),
+        max_attempts=6,
     )
