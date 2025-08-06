@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-import fsspec  # type: ignore
 import xarray as xr
 import zarr
 from fsspec.implementations.local import LocalFileSystem  # type: ignore
@@ -130,16 +129,6 @@ def copy_data_var(
         logger.warning(f"Failed to delete chunk after upload: {e}")
 
 
-def sync_to_store(store: zarr.abc.store.Store, key: str, data: bytes) -> None:
-    zarr.core.sync.sync(
-        store.set(
-            key,
-            # Should we use zarr.core.buffer.default_buffer_prototype().buffer.from_bytes( ?
-            zarr.core.buffer.cpu.Buffer.from_bytes(data),
-        )
-    )
-
-
 def copy_zarr_metadata(
     template_ds: xr.Dataset, tmp_store: Path, primary_store: zarr.abc.store.Store
 ) -> None:
@@ -161,16 +150,10 @@ def copy_zarr_metadata(
         sync_to_store(primary_store, relative_path, file.read_bytes())
 
 
-def _get_fs_and_path(
-    store: zarr.abc.store.Store,
-) -> tuple[fsspec.AbstractFileSystem, str]:
-    """Gross work around to allow us to make other store types quack like FsspecStore."""
-    fs = getattr(store, "fs", None)
-    if not isinstance(fs, fsspec.AbstractFileSystem):
-        raise ValueError(
-            "primary_store must have an fs that is an instance of fsspec.AbstractFileSystem"
+def sync_to_store(store: zarr.abc.store.Store, key: str, data: bytes) -> None:
+    zarr.core.sync.sync(
+        store.set(
+            key,
+            zarr.core.buffer.cpu.Buffer.from_bytes(data),
         )
-    path = getattr(store, "path", None)
-    if not isinstance(path, str):
-        raise ValueError("primary_store must have a path attribute that is a string")
-    return fs, path
+    )
