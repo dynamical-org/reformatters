@@ -221,7 +221,9 @@ def reformat_operational_update(job_name: str) -> None:
         )
 
         progress_tracker = UpdateProgressTracker(
-            primary_store, job_name, init_time_i_slice.start
+            job_name,
+            init_time_i_slice.start,
+            primary_store.path,
         )
         vars_to_process = progress_tracker.get_unprocessed_str(
             list(template_ds.data_vars.keys())
