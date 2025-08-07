@@ -60,7 +60,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
             dataset_version="0.1.0",
             name="DWD ICON-EU Forecast",
             description="High-resolution weather forecasts for Europe from the ICON-EU model operated by Deutscher Wetterdienst (DWD).",
-            attribution="DWD ICON-EU data processed by dynamical.org from DWD.",
+            attribution="DWD ICON-EU data processed by dynamical.org.",
             spatial_domain="Europe",
             spatial_resolution="0.0625 degrees (~7km)",
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
@@ -282,7 +282,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
     @property
     def data_vars(self) -> Sequence[DwdIconEuDataVar]:
         """Define metadata and encoding for each data variable."""
-        # Roughly 4.5MB uncompressed, 2.5MB compressed
+        # Roughly 12.5MB uncompressed, 2.5MB compressed
         var_chunks: dict[Dim, int] = {
             "init_time": 1,
             "lead_time": 93,
