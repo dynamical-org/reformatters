@@ -4,7 +4,7 @@
     "dataset_version": "0.1.0",
     "name": "DWD ICON-EU Forecast",
     "description": "High-resolution weather forecasts for Europe from the ICON-EU model operated by Deutscher Wetterdienst (DWD).",
-    "attribution": "DWD ICON-EU data processed by dynamical.org from DWD.",
+    "attribution": "DWD ICON-EU data processed by dynamical.org.",
     "spatial_domain": "Europe",
     "spatial_resolution": "0.0625 degrees (~7km)",
     "time_domain": "Forecasts initialized 2025-08-08 00:00:00 UTC to Present",
