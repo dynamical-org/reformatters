@@ -98,8 +98,8 @@ def download_file(
         )
 
         return coords, local_path
-    except Exception as e:
-        print("Download failed", e)
+    except Exception:
+        logger.exception("Download failed")
         return coords, None
 
 

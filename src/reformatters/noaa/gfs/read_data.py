@@ -13,9 +13,12 @@ import xarray as xr
 
 from reformatters.common.config import Config
 from reformatters.common.download import download_to_disk, http_store
+from reformatters.common.logging import get_logger
 from reformatters.common.types import Array2D
 from reformatters.noaa.models import NoaaDataVar
 from reformatters.noaa.noaa_utils import has_hour_0_values
+
+log = get_logger(__name__)
 
 DOWNLOAD_DIR = Path("data/download/")
 
@@ -94,8 +97,8 @@ def download_file(
 
         return coords, local_path
 
-    except Exception as e:
-        print("Download failed", vars_str, e)
+    except Exception:
+        log.exception("Download failed", vars_str)
         return coords, None
 
 
@@ -193,8 +196,8 @@ def read_into(
             out.rio.transform(),
             out.rio.crs,
         )
-    except Exception as e:
-        print("Read failed", coords, e)
+    except Exception:
+        log.exception("Read failed", coords)
         return
 
     out.loc[coords] = raw_data
