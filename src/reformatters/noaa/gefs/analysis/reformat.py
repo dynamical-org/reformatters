@@ -329,7 +329,7 @@ def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
         cpu="14",  # fit on 16 vCPU node
         memory="30G",  # fit on 32GB node
         shared_memory="12G",
-        ephemeral_storage="30G",
+        ephemeral_storage="35G",
         secret_names=["source-coop-key"],
     )
     validation_cron_job = ValidationCronJob(
