@@ -15,6 +15,7 @@ from reformatters.contrib.noaa.ndvi_cdr.analysis import (
     NoaaNdviCdrAnalysisDataset,
 )
 from reformatters.contrib.uarizona.swann.analysis import UarizonaSwannAnalysisDataset
+from reformatters.dwd.icon_eu.forecast import DwdIconEuForecastDataset
 from reformatters.example.new_dataset import initialize_new_integration
 from reformatters.noaa.gfs.forecast import NoaaGfsForecastDataset
 from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
@@ -52,6 +53,7 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         storage_config=UpstreamGriddedZarrsDatasetStorageConfig()
     ),
     NoaaGfsForecastDataset(storage_config=SourceCoopDatasetStorageConfig()),
+    DwdIconEuForecastDataset(storage_config=SourceCoopDatasetStorageConfig()),
     NoaaHrrrForecast48HourDataset(storage_config=SourceCoopDatasetStorageConfig()),
 ]
 
