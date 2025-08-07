@@ -121,13 +121,16 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
         # HRRR provides forecasts every hour, but 48-hour forecasts are only available
         # every 6 hours (00, 06, 12, 18 UTC)
 
-        # Check if we have existing data
+        # Check if we have existing data - operational updates require existing data
         try:
             existing_ds = xr.open_zarr(primary_store_factory.store())
             append_dim_start = cls._update_append_dim_start(existing_ds)
-        except (FileNotFoundError, ValueError):
-            # If no existing data, start from the beginning of HRRR v3
-            append_dim_start = pd.Timestamp("2018-07-13T12:00")
+        except (FileNotFoundError, ValueError) as e:
+            # Operational updates require existing data - backfill must be done first
+            raise ValueError(
+                "No existing data found for operational update. "
+                "Please run a backfill job first to create the initial dataset."
+            ) from e
 
         append_dim_end = cls._update_append_dim_end()
         template_ds = get_template_fn(append_dim_end)
