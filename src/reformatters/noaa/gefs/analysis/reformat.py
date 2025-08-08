@@ -225,7 +225,9 @@ def reformat_operational_update(job_name: str) -> None:
         max_processed_time = pd.Timestamp.min
 
         progress_tracker = UpdateProgressTracker(
-            primary_store, job_name, time_i_slice.start
+            job_name,
+            time_i_slice.start,
+            primary_store.path,
         )
         vars_to_process = progress_tracker.get_unprocessed_str(
             list(template_ds.data_vars.keys())

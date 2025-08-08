@@ -3,7 +3,6 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Literal, assert_never
 
-import fsspec  # type: ignore[import-untyped]
 import zarr
 from pydantic import Field, computed_field
 
@@ -40,30 +39,26 @@ class StoreFactory(FrozenBaseModel):
             case _ as unreachable:
                 assert_never(unreachable)
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def store_path(self) -> str:
+        if Config.is_prod:
+            base_path = self.storage_config.base_path
+        else:
+            base_path = _LOCAL_ZARR_STORE_BASE_PATH
+
+        return f"{base_path}/{self.dataset_id}/v{self.version}.zarr"
+
     def store(self) -> zarr.abc.store.Store:
         if not Config.is_prod:
             # This should work, but it gives FileNotFoundError when it should be creating a new zarr.
             # return zarr.storage.FsspecStore.from_url(
             #     "file://data/output/noaa/gefs/forecast/dev.zarr"
             # )
-            # Instead make a zarr LocalStore and attach an fsspec filesystem to it.
-            # Technically that filesystem should be an AsyncFileSystem to match
-            # zarr.storage.FsspecStore but AsyncFileSystem does not support _put.
-            local_path = Path(
-                f"{_LOCAL_ZARR_STORE_BASE_PATH}/{self.dataset_id}/v{self.version}.zarr"
-            ).absolute()
+            local_path = Path(self.store_path).absolute()
+            return zarr.storage.LocalStore(local_path)
 
-            store = zarr.storage.LocalStore(local_path)
-
-            fs = fsspec.implementations.local.LocalFileSystem(auto_mkdir=True)
-            store.fs = fs  # type: ignore[attr-defined]
-            store.path = str(local_path)  # type: ignore[attr-defined]
-            # We are duck typing this LocalStore as a FsspecStore
-            return store
-
-        return zarr.storage.FsspecStore.from_url(
-            f"{self.storage_config.base_path}/{self.dataset_id}/v{self.version}.zarr"
-        )
+        return zarr.storage.FsspecStore.from_url(self.store_path)
 
     def mode(self) -> Literal["w", "w-"]:
         return "w" if self.version == "dev" else "w-"
