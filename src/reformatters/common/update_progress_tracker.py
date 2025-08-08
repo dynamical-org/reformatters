@@ -4,14 +4,30 @@ import threading
 from collections.abc import Sequence
 
 import fsspec  # type: ignore
+import zarr.storage
 
 from reformatters.common.config_models import BaseInternalAttrs, DataVar
+from reformatters.common.fsspec import fsspec_apply
 from reformatters.common.logging import get_logger
-from reformatters.common.retry import retry
 
 log = get_logger(__name__)
 
 PROCESSED_VARIABLES_KEY = "processed_variables"
+
+
+def _get_fs_and_path(
+    store: zarr.abc.store.Store,
+) -> tuple[fsspec.AbstractFileSystem, str]:
+    """Gross work around to allow us to make other store types quack like FsspecStore."""
+    fs = getattr(store, "fs", None)
+    if not isinstance(fs, fsspec.AbstractFileSystem):
+        raise ValueError(
+            "primary_store must have an fs that is an instance of fsspec.AbstractFileSystem"
+        )
+    path = getattr(store, "path", None)
+    if not isinstance(path, str):
+        raise ValueError("primary_store must have a path attribute that is a string")
+    return fs, path
 
 
 class UpdateProgressTracker:
@@ -22,26 +38,21 @@ class UpdateProgressTracker:
 
     def __init__(
         self,
+        store: zarr.abc.store.Store,
         reformat_job_name: str,
         time_i_slice_start: int,
-        store_path: str,
     ):
         self.reformat_job_name = reformat_job_name
         self.time_i_slice_start = time_i_slice_start
         self.queue: queue.Queue[str] = queue.Queue()
-
-        self.fs, self.update_progress_dir = fsspec.core.url_to_fs(
-            store_path.replace(".zarr", "_update_progress"),
-            auto_mkdir=True,
-        )
+        self.fs, self.path = _get_fs_and_path(store)
 
         try:
-            file_content = retry(
-                lambda: self.fs.read_text(self._get_path(), encoding="utf-8"),
-                max_attempts=1,
+            file_content = fsspec_apply(
+                self.fs, "cat_file", self._get_path(), max_attempts=1
             )
             self.processed_variables: set[str] = set(
-                json.loads(file_content)[PROCESSED_VARIABLES_KEY]
+                json.loads(file_content.decode("utf-8"))[PROCESSED_VARIABLES_KEY]
             )
             log.info(
                 f"Loaded {len(self.processed_variables)} processed variables: {self.processed_variables}"
@@ -76,12 +87,12 @@ class UpdateProgressTracker:
 
     def close(self) -> None:
         try:
-            retry(lambda: self.fs.rm(self._get_path()), max_attempts=1)
+            fsspec_apply(self.fs, "rm", self._get_path(), max_attempts=1)
         except Exception as e:
             log.warning(f"Could not delete progress file: {e}")
 
     def _get_path(self) -> str:
-        return f"{self.update_progress_dir}/_internal_update_progress_{self.reformat_job_name}_{self.time_i_slice_start}.json"
+        return f"{self.path}/_internal_update_progress_{self.reformat_job_name}_{self.time_i_slice_start}.json"
 
     def _process_queue(self) -> None:
         """Run as a background thread to process variables from the queue and record progress."""
@@ -90,16 +101,10 @@ class UpdateProgressTracker:
                 var = self.queue.get()
                 self.processed_variables.add(var)
 
-                def _write_content() -> None:
-                    content = json.dumps(
-                        {PROCESSED_VARIABLES_KEY: list(self.processed_variables)}
-                    )
-                    self.fs.pipe(self._get_path(), content.encode("utf-8"))
-
-                retry(
-                    _write_content,
-                    max_attempts=3,
+                content = json.dumps(
+                    {PROCESSED_VARIABLES_KEY: list(self.processed_variables)}
                 )
+                fsspec_apply(self.fs, "pipe", self._get_path(), content.encode("utf-8"))
 
                 self.queue.task_done()
             except Exception as e:
