@@ -10,7 +10,10 @@ from reformatters.common.config_models import (
     Encoding,
 )
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
-from reformatters.common.update_progress_tracker import UpdateProgressTracker
+from reformatters.common.update_progress_tracker import (
+    PROCESSED_VARIABLES_KEY,
+    UpdateProgressTracker,
+)
 
 
 def create_example_datavar(name: str = "test_var") -> DataVar[BaseInternalAttrs]:
@@ -133,3 +136,35 @@ def test_close_deletes_progress_file(store_factory: StoreFactory) -> None:
 
     tracker.close()
     assert not tracker.fs.exists(tracker._get_path())
+
+
+def test_process_queue_multiple_items_written_separately(
+    store_factory: StoreFactory,
+) -> None:
+    """Test that multiple items on the queue are processed and written with separate content"""
+    tracker = UpdateProgressTracker("test-job", 0, store_factory.store_path)
+
+    # Record two variables to the queue
+    tracker.record_completion("var1")
+    tracker.record_completion("var2")
+
+    # Wait for both items to be processed
+    tracker.queue.join()
+
+    # Verify both variables are in the processed set
+    assert "var1" in tracker.processed_variables
+    assert "var2" in tracker.processed_variables
+    assert len(tracker.processed_variables) == 2
+
+    # Verify the progress file exists and contains both variables
+    assert tracker.fs.exists(tracker._get_path())
+
+    # Read the content and verify it contains both variables
+    content = tracker.fs.read_text(tracker._get_path(), encoding="utf-8")
+    progress_data = json.loads(content)
+
+    assert PROCESSED_VARIABLES_KEY in progress_data
+    processed_vars = set(progress_data[PROCESSED_VARIABLES_KEY])
+    assert processed_vars == {"var1", "var2"}
+
+    tracker.close()

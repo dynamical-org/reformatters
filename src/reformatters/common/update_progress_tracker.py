@@ -90,12 +90,14 @@ class UpdateProgressTracker:
                 var = self.queue.get()
                 self.processed_variables.add(var)
 
-                content = json.dumps(
-                    {PROCESSED_VARIABLES_KEY: list(self.processed_variables)}
-                )
+                def _write_content() -> None:
+                    content = json.dumps(
+                        {PROCESSED_VARIABLES_KEY: list(self.processed_variables)}
+                    )
+                    self.fs.pipe(self._get_path(), content.encode("utf-8"))
 
                 retry(
-                    lambda: self.fs.pipe(self._get_path(), content.encode("utf-8")),  # noqa: B023
+                    _write_content,
                     max_attempts=3,
                 )
 
