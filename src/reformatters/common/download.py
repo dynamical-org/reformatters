@@ -12,11 +12,6 @@ from urllib.parse import urlparse
 
 import obstore
 
-from reformatters.common.logging import get_logger
-
-logger = get_logger(__name__)
-
-
 if TYPE_CHECKING:
     from obstore.store import ObjectStore
 
@@ -32,9 +27,6 @@ def download_to_disk(
     overwrite_existing: bool,
 ) -> None:
     if not overwrite_existing and local_path.exists():
-        logger.info(
-            f"Skipping download of {path} to {local_path} as it already exists."
-        )
         return
 
     local_path.parent.mkdir(parents=True, exist_ok=True)
@@ -57,8 +49,7 @@ def download_to_disk(
 
         temp_path.rename(local_path)
 
-    except Exception as e:
-        logger.info(e)
+    except Exception:
         with contextlib.suppress(FileNotFoundError):
             os.remove(temp_path)
             os.remove(local_path)
