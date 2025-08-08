@@ -10,6 +10,9 @@ from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.contrib.noaa.ndvi_cdr.analysis.dynamical_dataset import (
     NoaaNdviCdrAnalysisDataset,
 )
+from reformatters.contrib.noaa.ndvi_cdr.analysis.region_job import (
+    NoaaNdviCdrAnalysisRegionJob,
+)
 
 pytestmark = pytest.mark.slow
 
@@ -21,6 +24,12 @@ noop_storage_config = StorageConfig(
 
 
 def test_backfill_local_and_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        NoaaNdviCdrAnalysisRegionJob,
+        "_use_ncei_to_download",
+        lambda self, file_time: False,
+    )
+
     dataset = NoaaNdviCdrAnalysisDataset(storage_config=noop_storage_config)
     # Dataset starts at 1981-06-24, test with a couple days after start
     dataset.backfill_local(append_dim_end=pd.Timestamp("1981-06-25"))
