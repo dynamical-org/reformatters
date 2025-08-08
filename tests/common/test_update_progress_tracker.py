@@ -53,10 +53,12 @@ def test_update_progress_tracker_initialization_with_existing_progress(
     print(store_factory.store_path)
 
     tracker = UpdateProgressTracker("test-job", 0, store_factory.store_path)
-    tracker.fs.mkdir(tracker.path, create_parents=True, exist_ok=True)
+    tracker.fs.mkdir(tracker.update_progress_dir, create_parents=True, exist_ok=True)
 
     # Create existing progress file
-    progress_file = Path(tracker.path) / "_internal_update_progress_test-job_0.json"
+    progress_file = (
+        Path(tracker.update_progress_dir) / "_internal_update_progress_test-job_0.json"
+    )
     existing_vars = ["var1", "var2", "var3"]
     tracker.fs.write_text(
         progress_file,

@@ -30,7 +30,7 @@ class UpdateProgressTracker:
         self.time_i_slice_start = time_i_slice_start
         self.queue: queue.Queue[str] = queue.Queue()
 
-        self.fs, self.path = fsspec.core.url_to_fs(
+        self.fs, self.update_progress_dir = fsspec.core.url_to_fs(
             store_path.replace(".zarr", "_update_progress"),
             auto_mkdir=True,
         )
@@ -81,7 +81,7 @@ class UpdateProgressTracker:
             log.warning(f"Could not delete progress file: {e}")
 
     def _get_path(self) -> str:
-        return f"{self.path}/_internal_update_progress_{self.reformat_job_name}_{self.time_i_slice_start}.json"
+        return f"{self.update_progress_dir}/_internal_update_progress_{self.reformat_job_name}_{self.time_i_slice_start}.json"
 
     def _process_queue(self) -> None:
         """Run as a background thread to process variables from the queue and record progress."""
@@ -96,7 +96,7 @@ class UpdateProgressTracker:
 
                 retry(
                     lambda: self.fs.pipe(self._get_path(), content.encode("utf-8")),  # noqa: B023
-                    max_attempts=1,
+                    max_attempts=3,
                 )
 
                 self.queue.task_done()
