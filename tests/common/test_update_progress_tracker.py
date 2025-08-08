@@ -56,7 +56,6 @@ def test_update_progress_tracker_initialization_with_existing_progress(
     print(store_factory.store_path)
 
     tracker = UpdateProgressTracker("test-job", 0, store_factory.store_path)
-    tracker.fs.mkdir(tracker.update_progress_dir, create_parents=True, exist_ok=True)
 
     # Create existing progress file
     progress_file = (
