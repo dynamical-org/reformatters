@@ -14,7 +14,6 @@ Key features:
 """
 
 from collections.abc import Callable, Mapping, Sequence
-from itertools import product
 from pathlib import Path
 
 import pandas as pd
@@ -156,66 +155,36 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
         init_times = pd.to_datetime(processing_region_ds["init_time"].values)
         lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
 
-        # Filter out hour 0 for variables that don't have hour 0 values
-        # (accumulated or last N hours avg values)
-        filtered_coords = []
-        for data_var in data_var_group:
-            if not has_hour_0_values(data_var):
-                # Filter out hour 0 for this variable
-                var_lead_times = [lt for lt in lead_times if lt > pd.Timedelta(hours=0)]
-            else:
-                var_lead_times = list(lead_times)
-
-            # All data variables in a group should be from the same file type
-            file_types = {var.internal_attrs.hrrr_file_type for var in data_var_group}
-            if len(file_types) != 1:
-                raise ValueError(
-                    f"All variables in group must be from same file type, got: {file_types}"
-                )
-            file_type = next(iter(file_types))
-
-            # HRRR forecast data is available for CONUS domain
-            domains: list[HRRRDomain] = ["conus"]
-
-            coords_for_var = []
-            for init_time in init_times:
-                # Filter lead times based on init hour
-                # HRRR provides 48h forecasts for 00, 06, 12, 18 UTC; 18h for others
-                init_hour = init_time.hour
-                if init_hour in [0, 6, 12, 18]:
-                    max_lead_time = pd.Timedelta("48h")
-                else:
-                    max_lead_time = pd.Timedelta("18h")
-
-                # Filter lead times for this init_time
-                valid_lead_times = [lt for lt in var_lead_times if lt <= max_lead_time]
-
-                for lead_time, domain in product(valid_lead_times, domains):
-                    coords_for_var.append(
-                        HRRRSourceFileCoord(
-                            init_time=init_time,
-                            lead_time=lead_time,
-                            domain=domain,
-                            file_type=file_type,
-                        )
-                    )
-            filtered_coords.extend(coords_for_var)
-
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_coords = []
-        for coord in filtered_coords:
-            coord_key = (
-                coord.init_time,
-                coord.lead_time,
-                coord.domain,
-                coord.file_type,
+        # All data variables in a group should be from the same file type
+        file_types = {var.internal_attrs.hrrr_file_type for var in data_var_group}
+        if len(file_types) != 1:
+            raise ValueError(
+                f"All variables in group must be from same file type, got: {file_types}"
             )
-            if coord_key not in seen:
-                seen.add(coord_key)
-                unique_coords.append(coord)
+        file_type = next(iter(file_types))
 
-        return unique_coords
+        # Check if any variable in the group doesn't have hour 0 values
+        group_has_hour_0 = any(has_hour_0_values(var) for var in data_var_group)
+        if not group_has_hour_0:
+            # Filter out hour 0 for this group
+            lead_times = pd.to_timedelta(
+                [lt for lt in lead_times if lt > pd.Timedelta(hours=0)]
+            )
+
+        # Generate coordinates for all init_time x lead_time combinations
+        coords = []
+        for init_time in init_times:
+            for lead_time in lead_times:
+                coords.append(
+                    HRRRSourceFileCoord(
+                        init_time=init_time,
+                        lead_time=lead_time,
+                        domain="conus",
+                        file_type=file_type,
+                    )
+                )
+
+        return coords
 
     def download_file(self, coord: HRRRSourceFileCoord) -> Path:
         """Download a HRRR file and return the local path."""

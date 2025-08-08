@@ -216,8 +216,8 @@ def test_region_job_generate_source_file_coords_filters_hour_0(
         assert isinstance(coord, HRRRSourceFileCoord)
 
 
-def test_region_job_48h_vs_18h_forecasts(store_factory: StoreFactory) -> None:
-    """Test that forecast length limits are respected based on init hour."""
+def test_region_job_48h_forecasts(store_factory: StoreFactory) -> None:
+    """Test that 48-hour forecast coordinates are generated correctly."""
     template_config = NoaaHrrrForecast48HourTemplateConfig()
 
     # Create template with long lead times
@@ -239,20 +239,18 @@ def test_region_job_48h_vs_18h_forecasts(store_factory: StoreFactory) -> None:
 
     processing_region_ds, output_region_ds = region_job._get_region_datasets()
 
-    # Modify the init_time to test different hours
-    # Hour 0, 6, 12, 18 should allow 48h forecasts
-    # Other hours should limit to 18h forecasts
     source_coords = region_job.generate_source_file_coords(
         processing_region_ds, template_config.data_vars[:1]
     )
 
-    # Should generate some coordinates
+    # Should generate coordinates for all available lead times (48h dataset)
     assert len(source_coords) > 0
 
     # All coordinates should be valid HRRRSourceFileCoord instances
     for coord in source_coords:
         assert isinstance(coord, HRRRSourceFileCoord)
-        # Lead time should be <= 48h
+        assert coord.domain == "conus"  # Always CONUS for this dataset
+        # Lead time should be <= 48h (dataset maximum)
         assert coord.lead_time <= pd.Timedelta("48h")
 
 
