@@ -31,9 +31,11 @@ class UpdateProgressTracker:
         self.queue: queue.Queue[str] = queue.Queue()
 
         self.fs, self.update_progress_dir = fsspec.core.url_to_fs(
-            store_path.replace(".zarr", "_update_progress"),
-            auto_mkdir=True,
+            store_path.replace(".zarr", "_update_progress")
         )
+
+        if isinstance(self.fs, fsspec.implementations.local.LocalFileSystem):
+            self.fs.makedirs(self.update_progress_dir, exist_ok=True)
 
         try:
             file_content = retry(
