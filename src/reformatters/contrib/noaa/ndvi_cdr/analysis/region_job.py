@@ -114,11 +114,7 @@ class NoaaNdviCdrAnalysisRegionJob(
                     file_time = pd.Timestamp(date_str)
                     filename = Path(filepath).name
 
-                    # if file_time is within 2 weeks of today, fetch from ncei,
-                    # otherwise fetch from S3
-                    two_weeks_ago = pd.Timestamp.now() - pd.Timedelta(days=14)
-                    is_within_last_2_weeks = two_weeks_ago <= file_time
-                    if is_within_last_2_weeks:
+                    if self._use_ncei_to_download(file_time):
                         url = f"{self.root_nc_url}/{year}/{filename}"
                     else:
                         url = f"{self.s3_bucket_url}/data/{year}/{filename}"
@@ -224,6 +220,12 @@ class NoaaNdviCdrAnalysisRegionJob(
 
         ndvi_data[bad_values_mask] = np.nan
         return cast(ArrayFloat32, ndvi_data)
+
+    def _use_ncei_to_download(self, file_time: pd.Timestamp) -> bool:
+        """Returns True if we should use NCEI to download the file, False otherwise."""
+        two_weeks_ago = pd.Timestamp.now() - pd.Timedelta(days=14)
+        is_within_last_2_weeks = two_weeks_ago <= file_time
+        return is_within_last_2_weeks
 
     def _list_source_files(self, year: int) -> list[str]:
         # We believe NCEI will have more recent files before S3 does.

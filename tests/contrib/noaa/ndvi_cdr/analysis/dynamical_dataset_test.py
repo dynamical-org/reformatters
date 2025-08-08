@@ -10,6 +10,9 @@ from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.contrib.noaa.ndvi_cdr.analysis.dynamical_dataset import (
     NoaaNdviCdrAnalysisDataset,
 )
+from reformatters.contrib.noaa.ndvi_cdr.analysis.region_job import (
+    NoaaNdviCdrAnalysisRegionJob,
+)
 
 pytestmark = pytest.mark.slow
 
@@ -60,6 +63,11 @@ def test_backfill_local_and_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
 
     # Mock pd.Timestamp.now() to control the update end date
     monkeypatch.setattr("pandas.Timestamp.now", lambda: pd.Timestamp("1981-06-26"))
+    monkeypatch.setattr(
+        NoaaNdviCdrAnalysisRegionJob,
+        "_use_ncei_to_download",
+        lambda self, file_time: False,
+    )
     dataset = NoaaNdviCdrAnalysisDataset(storage_config=noop_storage_config)
     dataset.update("test-update")
     updated_ds = xr.open_zarr(dataset.primary_store_factory.store(), chunks=None)
