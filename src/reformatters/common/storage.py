@@ -1,14 +1,17 @@
 from collections.abc import Sequence
 from enum import StrEnum
+from functools import cache
 from pathlib import Path
 from typing import Literal, assert_never
+from uuid import uuid4
 
 import zarr
 from pydantic import Field, computed_field
 
 from reformatters.common.config import Config, Env
 from reformatters.common.pydantic import FrozenBaseModel
-from reformatters.common.zarr import _LOCAL_ZARR_STORE_BASE_PATH
+
+_LOCAL_ZARR_STORE_BASE_PATH = "data/output"
 
 
 class DatasetFormat(StrEnum):
@@ -62,3 +65,8 @@ class StoreFactory(FrozenBaseModel):
 
     def mode(self) -> Literal["w", "w-"]:
         return "w" if self.version == "dev" else "w-"
+
+
+@cache
+def get_local_tmp_store() -> Path:
+    return Path(f"data/tmp/{uuid4()}-tmp.zarr").absolute()

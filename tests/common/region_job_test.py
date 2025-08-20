@@ -20,9 +20,13 @@ from reformatters.common.region_job import (
     SourceFileCoord,
     SourceFileStatus,
 )
-from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
+from reformatters.common.storage import (
+    DatasetFormat,
+    StorageConfig,
+    StoreFactory,
+    get_local_tmp_store,
+)
 from reformatters.common.types import ArrayFloat32, Timestamp
-from reformatters.common.zarr import get_local_tmp_store
 
 
 class ExampleDataVar(DataVar[BaseInternalAttrs]):
