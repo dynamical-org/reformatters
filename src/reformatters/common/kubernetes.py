@@ -22,7 +22,8 @@ class Job(pydantic.BaseModel):
     ttl: timedelta = timedelta(days=1)
     pod_active_deadline: timedelta = timedelta(hours=6)
 
-    secret_names: Sequence[str] = []
+    secret_names: Sequence[str] = pydantic.Field(default_factory=list)
+    env_var_secret_names: Sequence[str] = pydantic.Field(default_factory=list)
 
     @property
     def job_name(self) -> str:
@@ -109,8 +110,8 @@ class Job(pydantic.BaseModel):
                                     },
                                 ],
                                 "envFrom": [
-                                    {"secretRef": {"name": secret_name}}
-                                    for secret_name in self.secret_names
+                                    {"secretRef": {"name": env_var_secret_name}}
+                                    for env_var_secret_name in self.env_var_secret_names
                                 ],
                                 "image": f"{self.image}",
                                 "name": "worker",

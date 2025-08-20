@@ -1,7 +1,8 @@
+import json
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
-from typing import Literal, assert_never
+from typing import Any, Literal, assert_never
 from uuid import uuid4
 
 import fsspec  # type: ignore
@@ -24,6 +25,17 @@ class StorageConfig(FrozenBaseModel):
     base_path: str
     k8s_secret_name: str = ""
     format: DatasetFormat
+
+    def load_storage_options(self) -> dict[str, Any] | None:
+        """Load the storage options from the Kubernetes secret."""
+        if self.k8s_secret_name == "":
+            return None
+
+        secret_file = Path("/secrets") / f"{self.k8s_secret_name}.json"
+        with open(secret_file) as f:
+            options = json.load(f)
+            assert isinstance(options, dict)
+            return options
 
 
 class StoreFactory(FrozenBaseModel):
@@ -61,7 +73,10 @@ class StoreFactory(FrozenBaseModel):
             local_path = Path(self.store_path).absolute()
             return zarr.storage.LocalStore(local_path)
 
-        return zarr.storage.FsspecStore.from_url(self.store_path)
+        storage_options = self.storage_config.load_storage_options()
+        return zarr.storage.FsspecStore.from_url(
+            self.store_path, storage_options=storage_options
+        )
 
     def mode(self) -> Literal["w", "w-"]:
         return "w" if self.version == "dev" else "w-"
