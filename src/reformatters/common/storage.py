@@ -87,7 +87,8 @@ class StoreFactory(FrozenBaseModel):
         The filesystem type depends on the store_path (e.g., LocalFileSystem
         for file://, S3FileSystem for s3://, etc.).
         """
-        fs, relative_path = fsspec.core.url_to_fs(self.store_path)
+        storage_options = self.storage_config.load_storage_options()
+        fs, relative_path = fsspec.core.url_to_fs(self.store_path, **storage_options)
         assert isinstance(fs, fsspec.spec.AbstractFileSystem)
         return fs, relative_path
 
