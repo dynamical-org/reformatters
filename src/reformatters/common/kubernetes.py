@@ -126,6 +126,15 @@ class Job(pydantic.BaseModel):
                                         "mountPath": "/dev/shm",  # noqa: S108 yes we're using a known, shared path
                                         "name": "shared-memory-dir",
                                     },
+                                    *[
+                                        {
+                                            "name": secret_name,
+                                            "mountPath": f"/secrets/{secret_name}.json",
+                                            "subPath": "storage_options.json",
+                                            "readOnly": True,
+                                        }
+                                        for secret_name in self.secret_names
+                                    ],
                                 ],
                             }
                         ],
@@ -163,6 +172,13 @@ class Job(pydantic.BaseModel):
                                     "sizeLimit": self.shared_memory,
                                 },
                             },
+                            *[
+                                {
+                                    "name": secret_name,
+                                    "secret": {"secretName": secret_name},
+                                }
+                                for secret_name in self.secret_names
+                            ],
                         ],
                     }
                 },
