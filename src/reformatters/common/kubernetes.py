@@ -147,7 +147,9 @@ class Job(pydantic.BaseModel):
                             "fsGroup": 999,  # this is the `app` group our app runs under
                         },
                         "terminationGracePeriodSeconds": 5,
-                        "activeDeadlineSeconds": self.pod_active_deadline.total_seconds(),
+                        "activeDeadlineSeconds": int(
+                            self.pod_active_deadline.total_seconds()
+                        ),
                         "volumes": [
                             {
                                 "ephemeral": {

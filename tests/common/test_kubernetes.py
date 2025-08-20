@@ -1,6 +1,8 @@
 from datetime import timedelta
 from typing import Any
 
+import pytest
+
 from reformatters.common.kubernetes import Job
 
 
@@ -27,81 +29,141 @@ def test_as_kubernetes_object_comprehensive() -> None:
     assert "name" in k8s_obj["metadata"]
     assert k8s_obj["metadata"]["name"].startswith("weather-data-backfill-kubernetes-")
 
-    # Test job spec structure
-    spec: dict[str, Any] = k8s_obj["spec"]
-    assert spec["completions"] == 4
-    assert spec["parallelism"] == 2
-    assert spec["completionMode"] == "Indexed"
-    assert spec["backoffLimitPerIndex"] == 5
-
-    # Test pod spec structure
-    pod_spec: dict[str, Any] = spec["template"]["spec"]
-    container: dict[str, Any] = pod_spec["containers"][0]
-
-    # Test container configuration
-    expected_command: list[str] = [
-        "python",
-        "src/reformatters/__main__.py",
-        "weather_data",
-        "backfill-kubernetes",
-        "2025-01-01T00:00:00",
-        "1",
-        "1",
-    ]
-    assert container["command"] == expected_command
-    assert container["image"] == "weather-app:v1.0"
-
-    # Test resources
-    assert container["resources"]["requests"]["cpu"] == "500m"
-    assert container["resources"]["requests"]["memory"] == "1Gi"
-
-    # Test environment variables
-    env_vars: dict[str, dict[str, Any]] = {env["name"]: env for env in container["env"]}
-    assert env_vars["DYNAMICAL_ENV"]["value"] == "prod"
-    assert env_vars["WORKERS_TOTAL"]["value"] == "4"
-
-    # Test secret references
-    assert len(container["envFrom"]) == 2
-    secret_names: set[str] = {ref["secretRef"]["name"] for ref in container["envFrom"]}
-    assert secret_names == {"aws-creds", "db-creds"}
-
-    # Test volume mounts
-    volume_mounts: dict[str, Any] = {
-        mount["name"]: mount for mount in container["volumeMounts"]
+    # Test complete spec
+    expected_spec = {
+        "backoffLimitPerIndex": 5,
+        "completionMode": "Indexed",
+        "completions": 4,
+        "maxFailedIndexes": 4,
+        "parallelism": 2,
+        "podFailurePolicy": {
+            "rules": [
+                {
+                    "action": "Ignore",
+                    "onPodConditions": [{"type": "DisruptionTarget", "status": "True"}],
+                },
+                {
+                    "action": "FailJob",
+                    "onPodConditions": [{"type": "ConfigIssue", "status": "True"}],
+                },
+            ]
+        },
+        "template": {
+            "spec": {
+                "containers": [
+                    {
+                        "command": [
+                            "python",
+                            "src/reformatters/__main__.py",
+                            "weather_data",
+                            "backfill-kubernetes",
+                            "2025-01-01T00:00:00",
+                            "1",
+                            "1",
+                        ],
+                        "env": [
+                            {"name": "DYNAMICAL_ENV", "value": "prod"},
+                            {
+                                "name": "DYNAMICAL_SENTRY_DSN",
+                                "valueFrom": {
+                                    "secretKeyRef": {
+                                        "key": "DYNAMICAL_SENTRY_DSN",
+                                        "name": "sentry",
+                                    }
+                                },
+                            },
+                            {
+                                "name": "JOB_NAME",
+                                "valueFrom": {
+                                    "fieldRef": {
+                                        "fieldPath": "metadata.labels['job-name']"
+                                    }
+                                },
+                            },
+                            {
+                                "name": "WORKER_INDEX",
+                                "valueFrom": {
+                                    "fieldRef": {
+                                        "fieldPath": "metadata.annotations['batch.kubernetes.io/job-completion-index']"
+                                    }
+                                },
+                            },
+                            {
+                                "name": "WORKERS_TOTAL",
+                                "value": "4",
+                            },
+                        ],
+                        "envFrom": [
+                            {"secretRef": {"name": "aws-creds"}},
+                            {"secretRef": {"name": "db-creds"}},
+                        ],
+                        "image": "weather-app:v1.0",
+                        "name": "worker",
+                        "resources": {
+                            "requests": {
+                                "cpu": "500m",
+                                "memory": "1Gi",
+                            }
+                        },
+                        "volumeMounts": [
+                            {"mountPath": "/app/data", "name": "ephemeral-vol"},
+                            {"mountPath": "/dev/shm", "name": "shared-memory-dir"},  # noqa: S108 yes we're using a known, shared path
+                            {
+                                "name": "aws-creds",
+                                "mountPath": "/secrets/aws-creds.json",
+                                "subPath": "storage_options.json",
+                                "readOnly": True,
+                            },
+                            {
+                                "name": "db-creds",
+                                "mountPath": "/secrets/db-creds.json",
+                                "subPath": "storage_options.json",
+                                "readOnly": True,
+                            },
+                        ],
+                    }
+                ],
+                "nodeSelector": {
+                    "eks.amazonaws.com/compute-type": "auto",
+                    "karpenter.sh/capacity-type": "spot",
+                },
+                "restartPolicy": "Never",
+                "securityContext": {
+                    "fsGroup": 999,
+                },
+                "terminationGracePeriodSeconds": 5,
+                "activeDeadlineSeconds": 21600,  # default 6 hours
+                "volumes": [
+                    {
+                        "name": "ephemeral-vol",
+                        "ephemeral": {
+                            "volumeClaimTemplate": {
+                                "metadata": {"labels": {"type": "ephemeral"}},
+                                "spec": {
+                                    "accessModes": ["ReadWriteOnce"],
+                                    "resources": {
+                                        "requests": {"storage": "10G"}  # default value
+                                    },
+                                },
+                            }
+                        },
+                    },
+                    {
+                        "name": "shared-memory-dir",
+                        "emptyDir": {
+                            "medium": "Memory",
+                            "sizeLimit": "1k",  # default value
+                        },
+                    },
+                    {"name": "aws-creds", "secret": {"secretName": "aws-creds"}},
+                    {"name": "db-creds", "secret": {"secretName": "db-creds"}},
+                ],
+            }
+        },
+        "ttlSecondsAfterFinished": 86400,  # default 24 hours
     }
-    assert volume_mounts["ephemeral-vol"]["mountPath"] == "/app/data"
-    assert volume_mounts["shared-memory-dir"]["mountPath"] == "/dev/shm"  # noqa: S108 yes we're using a known, shared path
-    assert volume_mounts["aws-creds"]["mountPath"] == "/secrets/aws-creds.json"
-    assert volume_mounts["db-creds"]["mountPath"] == "/secrets/db-creds.json"
 
-    # Test volumes
-    volumes: dict[str, dict[str, Any]] = {
-        vol["name"]: vol for vol in pod_spec["volumes"]
-    }
-
-    # Test ephemeral volume
-    ephemeral_vol: dict[str, Any] = volumes["ephemeral-vol"]
-    assert "ephemeral" in ephemeral_vol
-    assert ephemeral_vol["ephemeral"]["volumeClaimTemplate"]["spec"]["accessModes"] == [
-        "ReadWriteOnce"
-    ]
-    assert (
-        ephemeral_vol["ephemeral"]["volumeClaimTemplate"]["spec"]["resources"][
-            "requests"
-        ]["storage"]
-        == "10G"
-    )  # default value
-
-    # Test shared memory volume
-    shared_mem_vol: dict[str, Any] = volumes["shared-memory-dir"]
-    assert shared_mem_vol["emptyDir"]["medium"] == "Memory"
-    assert shared_mem_vol["emptyDir"]["sizeLimit"] == "1k"  # default value
-
-    # Test secret volumes
-    assert "aws-creds" in volumes
-    assert volumes["aws-creds"]["secret"]["secretName"] == "aws-creds"
-    assert "db-creds" in volumes
-    assert volumes["db-creds"]["secret"]["secretName"] == "db-creds"
+    assert k8s_obj["spec"] == expected_spec
 
 
 def test_as_kubernetes_object_with_custom_values() -> None:
@@ -142,3 +204,36 @@ def test_as_kubernetes_object_with_custom_values() -> None:
         "resources"
     ]["requests"]["storage"]
     assert storage_request == "50G"
+
+
+@pytest.mark.parametrize(
+    "workers_total,expected_max_failed_indexes",
+    [
+        # Small worker count: min(100, max(min(5, 3), 3 // 8)) = min(100, max(3, 0)) = 3
+        (3, 3),
+        # Edge case: min(5, workers_total) wins: min(100, max(min(5, 5), 5 // 8)) = min(100, max(5, 0)) = 5
+        (5, 5),
+        # Medium count: workers_total // 8 wins: min(100, max(min(5, 40), 40 // 8)) = min(100, max(5, 5)) = 5
+        (40, 5),
+        # Larger count: workers_total // 8 wins: min(100, max(min(5, 64), 64 // 8)) = min(100, max(5, 8)) = 8
+        (64, 8),
+        # Very large: hits 100 limit: min(100, max(min(5, 1000), 1000 // 8)) = min(100, max(5, 125)) = 100
+        (1000, 100),
+    ],
+)
+def test_max_failed_indexes_calculation(
+    workers_total: int, expected_max_failed_indexes: int
+) -> None:
+    """Test that maxFailedIndexes is calculated correctly for different worker counts."""
+    job = Job(
+        command=["test"],
+        image="test:latest",
+        dataset_id="test",
+        cpu="100m",
+        memory="128Mi",
+        workers_total=workers_total,
+        parallelism=1,
+    )
+
+    k8s_obj = job.as_kubernetes_object()
+    assert k8s_obj["spec"]["maxFailedIndexes"] == expected_max_failed_indexes
