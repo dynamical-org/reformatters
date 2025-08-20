@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Literal, assert_never
 from uuid import uuid4
 
+import fsspec  # type: ignore
 import zarr
 from pydantic import Field, computed_field
 
@@ -65,6 +66,16 @@ class StoreFactory(FrozenBaseModel):
 
     def mode(self) -> Literal["w", "w-"]:
         return "w" if self.version == "dev" else "w-"
+
+    def fsspec_filesystem(self) -> tuple[fsspec.spec.AbstractFileSystem, str]:
+        """Returns a concrete filesystem implementation and relative path.
+
+        The filesystem type depends on the store_path (e.g., LocalFileSystem
+        for file://, S3FileSystem for s3://, etc.).
+        """
+        fs, relative_path = fsspec.core.url_to_fs(self.store_path)
+        assert isinstance(fs, fsspec.spec.AbstractFileSystem)
+        return fs, relative_path
 
 
 @cache

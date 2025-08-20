@@ -482,7 +482,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         progress_tracker = UpdateProgressTracker(
             self.reformat_job_name,
             self.region.start,
-            self.primary_store_factory.store_path,
+            self.primary_store_factory,
         )
         data_vars_to_process: Sequence[DATA_VAR] = progress_tracker.get_unprocessed(
             self.data_vars

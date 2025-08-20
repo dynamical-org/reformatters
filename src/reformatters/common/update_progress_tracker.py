@@ -8,6 +8,7 @@ import fsspec  # type: ignore
 from reformatters.common.config_models import BaseInternalAttrs, DataVar
 from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
+from reformatters.common.storage import StoreFactory
 
 log = get_logger(__name__)
 
@@ -24,14 +25,15 @@ class UpdateProgressTracker:
         self,
         reformat_job_name: str,
         time_i_slice_start: int,
-        store_path: str,
+        store_factory: StoreFactory,
     ):
         self.reformat_job_name = reformat_job_name
         self.time_i_slice_start = time_i_slice_start
         self.queue: queue.Queue[str] = queue.Queue()
 
-        self.fs, self.update_progress_dir = fsspec.core.url_to_fs(
-            store_path.replace(".zarr", "_update_progress")
+        self.fs, relative_store_path = store_factory.fsspec_filesystem()
+        self.update_progress_dir = relative_store_path.replace(
+            ".zarr", "_update_progress"
         )
 
         if isinstance(self.fs, fsspec.implementations.local.LocalFileSystem):
