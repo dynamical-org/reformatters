@@ -38,7 +38,7 @@ class UpstreamGriddedZarrsDatasetStorageConfig(StorageConfig):
     # The R2 endpoint URL is stored within our k8s secret and will be set
     # when it's imported into the env.
     base_path: str = "s3://upstream-gridded-zarrs"
-    k8s_secret_name: str = "upstream-gridded-zarrs-key"  # noqa: S105
+    k8s_secret_name: str = "upstream-gridded-zarrs-storage-options-key"  # noqa: S105
     format: DatasetFormat = DatasetFormat.ZARR3
 
 
