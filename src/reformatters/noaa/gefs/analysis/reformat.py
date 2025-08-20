@@ -29,7 +29,6 @@ from reformatters.common.kubernetes import (
 from reformatters.common.logging import get_logger
 from reformatters.common.reformat_utils import ChunkFilters
 from reformatters.common.types import DatetimeLike
-from reformatters.common.update_progress_tracker import UpdateProgressTracker
 from reformatters.common.zarr import (
     copy_data_var,
     copy_zarr_metadata,
@@ -43,6 +42,7 @@ from reformatters.noaa.gefs.analysis.reformat_internals import (
     reformat_time_i_slices,
 )
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
+from reformatters.noaa.gefs.legacy_progress_tracker import UpdateProgressTracker
 
 # 1 makes logic simpler when accessing GEFSv12 reforecast which has a file per variable
 _VARIABLES_PER_BACKFILL_JOB = 1
