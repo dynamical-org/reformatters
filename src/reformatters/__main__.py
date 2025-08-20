@@ -27,7 +27,7 @@ class SourceCoopDatasetStorageConfig(StorageConfig):
     """Configuration for the storage of a SourceCoop dataset."""
 
     base_path: str = "s3://us-west-2.opendata.source.coop/dynamical"
-    k8s_secret_names: Sequence[str] = ["source-coop-key"]
+    k8s_secret_name: str = "source-coop-key"  # noqa: S105
     format: DatasetFormat = DatasetFormat.ZARR3
 
 
@@ -38,7 +38,7 @@ class UpstreamGriddedZarrsDatasetStorageConfig(StorageConfig):
     # The R2 endpoint URL is stored within our k8s secret and will be set
     # when it's imported into the env.
     base_path: str = "s3://upstream-gridded-zarrs"
-    k8s_secret_names: Sequence[str] = ["upstream-gridded-zarrs-key"]
+    k8s_secret_name: str = "upstream-gridded-zarrs-key"  # noqa: S105
     format: DatasetFormat = DatasetFormat.ZARR3
 
 

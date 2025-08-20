@@ -1,4 +1,3 @@
-from collections.abc import Sequence
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
@@ -7,7 +6,7 @@ from uuid import uuid4
 
 import fsspec  # type: ignore
 import zarr
-from pydantic import Field, computed_field
+from pydantic import computed_field
 
 from reformatters.common.config import Config, Env
 from reformatters.common.pydantic import FrozenBaseModel
@@ -23,7 +22,7 @@ class StorageConfig(FrozenBaseModel):
     """Configuration for the storage of a dataset in production."""
 
     base_path: str
-    k8s_secret_names: Sequence[str] = Field(default_factory=tuple)
+    k8s_secret_name: str = ""
     format: DatasetFormat
 
 
