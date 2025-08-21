@@ -28,14 +28,11 @@ from reformatters.common.kubernetes import (
 )
 from reformatters.common.logging import get_logger
 from reformatters.common.reformat_utils import ChunkFilters
+from reformatters.common.storage import get_local_tmp_store
 from reformatters.common.types import DatetimeLike
-from reformatters.common.update_progress_tracker import UpdateProgressTracker
 from reformatters.common.zarr import (
     copy_data_var,
     copy_zarr_metadata,
-    get_local_tmp_store,
-    get_mode,
-    get_zarr_store,
 )
 from reformatters.noaa.gefs.analysis import template
 from reformatters.noaa.gefs.analysis.reformat_internals import (
@@ -43,6 +40,10 @@ from reformatters.noaa.gefs.analysis.reformat_internals import (
     reformat_time_i_slices,
 )
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
+from reformatters.noaa.gefs.gefs_utils import get_mode, get_zarr_store
+from reformatters.noaa.gefs.legacy_progress_tracker import (
+    LegacyUpdateProgressTracker as UpdateProgressTracker,
+)
 
 # 1 makes logic simpler when accessing GEFSv12 reforecast which has a file per variable
 _VARIABLES_PER_BACKFILL_JOB = 1
@@ -332,7 +333,7 @@ def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
         memory="30G",  # fit on 32GB node
         shared_memory="12G",
         ephemeral_storage="35G",
-        secret_names=["source-coop-key"],
+        env_var_secret_names=["source-coop-key"],
     )
     validation_cron_job = ValidationCronJob(
         name=f"{template.DATASET_ID}-validation",
@@ -342,7 +343,7 @@ def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
         dataset_id=template.DATASET_ID,
         cpu="1.3",  # fit on 2 vCPU node
         memory="7G",  # fit on 8GB node
-        secret_names=["source-coop-key"],
+        env_var_secret_names=["source-coop-key"],
     )
 
     return [operational_update_cron_job, validation_cron_job]

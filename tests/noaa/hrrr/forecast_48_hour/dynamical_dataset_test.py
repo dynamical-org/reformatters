@@ -66,7 +66,7 @@ def test_operational_kubernetes_resources(
     # # Check update job
     # assert update_cron_job.name == f"{dataset.dataset_id}-operational-update"
     # assert update_cron_job.schedule == "30 0,6,12,18 * * *"  # Every 6 hours at :30
-    # assert update_cron_job.secret_names == dataset.storage_config.k8s_secret_names
+    # assert update_cron_job.secret_names == [dataset.storage_config.k8s_secret_name]
     # assert "6" in update_cron_job.cpu  # Should be CPU intensive
     # assert (
     #     "24G" in update_cron_job.memory
@@ -75,7 +75,7 @@ def test_operational_kubernetes_resources(
     # # Check validation job
     # assert validation_cron_job.name == f"{dataset.dataset_id}-validation"
     # assert validation_cron_job.schedule == "30 1,7,13,19 * * *"  # 1 hour after updates
-    # assert validation_cron_job.secret_names == dataset.storage_config.k8s_secret_names
+    # assert validation_cron_job.secret_names == [dataset.storage_config.k8s_secret_name]
 
 
 def test_validators(dataset: NoaaHrrrForecast48HourDataset) -> None:

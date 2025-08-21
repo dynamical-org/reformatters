@@ -26,7 +26,7 @@ class DwdIconEuForecastDataset(
         #     memory="30G",
         #     shared_memory="12G",
         #     ephemeral_storage="30G",
-        #     secret_names=self.storage_config.k8s_secret_names,
+        #     secret_names=[self.storage_config.k8s_secret_name],
         # )
         # validation_cron_job = ValidationCronJob(
         #     name=f"{self.dataset_id}-validation",
@@ -36,7 +36,7 @@ class DwdIconEuForecastDataset(
         #     dataset_id=self.dataset_id,
         #     cpu="1.3",
         #     memory="7G",
-        #     secret_names=self.storage_config.k8s_secret_names,
+        #     secret_names=[self.storage_config.k8s_secret_name],
         # )
 
         # return [operational_update_cron_job, validation_cron_job]

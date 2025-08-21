@@ -23,19 +23,20 @@ from reformatters.common.iterating import (
 from reformatters.common.kubernetes import Job, ReformatCronJob, ValidationCronJob
 from reformatters.common.logging import get_logger
 from reformatters.common.reformat_utils import ChunkFilters
+from reformatters.common.storage import get_local_tmp_store
 from reformatters.common.types import Array1D, DatetimeLike
-from reformatters.common.update_progress_tracker import UpdateProgressTracker
 from reformatters.common.zarr import (
     copy_data_var,
     copy_zarr_metadata,
-    get_local_tmp_store,
-    get_mode,
-    get_zarr_store,
 )
 from reformatters.noaa.gefs.forecast_35_day import template
 from reformatters.noaa.gefs.forecast_35_day.reformat_internals import (
     group_data_vars_by_gefs_file_type,
     reformat_init_time_i_slices,
+)
+from reformatters.noaa.gefs.gefs_utils import get_mode, get_zarr_store
+from reformatters.noaa.gefs.legacy_progress_tracker import (
+    LegacyUpdateProgressTracker as UpdateProgressTracker,
 )
 
 _VARIABLES_PER_BACKFILL_JOB = 3
@@ -329,7 +330,7 @@ def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
         memory="60G",  # fit on 64GB node
         shared_memory="24G",
         ephemeral_storage="150G",
-        secret_names=["source-coop-key"],
+        env_var_secret_names=["source-coop-key"],
     )
     validation_cron_job = ValidationCronJob(
         name=f"{template.DATASET_ID}-validation",
@@ -339,7 +340,7 @@ def operational_kubernetes_resources(image_tag: str) -> Iterable[Job]:
         dataset_id=template.DATASET_ID,
         cpu="3",  # fit on 4 vCPU node
         memory="30G",  # fit on 32GB node
-        secret_names=["source-coop-key"],
+        env_var_secret_names=["source-coop-key"],
     )
 
     return [operational_update_cron_job, validation_cron_job]

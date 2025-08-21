@@ -55,7 +55,7 @@ def test_update_progress_tracker_initialization_with_existing_progress(
     """Test UpdateProgressTracker correctly loads existing processed variables"""
     print(store_factory.store_path)
 
-    tracker = UpdateProgressTracker("test-job", 0, store_factory.store_path)
+    tracker = UpdateProgressTracker("test-job", 0, store_factory)
 
     # Create existing progress file
     progress_file = (
@@ -68,7 +68,7 @@ def test_update_progress_tracker_initialization_with_existing_progress(
     )
 
     # Create new tracker - should load existing progress
-    new_tracker = UpdateProgressTracker("test-job", 0, store_factory.store_path)
+    new_tracker = UpdateProgressTracker("test-job", 0, store_factory)
     assert new_tracker.processed_variables == set(existing_vars)
     new_tracker.close()
 
@@ -89,7 +89,7 @@ def test_get_unprocessed_with_datavar_objects_parametrized(
     store_factory: StoreFactory,
 ) -> None:
     """Test get_unprocessed with DataVar objects - normal case and edge case"""
-    tracker = UpdateProgressTracker("test-job", 0, store_factory.store_path)
+    tracker = UpdateProgressTracker("test-job", 0, store_factory)
 
     # Set processed variables
     tracker.processed_variables = processed_vars
@@ -112,7 +112,7 @@ def test_record_completion_adds_to_processed_variables(
     store_factory: StoreFactory,
 ) -> None:
     """Test record_completion adds variables to processed set"""
-    tracker = UpdateProgressTracker("test-job", 0, store_factory.store_path)
+    tracker = UpdateProgressTracker("test-job", 0, store_factory)
 
     initial_count = len(tracker.processed_variables)
     tracker.record_completion("new_var")
@@ -125,7 +125,7 @@ def test_record_completion_adds_to_processed_variables(
 
 
 def test_close_deletes_progress_file(store_factory: StoreFactory) -> None:
-    tracker = UpdateProgressTracker("test-job", 0, store_factory.store_path)
+    tracker = UpdateProgressTracker("test-job", 0, store_factory)
     assert not tracker.fs.exists(tracker._get_path())
 
     tracker.fs.write_text(
@@ -141,7 +141,7 @@ def test_process_queue_multiple_items_written_separately(
     store_factory: StoreFactory,
 ) -> None:
     """Test that multiple items on the queue are processed and written with separate content"""
-    tracker = UpdateProgressTracker("test-job", 0, store_factory.store_path)
+    tracker = UpdateProgressTracker("test-job", 0, store_factory)
 
     # Record two variables to the queue
     tracker.record_completion("var1")

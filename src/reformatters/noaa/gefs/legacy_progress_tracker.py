@@ -1,3 +1,5 @@
+"""Legacy implementation for GEFS datasets that have not yet been ported to the DynamicalDataset pattern."""
+
 import json
 import queue
 import threading
@@ -8,15 +10,18 @@ import fsspec  # type: ignore
 from reformatters.common.config_models import BaseInternalAttrs, DataVar
 from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
-from reformatters.common.storage import StoreFactory
 
 log = get_logger(__name__)
 
 PROCESSED_VARIABLES_KEY = "processed_variables"
 
 
-class UpdateProgressTracker:
+class LegacyUpdateProgressTracker:
     """
+    Used only for legacy datasets that have not yet been ported to the DynamicalDataset pattern
+    (GEFS forecast and GEFS analysis). This version does not take a StoreFactory as an argument
+    and instead just takes a store path.
+
     Tracks which variables have been processed within a time slice of a job.
     Allows for skipping already processed variables in case the process is interrupted.
     """
@@ -25,15 +30,14 @@ class UpdateProgressTracker:
         self,
         reformat_job_name: str,
         time_i_slice_start: int,
-        store_factory: StoreFactory,
+        store_path: str,
     ):
         self.reformat_job_name = reformat_job_name
         self.time_i_slice_start = time_i_slice_start
         self.queue: queue.Queue[str] = queue.Queue()
 
-        self.fs, relative_store_path = store_factory.fsspec_filesystem()
-        self.update_progress_dir = relative_store_path.replace(
-            ".zarr", "_update_progress"
+        self.fs, self.update_progress_dir = fsspec.core.url_to_fs(
+            store_path.replace(".zarr", "_update_progress")
         )
 
         if isinstance(self.fs, fsspec.implementations.local.LocalFileSystem):

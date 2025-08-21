@@ -26,13 +26,10 @@ from reformatters.common.kubernetes import (
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.region_job import RegionJob, SourceFileCoord
-from reformatters.common.storage import StorageConfig, StoreFactory
+from reformatters.common.storage import StorageConfig, StoreFactory, get_local_tmp_store
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike
-from reformatters.common.zarr import (
-    copy_zarr_metadata,
-    get_local_tmp_store,
-)
+from reformatters.common.zarr import copy_zarr_metadata
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
@@ -74,7 +71,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             memory="30G",
             shared_memory="12G",
             ephemeral_storage="30G",
-            secret_names=self.storage_config.k8s_secret_names,
+            secret_names=[self.storage_config.k8s_secret_name],
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validation",
@@ -84,7 +81,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             dataset_id=self.dataset_id,
             cpu="1.3",
             memory="7G",
-            secret_names=self.storage_config.k8s_secret_names,
+            secret_names=[self.storage_config.k8s_secret_name],
         )
 
         return [operational_update_cron_job, validation_cron_job]
@@ -236,7 +233,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     "pod_active_deadline",
                 }
             ),
-            secret_names=self.storage_config.k8s_secret_names,
+            secret_names=[self.storage_config.k8s_secret_name],
         )
         subprocess.run(
             ["/usr/bin/kubectl", "apply", "-f", "-"],
