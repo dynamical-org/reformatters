@@ -143,7 +143,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     calendar="proleptic_gregorian",
                     units="seconds since 1970-01-01 00:00:00",
                     chunks=append_dim_coordinate_chunk_size,
-                    shards=append_dim_coordinate_chunk_size,
+                    shards=None,
                 ),
                 attrs=CoordinateAttrs(
                     units="seconds since 1970-01-01 00:00:00",
@@ -160,7 +160,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
                     units="seconds",
                     chunks=len(dim_coords["lead_time"]),
-                    shards=len(dim_coords["lead_time"]),
+                    shards=None,
                 ),
                 attrs=CoordinateAttrs(
                     units="seconds",
@@ -176,8 +176,8 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     dtype="float64",
                     fill_value=np.nan,
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    chunks=180,  # Smaller chunk size to avoid zarr sharding bug
-                    shards=180,  # Use same as chunks
+                    chunks=len(dim_coords["x"]),
+                    shards=None,
                 ),
                 attrs=CoordinateAttrs(
                     units="m",
@@ -193,8 +193,8 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     dtype="float64",
                     fill_value=np.nan,
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    chunks=180,  # Smaller chunk size to avoid zarr sharding bug
-                    shards=180,  # Use same as chunks
+                    chunks=len(dim_coords["y"]),
+                    shards=None,
                 ),
                 attrs=CoordinateAttrs(
                     units="m",
@@ -216,10 +216,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                         append_dim_coordinate_chunk_size,
                         len(dim_coords["lead_time"]),
                     ),
-                    shards=(
-                        append_dim_coordinate_chunk_size,
-                        len(dim_coords["lead_time"]),
-                    ),
+                    shards=None,
                 ),
                 attrs=CoordinateAttrs(
                     units="seconds since 1970-01-01 00:00:00",
@@ -236,7 +233,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
                     units="seconds",
                     chunks=append_dim_coordinate_chunk_size,
-                    shards=append_dim_coordinate_chunk_size,
+                    shards=None,
                 ),
                 attrs=CoordinateAttrs(
                     units="seconds",
@@ -254,7 +251,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
                     units="seconds",
                     chunks=append_dim_coordinate_chunk_size,
-                    shards=append_dim_coordinate_chunk_size,
+                    shards=None,
                 ),
                 attrs=CoordinateAttrs(
                     units="seconds",
@@ -272,7 +269,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     fill_value=np.nan,
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
                     chunks=(len(dim_coords["y"]), len(dim_coords["x"])),
-                    shards=(len(dim_coords["y"]), len(dim_coords["x"])),
+                    shards=None,
                 ),
                 attrs=CoordinateAttrs(
                     units="degrees_north",
@@ -289,7 +286,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     fill_value=np.nan,
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
                     chunks=(len(dim_coords["y"]), len(dim_coords["x"])),
-                    shards=(len(dim_coords["y"]), len(dim_coords["x"])),
+                    shards=None,
                 ),
                 attrs=CoordinateAttrs(
                     units="degrees_east",

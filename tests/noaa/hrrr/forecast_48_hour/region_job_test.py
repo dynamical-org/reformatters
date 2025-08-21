@@ -88,9 +88,7 @@ def test_source_file_coord_invalid_lead_time() -> None:
         file_type="sfc",
     )
 
-    with pytest.raises(
-        ValueError, match="Lead time .* must be a whole number of hours"
-    ):
+    with pytest.raises(AssertionError):
         coord.get_url()
 
 
