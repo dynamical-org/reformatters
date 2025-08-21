@@ -5,6 +5,7 @@ from datetime import timedelta
 from typing import Annotated, Any
 
 import pydantic
+from kubernetes import client, config  # type: ignore[import-untyped]
 
 
 class Job(pydantic.BaseModel):
@@ -222,3 +223,11 @@ class ValidationCronJob(CronJob):
     command: Sequence[str] = ["validate"]
     workers_total: int = 1
     parallelism: int = 1
+
+
+def load_k8s_secrets_locally(secret_name: str) -> dict[str, Any]:
+    config.load_kube_config()
+    v1 = client.CoreV1Api()
+    secret = v1.read_namespaced_secret(secret_name, "default")
+    assert isinstance(secret.data, dict)
+    return secret.data

@@ -27,7 +27,7 @@ class SourceCoopDatasetStorageConfig(StorageConfig):
     """Configuration for the storage of a SourceCoop dataset."""
 
     base_path: str = "s3://us-west-2.opendata.source.coop/dynamical"
-    k8s_secret_name: str = "source-coop-key"  # noqa: S105
+    k8s_secret_name: str = "source-coop-storage-options-key"  # noqa: S105
     format: DatasetFormat = DatasetFormat.ZARR3
 
 

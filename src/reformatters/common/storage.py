@@ -1,4 +1,6 @@
+import base64
 import json
+import os
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
@@ -9,11 +11,13 @@ import fsspec  # type: ignore
 import zarr
 from pydantic import computed_field
 
+from reformatters.common import kubernetes
 from reformatters.common.config import Config, Env
 from reformatters.common.pydantic import FrozenBaseModel
 
 _LOCAL_ZARR_STORE_BASE_PATH = "data/output"
 _SECRET_MOUNT_PATH = "/secrets"  # noqa: S105 this not a real secret
+_STORAGE_OPTIONS_KEY = "storage_options.json"
 
 
 class DatasetFormat(StrEnum):
@@ -33,10 +37,29 @@ class StorageConfig(FrozenBaseModel):
             return {}
 
         secret_file = Path(_SECRET_MOUNT_PATH) / f"{self.k8s_secret_name}.json"
+
+        # When we backfill, we need to write the template metadata to our cloud stoage
+        # location. To do this, we need the credentials to write to the base path, but
+        # because this happens locally, we don't have the secret mounted. In this case
+        # we will attempt to load the secrets from kubernetes locally. This assumes that
+        # we are connected to the kubernetes cluster locally. We have a guard on JOB_NAME
+        # to ensure that we don't try to do this this is run within the kubernetes cluster.
+        if not secret_file.exists() and os.getenv("JOB_NAME") is None:
+            return self._load_storage_options_locally()
+
         with open(secret_file) as f:
             options = json.load(f)
             assert isinstance(options, dict)
             return options
+
+    def _load_storage_options_locally(self) -> dict[str, Any]:
+        secret_data = kubernetes.load_k8s_secrets_locally(self.k8s_secret_name)
+        storage_options_json = base64.b64decode(
+            secret_data[_STORAGE_OPTIONS_KEY]
+        ).decode("utf-8")
+        options = json.loads(storage_options_json)
+        assert isinstance(options, dict)
+        return options
 
 
 class StoreFactory(FrozenBaseModel):
