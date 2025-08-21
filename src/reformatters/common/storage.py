@@ -13,6 +13,7 @@ from reformatters.common.config import Config, Env
 from reformatters.common.pydantic import FrozenBaseModel
 
 _LOCAL_ZARR_STORE_BASE_PATH = "data/output"
+_SECRET_MOUNT_PATH = "/secrets"  # noqa: S105 this not a real secret
 
 
 class DatasetFormat(StrEnum):
@@ -26,12 +27,12 @@ class StorageConfig(FrozenBaseModel):
     k8s_secret_name: str = ""
     format: DatasetFormat
 
-    def load_storage_options(self) -> dict[str, Any] | None:
+    def load_storage_options(self) -> dict[str, Any]:
         """Load the storage options from the Kubernetes secret."""
-        if self.k8s_secret_name == "":
-            return None
+        if not Config.is_prod or self.k8s_secret_name == "":
+            return {}
 
-        secret_file = Path("/secrets") / f"{self.k8s_secret_name}.json"
+        secret_file = Path(_SECRET_MOUNT_PATH) / f"{self.k8s_secret_name}.json"
         with open(secret_file) as f:
             options = json.load(f)
             assert isinstance(options, dict)
