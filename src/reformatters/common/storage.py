@@ -28,12 +28,12 @@ class StorageConfig(FrozenBaseModel):
     """Configuration for the storage of a dataset in production."""
 
     base_path: str
-    k8s_secret_name: str = ""
+    k8s_secret_name: str | None = None
     format: DatasetFormat
 
     def load_storage_options(self) -> dict[str, Any]:
         """Load the storage options from the Kubernetes secret."""
-        if not Config.is_prod or self.k8s_secret_name == "":
+        if not Config.is_prod or self.k8s_secret_name is None:
             return {}
 
         secret_file = Path(_SECRET_MOUNT_PATH) / f"{self.k8s_secret_name}.json"
@@ -53,6 +53,7 @@ class StorageConfig(FrozenBaseModel):
             return options
 
     def _load_storage_options_locally(self) -> dict[str, Any]:
+        assert self.k8s_secret_name is not None
         secret_data = kubernetes.load_k8s_secrets_locally(self.k8s_secret_name)
         storage_options_json = base64.b64decode(
             secret_data[_STORAGE_OPTIONS_KEY]
