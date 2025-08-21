@@ -62,6 +62,8 @@ class HRRRSourceFileCoord(SourceFileCoord):
 class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord]):
     """Region job for HRRR 48-hour forecast data processing."""
 
+    max_vars_per_download_group = 8  # currently a best guess
+
     @classmethod
     def source_groups(
         cls,
