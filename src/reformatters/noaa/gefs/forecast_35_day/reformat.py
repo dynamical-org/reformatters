@@ -35,7 +35,9 @@ from reformatters.noaa.gefs.forecast_35_day.reformat_internals import (
     reformat_init_time_i_slices,
 )
 from reformatters.noaa.gefs.gefs_utils import get_mode, get_zarr_store
-from reformatters.noaa.gefs.legacy_progress_tracker import UpdateProgressTracker
+from reformatters.noaa.gefs.legacy_progress_tracker import (
+    LegacyUpdateProgressTracker as UpdateProgressTracker,
+)
 
 _VARIABLES_PER_BACKFILL_JOB = 3
 _OPERATIONAL_CRON_SCHEDULE = "0 7 * * *"  # At 7:00 UTC every day.

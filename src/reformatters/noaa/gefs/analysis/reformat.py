@@ -41,7 +41,9 @@ from reformatters.noaa.gefs.analysis.reformat_internals import (
 )
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
 from reformatters.noaa.gefs.gefs_utils import get_mode, get_zarr_store
-from reformatters.noaa.gefs.legacy_progress_tracker import UpdateProgressTracker
+from reformatters.noaa.gefs.legacy_progress_tracker import (
+    LegacyUpdateProgressTracker as UpdateProgressTracker,
+)
 
 # 1 makes logic simpler when accessing GEFSv12 reforecast which has a file per variable
 _VARIABLES_PER_BACKFILL_JOB = 1

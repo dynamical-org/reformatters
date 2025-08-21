@@ -16,8 +16,12 @@ log = get_logger(__name__)
 PROCESSED_VARIABLES_KEY = "processed_variables"
 
 
-class UpdateProgressTracker:
+class LegacyUpdateProgressTracker:
     """
+    Used only for legacy datasets that have not yet been ported to the DynamicalDataset pattern
+    (GEFS forecast and GEFS analysis). This version does not take a StoreFactory as an argument
+    and instead just takes a store path.
+
     Tracks which variables have been processed within a time slice of a job.
     Allows for skipping already processed variables in case the process is interrupted.
     """
