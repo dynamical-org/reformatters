@@ -126,41 +126,19 @@
         "fill_value": 0,
         "codecs": [
           {
-            "name": "sharding_indexed",
+            "name": "bytes",
             "configuration": {
-              "chunk_shape": [
-                32120
-              ],
-              "codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "blosc",
-                  "configuration": {
-                    "typesize": 8,
-                    "cname": "zstd",
-                    "clevel": 3,
-                    "shuffle": "shuffle",
-                    "blocksize": 0
-                  }
-                }
-              ],
-              "index_codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "crc32c"
-                }
-              ],
-              "index_location": "end"
+              "endian": "little"
+            }
+          },
+          {
+            "name": "blosc",
+            "configuration": {
+              "typesize": 8,
+              "cname": "zstd",
+              "clevel": 3,
+              "shuffle": "shuffle",
+              "blocksize": 0
             }
           }
         ],
@@ -200,41 +178,19 @@
         "fill_value": 0,
         "codecs": [
           {
-            "name": "sharding_indexed",
+            "name": "bytes",
             "configuration": {
-              "chunk_shape": [
-                32120
-              ],
-              "codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "blosc",
-                  "configuration": {
-                    "typesize": 8,
-                    "cname": "zstd",
-                    "clevel": 3,
-                    "shuffle": "shuffle",
-                    "blocksize": 0
-                  }
-                }
-              ],
-              "index_codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "crc32c"
-                }
-              ],
-              "index_location": "end"
+              "endian": "little"
+            }
+          },
+          {
+            "name": "blosc",
+            "configuration": {
+              "typesize": 8,
+              "cname": "zstd",
+              "clevel": 3,
+              "shuffle": "shuffle",
+              "blocksize": 0
             }
           }
         ],
@@ -274,41 +230,19 @@
         "fill_value": 0,
         "codecs": [
           {
-            "name": "sharding_indexed",
+            "name": "bytes",
             "configuration": {
-              "chunk_shape": [
-                32120
-              ],
-              "codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "blosc",
-                  "configuration": {
-                    "typesize": 8,
-                    "cname": "zstd",
-                    "clevel": 3,
-                    "shuffle": "shuffle",
-                    "blocksize": 0
-                  }
-                }
-              ],
-              "index_codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "crc32c"
-                }
-              ],
-              "index_location": "end"
+              "endian": "little"
+            }
+          },
+          {
+            "name": "blosc",
+            "configuration": {
+              "typesize": 8,
+              "cname": "zstd",
+              "clevel": 3,
+              "shuffle": "shuffle",
+              "blocksize": 0
             }
           }
         ],
@@ -351,42 +285,19 @@
         "fill_value": 0.0,
         "codecs": [
           {
-            "name": "sharding_indexed",
+            "name": "bytes",
             "configuration": {
-              "chunk_shape": [
-                1059,
-                1799
-              ],
-              "codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "blosc",
-                  "configuration": {
-                    "typesize": 8,
-                    "cname": "zstd",
-                    "clevel": 3,
-                    "shuffle": "shuffle",
-                    "blocksize": 0
-                  }
-                }
-              ],
-              "index_codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "crc32c"
-                }
-              ],
-              "index_location": "end"
+              "endian": "little"
+            }
+          },
+          {
+            "name": "blosc",
+            "configuration": {
+              "typesize": 8,
+              "cname": "zstd",
+              "clevel": 3,
+              "shuffle": "shuffle",
+              "blocksize": 0
             }
           }
         ],
@@ -428,41 +339,19 @@
         "fill_value": 0,
         "codecs": [
           {
-            "name": "sharding_indexed",
+            "name": "bytes",
             "configuration": {
-              "chunk_shape": [
-                49
-              ],
-              "codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "blosc",
-                  "configuration": {
-                    "typesize": 8,
-                    "cname": "zstd",
-                    "clevel": 3,
-                    "shuffle": "shuffle",
-                    "blocksize": 0
-                  }
-                }
-              ],
-              "index_codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "crc32c"
-                }
-              ],
-              "index_location": "end"
+              "endian": "little"
+            }
+          },
+          {
+            "name": "blosc",
+            "configuration": {
+              "typesize": 8,
+              "cname": "zstd",
+              "clevel": 3,
+              "shuffle": "shuffle",
+              "blocksize": 0
             }
           }
         ],
@@ -504,42 +393,19 @@
         "fill_value": 0.0,
         "codecs": [
           {
-            "name": "sharding_indexed",
+            "name": "bytes",
             "configuration": {
-              "chunk_shape": [
-                1059,
-                1799
-              ],
-              "codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "blosc",
-                  "configuration": {
-                    "typesize": 8,
-                    "cname": "zstd",
-                    "clevel": 3,
-                    "shuffle": "shuffle",
-                    "blocksize": 0
-                  }
-                }
-              ],
-              "index_codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "crc32c"
-                }
-              ],
-              "index_location": "end"
+              "endian": "little"
+            }
+          },
+          {
+            "name": "blosc",
+            "configuration": {
+              "typesize": 8,
+              "cname": "zstd",
+              "clevel": 3,
+              "shuffle": "shuffle",
+              "blocksize": 0
             }
           }
         ],
@@ -583,42 +449,19 @@
         "fill_value": 0,
         "codecs": [
           {
-            "name": "sharding_indexed",
+            "name": "bytes",
             "configuration": {
-              "chunk_shape": [
-                32120,
-                49
-              ],
-              "codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "blosc",
-                  "configuration": {
-                    "typesize": 8,
-                    "cname": "zstd",
-                    "clevel": 3,
-                    "shuffle": "shuffle",
-                    "blocksize": 0
-                  }
-                }
-              ],
-              "index_codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "crc32c"
-                }
-              ],
-              "index_location": "end"
+              "endian": "little"
+            }
+          },
+          {
+            "name": "blosc",
+            "configuration": {
+              "typesize": 8,
+              "cname": "zstd",
+              "clevel": 3,
+              "shuffle": "shuffle",
+              "blocksize": 0
             }
           }
         ],
@@ -647,7 +490,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              180
+              1799
             ]
           }
         },
@@ -660,41 +503,19 @@
         "fill_value": 0.0,
         "codecs": [
           {
-            "name": "sharding_indexed",
+            "name": "bytes",
             "configuration": {
-              "chunk_shape": [
-                180
-              ],
-              "codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "blosc",
-                  "configuration": {
-                    "typesize": 8,
-                    "cname": "zstd",
-                    "clevel": 3,
-                    "shuffle": "shuffle",
-                    "blocksize": 0
-                  }
-                }
-              ],
-              "index_codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "crc32c"
-                }
-              ],
-              "index_location": "end"
+              "endian": "little"
+            }
+          },
+          {
+            "name": "blosc",
+            "configuration": {
+              "typesize": 8,
+              "cname": "zstd",
+              "clevel": 3,
+              "shuffle": "shuffle",
+              "blocksize": 0
             }
           }
         ],
@@ -722,7 +543,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              180
+              1059
             ]
           }
         },
@@ -735,41 +556,19 @@
         "fill_value": 0.0,
         "codecs": [
           {
-            "name": "sharding_indexed",
+            "name": "bytes",
             "configuration": {
-              "chunk_shape": [
-                180
-              ],
-              "codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "blosc",
-                  "configuration": {
-                    "typesize": 8,
-                    "cname": "zstd",
-                    "clevel": 3,
-                    "shuffle": "shuffle",
-                    "blocksize": 0
-                  }
-                }
-              ],
-              "index_codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "crc32c"
-                }
-              ],
-              "index_location": "end"
+              "endian": "little"
+            }
+          },
+          {
+            "name": "blosc",
+            "configuration": {
+              "typesize": 8,
+              "cname": "zstd",
+              "clevel": 3,
+              "shuffle": "shuffle",
+              "blocksize": 0
             }
           }
         ],
