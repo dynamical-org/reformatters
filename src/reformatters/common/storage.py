@@ -19,6 +19,10 @@ _LOCAL_ZARR_STORE_BASE_PATH = "data/output"
 _SECRET_MOUNT_PATH = "/secrets"  # noqa: S105 this not a real secret
 _STORAGE_OPTIONS_KEY = "storage_options.json"
 
+# This is a sentinel value to indicate that we should not try to load the storage options from a Kubernetes secret.
+# This is useful in the test and dev environments where we don't have a Kubernetes secret mounted.
+_NO_SECRET_NAME = "no-secret"  # noqa: S105
+
 
 class DatasetFormat(StrEnum):
     ZARR3 = "zarr3"
@@ -28,12 +32,12 @@ class StorageConfig(FrozenBaseModel):
     """Configuration for the storage of a dataset in production."""
 
     base_path: str
-    k8s_secret_name: str | None = None
+    k8s_secret_name: str = _NO_SECRET_NAME
     format: DatasetFormat
 
     def load_storage_options(self) -> dict[str, Any]:
         """Load the storage options from the Kubernetes secret."""
-        if not Config.is_prod or self.k8s_secret_name is None:
+        if not Config.is_prod or self.k8s_secret_name == _NO_SECRET_NAME:
             return {}
 
         secret_file = Path(_SECRET_MOUNT_PATH) / f"{self.k8s_secret_name}.json"
