@@ -43,7 +43,7 @@ class StorageConfig(FrozenBaseModel):
         # because this happens locally, we don't have the secret mounted. In this case
         # we will attempt to load the secrets from kubernetes locally. This assumes that
         # we are connected to the kubernetes cluster locally. We have a guard on JOB_NAME
-        # to ensure that we don't try to do this this is run within the kubernetes cluster.
+        # to ensure that we don't try to do this when this is run in the cluster.
         if not secret_file.exists() and os.getenv("JOB_NAME") is None:
             return self._load_storage_options_locally()
 
