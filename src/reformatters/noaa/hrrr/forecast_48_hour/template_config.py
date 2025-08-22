@@ -114,18 +114,15 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
 
         # Expected forecast length based on initialization hour
         expected_lengths = EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR.loc[
-            ds["init_time"].dt.hour
+            ds[self.append_dim].dt.hour
         ]
 
         return {
-            # Spatial reference (required by base class)
-            # Valid time coordinate
             "valid_time": valid_time,
-            # Forecast length metadata
             "expected_forecast_length": (("init_time",), expected_lengths.values),
             "ingested_forecast_length": (
                 ("init_time",),
-                expected_lengths.values,
+                np.full(ds[self.append_dim].size, np.timedelta64("NaT", "ns")),
             ),
             "y": y_coords,
             "x": x_coords,
