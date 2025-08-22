@@ -22,20 +22,22 @@ def write_metadata(
     mode: Literal["w", "w-"] | None = None,
 ) -> None:
     store: zarr.abc.store.Store | Path
+    replica_stores: list[zarr.abc.store.Store]
 
     if isinstance(storage, StoreFactory):
         store = storage.primary_store()
         assert mode is None, "mode should not be provided if StoreFactory is provided"
         mode = storage.mode()
+        replica_stores = storage.replica_stores()
     else:
         assert isinstance(storage, zarr.abc.store.Store) or isinstance(storage, Path)
         store = storage
+        replica_stores = []
         # respect mode if provided by legacy implementations
         if mode is None:
             assert isinstance(store, Path), f"Expected Path, got {type(store)}"
             mode = _get_mode_from_path_store(store)
 
-    logger.info(f"Writing metadata to {store} with mode {mode}")
     with warnings.catch_warnings():
         # Unconsolidated metadata is also written so adding
         # consolidated metadata is unlikely to impact interoperability.
@@ -44,6 +46,14 @@ def write_metadata(
             message="Consolidated metadata is currently not part in the Zarr format 3 specification",
             category=UserWarning,
         )
+
+        for replica_store in replica_stores:
+            logger.info(
+                f"Writing metadata to replica store {replica_store} with mode {mode}"
+            )
+            template_ds.to_zarr(replica_store, mode=mode, compute=False)  # type: ignore[call-overload]
+
+        logger.info(f"Writing metadata to primary store {store} with mode {mode}")
         template_ds.to_zarr(store, mode=mode, compute=False)  # type: ignore[call-overload]
 
     if isinstance(store, Path | str):

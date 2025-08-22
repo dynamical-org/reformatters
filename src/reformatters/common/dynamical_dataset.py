@@ -138,16 +138,23 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
             template_utils.write_metadata(template_ds, tmp_store)
 
+            primary_store = self.store_factory.primary_store()
+            replica_stores = self.store_factory.replica_stores()
+
             for job in jobs:
                 process_results = job.process()
                 updated_template = job.update_template_with_results(process_results)
                 # overwrite the tmp store metadata with updated template
                 template_utils.write_metadata(updated_template, tmp_store)
-                primary_store = self.store_factory.primary_store()
-                copy_zarr_metadata(updated_template, tmp_store, primary_store)
+                copy_zarr_metadata(
+                    updated_template,
+                    tmp_store,
+                    primary_store,
+                    replica_stores=replica_stores,
+                )
 
         logger.info(
-            f"Operational update complete. Wrote to store: {self.store_factory.primary_store()}"
+            f"Operational update complete. Wrote to store: {self.store_factory.primary_store()} with {len(self.store_factory.replica_stores())} replicas"
         )
 
     def backfill_kubernetes(
@@ -318,8 +325,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         with self._monitor(ValidationCronJob, reformat_job_name):
             store = self.store_factory.primary_store()
             validation.validate_dataset(store, validators=self.validators())
+            logger.info(f"Done validating {store}")
 
-        logger.info(f"Done validating {store}")
+            for replica_store in self.store_factory.replica_stores():
+                validation.validate_dataset(replica_store, validators=self.validators())
+                logger.info(f"Done validating {replica_store}")
 
     def get_cli(
         self,

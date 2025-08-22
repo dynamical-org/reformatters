@@ -294,6 +294,7 @@ def test_validate_dataset_calls_validators_and_uses_primary_store(
     mock_store = Mock()
     monkeypatch.setattr(ExampleDataset, "store_factory", store_factory)
     monkeypatch.setattr(store_factory, "primary_store", lambda: mock_store)
+    monkeypatch.setattr(store_factory, "replica_stores", list)
 
     dataset.validate_dataset("example-job-name")
 

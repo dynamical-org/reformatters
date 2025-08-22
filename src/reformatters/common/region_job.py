@@ -478,6 +478,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         processing_region_ds, output_region_ds = self._get_region_datasets()
 
         primary_store = self.store_factory.primary_store()
+        replica_stores = self.store_factory.replica_stores()
 
         progress_tracker = UpdateProgressTracker(
             self.reformat_job_name,
@@ -558,7 +559,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                             self.append_dim,
                             self.tmp_store,
                             primary_store,
-                            partial(progress_tracker.record_completion, data_var.name),
+                            replica_stores=replica_stores,
+                            track_progress_callback=partial(
+                                progress_tracker.record_completion, data_var.name
+                            ),
                         )
                     )
 
