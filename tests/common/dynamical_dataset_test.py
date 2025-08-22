@@ -210,7 +210,8 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
     dataset.backfill_local(pd.Timestamp("2000-01-02"))
 
     assert (
-        xr.open_zarr(dataset.primary_store_factory.store()).attrs["cool"] == "weather"
+        xr.open_zarr(dataset.primary_store_factory.primary_store()).attrs["cool"]
+        == "weather"
     )
     process_backfill_region_jobs_mock.assert_called_once_with(
         pd.Timestamp("2000-01-02"),
@@ -298,7 +299,7 @@ def test_validate_dataset_calls_validators_and_uses_primary_store(
 
     # Ensure validate_dataset was called with correct arguments
     # this implies
-    # - self.primary_store_factory.store() was called and returned our mock_store
+    # - self.primary_store_factory.primary_store() was called and returned our mock_store
     # - self.validators() was called and returned our mock_validators
     mock_validate.assert_called_once_with(mock_store, validators=mock_validators)
 

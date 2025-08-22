@@ -141,11 +141,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 updated_template = job.update_template_with_results(process_results)
                 # overwrite the tmp store metadata with updated template
                 template_utils.write_metadata(updated_template, tmp_store)
-                primary_store = self.primary_store_factory.store()
+                primary_store = self.primary_store_factory.primary_store()
                 copy_zarr_metadata(updated_template, tmp_store, primary_store)
 
         logger.info(
-            f"Operational update complete. Wrote to store: {self.primary_store_factory.store()}"
+            f"Operational update complete. Wrote to store: {self.primary_store_factory.primary_store()}"
         )
 
     def backfill_kubernetes(
@@ -267,7 +267,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             filter_contains=filter_contains,
             filter_variable_names=filter_variable_names,
         )
-        logger.info(f"Done writing to {self.primary_store_factory.store()}")
+        logger.info(f"Done writing to {self.primary_store_factory.primary_store()}")
 
     def process_backfill_region_jobs(
         self,
@@ -314,7 +314,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
         with self._monitor(ValidationCronJob, reformat_job_name):
-            store = self.primary_store_factory.store()
+            store = self.primary_store_factory.primary_store()
             validation.validate_dataset(store, validators=self.validators())
 
         logger.info(f"Done validating {store}")

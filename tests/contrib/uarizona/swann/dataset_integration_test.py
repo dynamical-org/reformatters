@@ -26,7 +26,7 @@ def test_backfill_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     dataset = UarizonaSwannAnalysisDataset(storage_config=noop_storage_config)
     # Dataset starts at 1981-10-01
     dataset.backfill_local(append_dim_end=pd.Timestamp("1981-10-02"))
-    ds = xr.open_zarr(dataset.primary_store_factory.store(), chunks=None)
+    ds = xr.open_zarr(dataset.primary_store_factory.primary_store(), chunks=None)
     assert ds.snow_depth.mean() == 0.23608214
     assert ds.snow_water_equivalent.mean() == 0.0433126
 
@@ -39,7 +39,7 @@ def test_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     dataset = UarizonaSwannAnalysisDataset(storage_config=noop_storage_config)
     # Dataset starts at 1981-10-01
     dataset.backfill_local(append_dim_end=pd.Timestamp("1981-10-02"))
-    ds = xr.open_zarr(dataset.primary_store_factory.store(), chunks=None)
+    ds = xr.open_zarr(dataset.primary_store_factory.primary_store(), chunks=None)
     assert ds.time.max() == pd.Timestamp("1981-10-01")
 
     monkeypatch.setattr(
@@ -55,7 +55,9 @@ def test_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     )
 
     dataset.update("test-update")
-    updated_ds = xr.open_zarr(dataset.primary_store_factory.store(), chunks=None)
+    updated_ds = xr.open_zarr(
+        dataset.primary_store_factory.primary_store(), chunks=None
+    )
     np.testing.assert_array_equal(
         updated_ds.time, pd.date_range("1981-10-01", "1981-10-03")
     )
@@ -70,7 +72,7 @@ def test_update_template_trimming(monkeypatch: MonkeyPatch, tmp_path: Path) -> N
     dataset = UarizonaSwannAnalysisDataset(storage_config=noop_storage_config)
     # Dataset starts at 1981-10-01
     dataset.backfill_local(append_dim_end=pd.Timestamp("1981-10-02"))
-    ds = xr.open_zarr(dataset.primary_store_factory.store(), chunks=None)
+    ds = xr.open_zarr(dataset.primary_store_factory.primary_store(), chunks=None)
     assert ds.time.max() == pd.Timestamp("1981-10-01")
 
     monkeypatch.setattr(
@@ -99,7 +101,9 @@ def test_update_template_trimming(monkeypatch: MonkeyPatch, tmp_path: Path) -> N
     monkeypatch.setattr(dataset.region_job_class, "download_file", mock_download_file)
 
     dataset.update("test-update")
-    updated_ds = xr.open_zarr(dataset.primary_store_factory.store(), chunks=None)
+    updated_ds = xr.open_zarr(
+        dataset.primary_store_factory.primary_store(), chunks=None
+    )
 
     # The dataset should only extend to 1981-10-02 because 1981-10-03 failed to download
     np.testing.assert_array_equal(

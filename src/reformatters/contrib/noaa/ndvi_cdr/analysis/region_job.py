@@ -306,7 +306,7 @@ class NoaaNdviCdrAnalysisRegionJob(
         Sequence["RegionJob[NoaaNdviCdrDataVar, NoaaNdviCdrAnalysisSourceFileCoord]"],
         xr.Dataset,
     ]:
-        existing_ds = xr.open_zarr(primary_store_factory.store())
+        existing_ds = xr.open_zarr(primary_store_factory.primary_store())
         append_dim_start = existing_ds[append_dim].max()
         append_dim_end = pd.Timestamp.now()
         template_ds = get_template_fn(append_dim_end)

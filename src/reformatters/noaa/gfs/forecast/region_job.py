@@ -185,7 +185,7 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         from its current state to include the latest available data.
         """
         existing_ds = xr.open_zarr(
-            primary_store_factory.store(), decode_timedelta=True, chunks=None
+            primary_store_factory.primary_store(), decode_timedelta=True, chunks=None
         )
         # Start by reprocessing the most recent forecast already in the dataset; it may be incomplete.
         append_dim_start = existing_ds[append_dim].max()

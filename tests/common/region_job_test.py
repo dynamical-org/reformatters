@@ -141,7 +141,7 @@ def test_region_job(template_ds: xr.Dataset, store_factory: StoreFactory) -> Non
 
     job.process()
 
-    ds = xr.open_zarr(store_factory.store())
+    ds = xr.open_zarr(store_factory.primary_store())
     region_template_ds = template_ds.isel({job.append_dim: job.region})
     region_ds = ds.isel({job.append_dim: job.region})
     assert np.array_equal(region_ds.time.values, region_template_ds.time.values)

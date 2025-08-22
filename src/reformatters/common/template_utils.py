@@ -24,7 +24,7 @@ def write_metadata(
     store: zarr.abc.store.Store | Path
 
     if isinstance(storage, StoreFactory):
-        store = storage.store()
+        store = storage.primary_store()
         assert mode is None, "mode should not be provided if StoreFactory is provided"
         mode = storage.mode()
     else:

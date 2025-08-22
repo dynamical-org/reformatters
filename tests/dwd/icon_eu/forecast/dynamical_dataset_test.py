@@ -14,7 +14,7 @@
 
 #     # Local backfill reformat
 #     dataset.backfill_local(append_dim_end=pd.Timestamp("2000-01-02"))
-#     ds = xr.open_zarr(dataset.primary_store_factory.store(), chunks=None)
+#     ds = xr.open_zarr(dataset.primary_store_factory.primary_store(), chunks=None)
 #     assert ds.time.max() == pd.Timestamp("2000-01-01")
 
 #     # Operational update
@@ -32,7 +32,7 @@
 #     dataset.update("test-update")
 
 #     # Check resulting dataset
-#     updated_ds = xr.open_zarr(dataset.primary_store_factory.store(), chunks=None)
+#     updated_ds = xr.open_zarr(dataset.primary_store_factory.primary_store(), chunks=None)
 
 #     np.testing.assert_array_equal(
 #         updated_ds.time, pd.date_range("1981-10-01", "1981-10-03")

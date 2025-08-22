@@ -93,7 +93,7 @@ class StoreFactory(FrozenBaseModel):
 
         return f"{base_path}/{self.dataset_id}/v{self.version}.zarr"
 
-    def store(self) -> zarr.abc.store.Store:
+    def primary_store(self) -> zarr.abc.store.Store:
         if not Config.is_prod:
             # This should work, but it gives FileNotFoundError when it should be creating a new zarr.
             # return zarr.storage.FsspecStore.from_url(

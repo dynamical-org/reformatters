@@ -98,7 +98,7 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
         # HRRR provides forecasts every hour, but 48-hour forecasts are only available
         # every 6 hours (00, 06, 12, 18 UTC)
 
-        existing_ds = xr.open_zarr(primary_store_factory.store())
+        existing_ds = xr.open_zarr(primary_store_factory.primary_store())
         append_dim_start = cls._update_append_dim_start(existing_ds)
 
         append_dim_end = cls._update_append_dim_end()

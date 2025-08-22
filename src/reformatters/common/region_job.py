@@ -477,7 +477,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         processing_region_ds, output_region_ds = self._get_region_datasets()
 
-        primary_store = self.primary_store_factory.store()
+        primary_store = self.primary_store_factory.primary_store()
 
         progress_tracker = UpdateProgressTracker(
             self.reformat_job_name,

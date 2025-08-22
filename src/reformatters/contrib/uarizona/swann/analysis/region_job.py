@@ -95,7 +95,7 @@ class UarizonaSwannAnalysisRegionJob(
         Sequence[RegionJob[UarizonaSwannDataVar, UarizonaSwannAnalysisSourceFileCoord]],
         xr.Dataset,
     ]:
-        existing_ds = xr.open_zarr(primary_store_factory.store())
+        existing_ds = xr.open_zarr(primary_store_factory.primary_store())
         append_dim_start = cls._update_append_dim_start(existing_ds)
         append_dim_end = cls._update_append_dim_end()
         template_ds = get_template_fn(append_dim_end)
