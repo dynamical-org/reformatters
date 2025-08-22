@@ -35,7 +35,7 @@ EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR = pd.Series(
 
 class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
     # HRRR uses a projected coordinate system with x/y dimensions
-    dims: tuple[Dim, ...] = ("init_time", "lead_time", "x", "y")
+    dims: tuple[Dim, ...] = ("init_time", "lead_time", "y", "x")
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = pd.Timestamp("2018-07-13T12:00")  # start of HRRR v3
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
@@ -63,8 +63,8 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                 self.append_dim_start + self.append_dim_frequency
             ),
             "lead_time": pd.timedelta_range("0h", "48h", freq=pd.Timedelta("1h")),
-            "x": np.arange(1799),  # x-dimension for projected coordinates
             "y": np.arange(1059),  # y-dimension for projected coordinates
+            "x": np.arange(1799),  # x-dimension for projected coordinates
         }
 
     def derive_coordinates(
@@ -104,25 +104,28 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
         xs, ys = np.meshgrid(x_coords, y_coords)
         lons, lats = pj(xs, ys, inverse=True)
 
+        # Dropping to 32 bit precision still gets us < 1 meter precision and
+        # makes each array about 6MB vs 15MB for float64.
+        lats = lats.astype(np.float32)
+        lons = lons.astype(np.float32)
+
         # Calculate valid_time as init_time + lead_time
         valid_time = ds["init_time"] + ds["lead_time"]
 
         # Expected forecast length based on initialization hour
         expected_lengths = EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR.loc[
-            ds["init_time"].dt.hour
+            ds[self.append_dim].dt.hour
         ]
 
         return {
-            # Spatial reference (required by base class)
-            # Valid time coordinate
             "valid_time": valid_time,
-            # Forecast length metadata
             "expected_forecast_length": (("init_time",), expected_lengths.values),
             "ingested_forecast_length": (
                 ("init_time",),
-                expected_lengths.values,
+                np.full(ds[self.append_dim].size, np.timedelta64("NaT", "ns")),
             ),
-            # Latitude and longitude as 2D coordinates over y,x
+            "y": y_coords,
+            "x": x_coords,
             "latitude": (("y", "x"), lats),
             "longitude": (("y", "x"), lons),
         }
@@ -265,9 +268,9 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
             Coordinate(
                 name="latitude",
                 encoding=Encoding(
-                    dtype="float64",
+                    dtype="float32",
                     fill_value=np.nan,
-                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                     chunks=(len(dim_coords["y"]), len(dim_coords["x"])),
                     shards=None,
                 ),
@@ -282,9 +285,9 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
             Coordinate(
                 name="longitude",
                 encoding=Encoding(
-                    dtype="float64",
+                    dtype="float32",
                     fill_value=np.nan,
-                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                     chunks=(len(dim_coords["y"]), len(dim_coords["x"])),
                     shards=None,
                 ),

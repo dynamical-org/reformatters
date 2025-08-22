@@ -58,7 +58,7 @@ def test_template_config_attrs() -> None:
     config = NoaaHrrrForecast48HourTemplateConfig()
 
     # Check dimensions
-    assert config.dims == ("init_time", "lead_time", "x", "y")
+    assert config.dims == ("init_time", "lead_time", "y", "x")
     assert config.append_dim == "init_time"
 
     # Check date range

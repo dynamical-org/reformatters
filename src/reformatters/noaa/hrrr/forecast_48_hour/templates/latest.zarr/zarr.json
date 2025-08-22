@@ -21,8 +21,8 @@
         "shape": [
           1,
           49,
-          1799,
-          1059
+          1059,
+          1799
         ],
         "data_type": "float32",
         "chunk_grid": {
@@ -97,8 +97,8 @@
         "dimension_names": [
           "init_time",
           "lead_time",
-          "x",
-          "y"
+          "y",
+          "x"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -266,7 +266,7 @@
           1059,
           1799
         ],
-        "data_type": "float64",
+        "data_type": "float32",
         "chunk_grid": {
           "name": "regular",
           "configuration": {
@@ -293,7 +293,7 @@
           {
             "name": "blosc",
             "configuration": {
-              "typesize": 8,
+              "typesize": 4,
               "cname": "zstd",
               "clevel": 3,
               "shuffle": "shuffle",
@@ -374,7 +374,7 @@
           1059,
           1799
         ],
-        "data_type": "float64",
+        "data_type": "float32",
         "chunk_grid": {
           "name": "regular",
           "configuration": {
@@ -401,7 +401,7 @@
           {
             "name": "blosc",
             "configuration": {
-              "typesize": 8,
+              "typesize": 4,
               "cname": "zstd",
               "clevel": 3,
               "shuffle": "shuffle",

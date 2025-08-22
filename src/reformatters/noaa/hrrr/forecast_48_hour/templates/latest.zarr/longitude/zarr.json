@@ -3,7 +3,7 @@
     1059,
     1799
   ],
-  "data_type": "float64",
+  "data_type": "float32",
   "chunk_grid": {
     "name": "regular",
     "configuration": {
@@ -30,7 +30,7 @@
     {
       "name": "blosc",
       "configuration": {
-        "typesize": 8,
+        "typesize": 4,
         "cname": "zstd",
         "clevel": 3,
         "shuffle": "shuffle",
