@@ -47,7 +47,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def primary_store_factory(self) -> StoreFactory:
+    def store_factory(self) -> StoreFactory:
         return StoreFactory(
             storage_config=self.storage_config,
             dataset_id=self.dataset_id,
@@ -127,7 +127,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             tmp_store = self._tmp_store()
 
             jobs, template_ds = self.region_job_class.operational_update_jobs(
-                primary_store_factory=self.primary_store_factory,
+                store_factory=self.store_factory,
                 tmp_store=tmp_store,
                 get_template_fn=self._get_template,
                 append_dim=self.template_config.append_dim,
@@ -141,11 +141,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 updated_template = job.update_template_with_results(process_results)
                 # overwrite the tmp store metadata with updated template
                 template_utils.write_metadata(updated_template, tmp_store)
-                primary_store = self.primary_store_factory.primary_store()
+                primary_store = self.store_factory.primary_store()
                 copy_zarr_metadata(updated_template, tmp_store, primary_store)
 
         logger.info(
-            f"Operational update complete. Wrote to store: {self.primary_store_factory.primary_store()}"
+            f"Operational update complete. Wrote to store: {self.store_factory.primary_store()}"
         )
 
     def backfill_kubernetes(
@@ -163,12 +163,12 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         image_tag = docker_image or docker.build_and_push_image()
 
         template_ds = self._get_template(append_dim_end)
-        template_utils.write_metadata(template_ds, self.primary_store_factory)
+        template_utils.write_metadata(template_ds, self.store_factory)
 
         num_jobs = len(
             self.region_job_class.get_jobs(
                 kind="backfill",
-                primary_store_factory=self.primary_store_factory,
+                store_factory=self.store_factory,
                 tmp_store=self._tmp_store(),
                 template_ds=template_ds,
                 append_dim=self.template_config.append_dim,
@@ -255,7 +255,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> None:
         """Run dataset reformatting locally in this process."""
         template_ds = self._get_template(append_dim_end)
-        template_utils.write_metadata(template_ds, self.primary_store_factory)
+        template_utils.write_metadata(template_ds, self.store_factory)
 
         self.process_backfill_region_jobs(
             append_dim_end,
@@ -267,7 +267,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             filter_contains=filter_contains,
             filter_variable_names=filter_variable_names,
         )
-        logger.info(f"Done writing to {self.primary_store_factory.primary_store()}")
+        logger.info(f"Done writing to {self.store_factory.primary_store()}")
 
     def process_backfill_region_jobs(
         self,
@@ -285,7 +285,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         region_jobs = self.region_job_class.get_jobs(
             kind="backfill",
-            primary_store_factory=self.primary_store_factory,
+            store_factory=self.store_factory,
             tmp_store=self._tmp_store(),
             template_ds=self._get_template(append_dim_end),
             append_dim=self.template_config.append_dim,
@@ -314,7 +314,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
         with self._monitor(ValidationCronJob, reformat_job_name):
-            store = self.primary_store_factory.primary_store()
+            store = self.store_factory.primary_store()
             validation.validate_dataset(store, validators=self.validators())
 
         logger.info(f"Done validating {store}")

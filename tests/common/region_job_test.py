@@ -130,7 +130,7 @@ def test_region_job(template_ds: xr.Dataset, store_factory: StoreFactory) -> Non
     template_utils.write_metadata(template_ds, store_factory)
 
     job = ExampleRegionJob(
-        primary_store_factory=store_factory,
+        store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         data_vars=[ExampleDataVar(name=name) for name in template_ds.data_vars.keys()],
@@ -159,7 +159,7 @@ def test_update_template_with_results(
     tmp_store = get_local_tmp_store()
 
     job = ExampleRegionJob(
-        primary_store_factory=store_factory,
+        store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         data_vars=[ExampleDataVar(name=name) for name in template_ds.data_vars.keys()],
@@ -203,7 +203,7 @@ def test_get_jobs_grouping_no_filters(
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
-        primary_store_factory=store_factory,
+        store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -242,7 +242,7 @@ def test_get_jobs_grouping_filters(
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
-        primary_store_factory=store_factory,
+        store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -287,7 +287,7 @@ def test_get_jobs_grouping_filters_and_worker_index(
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
-        primary_store_factory=store_factory,
+        store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -323,7 +323,7 @@ def test_get_jobs_grouping_filter_contains(
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
-        primary_store_factory=store_factory,
+        store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -354,7 +354,7 @@ def test_get_jobs_grouping_filter_contains_second_shard(
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
-        primary_store_factory=store_factory,
+        store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -385,7 +385,7 @@ def test_get_jobs_grouping_filter_contains_all_shards(
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
-        primary_store_factory=store_factory,
+        store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",

@@ -44,7 +44,7 @@ def test_backfill_local_and_operational_update(
         append_dim_end=init_time_end, filter_variable_names=filter_variable_names
     )
     original_ds = xr.open_zarr(
-        dataset.primary_store_factory.primary_store(),
+        dataset.store_factory.primary_store(),
         decode_timedelta=True,
         chunks=None,
     )
@@ -122,7 +122,7 @@ def test_backfill_local_and_operational_update(
     dataset.update("test-update-job-name")
 
     updated_ds = xr.open_zarr(
-        dataset.primary_store_factory.primary_store(),
+        dataset.store_factory.primary_store(),
         decode_timedelta=True,
         chunks=None,
     )

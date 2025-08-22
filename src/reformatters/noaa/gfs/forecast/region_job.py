@@ -171,7 +171,7 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
     @classmethod
     def operational_update_jobs(
         cls,
-        primary_store_factory: StoreFactory,
+        store_factory: StoreFactory,
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
@@ -185,7 +185,7 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         from its current state to include the latest available data.
         """
         existing_ds = xr.open_zarr(
-            primary_store_factory.primary_store(), decode_timedelta=True, chunks=None
+            store_factory.primary_store(), decode_timedelta=True, chunks=None
         )
         # Start by reprocessing the most recent forecast already in the dataset; it may be incomplete.
         append_dim_start = existing_ds[append_dim].max()
@@ -194,7 +194,7 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
 
         jobs = cls.get_jobs(
             kind="operational-update",
-            primary_store_factory=primary_store_factory,
+            store_factory=store_factory,
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=append_dim,

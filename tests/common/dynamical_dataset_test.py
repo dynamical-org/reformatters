@@ -210,8 +210,7 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
     dataset.backfill_local(pd.Timestamp("2000-01-02"))
 
     assert (
-        xr.open_zarr(dataset.primary_store_factory.primary_store()).attrs["cool"]
-        == "weather"
+        xr.open_zarr(dataset.store_factory.primary_store()).attrs["cool"] == "weather"
     )
     process_backfill_region_jobs_mock.assert_called_once_with(
         pd.Timestamp("2000-01-02"),
@@ -244,9 +243,9 @@ def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
     )
-    primary_store_factory = Mock()
-    monkeypatch.setattr(ExampleDataset, "primary_store_factory", primary_store_factory)
-    monkeypatch.setattr(primary_store_factory, "store", lambda: tmp_path)
+    store_factory = Mock()
+    monkeypatch.setattr(ExampleDataset, "store_factory", store_factory)
+    monkeypatch.setattr(store_factory, "store", lambda: tmp_path)
 
     dataset.backfill_kubernetes(
         append_dim_end=datetime(2025, 1, 1),
@@ -290,16 +289,16 @@ def test_validate_dataset_calls_validators_and_uses_primary_store(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
     )
-    primary_store_factory = Mock()
+    store_factory = Mock()
     mock_store = Mock()
-    monkeypatch.setattr(ExampleDataset, "primary_store_factory", primary_store_factory)
-    monkeypatch.setattr(primary_store_factory, "store", lambda: mock_store)
+    monkeypatch.setattr(ExampleDataset, "store_factory", store_factory)
+    monkeypatch.setattr(store_factory, "store", lambda: mock_store)
 
     dataset.validate_dataset("example-job-name")
 
     # Ensure validate_dataset was called with correct arguments
     # this implies
-    # - self.primary_store_factory.primary_store() was called and returned our mock_store
+    # - self.store_factory.primary_store() was called and returned our mock_store
     # - self.validators() was called and returned our mock_validators
     mock_validate.assert_called_once_with(mock_store, validators=mock_validators)
 
