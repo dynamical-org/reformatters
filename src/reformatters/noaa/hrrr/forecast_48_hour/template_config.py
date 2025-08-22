@@ -104,6 +104,11 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
         xs, ys = np.meshgrid(x_coords, y_coords)
         lons, lats = pj(xs, ys, inverse=True)
 
+        # Dropping to 32 bit precision still gets us < 1 meter precision and
+        # makes each array about 6MB vs 15MB for float64.
+        lats = lats.astype(np.float32)
+        lons = lons.astype(np.float32)
+
         # Calculate valid_time as init_time + lead_time
         valid_time = ds["init_time"] + ds["lead_time"]
 
@@ -265,9 +270,9 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
             Coordinate(
                 name="latitude",
                 encoding=Encoding(
-                    dtype="float64",
+                    dtype="float32",
                     fill_value=np.nan,
-                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                     chunks=(len(dim_coords["y"]), len(dim_coords["x"])),
                     shards=None,
                 ),
@@ -282,9 +287,9 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
             Coordinate(
                 name="longitude",
                 encoding=Encoding(
-                    dtype="float64",
+                    dtype="float32",
                     fill_value=np.nan,
-                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                     chunks=(len(dim_coords["y"]), len(dim_coords["x"])),
                     shards=None,
                 ),
