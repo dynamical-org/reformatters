@@ -47,17 +47,17 @@ class NoaaHrrrForecast48HourDataset(DynamicalDataset[HRRRDataVar, HRRRSourceFile
 
         # # HRRR operational update job
         # # Run every 6 hours at :30 to catch new 48-hour forecasts (00, 06, 12, 18 UTC)
-        # # HRRR data typically becomes available ~30-45 minutes after init time
+        # # HRRR data typically becomes available ~30-45 minutes after init time (TODO confim)
         # operational_update_cron_job = ReformatCronJob(
         #     name=f"{self.dataset_id}-operational-update",
         #     schedule="30 0,6,12,18 * * *",  # Every 6 hours at :30 minutes
-        #     pod_active_deadline=timedelta(hours=2),  # HRRR processing can take time
+        #     pod_active_deadline=timedelta(hours=30),
         #     image=image_tag,
         #     dataset_id=self.dataset_id,
-        #     cpu="6",  # HRRR files are large and processing is CPU-intensive
-        #     memory="24G",  # Large memory for GRIB processing and zarr chunks
-        #     shared_memory="8Gi",  # Shared memory for parallel processing
-        #     ephemeral_storage="50G",  # HRRR files can be large
+        #     cpu="3",
+        #     memory="14",
+        #     shared_memory="1G",
+        #     ephemeral_storage="30G",
         #     secret_names=[self.storage_config.k8s_secret_name],
         # )
 
@@ -65,7 +65,7 @@ class NoaaHrrrForecast48HourDataset(DynamicalDataset[HRRRDataVar, HRRRSourceFile
         # validation_cron_job = ValidationCronJob(
         #     name=f"{self.dataset_id}-validation",
         #     schedule="30 1,7,13,19 * * *",  # 1 hour after operational updates
-        #     pod_active_deadline=timedelta(minutes=20),
+        #     pod_active_deadline=timedelta(minutes=10),
         #     image=image_tag,
         #     dataset_id=self.dataset_id,
         #     cpu="2",
