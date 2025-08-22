@@ -22,7 +22,7 @@ from reformatters.common.config_models import (
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.common.region_job import RegionJob, SourceFileCoord
-from reformatters.common.storage import DatasetFormat, StorageConfig
+from reformatters.common.storage import _NO_SECRET_NAME, DatasetFormat, StorageConfig
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 
@@ -90,7 +90,7 @@ class ExampleConfig(TemplateConfig[ExampleDataVar]):
 class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
     template_config: ExampleConfig = ExampleConfig()
     region_job_class: type[ExampleRegionJob] = ExampleRegionJob
-    storage_config: ExampleDatasetStorageConfig = ExampleDatasetStorageConfig()
+    primary_storage_config: ExampleDatasetStorageConfig = ExampleDatasetStorageConfig()
 
     def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
         return [
@@ -104,7 +104,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
                 memory="1G",
                 shared_memory="1G",
                 ephemeral_storage="1G",
-                secret_names=[self.storage_config.k8s_secret_name],
+                secret_names=self.store_factory.k8s_secret_names(),
             ),
             ValidationCronJob(
                 name=f"{self.dataset_id}-validation",
@@ -116,7 +116,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
                 memory="1G",
                 shared_memory="1G",
                 ephemeral_storage="1G",
-                secret_names=[self.storage_config.k8s_secret_name],
+                secret_names=self.store_factory.k8s_secret_names(),
             ),
         ]
 
@@ -245,7 +245,8 @@ def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     )
     store_factory = Mock()
     monkeypatch.setattr(ExampleDataset, "store_factory", store_factory)
-    monkeypatch.setattr(store_factory, "store", lambda: tmp_path)
+    monkeypatch.setattr(store_factory, "primary_store", lambda: tmp_path)
+    monkeypatch.setattr(store_factory, "k8s_secret_names", lambda: [_NO_SECRET_NAME])
 
     dataset.backfill_kubernetes(
         append_dim_end=datetime(2025, 1, 1),
@@ -292,7 +293,7 @@ def test_validate_dataset_calls_validators_and_uses_primary_store(
     store_factory = Mock()
     mock_store = Mock()
     monkeypatch.setattr(ExampleDataset, "store_factory", store_factory)
-    monkeypatch.setattr(store_factory, "store", lambda: mock_store)
+    monkeypatch.setattr(store_factory, "primary_store", lambda: mock_store)
 
     dataset.validate_dataset("example-job-name")
 

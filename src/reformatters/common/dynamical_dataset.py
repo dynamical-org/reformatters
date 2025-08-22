@@ -11,7 +11,7 @@ import pandas as pd
 import sentry_sdk
 import typer
 import xarray as xr
-from pydantic import computed_field
+from pydantic import Field, computed_field
 
 from reformatters.common import docker, template_utils, validation
 from reformatters.common.config import Config
@@ -43,13 +43,15 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     template_config: TemplateConfig[DATA_VAR]
     region_job_class: type[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
 
-    storage_config: StorageConfig
+    primary_storage_config: StorageConfig
+    replica_storage_configs: list[StorageConfig] = Field(default_factory=list)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def store_factory(self) -> StoreFactory:
         return StoreFactory(
-            storage_config=self.storage_config,
+            primary_storage_config=self.primary_storage_config,
+            replica_storage_configs=self.replica_storage_configs,
             dataset_id=self.dataset_id,
             template_config_version=self.template_config.version,
         )
@@ -71,7 +73,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             memory="30G",
             shared_memory="12G",
             ephemeral_storage="30G",
-            secret_names=[self.storage_config.k8s_secret_name],
+            secret_names=self.store_factory.k8s_secret_names(),
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validation",
@@ -81,7 +83,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             dataset_id=self.dataset_id,
             cpu="1.3",
             memory="7G",
-            secret_names=[self.storage_config.k8s_secret_name],
+            secret_names=self.store_factory.k8s_secret_names(),
         )
 
         return [operational_update_cron_job, validation_cron_job]
@@ -233,7 +235,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     "pod_active_deadline",
                 }
             ),
-            secret_names=[self.storage_config.k8s_secret_name],
+            secret_names=self.store_factory.k8s_secret_names(),
         )
         subprocess.run(
             ["/usr/bin/kubectl", "apply", "-f", "-"],

@@ -30,7 +30,7 @@ def test_backfill_local_and_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
         lambda self, file_time: False,
     )
 
-    dataset = NoaaNdviCdrAnalysisDataset(storage_config=noop_storage_config)
+    dataset = NoaaNdviCdrAnalysisDataset(primary_storage_config=noop_storage_config)
     # Dataset starts at 1981-06-24, test with a couple days after start
     dataset.backfill_local(append_dim_end=pd.Timestamp("1981-06-25"))
     ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
@@ -69,7 +69,7 @@ def test_backfill_local_and_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
 
     # Mock pd.Timestamp.now() to control the update end date
     monkeypatch.setattr("pandas.Timestamp.now", lambda: pd.Timestamp("1981-06-26"))
-    dataset = NoaaNdviCdrAnalysisDataset(storage_config=noop_storage_config)
+    dataset = NoaaNdviCdrAnalysisDataset(primary_storage_config=noop_storage_config)
     dataset.update("test-update")
     updated_ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
     np.testing.assert_array_equal(

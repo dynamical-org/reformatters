@@ -87,7 +87,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoords]):
 @pytest.fixture
 def store_factory() -> StoreFactory:
     return StoreFactory(
-        storage_config=StorageConfig(
+        primary_storage_config=StorageConfig(
             base_path="fake-prod-path",
             format=DatasetFormat.ZARR3,
         ),

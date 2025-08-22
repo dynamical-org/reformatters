@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import fsspec  # type: ignore
 import zarr
-from pydantic import computed_field
+from pydantic import Field, computed_field
 
 from reformatters.common import kubernetes
 from reformatters.common.config import Config, Env
@@ -68,7 +68,8 @@ class StorageConfig(FrozenBaseModel):
 
 
 class StoreFactory(FrozenBaseModel):
-    storage_config: StorageConfig
+    primary_storage_config: StorageConfig
+    replica_storage_configs: list[StorageConfig] = Field(default_factory=list)
     dataset_id: str
     template_config_version: str
 
@@ -83,29 +84,33 @@ class StoreFactory(FrozenBaseModel):
             case _ as unreachable:
                 assert_never(unreachable)
 
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def store_path(self) -> str:
-        if Config.is_prod:
-            base_path = self.storage_config.base_path
-        else:
-            base_path = _LOCAL_ZARR_STORE_BASE_PATH
-
-        return f"{base_path}/{self.dataset_id}/v{self.version}.zarr"
+    def k8s_secret_names(self) -> list[str]:
+        return [
+            self.primary_storage_config.k8s_secret_name,
+            *[config.k8s_secret_name for config in self.replica_storage_configs],
+        ]
 
     def primary_store(self) -> zarr.abc.store.Store:
-        if not Config.is_prod:
-            # This should work, but it gives FileNotFoundError when it should be creating a new zarr.
-            # return zarr.storage.FsspecStore.from_url(
-            #     "file://data/output/noaa/gefs/forecast/dev.zarr"
-            # )
-            local_path = Path(self.store_path).absolute()
-            return zarr.storage.LocalStore(local_path)
-
-        storage_options = self.storage_config.load_storage_options()
-        return zarr.storage.FsspecStore.from_url(
-            self.store_path, storage_options=storage_options
+        store_path = _get_store_path(
+            self.dataset_id,
+            self.version,
+            self.primary_storage_config.base_path,
         )
+
+        return _get_store(store_path, self.primary_storage_config)
+
+    def replica_stores(self) -> list[zarr.abc.store.Store]:
+        stores = []
+        for config in self.replica_storage_configs:
+            store_path = _get_store_path(
+                self.dataset_id,
+                self.version,
+                config.base_path,
+            )
+            store = _get_store(store_path, config)
+            stores.append(store)
+
+        return stores
 
     def mode(self) -> Literal["w", "w-"]:
         return "w" if self.version == "dev" else "w-"
@@ -116,12 +121,35 @@ class StoreFactory(FrozenBaseModel):
         The filesystem type depends on the store_path (e.g., LocalFileSystem
         for file://, S3FileSystem for s3://, etc.).
         """
-        storage_options = self.storage_config.load_storage_options()
-        fs, relative_path = fsspec.core.url_to_fs(self.store_path, **storage_options)
+        store_path = _get_store_path(
+            self.dataset_id,
+            self.version,
+            self.primary_storage_config.base_path,
+        )
+        storage_options = self.primary_storage_config.load_storage_options()
+
+        fs, relative_path = fsspec.core.url_to_fs(store_path, **storage_options)
         assert isinstance(fs, fsspec.spec.AbstractFileSystem)
+
         return fs, relative_path
 
 
 @cache
 def get_local_tmp_store() -> Path:
     return Path(f"data/tmp/{uuid4()}-tmp.zarr").absolute()
+
+
+def _get_store_path(dataset_id: str, version: str, base_path: str) -> str:
+    if not Config.is_prod:
+        base_path = _LOCAL_ZARR_STORE_BASE_PATH
+
+    return f"{base_path}/{dataset_id}/v{version}.zarr"
+
+
+def _get_store(store_path: str, storage_config: StorageConfig) -> zarr.abc.store.Store:
+    if not Config.is_prod:
+        return zarr.storage.LocalStore(Path(store_path).absolute())
+
+    return zarr.storage.FsspecStore.from_url(
+        store_path, storage_options=storage_config.load_storage_options()
+    )

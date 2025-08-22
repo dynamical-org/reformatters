@@ -23,7 +23,7 @@ noop_storage_config = StorageConfig(
 
 
 def test_backfill_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    dataset = UarizonaSwannAnalysisDataset(storage_config=noop_storage_config)
+    dataset = UarizonaSwannAnalysisDataset(primary_storage_config=noop_storage_config)
     # Dataset starts at 1981-10-01
     dataset.backfill_local(append_dim_end=pd.Timestamp("1981-10-02"))
     ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
@@ -36,7 +36,7 @@ def test_backfill_local(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
 
 
 def test_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    dataset = UarizonaSwannAnalysisDataset(storage_config=noop_storage_config)
+    dataset = UarizonaSwannAnalysisDataset(primary_storage_config=noop_storage_config)
     # Dataset starts at 1981-10-01
     dataset.backfill_local(append_dim_end=pd.Timestamp("1981-10-02"))
     ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
@@ -67,7 +67,7 @@ def test_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
 
 
 def test_update_template_trimming(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    dataset = UarizonaSwannAnalysisDataset(storage_config=noop_storage_config)
+    dataset = UarizonaSwannAnalysisDataset(primary_storage_config=noop_storage_config)
     # Dataset starts at 1981-10-01
     dataset.backfill_local(append_dim_end=pd.Timestamp("1981-10-02"))
     ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)

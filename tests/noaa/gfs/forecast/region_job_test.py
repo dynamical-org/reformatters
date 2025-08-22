@@ -16,7 +16,7 @@ from reformatters.noaa.gfs.forecast.template_config import NoaaGfsForecastTempla
 @pytest.fixture
 def store_factory() -> StoreFactory:
     return StoreFactory(
-        storage_config=StorageConfig(
+        primary_storage_config=StorageConfig(
             base_path="fake-prod-path",
             format=DatasetFormat.ZARR3,
         ),
@@ -147,7 +147,7 @@ def test_operational_update_jobs(
 ) -> None:
     template_config = NoaaGfsForecastTemplateConfig()
     store_factory = StoreFactory(
-        storage_config=StorageConfig(
+        primary_storage_config=StorageConfig(
             base_path="fake-prod-path",
             format=DatasetFormat.ZARR3,
         ),

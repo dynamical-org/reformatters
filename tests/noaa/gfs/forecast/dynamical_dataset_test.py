@@ -16,7 +16,7 @@ from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 def test_backfill_local_and_operational_update(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
-    dataset = NoaaGfsForecastDataset(storage_config=NOOP_STORAGE_CONFIG)
+    dataset = NoaaGfsForecastDataset(primary_storage_config=NOOP_STORAGE_CONFIG)
 
     init_time_start = dataset.template_config.append_dim_start
     init_time_end = init_time_start + timedelta(hours=12)
@@ -105,7 +105,7 @@ def test_backfill_local_and_operational_update(
 
     # 2. Operational update
     # Set "now" to just past the 12 UTC init time so we add a third init_time step
-    dataset = NoaaGfsForecastDataset(storage_config=NOOP_STORAGE_CONFIG)
+    dataset = NoaaGfsForecastDataset(primary_storage_config=NOOP_STORAGE_CONFIG)
     monkeypatch.setattr(
         pd.Timestamp, "now", classmethod(lambda cls: pd.Timestamp("2021-05-01T14:00"))
     )
@@ -153,19 +153,19 @@ def test_backfill_local_and_operational_update(
 
 
 def test_operational_kubernetes_resources() -> None:
-    dataset = NoaaGfsForecastDataset(storage_config=NOOP_STORAGE_CONFIG)
+    dataset = NoaaGfsForecastDataset(primary_storage_config=NOOP_STORAGE_CONFIG)
     cron_jobs = dataset.operational_kubernetes_resources("test-image-tag")
 
     assert len(cron_jobs) == 2
     update_cron_job, validation_cron_job = cron_jobs
     assert update_cron_job.name == f"{dataset.dataset_id}-operational-update"
     assert validation_cron_job.name == f"{dataset.dataset_id}-validation"
-    assert update_cron_job.secret_names == [dataset.storage_config.k8s_secret_name]
-    assert validation_cron_job.secret_names == [dataset.storage_config.k8s_secret_name]
+    assert update_cron_job.secret_names == dataset.store_factory.k8s_secret_names()
+    assert validation_cron_job.secret_names == dataset.store_factory.k8s_secret_names()
 
 
 def test_validators() -> None:
-    dataset = NoaaGfsForecastDataset(storage_config=NOOP_STORAGE_CONFIG)
+    dataset = NoaaGfsForecastDataset(primary_storage_config=NOOP_STORAGE_CONFIG)
     validators = tuple(dataset.validators())
     assert len(validators) == 2
     assert all(isinstance(v, validation.DataValidator) for v in validators)
