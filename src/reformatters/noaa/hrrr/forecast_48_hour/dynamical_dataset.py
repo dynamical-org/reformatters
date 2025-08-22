@@ -58,7 +58,7 @@ class NoaaHrrrForecast48HourDataset(DynamicalDataset[HRRRDataVar, HRRRSourceFile
         #     memory="24G",  # Large memory for GRIB processing and zarr chunks
         #     shared_memory="8Gi",  # Shared memory for parallel processing
         #     ephemeral_storage="50G",  # HRRR files can be large
-        #     secret_names=[self.storage_config.k8s_secret_name],
+        #     secret_names=self.store_factory.k8s_secret_names(),
         # )
 
         # # Validation job - run 1 hour after operational update
@@ -70,7 +70,7 @@ class NoaaHrrrForecast48HourDataset(DynamicalDataset[HRRRDataVar, HRRRSourceFile
         #     dataset_id=self.dataset_id,
         #     cpu="2",
         #     memory="8G",
-        #     secret_names=[self.storage_config.k8s_secret_name],
+        #     secret_names=self.store_factory.k8s_secret_names(),
         # )
 
         # return [operational_update_cron_job, validation_cron_job]

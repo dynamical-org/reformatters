@@ -248,7 +248,9 @@ def reformat_operational_update(job_name: str) -> None:
                     template.APPEND_DIMENSION,
                     tmp_store,
                     primary_store,
-                    partial(progress_tracker.record_completion, data_var.name),
+                    track_progress_callback=partial(
+                        progress_tracker.record_completion, data_var.name
+                    ),
                 )
             )
             for (init_time, ensemble_member), max_lead_time in max_lead_times.items():

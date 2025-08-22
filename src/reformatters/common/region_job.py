@@ -101,7 +101,7 @@ def region_slice(s: slice) -> slice:
 
 
 class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
-    primary_store_factory: StoreFactory
+    store_factory: StoreFactory
     tmp_store: Path
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
@@ -266,7 +266,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     @classmethod
     def operational_update_jobs(
         cls,
-        primary_store_factory: StoreFactory,
+        store_factory: StoreFactory,
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
@@ -291,7 +291,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         Parameters
         ----------
-        primary_store_factory : StoreFactory
+        store_factory : StoreFactory
             The factory to get the primary store to read existing data from and write updates to.
         tmp_store : Path
             The temporary Zarr store to write into while processing.
@@ -331,7 +331,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def get_jobs(
         cls,
         kind: Literal["backfill", "operational-update"],
-        primary_store_factory: StoreFactory,
+        store_factory: StoreFactory,
         tmp_store: Path,
         template_ds: xr.Dataset,
         append_dim: AppendDim,
@@ -357,7 +357,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         Parameters
         ----------
-        primary_store_factory : StoreFactory
+        store_factory : StoreFactory
             The factory to get the primary store to read existing data from and write updates to.
         tmp_store : Path
             The temporary Zarr store to write into while processing.
@@ -442,7 +442,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         all_jobs = [
             cls(
-                primary_store_factory=primary_store_factory,
+                store_factory=store_factory,
                 tmp_store=tmp_store,
                 template_ds=template_ds,
                 data_vars=data_var_group,
@@ -477,12 +477,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         processing_region_ds, output_region_ds = self._get_region_datasets()
 
-        primary_store = self.primary_store_factory.store()
+        primary_store = self.store_factory.primary_store()
+        replica_stores = self.store_factory.replica_stores()
 
         progress_tracker = UpdateProgressTracker(
             self.reformat_job_name,
             self.region.start,
-            self.primary_store_factory,
+            self.store_factory,
         )
         data_vars_to_process: Sequence[DATA_VAR] = progress_tracker.get_unprocessed(
             self.data_vars
@@ -558,7 +559,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                             self.append_dim,
                             self.tmp_store,
                             primary_store,
-                            partial(progress_tracker.record_completion, data_var.name),
+                            replica_stores=replica_stores,
+                            track_progress_callback=partial(
+                                progress_tracker.record_completion, data_var.name
+                            ),
                         )
                     )
 

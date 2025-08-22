@@ -9,7 +9,7 @@ from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 
 @pytest.fixture
 def dataset() -> NoaaHrrrForecast48HourDataset:
-    return NoaaHrrrForecast48HourDataset(storage_config=NOOP_STORAGE_CONFIG)
+    return NoaaHrrrForecast48HourDataset(primary_storage_config=NOOP_STORAGE_CONFIG)
 
 
 def test_template_config(dataset: NoaaHrrrForecast48HourDataset) -> None:

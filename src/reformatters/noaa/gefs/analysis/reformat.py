@@ -30,10 +30,7 @@ from reformatters.common.logging import get_logger
 from reformatters.common.reformat_utils import ChunkFilters
 from reformatters.common.storage import get_local_tmp_store
 from reformatters.common.types import DatetimeLike
-from reformatters.common.zarr import (
-    copy_data_var,
-    copy_zarr_metadata,
-)
+from reformatters.common.zarr import copy_data_var, copy_zarr_metadata
 from reformatters.noaa.gefs.analysis import template
 from reformatters.noaa.gefs.analysis.reformat_internals import (
     group_data_vars_by_gefs_file_type,
@@ -254,7 +251,9 @@ def reformat_operational_update(job_name: str) -> None:
                     append_dim,
                     tmp_store,
                     primary_store,
-                    partial(progress_tracker.record_completion, data_var.name),
+                    track_progress_callback=partial(
+                        progress_tracker.record_completion, data_var.name
+                    ),
                 )
             )
 

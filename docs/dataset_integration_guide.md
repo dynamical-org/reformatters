@@ -45,7 +45,7 @@ from reformatters.provider.model.variant import ProviderModelVariantDataset
 
 DYNAMICAL_DATASETS = [
     ...,
-    ProviderModelVariantDataset(storage_config=SourceCoopDatasetStorageConfig()),
+    ProviderModelVariantDataset(primary_storage_config=SourceCoopDatasetStorageConfig()),
 ]
 ```
 
