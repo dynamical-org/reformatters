@@ -11,7 +11,7 @@ import pytest
 import xarray as xr
 from pydantic import computed_field
 
-from reformatters.common import template_utils, validation
+from reformatters.common import storage, template_utils, validation
 from reformatters.common.config import Config
 from reformatters.common.config_models import (
     BaseInternalAttrs,
@@ -205,13 +205,40 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
+        replica_storage_configs=[
+            ExampleDatasetStorageConfig(
+                base_path="s3://replica-bucket-a/path",
+                format=DatasetFormat.ZARR3,
+            ),
+            ExampleDatasetStorageConfig(
+                base_path="s3://replica-bucket-b/path",
+                format=DatasetFormat.ZARR3,
+            ),
+        ],
     )
+    _original_get_store_path = storage._get_store_path
+
+    def _get_store_path(dataset_id: str, version: str, base_path: str) -> str:
+        if base_path == "s3://replica-bucket-a/path":
+            return str(tmp_path / "replica-bucket-a" / f"{dataset_id}/v{version}.zarr")
+        elif base_path == "s3://replica-bucket-b/path":
+            return str(tmp_path / "replica-bucket-b" / f"{dataset_id}/v{version}.zarr")
+        else:
+            return _original_get_store_path(dataset_id, version, base_path)
+
+    monkeypatch.setattr(storage, "_get_store_path", _get_store_path)
 
     dataset.backfill_local(pd.Timestamp("2000-01-02"))
 
     assert (
         xr.open_zarr(dataset.store_factory.primary_store()).attrs["cool"] == "weather"
     )
+
+    for replica_store in dataset.store_factory.replica_stores():
+        assert xr.open_zarr(replica_store).attrs["cool"] == "weather", (
+            "replica store should have the same metadata as the primary store"
+        )
+
     process_backfill_region_jobs_mock.assert_called_once_with(
         pd.Timestamp("2000-01-02"),
         worker_index=0,
@@ -289,12 +316,19 @@ def test_validate_dataset_calls_validators_and_uses_primary_store(
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
+        replica_storage_configs=[
+            ExampleDatasetStorageConfig(
+                base_path="s3://replica-bucket-a/path",
+                format=DatasetFormat.ZARR3,
+            ),
+        ],
     )
     store_factory = Mock()
     mock_store = Mock()
+    mock_replica_store = Mock()
     monkeypatch.setattr(ExampleDataset, "store_factory", store_factory)
     monkeypatch.setattr(store_factory, "primary_store", lambda: mock_store)
-    monkeypatch.setattr(store_factory, "replica_stores", list)
+    monkeypatch.setattr(store_factory, "replica_stores", lambda: [mock_replica_store])
 
     dataset.validate_dataset("example-job-name")
 
@@ -302,7 +336,11 @@ def test_validate_dataset_calls_validators_and_uses_primary_store(
     # this implies
     # - self.store_factory.primary_store() was called and returned our mock_store
     # - self.validators() was called and returned our mock_validators
-    mock_validate.assert_called_once_with(mock_store, validators=mock_validators)
+    assert mock_validate.call_count == 2
+
+    # Check that it was called with both stores
+    mock_validate.assert_any_call(mock_store, validators=mock_validators)
+    mock_validate.assert_any_call(mock_replica_store, validators=mock_validators)
 
 
 def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> None:
