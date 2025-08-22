@@ -100,6 +100,10 @@ class StoreFactory(FrozenBaseModel):
         return _get_store(store_path, self.primary_storage_config)
 
     def replica_stores(self) -> list[zarr.abc.store.Store]:
+        # Disable replica stores in dev environment
+        if Config.is_dev:
+            return []
+
         stores = []
         for config in self.replica_storage_configs:
             store_path = _get_store_path(
