@@ -35,7 +35,7 @@ EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR = pd.Series(
 
 class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
     # HRRR uses a projected coordinate system with x/y dimensions
-    dims: tuple[Dim, ...] = ("init_time", "lead_time", "x", "y")
+    dims: tuple[Dim, ...] = ("init_time", "lead_time", "y", "x")
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = pd.Timestamp("2018-07-13T12:00")  # start of HRRR v3
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
@@ -63,8 +63,8 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                 self.append_dim_start + self.append_dim_frequency
             ),
             "lead_time": pd.timedelta_range("0h", "48h", freq=pd.Timedelta("1h")),
-            "x": np.arange(1799),  # x-dimension for projected coordinates
             "y": np.arange(1059),  # y-dimension for projected coordinates
+            "x": np.arange(1799),  # x-dimension for projected coordinates
         }
 
     def derive_coordinates(
