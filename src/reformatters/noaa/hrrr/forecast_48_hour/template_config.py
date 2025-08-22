@@ -127,7 +127,8 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                 ("init_time",),
                 expected_lengths.values,
             ),
-            # Latitude and longitude as 2D coordinates over y,x
+            "y": y_coords,
+            "x": x_coords,
             "latitude": (("y", "x"), lats),
             "longitude": (("y", "x"), lons),
         }
