@@ -23,6 +23,14 @@ from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
 )
 
 
+class NoaaHrrrAwsOpenDataDatasetStorageConfig(StorageConfig):
+    """Configuration for the storage of a AWS Open Data dataset."""
+
+    base_path: str = "s3://dynamical-noaa-hrrr"
+    k8s_secret_name: str = "aws-open-data-storage-options-key"  # noqa:S105
+    format: DatasetFormat = DatasetFormat.ZARR3
+
+
 class SourceCoopDatasetStorageConfig(StorageConfig):
     """Configuration for the storage of a SourceCoop dataset."""
 
@@ -54,7 +62,9 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     ),
     NoaaGfsForecastDataset(storage_config=SourceCoopDatasetStorageConfig()),
     DwdIconEuForecastDataset(storage_config=SourceCoopDatasetStorageConfig()),
-    NoaaHrrrForecast48HourDataset(storage_config=SourceCoopDatasetStorageConfig()),
+    NoaaHrrrForecast48HourDataset(
+        storage_config=NoaaHrrrAwsOpenDataDatasetStorageConfig()
+    ),
 ]
 
 if Config.is_sentry_enabled:
