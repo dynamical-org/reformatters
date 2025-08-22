@@ -17,7 +17,7 @@ def test_template_config(dataset: NoaaHrrrForecast48HourDataset) -> None:
     template_config = dataset.template_config
 
     # Check basic attributes - HRRR uses x/y projected coordinates
-    assert template_config.dims == ("init_time", "lead_time", "x", "y")
+    assert template_config.dims == ("init_time", "lead_time", "y", "x")
     assert template_config.append_dim == "init_time"
     assert template_config.append_dim_frequency.total_seconds() == 6 * 3600  # 6 hours
 
