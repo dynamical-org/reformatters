@@ -11,7 +11,7 @@ import pandas as pd
 import sentry_sdk
 import typer
 import xarray as xr
-from pydantic import computed_field
+from pydantic import Field, computed_field
 
 from reformatters.common import docker, template_utils, validation
 from reformatters.common.config import Config
@@ -43,13 +43,15 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     template_config: TemplateConfig[DATA_VAR]
     region_job_class: type[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
 
-    storage_config: StorageConfig
+    primary_storage_config: StorageConfig
+    replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def primary_store_factory(self) -> StoreFactory:
+    def store_factory(self) -> StoreFactory:
         return StoreFactory(
-            storage_config=self.storage_config,
+            primary_storage_config=self.primary_storage_config,
+            replica_storage_configs=self.replica_storage_configs,
             dataset_id=self.dataset_id,
             template_config_version=self.template_config.version,
         )
@@ -71,7 +73,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             memory="30G",
             shared_memory="12G",
             ephemeral_storage="30G",
-            secret_names=[self.storage_config.k8s_secret_name],
+            secret_names=self.store_factory.k8s_secret_names(),
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validation",
@@ -81,7 +83,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             dataset_id=self.dataset_id,
             cpu="1.3",
             memory="7G",
-            secret_names=[self.storage_config.k8s_secret_name],
+            secret_names=self.store_factory.k8s_secret_names(),
         )
 
         return [operational_update_cron_job, validation_cron_job]
@@ -127,7 +129,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             tmp_store = self._tmp_store()
 
             jobs, template_ds = self.region_job_class.operational_update_jobs(
-                primary_store_factory=self.primary_store_factory,
+                store_factory=self.store_factory,
                 tmp_store=tmp_store,
                 get_template_fn=self._get_template,
                 append_dim=self.template_config.append_dim,
@@ -136,16 +138,23 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
             template_utils.write_metadata(template_ds, tmp_store)
 
+            primary_store = self.store_factory.primary_store()
+            replica_stores = self.store_factory.replica_stores()
+
             for job in jobs:
                 process_results = job.process()
                 updated_template = job.update_template_with_results(process_results)
                 # overwrite the tmp store metadata with updated template
                 template_utils.write_metadata(updated_template, tmp_store)
-                primary_store = self.primary_store_factory.store()
-                copy_zarr_metadata(updated_template, tmp_store, primary_store)
+                copy_zarr_metadata(
+                    updated_template,
+                    tmp_store,
+                    primary_store,
+                    replica_stores=replica_stores,
+                )
 
         logger.info(
-            f"Operational update complete. Wrote to store: {self.primary_store_factory.store()}"
+            f"Operational update complete. Wrote to primary store: {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()} replicas"
         )
 
     def backfill_kubernetes(
@@ -163,12 +172,12 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         image_tag = docker_image or docker.build_and_push_image()
 
         template_ds = self._get_template(append_dim_end)
-        template_utils.write_metadata(template_ds, self.primary_store_factory)
+        template_utils.write_metadata(template_ds, self.store_factory)
 
         num_jobs = len(
             self.region_job_class.get_jobs(
                 kind="backfill",
-                primary_store_factory=self.primary_store_factory,
+                store_factory=self.store_factory,
                 tmp_store=self._tmp_store(),
                 template_ds=template_ds,
                 append_dim=self.template_config.append_dim,
@@ -233,7 +242,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     "pod_active_deadline",
                 }
             ),
-            secret_names=[self.storage_config.k8s_secret_name],
+            secret_names=self.store_factory.k8s_secret_names(),
         )
         subprocess.run(
             ["/usr/bin/kubectl", "apply", "-f", "-"],
@@ -255,7 +264,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> None:
         """Run dataset reformatting locally in this process."""
         template_ds = self._get_template(append_dim_end)
-        template_utils.write_metadata(template_ds, self.primary_store_factory)
+        template_utils.write_metadata(template_ds, self.store_factory)
 
         self.process_backfill_region_jobs(
             append_dim_end,
@@ -267,7 +276,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             filter_contains=filter_contains,
             filter_variable_names=filter_variable_names,
         )
-        logger.info(f"Done writing to {self.primary_store_factory.store()}")
+        logger.info(f"Done writing to {self.store_factory.primary_store()}")
 
     def process_backfill_region_jobs(
         self,
@@ -285,7 +294,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         region_jobs = self.region_job_class.get_jobs(
             kind="backfill",
-            primary_store_factory=self.primary_store_factory,
+            store_factory=self.store_factory,
             tmp_store=self._tmp_store(),
             template_ds=self._get_template(append_dim_end),
             append_dim=self.template_config.append_dim,
@@ -314,10 +323,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
         with self._monitor(ValidationCronJob, reformat_job_name):
-            store = self.primary_store_factory.store()
+            store = self.store_factory.primary_store()
             validation.validate_dataset(store, validators=self.validators())
+            logger.info(f"Done validating {store}")
 
-        logger.info(f"Done validating {store}")
+            for replica_store in self.store_factory.replica_stores():
+                validation.validate_dataset(replica_store, validators=self.validators())
+                logger.info(f"Done validating {replica_store}")
 
     def get_cli(
         self,

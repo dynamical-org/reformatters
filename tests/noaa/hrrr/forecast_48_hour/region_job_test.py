@@ -18,7 +18,7 @@ from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
 @pytest.fixture
 def store_factory() -> StoreFactory:
     return StoreFactory(
-        storage_config=StorageConfig(
+        primary_storage_config=StorageConfig(
             base_path="fake-prod-path",
             format=DatasetFormat.ZARR3,
         ),
@@ -146,7 +146,7 @@ def test_region_job_generate_source_file_coords(store_factory: StoreFactory) -> 
 
     # use `model_construct` to skip pydantic validation so we can pass mock stores
     region_job = NoaaHrrrForecast48HourRegionJob.model_construct(
-        primary_store_factory=store_factory,
+        store_factory=store_factory,
         tmp_store=Mock(),
         template_ds=test_ds,
         data_vars=template_config.data_vars[:1],  # Just one variable
@@ -191,7 +191,7 @@ def test_region_job_generate_source_file_coords_filters_hour_0(
     # Find a variable that doesn't have hour 0 values (if any)
     # For now, just test with a regular variable
     region_job = NoaaHrrrForecast48HourRegionJob.model_construct(
-        primary_store_factory=store_factory,
+        store_factory=store_factory,
         tmp_store=Mock(),
         template_ds=test_ds,
         data_vars=template_config.data_vars[:1],
@@ -226,7 +226,7 @@ def test_region_job_48h_forecasts(store_factory: StoreFactory) -> None:
     )
 
     region_job = NoaaHrrrForecast48HourRegionJob.model_construct(
-        primary_store_factory=store_factory,
+        store_factory=store_factory,
         tmp_store=Mock(),
         template_ds=test_ds,
         data_vars=template_config.data_vars[:1],
@@ -266,7 +266,7 @@ def test_region_job_download_file(
     )
 
     region_job = NoaaHrrrForecast48HourRegionJob.model_construct(
-        primary_store_factory=store_factory,
+        store_factory=store_factory,
         tmp_store=Mock(),
         template_ds=Mock(),
         data_vars=template_config.data_vars[:1],
@@ -313,7 +313,7 @@ def test_region_job_read_data(
     )
 
     region_job = NoaaHrrrForecast48HourRegionJob.model_construct(
-        primary_store_factory=store_factory,
+        store_factory=store_factory,
         tmp_store=Mock(),
         template_ds=Mock(),
         data_vars=template_config.data_vars[:1],

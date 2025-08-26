@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 import xarray as xr
@@ -41,6 +41,7 @@ def copy_data_var(
     append_dim: str,
     tmp_store: Path,
     primary_store: zarr.abc.store.Store,
+    replica_stores: Iterable[zarr.abc.store.Store] = (),
     track_progress_callback: Callable[[], None] | None = None,
 ) -> None:
     dim_index = template_ds[data_var_name].dims.index(append_dim)
@@ -49,15 +50,16 @@ def copy_data_var(
     assert dim_index == 0  # relative_dir format below assumes append dim is first
     relative_dir = f"{data_var_name}/c/{shard_index}/"
 
+    for replica_store in replica_stores:
+        logger.info(
+            f"Copying data var chunks to replica store ({replica_store}) for {relative_dir}."
+        )
+        _copy_data_var_chunks(tmp_store, relative_dir, replica_store)
+
     logger.info(
         f"Copying data var chunks to primary store ({primary_store}) for {relative_dir}."
     )
-
-    for file in tmp_store.glob(f"{relative_dir}**/*"):
-        if not file.is_file():
-            continue
-        key = str(file.relative_to(tmp_store))
-        sync_to_store(primary_store, key, file.read_bytes())
+    _copy_data_var_chunks(tmp_store, relative_dir, primary_store)
 
     if track_progress_callback is not None:
         track_progress_callback()
@@ -71,11 +73,24 @@ def copy_data_var(
         logger.warning(f"Failed to delete chunk after upload: {e}")
 
 
-def copy_zarr_metadata(
-    template_ds: xr.Dataset, tmp_store: Path, primary_store: zarr.abc.store.Store
+def _copy_data_var_chunks(
+    tmp_store: Path,
+    relative_dir: str,
+    store: zarr.abc.store.Store,
 ) -> None:
-    logger.info(f"Copying metadata to primary store ({primary_store}) from {tmp_store}")
+    for file in tmp_store.glob(f"{relative_dir}**/*"):
+        if not file.is_file():
+            continue
+        key = str(file.relative_to(tmp_store))
+        sync_to_store(store, key, file.read_bytes())
 
+
+def copy_zarr_metadata(
+    template_ds: xr.Dataset,
+    tmp_store: Path,
+    primary_store: zarr.abc.store.Store,
+    replica_stores: Iterable[zarr.abc.store.Store] = (),
+) -> None:
     metadata_files: list[Path] = []
 
     # The coordinate label arrays must be copied before the metadata.
@@ -87,9 +102,27 @@ def copy_zarr_metadata(
     metadata_files.append(tmp_store / "zarr.json")
     metadata_files.extend(tmp_store.glob("*/zarr.json"))
 
+    # It is important that we copy metadata to replica stores first
+    # Since the primary store is our reference store (to determine what data we have and what needs to be written)
+    # we only want to update its metadata once we are sure the replicas are up to date.
+    for replica_store in replica_stores:
+        logger.info(
+            f"Copying metadata to replica store ({replica_store}) from {tmp_store}"
+        )
+        _copy_metadata_files(metadata_files, tmp_store, replica_store)
+
+    logger.info(f"Copying metadata to primary store ({primary_store}) from {tmp_store}")
+    _copy_metadata_files(metadata_files, tmp_store, primary_store)
+
+
+def _copy_metadata_files(
+    metadata_files: list[Path],
+    tmp_store: Path,
+    store: zarr.abc.store.Store,
+) -> None:
     for file in metadata_files:
         relative_path = str(file.relative_to(tmp_store))
-        sync_to_store(primary_store, relative_path, file.read_bytes())
+        sync_to_store(store, relative_path, file.read_bytes())
 
 
 def sync_to_store(store: zarr.abc.store.Store, key: str, data: bytes) -> None:

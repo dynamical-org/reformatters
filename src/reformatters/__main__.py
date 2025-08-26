@@ -55,15 +55,15 @@ class UpstreamGriddedZarrsDatasetStorageConfig(StorageConfig):
 # are excluded here until they are refactored.
 DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     UarizonaSwannAnalysisDataset(
-        storage_config=UpstreamGriddedZarrsDatasetStorageConfig()
+        primary_storage_config=UpstreamGriddedZarrsDatasetStorageConfig()
     ),
     NoaaNdviCdrAnalysisDataset(
-        storage_config=UpstreamGriddedZarrsDatasetStorageConfig()
+        primary_storage_config=UpstreamGriddedZarrsDatasetStorageConfig()
     ),
-    NoaaGfsForecastDataset(storage_config=SourceCoopDatasetStorageConfig()),
-    DwdIconEuForecastDataset(storage_config=SourceCoopDatasetStorageConfig()),
+    NoaaGfsForecastDataset(primary_storage_config=SourceCoopDatasetStorageConfig()),
+    DwdIconEuForecastDataset(primary_storage_config=SourceCoopDatasetStorageConfig()),
     NoaaHrrrForecast48HourDataset(
-        storage_config=NoaaHrrrAwsOpenDataDatasetStorageConfig()
+        primary_storage_config=NoaaHrrrAwsOpenDataDatasetStorageConfig()
     ),
 ]
 

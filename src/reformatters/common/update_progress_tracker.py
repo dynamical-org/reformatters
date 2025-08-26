@@ -31,7 +31,7 @@ class UpdateProgressTracker:
         self.time_i_slice_start = time_i_slice_start
         self.queue: queue.Queue[str] = queue.Queue()
 
-        self.fs, relative_store_path = store_factory.fsspec_filesystem()
+        self.fs, relative_store_path = store_factory.primary_store_fsspec_filesystem()
         self.update_progress_dir = relative_store_path.replace(
             ".zarr", "_update_progress"
         )

@@ -214,7 +214,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
     @classmethod
     def operational_update_jobs(
         cls,
-        primary_store_factory: StoreFactory,
+        store_factory: StoreFactory,
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
@@ -241,7 +241,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
 
         Parameters
         ----------
-        primary_store_factory : StoreFactory
+        store_factory : StoreFactory
             The factory to get the primary store to read existing data from and write updates to.
         tmp_store : Path
             The temporary Zarr store to write into while processing.
@@ -262,14 +262,14 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
         xr.Dataset
             The template_ds for the operational update.
         """
-        # existing_ds = xr.open_zarr(primary_store_factory.store())
+        # existing_ds = xr.open_zarr(store_factory.primary_store())
         # append_dim_start = existing_ds[append_dim].max()
         # append_dim_end = pd.Timestamp.now()
         # template_ds = get_template_fn(append_dim_end)
 
         # jobs = cls.get_jobs(
         #     kind="operational-update",
-        #     primary_store_factory=primary_store_factory,
+        #     store_factory=store_factory,
         #     tmp_store=tmp_store,
         #     template_ds=template_ds,
         #     append_dim=append_dim,

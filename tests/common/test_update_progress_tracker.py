@@ -40,7 +40,7 @@ def create_example_datavar(name: str = "test_var") -> DataVar[BaseInternalAttrs]
 @pytest.fixture
 def store_factory() -> StoreFactory:
     return StoreFactory(
-        storage_config=StorageConfig(
+        primary_storage_config=StorageConfig(
             base_path="fake-prod-path",
             format=DatasetFormat.ZARR3,
         ),
@@ -53,8 +53,6 @@ def test_update_progress_tracker_initialization_with_existing_progress(
     store_factory: StoreFactory,
 ) -> None:
     """Test UpdateProgressTracker correctly loads existing processed variables"""
-    print(store_factory.store_path)
-
     tracker = UpdateProgressTracker("test-job", 0, store_factory)
 
     # Create existing progress file

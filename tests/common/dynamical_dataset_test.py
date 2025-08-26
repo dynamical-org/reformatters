@@ -11,7 +11,7 @@ import pytest
 import xarray as xr
 from pydantic import computed_field
 
-from reformatters.common import template_utils, validation
+from reformatters.common import storage, template_utils, validation
 from reformatters.common.config import Config
 from reformatters.common.config_models import (
     BaseInternalAttrs,
@@ -22,7 +22,7 @@ from reformatters.common.config_models import (
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.common.region_job import RegionJob, SourceFileCoord
-from reformatters.common.storage import DatasetFormat, StorageConfig
+from reformatters.common.storage import _NO_SECRET_NAME, DatasetFormat, StorageConfig
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 
@@ -90,7 +90,7 @@ class ExampleConfig(TemplateConfig[ExampleDataVar]):
 class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
     template_config: ExampleConfig = ExampleConfig()
     region_job_class: type[ExampleRegionJob] = ExampleRegionJob
-    storage_config: ExampleDatasetStorageConfig = ExampleDatasetStorageConfig()
+    primary_storage_config: ExampleDatasetStorageConfig = ExampleDatasetStorageConfig()
 
     def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
         return [
@@ -104,7 +104,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
                 memory="1G",
                 shared_memory="1G",
                 ephemeral_storage="1G",
-                secret_names=[self.storage_config.k8s_secret_name],
+                secret_names=self.store_factory.k8s_secret_names(),
             ),
             ValidationCronJob(
                 name=f"{self.dataset_id}-validation",
@@ -116,7 +116,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
                 memory="1G",
                 shared_memory="1G",
                 ephemeral_storage="1G",
-                secret_names=[self.storage_config.k8s_secret_name],
+                secret_names=self.store_factory.k8s_secret_names(),
             ),
         ]
 
@@ -205,13 +205,40 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
+        replica_storage_configs=[
+            ExampleDatasetStorageConfig(
+                base_path="s3://replica-bucket-a/path",
+                format=DatasetFormat.ZARR3,
+            ),
+            ExampleDatasetStorageConfig(
+                base_path="s3://replica-bucket-b/path",
+                format=DatasetFormat.ZARR3,
+            ),
+        ],
     )
+    _original_get_store_path = storage._get_store_path
+
+    def _get_store_path(dataset_id: str, version: str, base_path: str) -> str:
+        if base_path == "s3://replica-bucket-a/path":
+            return str(tmp_path / "replica-bucket-a" / f"{dataset_id}/v{version}.zarr")
+        elif base_path == "s3://replica-bucket-b/path":
+            return str(tmp_path / "replica-bucket-b" / f"{dataset_id}/v{version}.zarr")
+        else:
+            return _original_get_store_path(dataset_id, version, base_path)
+
+    monkeypatch.setattr(storage, "_get_store_path", _get_store_path)
 
     dataset.backfill_local(pd.Timestamp("2000-01-02"))
 
     assert (
-        xr.open_zarr(dataset.primary_store_factory.store()).attrs["cool"] == "weather"
+        xr.open_zarr(dataset.store_factory.primary_store()).attrs["cool"] == "weather"
     )
+
+    for replica_store in dataset.store_factory.replica_stores():
+        assert xr.open_zarr(replica_store).attrs["cool"] == "weather", (
+            "replica store should have the same metadata as the primary store"
+        )
+
     process_backfill_region_jobs_mock.assert_called_once_with(
         pd.Timestamp("2000-01-02"),
         worker_index=0,
@@ -243,9 +270,10 @@ def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
     )
-    primary_store_factory = Mock()
-    monkeypatch.setattr(ExampleDataset, "primary_store_factory", primary_store_factory)
-    monkeypatch.setattr(primary_store_factory, "store", lambda: tmp_path)
+    store_factory = Mock()
+    monkeypatch.setattr(ExampleDataset, "store_factory", store_factory)
+    monkeypatch.setattr(store_factory, "primary_store", lambda: tmp_path)
+    monkeypatch.setattr(store_factory, "k8s_secret_names", lambda: [_NO_SECRET_NAME])
 
     dataset.backfill_kubernetes(
         append_dim_end=datetime(2025, 1, 1),
@@ -288,19 +316,31 @@ def test_validate_dataset_calls_validators_and_uses_primary_store(
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
+        replica_storage_configs=[
+            ExampleDatasetStorageConfig(
+                base_path="s3://replica-bucket-a/path",
+                format=DatasetFormat.ZARR3,
+            ),
+        ],
     )
-    primary_store_factory = Mock()
+    store_factory = Mock()
     mock_store = Mock()
-    monkeypatch.setattr(ExampleDataset, "primary_store_factory", primary_store_factory)
-    monkeypatch.setattr(primary_store_factory, "store", lambda: mock_store)
+    mock_replica_store = Mock()
+    monkeypatch.setattr(ExampleDataset, "store_factory", store_factory)
+    monkeypatch.setattr(store_factory, "primary_store", lambda: mock_store)
+    monkeypatch.setattr(store_factory, "replica_stores", lambda: [mock_replica_store])
 
     dataset.validate_dataset("example-job-name")
 
     # Ensure validate_dataset was called with correct arguments
     # this implies
-    # - self.primary_store_factory.store() was called and returned our mock_store
+    # - self.store_factory.primary_store() was called and returned our mock_store
     # - self.validators() was called and returned our mock_validators
-    mock_validate.assert_called_once_with(mock_store, validators=mock_validators)
+    assert mock_validate.call_count == 2
+
+    # Check that it was called with both stores
+    mock_validate.assert_any_call(mock_store, validators=mock_validators)
+    mock_validate.assert_any_call(mock_replica_store, validators=mock_validators)
 
 
 def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> None:
