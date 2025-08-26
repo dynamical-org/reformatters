@@ -119,7 +119,9 @@ class StoreFactory(FrozenBaseModel):
     def mode(self) -> Literal["w", "w-"]:
         return "w" if self.version == "dev" else "w-"
 
-    def fsspec_filesystem(self) -> tuple[fsspec.spec.AbstractFileSystem, str]:
+    def primary_store_fsspec_filesystem(
+        self,
+    ) -> tuple[fsspec.spec.AbstractFileSystem, str]:
         """Returns a concrete filesystem implementation and relative path.
 
         The filesystem type depends on the store_path (e.g., LocalFileSystem
