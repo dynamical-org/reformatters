@@ -118,7 +118,7 @@ def read_hrrr_data(
 
             # HRRR data comes in as (y, x) but we need to transpose to (x, y)
             # to match our x, y dimension order in the template
-            return result.T
+            return result
 
     except Exception as e:
         raise ValueError(f"Failed to read data from {file_path}: {e}") from e
