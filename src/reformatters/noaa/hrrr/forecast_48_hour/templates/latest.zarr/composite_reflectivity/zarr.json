@@ -2,8 +2,8 @@
   "shape": [
     1,
     49,
-    1799,
-    1059
+    1059,
+    1799
   ],
   "data_type": "float32",
   "chunk_grid": {
@@ -78,8 +78,8 @@
   "dimension_names": [
     "init_time",
     "lead_time",
-    "x",
-    "y"
+    "y",
+    "x"
   ],
   "zarr_format": 3,
   "node_type": "array",
