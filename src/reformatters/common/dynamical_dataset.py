@@ -154,7 +154,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 )
 
         logger.info(
-            f"Operational update complete. Wrote to store: {self.store_factory.primary_store()} with {len(self.store_factory.replica_stores())} replicas"
+            f"Operational update complete. Wrote to primary store: {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()} replicas"
         )
 
     def backfill_kubernetes(
