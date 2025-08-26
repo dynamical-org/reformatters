@@ -44,7 +44,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     region_job_class: type[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
 
     primary_storage_config: StorageConfig
-    replica_storage_configs: list[StorageConfig] = Field(default_factory=list)
+    replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
 
     @computed_field  # type: ignore[prop-decorator]
     @property

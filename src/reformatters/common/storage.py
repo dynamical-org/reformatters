@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+from collections.abc import Sequence
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
@@ -69,7 +70,7 @@ class StorageConfig(FrozenBaseModel):
 
 class StoreFactory(FrozenBaseModel):
     primary_storage_config: StorageConfig
-    replica_storage_configs: list[StorageConfig] = Field(default_factory=list)
+    replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
     dataset_id: str
     template_config_version: str
 

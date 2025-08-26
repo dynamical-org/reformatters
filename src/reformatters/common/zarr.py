@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 import xarray as xr
@@ -41,12 +41,9 @@ def copy_data_var(
     append_dim: str,
     tmp_store: Path,
     primary_store: zarr.abc.store.Store,
-    replica_stores: list[zarr.abc.store.Store] | None = None,
+    replica_stores: Iterable[zarr.abc.store.Store] = (),
     track_progress_callback: Callable[[], None] | None = None,
 ) -> None:
-    if replica_stores is None:
-        replica_stores = []
-
     dim_index = template_ds[data_var_name].dims.index(append_dim)
     append_dim_shard_size = template_ds[data_var_name].encoding["shards"][dim_index]
     shard_index = i_slice.start // append_dim_shard_size
@@ -92,11 +89,8 @@ def copy_zarr_metadata(
     template_ds: xr.Dataset,
     tmp_store: Path,
     primary_store: zarr.abc.store.Store,
-    replica_stores: list[zarr.abc.store.Store] | None = None,
+    replica_stores: Iterable[zarr.abc.store.Store] = (),
 ) -> None:
-    if replica_stores is None:
-        replica_stores = []
-
     metadata_files: list[Path] = []
 
     # The coordinate label arrays must be copied before the metadata.
