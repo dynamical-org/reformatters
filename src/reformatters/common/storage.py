@@ -6,10 +6,13 @@ from enum import StrEnum
 from functools import cache
 from pathlib import Path
 from typing import Any, Literal, assert_never
+from urllib.parse import urlparse
 from uuid import uuid4
 
 import fsspec  # type: ignore
+import icechunk
 import zarr
+from icechunk.store import IcechunkStore
 from pydantic import Field, computed_field
 
 from reformatters.common import kubernetes
@@ -27,6 +30,7 @@ _NO_SECRET_NAME = "no-secret"  # noqa: S105
 
 class DatasetFormat(StrEnum):
     ZARR3 = "zarr3"
+    ICECHUNK = "icechunk"
 
 
 class StorageConfig(FrozenBaseModel):
@@ -154,9 +158,50 @@ def _get_store_path(dataset_id: str, version: str, base_path: str) -> str:
 
 
 def _get_store(store_path: str, storage_config: StorageConfig) -> zarr.abc.store.Store:
+    if storage_config.format == DatasetFormat.ICECHUNK:
+        return _get_icechunk_store(store_path, storage_config)
+
     if not Config.is_prod:
         return zarr.storage.LocalStore(Path(store_path).absolute())
 
     return zarr.storage.FsspecStore.from_url(
         store_path, storage_options=storage_config.load_storage_options()
     )
+
+
+def _get_icechunk_store(
+    store_path: str, storage_config: StorageConfig
+) -> IcechunkStore:
+    if Config.is_prod:
+        parsed_path = urlparse(store_path)
+
+        scheme = parsed_path.scheme
+        bucket = parsed_path.netloc
+        prefix = parsed_path.path.lstrip("/")
+
+        if scheme != "s3":
+            raise NotImplementedError(
+                f"Support for {scheme} stores is not currently implemented"
+            )
+
+        storage = icechunk.s3_storage(
+            bucket=bucket,
+            prefix=prefix,
+            **storage_config.load_storage_options(),
+        )
+    else:
+        storage = icechunk.local_filesystem_storage(store_path)
+
+    repo = icechunk.Repository.open_or_create(storage)
+    session = repo.writable_session("main")
+    return session.store
+
+
+def commit_if_icechunk(
+    message: str,
+    *stores: zarr.abc.store.Store,
+) -> None:
+    for store in stores:
+        if not isinstance(store, IcechunkStore):
+            continue
+        store.session.commit(message=message)
