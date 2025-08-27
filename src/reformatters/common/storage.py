@@ -197,11 +197,9 @@ def _get_icechunk_store(
     return session.store
 
 
-def commit_if_icechunk(
+def icechunk_commit(
     message: str,
-    *stores: zarr.abc.store.Store,
+    icechunk_stores: Sequence[IcechunkStore],
 ) -> None:
-    for store in stores:
-        if not isinstance(store, IcechunkStore):
-            continue
+    for store in icechunk_stores:
         store.session.commit(message=message)
