@@ -8,6 +8,7 @@ import dask.array
 import numpy as np
 import xarray as xr
 import zarr
+from icechunk.store import IcechunkStore
 
 from reformatters.common.config_models import Coordinate, DataVar
 from reformatters.common.logging import get_logger
@@ -48,16 +49,24 @@ def write_metadata(
         )
 
         for replica_store in replica_stores:
-            logger.info(
-                f"Writing metadata to replica store {replica_store} with mode {mode}"
-            )
-            template_ds.to_zarr(replica_store, mode=mode, compute=False)  # type: ignore[call-overload]
+            logger.info(f"Writing metadata to replica {replica_store} with mode {mode}")
+            _write_template_to_store(template_ds, replica_store, mode)
 
         logger.info(f"Writing metadata to primary store {store} with mode {mode}")
-        template_ds.to_zarr(store, mode=mode, compute=False)  # type: ignore[call-overload]
+        _write_template_to_store(template_ds, store, mode)
 
     if isinstance(store, Path | str):
         sort_consolidated_metadata(Path(store) / "zarr.json")
+
+
+def _write_template_to_store(
+    template_ds: xr.Dataset,
+    store: zarr.abc.store.Store | Path,
+    mode: Literal["w", "w-"],
+) -> None:
+    template_ds.to_zarr(store, mode=mode, compute=False)  # type: ignore[call-overload]
+    if isinstance(store, IcechunkStore):
+        store.session.commit(message="write metadata")
 
 
 def _get_mode_from_path_store(store: Path) -> Literal["w", "w-"]:
