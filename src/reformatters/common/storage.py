@@ -214,10 +214,26 @@ def commit_if_icechunk(
 
     By separating out the primary store from the replica stores, we are able
     to ensure that the replicas are updated before the primary.
+
+    Concurrency handling:
+
+    Dynamical datasets may be written in parallel across multiple Kubernetes jobs.
+    Because these jobs are each responsible for their own discrete region in the zarr,
+    we do not need to coordinate these separate writes. We therefore follow icechunk's
+    "Uncooperative distributed writes" strategy, see documentation:
+    https://icechunk.io/en/latest/parallel/#cooperative-distributed-writes.
+
+
+    Each job however may need to rebase before it is able to commit. We use the rebase_with
+    argument which will handle automatic retries until the commit succeeds.
     """
     for store in replica_stores:
         if isinstance(store, IcechunkStore):
-            store.session.commit(message=message)
+            store.session.commit(
+                message=message, rebase_with=icechunk.ConflictDetector()
+            )
 
     if isinstance(primary_store, IcechunkStore):
-        primary_store.session.commit(message=message)
+        primary_store.session.commit(
+            message=message, rebase_with=icechunk.ConflictDetector()
+        )
