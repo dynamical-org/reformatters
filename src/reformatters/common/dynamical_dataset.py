@@ -11,7 +11,6 @@ import pandas as pd
 import sentry_sdk
 import typer
 import xarray as xr
-from icechunk.store import IcechunkStore
 from pydantic import Field, computed_field
 
 from reformatters.common import docker, storage, template_utils, validation
@@ -151,16 +150,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     replica_stores=replica_stores,
                 )
 
-                icechunk_stores = [
-                    s
-                    for s in [primary_store, *replica_stores]
-                    if isinstance(s, IcechunkStore)
-                ]
-                if any(icechunk_stores):
-                    storage.icechunk_commit(
-                        f"Completed operational update for {job}",
-                        icechunk_stores,
-                    )
+                storage.commit_if_icechunk(
+                    f"Completed operational update for {job}",
+                    primary_store,
+                    replica_stores,
+                )
 
         logger.info(
             f"Operational update complete. Wrote to primary store: {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()} replicas"
@@ -326,15 +320,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         for region_job in region_jobs:
             _, primary_store, replica_stores = region_job.process()
 
-            icechunk_stores = [
-                s
-                for s in [primary_store, *replica_stores]
-                if isinstance(s, IcechunkStore)
-            ]
-            if any(icechunk_stores):
-                storage.icechunk_commit(
-                    f"Completed backfill for {region_job}", icechunk_stores
-                )
+            storage.commit_if_icechunk(
+                f"Completed backfill for {region_job}", primary_store, replica_stores
+            )
 
     def validate_dataset(
         self,

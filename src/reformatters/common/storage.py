@@ -203,3 +203,21 @@ def icechunk_commit(
 ) -> None:
     for store in icechunk_stores:
         store.session.commit(message=message)
+
+
+def commit_if_icechunk(
+    message: str,
+    primary_store: zarr.abc.store.Store | None,
+    replica_stores: Sequence[zarr.abc.store.Store],
+) -> None:
+    """Conveience function to handle committing to icechunk stores.
+
+    By separating out the primary store from the replica stores, we are able
+    to ensure that the replicas are updated before the primary.
+    """
+    for store in replica_stores:
+        if isinstance(store, IcechunkStore):
+            store.session.commit(message=message)
+
+    if isinstance(primary_store, IcechunkStore):
+        primary_store.session.commit(message=message)
