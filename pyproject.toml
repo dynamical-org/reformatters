@@ -22,6 +22,7 @@ dependencies = [
     "xarray>=2025.1.2",
     "zarr>=3.0.4",
     "kubernetes>=33.1.0",
+    "icechunk==1.1.4",
 ]
 
 [build-system]
