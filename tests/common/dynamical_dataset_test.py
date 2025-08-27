@@ -165,10 +165,25 @@ def test_process_backfill_region_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
         "get_jobs",
         classmethod(lambda cls, *args, **kwargs: [mock_job0, mock_job1]),
     )
+
     monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
+    )
+    mock_job0.process = Mock(
+        return_value=(
+            {},
+            dataset.store_factory.primary_store(),
+            dataset.store_factory.replica_stores(),
+        )
+    )
+    mock_job1.process = Mock(
+        return_value=(
+            {},
+            dataset.store_factory.primary_store(),
+            dataset.store_factory.replica_stores(),
+        )
     )
 
     dataset.process_backfill_region_jobs(
@@ -212,7 +227,7 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
             ),
             ExampleDatasetStorageConfig(
                 base_path="s3://replica-bucket-b/path",
-                format=DatasetFormat.ZARR3,
+                format=DatasetFormat.ICECHUNK,
             ),
         ],
     )
@@ -227,6 +242,14 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
             return _original_get_store_path(dataset_id, version, base_path)
 
     monkeypatch.setattr(storage, "_get_store_path", _get_store_path)
+
+    mock_job0.process = Mock(
+        return_value=(
+            {},
+            dataset.store_factory.primary_store(),
+            dataset.store_factory.replica_stores(),
+        )
+    )
 
     dataset.backfill_local(pd.Timestamp("2000-01-02"))
 

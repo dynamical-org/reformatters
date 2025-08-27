@@ -13,7 +13,7 @@ import typer
 import xarray as xr
 from pydantic import Field, computed_field
 
-from reformatters.common import docker, template_utils, validation
+from reformatters.common import docker, storage, template_utils, validation
 from reformatters.common.config import Config
 from reformatters.common.config_models import DataVar
 from reformatters.common.iterating import digest, item
@@ -138,11 +138,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
             template_utils.write_metadata(template_ds, tmp_store)
 
-            primary_store = self.store_factory.primary_store()
-            replica_stores = self.store_factory.replica_stores()
-
             for job in jobs:
-                process_results = job.process()
+                process_results, primary_store, replica_stores = job.process()
                 updated_template = job.update_template_with_results(process_results)
                 # overwrite the tmp store metadata with updated template
                 template_utils.write_metadata(updated_template, tmp_store)
@@ -151,6 +148,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     tmp_store,
                     primary_store,
                     replica_stores=replica_stores,
+                )
+                storage.commit_if_icechunk(
+                    f"Completed operational update for {job}",
+                    primary_store,
+                    *replica_stores,
                 )
 
         logger.info(
@@ -315,7 +317,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             f"This is {worker_index = }, {workers_total = }, {len(region_jobs)} jobs, {jobs_summary}"
         )
         for region_job in region_jobs:
-            region_job.process()
+            _, primary_store, replica_stores = region_job.process()
+            storage.commit_if_icechunk(
+                f"Completed backfill for {region_job}", primary_store, *replica_stores
+            )
 
     def validate_dataset(
         self,
