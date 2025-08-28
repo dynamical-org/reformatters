@@ -328,7 +328,6 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
 
-        # Defaults used for a few variables below
         default_window_reset_frequency = pd.Timedelta("1h")
         default_keep_mantissa_bits = 7
 
@@ -344,9 +343,9 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                 ),
                 internal_attrs=HRRRInternalAttrs(
                     grib_element="REFC",
-                    grib_description="REFC:entire atmosphere",  # TODO
-                    index_position=0,
-                    keep_mantissa_bits=10,
+                    grib_description="REFC:entire atmosphere",
+                    index_position=1,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                     grib_index_level="entire atmosphere",
                     hrrr_file_type="sfc",
                 ),
