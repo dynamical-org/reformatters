@@ -233,13 +233,13 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
     )
     _original_get_store_path = storage._get_store_path
 
-    def _get_store_path(dataset_id: str, version: str, base_path: str) -> str:
-        if base_path == "s3://replica-bucket-a/path":
+    def _get_store_path(
+        dataset_id: str, version: str, storage_config: StorageConfig
+    ) -> str:
+        if storage_config.base_path == "s3://replica-bucket-a/path":
             return str(tmp_path / "replica-bucket-a" / f"{dataset_id}/v{version}.zarr")
-        elif base_path == "s3://replica-bucket-b/path":
-            return str(tmp_path / "replica-bucket-b" / f"{dataset_id}/v{version}.zarr")
         else:
-            return _original_get_store_path(dataset_id, version, base_path)
+            return _original_get_store_path(dataset_id, version, storage_config)
 
     monkeypatch.setattr(storage, "_get_store_path", _get_store_path)
 

@@ -13,7 +13,7 @@ import fsspec  # type: ignore
 import icechunk
 import zarr
 from icechunk.store import IcechunkStore
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, field_validator
 
 from reformatters.common import kubernetes
 from reformatters.common.config import Config, Env
@@ -78,6 +78,20 @@ class StoreFactory(FrozenBaseModel):
     dataset_id: str
     template_config_version: str
 
+    @field_validator("primary_storage_config")
+    @classmethod
+    def validate_primary_storage_not_icechunk(cls, v: StorageConfig) -> StorageConfig:
+        # Currently, we do not support icechunk stores for the primary store.
+        # This is because the format for the cloud storage credentials does not match
+        # the storage_options format that we pass to fsspec in primary_store_fsspec_filesystem.
+        #
+        # To support this, we will need to add a translation helper to be able to initialize
+        # the icechunk storage with the stored secrets and also to initialize the fsspec filesystem
+        # with those same values.
+        if v.format == DatasetFormat.ICECHUNK:
+            raise ValueError("Primary storage config cannot be set to Icechunk format.")
+        return v
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def version(self) -> str:
@@ -99,7 +113,7 @@ class StoreFactory(FrozenBaseModel):
         store_path = _get_store_path(
             self.dataset_id,
             self.version,
-            self.primary_storage_config.base_path,
+            self.primary_storage_config,
         )
 
         return _get_store(store_path, self.primary_storage_config)
@@ -111,11 +125,7 @@ class StoreFactory(FrozenBaseModel):
 
         stores = []
         for config in self.replica_storage_configs:
-            store_path = _get_store_path(
-                self.dataset_id,
-                self.version,
-                config.base_path,
-            )
+            store_path = _get_store_path(self.dataset_id, self.version, config)
             store = _get_store(store_path, config)
             stores.append(store)
 
@@ -135,7 +145,7 @@ class StoreFactory(FrozenBaseModel):
         store_path = _get_store_path(
             self.dataset_id,
             self.version,
-            self.primary_storage_config.base_path,
+            self.primary_storage_config,
         )
         storage_options = self.primary_storage_config.load_storage_options()
 
@@ -150,23 +160,44 @@ def get_local_tmp_store() -> Path:
     return Path(f"data/tmp/{uuid4()}-tmp.zarr").absolute()
 
 
-def _get_store_path(dataset_id: str, version: str, base_path: str) -> str:
-    if not Config.is_prod:
+def _get_store_path(
+    dataset_id: str, version: str, storage_config: StorageConfig
+) -> str:
+    if Config.is_prod:
+        base_path = storage_config.base_path
+    else:
         base_path = _LOCAL_ZARR_STORE_BASE_PATH
 
-    return f"{base_path}/{dataset_id}/v{version}.zarr"
+    match storage_config.format:
+        case DatasetFormat.ZARR3:
+            extension = ".zarr"
+        case DatasetFormat.ICECHUNK:
+            extension = ".icechunk"
+        case _ as unreachable:
+            assert_never(unreachable)
+
+    return f"{base_path}/{dataset_id}/v{version}.{extension}"
 
 
 def _get_store(store_path: str, storage_config: StorageConfig) -> zarr.abc.store.Store:
-    if storage_config.format == DatasetFormat.ICECHUNK:
-        return _get_icechunk_store(store_path, storage_config)
+    match storage_config.format:
+        case DatasetFormat.ICECHUNK:
+            return _get_icechunk_store(store_path, storage_config)
+        case DatasetFormat.ZARR3:
+            return _get_zarr3_store(store_path, storage_config)
+        case _ as unreachable:
+            assert_never(unreachable)
 
-    if not Config.is_prod:
+
+def _get_zarr3_store(
+    store_path: str, storage_config: StorageConfig
+) -> zarr.abc.store.Store:
+    if Config.is_prod:
+        return zarr.storage.FsspecStore.from_url(
+            store_path, storage_options=storage_config.load_storage_options()
+        )
+    else:
         return zarr.storage.LocalStore(Path(store_path).absolute())
-
-    return zarr.storage.FsspecStore.from_url(
-        store_path, storage_options=storage_config.load_storage_options()
-    )
 
 
 def _get_icechunk_store(
@@ -179,16 +210,20 @@ def _get_icechunk_store(
         bucket = parsed_path.netloc
         prefix = parsed_path.path.lstrip("/")
 
-        if scheme != "s3":
-            raise NotImplementedError(
-                f"Support for {scheme} stores is not currently implemented"
-            )
-
-        storage = icechunk.s3_storage(
-            bucket=bucket,
-            prefix=prefix,
-            **storage_config.load_storage_options(),
-        )
+        match scheme:
+            case "s3":
+                storage = icechunk.s3_storage(
+                    bucket=bucket,
+                    prefix=prefix,
+                    **storage_config.load_storage_options(),
+                )
+            case _:
+                # We are currently only working with s3 stores (and s3 compatible stores like R2).
+                # Icechunk supports additional storage backends, which we can add support for
+                # as needed. See https://icechunk.io/en/latest/storage/
+                raise ValueError(
+                    f"{scheme} Icechunk stores are not currently supported."
+                )
     else:
         storage = icechunk.local_filesystem_storage(store_path)
 
@@ -197,17 +232,9 @@ def _get_icechunk_store(
     return session.store
 
 
-def icechunk_commit(
-    message: str,
-    icechunk_stores: Sequence[IcechunkStore],
-) -> None:
-    for store in icechunk_stores:
-        store.session.commit(message=message)
-
-
 def commit_if_icechunk(
     message: str,
-    primary_store: zarr.abc.store.Store | None,
+    primary_store: zarr.storage.StoreLike,
     replica_stores: Sequence[zarr.abc.store.Store],
 ) -> None:
     """Conveience function to handle committing to icechunk stores.

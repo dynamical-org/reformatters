@@ -8,7 +8,6 @@ import dask.array
 import numpy as np
 import xarray as xr
 import zarr
-from icechunk.store import IcechunkStore
 
 from reformatters.common.config_models import Coordinate, DataVar
 from reformatters.common.logging import get_logger
@@ -60,7 +59,7 @@ def write_metadata(
 
     commit_if_icechunk(
         message="write metadata",
-        primary_store=store if isinstance(store, IcechunkStore) else None,
+        primary_store=store,
         replica_stores=replica_stores,
     )
 
