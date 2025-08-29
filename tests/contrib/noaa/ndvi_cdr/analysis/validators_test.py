@@ -11,10 +11,10 @@ from reformatters.contrib.noaa.ndvi_cdr.analysis.validators import (
 
 
 def test_check_data_is_current_success(monkeypatch: MonkeyPatch) -> None:
-    """Test passes when data is current within the last 4 days."""
+    """Test passes when data is current within the allowed delay window."""
     monkeypatch.setattr(pd.Timestamp, "now", lambda: pd.Timestamp("2024-01-05"))
 
-    # Create data within the last 4 days
+    # Create data within the allowed delay window
     times = pd.date_range("2024-01-01", periods=3, freq="1D")
     data = np.ones((3, 3, 3))
     ds = xr.Dataset(
@@ -25,14 +25,14 @@ def test_check_data_is_current_success(monkeypatch: MonkeyPatch) -> None:
     result = check_data_is_current(ds)
 
     assert result.passed is True
-    assert "Data found for the last 4 days" in result.message
+    assert "Data found for the allowed delay window" in result.message
 
 
 def test_check_data_is_current_failure(monkeypatch: MonkeyPatch) -> None:
-    """Test fails when no data is found within the last 4 days."""
-    monkeypatch.setattr(pd.Timestamp, "now", lambda: pd.Timestamp("2024-01-10"))
+    """Test fails when no data is found within the allowed delay window."""
+    monkeypatch.setattr(pd.Timestamp, "now", lambda: pd.Timestamp("2024-01-20"))
 
-    # Create data older than 4 days
+    # Create data older than the allowed delay window
     times = pd.date_range("2024-01-01", periods=3, freq="1D")
     data = np.ones((3, 3, 3))
     ds = xr.Dataset(
@@ -43,7 +43,7 @@ def test_check_data_is_current_failure(monkeypatch: MonkeyPatch) -> None:
     result = check_data_is_current(ds)
 
     assert result.passed is False
-    assert "No data found for the last 4 days" in result.message
+    assert "No data found for the allowed delay window" in result.message
 
 
 def test_check_data_is_current_success_with_nonzero_time(
@@ -54,7 +54,7 @@ def test_check_data_is_current_success_with_nonzero_time(
         pd.Timestamp, "now", lambda: pd.Timestamp("2024-01-05T14:30:00")
     )
 
-    # Create data within the last 4 days
+    # Create data within the allowed delay window
     times = pd.date_range("2024-01-02", periods=3, freq="1D")
     data = np.ones((3, 3, 3))
     ds = xr.Dataset(
@@ -65,7 +65,7 @@ def test_check_data_is_current_success_with_nonzero_time(
     result = check_data_is_current(ds)
 
     assert result.passed is True
-    assert "Data found for the last 4 days" in result.message
+    assert "Data found for the allowed delay window" in result.message
 
 
 @pytest.mark.parametrize(
