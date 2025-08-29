@@ -16,6 +16,11 @@ from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
 
 
 @pytest.fixture
+def template_config() -> NoaaHrrrForecast48HourTemplateConfig:
+    return NoaaHrrrForecast48HourTemplateConfig()
+
+
+@pytest.fixture
 def store_factory() -> StoreFactory:
     return StoreFactory(
         primary_storage_config=StorageConfig(
@@ -27,49 +32,61 @@ def store_factory() -> StoreFactory:
     )
 
 
-def test_source_file_coord_get_url() -> None:
+def test_source_file_coord_get_url(
+    template_config: NoaaHrrrForecast48HourTemplateConfig,
+) -> None:
     """Test URL generation for HRRR source file coordinates."""
     coord = HRRRSourceFileCoord(
         init_time=pd.Timestamp("2024-02-29T00:00"),
         lead_time=pd.Timedelta(hours=0),
         domain="conus",
         file_type="sfc",
+        data_vars=template_config.data_vars,
     )
     expected = "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t00z.wrfsfcf00.grib2"
     assert coord.get_url() == expected
 
 
-def test_source_file_coord_get_url_different_lead_time() -> None:
+def test_source_file_coord_get_url_different_lead_time(
+    template_config: NoaaHrrrForecast48HourTemplateConfig,
+) -> None:
     """Test URL generation for different lead times."""
     coord = HRRRSourceFileCoord(
         init_time=pd.Timestamp("2024-02-29T12:00"),
         lead_time=pd.Timedelta(hours=24),
         domain="conus",
         file_type="prs",
+        data_vars=template_config.data_vars,
     )
     expected = "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t12z.wrfprsf24.grib2"
     assert coord.get_url() == expected
 
 
-def test_source_file_coord_get_idx_url() -> None:
+def test_source_file_coord_get_idx_url(
+    template_config: NoaaHrrrForecast48HourTemplateConfig,
+) -> None:
     """Test index URL generation."""
     coord = HRRRSourceFileCoord(
         init_time=pd.Timestamp("2024-02-29T06:00"),
         lead_time=pd.Timedelta(hours=6),
         domain="conus",
         file_type="sfc",
+        data_vars=template_config.data_vars,
     )
     expected = "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t06z.wrfsfcf06.grib2.idx"
     assert coord.get_idx_url() == expected
 
 
-def test_source_file_coord_out_loc() -> None:
+def test_source_file_coord_out_loc(
+    template_config: NoaaHrrrForecast48HourTemplateConfig,
+) -> None:
     """Test output location mapping."""
     coord = HRRRSourceFileCoord(
         init_time=pd.Timestamp("2024-02-29T00:00"),
         lead_time=pd.Timedelta(hours=12),
         domain="conus",
         file_type="sfc",
+        data_vars=template_config.data_vars,
     )
 
     out_loc = coord.out_loc()
@@ -79,13 +96,16 @@ def test_source_file_coord_out_loc() -> None:
     }
 
 
-def test_source_file_coord_invalid_lead_time() -> None:
+def test_source_file_coord_invalid_lead_time(
+    template_config: NoaaHrrrForecast48HourTemplateConfig,
+) -> None:
     """Test that invalid lead times raise appropriate errors."""
     coord = HRRRSourceFileCoord(
         init_time=pd.Timestamp("2024-02-29T00:00"),
         lead_time=pd.Timedelta(minutes=30),  # 0.5 hours - not a whole hour
         domain="conus",
         file_type="sfc",
+        data_vars=template_config.data_vars[:1],
     )
 
     with pytest.raises(AssertionError):
@@ -263,6 +283,7 @@ def test_region_job_download_file(
         lead_time=pd.Timedelta(hours=0),
         domain="conus",
         file_type="sfc",
+        data_vars=template_config.data_vars[:3],
     )
 
     region_job = NoaaHrrrForecast48HourRegionJob.model_construct(
@@ -275,27 +296,42 @@ def test_region_job_download_file(
         reformat_job_name="test",
     )
 
-    # Mock the download_hrrr_file function directly to return a mock path
     mock_download_path = Path("/fake/downloaded/hrrr_file.grib2")
-    mock_download_hrrr_file = Mock(return_value=mock_download_path)
+    mock_http_download_to_disk = Mock(return_value=mock_download_path)
     monkeypatch.setattr(
-        "reformatters.noaa.hrrr.forecast_48_hour.region_job.download_hrrr_file",
-        mock_download_hrrr_file,
+        NoaaHrrrForecast48HourRegionJob,
+        "dataset_id",
+        "test-dataset-hrrr",
+    )
+
+    monkeypatch.setattr(
+        "reformatters.noaa.hrrr.forecast_48_hour.region_job.parse_hrrr_index_byte_ranges",
+        Mock(return_value=([0, 200], [100, 350])),
+    )
+    monkeypatch.setattr(
+        "reformatters.noaa.hrrr.forecast_48_hour.region_job.http_download_to_disk",
+        mock_http_download_to_disk,
     )
 
     result = region_job.download_file(coord)
 
-    # Verify the result
     assert result == mock_download_path
 
-    # Verify download_hrrr_file was called correctly
-    mock_download_hrrr_file.assert_called_once_with(
-        init_time=coord.init_time,
-        lead_time=coord.lead_time,
-        domain=coord.domain,
-        file_type=coord.file_type,
-        data_vars=template_config.data_vars[:1],
+    assert mock_http_download_to_disk.call_count == 2
+    assert mock_http_download_to_disk.call_args_list[0].args == (
+        "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t00z.wrfsfcf00.grib2.idx",
+        "test-dataset-hrrr",
     )
+    assert mock_http_download_to_disk.call_args_list[0].kwargs == {}
+
+    assert mock_http_download_to_disk.call_args_list[1].args == (
+        "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t00z.wrfsfcf00.grib2",
+        "test-dataset-hrrr",
+    )
+    assert mock_http_download_to_disk.call_args_list[1].kwargs == {
+        "byte_ranges": ([0, 200], [100, 350]),
+        "local_path_suffix": "-24863b9b",
+    }
 
 
 def test_region_job_read_data(
@@ -309,6 +345,7 @@ def test_region_job_read_data(
         lead_time=pd.Timedelta(hours=0),
         domain="conus",
         file_type="sfc",
+        data_vars=template_config.data_vars[:1],
         downloaded_path=Path("fake/path/to/downloaded/file.grib2"),
     )
 
