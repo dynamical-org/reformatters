@@ -9,8 +9,6 @@ import numpy as np
 import pandas as pd
 import rasterio  # type: ignore
 
-from reformatters.common.download import http_download_to_disk
-from reformatters.common.iterating import digest
 from reformatters.common.logging import get_logger
 from reformatters.common.types import ArrayFloat32
 from reformatters.noaa.hrrr.hrrr_config_models import (
@@ -147,7 +145,7 @@ def parse_hrrr_index_byte_ranges(
         if len(matches) != 1:
             raise ValueError(
                 f"Expected exactly 1 match for {var_info.name}, "
-                f"found {len(matches)} in {idx_local_path}"
+                f"found {len(matches)} in {idx_local_path}: {matches}"
             )
 
         match = matches[0]
@@ -156,95 +154,12 @@ def parse_hrrr_index_byte_ranges(
         if match[2] != "":
             end_byte = int(match[2])
         else:
-            # If no end byte specified, add a large offset
-            # (similar to existing logic in read_data.py)
+            # If last idx row, we don't know the length.
+            # Add a large offset to get the rest of the file in
+            # a way that's compatible with obstore's get_ranges
             end_byte = start_byte + (10 * (2**30))  # +10 GiB
 
         byte_range_starts.append(start_byte)
         byte_range_ends.append(end_byte)
 
     return byte_range_starts, byte_range_ends
-
-
-def download_hrrr_file(
-    init_time: pd.Timestamp,
-    lead_time: pd.Timedelta,
-    domain: HRRRDomain,
-    file_type: HRRRFileType,
-    data_vars: Iterable[HRRRDataVar],
-) -> Path:
-    """
-    Download a HRRR file for specific variables and return the local path.
-
-    This is a standalone version of the download_file method that can be called
-    from other modules without needing a RegionJob instance.
-
-    Args:
-        init_time: Initialization time of the forecast
-        lead_time: Lead time of the forecast
-        domain: HRRR domain (typically 'conus')
-        file_type: HRRR file type ('sfc', 'prs', 'nat', 'subh')
-        data_vars: Variables to download (used for byte range optimization)
-
-    Returns:
-        Path to the downloaded GRIB file
-
-    Raises:
-        ValueError: If variables don't match file type or lead time is invalid
-        FileNotFoundError: If download fails
-    """
-    # Import here to avoid circular imports
-    from reformatters.noaa.hrrr.forecast_48_hour.region_job import HRRRSourceFileCoord
-
-    # Verify that the variables in the group are all from the same file type
-    mismatched_file_types = {
-        var.internal_attrs.hrrr_file_type
-        for var in data_vars
-        if var.internal_attrs.hrrr_file_type != file_type
-    }
-    if mismatched_file_types:
-        mismatched_str = ", ".join(ft for ft in mismatched_file_types)
-        error_msg = f"All variables must be from {file_type}, but found variables from: {mismatched_str}"
-        raise ValueError(error_msg)
-
-    # Create a coordinate to use its URL generation logic
-    coord = HRRRSourceFileCoord(
-        init_time=init_time,
-        lead_time=lead_time,
-        domain=domain,
-        file_type=file_type,
-    )
-
-    try:
-        # Download index file and parse byte ranges
-        idx_url = coord.get_idx_url()
-        logger.debug("Downloading HRRR index file from %s", idx_url)
-        idx_local_path = http_download_to_disk(idx_url, "hrrr-forecast-48h")
-
-        # Parse the index file to get byte ranges for our variables
-        byte_range_starts, byte_range_ends = parse_hrrr_index_byte_ranges(
-            idx_local_path, data_vars
-        )
-
-        logger.debug(
-            "reading byte ranges: %s",
-            list(zip(byte_range_starts, byte_range_ends, strict=True)),
-        )
-
-        # Create a suffix for the downloaded file based on the byte ranges
-        vars_suffix = digest(
-            f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)
-        )
-
-        # Download the GRIB file with specific byte ranges
-        return http_download_to_disk(
-            coord.get_url(),
-            "hrrr-forecast-48h",
-            byte_ranges=(byte_range_starts, byte_range_ends),
-            local_path_suffix=f"-{vars_suffix}",
-        )
-
-    except Exception as e:
-        raise FileNotFoundError(
-            f"Failed to download HRRR file {coord.get_url()}: {e}"
-        ) from e

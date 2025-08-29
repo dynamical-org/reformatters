@@ -22,7 +22,6 @@ from reformatters.common.zarr import (
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import HRRRDataVar, HRRRInternalAttrs
-from reformatters.noaa.hrrr.read_data import download_hrrr_file
 
 #  All Standard Cycles go to forecast hour 18
 #  Init cycles going to forecast hour 48 are 00, 06, 12, 18
@@ -58,59 +57,38 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
+        # Calculate x and y coordinates
+        shape, bounds, resolution, _crs = self._spatial_info()
+        dx, dy = resolution
+        left, _bottom, _right, top = bounds
+        ny, nx = shape
+        # add 1/2 a pixel to corner of bounds to get pixel center
+        y_coords = (top + (0.5 * dy)) + (np.arange(ny) * dy)
+        x_coords = (left + (0.5 * dx)) + (np.arange(nx) * dx)
+
         return {
             "init_time": self.append_dim_coordinates(
                 self.append_dim_start + self.append_dim_frequency
             ),
             "lead_time": pd.timedelta_range("0h", "48h", freq=pd.Timedelta("1h")),
-            "y": np.arange(1059),  # y-dimension for projected coordinates
-            "x": np.arange(1799),  # x-dimension for projected coordinates
+            "y": y_coords,
+            "x": x_coords,
         }
 
     def derive_coordinates(
         self, ds: xr.Dataset
     ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
         """Compute non-dimension coordinates."""
-        # Download a sample file to get spatial information
-        filepath = download_hrrr_file(
-            init_time=pd.Timestamp("2025-01-01T00:00:00"),
-            lead_time=pd.Timedelta("0h"),
-            domain="conus",
-            file_type="sfc",
-            data_vars=[
-                self.data_vars[0]
-            ],  # Use the first data var for bounds/resolution
-        )
-
-        hrrrds = xr.open_dataset(str(filepath), engine="rasterio")
-
-        # Get spatial information from the HRRR file
-        hrrrds_bounds = hrrrds.rio.bounds(recalc=True)
-        hrrrds_res = hrrrds.rio.resolution(recalc=True)
-        dx, dy = hrrrds_res[0], hrrrds_res[1]
-
-        proj_xcorner, proj_ycorner = hrrrds_bounds[0], hrrrds_bounds[3]
-        nx = ds.x.size
-        ny = ds.y.size
-
-        # Create projection coordinates
-        pj = pyproj.Proj(hrrrds.rio.crs.to_proj4())
-        # rio.bounds returns the lower left corner, but we want the center of the gridcell
-        # so we offset by half the gridcell size.
-        x_coords = (proj_xcorner + (0.5 * dx)) + np.arange(nx) * dx
-        y_coords = (proj_ycorner + (0.5 * dy)) + np.arange(ny) * dy
-
-        # Create 2D meshgrids for lat/lon conversion
-        xs, ys = np.meshgrid(x_coords, y_coords)
-        lons, lats = pj(xs, ys, inverse=True)
-
+        # Create 2D latitude and longitude grids
+        # x, y are the spatial dimensions of this dataset
+        # latitude and longitude there
+        _shape, _bounds, _resolution, crs = self._spatial_info()
+        xs, ys = np.meshgrid(ds["x"], ds["y"])
+        lons, lats = pyproj.Proj(crs)(xs, ys, inverse=True)
         # Dropping to 32 bit precision still gets us < 1 meter precision and
         # makes each array about 6MB vs 15MB for float64.
         lats = lats.astype(np.float32)
         lons = lons.astype(np.float32)
-
-        # Calculate valid_time as init_time + lead_time
-        valid_time = ds["init_time"] + ds["lead_time"]
 
         # Expected forecast length based on initialization hour
         expected_lengths = EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR.loc[
@@ -118,14 +96,12 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
         ]
 
         return {
-            "valid_time": valid_time,
+            "valid_time": ds["init_time"] + ds["lead_time"],
             "expected_forecast_length": (("init_time",), expected_lengths.values),
             "ingested_forecast_length": (
                 ("init_time",),
                 np.full(ds[self.append_dim].size, np.timedelta64("NaT", "ns")),
             ),
-            "y": y_coords,
-            "x": x_coords,
             "latitude": (("y", "x"), lats),
             "longitude": (("y", "x"), lons),
         }
@@ -521,3 +497,25 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                 ),
             ),
         ]
+
+    def _spatial_info(
+        self,
+    ) -> tuple[
+        tuple[int, int], tuple[float, float, float, float], tuple[float, float], str
+    ]:
+        """
+        Returns (shape, bounds, resolution, crs proj4 string).
+        Useful for deriving x, y and latitude, longitude coordinates.
+        See tests/noaa/hrrr/forecast_48_hour/template_config_test.py::test_spatial_info_matches_file
+        """
+        return (
+            (1059, 1799),
+            (
+                -2699020.142521929,
+                -1588806.152556665,
+                2697979.857478071,
+                1588193.847443335,
+            ),
+            (3000.0, -3000.0),
+            "+proj=lcc +lat_0=38.5 +lon_0=-97.5 +lat_1=38.5 +lat_2=38.5 +x_0=0 +y_0=0 +R=6371229 +units=m +no_defs=True",
+        )
