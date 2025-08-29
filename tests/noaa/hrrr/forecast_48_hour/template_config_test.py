@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
@@ -164,7 +165,7 @@ def test_derive_coordinates_integration() -> None:
 def test_spatial_info_matches_file() -> None:
     """Test that hard coded spatial information matches the real values derived from a source file."""
     config = NoaaHrrrForecast48HourTemplateConfig()
-    spatial_info = config._spatial_info()
+    shape, bounds, resolution, crs = config._spatial_info()
 
     coord = HRRRSourceFileCoord(
         init_time=pd.Timestamp("2023-10-01T00:00"),
@@ -185,9 +186,7 @@ def test_spatial_info_matches_file() -> None:
     )
 
     ds = xr.open_dataset(local_path, engine="rasterio")
-    assert spatial_info == (
-        ds.rio.shape,
-        ds.rio.bounds(),
-        ds.rio.resolution(),
-        ds.rio.crs.to_proj4(),
-    )
+    assert shape == ds.rio.shape
+    assert np.allclose(bounds, ds.rio.bounds())
+    assert resolution == ds.rio.resolution()
+    assert crs == ds.rio.crs.to_proj4()
