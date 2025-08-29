@@ -5,7 +5,9 @@ from pathlib import Path
 import pandas as pd
 import xarray as xr
 
-from reformatters.common.iterating import item
+from reformatters.common.download import http_download_to_disk
+from reformatters.common.iterating import digest, item
+from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
     RegionJob,
@@ -26,8 +28,13 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
     HRRRDomain,
     HRRRFileType,
 )
-from reformatters.noaa.hrrr.read_data import download_hrrr_file, read_hrrr_data
+from reformatters.noaa.hrrr.read_data import (
+    parse_hrrr_index_byte_ranges,
+    read_hrrr_data,
+)
 from reformatters.noaa.noaa_utils import has_hour_0_values
+
+log = get_logger(__name__)
 
 
 class HRRRSourceFileCoord(SourceFileCoord):
@@ -37,6 +44,7 @@ class HRRRSourceFileCoord(SourceFileCoord):
     lead_time: Timedelta
     domain: HRRRDomain
     file_type: HRRRFileType
+    data_vars: Sequence[HRRRDataVar]
 
     def get_url(self) -> str:
         """Return the URL for this HRRR file."""
@@ -136,31 +144,29 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
                 lead_time=lead_time,
                 domain="conus",
                 file_type=file_type,
+                data_vars=data_var_group,
             )
             for init_time in init_times
             for lead_time in lead_times
         ]
 
     def download_file(self, coord: HRRRSourceFileCoord) -> Path:
-        """Download a HRRR file and return the local path."""
-        # Filter data_vars to only those matching this file type
-        relevant_vars = [
-            var
-            for var in self.data_vars
-            if var.internal_attrs.hrrr_file_type == coord.file_type
-        ]
+        """Download a subset of variables from a HRRR file and return the local path."""
+        idx_url = coord.get_idx_url()
+        idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
 
-        if not relevant_vars:
-            # No variables for this file type, which shouldn't happen in normal operation
-            raise ValueError(f"No variables found for file type {coord.file_type}")
+        byte_range_starts, byte_range_ends = parse_hrrr_index_byte_ranges(
+            idx_local_path, coord.data_vars
+        )
+        vars_suffix = digest(
+            f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)
+        )
 
-        # Use the standalone function for consistent download behavior
-        return download_hrrr_file(
-            init_time=coord.init_time,
-            lead_time=coord.lead_time,
-            domain=coord.domain,
-            file_type=coord.file_type,
-            data_vars=relevant_vars,
+        return http_download_to_disk(
+            coord.get_url(),
+            self.dataset_id,
+            byte_ranges=(byte_range_starts, byte_range_ends),
+            local_path_suffix=f"-{vars_suffix}",
         )
 
     def read_data(

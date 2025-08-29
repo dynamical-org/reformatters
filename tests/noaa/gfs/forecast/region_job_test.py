@@ -157,12 +157,12 @@ def test_operational_update_jobs(
 
     # Set the append_dim_end for the update
     monkeypatch.setattr(
-        pd.Timestamp, "now", classmethod(lambda cls: pd.Timestamp("2025-01-01T12:34"))
+        pd.Timestamp, "now", classmethod(lambda cls: pd.Timestamp("2022-01-01T12:34"))
     )
     # Set the append_dim_start for the update
     # Use a template_ds as a lightweight way to create a mock dataset with a known max append dim coordinate
     existing_ds = template_config.get_template(
-        pd.Timestamp("2025-01-01T06:01")  # 06 will be max existing init time
+        pd.Timestamp("2022-01-01T06:01")  # 06 will be max existing init time
     )
     template_utils.write_metadata(existing_ds, store_factory)
 
@@ -175,7 +175,7 @@ def test_operational_update_jobs(
         reformat_job_name="test_job",
     )
 
-    assert template_ds.init_time.max() == pd.Timestamp("2025-01-01T12:00")
+    assert template_ds.init_time.max() == pd.Timestamp("2022-01-01T12:00")
 
     assert len(jobs) == 2  # 06 and 12 UTC init times
     for job in jobs:

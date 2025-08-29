@@ -22,7 +22,6 @@ from reformatters.common.zarr import (
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import HRRRDataVar, HRRRInternalAttrs
-from reformatters.noaa.hrrr.read_data import download_hrrr_file
 
 #  All Standard Cycles go to forecast hour 18
 #  Init cycles going to forecast hour 48 are 00, 06, 12, 18
@@ -58,59 +57,38 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
+        # Calculate x and y coordinates
+        shape, bounds, resolution, _crs = self._spatial_info()
+        dx, dy = resolution
+        left, _bottom, _right, top = bounds
+        ny, nx = shape
+        # add 1/2 a pixel to corner of bounds to get pixel center
+        y_coords = (top + (0.5 * dy)) + (np.arange(ny) * dy)
+        x_coords = (left + (0.5 * dx)) + (np.arange(nx) * dx)
+
         return {
             "init_time": self.append_dim_coordinates(
                 self.append_dim_start + self.append_dim_frequency
             ),
             "lead_time": pd.timedelta_range("0h", "48h", freq=pd.Timedelta("1h")),
-            "y": np.arange(1059),  # y-dimension for projected coordinates
-            "x": np.arange(1799),  # x-dimension for projected coordinates
+            "y": y_coords,
+            "x": x_coords,
         }
 
     def derive_coordinates(
         self, ds: xr.Dataset
     ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
         """Compute non-dimension coordinates."""
-        # Download a sample file to get spatial information
-        filepath = download_hrrr_file(
-            init_time=pd.Timestamp("2025-01-01T00:00:00"),
-            lead_time=pd.Timedelta("0h"),
-            domain="conus",
-            file_type="sfc",
-            data_vars=[
-                self.data_vars[0]
-            ],  # Use the first data var for bounds/resolution
-        )
-
-        hrrrds = xr.open_dataset(str(filepath), engine="rasterio")
-
-        # Get spatial information from the HRRR file
-        hrrrds_bounds = hrrrds.rio.bounds(recalc=True)
-        hrrrds_res = hrrrds.rio.resolution(recalc=True)
-        dx, dy = hrrrds_res[0], hrrrds_res[1]
-
-        proj_xcorner, proj_ycorner = hrrrds_bounds[0], hrrrds_bounds[3]
-        nx = ds.x.size
-        ny = ds.y.size
-
-        # Create projection coordinates
-        pj = pyproj.Proj(hrrrds.rio.crs.to_proj4())
-        # rio.bounds returns the lower left corner, but we want the center of the gridcell
-        # so we offset by half the gridcell size.
-        x_coords = (proj_xcorner + (0.5 * dx)) + np.arange(nx) * dx
-        y_coords = (proj_ycorner + (0.5 * dy)) + np.arange(ny) * dy
-
-        # Create 2D meshgrids for lat/lon conversion
-        xs, ys = np.meshgrid(x_coords, y_coords)
-        lons, lats = pj(xs, ys, inverse=True)
-
+        # Create 2D latitude and longitude grids
+        # x, y are the spatial dimensions of this dataset
+        # latitude and longitude there
+        _shape, _bounds, _resolution, crs = self._spatial_info()
+        xs, ys = np.meshgrid(ds["x"], ds["y"])
+        lons, lats = pyproj.Proj(crs)(xs, ys, inverse=True)
         # Dropping to 32 bit precision still gets us < 1 meter precision and
         # makes each array about 6MB vs 15MB for float64.
         lats = lats.astype(np.float32)
         lons = lons.astype(np.float32)
-
-        # Calculate valid_time as init_time + lead_time
-        valid_time = ds["init_time"] + ds["lead_time"]
 
         # Expected forecast length based on initialization hour
         expected_lengths = EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR.loc[
@@ -118,14 +96,12 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
         ]
 
         return {
-            "valid_time": valid_time,
+            "valid_time": ds["init_time"] + ds["lead_time"],
             "expected_forecast_length": (("init_time",), expected_lengths.values),
             "ingested_forecast_length": (
                 ("init_time",),
                 np.full(ds[self.append_dim].size, np.timedelta64("NaT", "ns")),
             ),
-            "y": y_coords,
-            "x": x_coords,
             "latitude": (("y", "x"), lats),
             "longitude": (("y", "x"), lons),
         }
@@ -328,6 +304,9 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
 
+        default_window_reset_frequency = pd.Timedelta("1h")  # noqa: F841
+        default_keep_mantissa_bits = 7
+
         return [
             HRRRDataVar(
                 name="composite_reflectivity",
@@ -340,11 +319,203 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                 ),
                 internal_attrs=HRRRInternalAttrs(
                     grib_element="REFC",
-                    grib_description="REFC:entire atmosphere",  # TODO
-                    index_position=0,
-                    keep_mantissa_bits=10,
+                    grib_description="REFC:entire atmosphere",
+                    index_position=1,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                     grib_index_level="entire atmosphere",
                     hrrr_file_type="sfc",
                 ),
-            )
+            ),
+            # HRRRDataVar(
+            #     name="temperature_2m",
+            #     encoding=encoding_float32_default,
+            #     attrs=DataVarAttrs(
+            #         short_name="t2m",
+            #         long_name="2 metre temperature",
+            #         units="C",
+            #         step_type="instant",
+            #         standard_name="air_temperature",
+            #     ),
+            #     internal_attrs=HRRRInternalAttrs(
+            #         grib_element="TMP",
+            #         grib_description="TMP:2 m above ground",
+            #         grib_index_level="2 m above ground",
+            #         index_position=71,
+            #         keep_mantissa_bits=default_keep_mantissa_bits,
+            #         hrrr_file_type="sfc",
+            #     ),
+            # ),
+            # HRRRDataVar(
+            #     name="wind_u_10m",
+            #     encoding=encoding_float32_default,
+            #     attrs=DataVarAttrs(
+            #         short_name="u10",
+            #         long_name="10 metre U wind component",
+            #         units="m/s",
+            #         step_type="instant",
+            #         standard_name="eastward_wind",
+            #     ),
+            #     internal_attrs=HRRRInternalAttrs(
+            #         grib_element="UGRD",
+            #         grib_description="UGRD:10 m above ground",
+            #         grib_index_level="10 m above ground",
+            #         index_position=77,
+            #         keep_mantissa_bits=6,
+            #         hrrr_file_type="sfc",
+            #     ),
+            # ),
+            # HRRRDataVar(
+            #     name="wind_v_10m",
+            #     encoding=encoding_float32_default,
+            #     attrs=DataVarAttrs(
+            #         short_name="v10",
+            #         long_name="10 metre V wind component",
+            #         units="m/s",
+            #         step_type="instant",
+            #         standard_name="northward_wind",
+            #     ),
+            #     internal_attrs=HRRRInternalAttrs(
+            #         grib_element="VGRD",
+            #         grib_description="VGRD:10 m above ground",
+            #         grib_index_level="10 m above ground",
+            #         index_position=78,
+            #         keep_mantissa_bits=6,
+            #         hrrr_file_type="sfc",
+            #     ),
+            # ),
+            # HRRRDataVar(
+            #     name="precipitation_surface",
+            #     encoding=encoding_float32_default,
+            #     attrs=DataVarAttrs(
+            #         short_name="tp",
+            #         long_name="Total Precipitation",
+            #         units="kg/(m^2)",
+            #         comment="Total precipitation accumulation; deaccumulate to rate when needed.",
+            #         step_type="avg",
+            #     ),
+            #     internal_attrs=HRRRInternalAttrs(
+            #         grib_element="APCP",
+            #         grib_description="APCP:surface (total precipitation)",
+            #         grib_index_level="surface",
+            #         index_position=84,
+            #         deaccumulate_to_rate=True,
+            #         window_reset_frequency=default_window_reset_frequency,
+            #         keep_mantissa_bits=default_keep_mantissa_bits,
+            #         hrrr_file_type="sfc",
+            #     ),
+            # ),
+            # HRRRDataVar(
+            #     name="precipitable_water_atmosphere",
+            #     encoding=encoding_float32_default,
+            #     attrs=DataVarAttrs(
+            #         short_name="pwat",
+            #         long_name="Precipitable water",
+            #         units="kg/(m^2)",
+            #         step_type="instant",
+            #     ),
+            #     internal_attrs=HRRRInternalAttrs(
+            #         grib_element="PWAT",
+            #         grib_description="PWAT:entire atmosphere (precipitable water)",
+            #         grib_index_level="entire atmosphere (considered as a single layer)",
+            #         index_position=107,
+            #         keep_mantissa_bits=default_keep_mantissa_bits,
+            #         hrrr_file_type="sfc",
+            #     ),
+            # ),
+            # HRRRDataVar(
+            #     name="total_cloud_cover_atmosphere",
+            #     encoding=encoding_float32_default,
+            #     attrs=DataVarAttrs(
+            #         short_name="tcc",
+            #         long_name="Total Cloud Cover",
+            #         units="%",
+            #         step_type="avg",
+            #     ),
+            #     internal_attrs=HRRRInternalAttrs(
+            #         grib_element="TCDC",
+            #         grib_description="TCDC:entire atmosphere (total cloud cover)",
+            #         grib_index_level="entire atmosphere",
+            #         index_position=116,
+            #         keep_mantissa_bits=default_keep_mantissa_bits,
+            #         hrrr_file_type="sfc",
+            #     ),
+            # ),
+            # HRRRDataVar(
+            #     name="downward_short_wave_radiation_flux_surface",
+            #     encoding=encoding_float32_default,
+            #     attrs=DataVarAttrs(
+            #         short_name="sdswrf",
+            #         long_name="Surface downward short-wave radiation flux",
+            #         units="W/(m^2)",
+            #         step_type="avg",
+            #         comment="Average over the previous forecast step.",
+            #     ),
+            #     internal_attrs=HRRRInternalAttrs(
+            #         grib_element="DSWRF",
+            #         grib_description="DSWRF:surface (downward short-wave radiation flux)",
+            #         grib_index_level="surface",
+            #         index_position=123,
+            #         keep_mantissa_bits=default_keep_mantissa_bits,
+            #         hrrr_file_type="sfc",
+            #     ),
+            # ),
+            # HRRRDataVar(
+            #     name="downward_long_wave_radiation_flux_surface",
+            #     encoding=encoding_float32_default,
+            #     attrs=DataVarAttrs(
+            #         short_name="sdlwrf",
+            #         long_name="Surface downward long-wave radiation flux",
+            #         units="W/(m^2)",
+            #         step_type="avg",
+            #         comment="Average over the previous forecast step.",
+            #     ),
+            #     internal_attrs=HRRRInternalAttrs(
+            #         grib_element="DLWRF",
+            #         grib_description="DLWRF:surface (downward long-wave radiation flux)",
+            #         grib_index_level="surface",
+            #         index_position=124,
+            #         keep_mantissa_bits=default_keep_mantissa_bits,
+            #         hrrr_file_type="sfc",
+            #     ),
+            # ),
+            # HRRRDataVar(
+            #     name="pressure_reduced_to_mean_sea_level",
+            #     encoding=encoding_float32_default,
+            #     attrs=DataVarAttrs(
+            #         short_name="prmsl",
+            #         long_name="Pressure reduced to MSL",
+            #         units="Pa",
+            #         step_type="instant",
+            #     ),
+            #     internal_attrs=HRRRInternalAttrs(
+            #         grib_element="MSLMA",
+            #         grib_description="MSLMA:mean sea level pressure (MAPS reduction)",
+            #         grib_index_level="mean sea level",
+            #         index_position=41,
+            #         keep_mantissa_bits=10,
+            #         hrrr_file_type="sfc",
+            #     ),
+            # ),
         ]
+
+    def _spatial_info(
+        self,
+    ) -> tuple[
+        tuple[int, int], tuple[float, float, float, float], tuple[float, float], str
+    ]:
+        """
+        Returns (shape, bounds, resolution, crs proj4 string).
+        Useful for deriving x, y and latitude, longitude coordinates.
+        See tests/noaa/hrrr/forecast_48_hour/template_config_test.py::test_spatial_info_matches_file
+        """
+        return (
+            (1059, 1799),
+            (
+                -2699020.142521929,
+                -1588806.152556665,
+                2697979.857478071,
+                1588193.847443335,
+            ),
+            (3000.0, -3000.0),
+            "+proj=lcc +lat_0=38.5 +lon_0=-97.5 +lat_1=38.5 +lat_2=38.5 +x_0=0 +y_0=0 +R=6371229 +units=m +no_defs=True",
+        )
