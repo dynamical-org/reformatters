@@ -154,8 +154,6 @@ def test_derive_coordinates_integration() -> None:
     config = NoaaHrrrForecast48HourTemplateConfig()
     template_ds = config.get_template(pd.Timestamp("2025-01-01"))
 
-    # This would test the actual coordinate derivation, but requires downloading HRRR files
-    # Skip by default since it requires network access
     derived_coords = config.derive_coordinates(template_ds)
 
     # Check that spatial coordinates are derived
