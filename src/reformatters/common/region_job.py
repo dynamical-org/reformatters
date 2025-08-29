@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import pydantic
 import xarray as xr
+import zarr
 from pydantic import AfterValidator, Field, computed_field
 
 from reformatters.common import template_utils
@@ -456,7 +457,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         return get_worker_jobs(all_jobs, worker_index, workers_total)
 
-    def process(self) -> Mapping[str, Sequence[SOURCE_FILE_COORD]]:
+    def process(
+        self,
+    ) -> tuple[
+        Mapping[str, Sequence[SOURCE_FILE_COORD]],
+        zarr.abc.store.Store,
+        list[zarr.abc.store.Store],
+    ]:
         """
         Orchestrate the full region job processing pipeline.
 
@@ -576,7 +583,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         progress_tracker.close()
 
-        return results
+        return results, primary_store, replica_stores
 
     def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
         ds = self.template_ds[[v.name for v in self.data_vars]]
