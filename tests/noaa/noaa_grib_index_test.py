@@ -7,6 +7,9 @@ from reformatters.noaa.gefs.common_gefs_template_config import (
 )
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 from reformatters.noaa.noaa_utils import has_hour_0_values
+from reformatters.noaa.gfs.forecast.template_config import (
+    NoaaGfsForecastTemplateConfig,
+)
 
 IDX_FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -127,6 +130,31 @@ def test_grib_index_gec00_a_f432() -> None:
         for v in get_shared_data_var_configs(CHUNKS, SHARDS)
         if "a" in v.internal_attrs.gefs_file_type
     ]
+    assert len(data_vars) > 0
+
+    starts, ends = grib_message_byte_ranges_from_index(
+        idx_path, data_vars, init_time, lead_time
+    )
+
+    assert len(starts) == len(data_vars)
+    assert len(ends) == len(data_vars)
+    assert all(isinstance(s, int) and s >= 0 for s in starts)
+    assert all(isinstance(e, int) and e > 0 for e in ends)
+    assert all(start < stop for start, stop in zip(starts, ends, strict=True))
+
+
+def test_grib_index_gfs_anl() -> None:
+    idx_path = IDX_FIXTURES_DIR / "gfs.t00z.pgrb2.0p25.anl.idx"
+
+    init_time = pd.Timestamp("2025-08-01T00")
+    lead_time = pd.Timedelta("0h")
+
+    cfg = NoaaGfsForecastTemplateConfig()
+    data_vars = list(cfg.data_vars)
+
+    # For analysis (lead 0), only include variables that actually have hour-0 values
+    if lead_time == pd.Timedelta("0h"):
+        data_vars = [v for v in data_vars if has_hour_0_values(v)]
     assert len(data_vars) > 0
 
     starts, ends = grib_message_byte_ranges_from_index(
