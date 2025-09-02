@@ -88,3 +88,53 @@ def test_grib_index_gep01_s_f015() -> None:
     assert all(isinstance(s, int) and s >= 0 for s in starts)
     assert all(isinstance(e, int) and e > 0 for e in ends)
     assert all(start < stop for start, stop in zip(starts, ends, strict=True))
+
+
+def test_grib_index_gec00_b_f003() -> None:
+    idx_path = IDX_FIXTURES_DIR / "gec00.t00z.pgrb2b.0p50.f003.idx"
+
+    init_time = pd.Timestamp("2025-08-01T00")
+    lead_time = pd.Timedelta("3h")
+
+    # Get GEFS variables expected in a "b" file
+    data_vars = [
+        v
+        for v in get_shared_data_var_configs(CHUNKS, SHARDS)
+        if "b" in v.internal_attrs.gefs_file_type
+    ]
+    assert len(data_vars) > 0
+
+    starts, ends = grib_message_byte_ranges_from_index(
+        idx_path, data_vars, init_time, lead_time
+    )
+
+    assert len(starts) == len(data_vars)
+    assert len(ends) == len(data_vars)
+    assert all(isinstance(s, int) and s >= 0 for s in starts)
+    assert all(isinstance(e, int) and e > 0 for e in ends)
+    assert all(start < stop for start, stop in zip(starts, ends, strict=True))
+
+
+def test_grib_index_gec00_a_f432() -> None:
+    idx_path = IDX_FIXTURES_DIR / "gec00.t00z.pgrb2a.0p50.f432.idx"
+
+    init_time = pd.Timestamp("2025-08-01T00")
+    lead_time = pd.Timedelta("432h")
+
+    # Get GEFS variables expected in an "a" file
+    data_vars = [
+        v
+        for v in get_shared_data_var_configs(CHUNKS, SHARDS)
+        if "a" in v.internal_attrs.gefs_file_type
+    ]
+    assert len(data_vars) > 0
+
+    starts, ends = grib_message_byte_ranges_from_index(
+        idx_path, data_vars, init_time, lead_time
+    )
+
+    assert len(starts) == len(data_vars)
+    assert len(ends) == len(data_vars)
+    assert all(isinstance(s, int) and s >= 0 for s in starts)
+    assert all(isinstance(e, int) and e > 0 for e in ends)
+    assert all(start < stop for start, stop in zip(starts, ends, strict=True))
