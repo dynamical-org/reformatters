@@ -149,12 +149,10 @@ def test_grib_index_gfs_anl() -> None:
     init_time = pd.Timestamp("2025-08-01T00")
     lead_time = pd.Timedelta("0h")
 
-    cfg = NoaaGfsForecastTemplateConfig()
-    data_vars = list(cfg.data_vars)
-
-    # For analysis (lead 0), only include variables that actually have hour-0 values
-    if lead_time == pd.Timedelta("0h"):
-        data_vars = [v for v in data_vars if has_hour_0_values(v)]
+    # Get GFS variables with hour 0 values
+    data_vars = [
+        v for v in NoaaGfsForecastTemplateConfig().data_vars if has_hour_0_values(v)
+    ]
     assert len(data_vars) > 0
 
     starts, ends = grib_message_byte_ranges_from_index(
