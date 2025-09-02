@@ -63,7 +63,13 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     NoaaGfsForecastDataset(primary_storage_config=SourceCoopDatasetStorageConfig()),
     DwdIconEuForecastDataset(primary_storage_config=SourceCoopDatasetStorageConfig()),
     NoaaHrrrForecast48HourDataset(
-        primary_storage_config=NoaaHrrrAwsOpenDataDatasetStorageConfig()
+        primary_storage_config=NoaaHrrrAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[
+            NoaaHrrrAwsOpenDataDatasetStorageConfig(
+                k8s_secret_name="aws-open-data-icechunk-storage-options-key",  # noqa: S106
+                format=DatasetFormat.ICECHUNK,
+            )
+        ],
     ),
 ]
 

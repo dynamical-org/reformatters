@@ -157,7 +157,9 @@ def test_operational_update_jobs(
 
     # Set the append_dim_end for the update
     monkeypatch.setattr(
-        pd.Timestamp, "now", classmethod(lambda cls: pd.Timestamp("2022-01-01T12:34"))
+        pd.Timestamp,
+        "now",
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2022-01-01T12:34")),
     )
     # Set the append_dim_start for the update
     # Use a template_ds as a lightweight way to create a mock dataset with a known max append dim coordinate

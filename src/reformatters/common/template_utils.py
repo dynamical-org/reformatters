@@ -6,12 +6,13 @@ from typing import Any, Literal
 
 import dask.array
 import numpy as np
+import pandas as pd
 import xarray as xr
 import zarr
 
 from reformatters.common.config_models import Coordinate, DataVar
 from reformatters.common.logging import get_logger
-from reformatters.common.storage import StoreFactory
+from reformatters.common.storage import StoreFactory, commit_if_icechunk
 
 logger = get_logger(__name__)
 
@@ -48,9 +49,7 @@ def write_metadata(
         )
 
         for replica_store in replica_stores:
-            logger.info(
-                f"Writing metadata to replica store {replica_store} with mode {mode}"
-            )
+            logger.info(f"Writing metadata to replica {replica_store} with mode {mode}")
             template_ds.to_zarr(replica_store, mode=mode, compute=False)  # type: ignore[call-overload]
 
         logger.info(f"Writing metadata to primary store {store} with mode {mode}")
@@ -58,6 +57,12 @@ def write_metadata(
 
     if isinstance(store, Path | str):
         sort_consolidated_metadata(Path(store) / "zarr.json")
+
+    commit_if_icechunk(
+        message=f"Metadata written at {pd.Timestamp.now(tz='UTC').isoformat()}",
+        primary_store=store,
+        replica_stores=replica_stores,
+    )
 
 
 def _get_mode_from_path_store(store: Path) -> Literal["w", "w-"]:

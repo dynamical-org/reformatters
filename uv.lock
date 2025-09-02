@@ -505,6 +505,45 @@ wheels = [
 ]
 
 [[package]]
+name = "icechunk"
+version = "1.1.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "zarr" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/00/9d/92223400f51178fc5fb5f22ea5309da1e7b22e30dc0ebd68acfc3a216ce3/icechunk-1.1.4.tar.gz", hash = "sha256:9fd7410257fd31426d6df8db0be9b10717b1f5bf9a2b00da21d8293679091b61", size = 421137, upload-time = "2025-08-21T16:08:37.283Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e8/25/5d51ae0f33d1bb6e8a599c90f1f802ac024e912a1c0bab419d5302acf2b9/icechunk-1.1.4-cp312-cp312-macosx_10_12_x86_64.whl", hash = "sha256:f8aa8cef4ad5060b0071a17d8153ee21c9c956eee253014d1870a6c239b7779d", size = 15316128, upload-time = "2025-08-21T16:07:38.576Z" },
+    { url = "https://files.pythonhosted.org/packages/fe/36/0d9638b14124bcc22cfc20349892bea1503d845399f02a2e6b724b0416e0/icechunk-1.1.4-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:92012b6e8214dbf6d56c79d59f6d043aeed9986d06d32d010467fb336eb54224", size = 14770969, upload-time = "2025-08-21T16:07:30.908Z" },
+    { url = "https://files.pythonhosted.org/packages/ba/7a/b5dab8eaf1ea09f72efc4e069b132aae6861a22c748c2fa8b9149596cf57/icechunk-1.1.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:08436ba42b8ee7d40e2969e5671711e154408b9e5067f24a1478b8337e3a4a78", size = 16765521, upload-time = "2025-08-21T16:07:20.558Z" },
+    { url = "https://files.pythonhosted.org/packages/47/09/7b7a6cef38bb7d3f55192e3bebbf651bce64b2c2e5c8286a7e55835b412c/icechunk-1.1.4-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:259cd2984d51d06cb693d7056d12020d7fce027fb3ccab529f5301c75edc4ceb", size = 16478431, upload-time = "2025-08-21T16:06:49.678Z" },
+    { url = "https://files.pythonhosted.org/packages/90/50/1f416949fe932ee36e075ea2e407c4a3d7f07e8bc53515d69ff8904eb6ef/icechunk-1.1.4-cp312-cp312-manylinux_2_28_armv7l.whl", hash = "sha256:f85b1419bb072cc7cbfab4ff4c35e3321093a9a0f1e89e147fd735c2ab30fdf4", size = 15989728, upload-time = "2025-08-21T16:07:05.381Z" },
+    { url = "https://files.pythonhosted.org/packages/5c/31/0b6e66f4be7cda6e92948415a3f6403bb59705b4c635c7a9788adbd5e578/icechunk-1.1.4-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:d5ff7851bca2eed6ecdcaa560a29a6df56405ee5287a72d1219d8561e1f7225b", size = 16525856, upload-time = "2025-08-21T16:07:46.38Z" },
+    { url = "https://files.pythonhosted.org/packages/ba/30/d69aed9f0de8528d90890f26e2a89c22d382757ca5fbe69020f0423a1c41/icechunk-1.1.4-cp312-cp312-musllinux_1_2_armv7l.whl", hash = "sha256:f1cde9294b6e44318832e6354697c7c5713ebf08ed7846190a7e93b69212b7e6", size = 16239831, upload-time = "2025-08-21T16:07:59.631Z" },
+    { url = "https://files.pythonhosted.org/packages/15/57/3a16303b3b4c43d2ee0192bc60ad8f21c300cdc9664c4c28e2e06c0a69d2/icechunk-1.1.4-cp312-cp312-musllinux_1_2_i686.whl", hash = "sha256:488d1bcc9b18b7ddc44fe992bd990742bf3e327f13b3c689e7ddf5e13e26f419", size = 16823864, upload-time = "2025-08-21T16:08:13.543Z" },
+    { url = "https://files.pythonhosted.org/packages/af/0c/81df91b6116683a877ac7a066c1bd54277aabf5b3db3660f1f866f79ab7d/icechunk-1.1.4-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:1da86a15cb207932fd2b4a37c609f8ea9734dbd690aa8826e2b7e1a0df9001da", size = 16942161, upload-time = "2025-08-21T16:08:26.895Z" },
+    { url = "https://files.pythonhosted.org/packages/f4/84/b085d4901e35435c1918410415a85c723bbed31efcc573f2d2e976af0f8c/icechunk-1.1.4-cp312-cp312-win32.whl", hash = "sha256:0833e6ae383d3d5b0d7e9e9f64de94a8f9e924342207e70aa0961fcba413456d", size = 12081160, upload-time = "2025-08-21T16:08:49.276Z" },
+    { url = "https://files.pythonhosted.org/packages/88/65/9ece12e0f70300d56628ade54647aca8153c32aff311f51cca66b3848b2d/icechunk-1.1.4-cp312-cp312-win_amd64.whl", hash = "sha256:35432a1dab283613d823651fecde6c2175cc1f75c7a193bd0e6d215ff8bae5de", size = 13625254, upload-time = "2025-08-21T16:08:41.771Z" },
+    { url = "https://files.pythonhosted.org/packages/4d/4e/e77de27b0366c82d1d948fd9d8bab45eb7bd6df164f4eaea599a2bb569ca/icechunk-1.1.4-cp313-cp313-macosx_10_12_x86_64.whl", hash = "sha256:29aae25c891f04af66f6d31e300853ef335142e25c5805b28a0834437f7a466a", size = 15316417, upload-time = "2025-08-21T16:07:41.019Z" },
+    { url = "https://files.pythonhosted.org/packages/b3/8e/8398bc905476fb7e5a12a24cd963307a46a9ace3634b970ae462f2dbef65/icechunk-1.1.4-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:7e215818b0236932bfbd12cad8a62f9a0cd99ec8b77a6f46e3a26a3096b6ad12", size = 14771090, upload-time = "2025-08-21T16:07:33.408Z" },
+    { url = "https://files.pythonhosted.org/packages/ef/de/88814c631ab4b230fe13c5e71363057f50e90da7ae812374e278345c5c6c/icechunk-1.1.4-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:59309deb81337ab560bc578f83ac7ed464b8657ff894e406336c5393d1599860", size = 16764996, upload-time = "2025-08-21T16:07:23.168Z" },
+    { url = "https://files.pythonhosted.org/packages/ac/c0/bdf9fb04cdabd49af951bff4287dda861b90082a11d4f83c22040ad3fa3d/icechunk-1.1.4-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:719cda4bf78e1e488e4722275f5eb9ac586ed45b1511b0dc903527161a63c7ce", size = 16478586, upload-time = "2025-08-21T16:06:52.882Z" },
+    { url = "https://files.pythonhosted.org/packages/c1/8d/4a13e46a3c99ccff6f36805dcd0b8f199075825d260d489d0cd4c047b4dd/icechunk-1.1.4-cp313-cp313-manylinux_2_28_armv7l.whl", hash = "sha256:ed176103a546871cc9ef0b263d2ad277a583087b2e250b7d797a8ba950ccfa8b", size = 15988496, upload-time = "2025-08-21T16:07:08.651Z" },
+    { url = "https://files.pythonhosted.org/packages/8b/86/4b025104b946c1ffefda787735d28b7eba51b35e0b3d89f4118aabce34e1/icechunk-1.1.4-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:5a867007d4908a51c66d4187143b1e5c4a2edcb96f3105a97af2359a6b47f4d0", size = 16526351, upload-time = "2025-08-21T16:07:48.943Z" },
+    { url = "https://files.pythonhosted.org/packages/89/82/9e20c9731bc82cd710863791d2e9cea6c22922d41b2cec3f4d586d285c44/icechunk-1.1.4-cp313-cp313-musllinux_1_2_armv7l.whl", hash = "sha256:3ea61c19497ff3c885bc37f9903b92244652cf5142b66fc586fc29ae7eff5cfb", size = 16238647, upload-time = "2025-08-21T16:08:02.576Z" },
+    { url = "https://files.pythonhosted.org/packages/01/f7/c4ab56f6562c89d0d0f44125e06db817674bce3055f35243e0c2ff92b476/icechunk-1.1.4-cp313-cp313-musllinux_1_2_i686.whl", hash = "sha256:bb765ad3aec5c76ae3dbab9d01f8e0d7b6acd073fde3d4fd0b1f1bc92f48b772", size = 16823133, upload-time = "2025-08-21T16:08:16.351Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/a5/7ee3ab0ee3e96813048ba73fe46a39f5272c09bcbd7e665ca58754cbb8c2/icechunk-1.1.4-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:98f157c114400e43f148449a7017c5ad269141c7c715663c3c3acd974c2fc978", size = 16943658, upload-time = "2025-08-21T16:08:29.939Z" },
+    { url = "https://files.pythonhosted.org/packages/48/21/fda609d0ca6370447d36c9ab7bd74ab2a2fc918cb287b7e409edb365bb2d/icechunk-1.1.4-cp313-cp313-win32.whl", hash = "sha256:ef865ae5b478abba21c54ae477964c3f06a015699162e158a471f469f3b1e488", size = 12080675, upload-time = "2025-08-21T16:08:52.012Z" },
+    { url = "https://files.pythonhosted.org/packages/c8/59/bfbe1e51ce81f8e5e725addcead022e95fc7ae8d993f991a38044ae2b69e/icechunk-1.1.4-cp313-cp313-win_amd64.whl", hash = "sha256:7466996741c70082df2715c3a9b975894fcfccaff08bf3e3a7830503ae3b6e19", size = 13624442, upload-time = "2025-08-21T16:08:44.417Z" },
+    { url = "https://files.pythonhosted.org/packages/90/3b/968e9cbfe1bb131af36aba5a7af17d0bb071231c290a9a07421b5e1c3f04/icechunk-1.1.4-cp313-cp313t-manylinux_2_28_aarch64.whl", hash = "sha256:5a668462ba0c3bb83d35ea34bfb1dbf095beb9fbfc445e60607fb2ac9c9806fd", size = 16466719, upload-time = "2025-08-21T16:06:55.871Z" },
+    { url = "https://files.pythonhosted.org/packages/22/b6/2df1019194175f658f4937f82044d1571e1eb40bda3e098e2e4890f38280/icechunk-1.1.4-cp313-cp313t-manylinux_2_28_armv7l.whl", hash = "sha256:cc57a278a6e46829e060cbd4bcd8099cb6230b17c7d4c72bad0854aebedc389a", size = 15987391, upload-time = "2025-08-21T16:07:11.948Z" },
+    { url = "https://files.pythonhosted.org/packages/f0/6a/71fb10cabfc1ba7ab0534ef89c98c1178831efb4fb26a4606b2d96809b17/icechunk-1.1.4-cp313-cp313t-musllinux_1_2_aarch64.whl", hash = "sha256:031cc658330d20cf0f16f5ac1f27470d25b5b49cce8eb35a36dc435659b98d6a", size = 16516150, upload-time = "2025-08-21T16:07:51.731Z" },
+    { url = "https://files.pythonhosted.org/packages/64/bb/7ece8b40efb5616c126968306607886c4b218c906abbb7456583859c9fdb/icechunk-1.1.4-cp313-cp313t-musllinux_1_2_armv7l.whl", hash = "sha256:7556e84a7c100939ad6fb29f2435b06084c2a354910b3dcf81e766aa6d3af42b", size = 16238525, upload-time = "2025-08-21T16:08:05.101Z" },
+    { url = "https://files.pythonhosted.org/packages/42/7f/df3d2c85e30894e7b34d7b01d14cc75f29cb4cc51154aced0313ba473e2e/icechunk-1.1.4-cp313-cp313t-musllinux_1_2_i686.whl", hash = "sha256:bde8629e21dbe4a8658efde25825ab1cff4d61f32776bab0b86709a075688b4a", size = 16822618, upload-time = "2025-08-21T16:08:19.083Z" },
+    { url = "https://files.pythonhosted.org/packages/4f/5e/867b103cb59f9c4bdbeb4ff157c7380944487a8fd2d6590ea82b041815ae/icechunk-1.1.4-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:59448c1e3d61a6b272a502b57d8b58ecb1c58b004c66815d92ed01b7350cfd01", size = 16932615, upload-time = "2025-08-21T16:08:32.439Z" },
+]
+
+[[package]]
 name = "identify"
 version = "2.6.7"
 source = { registry = "https://pypi.org/simple" }
@@ -1351,6 +1390,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "dask" },
+    { name = "icechunk" },
     { name = "kubernetes" },
     { name = "numba" },
     { name = "numcodecs" },
@@ -1382,6 +1422,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "dask", specifier = ">=2024.9.0" },
+    { name = "icechunk", specifier = ">=1.1.4" },
     { name = "kubernetes", specifier = ">=33.1.0" },
     { name = "numba", specifier = ">=0.61.0" },
     { name = "numcodecs", specifier = ">=0.13.1" },
