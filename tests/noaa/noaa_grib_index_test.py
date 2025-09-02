@@ -8,6 +8,9 @@ from reformatters.noaa.gefs.common_gefs_template_config import (
 from reformatters.noaa.gfs.forecast.template_config import (
     NoaaGfsForecastTemplateConfig,
 )
+from reformatters.noaa.hrrr.forecast_48_hour.template_config import (  # type: ignore
+    NoaaHrrrForecast48HourTemplateConfig,
+)
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
@@ -172,6 +175,71 @@ def test_grib_index_gfs_f007() -> None:
     lead_time = pd.Timedelta("7h")
 
     data_vars = NoaaGfsForecastTemplateConfig().data_vars
+
+    starts, ends = grib_message_byte_ranges_from_index(
+        idx_path, data_vars, init_time, lead_time
+    )
+
+    assert len(starts) == len(data_vars)
+    assert len(ends) == len(data_vars)
+    assert all(isinstance(s, int) and s >= 0 for s in starts)
+    assert all(isinstance(e, int) and e > 0 for e in ends)
+    assert all(start < stop for start, stop in zip(starts, ends, strict=True))
+
+
+def test_grib_index_hrrr_f00() -> None:
+    idx_path = IDX_FIXTURES_DIR / "hrrr.t00z.wrfsfcf00.grib2.idx"
+
+    init_time = pd.Timestamp("2025-08-01T00")
+    lead_time = pd.Timedelta("0h")
+
+    cfg = NoaaHrrrForecast48HourTemplateConfig()
+    data_vars = [v for v in cfg.data_vars if has_hour_0_values(v)]
+    assert len(data_vars) > 0
+
+    starts, ends = grib_message_byte_ranges_from_index(
+        idx_path, data_vars, init_time, lead_time
+    )
+
+    assert len(starts) == len(data_vars)
+    assert len(ends) == len(data_vars)
+    assert all(isinstance(s, int) and s >= 0 for s in starts)
+    assert all(isinstance(e, int) and e > 0 for e in ends)
+    assert all(start < stop for start, stop in zip(starts, ends, strict=True))
+
+
+def test_grib_index_hrrr_f08() -> None:
+    idx_path = IDX_FIXTURES_DIR / "hrrr.t00z.wrfsfcf08.grib2.idx"
+
+    init_time = pd.Timestamp("2025-08-01T00")
+    lead_time = pd.Timedelta("8h")
+
+    cfg = NoaaHrrrForecast48HourTemplateConfig()
+    data_vars = list(cfg.data_vars)
+    assert len(data_vars) > 0
+
+    starts, ends = grib_message_byte_ranges_from_index(
+        idx_path, data_vars, init_time, lead_time
+    )
+
+    assert len(starts) == len(data_vars)
+    assert len(ends) == len(data_vars)
+    assert all(isinstance(s, int) and s >= 0 for s in starts)
+    assert all(isinstance(e, int) and e > 0 for e in ends)
+    assert all(start < stop for start, stop in zip(starts, ends, strict=True))
+
+
+def test_grib_index_pres_msl_gefs_reforecast() -> None:
+    idx_path = IDX_FIXTURES_DIR / "pres_msl_2019010100_c00.grib2.idx"
+
+    init_time = pd.Timestamp("2019-01-01T00")
+    lead_time = pd.Timedelta("0h")
+
+    # Use GEFS v12 reforecast variables and include only those with hour-0 values for analysis
+    data_vars = [
+        v for v in get_shared_data_var_configs(CHUNKS, SHARDS) if has_hour_0_values(v)
+    ]
+    assert len(data_vars) > 0
 
     starts, ends = grib_message_byte_ranges_from_index(
         idx_path, data_vars, init_time, lead_time
