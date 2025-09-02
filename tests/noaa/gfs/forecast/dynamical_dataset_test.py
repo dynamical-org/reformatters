@@ -107,7 +107,9 @@ def test_backfill_local_and_operational_update(
     # Set "now" to just past the 12 UTC init time so we add a third init_time step
     dataset = NoaaGfsForecastDataset(primary_storage_config=NOOP_STORAGE_CONFIG)
     monkeypatch.setattr(
-        pd.Timestamp, "now", classmethod(lambda cls: pd.Timestamp("2021-05-01T14:00"))
+        pd.Timestamp,
+        "now",
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2021-05-01T14:00")),
     )
     # Dataset updates always update all variables. For the test we hook into get_jobs to limit vars.
     orig_get_jobs = dataset.region_job_class.get_jobs

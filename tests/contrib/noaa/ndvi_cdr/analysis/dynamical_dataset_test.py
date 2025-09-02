@@ -68,7 +68,9 @@ def test_backfill_local_and_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
     # We roll this into this test because these tests are slow.
 
     # Mock pd.Timestamp.now() to control the update end date
-    monkeypatch.setattr("pandas.Timestamp.now", lambda: pd.Timestamp("1981-06-26"))
+    monkeypatch.setattr(
+        "pandas.Timestamp.now", lambda *args, **kwargs: pd.Timestamp("1981-06-26")
+    )
     dataset = NoaaNdviCdrAnalysisDataset(primary_storage_config=noop_storage_config)
     dataset.update("test-update")
     updated_ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
