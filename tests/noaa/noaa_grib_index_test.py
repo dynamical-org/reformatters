@@ -62,3 +62,27 @@ def test_grib_index_geavg_s_f009() -> None:
     assert all(isinstance(s, int) and s >= 0 for s in starts)
     assert all(isinstance(e, int) and e > 0 for e in ends)
     assert all(start < stop for start, stop in zip(starts, ends, strict=True))
+
+
+def test_grib_index_gep01_s_f015() -> None:
+    idx_path = IDX_FIXTURES_DIR / "gep01.t00z.pgrb2s.0p25.f015.idx"
+
+    init_time = pd.Timestamp("2025-08-01T00")
+    lead_time = pd.Timedelta("15h")
+
+    # Get GEFS variables expected in an "s" file at hour 15
+    data_vars = [
+        v
+        for v in get_shared_data_var_configs(CHUNKS, SHARDS)
+        if v.internal_attrs.gefs_file_type == "s+a"
+    ]
+
+    starts, ends = grib_message_byte_ranges_from_index(
+        idx_path, data_vars, init_time, lead_time
+    )
+
+    assert len(starts) == len(data_vars)
+    assert len(ends) == len(data_vars)
+    assert all(isinstance(s, int) and s >= 0 for s in starts)
+    assert all(isinstance(e, int) and e > 0 for e in ends)
+    assert all(start < stop for start, stop in zip(starts, ends, strict=True))
