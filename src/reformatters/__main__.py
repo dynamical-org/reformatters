@@ -68,7 +68,10 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     NoaaNdviCdrAnalysisDataset(
         primary_storage_config=UpstreamGriddedZarrsDatasetStorageConfig()
     ),
-    NoaaGfsForecastDataset(primary_storage_config=SourceCoopDatasetStorageConfig()),
+    NoaaGfsForecastDataset(
+        primary_storage_config=SourceCoopDatasetStorageConfig(),
+        replica_storage_configs=[NoaaGfsForecastAwsOpenDataDatasetStorageConfig()],
+    ),
     DwdIconEuForecastDataset(primary_storage_config=SourceCoopDatasetStorageConfig()),
     NoaaHrrrForecast48HourDataset(
         primary_storage_config=NoaaHrrrAwsOpenDataDatasetStorageConfig(),
