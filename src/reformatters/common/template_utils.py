@@ -59,7 +59,7 @@ def write_metadata(
         sort_consolidated_metadata(Path(store) / "zarr.json")
 
     commit_if_icechunk(
-        message=f"Metadata written at {pd.Timestamp.now().isoformat()}",
+        message=f"Metadata written at {pd.Timestamp.now(tz='UTC').isoformat()}",
         primary_store=store,
         replica_stores=replica_stores,
     )

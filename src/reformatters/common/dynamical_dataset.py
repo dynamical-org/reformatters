@@ -151,7 +151,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 )
 
                 storage.commit_if_icechunk(
-                    f"Automated update at {pd.Timestamp.now().isoformat()}",
+                    f"Automated update at {pd.Timestamp.now(tz='UTC').isoformat()}",
                     primary_store,
                     replica_stores,
                 )
@@ -321,7 +321,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             _, primary_store, replica_stores = region_job.process()
 
             storage.commit_if_icechunk(
-                f"Backfill completed at {pd.Timestamp.now().isoformat()}",
+                f"Backfill completed at {pd.Timestamp.now(tz='UTC').isoformat()}",
                 primary_store,
                 replica_stores,
             )
