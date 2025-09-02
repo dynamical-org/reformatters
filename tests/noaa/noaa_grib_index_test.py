@@ -8,6 +8,10 @@ from reformatters.noaa.gefs.common_gefs_template_config import (
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
+# dummy chunk/shard sizes
+CHUNKS = (1, 1, 1, 1)
+SHARDS = (1, 1, 1, 1)
+
 
 def test_grib_index_geavg_happy_path() -> None:
     fixtures_dir = Path(__file__).parent / "fixtures"
@@ -17,13 +21,8 @@ def test_grib_index_geavg_happy_path() -> None:
     init_time = pd.Timestamp("2025-08-01T00")
     lead_time = pd.Timedelta("0h")
 
-    # dummy chunk/shard sizes
-    chunks = (1, 1, 1, 1)
-    shards = (1, 1, 1, 1)
+    data_vars = list(get_shared_data_var_configs(CHUNKS, SHARDS))
 
-    data_vars = list(get_shared_data_var_configs(chunks, shards))
-
-    # For lead_time == 0, filter out vars that do not have hour-0 values
     if lead_time == pd.Timedelta("0h"):
         data_vars = [v for v in data_vars if has_hour_0_values(v)]
 

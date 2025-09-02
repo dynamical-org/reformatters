@@ -14,7 +14,10 @@ def grib_message_byte_ranges_from_index(
     init_time: pd.Timestamp,
     lead_time: pd.Timedelta,
 ) -> tuple[list[int], list[int]]:
-    """Parse byte ranges from GRIB index file for the given coordinate."""
+    """
+    Parse byte ranges from GRIB index file for the given data variables.
+    returns a tuple of two lists: (start_byte_offsets, end_byte_offsets)
+    """
     with open(index_path) as f:
         index_contents = f.read()
 
