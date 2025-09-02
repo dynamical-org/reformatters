@@ -170,9 +170,9 @@ def _get_store_path(
 
     match storage_config.format:
         case DatasetFormat.ZARR3:
-            extension = ".zarr"
+            extension = "zarr"
         case DatasetFormat.ICECHUNK:
-            extension = ".icechunk"
+            extension = "icechunk"
         case _ as unreachable:
             assert_never(unreachable)
 
@@ -182,8 +182,10 @@ def _get_store_path(
 def _get_store(store_path: str, storage_config: StorageConfig) -> zarr.abc.store.Store:
     match storage_config.format:
         case DatasetFormat.ICECHUNK:
+            assert store_path.endswith(".icechunk")
             return _get_icechunk_store(store_path, storage_config)
         case DatasetFormat.ZARR3:
+            assert store_path.endswith(".zarr")
             return _get_zarr3_store(store_path, storage_config)
         case _ as unreachable:
             assert_never(unreachable)
