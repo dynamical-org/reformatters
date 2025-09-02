@@ -96,6 +96,8 @@ def get_shared_data_var_configs(
         compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
     )
 
+    default_window_reset_frequency = pd.Timedelta("6h")
+
     keep_mantissa_bits_default = 7
     keep_mantissa_bits_categorical: Literal["no-rounding"] = "no-rounding"
 
@@ -172,6 +174,7 @@ def get_shared_data_var_configs(
                 grib_index_level="2 m above ground",
                 gefs_file_type="s+a",
                 index_position=13,
+                window_reset_frequency=default_window_reset_frequency,
                 keep_mantissa_bits=keep_mantissa_bits_default,
             ),
         ),
@@ -190,6 +193,7 @@ def get_shared_data_var_configs(
                 grib_index_level="2 m above ground",
                 gefs_file_type="s+a",
                 index_position=14,
+                window_reset_frequency=default_window_reset_frequency,
                 keep_mantissa_bits=keep_mantissa_bits_default,
             ),
         ),
@@ -325,6 +329,7 @@ def get_shared_data_var_configs(
                 grib_index_level="surface",
                 gefs_file_type="s+a",
                 index_position=19,
+                window_reset_frequency=default_window_reset_frequency,
                 keep_mantissa_bits=keep_mantissa_bits_categorical,
             ),
         ),
@@ -343,6 +348,7 @@ def get_shared_data_var_configs(
                 grib_index_level="surface",
                 gefs_file_type="s+a",
                 index_position=20,
+                window_reset_frequency=default_window_reset_frequency,
                 keep_mantissa_bits=keep_mantissa_bits_categorical,
             ),
         ),
@@ -361,6 +367,7 @@ def get_shared_data_var_configs(
                 grib_index_level="surface",
                 gefs_file_type="s+a",
                 index_position=21,
+                window_reset_frequency=default_window_reset_frequency,
                 keep_mantissa_bits=keep_mantissa_bits_categorical,
             ),
         ),
@@ -379,6 +386,7 @@ def get_shared_data_var_configs(
                 grib_index_level="surface",
                 gefs_file_type="s+a",
                 index_position=22,
+                window_reset_frequency=default_window_reset_frequency,
                 keep_mantissa_bits=keep_mantissa_bits_categorical,
             ),
         ),
@@ -416,6 +424,7 @@ def get_shared_data_var_configs(
                 grib_index_level="entire atmosphere",
                 gefs_file_type="s+a",
                 index_position=28,
+                window_reset_frequency=default_window_reset_frequency,
                 keep_mantissa_bits=keep_mantissa_bits_default,
             ),
         ),
@@ -454,6 +463,7 @@ def get_shared_data_var_configs(
                 grib_index_level="surface",
                 gefs_file_type="s+a",
                 index_position=30,
+                window_reset_frequency=default_window_reset_frequency,
                 keep_mantissa_bits=keep_mantissa_bits_default,
             ),
         ),
@@ -473,6 +483,7 @@ def get_shared_data_var_configs(
                 grib_index_level="surface",
                 gefs_file_type="s+a",
                 index_position=31,
+                window_reset_frequency=default_window_reset_frequency,
                 keep_mantissa_bits=keep_mantissa_bits_default,
             ),
         ),

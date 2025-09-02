@@ -4,13 +4,14 @@ from os import PathLike
 
 import pandas as pd
 
+from reformatters.common.config_models import DataVar
 from reformatters.common.time_utils import whole_hours
-from reformatters.noaa.models import NoaaDataVar
+from reformatters.noaa.models import NoaaInternalAttrs
 
 
 def grib_message_byte_ranges_from_index(
     index_path: PathLike[str],
-    data_vars: Sequence[NoaaDataVar],
+    data_vars: Sequence[DataVar[NoaaInternalAttrs]],
     init_time: pd.Timestamp,
     lead_time: pd.Timedelta,
 ) -> tuple[list[int], list[int]]:
@@ -45,6 +46,7 @@ def grib_message_byte_ranges_from_index(
                 lead_time_str = f"0-0 day {step_type} fcst"
             else:
                 lead_time_str = f"{reset_hour}-{lead_hours} hour {step_type} fcst"
+
         elif lead_hours == 0:
             lead_time_str = "anl"
         elif var.attrs.step_type == "instant":
@@ -74,6 +76,7 @@ def grib_message_byte_ranges_from_index(
         # We fall back to adding a large value (+10 GiB) to get an end point since obstore
         # doesn't support omitting the end byte but will return bytes up to the end of the file.
         end = int(end_match) if end_match else start + 10 * (2**30)
+        end -= 1  # HTTP Range header endpoint is inclusive
         starts.append(start)
         ends.append(end)
 
