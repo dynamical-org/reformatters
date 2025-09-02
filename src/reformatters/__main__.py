@@ -32,7 +32,7 @@ class NoaaHrrrAwsOpenDataDatasetStorageConfig(StorageConfig):
 
 
 class NoaaGfsForecastAwsOpenDataDatasetStorageConfig(StorageConfig):
-    """Configuration for the storage of a NOAA GFS Forecast dataset."""
+    """NOAA GFS in Icechunk on AWS Open Data."""
 
     base_path: str = "s3://dynamical-noaa-gfs"
     k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
