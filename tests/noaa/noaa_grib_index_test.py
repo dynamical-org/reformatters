@@ -5,8 +5,8 @@ import pandas as pd
 from reformatters.noaa.gefs.common_gefs_template_config import (
     get_shared_data_var_configs,
 )
-from reformatters.noaa.noaa_utils import has_hour_0_values
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
+from reformatters.noaa.noaa_utils import has_hour_0_values
 
 
 def test_grib_index_geavg_happy_path() -> None:
