@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import pandas as pd
-import pytest
 
 from reformatters.noaa.gefs.common_gefs_template_config import (
     get_shared_data_var_configs,
