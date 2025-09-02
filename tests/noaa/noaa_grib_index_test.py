@@ -9,18 +9,15 @@ from reformatters.noaa.gefs.common_gefs_template_config import (
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
+IDX_FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
 # dummy chunk/shard sizes
 CHUNKS = (1, 1, 1, 1)
 SHARDS = (1, 1, 1, 1)
 
 
-@pytest.fixture
-def fixtures_dir() -> Path:
-    return Path(__file__).parent / "fixtures"
-
-
-def test_grib_index_geavg_f000(fixtures_dir: Path) -> None:
-    idx_path = fixtures_dir / "geavg.t00z.pgrb2s.0p25.f000.idx"
+def test_grib_index_geavg_s_f000() -> None:
+    idx_path = IDX_FIXTURES_DIR / "geavg.t00z.pgrb2s.0p25.f000.idx"
 
     init_time = pd.Timestamp("2025-08-01T00")
     lead_time = pd.Timedelta("0h")
@@ -43,13 +40,13 @@ def test_grib_index_geavg_f000(fixtures_dir: Path) -> None:
     assert all(start < stop for start, stop in zip(starts, ends, strict=True))
 
 
-def test_grib_index_geavg_f009(fixtures_dir: Path) -> None:
-    idx_path = fixtures_dir / "geavg.t00z.pgrb2s.0p25.f009.idx"
+def test_grib_index_geavg_s_f009() -> None:
+    idx_path = IDX_FIXTURES_DIR / "geavg.t00z.pgrb2s.0p25.f009.idx"
 
     init_time = pd.Timestamp("2025-08-01T00")
     lead_time = pd.Timedelta("9h")
 
-    # Get GEFS variables expected in an "s" file at hour 9
+    # Get GEFS variables expected in an "s" file
     data_vars = [
         v
         for v in get_shared_data_var_configs(CHUNKS, SHARDS)
