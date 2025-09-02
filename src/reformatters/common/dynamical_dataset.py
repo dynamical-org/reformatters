@@ -151,7 +151,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 )
 
                 storage.commit_if_icechunk(
-                    f"Completed operational update for {job}",
+                    f"Automated update at {pd.Timestamp.now().isoformat()}",
                     primary_store,
                     replica_stores,
                 )
@@ -321,7 +321,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             _, primary_store, replica_stores = region_job.process()
 
             storage.commit_if_icechunk(
-                f"Completed backfill for {region_job}", primary_store, replica_stores
+                f"Backfill completed at {pd.Timestamp.now().isoformat()}",
+                primary_store,
+                replica_stores,
             )
 
     def validate_dataset(

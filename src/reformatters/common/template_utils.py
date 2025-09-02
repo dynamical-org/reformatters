@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 import dask.array
 import numpy as np
+import pandas as pd
 import xarray as xr
 import zarr
 
@@ -58,7 +59,7 @@ def write_metadata(
         sort_consolidated_metadata(Path(store) / "zarr.json")
 
     commit_if_icechunk(
-        message="write metadata",
+        message=f"Metadata written at {pd.Timestamp.now().isoformat()}",
         primary_store=store,
         replica_stores=replica_stores,
     )

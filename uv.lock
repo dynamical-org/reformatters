@@ -1422,7 +1422,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "dask", specifier = ">=2024.9.0" },
-    { name = "icechunk", specifier = "==1.1.4" },
+    { name = "icechunk", specifier = ">=1.1.4" },
     { name = "kubernetes", specifier = ">=33.1.0" },
     { name = "numba", specifier = ">=0.61.0" },
     { name = "numcodecs", specifier = ">=0.13.1" },
