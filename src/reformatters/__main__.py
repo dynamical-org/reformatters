@@ -31,7 +31,7 @@ class NoaaHrrrAwsOpenDataDatasetStorageConfig(StorageConfig):
     format: DatasetFormat = DatasetFormat.ZARR3
 
 
-class NoaaGfsForecastAwsOpenDataDatasetStorageConfig(StorageConfig):
+class NoaaGfsAwsOpenDataDatasetStorageConfig(StorageConfig):
     """NOAA GFS in Icechunk on AWS Open Data."""
 
     base_path: str = "s3://dynamical-noaa-gfs"
