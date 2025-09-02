@@ -31,6 +31,14 @@ class NoaaHrrrAwsOpenDataDatasetStorageConfig(StorageConfig):
     format: DatasetFormat = DatasetFormat.ZARR3
 
 
+class NoaaGfsForecastAwsOpenDataDatasetStorageConfig(StorageConfig):
+    """Configuration for the storage of a NOAA GFS Forecast dataset."""
+
+    base_path: str = "s3://dynamical-noaa-gfs"
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
 class SourceCoopDatasetStorageConfig(StorageConfig):
     """Configuration for the storage of a SourceCoop dataset."""
 
