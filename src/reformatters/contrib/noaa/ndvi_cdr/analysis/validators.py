@@ -6,21 +6,22 @@ from reformatters.common import validation
 
 def check_data_is_current(ds: xr.Dataset) -> validation.ValidationResult:
     """
-    Check that the data is current within the last 4 days.
+    Check that the data is current within the last 14 days.
 
-    There seems to be a consistent ~3 day lag for this data's availability.
-    We'll check that we have recent data within the last 4 days as a conservative check.
+    There's usually a consistent ~3 day lag for this data's availability.
+    Sometimes this goes much higher and it is not an operationally supported dynamical dataset (it's contrib)
+    so we'll alert after 14 days of lag.
     """
     today_start = pd.Timestamp.now().floor("D")
-    latest_init_time_ds = ds.sel(time=slice(today_start - pd.Timedelta(days=4), None))
+    latest_init_time_ds = ds.sel(time=slice(today_start - pd.Timedelta(days=14), None))
     if latest_init_time_ds.sizes["time"] == 0:
         return validation.ValidationResult(
-            passed=False, message="No data found for the last 4 days"
+            passed=False, message="No data found for the allowed delay window"
         )
 
     return validation.ValidationResult(
         passed=True,
-        message="Data found for the last 4 days",
+        message="Data found for the allowed delay window",
     )
 
 

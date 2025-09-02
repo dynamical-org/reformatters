@@ -1,0 +1,38 @@
+1:0:d=2025080100:VIS:surface:15 hour fcst:ENS=+1
+2:328368:d=2025080100:GUST:surface:15 hour fcst:ENS=+1
+3:882548:d=2025080100:MSLET:mean sea level:15 hour fcst:ENS=+1
+4:1820257:d=2025080100:PRES:surface:15 hour fcst:ENS=+1
+5:2575698:d=2025080100:TSOIL:0-0.1 m below ground:15 hour fcst:ENS=+1
+6:2943334:d=2025080100:SOILW:0-0.1 m below ground:15 hour fcst:ENS=+1
+7:3296840:d=2025080100:WEASD:surface:15 hour fcst:ENS=+1
+8:3510517:d=2025080100:SNOD:surface:15 hour fcst:ENS=+1
+9:3714969:d=2025080100:ICETK:surface:15 hour fcst:ENS=+1
+10:3789696:d=2025080100:TMP:2 m above ground:15 hour fcst:ENS=+1
+11:4229797:d=2025080100:DPT:2 m above ground:15 hour fcst:ENS=+1
+12:5018730:d=2025080100:RH:2 m above ground:15 hour fcst:ENS=+1
+13:5695222:d=2025080100:TMAX:2 m above ground:12-15 hour max fcst:ENS=+1
+14:6129153:d=2025080100:TMIN:2 m above ground:12-15 hour min fcst:ENS=+1
+15:6562241:d=2025080100:UGRD:10 m above ground:15 hour fcst:ENS=+1
+16:7419725:d=2025080100:VGRD:10 m above ground:15 hour fcst:ENS=+1
+17:8260369:d=2025080100:CPOFP:surface:15 hour fcst:ENS=+1
+18:8838298:d=2025080100:APCP:surface:12-15 hour acc fcst:ENS=+1
+19:9080634:d=2025080100:CSNOW:surface:12-15 hour ave fcst:ENS=+1
+20:9097731:d=2025080100:CICEP:surface:12-15 hour ave fcst:ENS=+1
+21:9097979:d=2025080100:CFRZR:surface:12-15 hour ave fcst:ENS=+1
+22:9099127:d=2025080100:CRAIN:surface:12-15 hour ave fcst:ENS=+1
+23:9198874:d=2025080100:LHTFL:surface:12-15 hour ave fcst:ENS=+1
+24:9730601:d=2025080100:SHTFL:surface:12-15 hour ave fcst:ENS=+1
+25:10549059:d=2025080100:CAPE:surface:15 hour fcst:ENS=+1
+26:11076830:d=2025080100:CIN:surface:15 hour fcst:ENS=+1
+27:11432796:d=2025080100:PWAT:entire atmosphere (considered as a single layer):15 hour fcst:ENS=+1
+28:11911274:d=2025080100:TCDC:entire atmosphere:12-15 hour ave fcst:ENS=+1
+29:12482533:d=2025080100:HGT:cloud ceiling:15 hour fcst:ENS=+1
+30:13566894:d=2025080100:DSWRF:surface:12-15 hour ave fcst:ENS=+1
+31:13785243:d=2025080100:DLWRF:surface:12-15 hour ave fcst:ENS=+1
+32:14308527:d=2025080100:USWRF:surface:12-15 hour ave fcst:ENS=+1
+33:14585339:d=2025080100:ULWRF:surface:12-15 hour ave fcst:ENS=+1
+34:14977464:d=2025080100:ULWRF:top of atmosphere:12-15 hour ave fcst:ENS=+1
+35:15462983:d=2025080100:HLCY:3000-0 m above ground:15 hour fcst:ENS=+1
+36:16084881:d=2025080100:CAPE:180-0 mb above ground:15 hour fcst:ENS=+1
+37:16620941:d=2025080100:CIN:180-0 mb above ground:15 hour fcst:ENS=+1
+38:17007489:d=2025080100:PRMSL:mean sea level:15 hour fcst:ENS=+1

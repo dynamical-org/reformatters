@@ -126,6 +126,9 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         Updates the template file on disk with the latest configuration.
         """
         coords = self.dimension_coordinates()
+        assert set(coords) == set(self.dims), (
+            f"`dimension_coordinates` must return coordinates for all dimensions {self.dims}"
+        )
 
         data_vars = {
             var_config.name: template_utils.make_empty_variable(
@@ -140,7 +143,11 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
             self.dataset_attributes.model_dump(exclude_none=True),
         )
 
-        ds = ds.assign_coords(self.derive_coordinates(ds))
+        derived_coords = self.derive_coordinates(ds)
+        assert set(derived_coords).isdisjoint(ds.dims), (
+            f"Return coordinates for dataset dimensions {self.dims} from `dimension_coordinates` rather than `derive_coordinates`."
+        )
+        ds = ds.assign_coords(derived_coords)
 
         assert {d.name for d in self.data_vars} == set(ds.data_vars)
         for var_config in self.data_vars:

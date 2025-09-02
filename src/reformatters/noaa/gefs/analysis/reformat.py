@@ -257,7 +257,9 @@ def reformat_operational_update(job_name: str) -> None:
                 )
             )
 
+        logger.info("Starting to wait for data var upload futures")
         concurrent.futures.wait(data_var_upload_futures, return_when="FIRST_EXCEPTION")
+        logger.info("Finished waiting for data var upload futures")
         for future in data_var_upload_futures:
             if (e := future.exception()) is not None:
                 raise e
@@ -268,7 +270,9 @@ def reformat_operational_update(job_name: str) -> None:
             )
             continue
 
+        logger.info("Closing progress tracker")
         progress_tracker.close()
+        logger.info("Closed progress tracker")
 
         # Trim off any steps that are not yet available and rewrite metadata locally.
         # We trim one less than the max_processed_time because the last step only has

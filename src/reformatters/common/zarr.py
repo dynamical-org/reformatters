@@ -55,17 +55,23 @@ def copy_data_var(
             f"Copying data var chunks to replica store ({replica_store}) for {relative_dir}."
         )
         _copy_data_var_chunks(tmp_store, relative_dir, replica_store)
+        logger.info(
+            f"Done copying data var chunks to replica store ({replica_store}) for {relative_dir}."
+        )
 
     logger.info(
         f"Copying data var chunks to primary store ({primary_store}) for {relative_dir}."
     )
     _copy_data_var_chunks(tmp_store, relative_dir, primary_store)
+    logger.info(
+        f"Done copying data var chunks to primary store ({primary_store}) for {relative_dir}."
+    )
 
     if track_progress_callback is not None:
         track_progress_callback()
 
     try:
-        # Delete data to conserve disk space.
+        # Delete data to free disk space.
         for file in tmp_store.glob(f"{relative_dir}**/*"):
             if file.is_file():
                 file.unlink()
@@ -131,7 +137,8 @@ def sync_to_store(store: zarr.abc.store.Store, key: str, data: bytes) -> None:
             store.set(
                 key,
                 zarr.core.buffer.default_buffer_prototype().buffer.from_bytes(data),
-            )
+            ),
+            timeout=90,  # In seconds. Timeout needs to be long enough to upload a large shard.
         ),
         max_attempts=6,
     )
