@@ -27,6 +27,7 @@ def test_grib_index_geavg_s_f000() -> None:
         for v in get_shared_data_var_configs(CHUNKS, SHARDS)
         if has_hour_0_values(v) and v.internal_attrs.gefs_file_type == "s+a"
     ]
+    assert len(data_vars) > 0
 
     starts, ends = grib_message_byte_ranges_from_index(
         idx_path, data_vars, init_time, lead_time
@@ -51,6 +52,7 @@ def test_grib_index_geavg_s_f009() -> None:
         for v in get_shared_data_var_configs(CHUNKS, SHARDS)
         if v.internal_attrs.gefs_file_type == "s+a"
     ]
+    assert len(data_vars) > 0
 
     starts, ends = grib_message_byte_ranges_from_index(
         idx_path, data_vars, init_time, lead_time
@@ -69,12 +71,13 @@ def test_grib_index_gep01_s_f015() -> None:
     init_time = pd.Timestamp("2025-08-01T00")
     lead_time = pd.Timedelta("15h")
 
-    # Get GEFS variables expected in an "s" file at hour 15
+    # Get GEFS variables expected in an "s" file
     data_vars = [
         v
         for v in get_shared_data_var_configs(CHUNKS, SHARDS)
         if v.internal_attrs.gefs_file_type == "s+a"
     ]
+    assert len(data_vars) > 0
 
     starts, ends = grib_message_byte_ranges_from_index(
         idx_path, data_vars, init_time, lead_time
