@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from reformatters.noaa.gefs.common_gefs_template_config import (
     get_shared_data_var_configs,
@@ -13,18 +14,23 @@ CHUNKS = (1, 1, 1, 1)
 SHARDS = (1, 1, 1, 1)
 
 
-def test_grib_index_geavg_happy_path() -> None:
-    fixtures_dir = Path(__file__).parent / "fixtures"
+@pytest.fixture
+def fixtures_dir() -> Path:
+    return Path(__file__).parent / "fixtures"
+
+
+def test_grib_index_geavg_f000(fixtures_dir: Path) -> None:
     idx_path = fixtures_dir / "geavg.t00z.pgrb2s.0p25.f000.idx"
 
-    # Per instructions: use init_time 2025-08-01T00 when not clear from filename
     init_time = pd.Timestamp("2025-08-01T00")
     lead_time = pd.Timedelta("0h")
 
-    data_vars = list(get_shared_data_var_configs(CHUNKS, SHARDS))
-
-    if lead_time == pd.Timedelta("0h"):
-        data_vars = [v for v in data_vars if has_hour_0_values(v)]
+    # Get GEFS variables expected in an "s" file at hour 0
+    data_vars = [
+        v
+        for v in get_shared_data_var_configs(CHUNKS, SHARDS)
+        if has_hour_0_values(v) and v.internal_attrs.gefs_file_type == "s+a"
+    ]
 
     starts, ends = grib_message_byte_ranges_from_index(
         idx_path, data_vars, init_time, lead_time
@@ -34,3 +40,4 @@ def test_grib_index_geavg_happy_path() -> None:
     assert len(ends) == len(data_vars)
     assert all(isinstance(s, int) and s >= 0 for s in starts)
     assert all(isinstance(e, int) and e > 0 for e in ends)
+    assert all(start < stop for start, stop in zip(starts, ends, strict=True))
