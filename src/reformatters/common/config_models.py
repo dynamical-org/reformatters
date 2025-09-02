@@ -132,7 +132,7 @@ class BaseInternalAttrs(FrozenBaseModel):
     deaccumulate_to_rate: bool = False
 
 
-INTERNAL_ATTRS = TypeVar("INTERNAL_ATTRS", bound=BaseInternalAttrs)
+INTERNAL_ATTRS = TypeVar("INTERNAL_ATTRS", bound=BaseInternalAttrs, covariant=True)
 
 
 class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS]):
