@@ -52,7 +52,7 @@ def write_metadata(
             logger.info(f"Writing metadata to replica {replica_store} with mode {mode}")
             template_ds.to_zarr(replica_store, mode=mode, compute=False)  # type: ignore[call-overload]
 
-        logger.info(f"Writing metadata to primary store {store} with mode {mode}")
+        logger.info(f"Writing metadata to store {store} with mode {mode}")
         template_ds.to_zarr(store, mode=mode, compute=False)  # type: ignore[call-overload]
 
     if isinstance(store, Path | str):
