@@ -1,4 +1,7 @@
+import numpy as np
+import pandas as pd
 import pytest
+import xarray as xr
 
 from reformatters.common import validation
 from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
@@ -10,6 +13,48 @@ from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 @pytest.fixture
 def dataset() -> NoaaHrrrForecast48HourDataset:
     return NoaaHrrrForecast48HourDataset(primary_storage_config=NOOP_STORAGE_CONFIG)
+
+
+@pytest.mark.slow
+def test_backfill_local_and_operational_update(
+    dataset: NoaaHrrrForecast48HourDataset, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Local backfill reformat
+    dataset.backfill_local(append_dim_end=pd.Timestamp("2018-07-13T18:00"))
+    ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
+    assert ds.time.max() == pd.Timestamp("2018-07-13T12:00")
+
+    # Operational update
+    monkeypatch.setattr(
+        dataset.region_job_class,
+        "_update_append_dim_end",
+        lambda: pd.Timestamp("2018-07-14T00:00"),
+    )
+    monkeypatch.setattr(
+        dataset.region_job_class,
+        "_update_append_dim_start",
+        lambda existing_ds: pd.Timestamp(existing_ds.time.max().item()),
+    )
+
+    dataset.update("test-update")
+
+    # Check resulting dataset
+    updated_ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
+
+    np.testing.assert_array_equal(
+        updated_ds.time,
+        pd.date_range(
+            "2018-07-13T12:00",
+            "2018-07-14T00:00",
+            freq=dataset.template_config.append_dim_frequency,
+        ),
+    )
+    subset_ds = updated_ds.sel(latitude=50, longitude=-90, method="nearest").sel(
+        lead_time=slice("0h", "3h")
+    )
+    np.testing.assert_array_equal(
+        subset_ds["temperature_2m"].values, [190.0, 163.0, 135.0]
+    )
 
 
 def test_operational_kubernetes_resources(
