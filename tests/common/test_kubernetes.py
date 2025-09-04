@@ -104,7 +104,6 @@ def test_as_kubernetes_object_comprehensive() -> None:
                         },
                         "volumeMounts": [
                             {"mountPath": "/app/data", "name": "ephemeral-vol"},
-                            {"mountPath": "/dev/shm", "name": "shared-memory-dir"},  # noqa: S108 yes we're using a known, shared path
                             {
                                 "name": "aws-creds",
                                 "mountPath": "/secrets/aws-creds.json",
@@ -145,13 +144,6 @@ def test_as_kubernetes_object_comprehensive() -> None:
                             }
                         },
                     },
-                    {
-                        "name": "shared-memory-dir",
-                        "emptyDir": {
-                            "medium": "Memory",
-                            "sizeLimit": "1k",  # default value
-                        },
-                    },
                     {"name": "aws-creds", "secret": {"secretName": "aws-creds"}},
                     {"name": "db-creds", "secret": {"secretName": "db-creds"}},
                 ],
@@ -188,12 +180,20 @@ def test_as_kubernetes_object_with_custom_values() -> None:
     pod_spec: dict[str, Any] = k8s_obj["spec"]["template"]["spec"]
     assert pod_spec["activeDeadlineSeconds"] == 10800  # 3 hours
 
-    # Test shared memory volume
+    # Read volumes and volume mounts into dicts for easier access
     volumes: dict[str, dict[str, Any]] = {
         vol["name"]: vol for vol in pod_spec["volumes"]
     }
+    assert len(pod_spec["containers"]) == 1  # assumed in [0] access just below
+    volume_mounts: dict[str, dict[str, Any]] = {
+        mount["name"]: mount for mount in pod_spec["containers"][0]["volumeMounts"]
+    }
+
+    # Test shared memory volume
     shared_mem_vol: dict[str, Any] = volumes["shared-memory-dir"]
     assert shared_mem_vol["emptyDir"]["sizeLimit"] == "512Mi"
+    assert shared_mem_vol["emptyDir"]["medium"] == "Memory"
+    assert volume_mounts["shared-memory-dir"]["mountPath"] == "/dev/shm"  # noqa: S108
 
     # Test ephemeral storage
     ephemeral_vol: dict[str, Any] = volumes["ephemeral-vol"]

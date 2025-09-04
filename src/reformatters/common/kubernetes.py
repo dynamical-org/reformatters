@@ -16,7 +16,7 @@ class Job(pydantic.BaseModel):
     dataset_id: Annotated[str, pydantic.Field(min_length=1)]
     cpu: Annotated[str, pydantic.Field(min_length=1)]
     memory: Annotated[str, pydantic.Field(min_length=1)]
-    shared_memory: Annotated[str, pydantic.Field(min_length=1)] = "1k"
+    shared_memory: Annotated[str | None, pydantic.Field(min_length=1)] = None
     ephemeral_storage: Annotated[str, pydantic.Field(min_length=1)] = "10G"
     workers_total: Annotated[int, pydantic.Field(ge=1)]
     parallelism: Annotated[int, pydantic.Field(ge=1)]
@@ -126,10 +126,16 @@ class Job(pydantic.BaseModel):
                                 },
                                 "volumeMounts": [
                                     {"mountPath": "/app/data", "name": "ephemeral-vol"},
-                                    {
-                                        "mountPath": "/dev/shm",  # noqa: S108 yes we're using a known, shared path
-                                        "name": "shared-memory-dir",
-                                    },
+                                    *(
+                                        [
+                                            {
+                                                "mountPath": "/dev/shm",  # noqa: S108 yes we're using a known, shared path
+                                                "name": "shared-memory-dir",
+                                            }
+                                        ]
+                                        if self.shared_memory is not None
+                                        else []
+                                    ),
                                     *[
                                         {
                                             "name": secret_name,
@@ -171,13 +177,19 @@ class Job(pydantic.BaseModel):
                                 },
                                 "name": "ephemeral-vol",
                             },
-                            {
-                                "name": "shared-memory-dir",
-                                "emptyDir": {
-                                    "medium": "Memory",
-                                    "sizeLimit": self.shared_memory,
-                                },
-                            },
+                            *(
+                                [
+                                    {
+                                        "name": "shared-memory-dir",
+                                        "emptyDir": {
+                                            "medium": "Memory",
+                                            "sizeLimit": self.shared_memory,
+                                        },
+                                    }
+                                ]
+                                if self.shared_memory is not None
+                                else []
+                            ),
                             *[
                                 {
                                     "name": secret_name,
