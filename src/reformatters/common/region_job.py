@@ -16,6 +16,7 @@ import pandas as pd
 import pydantic
 import xarray as xr
 import zarr
+from icechunk.store import IcechunkStore
 from pydantic import AfterValidator, Field, computed_field
 
 from reformatters.common import template_utils
@@ -502,6 +503,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
 
         template_utils.write_metadata(self.template_ds, self.tmp_store)
+
+        # Expand the icechunk stores _before_ we write chunk data
+        icechunk_stores = [s for s in replica_stores if isinstance(s, IcechunkStore)]
+        if isinstance(primary_store, IcechunkStore):
+            icechunk_stores.append(primary_store)
+        for icechunk_store in icechunk_stores:
+            template_utils.write_metadata(self.template_ds, icechunk_store, mode="w")
 
         results: dict[str, Sequence[SOURCE_FILE_COORD]] = {}
         upload_futures: list[Any] = []
