@@ -29,9 +29,9 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
     HRRRFileType,
 )
 from reformatters.noaa.hrrr.read_data import (
-    parse_hrrr_index_byte_ranges,
     read_hrrr_data,
 )
+from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
 log = get_logger(__name__)
@@ -155,8 +155,8 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
         idx_url = coord.get_idx_url()
         idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
 
-        byte_range_starts, byte_range_ends = parse_hrrr_index_byte_ranges(
-            idx_local_path, coord.data_vars
+        byte_range_starts, byte_range_ends = grib_message_byte_ranges_from_index(
+            idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
         )
         vars_suffix = digest(
             f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)

@@ -63,7 +63,9 @@ def grib_message_byte_ranges_from_index(
         # 2nd capture which wraps to capture the byte start of the next line to get our end byte.
         # 2nd capture is optional because we need to support matching the final variable in the index.
         matches = re.findall(
-            rf"\d+:(\d+):{var_match_str}:(?:\n\d+:(\d+))?",
+            rf"\d+:(\d+):"  # row number : start byte offset (captured)
+            rf"{var_match_str}:"  # uniquely identify the variable we want
+            rf"(?:.*\n\d+:(\d+))?",  # end of line and wrap to capture next line's byte offset to get end byte (optional capture to handle last line of index)
             index_contents,
         )
         assert len(matches) == 1, (
@@ -76,7 +78,6 @@ def grib_message_byte_ranges_from_index(
         # We fall back to adding a large value (+10 GiB) to get an end point since obstore
         # doesn't support omitting the end byte but will return bytes up to the end of the file.
         end = int(end_match) if end_match else start + 10 * (2**30)
-        end -= 1  # HTTP Range header endpoint is inclusive
         starts.append(start)
         ends.append(end)
 

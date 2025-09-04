@@ -13,7 +13,7 @@ from reformatters.noaa.hrrr.forecast_48_hour.region_job import (
 from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
     NoaaHrrrForecast48HourTemplateConfig,
 )
-from reformatters.noaa.hrrr.read_data import parse_hrrr_index_byte_ranges
+from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 
 
 def test_update_template(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -175,8 +175,8 @@ def test_spatial_info_matches_file() -> None:
         data_vars=[config.data_vars[0]],  # Any one variable will do
     )
     idx_local_path = http_download_to_disk(coord.get_idx_url(), config.dataset_id)
-    byte_range_starts, byte_range_ends = parse_hrrr_index_byte_ranges(
-        idx_local_path, coord.data_vars
+    byte_range_starts, byte_range_ends = grib_message_byte_ranges_from_index(
+        idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
     )
     local_path = http_download_to_disk(
         coord.get_url(),
