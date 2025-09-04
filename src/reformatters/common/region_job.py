@@ -509,7 +509,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         with (
             make_shared_buffer(processing_region_ds) as shared_buffer,
             ThreadPoolExecutor(max_workers=1) as download_executor,
-            ThreadPoolExecutor(max_workers=2) as upload_executor,
+            ThreadPoolExecutor(max_workers=1) as upload_executor,
         ):
             log.info(f"Starting {self!r}")
 
