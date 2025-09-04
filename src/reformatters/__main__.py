@@ -40,6 +40,14 @@ class NoaaHrrrAwsOpenDataDatasetStorageConfig(StorageConfig):
     format: DatasetFormat = DatasetFormat.ZARR3
 
 
+class NoaaGfsAwsOpenDataDatasetStorageConfig(StorageConfig):
+    """NOAA GFS in Icechunk on AWS Open Data."""
+
+    base_path: str = "s3://dynamical-noaa-gfs"
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
 class SourceCoopDatasetStorageConfig(StorageConfig):
     """Configuration for the storage of a SourceCoop dataset."""
 
@@ -69,7 +77,10 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     NoaaNdviCdrAnalysisDataset(
         primary_storage_config=UpstreamGriddedZarrsDatasetStorageConfig()
     ),
-    NoaaGfsForecastDataset(primary_storage_config=SourceCoopDatasetStorageConfig()),
+    NoaaGfsForecastDataset(
+        primary_storage_config=SourceCoopDatasetStorageConfig(),
+        replica_storage_configs=[NoaaGfsAwsOpenDataDatasetStorageConfig()],
+    ),
     DwdIconEuForecastDataset(primary_storage_config=SourceCoopDatasetStorageConfig()),
     NoaaHrrrForecast48HourDataset(
         primary_storage_config=NoaaHrrrAwsOpenDataDatasetStorageConfig(),

@@ -2,6 +2,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+import numpy as np
+
 
 def retry(func: Callable[[], Any], max_attempts: int = 6) -> Any:
     """Simple retry utility that sleeps for a short time between attempts."""
@@ -11,5 +13,5 @@ def retry(func: Callable[[], Any], max_attempts: int = 6) -> Any:
         except Exception:
             if attempt == max_attempts - 1:  # Last attempt failed
                 raise
-            time.sleep(attempt)
+            time.sleep(attempt * np.random.uniform(0.8, 1.2) + 0.1)
             continue

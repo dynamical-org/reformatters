@@ -1,4 +1,5 @@
 import base64
+import functools
 import json
 import os
 from collections.abc import Sequence
@@ -18,6 +19,7 @@ from pydantic import Field, computed_field, field_validator
 from reformatters.common import kubernetes
 from reformatters.common.config import Config, Env
 from reformatters.common.pydantic import FrozenBaseModel
+from reformatters.common.retry import retry
 
 _LOCAL_ZARR_STORE_BASE_PATH = "data/output"
 _SECRET_MOUNT_PATH = "/secrets"  # noqa: S105 this not a real secret
@@ -256,13 +258,21 @@ def commit_if_icechunk(
     Each job however may need to rebase before it is able to commit. We use the rebase_with
     argument which will handle automatic retries until the commit succeeds.
     """
+
+    def _commit(icechunk_store: IcechunkStore) -> None:
+        icechunk_store.session.commit(
+            message=message, rebase_with=icechunk.ConflictDetector()
+        )
+
     for store in replica_stores:
         if isinstance(store, IcechunkStore):
-            store.session.commit(
-                message=message, rebase_with=icechunk.ConflictDetector()
+            retry(
+                functools.partial(_commit, store),
+                max_attempts=10,
             )
 
     if isinstance(primary_store, IcechunkStore):
-        primary_store.session.commit(
-            message=message, rebase_with=icechunk.ConflictDetector()
+        retry(
+            functools.partial(_commit, primary_store),
+            max_attempts=10,
         )
