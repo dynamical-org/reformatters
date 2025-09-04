@@ -21,6 +21,7 @@ def write_metadata(
     template_ds: xr.Dataset,
     storage: zarr.storage.StoreLike | StoreFactory,
     mode: Literal["w", "w-"] | None = None,
+    skip_icechunk_commit: bool = False,
 ) -> None:
     store: zarr.abc.store.Store | Path
     replica_stores: list[zarr.abc.store.Store]
@@ -58,11 +59,12 @@ def write_metadata(
     if isinstance(store, Path | str):
         sort_consolidated_metadata(Path(store) / "zarr.json")
 
-    commit_if_icechunk(
-        message=f"Metadata written at {pd.Timestamp.now(tz='UTC').isoformat()}",
-        primary_store=store,
-        replica_stores=replica_stores,
-    )
+    if not skip_icechunk_commit:
+        commit_if_icechunk(
+            message=f"Metadata written at {pd.Timestamp.now(tz='UTC').isoformat()}",
+            primary_store=store,
+            replica_stores=replica_stores,
+        )
 
 
 def _get_mode_from_path_store(store: Path) -> Literal["w", "w-"]:

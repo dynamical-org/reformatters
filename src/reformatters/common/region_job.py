@@ -509,7 +509,12 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         if isinstance(primary_store, IcechunkStore):
             icechunk_stores.append(primary_store)
         for icechunk_store in icechunk_stores:
-            template_utils.write_metadata(self.template_ds, icechunk_store, mode="w")
+            template_utils.write_metadata(
+                self.template_ds,
+                icechunk_store,
+                mode="w",
+                skip_icechunk_commit=True,  # We will commit after all chunk data is written
+            )
 
         results: dict[str, Sequence[SOURCE_FILE_COORD]] = {}
         upload_futures: list[Any] = []
