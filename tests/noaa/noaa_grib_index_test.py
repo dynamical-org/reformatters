@@ -45,6 +45,15 @@ def test_grib_index_geavg_s_f000() -> None:
     assert all(isinstance(e, int) and e > 0 for e in ends)
     assert all(start < stop for start, stop in zip(starts, ends, strict=True))
 
+    # First match is "PRES:surface:anl:ens mean"
+    assert starts[0] == 1969991
+    assert ends[0] == 2768859
+
+    # Last match is "PRMSL:mean sea level:anl:ens mean"
+    # We don't know the end byte so we add 10 GiB to the start byte to get the rest of the file
+    assert starts[-1] == 13675595
+    assert ends[-1] == 13675595 + 10 * (2**30)
+
 
 def test_grib_index_geavg_s_f009() -> None:
     idx_path = IDX_FIXTURES_DIR / "geavg.t00z.pgrb2s.0p25.f009.idx"
@@ -185,6 +194,15 @@ def test_grib_index_gfs_f007() -> None:
     assert all(isinstance(s, int) and s >= 0 for s in starts)
     assert all(isinstance(e, int) and e > 0 for e in ends)
     assert all(start < stop for start, stop in zip(starts, ends, strict=True))
+
+    # First match is "PRES:surface:7 hour fcst:"
+    assert starts[0] == 409856805
+    assert ends[0] == 410705050
+
+    # Last match is "PRMSL:mean sea level:7 hour fcst:"
+    # It's actually the first index row
+    assert starts[-1] == 0
+    assert ends[-1] == 895140
 
 
 def test_grib_index_hrrr_f00() -> None:

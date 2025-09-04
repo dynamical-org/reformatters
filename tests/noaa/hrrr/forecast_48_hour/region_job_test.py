@@ -305,7 +305,7 @@ def test_region_job_download_file(
     )
 
     monkeypatch.setattr(
-        "reformatters.noaa.hrrr.forecast_48_hour.region_job.parse_hrrr_index_byte_ranges",
+        "reformatters.noaa.hrrr.forecast_48_hour.region_job.grib_message_byte_ranges_from_index",
         Mock(return_value=([0, 200], [100, 350])),
     )
     monkeypatch.setattr(

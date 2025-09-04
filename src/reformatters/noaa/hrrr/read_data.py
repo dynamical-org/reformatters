@@ -1,7 +1,5 @@
 import os
-import re
 import warnings
-from collections.abc import Iterable
 from pathlib import Path
 from typing import TypedDict
 
@@ -120,46 +118,3 @@ def read_hrrr_data(
 
     except Exception as e:
         raise ValueError(f"Failed to read data from {file_path}: {e}") from e
-
-
-def parse_hrrr_index_byte_ranges(
-    idx_local_path: Path,
-    data_vars: Iterable[HRRRDataVar],
-) -> tuple[list[int], list[int]]:
-    """Parse GRIB index file to get byte ranges for specific variables."""
-    with open(idx_local_path) as index_file:
-        index_contents = index_file.read()
-
-    byte_range_starts = []
-    byte_range_ends = []
-
-    for var_info in data_vars:
-        var_match_str = f"{var_info.internal_attrs.grib_element}:{var_info.internal_attrs.grib_index_level}"
-        var_match_str = re.escape(var_match_str)
-
-        matches = re.findall(
-            f"\\d+:(\\d+):.+:{var_match_str}:.+(\\n\\d+:(\\d+))?",
-            index_contents,
-        )
-
-        if len(matches) != 1:
-            raise ValueError(
-                f"Expected exactly 1 match for {var_info.name}, "
-                f"found {len(matches)} in {idx_local_path}: {matches}"
-            )
-
-        match = matches[0]
-        start_byte = int(match[0])
-
-        if match[2] != "":
-            end_byte = int(match[2])
-        else:
-            # If last idx row, we don't know the length.
-            # Add a large offset to get the rest of the file in
-            # a way that's compatible with obstore's get_ranges
-            end_byte = start_byte + (10 * (2**30))  # +10 GiB
-
-        byte_range_starts.append(start_byte)
-        byte_range_ends.append(end_byte)
-
-    return byte_range_starts, byte_range_ends
