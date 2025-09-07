@@ -1,10 +1,13 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+import rasterio  # type: ignore
 import xarray as xr
 import zarr
 
+from reformatters.common.download import http_download_to_disk
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
@@ -93,10 +96,7 @@ class DwdIconEuForecastRegionJob(
     def download_file(self, coord: DwdIconEuForecastSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local
         path."""
-        # return http_download_to_disk(coord.get_url(), self.dataset_id)
-        raise NotImplementedError(
-            "Download the file for the given coordinate and return the local path."
-        )
+        return http_download_to_disk(coord.get_url(), self.dataset_id)
 
     def read_data(
         self,
@@ -105,20 +105,22 @@ class DwdIconEuForecastRegionJob(
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source
         file coordinate."""
-        # with rasterio.open(coord.downloaded_file_path) as reader:
-        #     matching_indexes = [
-        #         i
-        #         for i in range(reader.count)
-        #         if (tags := reader.tags(i))["GRIB_ELEMENT"]
-        #         == data_var.internal_attrs.grib_element
-        #         and tags["GRIB_COMMENT"] == data_var.internal_attrs.grib_comment
-        #     ]
-        #     assert len(matching_indexes) == 1, f"Expected exactly 1 matching band, found {matching_indexes}. {data_var.internal_attrs.grib_element=}, {data_var.internal_attrs.grib_description=}, {coord.downloaded_file_path=}"
-        #     rasterio_band_index = 1 + matching_indexes[0]  # rasterio is 1-indexed
-        #     return reader.read(rasterio_band_index, dtype=np.float32)
-        raise NotImplementedError(
-            "Read and return data for the given variable and source file coordinate."
-        )
+        assert coord.downloaded_path is not None  # for type check, system guarantees it
+        with rasterio.open(coord.downloaded_path) as reader:
+            matching_indexes = [
+                i
+                for i in range(reader.count)
+                if (reader.tags(i))["GRIB_ELEMENT"]
+                == data_var.internal_attrs.grib_element
+            ]
+            assert len(matching_indexes) == 1, (
+                f"Expected exactly 1 matching band, found {matching_indexes}. "
+                f"{data_var.internal_attrs.grib_element=}, "
+                f"{coord.downloaded_path=}"
+            )
+            rasterio_band_index = 1 + matching_indexes[0]  # rasterio is 1-indexed
+            result: ArrayFloat32 = reader.read(rasterio_band_index, dtype=np.float32)
+            return result
 
     # Implement this to apply transformations to the array (e.g. deaccumulation)
     #
