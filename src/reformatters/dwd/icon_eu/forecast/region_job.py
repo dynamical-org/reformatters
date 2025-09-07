@@ -1,6 +1,7 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
+import pandas as pd
 import xarray as xr
 
 from reformatters.common.logging import get_logger
@@ -35,7 +36,9 @@ class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
     def get_url(self) -> str:
         """Return URLs to .grib2.bz2 files on DWD's HTTP server.
 
-        Note that this only handles single-level variables.
+        Note that this only handles single-level variables. Also note
+        that, unlike NOAA's NWPs, ICON-EU is published as one GRIB2 file
+        per variable.
         """
         # Example DWD URL:
         # https://opendata.dwd.de/weather/nwp/icon-eu/grib/00/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2025090700_000_ALB_RAD.grib2.bz2
@@ -58,44 +61,6 @@ class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
 class DwdIconEuForecastRegionJob(
     RegionJob[DwdIconEuDataVar, DwdIconEuForecastSourceFileCoord]
 ):
-    # Optionally, limit the number of variables downloaded together.
-    # If set to a value less than len(data_vars), downloading, reading/recompressing,
-    # and uploading steps will be pipelined within a region job.
-    # 5 is a reasonable default if it is possible to download less than all
-    # variables in a single file (e.g. you have a grib index).
-    # Leave unset if you have to download a whole file to get one variable out
-    # to avoid re-downloading the same file multiple times.
-    #
-    # max_vars_per_download_group: ClassVar[int | None] = None
-
-    # Implement this method only if different variables must be retrieved from different urls
-    #
-    # # @classmethod
-    # def source_groups(
-    #     cls,
-    #     data_vars: Sequence[DwdIconEuDataVar],
-    # ) -> Sequence[Sequence[DwdIconEuDataVar]]:
-    #     """
-    #     Return groups of variables, where all variables in a group can be retrieived from the same source file.
-    #     """
-    #     grouped = defaultdict(list)
-    #     for data_var in data_vars:
-    #         grouped[data_var.internal_attrs.file_type].append(data_var)
-    #     return list(grouped.values())
-
-    # Implement this method only if specific post processing in this dataset
-    # requires data from outside the region defined by self.region,
-    # e.g. for deaccumulation or interpolation along append_dim in an analysis dataset.
-    #
-    # def get_processing_region(self) -> slice:
-    #     """
-    #     Return a slice of integer offsets into self.template_ds along self.append_dim that identifies
-    #     the region to process. In most cases this is exactly self.region, but if additional data outside
-    #     the region is required, for example for correct interpolation or deaccumulation, this method can
-    #     return a modified slice (e.g. `slice(self.region.start - 1, self.region.stop + 1)`).
-    #     """
-    #     return self.region
-
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
@@ -103,19 +68,27 @@ class DwdIconEuForecastRegionJob(
     ) -> Sequence[DwdIconEuForecastSourceFileCoord]:
         """Return a sequence of coords, one for each source file required to
         process the data covered by processing_region_ds."""
-        # return [
-        #     DwdIconEuForecastSourceFileCoord(
-        #         init_time=init_time,
-        #         lead_time=lead_time,
-        #     )
-        #     for init_time, lead_time in itertools.product(
-        #         processing_region_ds["init_time"].values,
-        #         processing_region_ds["lead_time"].values,
-        #     )
-        # ]
-        raise NotImplementedError(
-            "Return a sequence of SourceFileCoord objects, one for each source file required to process the data covered by processing_region_ds."
-        )
+        init_times = pd.to_datetime(processing_region_ds["init_time"].values)
+        lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
+        grib_elements = [
+            data_var.internal_attrs.grib_element for data_var in data_var_group
+        ]
+
+        # Sanity checks
+        assert len(init_times) > 0
+        assert len(lead_times) > 0
+        assert len(grib_elements) > 0
+
+        return [
+            DwdIconEuForecastSourceFileCoord(
+                init_time=init_time,
+                lead_time=lead_time,
+                grib_element=grib_element,
+            )
+            for init_time in init_times
+            for lead_time in lead_times
+            for grib_element in grib_elements
+        ]
 
     def download_file(self, coord: DwdIconEuForecastSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local
