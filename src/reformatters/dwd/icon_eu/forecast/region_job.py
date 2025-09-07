@@ -251,22 +251,22 @@ class DwdIconEuForecastRegionJob(
         xr.Dataset
             The template_ds for the operational update.
         """
-        # existing_ds = xr.open_zarr(primary_store)
-        # append_dim_start = existing_ds[append_dim].max()
-        # append_dim_end = pd.Timestamp.now()
-        # template_ds = get_template_fn(append_dim_end)
+        # TODO(Jack): The implementation below is the unmodified code from
+        #             the dynamical.org example code. I _think_ this is what
+        #             ICON-EU needs, but I'm not 100% sure TBH!
+        existing_ds = xr.open_zarr(store_factory.primary_store())
+        append_dim_start = existing_ds[append_dim].max()
+        append_dim_end = pd.Timestamp.now()
+        template_ds = get_template_fn(append_dim_end)
 
-        # jobs = cls.get_jobs(
-        #     kind="operational-update",
-        #     tmp_store=tmp_store,
-        #     template_ds=template_ds,
-        #     append_dim=append_dim,
-        #     all_data_vars=all_data_vars,
-        #     reformat_job_name=reformat_job_name,
-        #     filter_start=append_dim_start,
-        # )
-        # return jobs, template_ds
-
-        raise NotImplementedError(
-            "Subclasses implement operational_update_jobs() with dataset-specific logic"
+        jobs = cls.get_jobs(
+            kind="operational-update",
+            store_factory=store_factory,
+            tmp_store=tmp_store,
+            template_ds=template_ds,
+            append_dim=append_dim,
+            all_data_vars=all_data_vars,
+            reformat_job_name=reformat_job_name,
+            filter_start=append_dim_start,
         )
+        return jobs, template_ds
