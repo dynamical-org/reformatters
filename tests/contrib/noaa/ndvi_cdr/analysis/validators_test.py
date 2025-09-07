@@ -30,10 +30,10 @@ def test_check_data_is_current_success(monkeypatch: MonkeyPatch) -> None:
 
 def test_check_data_is_current_failure(monkeypatch: MonkeyPatch) -> None:
     """Test fails when no data is found within the allowed delay window."""
-    monkeypatch.setattr(pd.Timestamp, "now", lambda: pd.Timestamp("2024-01-20"))
+    monkeypatch.setattr(pd.Timestamp, "now", lambda: pd.Timestamp("2024-02-05"))
 
     # Create data older than the allowed delay window
-    times = pd.date_range("2024-01-01", periods=3, freq="1D")
+    times = pd.date_range("2024-01-01", "2024-01-03", freq="1D")
     data = np.ones((3, 3, 3))
     ds = xr.Dataset(
         {"ndvi": (["time", "latitude", "longitude"], data)},
