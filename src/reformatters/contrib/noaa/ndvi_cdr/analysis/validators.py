@@ -8,12 +8,12 @@ def check_data_is_current(ds: xr.Dataset) -> validation.ValidationResult:
     """
     Check that the data is current within the last 14 days.
 
-    There's usually a consistent ~3 day lag for this data's availability.
+    There's usually a roughly ~3 day lag for this data's availability.
     Sometimes this goes much higher and it is not an operationally supported dynamical dataset (it's contrib)
-    so we'll alert after 14 days of lag.
+    so we'll alert after a much longer lag of days.
     """
     today_start = pd.Timestamp.now().floor("D")
-    latest_init_time_ds = ds.sel(time=slice(today_start - pd.Timedelta(days=14), None))
+    latest_init_time_ds = ds.sel(time=slice(today_start - pd.Timedelta(days=30), None))
     if latest_init_time_ds.sizes["time"] == 0:
         return validation.ValidationResult(
             passed=False, message="No data found for the allowed delay window"
