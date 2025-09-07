@@ -1,5 +1,3 @@
-# from pathlib import Path
-
 # import numpy as np
 # import pandas as pd
 # import pytest
@@ -7,11 +5,18 @@
 
 # from reformatters.common import validation
 # from reformatters.dwd.icon_eu.forecast.dynamical_dataset import DwdIconEuForecastDataset
+# from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+
+
+# @pytest.fixture
+# def dataset() -> DwdIconEuForecastDataset:
+#     return DwdIconEuForecastDataset(primary_storage_config=NOOP_STORAGE_CONFIG)
+
 
 # @pytest.mark.slow
-# def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) -> None:
-#     dataset = DwdIconEuForecastDataset()
-
+# def test_backfill_local_and_operational_update(
+#     monkeypatch: pytest.MonkeyPatch, dataset: DwdIconEuForecastDataset
+# ) -> None:
 #     # Local backfill reformat
 #     dataset.backfill_local(append_dim_end=pd.Timestamp("2000-01-02"))
 #     ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
@@ -35,9 +40,14 @@
 #     updated_ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
 
 #     np.testing.assert_array_equal(
-#         updated_ds.time, pd.date_range("1981-10-01", "1981-10-03")
+#         updated_ds.time,
+#         pd.date_range(
+#             "2000-10-01",
+#             "2000-10-03",
+#             freq=dataset.template_config.append_dim_frequency,
+#         ),
 #     )
-#     subset_ds = updated_ds.sel(latitude=48.583335, longitude=-94, method="nearest")
+#     subset_ds = updated_ds.sel(latitude=0, longitude=0, method="nearest")
 #     np.testing.assert_array_equal(
 #         subset_ds["your_variable"].values, [190.0, 163.0, 135.0]
 #     )
@@ -52,8 +62,12 @@
 #     update_cron_job, validation_cron_job = cron_jobs
 #     assert update_cron_job.name == f"{dataset.dataset_id}-operational-update"
 #     assert validation_cron_job.name == f"{dataset.dataset_id}-validation"
-#     assert update_cron_job.secret_names == [dataset.storage_config.k8s_secret_name]
-#     assert validation_cron_job.secret_names == [dataset.storage_config.k8s_secret_name]
+#     assert update_cron_job.secret_names == [
+#         dataset.primary_storage_config.k8s_secret_name
+#     ]
+#     assert validation_cron_job.secret_names == [
+#         dataset.primary_storage_config.k8s_secret_name
+#     ]
 
 
 # def test_validators(dataset: DwdIconEuForecastDataset) -> None:
