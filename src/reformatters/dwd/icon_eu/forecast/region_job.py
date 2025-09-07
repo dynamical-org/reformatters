@@ -30,7 +30,7 @@ class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
 
     init_time: Timestamp
     lead_time: Timedelta
-    data_var: DwdIconEuDataVar
+    grib_element: str
 
     def get_url(self) -> str:
         """Return URLs to .grib2.bz2 files on DWD's HTTP server.
@@ -41,10 +41,10 @@ class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
         # https://opendata.dwd.de/weather/nwp/icon-eu/grib/00/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2025090700_000_ALB_RAD.grib2.bz2
 
         lead_time_hours: int = whole_hours(self.lead_time)
-        init_date_str = self.init_time.strftime("%Y%m%d%H")
-        init_hour_str = self.init_time.strftime("%H")
+        init_date_str: str = self.init_time.strftime("%Y%m%d%H")
+        init_hour_str: str = self.init_time.strftime("%H")
 
-        return f"https://opendata.dwd.de/weather/nwp/icon-eu/grib/{init_hour_str}/{self.data_var.name}/icon-eu_europe_regular-lat-lon_single-level_{init_date_str}_{lead_time_hours:03d}_{self.data_var.name.upper()}.grib2.bz2"
+        return f"https://opendata.dwd.de/weather/nwp/icon-eu/grib/{init_hour_str}/{self.grib_element}/icon-eu_europe_regular-lat-lon_single-level_{init_date_str}_{lead_time_hours:03d}_{self.grib_element.upper()}.grib2.bz2"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
         """Return the output location for this file's data in the dataset."""
