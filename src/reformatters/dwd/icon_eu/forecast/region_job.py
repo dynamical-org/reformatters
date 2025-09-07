@@ -10,11 +10,14 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
 )
+from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     AppendDim,
     ArrayFloat32,
     DatetimeLike,
     Dim,
+    Timedelta,
+    Timestamp,
 )
 
 from .template_config import DwdIconEuDataVar
@@ -25,25 +28,31 @@ log = get_logger(__name__)
 class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
     """Coordinates of a single source file to process."""
 
-    def get_url(self) -> str:
-        raise NotImplementedError("Return the URL of the source file.")
+    init_time: Timestamp
+    lead_time: Timedelta
+    data_var: DwdIconEuDataVar
 
-    def out_loc(
-        self,
-    ) -> Mapping[Dim, CoordinateValueOrRange]:
+    def get_url(self) -> str:
+        """Return URLs to .grib2.bz2 files on DWD's HTTP server.
+
+        Note that this only handles single-level variables.
         """
-        Returns a data array indexer which identifies the region in the output dataset
-        to write the data from the source file. The indexer is a dict from dimension
-        names to coordinate values or slices.
-        """
-        # If the names of the coordinate attributes of your SourceFileCoord subclass are also all
-        # dimension names in the output dataset (e.g. init_time and lead_time),
-        # delete this implementation and use the default implementation of this method.
-        #
-        # Examples where you would override this method:
-        # - An analysis dataset created from forecast data:
-        #   return {"time": self.init_time + self.lead_time}
-        return super().out_loc()
+        # Example DWD URL:
+        # https://opendata.dwd.de/weather/nwp/icon-eu/grib/00/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2025090700_000_ALB_RAD.grib2.bz2
+
+        lead_time_hours: int = whole_hours(self.lead_time)
+        init_date_str = self.init_time.strftime("%Y%m%d%H")
+        init_hour_str = self.init_time.strftime("%H")
+
+        return f"https://opendata.dwd.de/weather/nwp/icon-eu/grib/{init_hour_str}/{self.data_var.name}/icon-eu_europe_regular-lat-lon_single-level_{init_date_str}_{lead_time_hours:03d}_{self.data_var.name.upper()}.grib2.bz2"
+
+    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+        """Return the output location for this file's data in the dataset."""
+        # Map to the standard dimension names used in the template
+        return {
+            "init_time": self.init_time,
+            "lead_time": self.lead_time,
+        }
 
 
 class DwdIconEuForecastRegionJob(
@@ -92,7 +101,8 @@ class DwdIconEuForecastRegionJob(
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[DwdIconEuDataVar],
     ) -> Sequence[DwdIconEuForecastSourceFileCoord]:
-        """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
+        """Return a sequence of coords, one for each source file required to
+        process the data covered by processing_region_ds."""
         # return [
         #     DwdIconEuForecastSourceFileCoord(
         #         init_time=init_time,
@@ -108,7 +118,8 @@ class DwdIconEuForecastRegionJob(
         )
 
     def download_file(self, coord: DwdIconEuForecastSourceFileCoord) -> Path:
-        """Download the file for the given coordinate and return the local path."""
+        """Download the file for the given coordinate and return the local
+        path."""
         # return http_download_to_disk(coord.get_url(), self.dataset_id)
         raise NotImplementedError(
             "Download the file for the given coordinate and return the local path."
@@ -119,7 +130,8 @@ class DwdIconEuForecastRegionJob(
         coord: DwdIconEuForecastSourceFileCoord,
         data_var: DwdIconEuDataVar,
     ) -> ArrayFloat32:
-        """Read and return an array of data for the given variable and source file coordinate."""
+        """Read and return an array of data for the given variable and source
+        file coordinate."""
         # with rasterio.open(coord.downloaded_file_path) as reader:
         #     matching_indexes = [
         #         i
@@ -163,9 +175,8 @@ class DwdIconEuForecastRegionJob(
     def update_template_with_results(
         self, process_results: Mapping[str, Sequence[DwdIconEuForecastSourceFileCoord]]
     ) -> xr.Dataset:
-        """
-        Update template dataset based on processing results. This method is called
-        during operational updates.
+        """Update template dataset based on processing results. This method is
+        called during operational updates.
 
         Subclasses should implement this method to apply dataset-specific adjustments
         based on the processing results. Examples include:
@@ -227,9 +238,8 @@ class DwdIconEuForecastRegionJob(
         Sequence["RegionJob[DwdIconEuDataVar, DwdIconEuForecastSourceFileCoord]"],
         xr.Dataset,
     ]:
-        """
-        Return the sequence of RegionJob instances necessary to update the dataset
-        from its current state to include the latest available data.
+        """Return the sequence of RegionJob instances necessary to update the
+        dataset from its current state to include the latest available data.
 
         Also return the template_ds, expanded along append_dim through the end of
         the data to process. The dataset returned here may extend beyond the
