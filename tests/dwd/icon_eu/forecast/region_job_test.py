@@ -1,16 +1,23 @@
 # from unittest.mock import Mock
 
-# import pandas as pd
 
-# from reformatters.dwd.icon_eu.forecast.region_job import (
-#     DwdIconEuForecastRegionJob,
-#     DwdIconEuForecastSourceFileCoord,
-# )
-# from reformatters.dwd.icon_eu.forecast.template_config import DwdIconEuForecastTemplateConfig
+import pandas as pd
 
-# def test_source_file_coord_get_url() -> None:
-#     coord = DwdIconEuForecastSourceFileCoord(time=pd.Timestamp("2000-01-01"))
-#     assert coord.get_url() == "https://example.com/data/2000-01-01.grib2"
+from reformatters.dwd.icon_eu.forecast.region_job import (
+    # DwdIconEuForecastRegionJob,
+    DwdIconEuForecastSourceFileCoord,
+)
+
+
+def test_source_file_coord_get_url() -> None:
+    coord = DwdIconEuForecastSourceFileCoord(
+        init_time=pd.Timestamp("2000-01-01T00:00"),
+        lead_time=pd.Timedelta(0),
+        grib_element="t_2m",
+    )
+    expected = "https://opendata.dwd.de/weather/nwp/icon-eu/grib/00/t_2m/icon-eu_europe_regular-lat-lon_single-level_2000010100_000_T_2M.grib2.bz2"
+
+    assert coord.get_url() == expected
 
 
 # def test_region_job_generete_source_file_coords() -> None:
