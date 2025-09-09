@@ -1,0 +1,508 @@
+import tempfile
+from datetime import datetime
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import numpy as np
+import pandas as pd
+import pytest
+import xarray as xr
+
+from reformatters.common.config_models import DataVarAttrs, Encoding
+from reformatters.common.storage import (
+    DatasetFormat,
+    StorageConfig,
+    StoreFactory,
+    get_local_tmp_store,
+)
+from reformatters.noaa.gefs.forecast_35_day.region_job import GefsForecast35DayRegionJob
+from reformatters.noaa.gefs.forecast_35_day.source_file_coord import (
+    GefsForecast35DayEnsembleSourceFileCoord,
+    GefsForecast35DayStatisticSourceFileCoord,
+)
+from reformatters.noaa.gefs.gefs_config_models import (
+    GEFSDataVar,
+    GEFSInternalAttrs,
+)
+
+
+@pytest.fixture
+def store_factory() -> StoreFactory:
+    """Create store factory for testing."""
+    return StoreFactory(
+        primary_storage_config=StorageConfig(
+            base_path="fake-prod-path",
+            format=DatasetFormat.ZARR3,
+        ),
+        dataset_id="test-gefs-forecast-35-day",
+        template_config_version="test-version",
+    )
+
+
+@pytest.fixture
+def template_ds() -> xr.Dataset:
+    """Create a template dataset for testing."""
+    num_init_time = 2
+    num_lead_time = 8
+    num_ensemble = 4
+    return xr.Dataset(
+        {
+            "temperature_2m": xr.Variable(
+                data=np.ones(
+                    (num_init_time, num_lead_time, num_ensemble, 10, 15),
+                    dtype=np.float32,
+                ),
+                dims=[
+                    "init_time",
+                    "lead_time",
+                    "ensemble_member",
+                    "latitude",
+                    "longitude",
+                ],
+                encoding={
+                    "dtype": "float32",
+                    "chunks": (1, num_lead_time, num_ensemble, 10, 15),
+                    "shards": (1, num_lead_time, num_ensemble, 10, 15),
+                },
+            ),
+            "precipitation_surface": xr.Variable(
+                data=np.ones(
+                    (num_init_time, num_lead_time, num_ensemble, 10, 15),
+                    dtype=np.float32,
+                ),
+                dims=[
+                    "init_time",
+                    "lead_time",
+                    "ensemble_member",
+                    "latitude",
+                    "longitude",
+                ],
+                encoding={
+                    "dtype": "float32",
+                    "chunks": (1, num_lead_time, num_ensemble, 10, 15),
+                    "shards": (1, num_lead_time, num_ensemble, 10, 15),
+                },
+            ),
+        },
+        coords={
+            "init_time": pd.date_range(
+                "2000-01-01T00:00", freq="6h", periods=num_init_time
+            ),
+            "lead_time": pd.timedelta_range("0h", freq="3h", periods=num_lead_time),
+            "ensemble_member": np.arange(num_ensemble),
+            "latitude": np.linspace(-90, 90, 10),
+            "longitude": np.linspace(-180, 179, 15),
+        },
+    )
+
+
+@pytest.fixture
+def example_data_vars() -> list[GEFSDataVar]:
+    """Create example GEFS data variables for testing."""
+    encoding = Encoding(
+        dtype="float32",
+        fill_value=np.nan,
+        chunks=(1, 8, 4, 10, 15),
+        shards=(1, 8, 4, 10, 15),
+    )
+
+    return [
+        GEFSDataVar(
+            name="temperature_2m",
+            encoding=encoding,
+            attrs=DataVarAttrs(
+                long_name="2 metre temperature",
+                short_name="t2m",
+                units="C",
+                step_type="instant",
+            ),
+            internal_attrs=GEFSInternalAttrs(
+                grib_element="TMP",
+                grib_description='2[m] HTGL="Specified height level above ground"',
+                grib_index_level="2 m above ground",
+                gefs_file_type="s+a",
+                index_position=10,
+                keep_mantissa_bits=10,
+            ),
+        ),
+        GEFSDataVar(
+            name="precipitation_surface",
+            encoding=encoding,
+            attrs=DataVarAttrs(
+                long_name="Total precipitation",
+                short_name="tp",
+                units="mm",
+                step_type="accum",
+            ),
+            internal_attrs=GEFSInternalAttrs(
+                grib_element="APCP",
+                grib_description='0[-] SFC="Ground or water surface"',
+                grib_index_level="surface",
+                gefs_file_type="s+a",
+                index_position=15,
+                keep_mantissa_bits=10,
+                window_reset_frequency=pd.Timedelta("6h"),
+            ),
+        ),
+    ]
+
+
+def test_max_vars_per_backfill_job() -> None:
+    """Test max_vars_per_backfill_job is correctly set."""
+    assert GefsForecast35DayRegionJob.max_vars_per_backfill_job == 3
+
+
+def test_get_processing_region(
+    store_factory: StoreFactory,
+    template_ds: xr.Dataset,
+    example_data_vars: list[GEFSDataVar],
+) -> None:
+    """Test processing region includes proper buffer."""
+    tmp_store = get_local_tmp_store()
+
+    job = GefsForecast35DayRegionJob(
+        store_factory=store_factory,
+        tmp_store=tmp_store,
+        template_ds=template_ds,
+        data_vars=example_data_vars[:1],  # Single variable
+        append_dim="init_time",
+        region=slice(1, 2),  # Single init time
+        reformat_job_name="test-job",
+    )
+
+    processing_region = job.get_processing_region()
+
+    # Should return the same region as no buffering needed for init_time
+    assert processing_region == slice(1, 2)
+
+
+def test_source_groups(example_data_vars: list[GEFSDataVar]) -> None:
+    """Test source groups based on GEFS file type and ensemble statistic."""
+    groups = GefsForecast35DayRegionJob.source_groups(example_data_vars)
+
+    # Both variables have same file type (s+a) and no ensemble statistic, so should be grouped together
+    assert len(groups) == 1
+    assert len(groups[0]) == 2
+    assert groups[0][0].name == "temperature_2m"
+    assert groups[0][1].name == "precipitation_surface"
+
+
+def test_generate_source_file_coords_ensemble(
+    store_factory: StoreFactory,
+    template_ds: xr.Dataset,
+    example_data_vars: list[GEFSDataVar],
+) -> None:
+    """Test generation of source file coordinates for ensemble data."""
+    tmp_store = get_local_tmp_store()
+
+    job = GefsForecast35DayRegionJob(
+        store_factory=store_factory,
+        tmp_store=tmp_store,
+        template_ds=template_ds,
+        data_vars=example_data_vars[:1],  # Single variable
+        append_dim="init_time",
+        region=slice(0, 1),  # Single init time
+        reformat_job_name="test-job",
+    )
+
+    processing_region_ds = template_ds.isel(init_time=slice(0, 1))
+    coords = list(
+        job.generate_source_file_coords(processing_region_ds, example_data_vars[:1])
+    )
+
+    # Should generate coordinates for each ensemble member and lead time
+    # 1 init_time * 8 lead_times * 4 ensemble_members = 32 coords
+    assert len(coords) == 32
+
+    # All should be ensemble source file coords
+    assert all(isinstance(c, GefsForecast35DayEnsembleSourceFileCoord) for c in coords)
+
+
+def test_source_file_coord_url_generation() -> None:
+    """Test source file coordinate URL generation."""
+    coord = GefsForecast35DayEnsembleSourceFileCoord(
+        init_time=pd.Timestamp("2000-01-01T00:00"),
+        lead_time=pd.Timedelta("3h"),
+        ensemble_member=1,
+    )
+
+    url = coord.get_url()
+
+    # Should contain the proper GEFS forecast URL structure
+    assert "gefs.20000101/00" in url
+    assert "gep01.t00z" in url
+    assert "pgrb2s.25.f003" in url
+
+
+def test_source_file_coord_out_loc_forecast() -> None:
+    """Test source file coordinate output location for forecast data."""
+    coord = GefsForecast35DayEnsembleSourceFileCoord(
+        init_time=pd.Timestamp("2000-01-01T00:00"),
+        lead_time=pd.Timedelta("3h"),
+        ensemble_member=1,
+    )
+
+    out_loc = coord.out_loc()
+
+    # Should map to proper forecast array indices
+    assert "init_time" in out_loc
+    assert "lead_time" in out_loc
+    assert "ensemble_member" in out_loc
+    assert out_loc["ensemble_member"] == 1
+
+
+def test_source_file_coord_statistic() -> None:
+    """Test statistic source file coordinate."""
+    coord = GefsForecast35DayStatisticSourceFileCoord(
+        init_time=pd.Timestamp("2000-01-01T00:00"),
+        lead_time=pd.Timedelta("3h"),
+        statistic="avg",
+    )
+
+    url = coord.get_url()
+    out_loc = coord.out_loc()
+
+    # URL should reference the mean file
+    assert "geavg.t00z" in url
+
+    # Should only have init_time and lead_time (no ensemble_member for statistics)
+    assert "init_time" in out_loc
+    assert "lead_time" in out_loc
+    assert "ensemble_member" not in out_loc
+
+
+@patch("reformatters.noaa.gefs.forecast_35_day.source_file_coord.download_source_file")
+def test_download_file(
+    mock_download_source: MagicMock,
+    store_factory: StoreFactory,
+    template_ds: xr.Dataset,
+    example_data_vars: list[GEFSDataVar],
+) -> None:
+    """Test download_file method."""
+    tmp_store = get_local_tmp_store()
+
+    job = GefsForecast35DayRegionJob(
+        store_factory=store_factory,
+        tmp_store=tmp_store,
+        template_ds=template_ds,
+        data_vars=example_data_vars[:1],
+        append_dim="init_time",
+        region=slice(0, 1),
+        reformat_job_name="test-job",
+    )
+
+    coord = GefsForecast35DayEnsembleSourceFileCoord(
+        init_time=pd.Timestamp("2000-01-01T00:00"),
+        lead_time=pd.Timedelta("3h"),
+        ensemble_member=1,
+    )
+
+    with tempfile.NamedTemporaryFile(suffix=".grib2", delete=False) as tmp_file:
+        local_path = Path(tmp_file.name)
+        # Mock returns tuple of (updated_coord, path)
+        mock_download_source.return_value = (coord, local_path)
+
+        result = job.download_file(coord)
+
+        assert result == local_path
+        mock_download_source.assert_called_once_with(coord, "s+a", [])
+
+
+@patch("reformatters.noaa.gefs.forecast_35_day.source_file_coord.download_source_file")
+@patch("reformatters.noaa.gefs.read_data.read_into")
+def test_read_data(
+    mock_read: MagicMock,
+    mock_download_source: MagicMock,
+    store_factory: StoreFactory,
+    template_ds: xr.Dataset,
+    example_data_vars: list[GEFSDataVar],
+) -> None:
+    """Test read_data method."""
+    tmp_store = get_local_tmp_store()
+
+    job = GefsForecast35DayRegionJob(
+        store_factory=store_factory,
+        tmp_store=tmp_store,
+        template_ds=template_ds,
+        data_vars=example_data_vars[:1],
+        append_dim="init_time",
+        region=slice(0, 1),
+        reformat_job_name="test-job",
+    )
+
+    coord = GefsForecast35DayEnsembleSourceFileCoord(
+        init_time=pd.Timestamp("2000-01-01T00:00"),
+        lead_time=pd.Timedelta("3h"),
+        ensemble_member=1,
+    )
+
+    with tempfile.NamedTemporaryFile(suffix=".grib2", delete=False) as tmp_file:
+        local_path = Path(tmp_file.name)
+
+        # Mock download_source_file to avoid empty data_vars issue
+        mock_download_source.return_value = (coord, local_path)
+
+        # The read_data method creates internal arrays, so we don't need to mock the return value
+        # Just verify the method executes without error
+        result = job.read_data(coord, example_data_vars[0])
+
+        # Should return array data
+        assert result is not None
+
+
+def test_apply_data_transformations(
+    store_factory: StoreFactory, template_ds: xr.Dataset
+) -> None:
+    """Test data transformation application."""
+    # Create test data with known values
+    data = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float32).reshape((1, 1, 1, 4))
+
+    var_with_rounding = GEFSDataVar(
+        name="test_var",
+        encoding=Encoding(
+            dtype="float32",
+            fill_value=np.nan,
+            chunks=(1, 1, 1, 4),
+            shards=(1, 1, 1, 4),
+        ),
+        attrs=DataVarAttrs(
+            long_name="Test variable",
+            short_name="test",
+            units="test",
+            step_type="instant",
+        ),
+        internal_attrs=GEFSInternalAttrs(
+            grib_element="TEST",
+            grib_description="Test variable",
+            grib_index_level="surface",
+            gefs_file_type="s+a",
+            index_position=1,
+            keep_mantissa_bits=10,
+        ),
+    )
+
+    # Create a DataArray with proper forecast dimensions
+    init_time_coords = pd.date_range("2000-01-01T00:00", freq="6h", periods=1)
+    lead_time_coords = pd.timedelta_range("0h", freq="3h", periods=1)
+    ensemble_coords = [0]
+    data_array = xr.DataArray(
+        data,
+        dims=["init_time", "lead_time", "ensemble_member", "test"],
+        coords={
+            "init_time": init_time_coords,
+            "lead_time": lead_time_coords,
+            "ensemble_member": ensemble_coords,
+        },
+    )
+
+    # Need to create a job instance to call apply_data_transformations
+    tmp_store = get_local_tmp_store()
+    job = GefsForecast35DayRegionJob(
+        store_factory=store_factory,
+        tmp_store=tmp_store,
+        template_ds=template_ds,
+        data_vars=[var_with_rounding],
+        append_dim="init_time",
+        region=slice(0, 1),
+        reformat_job_name="test-job",
+    )
+
+    # Apply transformations (this is an instance method)
+    job.apply_data_transformations(data_array, var_with_rounding)
+
+
+@patch("xarray.open_zarr")
+def test_operational_update_jobs(
+    mock_open_zarr: MagicMock,
+    store_factory: StoreFactory,
+    example_data_vars: list[GEFSDataVar],
+) -> None:
+    """Test operational_update_jobs method."""
+    # Create mock existing dataset
+    existing_init_time = pd.date_range("2000-01-01T00:00", freq="24h", periods=5)
+    existing_ds = xr.Dataset(
+        {
+            "temperature_2m": xr.Variable(
+                data=np.ones((5, 8, 4, 5, 10), dtype=np.float32),
+                dims=[
+                    "init_time",
+                    "lead_time",
+                    "ensemble_member",
+                    "latitude",
+                    "longitude",
+                ],
+            )
+        },
+        coords={
+            "init_time": existing_init_time,
+            "lead_time": pd.timedelta_range("0h", freq="3h", periods=8),
+            "ensemble_member": np.arange(4),
+            "latitude": np.linspace(-90, 90, 5),
+            "longitude": np.linspace(-180, 179, 10),
+        },
+    )
+    mock_open_zarr.return_value = existing_ds
+
+    # Mock get_template_fn
+    def mock_get_template_fn(
+        end_time: pd.Timestamp | np.datetime64 | datetime | str,
+    ) -> xr.Dataset:
+        return xr.Dataset(
+            {
+                "temperature_2m": xr.Variable(
+                    data=np.ones((10, 8, 4, 5, 10), dtype=np.float32),
+                    dims=[
+                        "init_time",
+                        "lead_time",
+                        "ensemble_member",
+                        "latitude",
+                        "longitude",
+                    ],
+                )
+            },
+            coords={
+                "init_time": pd.date_range("2000-01-01T00:00", freq="24h", periods=10),
+                "lead_time": pd.timedelta_range("0h", freq="3h", periods=8),
+                "ensemble_member": np.arange(4),
+                "latitude": np.linspace(-90, 90, 5),
+                "longitude": np.linspace(-180, 179, 10),
+            },
+        )
+
+    # Mock get_jobs method
+    with patch.object(GefsForecast35DayRegionJob, "get_jobs") as mock_get_jobs:
+        mock_jobs = [MagicMock() for _ in range(3)]  # Mock job instances
+        mock_get_jobs.return_value = mock_jobs
+
+        # Call operational_update_jobs
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_store_path = Path(tmp_dir)
+            jobs, template_ds = GefsForecast35DayRegionJob.operational_update_jobs(
+                store_factory=store_factory,
+                tmp_store=tmp_store_path,
+                get_template_fn=mock_get_template_fn,
+                append_dim="init_time",
+                all_data_vars=example_data_vars,
+                reformat_job_name="test-operational-update",
+            )
+
+            # Verify results
+            assert jobs == mock_jobs
+            assert template_ds is not None
+            assert len(template_ds.init_time) == 10
+
+            # Verify get_jobs was called with correct parameters
+            mock_get_jobs.assert_called_once()
+            call_args = mock_get_jobs.call_args
+            assert call_args.kwargs["kind"] == "operational-update"
+            assert call_args.kwargs["store_factory"] == store_factory
+            assert call_args.kwargs["tmp_store"] == tmp_store_path
+            assert call_args.kwargs["append_dim"] == "init_time"
+            assert call_args.kwargs["all_data_vars"] == example_data_vars
+            assert call_args.kwargs["reformat_job_name"] == "test-operational-update"
+            assert call_args.kwargs["filter_start"] == existing_init_time.max()
+
+            # Verify existing dataset was opened correctly
+            mock_open_zarr.assert_called_once_with(
+                store_factory.primary_store(), decode_timedelta=True, chunks=None
+            )

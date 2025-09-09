@@ -15,7 +15,7 @@ from reformatters.common.config import Config
 from reformatters.common.config_models import EnsembleStatistic
 from reformatters.common.download import download_to_disk, http_store
 from reformatters.common.logging import get_logger
-from reformatters.common.types import Array2D
+from reformatters.common.types import Array1D, Array2D
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_B22_TRANSITION_DATE,
     GEFS_S_FILE_MAX,
@@ -99,6 +99,13 @@ def is_v12(init_time: pd.Timestamp) -> bool:
 
 def is_v12_index(times: pd.DatetimeIndex) -> np.ndarray[Any, np.dtype[np.bool]]:
     return (times < GEFS_REFORECAST_END) | (GEFS_CURRENT_ARCHIVE_START <= times)
+
+
+def is_available_time(times: pd.DatetimeIndex) -> Array1D[np.bool]:
+    """Before v12, GEFS files had a 6 hour step."""
+    # pre-v12 data is all we have for the 9 month period after the v12 reforecast ends
+    # 2019-12-31 and before the v12 forecast archive starts 2020-10-01.
+    return is_v12_index(times) | (times.hour % 6 == 0)
 
 
 def download_file(

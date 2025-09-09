@@ -1,14 +1,14 @@
 {
   "shape": [
     1,
-    31
+    181
   ],
   "data_type": "int64",
   "chunk_grid": {
     "name": "regular",
     "configuration": {
       "chunk_shape": [
-        5475,
+        7300,
         181
       ]
     }
@@ -25,7 +25,7 @@
       "name": "sharding_indexed",
       "configuration": {
         "chunk_shape": [
-          5475,
+          7300,
           181
         ],
         "codecs": [
@@ -70,7 +70,7 @@
   },
   "dimension_names": [
     "init_time",
-    "ensemble_member"
+    "lead_time"
   ],
   "zarr_format": 3,
   "node_type": "array",
