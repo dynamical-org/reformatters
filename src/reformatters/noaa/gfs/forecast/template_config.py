@@ -37,7 +37,7 @@ class NoaaGfsForecastTemplateConfig(TemplateConfig[NoaaDataVar]):
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
             dataset_id="noaa-gfs-forecast",
-            dataset_version="0.2.1",
+            dataset_version="0.2.6",
             name="NOAA GFS forecast",
             description="Weather forecasts from the Global Forecast System (GFS) operated by NOAA NWS NCEP.",
             attribution="NOAA NWS NCEP GFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
