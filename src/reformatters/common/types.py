@@ -33,6 +33,7 @@ type Dim = Literal[
     "longitude",
     "x",
     "y",
+    "statistic",
 ]
 type AppendDim = Literal["init_time", "time"]
 assert set(get_args(AppendDim)) <= set(get_args(Dim))

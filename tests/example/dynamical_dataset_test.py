@@ -20,7 +20,7 @@
 #     # Local backfill reformat
 #     dataset.backfill_local(append_dim_end=pd.Timestamp("2000-01-02"))
 #     ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
-#     assert ds.time.max() == pd.Timestamp("2000-01-01")
+#     assert ds.time.min() == pd.Timestamp("2000-01-01")
 
 #     # Operational update
 #     monkeypatch.setattr(
@@ -42,8 +42,8 @@
 #     np.testing.assert_array_equal(
 #         updated_ds.time,
 #         pd.date_range(
-#             "2000-10-01",
-#             "2000-10-03",
+#             "2000-01-01",
+#             "2000-01-03",
 #             freq=dataset.template_config.append_dim_frequency,
 #         ),
 #     )
