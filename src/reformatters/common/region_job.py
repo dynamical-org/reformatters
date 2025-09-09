@@ -5,7 +5,6 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import suppress
 from copy import deepcopy
 from enum import Enum, auto
-from functools import partial
 from itertools import batched, chain
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
@@ -38,7 +37,7 @@ from reformatters.common.types import (
     Timestamp,
 )
 from reformatters.common.update_progress_tracker import UpdateProgressTracker
-from reformatters.common.zarr import copy_data_var
+from reformatters.common.zarr import copy_data_var, copy_zarr_metadata
 
 log = get_logger(__name__)
 
@@ -460,6 +459,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def process(
         self,
+        expand_icechunk_stores: bool = False,
     ) -> tuple[
         Mapping[str, Sequence[SOURCE_FILE_COORD]],
         zarr.abc.store.Store,
@@ -505,16 +505,18 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         template_utils.write_metadata(self.template_ds, self.tmp_store)
 
         # Expand the icechunk stores _before_ we write chunk data
-        icechunk_stores = [s for s in replica_stores if isinstance(s, IcechunkStore)]
-        if isinstance(primary_store, IcechunkStore):
-            icechunk_stores.append(primary_store)
-        for icechunk_store in icechunk_stores:
-            template_utils.write_metadata(
-                self.template_ds,
-                icechunk_store,
-                mode="w",
-                skip_icechunk_commit=True,  # We will commit after all chunk data is written
-            )
+        if expand_icechunk_stores:
+            icechunk_stores = [
+                s for s in replica_stores if isinstance(s, IcechunkStore)
+            ]
+            if isinstance(primary_store, IcechunkStore):
+                icechunk_stores.append(primary_store)
+            for icechunk_store in icechunk_stores:
+                copy_zarr_metadata(
+                    self.template_ds,
+                    self.tmp_store,
+                    icechunk_store,  # Note that this is in the position of the primary store intentionally
+                )
 
         results: dict[str, Sequence[SOURCE_FILE_COORD]] = {}
         upload_futures: list[Any] = []
@@ -580,9 +582,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                             self.tmp_store,
                             primary_store,
                             replica_stores=replica_stores,
-                            track_progress_callback=partial(
-                                progress_tracker.record_completion, data_var.name
-                            ),
                         )
                     )
 

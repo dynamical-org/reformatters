@@ -139,7 +139,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             template_utils.write_metadata(template_ds, tmp_store)
 
             for job in jobs:
-                process_results, primary_store, replica_stores = job.process()
+                process_results, primary_store, replica_stores = job.process(
+                    expand_icechunk_stores=True
+                )
                 updated_template = job.update_template_with_results(process_results)
                 # overwrite the tmp store metadata with updated template
                 template_utils.write_metadata(updated_template, tmp_store)
