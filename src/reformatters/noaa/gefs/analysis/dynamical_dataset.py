@@ -6,13 +6,8 @@ from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
 
-from .region_job import GefsAnalysisRegionJob
-from .source_file_coord import GefsAnalysisSourceFileCoord
+from .region_job import GefsAnalysisRegionJob, GefsAnalysisSourceFileCoord
 from .template_config import GefsAnalysisTemplateConfig
-
-# Operational and validation cron schedules from existing implementation
-_OPERATIONAL_CRON_SCHEDULE = "0 0,6,12,18 * * *"  # UTC
-_VALIDATION_CRON_SCHEDULE = "30 7,10,13,19 * * *"  # UTC 1.5 hours after update
 
 
 class GefsAnalysisDataset(DynamicalDataset[GEFSDataVar, GefsAnalysisSourceFileCoord]):
@@ -22,13 +17,10 @@ class GefsAnalysisDataset(DynamicalDataset[GEFSDataVar, GefsAnalysisSourceFileCo
     region_job_class: type[GefsAnalysisRegionJob] = GefsAnalysisRegionJob
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        """Return the kubernetes cron job definitions to operationally update and validate this dataset.
-
-        Based on existing operational_kubernetes_resources() function in analysis/reformat.py
-        """
+        """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-operational-update",
-            schedule=_OPERATIONAL_CRON_SCHEDULE,
+            schedule="0 0,6,12,18 * * *",  # UTC
             pod_active_deadline=timedelta(hours=1),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -40,7 +32,7 @@ class GefsAnalysisDataset(DynamicalDataset[GEFSDataVar, GefsAnalysisSourceFileCo
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validation",
-            schedule=_VALIDATION_CRON_SCHEDULE,
+            schedule="30 7,10,13,19 * * *",  # UTC 1.5 hours after update
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -52,10 +44,7 @@ class GefsAnalysisDataset(DynamicalDataset[GEFSDataVar, GefsAnalysisSourceFileCo
         return [operational_update_cron_job, validation_cron_job]
 
     def validators(self) -> Sequence[validation.DataValidator]:
-        """Return a sequence of DataValidators to run on this dataset.
-
-        Based on existing validate_dataset() function in analysis/reformat.py
-        """
+        """Return a sequence of DataValidators to run on this dataset."""
         return (
             validation.check_analysis_current_data,
             validation.check_analysis_recent_nans,

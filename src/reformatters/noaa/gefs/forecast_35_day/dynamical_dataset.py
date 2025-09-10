@@ -6,8 +6,7 @@ from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
 
-from .region_job import GefsForecast35DayRegionJob
-from .source_file_coord import GefsForecast35DaySourceFileCoord
+from .region_job import GefsForecast35DayRegionJob, GefsForecast35DaySourceFileCoord
 from .template_config import GefsForecast35DayTemplateConfig
 
 
@@ -20,10 +19,7 @@ class GefsForecast35DayDataset(
     region_job_class: type[GefsForecast35DayRegionJob] = GefsForecast35DayRegionJob
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        """Return the kubernetes cron job definitions to operationally update and validate this dataset.
-
-        Based on existing operational_kubernetes_resources() function in forecast_35_day/reformat.py
-        """
+        """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-operational-update",
             schedule="0 7 * * *",  # At 7:00 UTC every day.
@@ -50,10 +46,7 @@ class GefsForecast35DayDataset(
         return [operational_update_cron_job, validation_cron_job]
 
     def validators(self) -> Sequence[validation.DataValidator]:
-        """Return a sequence of DataValidators to run on this dataset.
-
-        Based on existing validate_dataset() function in forecast_35_day/reformat.py
-        """
+        """Return a sequence of DataValidators to run on this dataset."""
         return (
             validation.check_forecast_current_data,
             validation.check_forecast_recent_nans,

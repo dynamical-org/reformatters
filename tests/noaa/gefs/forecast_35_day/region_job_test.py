@@ -1,7 +1,7 @@
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import numpy as np
 import pandas as pd
@@ -9,19 +9,20 @@ import pytest
 import xarray as xr
 
 from reformatters.common.config_models import DataVarAttrs, Encoding
+from reformatters.common.pydantic import replace
 from reformatters.common.storage import (
     DatasetFormat,
     StorageConfig,
     StoreFactory,
     get_local_tmp_store,
 )
-from reformatters.noaa.gefs.forecast_35_day.region_job import GefsForecast35DayRegionJob
-from reformatters.noaa.gefs.forecast_35_day.source_file_coord import (
-    GefsForecast35DayEnsembleSourceFileCoord,
-    GefsForecast35DayStatisticSourceFileCoord,
+from reformatters.noaa.gefs.forecast_35_day.region_job import (
+    GefsForecast35DayRegionJob,
+    GefsForecast35DaySourceFileCoord,
 )
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFSDataVar,
+    GefsEnsembleSourceFileCoord,
     GEFSInternalAttrs,
 )
 
@@ -93,6 +94,7 @@ def template_ds() -> xr.Dataset:
             "latitude": np.linspace(-90, 90, 10),
             "longitude": np.linspace(-180, 179, 15),
         },
+        attrs={"dataset_id": "noaa-gefs-forecast-35-day"},
     )
 
 
@@ -215,31 +217,34 @@ def test_generate_source_file_coords_ensemble(
     assert len(coords) == 32
 
     # All should be ensemble source file coords
-    assert all(isinstance(c, GefsForecast35DayEnsembleSourceFileCoord) for c in coords)
+    assert all(isinstance(c, GefsEnsembleSourceFileCoord) for c in coords)
 
 
-def test_source_file_coord_url_generation() -> None:
+def test_source_file_coord_url_generation(example_data_vars: list[GEFSDataVar]) -> None:
     """Test source file coordinate URL generation."""
-    coord = GefsForecast35DayEnsembleSourceFileCoord(
-        init_time=pd.Timestamp("2000-01-01T00:00"),
+    coord = GefsEnsembleSourceFileCoord(
+        init_time=pd.Timestamp("2021-01-01T00:00"),  # Use current archive period
         lead_time=pd.Timedelta("3h"),
         ensemble_member=1,
+        data_vars=example_data_vars[:1],
     )
 
     url = coord.get_url()
 
-    # Should contain the proper GEFS forecast URL structure
-    assert "gefs.20000101/00" in url
+    assert "gefs.20210101/00" in url
     assert "gep01.t00z" in url
-    assert "pgrb2s.25.f003" in url
+    assert "pgrb2s.0p25.f003" in url
 
 
-def test_source_file_coord_out_loc_forecast() -> None:
+def test_source_file_coord_out_loc_forecast(
+    example_data_vars: list[GEFSDataVar],
+) -> None:
     """Test source file coordinate output location for forecast data."""
-    coord = GefsForecast35DayEnsembleSourceFileCoord(
+    coord = GefsEnsembleSourceFileCoord(
         init_time=pd.Timestamp("2000-01-01T00:00"),
         lead_time=pd.Timedelta("3h"),
         ensemble_member=1,
+        data_vars=example_data_vars,
     )
 
     out_loc = coord.out_loc()
@@ -251,73 +256,91 @@ def test_source_file_coord_out_loc_forecast() -> None:
     assert out_loc["ensemble_member"] == 1
 
 
-def test_source_file_coord_statistic() -> None:
-    """Test statistic source file coordinate."""
-    coord = GefsForecast35DayStatisticSourceFileCoord(
-        init_time=pd.Timestamp("2000-01-01T00:00"),
-        lead_time=pd.Timedelta("3h"),
-        statistic="avg",
-    )
-
-    url = coord.get_url()
-    out_loc = coord.out_loc()
-
-    # URL should reference the mean file
-    assert "geavg.t00z" in url
-
-    # Should only have init_time and lead_time (no ensemble_member for statistics)
-    assert "init_time" in out_loc
-    assert "lead_time" in out_loc
-    assert "ensemble_member" not in out_loc
-
-
-@patch("reformatters.noaa.gefs.forecast_35_day.source_file_coord.download_source_file")
 def test_download_file(
-    mock_download_source: MagicMock,
     store_factory: StoreFactory,
     template_ds: xr.Dataset,
     example_data_vars: list[GEFSDataVar],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test download_file method."""
     tmp_store = get_local_tmp_store()
+    data_vars = example_data_vars[:1]
 
     job = GefsForecast35DayRegionJob(
         store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
-        data_vars=example_data_vars[:1],
+        data_vars=data_vars,
         append_dim="init_time",
         region=slice(0, 1),
         reformat_job_name="test-job",
     )
 
-    coord = GefsForecast35DayEnsembleSourceFileCoord(
+    coord = GefsForecast35DaySourceFileCoord(
         init_time=pd.Timestamp("2000-01-01T00:00"),
         lead_time=pd.Timedelta("3h"),
         ensemble_member=1,
+        data_vars=data_vars,
     )
 
-    with tempfile.NamedTemporaryFile(suffix=".grib2", delete=False) as tmp_file:
-        local_path = Path(tmp_file.name)
-        # Mock returns tuple of (updated_coord, path)
-        mock_download_source.return_value = (coord, local_path)
+    # Mock the http_download_to_disk function to avoid actual network calls
+    mock_download = Mock()
+    mock_index_path = Mock()
+    mock_index_path.read_text.return_value = "ignored"
+    mock_data_path = Mock()
 
-        result = job.download_file(coord)
+    # Configure the mock to return different paths for index and data files
+    def mock_download_side_effect(url: str, dataset_id: str, **kwargs: object) -> Mock:
+        if url.endswith(".idx"):
+            return mock_index_path
+        else:
+            return mock_data_path
 
-        assert result == local_path
-        mock_download_source.assert_called_once_with(coord, "s+a", [])
+    mock_download.side_effect = mock_download_side_effect
+    monkeypatch.setattr(
+        "reformatters.noaa.gefs.forecast_35_day.region_job.http_download_to_disk",
+        mock_download,
+    )
+
+    # Mock parse_grib_index to return some byte ranges
+    mock_parse = Mock(return_value=([123456, 234567], [234566, 345678]))
+    monkeypatch.setattr(
+        "reformatters.noaa.gefs.forecast_35_day.region_job.parse_grib_index",
+        mock_parse,
+    )
+
+    result = job.download_file(coord)
+
+    # Verify the result
+    assert result == mock_data_path
+
+    # Verify http_download_to_disk was called correctly
+    assert mock_download.call_count == 2
+
+    # First call should be for the index file
+    first_call = mock_download.call_args_list[0]
+    assert first_call[0][0].endswith(".idx")
+    assert first_call[0][1] == "noaa-gefs-forecast-35-day"
+
+    # Second call should be for the data file with byte ranges
+    second_call = mock_download.call_args_list[1]
+    assert not second_call[0][0].endswith(".idx")
+    assert second_call[0][1] == "noaa-gefs-forecast-35-day"
+    assert second_call[1]["byte_ranges"] == ([123456, 234567], [234566, 345678])
+    assert "local_path_suffix" in second_call[1]
 
 
-@patch("reformatters.noaa.gefs.forecast_35_day.source_file_coord.download_source_file")
-@patch("reformatters.noaa.gefs.read_data.read_into")
+@patch("reformatters.noaa.gefs.forecast_35_day.region_job.read_data")
 def test_read_data(
-    mock_read: MagicMock,
-    mock_download_source: MagicMock,
+    mock_read_data: MagicMock,
     store_factory: StoreFactory,
     template_ds: xr.Dataset,
     example_data_vars: list[GEFSDataVar],
 ) -> None:
     """Test read_data method."""
+    mock_data = np.ones((10, 15), dtype=np.float32)
+    mock_read_data.return_value = mock_data
+
     tmp_store = get_local_tmp_store()
 
     job = GefsForecast35DayRegionJob(
@@ -330,24 +353,19 @@ def test_read_data(
         reformat_job_name="test-job",
     )
 
-    coord = GefsForecast35DayEnsembleSourceFileCoord(
+    coord = GefsForecast35DaySourceFileCoord(
         init_time=pd.Timestamp("2000-01-01T00:00"),
         lead_time=pd.Timedelta("3h"),
         ensemble_member=1,
+        data_vars=example_data_vars,
     )
+    # Set a mock downloaded path since read_data expects this
+    coord = replace(coord, downloaded_path=Path("/mock/path/to/file.grib2"))
 
-    with tempfile.NamedTemporaryFile(suffix=".grib2", delete=False) as tmp_file:
-        local_path = Path(tmp_file.name)
+    result = job.read_data(coord, example_data_vars[0])
 
-        # Mock download_source_file to avoid empty data_vars issue
-        mock_download_source.return_value = (coord, local_path)
-
-        # The read_data method creates internal arrays, so we don't need to mock the return value
-        # Just verify the method executes without error
-        result = job.read_data(coord, example_data_vars[0])
-
-        # Should return array data
-        assert result is not None
+    # The read_data function is already mocked, so this should work
+    assert result.dtype == np.float32
 
 
 def test_apply_data_transformations(

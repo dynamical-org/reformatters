@@ -9,17 +9,30 @@ import xarray as xr
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config_models import EnsembleStatistic
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
+from reformatters.common.download import (
+    http_download_to_disk,
+)
+from reformatters.common.iterating import digest
 from reformatters.common.region_job import RegionJob
 from reformatters.common.storage import StoreFactory
 from reformatters.common.types import AppendDim, ArrayND, DatetimeLike
-from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar, GEFSFileType
-from reformatters.noaa.gefs.read_data import read_into
-
-from .source_file_coord import (
-    GefsForecast35DayEnsembleSourceFileCoord,
-    GefsForecast35DaySourceFileCoord,
-    GefsForecast35DayStatisticSourceFileCoord,
+from reformatters.noaa.gefs.gefs_config_models import (
+    GEFSDataVar,
+    GefsEnsembleSourceFileCoord,
+    GEFSFileType,
 )
+from reformatters.noaa.gefs.read_data import (
+    parse_grib_index,
+    read_data,
+)
+
+
+class GefsForecast35DaySourceFileCoord(GefsEnsembleSourceFileCoord):
+    # We share the name attributes (init_time, lead_time, data_vars) with
+    # GefsSourceFileCoord, and the default out_loc implementation of
+    # {"init_time": self.init_time, "lead_time": self.lead_time}
+    # is correct for this dataset.
+    pass
 
 
 class GefsForecast35DayRegionJob(
@@ -67,96 +80,37 @@ class GefsForecast35DayRegionJob(
             for lead_time in processing_region_ds["lead_time"].values:
                 for ensemble_member in processing_region_ds["ensemble_member"].values:
                     coords.append(
-                        GefsForecast35DayEnsembleSourceFileCoord(
+                        GefsForecast35DaySourceFileCoord(
                             init_time=pd.Timestamp(init_time),
                             lead_time=pd.Timedelta(lead_time),
+                            data_vars=data_var_group,
                             ensemble_member=int(ensemble_member),
                         )
                     )
         return coords
 
-    def _get_gefs_file_type(
-        self, data_var_group: Sequence[GEFSDataVar]
-    ) -> GEFSFileType:
-        """Get the GEFS file type for a group of variables."""
-        # All variables in a group should have the same file type
-        file_types = {var.internal_attrs.gefs_file_type for var in data_var_group}
-        if len(file_types) != 1:
-            raise ValueError(f"Mixed file types in variable group: {file_types}")
-        return next(iter(file_types))
-
     def download_file(self, coord: GefsForecast35DaySourceFileCoord) -> Path:
         """Download the source file for the given coordinate."""
-        from .source_file_coord import download_source_file
+        # Download grib index file
+        idx_url = f"{coord.get_url()}.idx"
+        idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
+        index_contents = idx_local_path.read_text()
 
-        # We need to determine the file type and variables from the data_vars in the group being processed
-        # For now, we'll pass an empty list and handle this properly when integrating with the full pipeline
-        _, path = download_source_file(coord, "s+a", [])
-        if path is None:
-            raise FileNotFoundError(f"Could not download file for {coord}")
-        return path
+        # Download the grib messages for the data vars in the coord using byte ranges
+        starts, ends = parse_grib_index(index_contents, coord)
+        vars_suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=True))
+        return http_download_to_disk(
+            coord.get_url(),
+            self.dataset_id,
+            byte_ranges=(starts, ends),
+            local_path_suffix=f"-{vars_suffix}",
+        )
 
     def read_data(
         self, coord: GefsForecast35DaySourceFileCoord, data_var: GEFSDataVar
     ) -> ArrayND[np.generic]:
         """Read data from the source file for the given coordinate and variable."""
-        # Create output data array with proper coordinates
-        data_array = xr.DataArray(
-            np.empty(
-                (
-                    1,
-                    1,
-                    1,
-                    len(self.template_ds["latitude"]),
-                    len(self.template_ds["longitude"]),
-                ),
-                dtype=np.float32,
-            ),
-            coords={
-                "init_time": [coord.init_time],
-                "lead_time": [coord.lead_time],
-                "ensemble_member": [coord.ensemble_member]
-                if hasattr(coord, "ensemble_member")
-                else [0],
-                "latitude": self.template_ds["latitude"],
-                "longitude": self.template_ds["longitude"],
-            },
-            dims=["init_time", "lead_time", "ensemble_member", "latitude", "longitude"],
-        )
-
-        # Download the file if not already downloaded
-        if coord.downloaded_path is None:
-            # We can't modify the frozen dataclass directly
-            # The download path should be set by the framework
-            path = self.download_file(coord)
-        else:
-            path = coord.downloaded_path
-
-        # Convert coord to legacy format for read_into
-        if isinstance(coord, GefsForecast35DayEnsembleSourceFileCoord):
-            legacy_coords = {
-                "init_time": coord.init_time,
-                "ensemble_member": coord.ensemble_member,
-                "lead_time": coord.lead_time,
-            }
-        elif isinstance(coord, GefsForecast35DayStatisticSourceFileCoord):
-            legacy_coords = {
-                "init_time": coord.init_time,
-                "statistic": coord.statistic,
-                "lead_time": coord.lead_time,
-            }
-        else:
-            raise TypeError(f"Unexpected coordinate type: {type(coord)}")
-
-        # Use existing read_into function
-        # Cast the dict to the proper SourceFileCoords type
-        from typing import cast
-
-        from reformatters.noaa.gefs.read_data import SourceFileCoords
-
-        # The legacy_coords dict already has the right structure for SourceFileCoords
-        read_into(data_array, cast(SourceFileCoords, legacy_coords), path, data_var)
-        return data_array.values
+        return read_data(self.template_ds, coord, data_var)
 
     def apply_data_transformations(
         self, data_array: xr.DataArray, data_var: GEFSDataVar
