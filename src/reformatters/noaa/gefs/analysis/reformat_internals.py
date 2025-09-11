@@ -40,7 +40,7 @@ from reformatters.noaa.gefs.read_data import (
 )
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
-logger = get_logger(__name__)
+log = get_logger(__name__)
 
 # Integer ensemble member or an ensemble statistic
 type EnsOrStat = int | np.integer[Any] | str
@@ -91,7 +91,7 @@ def reformat_time_i_slices(
             chunk_template_ds = template_ds[data_var_names].isel(
                 {template.APPEND_DIMENSION: append_dim_i_slice}
             )
-            logger.info(f"Starting chunk {time_range_str(chunk_template_ds['time'])}")
+            log.info(f"Starting chunk {time_range_str(chunk_template_ds['time'])}")
 
             processing_i_slice = buffer_slice(
                 append_dim_i_slice, buffer_size=time_buffer_i_size
@@ -99,9 +99,7 @@ def reformat_time_i_slices(
             padded_chunk_template_ds = template_ds[data_var_names].isel(
                 {template.APPEND_DIMENSION: processing_i_slice}
             )
-            logger.info(
-                f"Expanded to {time_range_str(padded_chunk_template_ds['time'])}"
-            )
+            log.info(f"Expanded to {time_range_str(padded_chunk_template_ds['time'])}")
 
             download_var_group_futures = get_download_var_group_futures(
                 padded_chunk_template_ds,
@@ -204,7 +202,7 @@ def download_var_group_files(
     gefs_file_type: GEFSFileType,
     io_executor: ThreadPoolExecutor,
 ) -> Sequence[tuple[SourceFileCoords, Path | None]]:
-    logger.info(f"Downloading {[d.name for d in idx_data_vars]}")
+    log.info(f"Downloading {[d.name for d in idx_data_vars]}")
     done, not_done = concurrent.futures.wait(
         [
             io_executor.submit(
@@ -222,7 +220,7 @@ def download_var_group_files(
         if (e := future.exception()) is not None:
             raise e
 
-    logger.info(f"Completed download for {[d.name for d in idx_data_vars]}")
+    log.info(f"Completed download for {[d.name for d in idx_data_vars]}")
     return [f.result() for f in done]
 
 
@@ -417,7 +415,7 @@ def read_into_data_array(
     var_coords_and_paths: CoordsAndPaths,
     cpu_executor: ThreadPoolExecutor,
 ) -> None:
-    logger.info(f"Reading {data_var.name}")
+    log.info(f"Reading {data_var.name}")
     consume(
         cpu_executor.map(
             partial(
@@ -435,7 +433,7 @@ def apply_data_transformations_inplace(
 ) -> None:
     expected_missing = ~is_available_time(pd.to_datetime(data_array["time"].values))
     if data_var.internal_attrs.deaccumulate_to_rate:
-        logger.info(f"Converting {data_var.name} from accumulations to rates")
+        log.info(f"Converting {data_var.name} from accumulations to rates")
         try:
             deaccumulate_to_rates_inplace(
                 data_array,
@@ -445,10 +443,10 @@ def apply_data_transformations_inplace(
             )
         except ValueError:
             # Log exception so we are notified if deaccumulation errors are larger than expected.
-            logger.exception(f"Error deaccumulating {data_var.name}")
+            log.exception(f"Error deaccumulating {data_var.name}")
 
     if expected_missing.any():
-        logger.info(f"Interpolating missing values for {data_var.name}")
+        log.info(f"Interpolating missing values for {data_var.name}")
         linear_interpolate_1d_inplace(data_array, dim="time", where=expected_missing)
 
     keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
@@ -485,7 +483,7 @@ def write_shards(
         .dt.strftime("%Y-%m-%dT%H:%M")
         .values
     )
-    logger.info(
+    log.info(
         f"Writing {data_array_template.name} {chunk_times_str} in {len(shard_indexers)} shards"
     )
     # Use ProcessPoolExecutor for parallel writing of shards.

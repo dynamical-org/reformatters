@@ -47,22 +47,22 @@ _VARIABLES_PER_BACKFILL_JOB = 1
 _OPERATIONAL_CRON_SCHEDULE = "0 0,6,12,18 * * *"  # UTC
 _VALIDATION_CRON_SCHEDULE = "30 7,10,13,19 * * *"  # UTC 1.5 hours after update
 
-logger = get_logger(__name__)
+log = get_logger(__name__)
 
 
 def reformat_local(time_end: DatetimeLike, chunk_filters: ChunkFilters) -> None:
     template_ds = template.get_template(time_end)
     store = get_store()
 
-    logger.info("Writing metadata")
+    log.info("Writing metadata")
     template_utils.write_metadata(template_ds, store, get_mode(store))
 
-    logger.info("Starting reformat")
+    log.info("Starting reformat")
     # Process all chunks by setting worker_index=0 and worker_total=1
     reformat_chunks(
         time_end, worker_index=0, workers_total=1, chunk_filters=chunk_filters
     )
-    logger.info(f"Done writing to {store}")
+    log.info(f"Done writing to {store}")
 
 
 def reformat_kubernetes(
@@ -76,7 +76,7 @@ def reformat_kubernetes(
 
     template_ds = template.get_template(time_end)
     store = get_store()
-    logger.info(f"Writing zarr metadata to {store.path}")
+    log.info(f"Writing zarr metadata to {store.path}")
     template.write_metadata(template_ds, store, get_mode(store))
 
     num_jobs = len(
@@ -120,7 +120,7 @@ def reformat_kubernetes(
         check=True,
     )
 
-    logger.info(f"Submitted kubernetes job {kubernetes_job.job_name}")
+    log.info(f"Submitted kubernetes job {kubernetes_job.job_name}")
 
 
 def reformat_chunks(
@@ -146,7 +146,7 @@ def reformat_chunks(
         workers_total,
     )
 
-    logger.info(f"This is {worker_index = }, {workers_total = }, {worker_jobs}")
+    log.info(f"This is {worker_index = }, {workers_total = }, {worker_jobs}")
     consume(
         reformat_time_i_slices(
             worker_jobs,
@@ -257,22 +257,22 @@ def reformat_operational_update(job_name: str) -> None:
                 )
             )
 
-        logger.info("Starting to wait for data var upload futures")
+        log.info("Starting to wait for data var upload futures")
         concurrent.futures.wait(data_var_upload_futures, return_when="FIRST_EXCEPTION")
-        logger.info("Finished waiting for data var upload futures")
+        log.info("Finished waiting for data var upload futures")
         for future in data_var_upload_futures:
             if (e := future.exception()) is not None:
                 raise e
 
         if max_processed_time == pd.Timestamp.min:
-            logger.info(
+            log.info(
                 f"No data processed in time_i_slice={time_i_slice}, not updating metadata."
             )
             continue
 
-        logger.info("Closing progress tracker")
+        log.info("Closing progress tracker")
         progress_tracker.close()
-        logger.info("Closed progress tracker")
+        log.info("Closed progress tracker")
 
         # Trim off any steps that are not yet available and rewrite metadata locally.
         # We trim one less than the max_processed_time because the last step only has
@@ -281,7 +281,7 @@ def reformat_operational_update(job_name: str) -> None:
         truncated_template_ds = template_ds.sel(
             time=slice(None, max_processed_time)
         ).isel(time=slice(None, -1))
-        logger.info(f"Writing updated metadata for dataset ending {max_processed_time}")
+        log.info(f"Writing updated metadata for dataset ending {max_processed_time}")
         template.write_metadata(
             truncated_template_ds,
             tmp_store,

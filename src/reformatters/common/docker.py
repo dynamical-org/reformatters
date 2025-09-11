@@ -6,7 +6,7 @@ import pandas as pd
 
 from reformatters.common.logging import get_logger
 
-logger = get_logger(__name__)
+log = get_logger(__name__)
 
 
 def build_and_push_image() -> str:
@@ -32,6 +32,6 @@ def build_and_push_image() -> str:
         ],
         check=True,
     )
-    logger.info(f"Pushed {image_tag}")
+    log.info(f"Pushed {image_tag}")
 
     return image_tag

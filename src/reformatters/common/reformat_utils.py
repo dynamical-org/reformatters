@@ -22,7 +22,7 @@ from reformatters.common.shared_memory_utils import (
 )
 from reformatters.common.types import ArrayFloat32
 
-logger = get_logger(__name__)
+log = get_logger(__name__)
 
 
 # NOTE: superseded by in region_job.py by just passing keyword arguments
@@ -50,7 +50,7 @@ def write_shards(
     chunk_init_times_str = ", ".join(
         data_array_template.init_time.dt.strftime("%Y-%m-%dT%H:%M").values
     )
-    logger.info(
+    log.info(
         f"Writing {data_array_template.name} {chunk_init_times_str} in {len(shard_indexers)} shards"
     )
 

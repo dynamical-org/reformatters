@@ -14,7 +14,7 @@ from reformatters.common.config_models import Coordinate, DataVar
 from reformatters.common.logging import get_logger
 from reformatters.common.storage import StoreFactory, commit_if_icechunk
 
-logger = get_logger(__name__)
+log = get_logger(__name__)
 
 
 def write_metadata(
@@ -50,10 +50,10 @@ def write_metadata(
         )
 
         for replica_store in replica_stores:
-            logger.info(f"Writing metadata to replica {replica_store} with mode {mode}")
+            log.info(f"Writing metadata to replica {replica_store} with mode {mode}")
             template_ds.to_zarr(replica_store, mode=mode, compute=False)  # type: ignore[call-overload]
 
-        logger.info(f"Writing metadata to store {store} with mode {mode}")
+        log.info(f"Writing metadata to store {store} with mode {mode}")
         template_ds.to_zarr(store, mode=mode, compute=False)  # type: ignore[call-overload]
 
     if isinstance(store, Path | str):

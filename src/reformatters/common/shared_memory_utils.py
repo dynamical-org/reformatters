@@ -14,7 +14,7 @@ from reformatters.common.iterating import consume, shard_slice_indexers
 from reformatters.common.logging import get_logger
 from reformatters.common.types import AppendDim, ArrayFloat32
 
-logger = get_logger(__name__)
+log = get_logger(__name__)
 
 
 @contextmanager
@@ -35,7 +35,7 @@ def make_shared_buffer(ds: xr.Dataset) -> Generator[SharedMemory, None, None]:
     """
     buffer_size = max(data_var.nbytes for data_var in ds.data_vars.values())
 
-    logger.info(f"Creating shared memory buffer of size {buffer_size / 10**9} GB")
+    log.info(f"Creating shared memory buffer of size {buffer_size / 10**9} GB")
     shared_memory = SharedMemory(create=True, size=buffer_size)
     try:
         yield shared_memory
@@ -132,7 +132,7 @@ def write_shards(
         .dt.strftime("%Y-%m-%dT%H:%M")
         .values
     )
-    logger.info(
+    log.info(
         f"Writing {processing_region_da_template.name} {chunk_times_str} in {len(shard_indexers)} shards"
     )
     # Use ProcessPoolExecutor for parallel writing of shards.

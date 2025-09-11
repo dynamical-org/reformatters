@@ -35,7 +35,7 @@ from .template_config import DATASET_VERSION as DATASET_VERSION
 
 _TEMPLATE_PATH = Path(__file__).parent / "templates" / "latest.zarr"
 
-logger = get_logger(__name__)
+log = get_logger(__name__)
 
 
 def get_template(init_time_end: DatetimeLike) -> xr.Dataset:

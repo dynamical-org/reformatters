@@ -34,7 +34,7 @@ from reformatters.common.zarr import copy_zarr_metadata
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
 
-logger = get_logger(__name__)
+log = get_logger(__name__)
 
 
 class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
@@ -158,7 +158,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     replica_stores,
                 )
 
-        logger.info(
+        log.info(
             f"Operational update complete. Wrote to primary store: {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()} replicas"
         )
 
@@ -256,7 +256,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             check=True,
         )
 
-        logger.info(f"Submitted kubernetes job {kubernetes_job.job_name}")
+        log.info(f"Submitted kubernetes job {kubernetes_job.job_name}")
 
     def backfill_local(
         self,
@@ -281,7 +281,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             filter_contains=filter_contains,
             filter_variable_names=filter_variable_names,
         )
-        logger.info(f"Done writing to {self.store_factory.primary_store()}")
+        log.info(f"Done writing to {self.store_factory.primary_store()}")
 
     def process_backfill_region_jobs(
         self,
@@ -316,7 +316,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
 
         jobs_summary = ", ".join(repr(j) for j in region_jobs)
-        logger.info(
+        log.info(
             f"This is {worker_index = }, {workers_total = }, {len(region_jobs)} jobs, {jobs_summary}"
         )
         for region_job in region_jobs:
@@ -336,11 +336,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         with self._monitor(ValidationCronJob, reformat_job_name):
             store = self.store_factory.primary_store()
             validation.validate_dataset(store, validators=self.validators())
-            logger.info(f"Done validating {store}")
+            log.info(f"Done validating {store}")
 
             for replica_store in self.store_factory.replica_stores():
                 validation.validate_dataset(replica_store, validators=self.validators())
-                logger.info(f"Done validating {replica_store}")
+                log.info(f"Done validating {replica_store}")
 
     def get_cli(
         self,
