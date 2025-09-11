@@ -12,7 +12,7 @@ from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import (
     http_download_to_disk,
 )
-from reformatters.common.iterating import digest
+from reformatters.common.iterating import digest, item
 from reformatters.common.region_job import RegionJob
 from reformatters.common.storage import StoreFactory
 from reformatters.common.types import AppendDim, ArrayND, DatetimeLike
@@ -25,6 +25,7 @@ from reformatters.noaa.gefs.read_data import (
     parse_grib_index,
     read_data,
 )
+from reformatters.noaa.noaa_utils import has_hour_0_values
 
 
 class GefsForecast35DaySourceFileCoord(GefsEnsembleSourceFileCoord):
@@ -40,7 +41,6 @@ class GefsForecast35DayRegionJob(
 ):
     """RegionJob for GEFS Forecast 35-Day dataset processing."""
 
-    # From existing _VARIABLES_PER_BACKFILL_JOB in forecast_35_day/reformat.py
     max_vars_per_backfill_job = 3
 
     @classmethod
@@ -75,6 +75,12 @@ class GefsForecast35DayRegionJob(
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[GEFSDataVar]
     ) -> Sequence[GefsForecast35DaySourceFileCoord]:
         """Generate source file coordinates for forecast data."""
+        # Filter out lead_time=0 for variables that don't have hour 0 values
+        # (accumulated and last N hour avg values don't exist in the 0-hour forecast)
+        var_has_hour_0_values = item({has_hour_0_values(v) for v in data_var_group})
+        if not var_has_hour_0_values:
+            processing_region_ds = processing_region_ds.sel(lead_time=slice("1h", None))
+
         coords = []
         for init_time in processing_region_ds["init_time"].values:
             for lead_time in processing_region_ds["lead_time"].values:

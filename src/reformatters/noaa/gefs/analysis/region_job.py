@@ -21,22 +21,34 @@ from reformatters.common.region_job import (
 from reformatters.common.storage import StoreFactory
 from reformatters.common.types import (
     AppendDim,
+    Array1D,
     ArrayND,
     DatetimeLike,
     Dim,
 )
 from reformatters.noaa.gefs.gefs_config_models import (
+    GEFS_INIT_TIME_FREQUENCY,
+    GEFS_REFORECAST_END,
+    GEFS_REFORECAST_INIT_TIME_FREQUENCY,
+    GEFS_REFORECAST_START,
     GEFSDataVar,
     GefsEnsembleSourceFileCoord,
     GEFSFileType,
+    is_v12_index,
 )
-from reformatters.noaa.gefs.read_data import (
-    filter_available_times,
-    is_available_time,
-    parse_grib_index,
-    read_data,
-)
+from reformatters.noaa.gefs.read_data import parse_grib_index, read_data
 from reformatters.noaa.noaa_utils import has_hour_0_values
+
+
+def is_available_time(times: pd.DatetimeIndex) -> Array1D[np.bool]:
+    """Before v12, GEFS files had a 6 hour step."""
+    # pre-v12 data is all we have for the 9 month period after the v12 reforecast ends
+    # 2019-12-31 and before the v12 forecast archive starts 2020-10-01.
+    return is_v12_index(times) | (times.hour % 6 == 0)
+
+
+def filter_available_times(times: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    return times[is_available_time(times)]
 
 
 class GefsAnalysisSourceFileCoord(GefsEnsembleSourceFileCoord):
@@ -99,15 +111,53 @@ class GefsAnalysisRegionJob(RegionJob[GEFSDataVar, GefsAnalysisSourceFileCoord])
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[GEFSDataVar]
     ) -> Sequence[GefsAnalysisSourceFileCoord]:
         """Generate source file coordinates for analysis data from forecast files."""
+
         times = filter_available_times(
             pd.to_datetime(processing_region_ds["time"].values)
         )
-        coords = []
-        for init_time in times:
-            lead_time = pd.Timedelta(hours=init_time.hour % 24)
-            init_time = init_time.replace(hour=0)
 
-            # Analysis dataset uses control member only (ensemble_memeoner=0)
+        # Check if any variable in the group doesn't have hour 0 values
+        var_has_hour_0_values = any(has_hour_0_values(var) for var in data_var_group)
+
+        coords = []
+        for time in times:
+            # Determine if we're in the reforecast period
+            # If var doesn't have hour 0 values we have to go back one forecast
+            # so the first step after the reforecast will still be drawn from the reforecast.
+            if var_has_hour_0_values:
+                is_reforecast = time < GEFS_REFORECAST_END
+            else:
+                is_reforecast = time <= GEFS_REFORECAST_END
+
+            # Calculate init_time based on period and frequency
+            if is_reforecast:
+                init_time = time.floor(
+                    f"{GEFS_REFORECAST_INIT_TIME_FREQUENCY.total_seconds() / 3600:.0f}h"
+                )
+            else:
+                init_time = time.floor(
+                    f"{GEFS_INIT_TIME_FREQUENCY.total_seconds() / 3600:.0f}h"
+                )
+
+            # If var doesn't have hour 0 values OR we are in the reforecast period which
+            # does not have hour 0 values for any variable, we have to go back one forecast.
+            # eg. Get the 6th hour rather than the 0th hour for 6-hourly init times.
+            is_hour_0 = time == init_time
+            do_shift = is_hour_0 and ((not var_has_hour_0_values) or is_reforecast)
+
+            if do_shift:
+                if is_reforecast:
+                    init_time = init_time - GEFS_REFORECAST_INIT_TIME_FREQUENCY
+                else:
+                    init_time = init_time - GEFS_INIT_TIME_FREQUENCY
+
+            # Skip if we shifted init to before start of archive
+            if init_time < GEFS_REFORECAST_START:
+                continue
+
+            lead_time = time - init_time
+
+            # Analysis dataset uses control member only (ensemble_member=0)
             coords.append(
                 GefsAnalysisSourceFileCoord(
                     init_time=init_time,

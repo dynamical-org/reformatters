@@ -1,6 +1,7 @@
 from collections.abc import Mapping, Sequence
-from typing import Final, Literal, assert_never
+from typing import Any, Final, Literal, assert_never
 
+import numpy as np
 import pandas as pd
 
 from reformatters.common.config_models import DataVar, EnsembleStatistic
@@ -68,6 +69,14 @@ FILE_RESOLUTIONS = {
     "a": "0p50",
     "b": "0p50",
 }
+
+
+def is_v12(init_time: pd.Timestamp) -> bool:
+    return init_time < GEFS_REFORECAST_END or GEFS_CURRENT_ARCHIVE_START <= init_time
+
+
+def is_v12_index(times: pd.DatetimeIndex) -> np.ndarray[Any, np.dtype[np.bool]]:
+    return (times < GEFS_REFORECAST_END) | (GEFS_CURRENT_ARCHIVE_START <= times)
 
 
 def get_grib_element(var_info: GEFSDataVar, init_time: pd.Timestamp) -> str:
@@ -167,14 +176,14 @@ class GefsSourceFileCoord(SourceFileCoord):
         if self.init_time >= GEFS_CURRENT_ARCHIVE_START:
             resolution_str = FILE_RESOLUTIONS[true_gefs_file_type]
             url = (
-                "https://noaa-gefs-pds.s3.amazonaws.com"
+                "https://noaa-gefs-pds.s3.amazonaws.com/"
                 f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2{true_gefs_file_type}{resolution_str.strip('0')}/"
                 f"ge{ensemble_or_statistic_str}.t{init_hour_str}z.pgrb2{true_gefs_file_type}.{resolution_str}.f{lead_time_hours:03.0f}"
             )
             return url
         elif self.init_time >= GEFS_REFORECAST_END:
             url = (
-                "https://noaa-gefs-pds.s3.amazonaws.com"
+                "https://noaa-gefs-pds.s3.amazonaws.com/"
                 f"gefs.{init_date_str}/{init_hour_str}/pgrb2{true_gefs_file_type}/"
                 f"ge{ensemble_or_statistic_str}.t{init_hour_str}z.pgrb2{true_gefs_file_type}f{lead_time_hours:02.0f}"
             )

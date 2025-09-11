@@ -1,7 +1,7 @@
 import os
 import re
 import warnings
-from typing import Any, Literal, assert_never
+from typing import Literal, assert_never
 
 import numpy as np
 import pandas as pd
@@ -9,37 +9,15 @@ import rasterio  # type: ignore
 import xarray as xr
 
 from reformatters.common.config import Config
-from reformatters.common.logging import get_logger
-from reformatters.common.types import Array1D, Array2D, ArrayFloat32
+from reformatters.common.types import Array2D, ArrayFloat32
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_ACCUMULATION_RESET_HOURS,
-    GEFS_CURRENT_ARCHIVE_START,
     GEFS_REFORECAST_END,
     GEFS_REFORECAST_GRIB_ELEMENT_RENAME,
     GEFSDataVar,
     GefsSourceFileCoord,
+    is_v12,
 )
-
-log = get_logger(__name__)
-
-
-def is_v12(init_time: pd.Timestamp) -> bool:
-    return init_time < GEFS_REFORECAST_END or GEFS_CURRENT_ARCHIVE_START <= init_time
-
-
-def is_v12_index(times: pd.DatetimeIndex) -> np.ndarray[Any, np.dtype[np.bool]]:
-    return (times < GEFS_REFORECAST_END) | (GEFS_CURRENT_ARCHIVE_START <= times)
-
-
-def is_available_time(times: pd.DatetimeIndex) -> Array1D[np.bool]:
-    """Before v12, GEFS files had a 6 hour step."""
-    # pre-v12 data is all we have for the 9 month period after the v12 reforecast ends
-    # 2019-12-31 and before the v12 forecast archive starts 2020-10-01.
-    return is_v12_index(times) | (times.hour % 6 == 0)
-
-
-def filter_available_times(times: pd.DatetimeIndex) -> pd.DatetimeIndex:
-    return times[is_available_time(times)]
 
 
 def get_hours_str(var_info: GEFSDataVar, lead_time_hours: float) -> str:
