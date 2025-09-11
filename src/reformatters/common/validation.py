@@ -10,7 +10,7 @@ import zarr
 
 from reformatters.common.logging import get_logger
 
-logger = get_logger(__name__)
+log = get_logger(__name__)
 
 
 class ValidationResult(pydantic.BaseModel):
@@ -40,7 +40,7 @@ def validate_dataset(
     Raises:
         ValueError: If any validation checks fail
     """
-    logger.info(f"Validating zarr {store}")
+    log.info(f"Validating zarr {store}")
 
     # Open dataset
     ds = xr.open_zarr(store, chunks=None)
@@ -58,7 +58,7 @@ def validate_dataset(
             + "\n".join(f"- {msg}" for msg in failed_validations)
         )
 
-    logger.info("Zarr validation passed all checks")
+    log.info("Zarr validation passed all checks")
 
 
 def check_forecast_current_data(ds: xr.Dataset) -> ValidationResult:

@@ -37,7 +37,7 @@ from reformatters.noaa.gefs.read_data import (
 )
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
-logger = get_logger(__name__)
+log = get_logger(__name__)
 
 # Integer ensemble member or an ensemble statistic
 type EnsOrStat = int | np.integer[Any] | str
@@ -102,7 +102,7 @@ def reformat_init_time_i_slices(
             chunk_init_times_str = ", ".join(
                 chunk_init_times.strftime("%Y-%m-%dT%H:%M")
             )
-            logger.info(f"Starting chunk with init times {chunk_init_times_str}")
+            log.info(f"Starting chunk with init times {chunk_init_times_str}")
 
             download_var_group_futures = get_download_var_group_futures(
                 chunk_template_ds,
@@ -186,7 +186,7 @@ def download_var_group_files(
     gefs_file_type: GEFSFileType,
     io_executor: ThreadPoolExecutor,
 ) -> list[tuple[SourceFileCoords, Path | None]]:
-    logger.info(f"Downloading {[d.name for d in idx_data_vars]}")
+    log.info(f"Downloading {[d.name for d in idx_data_vars]}")
     done, not_done = concurrent.futures.wait(
         [
             io_executor.submit(
@@ -204,7 +204,7 @@ def download_var_group_files(
         if (e := future.exception()) is not None:
             raise e
 
-    logger.info(f"Completed download for {[d.name for d in idx_data_vars]}")
+    log.info(f"Completed download for {[d.name for d in idx_data_vars]}")
     return [f.result() for f in done]
 
 
@@ -366,7 +366,7 @@ def read_into_data_array(
     var_coords_and_paths: CoordsAndPaths,
     cpu_executor: ThreadPoolExecutor,
 ) -> None:
-    logger.info(f"Reading {data_var.name}")
+    log.info(f"Reading {data_var.name}")
     consume(
         cpu_executor.map(
             partial(
@@ -383,7 +383,7 @@ def apply_data_transformations_inplace(
     data_array: xr.DataArray, data_var: DataVar[Any]
 ) -> None:
     if data_var.internal_attrs.deaccumulate_to_rate:
-        logger.info(f"Converting {data_var.name} from accumulations to rates")
+        log.info(f"Converting {data_var.name} from accumulations to rates")
         try:
             deaccumulate_to_rates_inplace(
                 data_array,
@@ -392,7 +392,7 @@ def apply_data_transformations_inplace(
             )
         except ValueError:
             # Log exception so we are notified if deaccumulation errors are larger than expected.
-            logger.exception(f"Error deaccumulating {data_var.name}")
+            log.exception(f"Error deaccumulating {data_var.name}")
 
     keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
     if isinstance(keep_mantissa_bits, int):
@@ -412,7 +412,7 @@ def write_shards(
     chunk_init_times_str = ", ".join(
         data_array_template.init_time.dt.strftime("%Y-%m-%dT%H:%M").values
     )
-    logger.info(
+    log.info(
         f"Writing {data_array_template.name} {chunk_init_times_str} in {len(shard_indexers)} shards"
     )
 

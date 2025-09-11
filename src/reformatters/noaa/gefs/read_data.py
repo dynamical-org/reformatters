@@ -24,7 +24,7 @@ from reformatters.noaa.gefs.gefs_config_models import (
 )
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
-logger = get_logger(__name__)
+log = get_logger(__name__)
 
 FILE_RESOLUTIONS = {
     "s": "0p25",
@@ -202,13 +202,13 @@ def download_file(
     except FileNotFoundError as e:
         # For recent files, we expect some files to not exist yet, just log the path
         if init_time > (pd.Timestamp.now() - pd.Timedelta(hours=24)):
-            logger.info(" ".join(str(e).split("\n")[:2]))
+            log.info(" ".join(str(e).split("\n")[:2]))
         else:
-            logger.exception("File not found")
+            log.exception("File not found")
         return coords, None
 
     except Exception:
-        logger.exception("Download failed")
+        log.exception("Download failed")
         return coords, None
 
 
@@ -375,7 +375,7 @@ def read_into(
             true_gefs_file_type,
         )
     except Exception:
-        logger.exception("Read failed")
+        log.exception("Read failed")
         return
 
     if "init_time" in out.dims:

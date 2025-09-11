@@ -43,22 +43,22 @@ _VARIABLES_PER_BACKFILL_JOB = 3
 _OPERATIONAL_CRON_SCHEDULE = "0 7 * * *"  # At 7:00 UTC every day.
 _VALIDATION_CRON_SCHEDULE = "30 11 * * *"  # At 11:30 UTC every day.
 
-logger = get_logger(__name__)
+log = get_logger(__name__)
 
 
 def reformat_local(init_time_end: DatetimeLike, chunk_filters: ChunkFilters) -> None:
     template_ds = template.get_template(init_time_end)
     store = get_store()
 
-    logger.info("Writing metadata")
+    log.info("Writing metadata")
     template.write_metadata(template_ds, store, get_mode(store))
 
-    logger.info("Starting reformat")
+    log.info("Starting reformat")
     # Process all chunks by setting worker_index=0 and worker_total=1
     reformat_chunks(
         init_time_end, worker_index=0, workers_total=1, chunk_filters=chunk_filters
     )
-    logger.info(f"Done writing to {store}")
+    log.info(f"Done writing to {store}")
 
 
 def reformat_kubernetes(
@@ -72,7 +72,7 @@ def reformat_kubernetes(
 
     template_ds = template.get_template(init_time_end)
     store = get_store()
-    logger.info(f"Writing zarr metadata to {store.path}")
+    log.info(f"Writing zarr metadata to {store.path}")
     template.write_metadata(template_ds, store, get_mode(store))
 
     num_jobs = len(all_jobs_ordered(template_ds, chunk_filters))
@@ -109,7 +109,7 @@ def reformat_kubernetes(
         check=True,
     )
 
-    logger.info(f"Submitted kubernetes job {kubernetes_job.job_name}")
+    log.info(f"Submitted kubernetes job {kubernetes_job.job_name}")
 
 
 def reformat_chunks(
@@ -130,7 +130,7 @@ def reformat_chunks(
         workers_total,
     )
 
-    logger.info(f"This is {worker_index = }, {workers_total = }, {worker_jobs}")
+    log.info(f"This is {worker_index = }, {workers_total = }, {worker_jobs}")
     consume(
         reformat_init_time_i_slices(
             worker_jobs,

@@ -7,7 +7,7 @@ import zarr
 from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
 
-logger = get_logger(__name__)
+log = get_logger(__name__)
 
 _LOCAL_ZARR_STORE_BASE_PATH = "data/output"
 
@@ -51,19 +51,19 @@ def copy_data_var(
     relative_dir = f"{data_var_name}/c/{shard_index}/"
 
     for replica_store in replica_stores:
-        logger.info(
+        log.info(
             f"Copying data var chunks to replica store ({replica_store}) for {relative_dir}."
         )
         _copy_data_var_chunks(tmp_store, relative_dir, replica_store)
-        logger.info(
+        log.info(
             f"Done copying data var chunks to replica store ({replica_store}) for {relative_dir}."
         )
 
-    logger.info(
+    log.info(
         f"Copying data var chunks to primary store ({primary_store}) for {relative_dir}."
     )
     _copy_data_var_chunks(tmp_store, relative_dir, primary_store)
-    logger.info(
+    log.info(
         f"Done copying data var chunks to primary store ({primary_store}) for {relative_dir}."
     )
 
@@ -76,7 +76,7 @@ def copy_data_var(
             if file.is_file():
                 file.unlink()
     except Exception as e:
-        logger.warning(f"Failed to delete chunk after upload: {e}")
+        log.warning(f"Failed to delete chunk after upload: {e}")
 
 
 def _copy_data_var_chunks(
@@ -112,12 +112,12 @@ def copy_zarr_metadata(
     # Since the primary store is our reference store (to determine what data we have and what needs to be written)
     # we only want to update its metadata once we are sure the replicas are up to date.
     for replica_store in replica_stores:
-        logger.info(
+        log.info(
             f"Copying metadata to replica store ({replica_store}) from {tmp_store}"
         )
         _copy_metadata_files(metadata_files, tmp_store, replica_store)
 
-    logger.info(f"Copying metadata to primary store ({primary_store}) from {tmp_store}")
+    log.info(f"Copying metadata to primary store ({primary_store}) from {tmp_store}")
     _copy_metadata_files(metadata_files, tmp_store, primary_store)
 
 
