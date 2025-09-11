@@ -667,21 +667,39 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         Reads data from source files into `out`.
         Returns a list of coords with the final status.
         """
-
-        def _read_and_write_one(coord: SOURCE_FILE_COORD) -> SOURCE_FILE_COORD:
-            try:
-                out.loc[coord.out_loc()] = self.read_data(coord, data_var)
-                return replace(coord, status=SourceFileStatus.Succeeded)
-            except Exception:
-                log.exception(f"Read failed {coord.downloaded_path}")
-                return replace(coord, status=SourceFileStatus.ReadFailed)
-
         # Skip coords where the download failed
         read_coords = (
             c for c in source_file_coords if c.status == SourceFileStatus.Processing
         )
+
+        def _read_and_write_one(coord: SOURCE_FILE_COORD) -> ArrayND[np.generic]:
+            return self.read_data(coord, data_var)
+
+        # Index is used to maintain order of coords
+        updated_coords: dict[int, SOURCE_FILE_COORD] = {}
+
         with ThreadPoolExecutor(max_workers=self.read_parallelism) as executor:
-            return list(executor.map(_read_and_write_one, read_coords))
+            futures = {}
+            for i, coord in enumerate(read_coords):
+                future = executor.submit(_read_and_write_one, coord)
+                futures[future] = (i, coord)
+
+            for future in concurrent.futures.as_completed(futures):
+                index, coord = futures[future]
+                try:
+                    data = future.result()
+                    out.loc[coord.out_loc()] = data
+                    updated_coords[index] = replace(
+                        coord, status=SourceFileStatus.Succeeded
+                    )
+                except Exception:
+                    log.exception(f"Read failed {coord.downloaded_path}")
+                    updated_coords[index] = replace(
+                        coord, status=SourceFileStatus.ReadFailed
+                    )
+
+        sorted_updated_coords = [updated_coords[i] for i in sorted(updated_coords)]
+        return sorted_updated_coords
 
     def _write_shards(
         self,
