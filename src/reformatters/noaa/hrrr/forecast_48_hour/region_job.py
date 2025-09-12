@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 import xarray as xr
+import zarr
 
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import digest, item
@@ -13,7 +14,6 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
 )
-from reformatters.common.storage import StoreFactory
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     AppendDim,
@@ -91,7 +91,7 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
     @classmethod
     def operational_update_jobs(
         cls,
-        store_factory: StoreFactory,
+        primary_store: zarr.abc.store.Store,
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
@@ -106,7 +106,7 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
         # HRRR provides forecasts every hour, but 48-hour forecasts are only available
         # every 6 hours (00, 06, 12, 18 UTC)
 
-        existing_ds = xr.open_zarr(store_factory.primary_store())
+        existing_ds = xr.open_zarr(primary_store)
         append_dim_start = cls._update_append_dim_start(existing_ds)
 
         append_dim_end = cls._update_append_dim_end()
@@ -114,7 +114,6 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
 
         jobs = cls.get_jobs(
             kind="operational-update",
-            store_factory=store_factory,
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=append_dim,

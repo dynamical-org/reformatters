@@ -15,7 +15,6 @@ import pandas as pd
 import pydantic
 import xarray as xr
 import zarr
-from icechunk.store import IcechunkStore
 from pydantic import AfterValidator, Field, computed_field
 
 from reformatters.common import template_utils
@@ -28,7 +27,6 @@ from reformatters.common.reformat_utils import (
     create_data_array_and_template,
 )
 from reformatters.common.shared_memory_utils import make_shared_buffer, write_shards
-from reformatters.common.storage import StoreFactory
 from reformatters.common.types import (
     AppendDim,
     ArrayND,
@@ -36,8 +34,7 @@ from reformatters.common.types import (
     Dim,
     Timestamp,
 )
-from reformatters.common.update_progress_tracker import UpdateProgressTracker
-from reformatters.common.zarr import copy_data_var, copy_zarr_metadata
+from reformatters.common.zarr import copy_data_var
 
 log = get_logger(__name__)
 
@@ -102,7 +99,6 @@ def region_slice(s: slice) -> slice:
 
 
 class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
-    store_factory: StoreFactory
     tmp_store: Path
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
@@ -267,7 +263,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     @classmethod
     def operational_update_jobs(
         cls,
-        store_factory: StoreFactory,
+        primary_store: zarr.abc.store.Store,
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
@@ -292,8 +288,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         Parameters
         ----------
-        store_factory : StoreFactory
-            The factory to get the primary store to read existing data from and write updates to.
+        primary_store : zarr.abc.store.Store
+            The primary store to read existing data from and write updates to.
         tmp_store : Path
             The temporary Zarr store to write into while processing.
         get_template_fn : Callable[[DatetimeLike], xr.Dataset]
@@ -332,7 +328,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def get_jobs(
         cls,
         kind: Literal["backfill", "operational-update"],
-        store_factory: StoreFactory,
         tmp_store: Path,
         template_ds: xr.Dataset,
         append_dim: AppendDim,
@@ -358,8 +353,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         Parameters
         ----------
-        store_factory : StoreFactory
-            The factory to get the primary store to read existing data from and write updates to.
         tmp_store : Path
             The temporary Zarr store to write into while processing.
         template_ds : xr.Dataset
@@ -443,7 +436,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         all_jobs = [
             cls(
-                store_factory=store_factory,
                 tmp_store=tmp_store,
                 template_ds=template_ds,
                 data_vars=data_var_group,
@@ -459,12 +451,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def process(
         self,
-        expand_icechunk_stores: bool = False,
-    ) -> tuple[
-        Mapping[str, Sequence[SOURCE_FILE_COORD]],
-        zarr.abc.store.Store,
-        list[zarr.abc.store.Store],
-    ]:
+        primary_store: zarr.abc.store.Store,
+        replica_stores: list[zarr.abc.store.Store],
+    ) -> Mapping[str, Sequence[SOURCE_FILE_COORD]]:
         """
         Orchestrate the full region job processing pipeline.
 
@@ -485,38 +474,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         processing_region_ds, output_region_ds = self._get_region_datasets()
 
-        primary_store = self.store_factory.primary_store()
-        replica_stores = self.store_factory.replica_stores()
-
-        progress_tracker = UpdateProgressTracker(
-            self.reformat_job_name,
-            self.region.start,
-            self.store_factory,
-        )
-        data_vars_to_process: Sequence[DATA_VAR] = progress_tracker.get_unprocessed(
-            self.data_vars
-        )  # type: ignore  # Cast shouldn't be needed but can't get mypy to be happy
-        data_var_groups = self.source_groups(data_vars_to_process)
+        data_var_groups = self.source_groups(self.data_vars)
         if self.max_vars_per_download_group is not None:
             data_var_groups = self._maybe_split_groups(
                 data_var_groups, self.max_vars_per_download_group
             )
 
         template_utils.write_metadata(self.template_ds, self.tmp_store)
-
-        # Expand the icechunk stores _before_ we write chunk data
-        if expand_icechunk_stores:
-            icechunk_stores = [
-                s for s in replica_stores if isinstance(s, IcechunkStore)
-            ]
-            if isinstance(primary_store, IcechunkStore):
-                icechunk_stores.append(primary_store)
-            for icechunk_store in icechunk_stores:
-                copy_zarr_metadata(
-                    self.template_ds,
-                    self.tmp_store,
-                    icechunk_store,  # Note that this is in the position of the primary store intentionally
-                )
 
         results: dict[str, Sequence[SOURCE_FILE_COORD]] = {}
         upload_futures: list[Any] = []
@@ -593,9 +557,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             if (e := future.exception()) is not None:
                 raise e
 
-        progress_tracker.close()
-
-        return results, primary_store, replica_stores
+        return results
 
     def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
         ds = self.template_ds[[v.name for v in self.data_vars]]

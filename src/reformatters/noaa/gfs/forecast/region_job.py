@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import rasterio  # type: ignore
 import xarray as xr
+import zarr
 
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
@@ -17,7 +18,6 @@ from reformatters.common.download import (
 from reformatters.common.iterating import digest, item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob
-from reformatters.common.storage import StoreFactory
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     AppendDim,
@@ -133,7 +133,6 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
                 f"{grib_element=}, {grib_description=}, {coord.downloaded_path=}"
             )
             rasterio_band_index = matching_bands[0]
-
             result: ArrayFloat32 = reader.read(
                 rasterio_band_index,
                 out_dtype=np.float32,
@@ -171,7 +170,7 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
     @classmethod
     def operational_update_jobs(
         cls,
-        store_factory: StoreFactory,
+        primary_store: zarr.abc.store.Store,
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
@@ -184,9 +183,7 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         Return the sequence of RegionJob instances necessary to update the dataset
         from its current state to include the latest available data.
         """
-        existing_ds = xr.open_zarr(
-            store_factory.primary_store(), decode_timedelta=True, chunks=None
-        )
+        existing_ds = xr.open_zarr(primary_store, decode_timedelta=True, chunks=None)
         # Start by reprocessing the most recent forecast already in the dataset; it may be incomplete.
         append_dim_start = existing_ds[append_dim].max()
         append_dim_end = pd.Timestamp.now()
@@ -194,7 +191,6 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
 
         jobs = cls.get_jobs(
             kind="operational-update",
-            store_factory=store_factory,
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=append_dim,
