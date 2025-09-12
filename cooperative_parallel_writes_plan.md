@@ -1,7 +1,7 @@
 # Cooperative parallel writes refactor plan
 
 ## Background
-We need to refactor to support parallel, cooperative updates to an icechunk/zarr v3 store. Our previous method of writing a fill that had the data variable names that were already processed doesn't work with icechunk unless you share the session. If we're going to be sharing the session between processes with might as well make them run in parallel too so updates can be faster.
+We need to refactor to support parallel, cooperative updates to an icechunk/zarr v3 store. Our previous method of writing a file that had the data variable names that were already processed doesn't work with icechunk unless you share the session because each new process restart (e.g. on preemption) had a fresh session that discards previous progress. If we're going to be sharing the session between processes with might as well make them run in parallel too so updates can be faster.
 
 Icechunk is a data storage engine for zarr which supports explicit git-like version control of zarr data.
 
