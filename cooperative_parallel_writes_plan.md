@@ -1,6 +1,8 @@
 # Cooperative parallel writes refactor plan
 
 ## Background
+We need to refactor to support parallel, cooperative updates to an icechunk/zarr v3 store. Our previous method of writing a fill that had the data variable names that were already processed doesn't work with icechunk unless you share the session. If we're going to be sharing the session between processes with might as well make them run in parallel too so updates can be faster.
+
 Icechunk is a data storage engine for zarr which supports explicit git-like version control of zarr data.
 
 To have multiple processes cooperate to write data in a single commit in Icechunk you,
@@ -33,4 +35,4 @@ Conceptually this looks like a DAG where pod 0 sets up the work, all pods fan ou
     - expanding the icechunk store if it's an update and is_first_pod 
     - in a loop, calling .process(primary_store, replica_stores) 
     - writing pickled, updated session
-    - if last pod, get_merged_sessions and commit
+    - if last pod, get_merged_sessions and commit for icechunk stores, for zarrv3 stores, write the updated metadata
