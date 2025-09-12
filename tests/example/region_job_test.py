@@ -18,7 +18,6 @@
 #     template_ds = template_config.get_template(pd.Timestamp("2000-01-23"))
 
 #     region_job = ExampleRegionJob(
-#         store_factory=Mock(),
 #         tmp_store=Mock(),
 #         template_ds=template_ds,
 #         data_vars=[Mock(), Mock()],
