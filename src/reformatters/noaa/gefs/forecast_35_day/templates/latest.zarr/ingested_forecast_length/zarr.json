@@ -1,7 +1,7 @@
 {
   "shape": [
     1,
-    31
+    181
   ],
   "data_type": "int64",
   "chunk_grid": {
@@ -70,7 +70,7 @@
   },
   "dimension_names": [
     "init_time",
-    "ensemble_member"
+    "lead_time"
   ],
   "zarr_format": 3,
   "node_type": "array",
