@@ -1,6 +1,7 @@
 import subprocess
 from collections.abc import Iterable
 from datetime import datetime, timedelta
+from functools import partial
 from pathlib import Path
 from typing import ClassVar
 from unittest.mock import Mock
@@ -349,21 +350,36 @@ def test_validate_dataset_calls_validators_and_uses_primary_store(
     store_factory = Mock()
     mock_store = Mock()
     mock_replica_store = Mock()
+    mock_replica_store_ds = Mock()
     monkeypatch.setattr(ExampleDataset, "store_factory", store_factory)
     monkeypatch.setattr(store_factory, "primary_store", lambda: mock_store)
     monkeypatch.setattr(store_factory, "replica_stores", lambda: [mock_replica_store])
+    monkeypatch.setattr(
+        xr, "open_zarr", lambda store, chunks=None: mock_replica_store_ds
+    )
 
     dataset.validate_dataset("example-job-name")
 
-    # Ensure validate_dataset was called with correct arguments
-    # this implies
-    # - self.store_factory.primary_store() was called and returned our mock_store
-    # - self.validators() was called and returned our mock_validators
+    # Check that we have exactly 2 calls
     assert mock_validate.call_count == 2
 
-    # Check that it was called with both stores
+    # Check the first call (primary store)
     mock_validate.assert_any_call(mock_store, validators=mock_validators)
-    mock_validate.assert_any_call(mock_replica_store, validators=mock_validators)
+
+    # Check the second call (replica store)
+    replica_call = mock_validate.call_args_list[1]
+    assert replica_call[0] == (mock_replica_store,)  # positional args
+    replica_validators = replica_call[1]["validators"]  # keyword args
+
+    # Verify replica validators = base validators + compare_replica_and_primary partial
+    assert len(replica_validators) == len(mock_validators) + 1
+    assert replica_validators[:-1] == mock_validators
+    assert isinstance(replica_validators[-1], partial)
+    assert replica_validators[-1].func == validation.compare_replica_and_primary
+    assert replica_validators[-1].args == (
+        dataset.template_config.append_dim,
+        mock_replica_store_ds,
+    )
 
 
 def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> None:
