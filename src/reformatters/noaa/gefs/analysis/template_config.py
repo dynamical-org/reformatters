@@ -46,6 +46,15 @@ class GefsAnalysisTemplateConfig(TemplateConfig[GEFSDataVar]):
             time_resolution=f"{self.append_dim_frequency.total_seconds() / (60 * 60)} hours",
         )
 
+    def append_dim_coordinate_chunk_size(self) -> int:
+        """
+        Returns a stable, fixed chunk size for the append dimension to allow
+        expansion while making an effort to keep all coordinates in a single chunk.
+        """
+        # Use 50 years (instead of the default impl) to match the existing dataset
+        # that existed before refactoring things to use TemplateConfig/etc.
+        return int(pd.Timedelta(days=365 * 50) / self.append_dim_frequency)
+
     def dimension_coordinates(self) -> dict[str, Any]:
         """Returns dimension coordinates for the dataset."""
         return {

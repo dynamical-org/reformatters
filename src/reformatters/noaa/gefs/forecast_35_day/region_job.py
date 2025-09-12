@@ -7,7 +7,6 @@ import pandas as pd
 import xarray as xr
 
 from reformatters.common.binary_rounding import round_float32_inplace
-from reformatters.common.config_models import EnsembleStatistic
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import (
     http_download_to_disk,
@@ -52,13 +51,10 @@ class GefsForecast35DayRegionJob(
 
         Note: forecast version doesn't include has_hour_0_values in grouping.
         """
-        grouper: dict[
-            tuple[GEFSFileType, EnsembleStatistic | None], list[GEFSDataVar]
-        ] = defaultdict(list)
+        grouper: dict[GEFSFileType, list[GEFSDataVar]] = defaultdict(list)
         for data_var in data_vars:
             gefs_file_type = data_var.internal_attrs.gefs_file_type
-            ensemble_statistic = data_var.attrs.ensemble_statistic
-            grouper[(gefs_file_type, ensemble_statistic)].append(data_var)
+            grouper[gefs_file_type].append(data_var)
 
         groups = []
         for idx_data_vars in grouper.values():

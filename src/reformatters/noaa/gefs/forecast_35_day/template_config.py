@@ -56,6 +56,22 @@ class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
             forecast_resolution="Forecast step 0-240 hours: 3 hourly, 243-840 hours: 6 hourly",
         )
 
+    def append_dim_coordinate_chunk_size(self) -> int:
+        """
+        Returns a stable, fixed chunk size for the append dimension to allow
+        expansion while making an effort to keep all coordinates in a single chunk.
+        """
+        # The init time dimension is our append dimension during updates.
+        # We also want coordinates to be in a single chunk for dataset open speed.
+        # By fixing the chunk size for coordinates along the append dimension to
+        # something much larger than we will really use, the array is always
+        # a fixed underlying chunk size and values in it can be safely updated
+        # prior to metadata document updates that increase the reported array size.
+        # This is a zarr format hack to allow expanding an array safely and requires
+        # that new array values are written strictly before new metadata is written
+        # (doing this correctly is a key benefit of icechunk).
+        return int(pd.Timedelta(days=365 * 15) / self.append_dim_frequency)
+
     def dimension_coordinates(self) -> dict[str, Any]:
         """Returns dimension coordinates for the dataset."""
         return {

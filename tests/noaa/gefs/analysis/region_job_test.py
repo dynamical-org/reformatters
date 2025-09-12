@@ -243,10 +243,10 @@ def test_source_groups(example_data_vars: list[GEFSDataVar]) -> None:
 
     groups = GefsAnalysisRegionJob.source_groups(all_vars)
 
-    # Should group by (gefs_file_type, ensemble_statistic, has_hour_0_values)
-    # Group 1: "a" with None and has_hour_0_values=True (geopotential_height_500)
-    # Group 2: "s+a" with None and has_hour_0_values=True (temperature_2m, wind_u_10m)
-    # Group 3: "s+a" with None and has_hour_0_values=False (precipitation_surface)
+    # Should group by (gefs_file_type, has_hour_0_values)
+    # Group 1: "a" with has_hour_0_values=True (geopotential_height_500)
+    # Group 2: "s+a" with has_hour_0_values=True (temperature_2m, wind_u_10m)
+    # Group 3: "s+a" with has_hour_0_values=False (precipitation_surface)
 
     assert len(groups) == 3
 
@@ -260,15 +260,14 @@ def test_source_groups(example_data_vars: list[GEFSDataVar]) -> None:
             )  # This is how has_hour_0_values works
             info = (
                 var.internal_attrs.gefs_file_type,
-                var.attrs.ensemble_statistic,
                 has_hour_0,
             )
             group_info.append(info)
 
     expected_info = [
-        ("a", None, True),  # geopotential_height_500
-        ("s+a", None, False),  # precipitation_surface (accum)
-        ("s+a", None, True),  # temperature_2m, wind_u_10m (instant)
+        ("a", True),  # geopotential_height_500
+        ("s+a", False),  # precipitation_surface (accum)
+        ("s+a", True),  # temperature_2m, wind_u_10m (instant)
     ]
     assert set(group_info) == set(expected_info)
 

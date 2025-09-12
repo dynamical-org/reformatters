@@ -217,7 +217,6 @@ class GefsEnsembleSourceFileCoord(GefsSourceFileCoord):
     def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
         """Use existing coordinate structure directly for forecast dataset."""
         return {
-            # "time": self.init_time + self.lead_time,
             "init_time": self.init_time,
             "lead_time": self.lead_time,
             "ensemble_member": self.ensemble_member,
@@ -238,7 +237,6 @@ class GefsStatisticSourceFileCoord(GefsSourceFileCoord):
         but the output location only uses init_time and lead_time.
         """
         return {
-            # "time": self.init_time + self.lead_time,
             "init_time": self.init_time,
             "lead_time": self.lead_time,
         }

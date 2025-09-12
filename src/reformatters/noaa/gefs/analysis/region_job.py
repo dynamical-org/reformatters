@@ -7,13 +7,12 @@ import pandas as pd
 import xarray as xr
 
 from reformatters.common.binary_rounding import round_float32_inplace
-from reformatters.common.config_models import EnsembleStatistic
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import (
     http_download_to_disk,
 )
 from reformatters.common.interpolation import linear_interpolate_1d_inplace
-from reformatters.common.iterating import digest
+from reformatters.common.iterating import digest, item
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
     RegionJob,
@@ -85,16 +84,11 @@ class GefsAnalysisRegionJob(RegionJob[GEFSDataVar, GefsAnalysisSourceFileCoord])
         """
         Group variables by GEFS file type and ensemble statistic.
         """
-        grouper: dict[
-            tuple[GEFSFileType, EnsembleStatistic | None, bool], list[GEFSDataVar]
-        ] = defaultdict(list)
+        grouper: dict[tuple[GEFSFileType, bool], list[GEFSDataVar]] = defaultdict(list)
         for data_var in data_vars:
             gefs_file_type = data_var.internal_attrs.gefs_file_type
-            ensemble_statistic = data_var.attrs.ensemble_statistic
             var_has_hour_0_values = has_hour_0_values(data_var)
-            grouper[(gefs_file_type, ensemble_statistic, var_has_hour_0_values)].append(
-                data_var
-            )
+            grouper[(gefs_file_type, var_has_hour_0_values)].append(data_var)
 
         groups = []
         for idx_data_vars in grouper.values():
@@ -116,8 +110,8 @@ class GefsAnalysisRegionJob(RegionJob[GEFSDataVar, GefsAnalysisSourceFileCoord])
             pd.to_datetime(processing_region_ds["time"].values)
         )
 
-        # Check if any variable in the group doesn't have hour 0 values
-        var_has_hour_0_values = any(has_hour_0_values(var) for var in data_var_group)
+        # Check if all vars in the group either have or don't have hour 0 values
+        var_has_hour_0_values = item({has_hour_0_values(var) for var in data_var_group})
 
         coords = []
         for time in times:
