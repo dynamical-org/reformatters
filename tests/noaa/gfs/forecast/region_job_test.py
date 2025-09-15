@@ -13,6 +13,18 @@ from reformatters.noaa.gfs.forecast.region_job import (
 from reformatters.noaa.gfs.forecast.template_config import NoaaGfsForecastTemplateConfig
 
 
+@pytest.fixture
+def store_factory() -> StoreFactory:
+    return StoreFactory(
+        primary_storage_config=StorageConfig(
+            base_path="fake-prod-path",
+            format=DatasetFormat.ZARR3,
+        ),
+        dataset_id="test-dataset-A",
+        template_config_version="test-version",
+    )
+
+
 def test_source_file_coord_get_url() -> None:
     coord = NoaaGfsForecastSourceFileCoord(
         init_time=pd.Timestamp("2000-01-01T00:00"),
@@ -29,6 +41,7 @@ def test_region_job_generete_source_file_coords() -> None:
 
     # use `model_construct` to skip pydantic validation so we can pass mock stores
     region_job = NoaaGfsForecastRegionJob.model_construct(
+        store_factory=Mock(),
         tmp_store=Mock(),
         template_ds=template_ds,
         data_vars=template_config.data_vars[:3],
@@ -67,6 +80,7 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # Create a region job with mock stores
     region_job = NoaaGfsForecastRegionJob.model_construct(
+        store_factory=Mock(),
         tmp_store=Mock(),
         template_ds=template_config.get_template(pd.Timestamp("2025-01-01")),
         data_vars=template_config.data_vars[:2],
@@ -155,7 +169,7 @@ def test_operational_update_jobs(
     template_utils.write_metadata(existing_ds, store_factory)
 
     jobs, template_ds = NoaaGfsForecastRegionJob.operational_update_jobs(
-        primary_store=store_factory.primary_store(),
+        store_factory=store_factory,
         tmp_store=tmp_path / "tmp_ds.zarr",
         get_template_fn=template_config.get_template,
         append_dim=template_config.append_dim,

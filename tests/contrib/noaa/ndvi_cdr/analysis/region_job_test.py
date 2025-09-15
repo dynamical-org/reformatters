@@ -85,6 +85,7 @@ def test_region_job_generate_source_file_coords(
     )
 
     region_job = NoaaNdviCdrAnalysisRegionJob.model_construct(
+        store_factory=Mock(),
         tmp_store=Mock(),
         template_ds=template_ds,
         data_vars=template_config.data_vars,
@@ -158,6 +159,7 @@ def test_region_job_generate_source_file_coords_file_not_found(
     )
 
     region_job = NoaaNdviCdrAnalysisRegionJob.model_construct(
+        store_factory=Mock(),
         tmp_store=Mock(),
         template_ds=template_ds,
         data_vars=template_config.data_vars,
@@ -189,6 +191,7 @@ def test_read_usable_ndvi_avhrr_era(monkeypatch: pytest.MonkeyPatch) -> None:
     template_config = NoaaNdviCdrAnalysisTemplateConfig()
 
     region_job = NoaaNdviCdrAnalysisRegionJob.model_construct(
+        store_factory=Mock(),
         tmp_store=Mock(),
         template_ds=Mock(),
         data_vars=template_config.data_vars,
@@ -252,6 +255,7 @@ def test_read_usable_ndvi_viirs_era(monkeypatch: pytest.MonkeyPatch) -> None:
     template_config = NoaaNdviCdrAnalysisTemplateConfig()
 
     region_job = NoaaNdviCdrAnalysisRegionJob.model_construct(
+        store_factory=Mock(),
         tmp_store=Mock(),
         template_ds=Mock(),
         data_vars=template_config.data_vars,
@@ -351,6 +355,7 @@ def test_generate_source_file_coords_uses_ncei_for_recent_year(
     )
 
     region_job = NoaaNdviCdrAnalysisRegionJob.model_construct(
+        store_factory=Mock(),
         tmp_store=Mock(),
         template_ds=template_ds,
         data_vars=template_config.data_vars,
@@ -406,6 +411,7 @@ def test_list_source_files_routing_by_year(
     template_config = NoaaNdviCdrAnalysisTemplateConfig()
 
     region_job = NoaaNdviCdrAnalysisRegionJob.model_construct(
+        store_factory=Mock(),
         tmp_store=Mock(),
         template_ds=Mock(),
         data_vars=template_config.data_vars,
