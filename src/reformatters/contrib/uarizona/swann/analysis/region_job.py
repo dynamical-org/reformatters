@@ -5,9 +5,8 @@ from typing import ClassVar
 import numpy as np
 import pandas as pd
 import xarray as xr
-import zarr
 from pydantic import Field
-from rasterio import rasterio  # type: ignore[import-untyped]
+from rasterio import rasterio  # type: ignore
 
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.region_job import (
@@ -15,6 +14,7 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
 )
+from reformatters.common.storage import StoreFactory
 from reformatters.common.types import (
     AppendDim,
     Array2D,
@@ -85,7 +85,7 @@ class UarizonaSwannAnalysisRegionJob(
     @classmethod
     def operational_update_jobs(
         cls,
-        primary_store: zarr.abc.store.Store,
+        store_factory: StoreFactory,
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
@@ -95,13 +95,14 @@ class UarizonaSwannAnalysisRegionJob(
         Sequence[RegionJob[UarizonaSwannDataVar, UarizonaSwannAnalysisSourceFileCoord]],
         xr.Dataset,
     ]:
-        existing_ds = xr.open_zarr(primary_store)
+        existing_ds = xr.open_zarr(store_factory.primary_store())
         append_dim_start = cls._update_append_dim_start(existing_ds)
         append_dim_end = cls._update_append_dim_end()
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
             kind="operational-update",
+            store_factory=store_factory,
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=append_dim,

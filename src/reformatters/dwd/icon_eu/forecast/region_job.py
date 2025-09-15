@@ -2,7 +2,6 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 import xarray as xr
-import zarr
 
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
@@ -10,6 +9,7 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
 )
+from reformatters.common.storage import StoreFactory
 from reformatters.common.types import (
     AppendDim,
     ArrayFloat32,
@@ -218,7 +218,7 @@ class DwdIconEuForecastRegionJob(
     @classmethod
     def operational_update_jobs(
         cls,
-        primary_store: zarr.abc.store.Store,
+        store_factory: StoreFactory,
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
@@ -246,8 +246,8 @@ class DwdIconEuForecastRegionJob(
 
         Parameters
         ----------
-        primary_store : zarr.abc.store.Store
-            The primary store to read existing data from and write updates to.
+        store_factory : StoreFactory
+            The factory to get the primary store to read existing data from and write updates to.
         tmp_store : Path
             The temporary Zarr store to write into while processing.
         get_template_fn : Callable[[DatetimeLike], xr.Dataset]
@@ -267,13 +267,14 @@ class DwdIconEuForecastRegionJob(
         xr.Dataset
             The template_ds for the operational update.
         """
-        # existing_ds = xr.open_zarr(primary_store)
+        # existing_ds = xr.open_zarr(store_factory.primary_store())
         # append_dim_start = existing_ds[append_dim].max()
         # append_dim_end = pd.Timestamp.now()
         # template_ds = get_template_fn(append_dim_end)
 
         # jobs = cls.get_jobs(
         #     kind="operational-update",
+        #     store_factory=store_factory,
         #     tmp_store=tmp_store,
         #     template_ds=template_ds,
         #     append_dim=append_dim,

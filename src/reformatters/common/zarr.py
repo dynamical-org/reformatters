@@ -3,7 +3,6 @@ from pathlib import Path
 
 import xarray as xr
 import zarr
-from icechunk.store import IcechunkStore
 
 from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
@@ -97,18 +96,7 @@ def copy_zarr_metadata(
     tmp_store: Path,
     primary_store: zarr.abc.store.Store,
     replica_stores: Iterable[zarr.abc.store.Store] = (),
-    icechunk_only: bool = False,
 ) -> None:
-    """
-    Copy the metadata and coordinate label arrays from the temporary store to the primary and replica stores.
-
-    In the zarr3 case, the updated metadata will become available to readers, which is why we update the metadata
-    after we have already written the actual data chunks.
-
-    In the Icechunk case, we need to update the metadata before writing data chunks, as Icechunk will throw an error
-    if we try to write data that does not match the shape specified in the metadata. This is safe to do so, however,
-    because in the Icechunk case, data is not available to readers until we commit the Icechunk writable session.
-    """
     metadata_files: list[Path] = []
 
     # The coordinate label arrays must be copied before the metadata.
@@ -124,22 +112,10 @@ def copy_zarr_metadata(
     # Since the primary store is our reference store (to determine what data we have and what needs to be written)
     # we only want to update its metadata once we are sure the replicas are up to date.
     for replica_store in replica_stores:
-        if icechunk_only and not isinstance(replica_store, IcechunkStore):
-            log.info(
-                f"Skipping metadata copy to replica store ({replica_store}) because it is not an IcechunkStore and icechunk_only is True"
-            )
-            continue
-
         log.info(
             f"Copying metadata to replica store ({replica_store}) from {tmp_store}"
         )
         _copy_metadata_files(metadata_files, tmp_store, replica_store)
-
-    if icechunk_only and not isinstance(primary_store, IcechunkStore):
-        log.info(
-            f"Skipping metadata copy to primary store ({primary_store}) because it is not an IcechunkStore and icechunk_only is True"
-        )
-        return
 
     log.info(f"Copying metadata to primary store ({primary_store}) from {tmp_store}")
     _copy_metadata_files(metadata_files, tmp_store, primary_store)
