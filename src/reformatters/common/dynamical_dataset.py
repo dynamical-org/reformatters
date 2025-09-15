@@ -129,7 +129,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             tmp_store = self._tmp_store()
 
             jobs, template_ds = self.region_job_class.operational_update_jobs(
-                store_factory=self.store_factory,
+                primary_store=self.store_factory.primary_store(),
                 tmp_store=tmp_store,
                 get_template_fn=self._get_template,
                 append_dim=self.template_config.append_dim,
@@ -139,8 +139,23 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             template_utils.write_metadata(template_ds, tmp_store)
 
             for job in jobs:
-                process_results, primary_store, replica_stores = job.process(
-                    expand_icechunk_stores=True
+                # New stores to ensure that, if any are Icechunk stores, we have
+                # an uncomitted Icechunk session for each job.
+                primary_store = self.store_factory.primary_store()
+                replica_stores = self.store_factory.replica_stores()
+
+                # Icechunk stores metadata needs to be updated to
+                # expand the dataset dimensions before we write the actual data
+                copy_zarr_metadata(
+                    job.template_ds,
+                    tmp_store,
+                    primary_store,
+                    replica_stores=replica_stores,
+                    icechunk_only=True,
+                )
+
+                process_results = job.process(
+                    primary_store=primary_store, replica_stores=replica_stores
                 )
                 updated_template = job.update_template_with_results(process_results)
                 # overwrite the tmp store metadata with updated template
@@ -182,7 +197,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         num_jobs = len(
             self.region_job_class.get_jobs(
                 kind="backfill",
-                store_factory=self.store_factory,
                 tmp_store=self._tmp_store(),
                 template_ds=template_ds,
                 append_dim=self.template_config.append_dim,
@@ -299,7 +313,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         region_jobs = self.region_job_class.get_jobs(
             kind="backfill",
-            store_factory=self.store_factory,
             tmp_store=self._tmp_store(),
             template_ds=self._get_template(append_dim_end),
             append_dim=self.template_config.append_dim,
@@ -320,7 +333,12 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             f"This is {worker_index = }, {workers_total = }, {len(region_jobs)} jobs, {jobs_summary}"
         )
         for region_job in region_jobs:
-            _, primary_store, replica_stores = region_job.process()
+            # New stores to ensure that, if any are Icechunk stores, we have
+            # an uncomitted Icechunk session for each job.
+            primary_store = self.store_factory.primary_store()
+            replica_stores = self.store_factory.replica_stores()
+
+            region_job.process(primary_store, replica_stores)
 
             storage.commit_if_icechunk(
                 f"Backfill completed at {pd.Timestamp.now(tz='UTC').isoformat()}",
