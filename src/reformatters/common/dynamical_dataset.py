@@ -140,10 +140,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             template_utils.write_metadata(template_ds, tmp_store)
 
             for job in jobs:
-                # We need to reinstantiate the primary store and replica stores
-                # for each job. This is because if they are an IcechunkStore,
-                # the associated Icechunk session will become read_only after
-                # the first job commits.
+                # New stores to ensure that, if any are Icechunk stores, we have
+                # an uncomitted Icechunk session for each job.
                 primary_store = self.store_factory.primary_store()
                 replica_stores = self.store_factory.replica_stores()
 
@@ -338,10 +336,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             f"This is {worker_index = }, {workers_total = }, {len(region_jobs)} jobs, {jobs_summary}"
         )
         for region_job in region_jobs:
-            # We need to reinstantiate the primary store and replica stores
-            # for each job. This is because if they are an IcechunkStore,
-            # the associated Icechunk session will become read_only after
-            # the first job commits.
+            # New stores to ensure that, if any are Icechunk stores, we have
+            # an uncomitted Icechunk session for each job.
             primary_store = self.store_factory.primary_store()
             replica_stores = self.store_factory.replica_stores()
 
