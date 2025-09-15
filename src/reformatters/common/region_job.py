@@ -17,7 +17,6 @@ import xarray as xr
 import zarr
 from pydantic import AfterValidator, Field, computed_field
 
-from reformatters.common import template_utils
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config_models import DataVar
 from reformatters.common.iterating import dimension_slices, get_worker_jobs
@@ -479,8 +478,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             data_var_groups = self._maybe_split_groups(
                 data_var_groups, self.max_vars_per_download_group
             )
-
-        template_utils.write_metadata(self.template_ds, self.tmp_store)
 
         results: dict[str, Sequence[SOURCE_FILE_COORD]] = {}
         upload_futures: list[Any] = []
