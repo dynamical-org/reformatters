@@ -137,9 +137,12 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 all_data_vars=self.template_config.data_vars,
                 reformat_job_name=reformat_job_name,
             )
-            template_utils.write_metadata(template_ds, tmp_store)
 
             for job in jobs:
+                assert template_ds.equals(job.template_ds), (
+                    f"template_ds doesn't match job.template_ds: {template_ds} != {job.template_ds}"
+                )
+
                 # New stores to ensure that, if any are Icechunk stores, we have
                 # an uncomitted Icechunk session for each job.
                 primary_store = self.store_factory.primary_store()
