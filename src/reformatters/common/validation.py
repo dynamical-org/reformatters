@@ -180,12 +180,12 @@ def compare_replica_and_primary(
     )
 
     last_chunk = iterating.dimension_slices(primary_ds, append_dim, "chunks")[-1]
-    replica_ds_last_chunk = replica_ds.isel({append_dim: last_chunk})[
-        variables_to_check
-    ]
-    primary_ds_last_chunk = primary_ds.isel({append_dim: last_chunk})[
-        variables_to_check
-    ]
+    replica_ds_last_chunk = replica_ds[variables_to_check].isel(
+        {append_dim: last_chunk}
+    )
+    primary_ds_last_chunk = primary_ds[variables_to_check].isel(
+        {append_dim: last_chunk}
+    )
 
     try:
         xr.testing.assert_equal(replica_ds_last_chunk, primary_ds_last_chunk)
