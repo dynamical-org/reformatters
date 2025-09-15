@@ -11,7 +11,6 @@ import pandas as pd
 import sentry_sdk
 import typer
 import xarray as xr
-from icechunk.store import IcechunkStore
 from pydantic import Field, computed_field
 
 from reformatters.common import docker, storage, template_utils, validation
@@ -145,17 +144,15 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 primary_store = self.store_factory.primary_store()
                 replica_stores = self.store_factory.replica_stores()
 
-                icechunk_stores = [
-                    s for s in replica_stores if isinstance(s, IcechunkStore)
-                ]
-                if isinstance(primary_store, IcechunkStore):
-                    icechunk_stores.append(primary_store)
-                for icechunk_store in icechunk_stores:
-                    copy_zarr_metadata(
-                        job.template_ds,
-                        tmp_store,
-                        icechunk_store,  # Note that this is in the position of the primary store intentionally
-                    )
+                # Icechunk stores metadata needs to be updated to
+                # expand the dataset dimensions before we write the actual data
+                copy_zarr_metadata(
+                    job.template_ds,
+                    tmp_store,
+                    primary_store,
+                    replica_stores=replica_stores,
+                    icechunk_only=True,
+                )
 
                 process_results = job.process(
                     primary_store=primary_store, replica_stores=replica_stores
