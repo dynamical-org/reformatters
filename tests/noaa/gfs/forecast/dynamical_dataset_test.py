@@ -120,7 +120,14 @@ def test_backfill_local_and_operational_update(
 
     # 2. Operational update
     # Set "now" to just past the 12 UTC init time so we add a third init_time step
-    dataset = NoaaGfsForecastDataset(primary_storage_config=NOOP_STORAGE_CONFIG)
+    dataset = NoaaGfsForecastDataset(
+        primary_storage_config=NOOP_STORAGE_CONFIG,
+        replica_storage_configs=[
+            StorageConfig(
+                base_path="s3://replica-bucket-a/path", format=DatasetFormat.ICECHUNK
+            )
+        ],
+    )
     monkeypatch.setattr(
         pd.Timestamp,
         "now",

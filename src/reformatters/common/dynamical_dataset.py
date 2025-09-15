@@ -151,7 +151,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 # expand the dataset dimensions before we write the actual data
                 copy_zarr_metadata(
                     job.template_ds,
-                    tmp_store,
+                    job.tmp_store,
                     primary_store,
                     replica_stores=replica_stores,
                     icechunk_only=True,
