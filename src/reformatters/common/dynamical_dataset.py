@@ -145,6 +145,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 primary_store = self.store_factory.primary_store()
                 replica_stores = self.store_factory.replica_stores()
 
+                template_utils.write_metadata(job.template_ds, job.tmp_store)
+
                 # Icechunk stores metadata needs to be updated to
                 # expand the dataset dimensions before we write the actual data
                 copy_zarr_metadata(
@@ -338,6 +340,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             # an uncomitted Icechunk session for each job.
             primary_store = self.store_factory.primary_store()
             replica_stores = self.store_factory.replica_stores()
+
+            template_utils.write_metadata(region_job.template_ds, region_job.tmp_store)
 
             region_job.process(primary_store, replica_stores)
 
