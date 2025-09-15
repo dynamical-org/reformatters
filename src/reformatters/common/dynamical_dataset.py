@@ -148,6 +148,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 primary_store = self.store_factory.primary_store()
                 replica_stores = self.store_factory.replica_stores()
 
+                # This will expand the tmp store dimensions. We do this for each job
+                # because the tmp store will also be potentially trimmed when we
+                # call update_template_with_results on the job, and each job needs to
+                # start off with the fully expanded dimensions.
                 template_utils.write_metadata(job.template_ds, job.tmp_store)
 
                 # Icechunk stores metadata needs to be updated to
