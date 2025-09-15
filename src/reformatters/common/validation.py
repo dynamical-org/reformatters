@@ -198,5 +198,5 @@ def compare_replica_and_primary(
 
     return ValidationResult(
         passed=True,
-        message="Data in replica and primary stores are the same",
+        message="Data in tested subset of replica and primary stores is the same",
     )
