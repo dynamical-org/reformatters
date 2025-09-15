@@ -44,15 +44,12 @@ def tmp_store_and_metadata_files(tmp_path: Path) -> tuple[Path, list[Path]]:
 
     # Coordinate label arrays should be copied before metadata
     metadata_files: list[Path] = []
-    # Simulate template_ds.coords - we know it's ["time", "lat", "lon"] from the test
     for coord in ["time", "lat", "lon"]:
         metadata_files.extend(
             f for f in store_path.glob(f"{coord}/c/**/*") if f.is_file()
         )
     metadata_files.append(store_path / "zarr.json")
-    metadata_files.extend(
-        store_path.glob("*/zarr.json")
-    )  # This will be in filesystem order
+    metadata_files.extend(store_path.glob("*/zarr.json"))
 
     return store_path, metadata_files
 
