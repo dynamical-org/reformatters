@@ -8,6 +8,7 @@ import pydantic
 import xarray as xr
 import zarr
 
+from reformatters.common import iterating
 from reformatters.common.logging import get_logger
 
 log = get_logger(__name__)
@@ -155,4 +156,47 @@ def check_analysis_recent_nans(
     return ValidationResult(
         passed=True,
         message=f"All variables have acceptable NaN percentages (<{max_nan_percentage}%) in sampled location of latest data",
+    )
+
+
+def compare_replica_and_primary(
+    append_dim: str, replica_ds: xr.Dataset, primary_ds: xr.Dataset
+) -> ValidationResult:
+    """Compare the data in the replica and primary stores."""
+    problem_coords = []
+    for coord in primary_ds.coords:
+        try:
+            xr.testing.assert_equal(primary_ds[coord], replica_ds[coord])
+        except AssertionError as e:
+            log.exception(e)
+            problem_coords.append(coord)
+    if problem_coords:
+        message = f"Data in replica and primary stores are different for coords: {problem_coords}"
+        return ValidationResult(passed=False, message=message)
+
+    num_variables_to_check = min(5, len(primary_ds.data_vars))
+    variables_to_check = np.random.choice(
+        list(primary_ds.data_vars.keys()), num_variables_to_check
+    )
+
+    last_chunk = iterating.dimension_slices(primary_ds, append_dim, "chunks")[-1]
+    replica_ds_last_chunk = replica_ds[variables_to_check].isel(
+        {append_dim: last_chunk}
+    )
+    primary_ds_last_chunk = primary_ds[variables_to_check].isel(
+        {append_dim: last_chunk}
+    )
+
+    try:
+        xr.testing.assert_equal(replica_ds_last_chunk, primary_ds_last_chunk)
+    except AssertionError as e:
+        log.exception(e)
+        return ValidationResult(
+            passed=False,
+            message=f"Data in replica and primary stores are different for chunks: {last_chunk}",
+        )
+
+    return ValidationResult(
+        passed=True,
+        message="Data in tested subset of replica and primary stores is the same",
     )

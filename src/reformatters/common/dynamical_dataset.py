@@ -3,6 +3,7 @@ import subprocess
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from typing import Annotated, Any, Generic, Literal, TypeVar
 
@@ -357,7 +358,16 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             log.info(f"Done validating {store}")
 
             for replica_store in self.store_factory.replica_stores():
-                validation.validate_dataset(replica_store, validators=self.validators())
+                validators = list(self.validators())
+                validators.append(
+                    partial(
+                        validation.compare_replica_and_primary,
+                        self.template_config.append_dim,
+                        xr.open_zarr(replica_store, chunks=None),
+                    )
+                )
+
+                validation.validate_dataset(replica_store, validators=validators)
                 log.info(f"Done validating {replica_store}")
 
     def get_cli(
