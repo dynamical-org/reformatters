@@ -280,20 +280,21 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def data_vars(self) -> Sequence[HRRRDataVar]:
-        # TODO: These chunks are about XXXmb of uncompressed float32s
+        # ~15.6MB uncompressed, ~3.1MB compressed
         var_chunks: dict[Dim, int] = {
             "init_time": 1,
-            "lead_time": 49,
-            "x": 180,
-            "y": 180,
+            "lead_time": 49,  # all lead times
+            "x": 300,  # 6 chunks (1799 pixels)
+            "y": 265,  # 4 chunks (1059 pixels)
         }
 
-        # TODO: About XXXMB compressed, about XXGB uncompressed
+        # Single shard for each init time
+        # ~374MB uncompressed, ~75MB compressed
         var_shards: dict[Dim, int] = {
             "init_time": 1,
             "lead_time": 49,
-            "x": 180 * 3,  # 3 shards
-            "y": 180 * 3,  # 3 shards
+            "x": var_chunks["x"] * 6,  # single shard
+            "y": var_chunks["y"] * 4,  # single shard
         }
 
         encoding_float32_default = Encoding(

@@ -68,10 +68,11 @@
     }
   ],
   "attributes": {
-    "long_name": "Composite reflectivity",
-    "short_name": "refc",
-    "units": "dBZ",
-    "step_type": "instant",
+    "long_name": "Surface downward short-wave radiation flux",
+    "short_name": "sdswrf",
+    "units": "W/(m^2)",
+    "comment": "Average over the previous forecast step.",
+    "step_type": "avg",
     "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },

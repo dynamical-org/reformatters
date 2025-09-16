@@ -68,9 +68,10 @@
     }
   ],
   "attributes": {
-    "long_name": "Composite reflectivity",
-    "short_name": "refc",
-    "units": "dBZ",
+    "long_name": "10 metre V wind component",
+    "short_name": "v10",
+    "standard_name": "northward_wind",
+    "units": "m/s",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude valid_time",
     "_FillValue": "AAAAAAAA+H8="

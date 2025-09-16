@@ -68,10 +68,10 @@
     }
   ],
   "attributes": {
-    "long_name": "Composite reflectivity",
-    "short_name": "refc",
-    "units": "dBZ",
-    "step_type": "instant",
+    "long_name": "Total Cloud Cover",
+    "short_name": "tcc",
+    "units": "%",
+    "step_type": "avg",
     "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },
