@@ -328,11 +328,13 @@ def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     assert '"my-docker-image"' in input_str
 
 
-def test_validate_dataset_calls_validators_and_uses_primary_store(
+def test_validate_dataset_calls_validators(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    mock_validators = [Mock(), Mock()]
-    monkeypatch.setattr(ExampleDataset, "validators", lambda self: mock_validators)
+    configured_validators = [Mock(), Mock()]
+    monkeypatch.setattr(
+        ExampleDataset, "validators", lambda self: configured_validators
+    )
 
     mock_validate = Mock()
     monkeypatch.setattr(validation, "validate_dataset", mock_validate)
@@ -347,13 +349,17 @@ def test_validate_dataset_calls_validators_and_uses_primary_store(
             ),
         ],
     )
+
     store_factory = Mock()
-    mock_store = Mock()
-    mock_replica_store = Mock()
-    mock_replica_store_ds = Mock()
     monkeypatch.setattr(ExampleDataset, "store_factory", store_factory)
+
+    mock_store = Mock()
     monkeypatch.setattr(store_factory, "primary_store", lambda: mock_store)
+
+    mock_replica_store = Mock()
     monkeypatch.setattr(store_factory, "replica_stores", lambda: [mock_replica_store])
+
+    mock_replica_store_ds = Mock()
     monkeypatch.setattr(
         xr, "open_zarr", lambda store, chunks=None: mock_replica_store_ds
     )
@@ -364,17 +370,27 @@ def test_validate_dataset_calls_validators_and_uses_primary_store(
     assert mock_validate.call_count == 2
 
     # Check the first call (primary store)
-    mock_validate.assert_any_call(mock_store, validators=mock_validators)
+    positional_args, keyword_args = mock_validate.call_args_list[0]
+    assert positional_args == (mock_store,)  # positional args
+    primary_store_validators = keyword_args["validators"]  # keyword args
+
+    assert primary_store_validators[:-1] == configured_validators
+    assert isinstance(primary_store_validators[-1], partial)
+    assert primary_store_validators[-1].func == validation.check_shard_count
+    assert primary_store_validators[-1].args == (mock_store,)
 
     # Check the second call (replica store)
-    replica_call = mock_validate.call_args_list[1]
-    assert replica_call[0] == (mock_replica_store,)  # positional args
-    replica_validators = replica_call[1]["validators"]  # keyword args
+    positional_args, keyword_args = mock_validate.call_args_list[1]
+    assert positional_args == (mock_replica_store,)  # positional args
+    replica_validators = keyword_args["validators"]  # keyword args
 
     # Verify replica validators = base validators + compare_replica_and_primary partial
-    assert len(replica_validators) == len(mock_validators) + 1
-    assert replica_validators[:-1] == mock_validators
-    assert isinstance(replica_validators[-1], partial)
+    assert len(replica_validators) == len(configured_validators) + 2
+    assert replica_validators[:-2] == configured_validators
+
+    assert replica_validators[-2].func == validation.check_shard_count
+    assert replica_validators[-2].args == (mock_replica_store,)
+
     assert replica_validators[-1].func == validation.compare_replica_and_primary
     assert replica_validators[-1].args == (
         dataset.template_config.append_dim,

@@ -1,5 +1,7 @@
+import itertools
 from collections.abc import Sequence
 from datetime import timedelta
+from functools import partial
 from typing import Protocol, runtime_checkable
 
 import numpy as np
@@ -10,6 +12,7 @@ import zarr
 
 from reformatters.common import iterating
 from reformatters.common.logging import get_logger
+from reformatters.common.retry import retry
 
 log = get_logger(__name__)
 
@@ -200,3 +203,51 @@ def compare_replica_and_primary(
         passed=True,
         message="Data in tested subset of replica and primary stores is the same",
     )
+
+
+def check_shard_count(store: zarr.abc.store.Store, ds: xr.Dataset) -> ValidationResult:
+    """Check that the number of shards is the same as the number of chunks."""
+    log.info(f"Checking shard count for {store}")
+
+    shard_counts_per_dim = [
+        len(iterating.dimension_slices(ds, str(dim), "shards"))
+        for dim in ds.sizes.keys()
+    ]
+    ranges = [range(shard_count) for shard_count in shard_counts_per_dim]
+    expected_shard_indexes = {
+        "/".join(map(str, index)) for index in itertools.product(*ranges)
+    }
+
+    problem_vars = []
+    for var in ds.data_vars.keys():
+        actual_var_shard_indexes = retry(
+            partial(_sync_list_shards, store, var),
+            max_attempts=3,
+        )
+
+        # During operational updates we trim down the dataset to only include
+        # data that was fully processed. This means there may be some extrashards present
+        # in the store, but the metadata has been trimmed such that they are not exposed.
+        # As such, we don't expect these two sets to necessarily be equal, but we do expect
+        # that expected_shard_indexes should be a proper subset of actual_var_shard_indexes.
+        if len(expected_shard_indexes - actual_var_shard_indexes) > 0:
+            problem_vars.append(var)
+
+    if len(problem_vars) > 0:
+        return ValidationResult(
+            passed=False,
+            message=f"{problem_vars} are missing expected shards",
+        )
+
+    return ValidationResult(
+        passed=True,
+        message="All variables have expected shards",
+    )
+
+
+def _sync_list_shards(store: zarr.abc.store.Store, var: str) -> set[str]:
+    return zarr.core.sync.sync(_list_shards(store, var))
+
+
+async def _list_shards(store: zarr.abc.store.Store, var: str) -> set[str]:
+    return {key.split(f"{var}/c/")[-1] async for key in store.list_prefix(f"{var}/c/")}
