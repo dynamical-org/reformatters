@@ -2,7 +2,9 @@ from collections.abc import Callable, Mapping, Sequence
 from itertools import groupby
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 import zarr
 
@@ -27,9 +29,6 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
     HRRRDataVar,
     HRRRDomain,
     HRRRFileType,
-)
-from reformatters.noaa.hrrr.read_data import (
-    read_hrrr_data,
 )
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 from reformatters.noaa.noaa_utils import has_hour_0_values
@@ -106,7 +105,7 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
         # HRRR provides forecasts every hour, but 48-hour forecasts are only available
         # every 6 hours (00, 06, 12, 18 UTC)
 
-        existing_ds = xr.open_zarr(primary_store)
+        existing_ds = xr.open_zarr(primary_store, chunks=None, decode_timedelta=True)
         append_dim_start = cls._update_append_dim_start(existing_ds)
 
         append_dim_end = cls._update_append_dim_end()
@@ -120,6 +119,7 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
             all_data_vars=all_data_vars,
             reformat_job_name=reformat_job_name,
             filter_start=append_dim_start,
+            filter_end=append_dim_end,
         )
         return jobs, template_ds
 
@@ -175,7 +175,28 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
     ) -> ArrayFloat32:
         """Read data from a HRRR file for a specific variable."""
         assert coord.downloaded_path is not None  # for type check, system guarantees it
-        return read_hrrr_data(coord.downloaded_path, data_var)
+        grib_element = data_var.internal_attrs.grib_element
+        grib_description = data_var.internal_attrs.grib_description
+
+        with rasterio.open(coord.downloaded_path) as reader:
+            matching_bands = [
+                rasterio_band_i
+                for band_i in range(reader.count)
+                if reader.descriptions[band_i] == grib_description
+                and reader.tags(rasterio_band_i := band_i + 1)["GRIB_ELEMENT"]
+                == grib_element
+            ]
+
+            assert len(matching_bands) == 1, (
+                f"Expected exactly 1 matching band, found {len(matching_bands)}: {matching_bands}. "
+                f"{grib_element=}, {grib_description=}, {coord.downloaded_path=}"
+            )
+            rasterio_band_index = item(matching_bands)
+
+            result: ArrayFloat32 = reader.read(
+                rasterio_band_index, out_dtype=np.float32
+            )
+            return result
 
     @classmethod
     def _update_append_dim_end(cls) -> pd.Timestamp:
@@ -186,4 +207,4 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
     def _update_append_dim_start(cls, existing_ds: xr.Dataset) -> pd.Timestamp:
         """Get the start time for operational updates based on existing data."""
         ds_max_time = existing_ds["init_time"].max().item()
-        return pd.Timestamp(ds_max_time) - pd.Timedelta(hours=6)
+        return pd.Timestamp(ds_max_time)
