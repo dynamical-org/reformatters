@@ -592,6 +592,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 path = self.download_file(coord)
                 return replace(coord, downloaded_path=path)
             except Exception as e:
+                if isinstance(e, AssertionError):
+                    raise
                 updated_coord = replace(coord, status=SourceFileStatus.DownloadFailed)
 
                 # For recent files, we expect some files to not exist yet, just log the path
