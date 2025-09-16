@@ -140,7 +140,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
             for job in jobs:
                 assert template_ds.equals(job.template_ds), (
-                    f"template_ds doesn't match job.template_ds: {template_ds} != {job.template_ds}"
+                    "template_ds doesn't match job.template_ds"
                 )
 
                 # New stores to ensure that, if any are Icechunk stores, we have
