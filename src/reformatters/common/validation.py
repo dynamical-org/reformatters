@@ -208,8 +208,8 @@ def compare_replica_and_primary(
 def check_for_expected_shards(
     store: zarr.abc.store.Store, ds: xr.Dataset
 ) -> ValidationResult:
-    """Check that the number of shards is the same as the number of chunks."""
-    log.info(f"Checking shard count for {store}")
+    """Check that the expected shards are present in the store."""
+    log.info(f"Checking for expected shards in {store}")
 
     shard_counts_per_dim = [
         len(iterating.dimension_slices(ds, str(dim), "shards"))
