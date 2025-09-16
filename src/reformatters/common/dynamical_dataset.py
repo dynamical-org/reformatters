@@ -364,13 +364,24 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
         with self._monitor(ValidationCronJob, reformat_job_name):
-            store = self.store_factory.primary_store()
-            validation.validate_dataset(store, validators=self.validators())
-            log.info(f"Done validating {store}")
+            primary_store = self.store_factory.primary_store()
+            primary_store_validators = list(self.validators())
+            primary_store_validators.append(
+                partial(validation.check_for_expected_shards, primary_store)
+            )
+
+            validation.validate_dataset(
+                primary_store,
+                validators=primary_store_validators,
+            )
+            log.info(f"Done validating {primary_store}")
 
             for replica_store in self.store_factory.replica_stores():
-                validators = list(self.validators())
-                validators.append(
+                replica_store_validators = list(self.validators())
+                replica_store_validators.append(
+                    partial(validation.check_for_expected_shards, replica_store)
+                )
+                replica_store_validators.append(
                     partial(
                         validation.compare_replica_and_primary,
                         self.template_config.append_dim,
@@ -378,7 +389,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     )
                 )
 
-                validation.validate_dataset(replica_store, validators=validators)
+                validation.validate_dataset(
+                    replica_store,
+                    validators=replica_store_validators,
+                )
                 log.info(f"Done validating {replica_store}")
 
     def get_cli(
