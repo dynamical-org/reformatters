@@ -205,7 +205,9 @@ def compare_replica_and_primary(
     )
 
 
-def check_shard_count(store: zarr.abc.store.Store, ds: xr.Dataset) -> ValidationResult:
+def check_for_expected_shards(
+    store: zarr.abc.store.Store, ds: xr.Dataset
+) -> ValidationResult:
     """Check that the number of shards is the same as the number of chunks."""
     log.info(f"Checking shard count for {store}")
 

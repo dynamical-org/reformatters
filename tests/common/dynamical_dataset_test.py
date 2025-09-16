@@ -376,7 +376,7 @@ def test_validate_dataset_calls_validators(
 
     assert primary_store_validators[:-1] == configured_validators
     assert isinstance(primary_store_validators[-1], partial)
-    assert primary_store_validators[-1].func == validation.check_shard_count
+    assert primary_store_validators[-1].func == validation.check_for_expected_shards
     assert primary_store_validators[-1].args == (mock_store,)
 
     # Check the second call (replica store)
@@ -388,7 +388,7 @@ def test_validate_dataset_calls_validators(
     assert len(replica_validators) == len(configured_validators) + 2
     assert replica_validators[:-2] == configured_validators
 
-    assert replica_validators[-2].func == validation.check_shard_count
+    assert replica_validators[-2].func == validation.check_for_expected_shards
     assert replica_validators[-2].args == (mock_replica_store,)
 
     assert replica_validators[-1].func == validation.compare_replica_and_primary

@@ -338,7 +338,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             primary_store = self.store_factory.primary_store()
             primary_store_validators = list(self.validators())
             primary_store_validators.append(
-                partial(validation.check_shard_count, primary_store)
+                partial(validation.check_for_expected_shards, primary_store)
             )
 
             validation.validate_dataset(
@@ -350,7 +350,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             for replica_store in self.store_factory.replica_stores():
                 replica_store_validators = list(self.validators())
                 replica_store_validators.append(
-                    partial(validation.check_shard_count, replica_store)
+                    partial(validation.check_for_expected_shards, replica_store)
                 )
                 replica_store_validators.append(
                     partial(
