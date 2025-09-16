@@ -228,7 +228,7 @@ def check_for_expected_shards(
         )
 
         # During operational updates we trim down the dataset to only include
-        # data that was fully processed. This means there may be some extrashards present
+        # data that was fully processed. This means there may be some extra shards present
         # in the store, but the metadata has been trimmed such that they are not exposed.
         # As such, we don't expect these two sets to necessarily be equal, but we do expect
         # that expected_shard_indexes should be a proper subset of actual_var_shard_indexes.
