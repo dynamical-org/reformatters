@@ -166,6 +166,7 @@ def test_process_backfill_region_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
         "get_jobs",
         classmethod(lambda cls, *args, **kwargs: [mock_job0, mock_job1]),
     )
+    monkeypatch.setattr(template_utils, "write_metadata", Mock())
 
     monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
     dataset = ExampleDataset(

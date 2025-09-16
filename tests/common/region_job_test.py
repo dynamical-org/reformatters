@@ -140,6 +140,8 @@ def test_region_job(template_ds: xr.Dataset, store_factory: StoreFactory) -> Non
 
     primary_store = store_factory.primary_store()
     replica_stores = store_factory.replica_stores()
+
+    template_utils.write_metadata(job.template_ds, tmp_store)
     job.process(primary_store, replica_stores)
 
     ds = xr.open_zarr(store_factory.primary_store())
