@@ -371,8 +371,8 @@ def test_validate_dataset_calls_validators(
 
     # Check the first call (primary store)
     positional_args, keyword_args = mock_validate.call_args_list[0]
-    assert positional_args == (mock_store,)  # positional args
-    primary_store_validators = keyword_args["validators"]  # keyword args
+    assert positional_args == (mock_store,)
+    primary_store_validators = keyword_args["validators"]
 
     assert primary_store_validators[:-1] == configured_validators
     assert isinstance(primary_store_validators[-1], partial)
@@ -381,8 +381,8 @@ def test_validate_dataset_calls_validators(
 
     # Check the second call (replica store)
     positional_args, keyword_args = mock_validate.call_args_list[1]
-    assert positional_args == (mock_replica_store,)  # positional args
-    replica_validators = keyword_args["validators"]  # keyword args
+    assert positional_args == (mock_replica_store,)
+    replica_validators = keyword_args["validators"]
 
     # Verify replica validators = base validators + compare_replica_and_primary partial
     assert len(replica_validators) == len(configured_validators) + 2
