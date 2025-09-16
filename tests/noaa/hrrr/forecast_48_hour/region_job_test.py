@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.noaa.hrrr.forecast_48_hour.region_job import (
     HRRRSourceFileCoord,
     NoaaHrrrForecast48HourRegionJob,
@@ -18,18 +17,6 @@ from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
 @pytest.fixture
 def template_config() -> NoaaHrrrForecast48HourTemplateConfig:
     return NoaaHrrrForecast48HourTemplateConfig()
-
-
-@pytest.fixture
-def store_factory() -> StoreFactory:
-    return StoreFactory(
-        primary_storage_config=StorageConfig(
-            base_path="fake-prod-path",
-            format=DatasetFormat.ZARR3,
-        ),
-        dataset_id="test-dataset-hrrr",
-        template_config_version="test-version",
-    )
 
 
 def test_source_file_coord_get_url(
@@ -156,7 +143,7 @@ def test_region_job_source_groups_multiple_file_types() -> None:
             assert len(file_types_in_group) == 1
 
 
-def test_region_job_generate_source_file_coords(store_factory: StoreFactory) -> None:
+def test_region_job_generate_source_file_coords() -> None:
     """Test source file coordinate generation."""
     template_config = NoaaHrrrForecast48HourTemplateConfig()
     template_ds = template_config.get_template(pd.Timestamp("2025-01-01"))
@@ -166,7 +153,6 @@ def test_region_job_generate_source_file_coords(store_factory: StoreFactory) -> 
 
     # use `model_construct` to skip pydantic validation so we can pass mock stores
     region_job = NoaaHrrrForecast48HourRegionJob.model_construct(
-        store_factory=store_factory,
         tmp_store=Mock(),
         template_ds=test_ds,
         data_vars=template_config.data_vars[:1],  # Just one variable
@@ -196,9 +182,7 @@ def test_region_job_generate_source_file_coords(store_factory: StoreFactory) -> 
         )
 
 
-def test_region_job_generate_source_file_coords_filters_hour_0(
-    store_factory: StoreFactory,
-) -> None:
+def test_region_job_generate_source_file_coords_filters_hour_0() -> None:
     """Test that hour 0 filtering works for accumulated variables."""
     template_config = NoaaHrrrForecast48HourTemplateConfig()
     template_ds = template_config.get_template(pd.Timestamp("2025-01-01"))
@@ -211,7 +195,6 @@ def test_region_job_generate_source_file_coords_filters_hour_0(
     # Find a variable that doesn't have hour 0 values (if any)
     # For now, just test with a regular variable
     region_job = NoaaHrrrForecast48HourRegionJob.model_construct(
-        store_factory=store_factory,
         tmp_store=Mock(),
         template_ds=test_ds,
         data_vars=template_config.data_vars[:1],
@@ -234,7 +217,7 @@ def test_region_job_generate_source_file_coords_filters_hour_0(
         assert isinstance(coord, HRRRSourceFileCoord)
 
 
-def test_region_job_48h_forecasts(store_factory: StoreFactory) -> None:
+def test_region_job_48h_forecasts() -> None:
     """Test that 48-hour forecast coordinates are generated correctly."""
     template_config = NoaaHrrrForecast48HourTemplateConfig()
 
@@ -246,7 +229,6 @@ def test_region_job_48h_forecasts(store_factory: StoreFactory) -> None:
     )
 
     region_job = NoaaHrrrForecast48HourRegionJob.model_construct(
-        store_factory=store_factory,
         tmp_store=Mock(),
         template_ds=test_ds,
         data_vars=template_config.data_vars[:1],
@@ -272,9 +254,7 @@ def test_region_job_48h_forecasts(store_factory: StoreFactory) -> None:
         assert coord.lead_time <= pd.Timedelta("48h")
 
 
-def test_region_job_download_file(
-    monkeypatch: pytest.MonkeyPatch, store_factory: StoreFactory
-) -> None:
+def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test HRRR file download with mocked network calls."""
     template_config = NoaaHrrrForecast48HourTemplateConfig()
 
@@ -287,7 +267,6 @@ def test_region_job_download_file(
     )
 
     region_job = NoaaHrrrForecast48HourRegionJob.model_construct(
-        store_factory=store_factory,
         tmp_store=Mock(),
         template_ds=Mock(),
         data_vars=template_config.data_vars[:1],
@@ -334,9 +313,7 @@ def test_region_job_download_file(
     }
 
 
-def test_region_job_read_data(
-    monkeypatch: pytest.MonkeyPatch, store_factory: StoreFactory
-) -> None:
+def test_region_job_read_data(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test HRRR data reading with mocked file operations."""
     template_config = NoaaHrrrForecast48HourTemplateConfig()
 
@@ -350,7 +327,6 @@ def test_region_job_read_data(
     )
 
     region_job = NoaaHrrrForecast48HourRegionJob.model_construct(
-        store_factory=store_factory,
         tmp_store=Mock(),
         template_ds=Mock(),
         data_vars=template_config.data_vars[:1],

@@ -130,7 +130,6 @@ def test_region_job(template_ds: xr.Dataset, store_factory: StoreFactory) -> Non
     template_utils.write_metadata(template_ds, store_factory)
 
     job = ExampleRegionJob(
-        store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         data_vars=[ExampleDataVar(name=name) for name in template_ds.data_vars.keys()],
@@ -139,7 +138,11 @@ def test_region_job(template_ds: xr.Dataset, store_factory: StoreFactory) -> Non
         reformat_job_name="test-job",
     )
 
-    job.process()
+    primary_store = store_factory.primary_store()
+    replica_stores = store_factory.replica_stores()
+
+    template_utils.write_metadata(job.template_ds, tmp_store)
+    job.process(primary_store, replica_stores)
 
     ds = xr.open_zarr(store_factory.primary_store())
     region_template_ds = template_ds.isel({job.append_dim: job.region})
@@ -153,13 +156,10 @@ def test_region_job(template_ds: xr.Dataset, store_factory: StoreFactory) -> Non
         np.testing.assert_array_equal(data_var.values, expected_values)
 
 
-def test_update_template_with_results(
-    template_ds: xr.Dataset, store_factory: StoreFactory
-) -> None:
+def test_update_template_with_results(template_ds: xr.Dataset) -> None:
     tmp_store = get_local_tmp_store()
 
     job = ExampleRegionJob(
-        store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         data_vars=[ExampleDataVar(name=name) for name in template_ds.data_vars.keys()],
@@ -196,14 +196,11 @@ def test_source_file_coord_out_loc_default_impl() -> None:
     assert coord.out_loc() == {"time": pd.Timestamp("2025-01-01T00")}
 
 
-def test_get_jobs_grouping_no_filters(
-    template_ds: xr.Dataset, store_factory: StoreFactory
-) -> None:
+def test_get_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
-        store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -235,14 +232,11 @@ def test_get_jobs_grouping_no_filters(
     ]
 
 
-def test_get_jobs_grouping_filters(
-    template_ds: xr.Dataset, store_factory: StoreFactory
-) -> None:
+def test_get_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
-        store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -279,15 +273,11 @@ def test_get_jobs_grouping_filters(
     )
 
 
-def test_get_jobs_grouping_filters_and_worker_index(
-    template_ds: xr.Dataset,
-    store_factory: StoreFactory,
-) -> None:
+def test_get_jobs_grouping_filters_and_worker_index(template_ds: xr.Dataset) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
-        store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -316,14 +306,11 @@ def test_get_jobs_grouping_filters_and_worker_index(
     ]
 
 
-def test_get_jobs_grouping_filter_contains(
-    template_ds: xr.Dataset, store_factory: StoreFactory
-) -> None:
+def test_get_jobs_grouping_filter_contains(template_ds: xr.Dataset) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
-        store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -348,13 +335,11 @@ def test_get_jobs_grouping_filter_contains(
 
 def test_get_jobs_grouping_filter_contains_second_shard(
     template_ds: xr.Dataset,
-    store_factory: StoreFactory,
 ) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
-        store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -377,15 +362,11 @@ def test_get_jobs_grouping_filter_contains_second_shard(
     ]
 
 
-def test_get_jobs_grouping_filter_contains_all_shards(
-    template_ds: xr.Dataset,
-    store_factory: StoreFactory,
-) -> None:
+def test_get_jobs_grouping_filter_contains_all_shards(template_ds: xr.Dataset) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
-        store_factory=store_factory,
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
