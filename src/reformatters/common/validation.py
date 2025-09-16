@@ -211,17 +211,20 @@ def check_for_expected_shards(
     """Check that the expected shards are present in the store."""
     log.info(f"Checking for expected shards in {store}")
 
-    shard_counts_per_dim = [
-        len(iterating.dimension_slices(ds, str(dim), "shards"))
-        for dim in ds.sizes.keys()
-    ]
-    ranges = [range(shard_count) for shard_count in shard_counts_per_dim]
-    expected_shard_indexes = {
-        "/".join(map(str, index)) for index in itertools.product(*ranges)
-    }
-
     problem_vars = []
+
     for var in ds.data_vars.keys():
+        ordered_dims = ds[var].dims
+
+        shard_counts_per_dim = [
+            len(iterating.dimension_slices(ds, str(dim), "shards"))
+            for dim in ordered_dims
+        ]
+        ranges = [range(shard_count) for shard_count in shard_counts_per_dim]
+        expected_shard_indexes = {
+            "/".join(map(str, index)) for index in itertools.product(*ranges)
+        }
+
         actual_var_shard_indexes = retry(
             partial(_sync_list_shards, store, var),
             max_attempts=3,
