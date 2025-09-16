@@ -304,7 +304,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
 
-        default_window_reset_frequency = pd.Timedelta("1h")  # noqa: F841
+        default_window_reset_frequency = pd.Timedelta("1h")
         default_keep_mantissa_bits = 7
 
         return [
