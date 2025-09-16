@@ -338,7 +338,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                 ),
                 internal_attrs=HRRRInternalAttrs(
                     grib_element="TMP",
-                    grib_description="TMP:2 m above ground",
+                    grib_description='2[m] HTGL="Specified height level above ground"',
                     grib_index_level="2 m above ground",
                     index_position=71,
                     keep_mantissa_bits=default_keep_mantissa_bits,
@@ -357,7 +357,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                 ),
                 internal_attrs=HRRRInternalAttrs(
                     grib_element="UGRD",
-                    grib_description="UGRD:10 m above ground",
+                    grib_description='10[m] HTGL="Specified height level above ground"',
                     grib_index_level="10 m above ground",
                     index_position=77,
                     keep_mantissa_bits=6,
@@ -376,7 +376,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                 ),
                 internal_attrs=HRRRInternalAttrs(
                     grib_element="VGRD",
-                    grib_description="VGRD:10 m above ground",
+                    grib_description='10[m] HTGL="Specified height level above ground"',
                     grib_index_level="10 m above ground",
                     index_position=78,
                     keep_mantissa_bits=6,
@@ -395,7 +395,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                 ),
                 internal_attrs=HRRRInternalAttrs(
                     grib_element="APCP",
-                    grib_description="APCP:surface (total precipitation)",
+                    grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
                     index_position=84,
                     deaccumulate_to_rate=True,
@@ -415,7 +415,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                 ),
                 internal_attrs=HRRRInternalAttrs(
                     grib_element="PWAT",
-                    grib_description="PWAT:entire atmosphere (precipitable water)",
+                    grib_description='0[-] EATM="Entire atmosphere (considered as a single layer)"',
                     grib_index_level="entire atmosphere (considered as a single layer)",
                     index_position=107,
                     keep_mantissa_bits=default_keep_mantissa_bits,
@@ -433,7 +433,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                 ),
                 internal_attrs=HRRRInternalAttrs(
                     grib_element="TCDC",
-                    grib_description="TCDC:entire atmosphere (total cloud cover)",
+                    grib_description='0[-] EATM="Entire Atmosphere"',
                     grib_index_level="entire atmosphere",
                     index_position=116,
                     keep_mantissa_bits=default_keep_mantissa_bits,
@@ -452,7 +452,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                 ),
                 internal_attrs=HRRRInternalAttrs(
                     grib_element="DSWRF",
-                    grib_description="DSWRF:surface (downward short-wave radiation flux)",
+                    grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
                     index_position=123,
                     keep_mantissa_bits=default_keep_mantissa_bits,
@@ -471,7 +471,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                 ),
                 internal_attrs=HRRRInternalAttrs(
                     grib_element="DLWRF",
-                    grib_description="DLWRF:surface (downward long-wave radiation flux)",
+                    grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
                     index_position=124,
                     keep_mantissa_bits=default_keep_mantissa_bits,
@@ -489,7 +489,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                 ),
                 internal_attrs=HRRRInternalAttrs(
                     grib_element="MSLMA",
-                    grib_description="MSLMA:mean sea level pressure (MAPS reduction)",
+                    grib_description='0[-] MSL="Mean sea level"',
                     grib_index_level="mean sea level",
                     index_position=41,
                     keep_mantissa_bits=10,
