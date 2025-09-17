@@ -12,6 +12,7 @@ from reformatters.noaa.hrrr.forecast_48_hour.region_job import (
 from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
     NoaaHrrrForecast48HourTemplateConfig,
 )
+from reformatters.noaa.noaa_utils import has_hour_0_values
 
 
 @pytest.fixture
@@ -110,11 +111,11 @@ def test_region_job_source_groups() -> None:
     # Test source grouping with available sfc variables
     groups = NoaaHrrrForecast48HourRegionJob.source_groups(sfc_vars)
 
-    # All variables should be in one group since they're all from the same file type
-    assert len(groups) == 1
-    assert len(groups[0]) == len(
-        sfc_vars
-    )  # Should equal the number of sfc vars available
+    # Two groups expected: those with hour 0 values and those without
+    assert len(groups) == 2
+    for group in groups:
+        assert len({v.internal_attrs.hrrr_file_type for v in group}) == 1
+        assert len({has_hour_0_values(v) for v in group}) == 1
 
 
 def test_region_job_source_groups_multiple_file_types() -> None:
@@ -238,6 +239,7 @@ def test_region_job_48h_forecasts() -> None:
     )
 
     processing_region_ds, output_region_ds = region_job._get_region_datasets()
+    assert processing_region_ds.equals(output_region_ds)
 
     source_coords = region_job.generate_source_file_coords(
         processing_region_ds, template_config.data_vars[:1]

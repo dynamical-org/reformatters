@@ -430,7 +430,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     short_name="tcc",
                     long_name="Total Cloud Cover",
                     units="%",
-                    step_type="avg",
+                    step_type="instant",
                 ),
                 internal_attrs=HRRRInternalAttrs(
                     grib_element="TCDC",
@@ -448,8 +448,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     short_name="sdswrf",
                     long_name="Surface downward short-wave radiation flux",
                     units="W/(m^2)",
-                    step_type="avg",
-                    comment="Average over the previous forecast step.",
+                    step_type="instant",
                 ),
                 internal_attrs=HRRRInternalAttrs(
                     grib_element="DSWRF",
@@ -467,8 +466,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     short_name="sdlwrf",
                     long_name="Surface downward long-wave radiation flux",
                     units="W/(m^2)",
-                    step_type="avg",
-                    comment="Average over the previous forecast step.",
+                    step_type="instant",
                 ),
                 internal_attrs=HRRRInternalAttrs(
                     grib_element="DLWRF",

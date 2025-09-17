@@ -1,5 +1,4 @@
 from collections.abc import Callable, Mapping, Sequence
-from itertools import groupby
 from pathlib import Path
 
 import numpy as np
@@ -9,7 +8,7 @@ import xarray as xr
 import zarr
 
 from reformatters.common.download import http_download_to_disk
-from reformatters.common.iterating import digest, item
+from reformatters.common.iterating import digest, group_by, item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
@@ -76,15 +75,8 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
         cls,
         data_vars: Sequence[HRRRDataVar],
     ) -> Sequence[Sequence[HRRRDataVar]]:
-        """Group variables by HRRR file type, since each file type comes from a separate source file."""
-        # Sort by file type first, then group
-        sorted_vars = sorted(data_vars, key=lambda v: v.internal_attrs.hrrr_file_type)
-        return tuple(
-            tuple(vars_iter)
-            for _, vars_iter in groupby(
-                sorted_vars,
-                key=lambda v: (has_hour_0_values(v), v.internal_attrs.hrrr_file_type),
-            )
+        return group_by(
+            data_vars, lambda v: (v.internal_attrs.hrrr_file_type, has_hour_0_values(v))
         )
 
     @classmethod
@@ -175,8 +167,12 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
     ) -> ArrayFloat32:
         """Read data from a HRRR file for a specific variable."""
         assert coord.downloaded_path is not None  # for type check, system guarantees it
-        grib_element = data_var.internal_attrs.grib_element
         grib_description = data_var.internal_attrs.grib_description
+
+        grib_element = data_var.internal_attrs.grib_element
+        # grib element has the accumulation window as a suffix in the grib file attributes, but not in the .idx file
+        if (reset_freq := data_var.internal_attrs.window_reset_frequency) is not None:
+            grib_element = f"{grib_element}{whole_hours(reset_freq):02d}"
 
         with rasterio.open(coord.downloaded_path) as reader:
             matching_bands = [

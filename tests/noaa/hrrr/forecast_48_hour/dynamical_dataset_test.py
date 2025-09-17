@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+from numpy.testing import assert_array_equal
 
 from reformatters.common import validation
 from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
@@ -34,6 +35,8 @@ def test_backfill_local_and_operational_update(
         "precipitation_surface",  # accumulation we deaccumulate
         "downward_short_wave_radiation_flux_surface",  # average over window, available as analysis and forecast
     ]
+    # Uncomment to test all variables
+    # filter_variable_names = [var.name for var in dataset.template_config.data_vars]
 
     # Local backfill reformat
     dataset.backfill_local(
@@ -46,47 +49,30 @@ def test_backfill_local_and_operational_update(
         dataset.store_factory.primary_store(), chunks=None, decode_timedelta=True
     )
     init_time_start = pd.Timestamp("2018-07-13T12:00")
-    np.testing.assert_array_equal(
+    assert_array_equal(
         backfill_ds["init_time"],
         np.array([init_time_start], dtype="datetime64"),
     )
     space_subset_ds = backfill_ds.isel(x=slice(10, 0), y=slice(0, 10))
 
     # These variables are present at all lead times
-    assert (
-        (
-            space_subset_ds[
-                [v for v in filter_variable_names if v != "precipitation_surface"]
-            ]
-            .isnull()
-            .sum()
-            == 0
-        )
-        .all()
-        .to_array()
-        .all()
+    assert_no_nulls(
+        space_subset_ds[
+            [v for v in filter_variable_names if v != "precipitation_surface"]
+        ]
     )
     # These variables are not present at hour 0
-    assert (
-        (
-            space_subset_ds[["precipitation_surface"]]
-            .sel(lead_time=slice("1h", None))
-            .isnull()
-            .sum()
-            == 0
-        )
-        .all()
-        .to_array()
-        .all()
+    assert_no_nulls(
+        space_subset_ds[["precipitation_surface"]].sel(lead_time=slice("1h", None))
     )
-    point_ds = backfill_ds.sel(
-        x=0, y=0, init_time=init_time_start, lead_time="2h", method="nearest"
+    # A point that has non zero precipitation
+    point_ds = backfill_ds.sel(init_time=init_time_start, lead_time="2h").isel(
+        x=1, y=-2
     )
 
-    assert point_ds["temperature_2m"] == 29.5
-    # TODO update
-    # assert point_ds["precipitation_surface"] == 0.0
-    # assert point_ds["downward_short_wave_radiation_flux_surface"] == 0.0
+    assert point_ds["temperature_2m"] == 22.875
+    assert point_ds["precipitation_surface"] == 0.16992188
+    assert point_ds["downward_short_wave_radiation_flux_surface"] == 8.1875
 
     # Operational update
     append_dim_end = pd.Timestamp("2018-07-14T00:00")  #
@@ -94,6 +80,14 @@ def test_backfill_local_and_operational_update(
         dataset.region_job_class,
         "_update_append_dim_end",
         lambda: append_dim_end,
+    )
+    orig_get_jobs = dataset.region_job_class.get_jobs
+    monkeypatch.setattr(
+        dataset.region_job_class,
+        "get_jobs",
+        lambda *args, **kwargs: orig_get_jobs(
+            *args, **{**kwargs, "filter_variable_names": filter_variable_names}
+        ),
     )
 
     dataset.update("test-update")
@@ -103,28 +97,45 @@ def test_backfill_local_and_operational_update(
         dataset.store_factory.primary_store(), chunks=None, decode_timedelta=True
     )
 
-    expected_init_times = (
-        pd.date_range(
-            init_time_start,
-            append_dim_end,
-            freq=dataset.template_config.append_dim_frequency,
-            inclusive="left",
-        ),
+    expected_init_times = pd.date_range(
+        init_time_start,
+        append_dim_end,
+        freq=dataset.template_config.append_dim_frequency,
+        inclusive="left",
     )
-    assert expected_init_times == pd.DatetimeIndex(
-        ["2018-07-13T12:00", "2018-07-13T18:00"]
+    assert_array_equal(
+        expected_init_times, pd.DatetimeIndex(["2018-07-13T12:00", "2018-07-13T18:00"])
     )
-    np.testing.assert_array_equal(updated_ds["init_time"], expected_init_times)
-    np.testing.assert_array_equal(
+    assert_array_equal(updated_ds["init_time"], expected_init_times)
+    assert_array_equal(
         updated_ds["lead_time"], pd.timedelta_range("0h", "5h", freq="1h")
+    )
+
+    space_subset_ds = updated_ds.isel(x=slice(-10, 0), y=slice(0, 10))
+    # These variables are present at all lead times
+    assert_no_nulls(
+        space_subset_ds[
+            [v for v in filter_variable_names if v != "precipitation_surface"]
+        ]
+    )
+    # These variables are not present at hour 0
+    assert_no_nulls(
+        space_subset_ds[["precipitation_surface"]].sel(lead_time=slice("1h", None))
     )
 
     # Two init times and two lead times at one point
     point_ds = updated_ds.sel(x=400_000, y=760_000, method="nearest").sel(
         lead_time=slice("0h", "1h")
     )
-    np.testing.assert_array_equal(
-        point_ds["composite_reflectivity"].values, [[25.5, 30.25], [-10.0, -10.0]]
+    assert_array_equal(
+        point_ds["temperature_2m"].values, [[21.0, 21.375], [20.75, 23.75]]
+    )
+    assert_array_equal(
+        point_ds["precipitation_surface"].values, [[np.nan, 0.6484375], [np.nan, 0.0]]
+    )
+    assert_array_equal(
+        point_ds["downward_short_wave_radiation_flux_surface"].values,
+        [[1.296875, 36.75], [912.0, 868.0]],
     )
 
 
@@ -159,3 +170,7 @@ def test_validators(dataset: NoaaHrrrForecast48HourDataset) -> None:
     validators = tuple(dataset.validators())
     assert len(validators) == 3
     assert all(isinstance(v, validation.DataValidator) for v in validators)
+
+
+def assert_no_nulls(ds: xr.Dataset) -> None:
+    assert (ds.isnull().sum() == 0).all().to_array().all()

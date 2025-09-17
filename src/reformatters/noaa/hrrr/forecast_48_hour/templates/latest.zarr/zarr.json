@@ -177,8 +177,7 @@
           "long_name": "Surface downward long-wave radiation flux",
           "short_name": "sdlwrf",
           "units": "W/(m^2)",
-          "comment": "Average over the previous forecast step.",
-          "step_type": "avg",
+          "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -265,8 +264,7 @@
           "long_name": "Surface downward short-wave radiation flux",
           "short_name": "sdswrf",
           "units": "W/(m^2)",
-          "comment": "Average over the previous forecast step.",
-          "step_type": "avg",
+          "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -1024,7 +1022,7 @@
           "long_name": "Total Cloud Cover",
           "short_name": "tcc",
           "units": "%",
-          "step_type": "avg",
+          "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
