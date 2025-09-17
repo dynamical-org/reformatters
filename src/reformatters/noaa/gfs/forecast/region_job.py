@@ -17,29 +17,43 @@ from reformatters.common.download import (
 )
 from reformatters.common.iterating import digest, item
 from reformatters.common.logging import get_logger
-from reformatters.common.region_job import RegionJob
+from reformatters.common.region_job import (
+    CoordinateValueOrRange,
+    RegionJob,
+    SourceFileCoord,
+)
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     AppendDim,
     ArrayFloat32,
     DatetimeLike,
-)
-from reformatters.noaa.gfs.gfs_common import (
-    NoaaGfsSourceFileCoord,
-    parse_grib_index,
+    Dim,
+    Timedelta,
+    Timestamp,
 )
 from reformatters.noaa.models import NoaaDataVar
+from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
 log = get_logger(__name__)
 
 
-class NoaaGfsForecastSourceFileCoord(NoaaGfsSourceFileCoord):
-    # We share the name attributes (init_time, lead_time, data_vars) with
-    # NoaaGfsSourceFileCoord, and the default out_loc implementation of
-    # {"init_time": self.init_time, "lead_time": self.lead_time}
-    # is correct for this dataset.
-    pass
+class NoaaGfsForecastSourceFileCoord(SourceFileCoord):
+    """Coordinates of a single source file to process."""
+
+    init_time: Timestamp
+    lead_time: Timedelta
+    data_vars: Sequence[NoaaDataVar]
+
+    def get_url(self) -> str:
+        init_date_str = self.init_time.strftime("%Y%m%d")
+        init_hour_str = self.init_time.strftime("%H")
+        lead_hours = whole_hours(self.lead_time)
+        base_path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_hours:03d}"
+        return f"https://noaa-gfs-bdp-pds.s3.amazonaws.com/{base_path}"
+
+    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+        return {"init_time": self.init_time, "lead_time": self.lead_time}
 
 
 class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileCoord]):
@@ -85,10 +99,11 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         # Download grib index file
         idx_url = f"{coord.get_url()}.idx"
         idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
-        index_contents = idx_local_path.read_text()
 
         # Download the grib messages for the data vars in the coord using byte ranges
-        starts, ends = parse_grib_index(index_contents, coord)
+        starts, ends = grib_message_byte_ranges_from_index(
+            idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
+        )
         vars_suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=True))
         return http_download_to_disk(
             coord.get_url(),
@@ -99,7 +114,7 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
 
     def read_data(
         self,
-        coord: NoaaGfsSourceFileCoord,
+        coord: NoaaGfsForecastSourceFileCoord,
         data_var: NoaaDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
