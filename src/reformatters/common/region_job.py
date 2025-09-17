@@ -653,7 +653,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     updated_coords[index] = replace(
                         coord, status=SourceFileStatus.Succeeded
                     )
-                except Exception:
+                except Exception as e:
+                    if isinstance(e, AssertionError):
+                        raise
                     log.exception(f"Read failed {coord.downloaded_path}")
                     updated_coords[index] = replace(
                         coord, status=SourceFileStatus.ReadFailed
