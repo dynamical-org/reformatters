@@ -26,6 +26,57 @@ from reformatters.common.zarr import (
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,  # noqa: F401
 )
 
+"""
+xr.open_dataset("data/2025-03-01T00:00:00.000000000.grib2", engine="cfgrib"), filter_by_keys={"dataType": "pf"})
+
+=== GRIB2 File Information ===
+File size: ~5.9 GB
+Grid: 721 x 1440 (lat x lon)
+Resolution: ~0.25°
+Ensemble members: 50
+Pressure levels: 13 levels
+Time: 2025-03-01T00:00:00.000000000
+Forecast step: 0 nanoseconds hours
+
+=== Available Variables ===
+asn        - Snow albedo [(0 - 1)]
+d          - Divergence [s**-1]
+ewss       - Time-integrated eastward turbulent surface stress [N m**-2 s]
+gh         - Geopotential height [gpm]
+lsm        - Land-sea mask [(0 - 1)]
+msl        - Mean sea level pressure [Pa]
+mucape     - Most-unstable CAPE [J kg**-1]
+nsss       - Time-integrated northward turbulent surface stress [N m**-2 s]
+ptype      - Precipitation type [(Code table 4.201)]
+q          - Specific humidity [kg kg**-1]
+r          - Relative humidity [%]
+ro         - Runoff [m]
+sithick    - Sea ice thickness [m]
+skt        - Skin temperature [K]
+sot        - Soil temperature [K]
+sp         - Surface pressure [Pa]
+ssr        - Surface net short-wave (solar) radiation [J m**-2]
+ssrd       - Surface short-wave (solar) radiation downwards [J m**-2]
+str        - Surface net long-wave (thermal) radiation [J m**-2]
+strd       - Surface long-wave (thermal) radiation downwards [J m**-2]
+sve        - Eastward surface sea water velocity [m s**-1]
+svn        - Northward surface sea water velocity [m s**-1]
+t          - Temperature [K]
+tcw        - Total column water [kg m**-2]
+tcwv       - Total column vertically-integrated water vapour [kg m**-2]
+tp         - Total precipitation [m]
+tprate     - Total precipitation rate [kg m**-2 s**-1]
+ttr        - Top net long-wave (thermal) radiation [J m**-2]
+u          - U component of wind [m s**-1]
+u100       - 100 metre U wind component [m s**-1]
+v          - V component of wind [m s**-1]
+v100       - 100 metre V wind component [m s**-1]
+vo         - Vorticity (relative) [s**-1]
+vsw        - Volumetric soil moisture [m**3 m**-3]
+w          - Vertical velocity [Pa s**-1]
+zos        - Sea surface height [m]
+"""
+
 
 class EcmwfIfsEnsInternalAttrs(BaseInternalAttrs):
     """
