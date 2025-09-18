@@ -15,7 +15,7 @@ from reformatters.common.config_models import (
     Encoding,
     StatisticsApproximate,
 )
-from reformatters.common.template_config import TemplateConfig
+from reformatters.common.template_config import SPATIAL_REF_COORDS, TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
@@ -104,6 +104,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
             ),
             "latitude": (("y", "x"), lats),
             "longitude": (("y", "x"), lons),
+            "spatial_ref": SPATIAL_REF_COORDS,
         }
 
     @computed_field  # type: ignore[prop-decorator]
@@ -273,6 +274,54 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                         min=-134.09548,
                         max=-60.917192,
                     ),
+                ),
+            ),
+            Coordinate(
+                name="spatial_ref",
+                encoding=Encoding(
+                    dtype="int64",
+                    fill_value=0,
+                    chunks=(),  # Scalar coordinate
+                    shards=None,
+                ),
+                # {'GeoTransform': '-2699020.142521929 3000.0 0.0 1588193.847443335 0.0 -3000.0',
+                #  'crs_wkt': 'PROJCS["unnamed",GEOGCS["Coordinate System imported from GRIB '
+                #             'file",DATUM["unnamed",SPHEROID["Sphere",6371229,0]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]]],PROJECTION["Lambert_Conformal_Conic_2SP"],PARAMETER["latitude_of_origin",38.5],PARAMETER["central_meridian",-97.5],PARAMETER["standard_parallel_1",38.5],PARAMETER["standard_parallel_2",38.5],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["Metre",1],AXIS["Easting",EAST],AXIS["Northing",NORTH]]',
+                #  'false_easting': 0.0,
+                #  'false_northing': 0.0,
+                #  'geographic_crs_name': 'Coordinate System imported from GRIB file',
+                #  'grid_mapping_name': 'lambert_conformal_conic',
+                #  'horizontal_datum_name': 'unnamed',
+                #  'inverse_flattening': 0.0,
+                #  'latitude_of_projection_origin': 38.5,
+                #  'longitude_of_central_meridian': -97.5,
+                #  'longitude_of_prime_meridian': 0.0,
+                #  'prime_meridian_name': 'Greenwich',
+                #  'projected_crs_name': 'unnamed',
+                #  'reference_ellipsoid_name': 'Sphere',
+                #  'semi_major_axis': 6371229.0,
+                #  'semi_minor_axis': 6371229.0,
+                #  'spatial_ref': 'PROJCS["unnamed",GEOGCS["Coordinate System imported from GRIB '
+                #                 'file",DATUM["unnamed",SPHEROID["Sphere",6371229,0]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]]],PROJECTION["Lambert_Conformal_Conic_2SP"],PARAMETER["latitude_of_origin",38.5],PARAMETER["central_meridian",-97.5],PARAMETER["standard_parallel_1",38.5],PARAMETER["standard_parallel_2",38.5],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["Metre",1],AXIS["Easting",EAST],AXIS["Northing",NORTH]]',
+                #  'standard_parallel': (38.5, 38.5)}
+                # Update the attributes below to match the commented attributes above AI!
+                attrs=CoordinateAttrs(
+                    units=None,
+                    statistics_approximate=None,
+                    # Deterived from opening a sample HRRR file, see
+                    # tests/noaa/hrrr/forecast_48_hour/template_config_test.py::test_spatial_info_matches_file
+                    crs_wkt='PROJCS["unnamed",GEOGCS["Coordinate System imported from GRIB file",DATUM["unnamed",SPHEROID["Sphere",6371229,0]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]]],PROJECTION["Lambert_Conformal_Conic_2SP"],PARAMETER["latitude_of_origin",38.5],PARAMETER["central_meridian",-97.5],PARAMETER["standard_parallel_1",38.5],PARAMETER["standard_parallel_2",38.5],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["Metre",1],AXIS["Easting",EAST],AXIS["Northing",NORTH]]',
+                    semi_major_axis=6371229.0,
+                    semi_minor_axis=6371229.0,
+                    inverse_flattening=0.0,
+                    reference_ellipsoid_name="unknown",
+                    longitude_of_prime_meridian=0.0,
+                    prime_meridian_name="Greenwich",
+                    geographic_crs_name="unknown",
+                    horizontal_datum_name="unknown",
+                    grid_mapping_name="latitude_longitude",
+                    spatial_ref='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
+                    comment="This coordinate reference system matches the source data which follows WMO conventions of assuming the earth is a perfect sphere with a radius of 6,371,229m. It is similar to EPSG:4326, but EPSG:4326 uses a more accurate representation of the earth's shape.",
                 ),
             ),
         ]
