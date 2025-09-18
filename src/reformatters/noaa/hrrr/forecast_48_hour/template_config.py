@@ -21,7 +21,10 @@ from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
-from reformatters.noaa.hrrr.hrrr_config_models import HRRRDataVar, HRRRInternalAttrs
+from reformatters.noaa.hrrr.hrrr_config_models import (
+    NoaaHrrrDataVar,
+    NoaaHrrrInternalAttrs,
+)
 
 #  All Standard Cycles go to forecast hour 18
 #  Init cycles going to forecast hour 48 are 00, 06, 12, 18
@@ -32,7 +35,7 @@ EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR = pd.Series(
 )
 
 
-class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
+class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
     # HRRR uses a projected coordinate system with x/y dimensions
     dims: tuple[Dim, ...] = ("init_time", "lead_time", "y", "x")
     append_dim: AppendDim = "init_time"
@@ -313,7 +316,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def data_vars(self) -> Sequence[HRRRDataVar]:
+    def data_vars(self) -> Sequence[NoaaHrrrDataVar]:
         # ~15.6MB uncompressed, ~3.1MB compressed
         var_chunks: dict[Dim, int] = {
             "init_time": 1,
@@ -343,7 +346,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
         default_keep_mantissa_bits = 7
 
         return [
-            HRRRDataVar(
+            NoaaHrrrDataVar(
                 name="composite_reflectivity",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -352,7 +355,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     units="dBZ",
                     step_type="instant",
                 ),
-                internal_attrs=HRRRInternalAttrs(
+                internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="REFC",
                     grib_description='0[-] EATM="Entire Atmosphere"',
                     index_position=1,
@@ -361,7 +364,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     hrrr_file_type="sfc",
                 ),
             ),
-            HRRRDataVar(
+            NoaaHrrrDataVar(
                 name="temperature_2m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -371,7 +374,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     step_type="instant",
                     standard_name="air_temperature",
                 ),
-                internal_attrs=HRRRInternalAttrs(
+                internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="TMP",
                     grib_description='2[m] HTGL="Specified height level above ground"',
                     grib_index_level="2 m above ground",
@@ -380,7 +383,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     hrrr_file_type="sfc",
                 ),
             ),
-            HRRRDataVar(
+            NoaaHrrrDataVar(
                 name="wind_u_10m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -390,7 +393,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     step_type="instant",
                     standard_name="eastward_wind",
                 ),
-                internal_attrs=HRRRInternalAttrs(
+                internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="UGRD",
                     grib_description='10[m] HTGL="Specified height level above ground"',
                     grib_index_level="10 m above ground",
@@ -399,7 +402,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     hrrr_file_type="sfc",
                 ),
             ),
-            HRRRDataVar(
+            NoaaHrrrDataVar(
                 name="wind_v_10m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -409,7 +412,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     step_type="instant",
                     standard_name="northward_wind",
                 ),
-                internal_attrs=HRRRInternalAttrs(
+                internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="VGRD",
                     grib_description='10[m] HTGL="Specified height level above ground"',
                     grib_index_level="10 m above ground",
@@ -418,7 +421,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     hrrr_file_type="sfc",
                 ),
             ),
-            HRRRDataVar(
+            NoaaHrrrDataVar(
                 name="precipitation_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -428,7 +431,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     comment="Total precipitation accumulation; deaccumulate to rate when needed.",
                     step_type="avg",
                 ),
-                internal_attrs=HRRRInternalAttrs(
+                internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="APCP",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
@@ -439,7 +442,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     hrrr_file_type="sfc",
                 ),
             ),
-            HRRRDataVar(
+            NoaaHrrrDataVar(
                 name="precipitable_water_atmosphere",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -448,7 +451,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     units="kg/(m^2)",
                     step_type="instant",
                 ),
-                internal_attrs=HRRRInternalAttrs(
+                internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="PWAT",
                     grib_description='0[-] EATM="Entire atmosphere (considered as a single layer)"',
                     grib_index_level="entire atmosphere (considered as a single layer)",
@@ -457,7 +460,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     hrrr_file_type="sfc",
                 ),
             ),
-            HRRRDataVar(
+            NoaaHrrrDataVar(
                 name="total_cloud_cover_atmosphere",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -466,7 +469,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     units="%",
                     step_type="instant",
                 ),
-                internal_attrs=HRRRInternalAttrs(
+                internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="TCDC",
                     grib_description='0[-] EATM="Entire Atmosphere"',
                     grib_index_level="entire atmosphere",
@@ -475,7 +478,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     hrrr_file_type="sfc",
                 ),
             ),
-            HRRRDataVar(
+            NoaaHrrrDataVar(
                 name="downward_short_wave_radiation_flux_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -484,7 +487,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     units="W/(m^2)",
                     step_type="instant",
                 ),
-                internal_attrs=HRRRInternalAttrs(
+                internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="DSWRF",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
@@ -493,7 +496,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     hrrr_file_type="sfc",
                 ),
             ),
-            HRRRDataVar(
+            NoaaHrrrDataVar(
                 name="downward_long_wave_radiation_flux_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -502,7 +505,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     units="W/(m^2)",
                     step_type="instant",
                 ),
-                internal_attrs=HRRRInternalAttrs(
+                internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="DLWRF",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
@@ -511,7 +514,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     hrrr_file_type="sfc",
                 ),
             ),
-            HRRRDataVar(
+            NoaaHrrrDataVar(
                 name="pressure_reduced_to_mean_sea_level",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -520,7 +523,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[HRRRDataVar]):
                     units="Pa",
                     step_type="instant",
                 ),
-                internal_attrs=HRRRInternalAttrs(
+                internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="MSLMA",
                     grib_description='0[-] MSL="Mean sea level"',
                     grib_index_level="mean sea level",

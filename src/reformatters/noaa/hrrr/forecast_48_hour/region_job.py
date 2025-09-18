@@ -25,9 +25,9 @@ from reformatters.common.types import (
     Timestamp,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import (
-    HRRRDataVar,
-    HRRRDomain,
-    HRRRFileType,
+    NoaaHrrrDataVar,
+    NoaaHrrrDomain,
+    NoaaHrrrFileType,
 )
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 from reformatters.noaa.noaa_utils import has_hour_0_values
@@ -35,14 +35,14 @@ from reformatters.noaa.noaa_utils import has_hour_0_values
 log = get_logger(__name__)
 
 
-class HRRRSourceFileCoord(SourceFileCoord):
+class NoaaHrrrSourceFileCoord(SourceFileCoord):
     """Source file coordinate for HRRR forecast data."""
 
     init_time: Timestamp
     lead_time: Timedelta
-    domain: HRRRDomain
-    file_type: HRRRFileType
-    data_vars: Sequence[HRRRDataVar]
+    domain: NoaaHrrrDomain
+    file_type: NoaaHrrrFileType
+    data_vars: Sequence[NoaaHrrrDataVar]
 
     def get_url(self) -> str:
         """Return the URL for this HRRR file."""
@@ -65,7 +65,9 @@ class HRRRSourceFileCoord(SourceFileCoord):
         }
 
 
-class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord]):
+class NoaaHrrrForecast48HourRegionJob(
+    RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]
+):
     """Region job for HRRR 48-hour forecast data processing."""
 
     max_vars_per_download_group = 8  # currently a best guess
@@ -73,8 +75,8 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
     @classmethod
     def source_groups(
         cls,
-        data_vars: Sequence[HRRRDataVar],
-    ) -> Sequence[Sequence[HRRRDataVar]]:
+        data_vars: Sequence[NoaaHrrrDataVar],
+    ) -> Sequence[Sequence[NoaaHrrrDataVar]]:
         return group_by(
             data_vars, lambda v: (v.internal_attrs.hrrr_file_type, has_hour_0_values(v))
         )
@@ -86,10 +88,10 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
-        all_data_vars: Sequence[HRRRDataVar],
+        all_data_vars: Sequence[NoaaHrrrDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence[RegionJob[HRRRDataVar, HRRRSourceFileCoord]],
+        Sequence[RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]],
         xr.Dataset,
     ]:
         """Generate operational update jobs for HRRR forecast data."""
@@ -118,8 +120,8 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
-        data_var_group: Sequence[HRRRDataVar],
-    ) -> Sequence[HRRRSourceFileCoord]:
+        data_var_group: Sequence[NoaaHrrrDataVar],
+    ) -> Sequence[NoaaHrrrSourceFileCoord]:
         """Generate source file coordinates for the processing region."""
         init_times = pd.to_datetime(processing_region_ds["init_time"].values)
         lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
@@ -130,7 +132,7 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
         file_type = item({var.internal_attrs.hrrr_file_type for var in data_var_group})
 
         return [
-            HRRRSourceFileCoord(
+            NoaaHrrrSourceFileCoord(
                 init_time=init_time,
                 lead_time=lead_time,
                 domain="conus",
@@ -141,7 +143,7 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
             for lead_time in lead_times
         ]
 
-    def download_file(self, coord: HRRRSourceFileCoord) -> Path:
+    def download_file(self, coord: NoaaHrrrSourceFileCoord) -> Path:
         """Download a subset of variables from a HRRR file and return the local path."""
         idx_url = coord.get_idx_url()
         idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
@@ -162,8 +164,8 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
 
     def read_data(
         self,
-        coord: HRRRSourceFileCoord,
-        data_var: HRRRDataVar,
+        coord: NoaaHrrrSourceFileCoord,
+        data_var: NoaaHrrrDataVar,
     ) -> ArrayFloat32:
         """Read data from a HRRR file for a specific variable."""
         assert coord.downloaded_path is not None  # for type check, system guarantees it
