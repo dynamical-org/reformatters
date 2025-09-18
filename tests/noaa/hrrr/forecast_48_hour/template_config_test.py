@@ -173,6 +173,7 @@ def test_coordinate_configs() -> None:
         "expected_forecast_length",
         "latitude",
         "longitude",
+        "spatial_ref",
     ]
 
     for coord_name in required_coords:
@@ -184,11 +185,16 @@ def test_derive_coordinates_integration() -> None:
     config = NoaaHrrrForecast48HourTemplateConfig()
     template_ds = config.get_template(pd.Timestamp("2025-01-01"))
 
-    derived_coords = config.derive_coordinates(template_ds)
+    assert (
+        template_ds.coords["init_time"]
+        == pd.date_range("2018-07-13T12:00", "2024-12-31T18:00", freq="6h")
+    ).all()
 
-    # Check that spatial coordinates are derived
-    assert "latitude" in derived_coords
-    assert "longitude" in derived_coords
+    assert (
+        template_ds.coords["valid_time"]
+        == (template_ds.coords["init_time"] + template_ds.coords["lead_time"])
+    ).all()
+    assert template_ds.coords["valid_time"].shape == (9454, 49)
 
 
 def test_spatial_info_matches_file() -> None:
@@ -229,4 +235,12 @@ def test_spatial_info_matches_file() -> None:
     ds.spatial_ref.attrs["standard_parallel"] = list(
         ds.spatial_ref.attrs["standard_parallel"]
     )
+    # Allow for a tiny floating point difference in the GeoTransform y offset last digit between arm64 and amd64
+    if (
+        ds.spatial_ref.attrs["GeoTransform"]
+        == "-2699020.142521929 3000.0 0.0 1588193.8474433345 0.0 -3000.0"
+    ):
+        ds.spatial_ref.attrs["GeoTransform"] = (
+            "-2699020.142521929 3000.0 0.0 1588193.847443335 0.0 -3000.0"
+        )
     assert ds.spatial_ref.attrs == template_ds.spatial_ref.attrs
