@@ -159,11 +159,19 @@ def create_comparison_plot(
         data_clean = data_flat[~np.isnan(data_flat)]
         ref_clean = ref_flat[~np.isnan(ref_flat)]
 
-        # Create histograms
+        # Calculate combined range for consistent bins
+        combined_data = np.concatenate([data_clean, ref_clean])
+        data_min, data_max = np.min(combined_data), np.max(combined_data)
+        bins = np.linspace(data_min, data_max, 51)  # 50 bins with consistent boundaries
+
+        # Create histograms with consistent bins
         ax3.hist(
-            ref_clean, bins=50, alpha=0.7, label=ref_ds.attrs["name"], color="blue"
+            ref_clean, bins=bins, alpha=0.7, label=ref_ds.attrs["name"], color="blue"
         )
-        ax3.hist(data_clean, bins=50, alpha=0.7, label=ds.attrs["name"], color="red")
+        ax3.hist(data_clean, bins=bins, alpha=0.7, label=ds.attrs["name"], color="red")
+
+        # Set x-axis limits to match the data range
+        ax3.set_xlim(data_min, data_max)
 
         ax3.set_xlabel(f"{var}")
         ax3.set_ylabel("Frequency")
