@@ -66,6 +66,7 @@ select = [
     "FURB",  # refurb
     "INP",   # missing __init__.py
     "PIE",   # misc flake8
+    "PL",    # pylint
 ]
 ignore = [
     "S101",  # disallow asserts
@@ -73,7 +74,14 @@ ignore = [
     "W293",  # black line contains whitespace
     "UP046", # non-pep695-generic-class - mypy doesn't support this yet
     "UP047", # non-pep695-generic-function - mypy doesn't support this yet
+    "PLC0414", # import aliases to same name - we use to specifically re-export
+    "PLR0913", # too many arguments
 ]
+
+[tool.ruff.lint.per-file-ignores]
+    "tests/*" = [
+        "PLR2004", # magic value used in comparison - useful in tests
+    ]
 
 
 [tool.mypy]
