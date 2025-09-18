@@ -73,7 +73,7 @@
     "standard_name": "northward_wind",
     "units": "m/s",
     "step_type": "instant",
-    "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude valid_time",
+    "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [

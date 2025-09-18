@@ -215,7 +215,18 @@ def test_spatial_info_matches_file() -> None:
     )
 
     ds = xr.open_dataset(local_path, engine="rasterio")
+
+    # Test that the spatial_info return values match the file
     assert shape == ds.rio.shape
     assert np.allclose(bounds, ds.rio.bounds())
     assert resolution == ds.rio.resolution()
     assert crs == ds.rio.crs.to_proj4()
+
+    # Test that the attributes stored in the template match the file
+    template_ds = config.get_template(pd.Timestamp("2025-01-01"))
+    # The template has to round trip through JSON so tuples become lists
+    assert ds.spatial_ref.attrs["standard_parallel"] == (38.5, 38.5)
+    ds.spatial_ref.attrs["standard_parallel"] = list(
+        ds.spatial_ref.attrs["standard_parallel"]
+    )
+    assert ds.spatial_ref.attrs == template_ds.spatial_ref.attrs

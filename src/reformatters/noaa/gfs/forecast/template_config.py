@@ -14,10 +14,7 @@ from reformatters.common.config_models import (
     Encoding,
     StatisticsApproximate,
 )
-from reformatters.common.template_config import (
-    SPATIAL_REF_COORDS,
-    TemplateConfig,
-)
+from reformatters.common.template_config import SPATIAL_REF_COORDS, TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
