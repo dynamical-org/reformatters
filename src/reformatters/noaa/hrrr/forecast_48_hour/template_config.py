@@ -543,7 +543,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CPOFP",
-                    grib_description='Percent frozen precipitation [%]',
+                    grib_description="Percent frozen precipitation [%]",
                     grib_index_level="surface",
                     index_position=82,
                     keep_mantissa_bits=7,
@@ -580,7 +580,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CICEP",
-                    grib_description='Categorical ice pellets [0=No; 1=Yes; 2-191=Reserved; 192-254=Reserved for local use; 255=Missing]',
+                    grib_description="Categorical ice pellets [0=No; 1=Yes; 2-191=Reserved; 192-254=Reserved for local use; 255=Missing]",
                     grib_index_level="surface",
                     index_position=91,
                     keep_mantissa_bits=7,
@@ -599,7 +599,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CSNOW",
-                    grib_description='Categorical snow [0=No; 1=Yes; 2-191=Reserved; 192-254=Reserved for local use; 255=Missing]',
+                    grib_description="Categorical snow [0=No; 1=Yes; 2-191=Reserved; 192-254=Reserved for local use; 255=Missing]",
                     grib_index_level="surface",
                     index_position=90,
                     keep_mantissa_bits=7,
@@ -618,7 +618,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CFRZR",
-                    grib_description='Categorical freezing rain [0=No; 1=Yes; 2-191=Reserved; 192-254=Reserved for local use; 255=Missing]',
+                    grib_description="Categorical freezing rain [0=No; 1=Yes; 2-191=Reserved; 192-254=Reserved for local use; 255=Missing]",
                     grib_index_level="surface",
                     index_position=92,
                     keep_mantissa_bits=7,
@@ -637,7 +637,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CRAIN",
-                    grib_description='Categorical rain [0=No; 1=Yes; 2-191=Reserved; 192-254=Reserved for local use; 255=Missing]',
+                    grib_description="Categorical rain [0=No; 1=Yes; 2-191=Reserved; 192-254=Reserved for local use; 255=Missing]",
                     grib_index_level="surface",
                     index_position=93,
                     keep_mantissa_bits=7,
@@ -655,7 +655,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="RH",
-                    grib_description='Relative humidity [%]',
+                    grib_description="Relative humidity [%]",
                     grib_index_level="2 m above ground",
                     index_position=75,
                     keep_mantissa_bits=7,
@@ -692,7 +692,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="UGRD",
-                    grib_description='u-component of wind [m/s]',
+                    grib_description="u-component of wind [m/s]",
                     grib_index_level="80 m above ground",
                     index_position=60,
                     keep_mantissa_bits=6,
@@ -711,7 +711,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="VGRD",
-                    grib_description='v-component of wind [m/s]',
+                    grib_description="v-component of wind [m/s]",
                     grib_index_level="80 m above ground",
                     index_position=61,
                     keep_mantissa_bits=6,
