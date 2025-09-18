@@ -5,15 +5,24 @@ import xarray as xr
 from numpy.testing import assert_array_equal
 
 from reformatters.common import validation
+from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
     NoaaHrrrForecast48HourDataset,
 )
 from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+from tests.xarray_testing import assert_no_nulls
 
 
 @pytest.fixture
 def dataset() -> NoaaHrrrForecast48HourDataset:
-    return NoaaHrrrForecast48HourDataset(primary_storage_config=NOOP_STORAGE_CONFIG)
+    return NoaaHrrrForecast48HourDataset(
+        primary_storage_config=NOOP_STORAGE_CONFIG,
+        replica_storage_configs=[
+            StorageConfig(
+                base_path="s3://replica-bucket/path", format=DatasetFormat.ICECHUNK
+            )
+        ],
+    )
 
 
 @pytest.mark.slow
@@ -75,7 +84,7 @@ def test_backfill_local_and_operational_update(
     assert point_ds["downward_short_wave_radiation_flux_surface"] == 8.1875
 
     # Operational update
-    append_dim_end = pd.Timestamp("2018-07-14T00:00")  #
+    append_dim_end = pd.Timestamp("2018-07-14T00:00")
     monkeypatch.setattr(
         dataset.region_job_class,
         "_update_append_dim_end",
@@ -170,7 +179,3 @@ def test_validators(dataset: NoaaHrrrForecast48HourDataset) -> None:
     validators = tuple(dataset.validators())
     assert len(validators) == 3
     assert all(isinstance(v, validation.DataValidator) for v in validators)
-
-
-def assert_no_nulls(ds: xr.Dataset) -> None:
-    assert (ds.isnull().sum() == 0).all().to_array().all()
