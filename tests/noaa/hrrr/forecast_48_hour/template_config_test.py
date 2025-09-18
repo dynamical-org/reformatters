@@ -59,10 +59,34 @@ def test_get_template_coordinates() -> None:
     assert ds.x.dims == ("x",)
     assert ds.y.dims == ("y",)
 
+    # Check values in x and y coordinates
+    assert len(ds.x) == 1799
+    assert (ds.x.diff(dim="x") == 3000.0).all()
+    assert np.isclose(ds.x.min() - (3000 / 2), -2699020.143)
+    assert np.isclose(ds.x.max() + (3000 / 2), 2697979.857)
+    assert len(ds.y) == 1059
+    assert (ds.y.diff(dim="y") == -3000.0).all()
+    assert np.isclose(ds.y.min() - (3000 / 2), -1588806.153)
+    assert np.isclose(ds.y.max() + (3000 / 2), 1588193.847)
+
+    # Check values in our computed latitude and longitude coordinates
     assert ds.latitude.min() == 21.138123
+    assert ds.latitude.mean() == 37.15252
+    # Note the maximum latitude is in the center north of CONUS, so this
+    # max is larger than either of the upper corners latitudes.
     assert ds.latitude.max() == 52.615654
+    # latitude decreases as we go north to south
+    # and the min and max diff in the y direction should be similar
+    assert np.isclose(ds.latitude.diff(dim="y").min(), -0.02698135)
+    assert np.isclose(ds.latitude.diff(dim="y").max(), -0.0245285)
+
     assert ds.longitude.min() == -134.09547
+    assert ds.longitude.mean() == -97.50584
     assert ds.longitude.max() == -60.917194
+    # longitude increases as we go west to east
+    # and the min and max diff in the x direction should be similar
+    assert np.isclose(ds.longitude.diff(dim="x").min(), 0.02666473)
+    assert np.isclose(ds.longitude.diff(dim="x").max(), 0.04299164)
 
 
 def test_template_config_attrs() -> None:
