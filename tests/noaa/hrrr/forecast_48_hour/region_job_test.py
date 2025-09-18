@@ -12,6 +12,7 @@ from reformatters.noaa.hrrr.forecast_48_hour.region_job import (
 from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
     NoaaHrrrForecast48HourTemplateConfig,
 )
+from reformatters.noaa.noaa_utils import has_hour_0_values
 
 
 @pytest.fixture
@@ -110,11 +111,11 @@ def test_region_job_source_groups() -> None:
     # Test source grouping with available sfc variables
     groups = NoaaHrrrForecast48HourRegionJob.source_groups(sfc_vars)
 
-    # All variables should be in one group since they're all from the same file type
-    assert len(groups) == 1
-    assert len(groups[0]) == len(
-        sfc_vars
-    )  # Should equal the number of sfc vars available
+    # Two groups expected: those with hour 0 values and those without
+    assert len(groups) == 2
+    for group in groups:
+        assert len({v.internal_attrs.hrrr_file_type for v in group}) == 1
+        assert len({has_hour_0_values(v) for v in group}) == 1
 
 
 def test_region_job_source_groups_multiple_file_types() -> None:
@@ -238,6 +239,7 @@ def test_region_job_48h_forecasts() -> None:
     )
 
     processing_region_ds, output_region_ds = region_job._get_region_datasets()
+    assert processing_region_ds.equals(output_region_ds)
 
     source_coords = region_job.generate_source_file_coords(
         processing_region_ds, template_config.data_vars[:1]
@@ -335,12 +337,17 @@ def test_region_job_read_data(monkeypatch: pytest.MonkeyPatch) -> None:
         reformat_job_name="test",
     )
 
-    # Mock the read_hrrr_data function to return test data
+    rasterio_reader = Mock()
+    rasterio_reader.__enter__ = Mock(return_value=rasterio_reader)
+    rasterio_reader.__exit__ = Mock(return_value=False)
+    rasterio_reader.count = 1
+    rasterio_reader.descriptions = ['0[-] EATM="Entire Atmosphere"']
+    rasterio_reader.tags = Mock(return_value={"GRIB_ELEMENT": "REFC"})
     test_data = np.ones((1799, 1059), dtype=np.float32) * 42.0
-    mock_read = Mock(return_value=test_data)
+    rasterio_reader.read = Mock(return_value=test_data)
     monkeypatch.setattr(
-        "reformatters.noaa.hrrr.forecast_48_hour.region_job.read_hrrr_data",
-        mock_read,
+        "reformatters.noaa.hrrr.forecast_48_hour.region_job.rasterio.open",
+        Mock(return_value=rasterio_reader),
     )
 
     result = region_job.read_data(coord, template_config.data_vars[0])
@@ -350,7 +357,4 @@ def test_region_job_read_data(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.shape == (1799, 1059)  # HRRR CONUS grid dimensions
     assert result.dtype == np.float32
 
-    # Verify read_hrrr_data was called correctly
-    mock_read.assert_called_once_with(
-        coord.downloaded_path, template_config.data_vars[0]
-    )
+    rasterio_reader.read.assert_called_once_with(1, out_dtype=np.float32)

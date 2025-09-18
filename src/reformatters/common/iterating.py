@@ -1,8 +1,8 @@
 import hashlib
 from collections import deque
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from itertools import islice, pairwise, product, starmap
-from typing import Literal
+from typing import Any, Literal
 
 import xarray as xr
 
@@ -79,3 +79,16 @@ def digest(data: Iterable[str], length: int = 8) -> str:
     for string in data:
         message.update(string.encode())
     return message.hexdigest()[:length]
+
+
+def group_by[T](
+    items: Iterable[T], key_func: Callable[[T], Any]
+) -> Sequence[Sequence[T]]:
+    """Group items by a key function."""
+    groups: dict[Any, list[T]] = {}
+    for item in items:
+        key = key_func(item)
+        if key not in groups:
+            groups[key] = []
+        groups[key].append(item)
+    return tuple(groups.values())

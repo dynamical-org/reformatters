@@ -1,13 +1,14 @@
 from collections.abc import Callable, Mapping, Sequence
-from itertools import groupby
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 import zarr
 
 from reformatters.common.download import http_download_to_disk
-from reformatters.common.iterating import digest, item
+from reformatters.common.iterating import digest, group_by, item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
@@ -27,9 +28,6 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
     HRRRDataVar,
     HRRRDomain,
     HRRRFileType,
-)
-from reformatters.noaa.hrrr.read_data import (
-    read_hrrr_data,
 )
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 from reformatters.noaa.noaa_utils import has_hour_0_values
@@ -77,15 +75,8 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
         cls,
         data_vars: Sequence[HRRRDataVar],
     ) -> Sequence[Sequence[HRRRDataVar]]:
-        """Group variables by HRRR file type, since each file type comes from a separate source file."""
-        # Sort by file type first, then group
-        sorted_vars = sorted(data_vars, key=lambda v: v.internal_attrs.hrrr_file_type)
-        return tuple(
-            tuple(vars_iter)
-            for _, vars_iter in groupby(
-                sorted_vars,
-                key=lambda v: (has_hour_0_values(v), v.internal_attrs.hrrr_file_type),
-            )
+        return group_by(
+            data_vars, lambda v: (v.internal_attrs.hrrr_file_type, has_hour_0_values(v))
         )
 
     @classmethod
@@ -106,7 +97,7 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
         # HRRR provides forecasts every hour, but 48-hour forecasts are only available
         # every 6 hours (00, 06, 12, 18 UTC)
 
-        existing_ds = xr.open_zarr(primary_store)
+        existing_ds = xr.open_zarr(primary_store, chunks=None, decode_timedelta=True)
         append_dim_start = cls._update_append_dim_start(existing_ds)
 
         append_dim_end = cls._update_append_dim_end()
@@ -120,6 +111,7 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
             all_data_vars=all_data_vars,
             reformat_job_name=reformat_job_name,
             filter_start=append_dim_start,
+            filter_end=append_dim_end,
         )
         return jobs, template_ds
 
@@ -175,7 +167,32 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
     ) -> ArrayFloat32:
         """Read data from a HRRR file for a specific variable."""
         assert coord.downloaded_path is not None  # for type check, system guarantees it
-        return read_hrrr_data(coord.downloaded_path, data_var)
+        grib_description = data_var.internal_attrs.grib_description
+
+        grib_element = data_var.internal_attrs.grib_element
+        # grib element has the accumulation window as a suffix in the grib file attributes, but not in the .idx file
+        if (reset_freq := data_var.internal_attrs.window_reset_frequency) is not None:
+            grib_element = f"{grib_element}{whole_hours(reset_freq):02d}"
+
+        with rasterio.open(coord.downloaded_path) as reader:
+            matching_bands = [
+                rasterio_band_i
+                for band_i in range(reader.count)
+                if reader.descriptions[band_i] == grib_description
+                and reader.tags(rasterio_band_i := band_i + 1)["GRIB_ELEMENT"]
+                == grib_element
+            ]
+
+            assert len(matching_bands) == 1, (
+                f"Expected exactly 1 matching band, found {len(matching_bands)}: {matching_bands}. "
+                f"{grib_element=}, {grib_description=}, {coord.downloaded_path=}"
+            )
+            rasterio_band_index = item(matching_bands)
+
+            result: ArrayFloat32 = reader.read(
+                rasterio_band_index, out_dtype=np.float32
+            )
+            return result
 
     @classmethod
     def _update_append_dim_end(cls) -> pd.Timestamp:
@@ -186,4 +203,4 @@ class NoaaHrrrForecast48HourRegionJob(RegionJob[HRRRDataVar, HRRRSourceFileCoord
     def _update_append_dim_start(cls, existing_ds: xr.Dataset) -> pd.Timestamp:
         """Get the start time for operational updates based on existing data."""
         ds_max_time = existing_ds["init_time"].max().item()
-        return pd.Timestamp(ds_max_time) - pd.Timedelta(hours=6)
+        return pd.Timestamp(ds_max_time)

@@ -59,6 +59,11 @@ def test_get_template_coordinates() -> None:
     assert ds.x.dims == ("x",)
     assert ds.y.dims == ("y",)
 
+    assert ds.latitude.min() == 21.138123
+    assert ds.latitude.max() == 52.615654
+    assert ds.longitude.min() == -134.09547
+    assert ds.longitude.max() == -60.917194
+
 
 def test_template_config_attrs() -> None:
     """Test basic template configuration attributes."""

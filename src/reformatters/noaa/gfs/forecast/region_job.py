@@ -1,5 +1,4 @@
 import warnings
-from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from itertools import product
 from pathlib import Path
@@ -15,7 +14,7 @@ from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import (
     http_download_to_disk,
 )
-from reformatters.common.iterating import digest, item
+from reformatters.common.iterating import digest, group_by, item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
@@ -62,17 +61,8 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         cls,
         data_vars: Sequence[NoaaDataVar],
     ) -> Sequence[Sequence[NoaaDataVar]]:
-        """
-        Return groups of variables, where all variables in a group can be retrieived from the same source file.
-
-        By separating variables that have hour 0 values from those that don't here,
-        generate_source_file coords can skip attempting to download hour 0 data,
-        reducing error log noise.
-        """
-        grouped = defaultdict(list)
-        for data_var in data_vars:
-            grouped[has_hour_0_values(data_var)].append(data_var)
-        return list(grouped.values())
+        """Return groups of variables that can be downloaded from the same source file."""
+        return group_by(data_vars, has_hour_0_values)
 
     def generate_source_file_coords(
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[NoaaDataVar]

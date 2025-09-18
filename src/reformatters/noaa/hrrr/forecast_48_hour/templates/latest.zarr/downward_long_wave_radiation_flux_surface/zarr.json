@@ -68,9 +68,9 @@
     }
   ],
   "attributes": {
-    "long_name": "Composite reflectivity",
-    "short_name": "refc",
-    "units": "dBZ",
+    "long_name": "Surface downward long-wave radiation flux",
+    "short_name": "sdlwrf",
+    "units": "W/(m^2)",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude valid_time",
     "_FillValue": "AAAAAAAA+H8="
