@@ -13,6 +13,11 @@ from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 from tests.xarray_testing import assert_no_nulls
 
 
+@pytest.fixture
+def dataset() -> NoaaHrrrForecast48HourDataset:
+    return make_dataset()
+
+
 def make_dataset() -> NoaaHrrrForecast48HourDataset:
     return NoaaHrrrForecast48HourDataset(
         primary_storage_config=NOOP_STORAGE_CONFIG,
@@ -26,6 +31,7 @@ def make_dataset() -> NoaaHrrrForecast48HourDataset:
 
 @pytest.mark.slow
 def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Create our first dataset, we'll use a different instance for the backfill and the update
     dataset = make_dataset()
     # Trim to first few hours of lead time dimension to speed up test
     orig_get_template = dataset.template_config.get_template
