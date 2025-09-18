@@ -5,9 +5,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from reformatters.common import template_utils
+from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.noaa.hrrr.forecast_48_hour.region_job import (
-    HRRRSourceFileCoord,
     NoaaHrrrForecast48HourRegionJob,
+    NoaaHrrrSourceFileCoord,
 )
 from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
     NoaaHrrrForecast48HourTemplateConfig,
@@ -24,7 +26,7 @@ def test_source_file_coord_get_url(
     template_config: NoaaHrrrForecast48HourTemplateConfig,
 ) -> None:
     """Test URL generation for HRRR source file coordinates."""
-    coord = HRRRSourceFileCoord(
+    coord = NoaaHrrrSourceFileCoord(
         init_time=pd.Timestamp("2024-02-29T00:00"),
         lead_time=pd.Timedelta(hours=0),
         domain="conus",
@@ -39,7 +41,7 @@ def test_source_file_coord_get_url_different_lead_time(
     template_config: NoaaHrrrForecast48HourTemplateConfig,
 ) -> None:
     """Test URL generation for different lead times."""
-    coord = HRRRSourceFileCoord(
+    coord = NoaaHrrrSourceFileCoord(
         init_time=pd.Timestamp("2024-02-29T12:00"),
         lead_time=pd.Timedelta(hours=24),
         domain="conus",
@@ -54,7 +56,7 @@ def test_source_file_coord_get_idx_url(
     template_config: NoaaHrrrForecast48HourTemplateConfig,
 ) -> None:
     """Test index URL generation."""
-    coord = HRRRSourceFileCoord(
+    coord = NoaaHrrrSourceFileCoord(
         init_time=pd.Timestamp("2024-02-29T06:00"),
         lead_time=pd.Timedelta(hours=6),
         domain="conus",
@@ -69,7 +71,7 @@ def test_source_file_coord_out_loc(
     template_config: NoaaHrrrForecast48HourTemplateConfig,
 ) -> None:
     """Test output location mapping."""
-    coord = HRRRSourceFileCoord(
+    coord = NoaaHrrrSourceFileCoord(
         init_time=pd.Timestamp("2024-02-29T00:00"),
         lead_time=pd.Timedelta(hours=12),
         domain="conus",
@@ -88,7 +90,7 @@ def test_source_file_coord_invalid_lead_time(
     template_config: NoaaHrrrForecast48HourTemplateConfig,
 ) -> None:
     """Test that invalid lead times raise appropriate errors."""
-    coord = HRRRSourceFileCoord(
+    coord = NoaaHrrrSourceFileCoord(
         init_time=pd.Timestamp("2024-02-29T00:00"),
         lead_time=pd.Timedelta(minutes=30),  # 0.5 hours - not a whole hour
         domain="conus",
@@ -103,13 +105,9 @@ def test_source_file_coord_invalid_lead_time(
 def test_region_job_source_groups() -> None:
     """Test that data variables are grouped by file type."""
     template_config = NoaaHrrrForecast48HourTemplateConfig()
-    data_vars = template_config.data_vars
-
-    # Get variables from different file types
-    sfc_vars = [v for v in data_vars if v.internal_attrs.hrrr_file_type == "sfc"]
 
     # Test source grouping with available sfc variables
-    groups = NoaaHrrrForecast48HourRegionJob.source_groups(sfc_vars)
+    groups = NoaaHrrrForecast48HourRegionJob.source_groups(template_config.data_vars)
 
     # Two groups expected: those with hour 0 values and those without
     assert len(groups) == 2
@@ -163,8 +161,9 @@ def test_region_job_generate_source_file_coords() -> None:
     )
 
     processing_region_ds, output_region_ds = region_job._get_region_datasets()
+    assert processing_region_ds.equals(output_region_ds)
 
-    # Test with a single data variable group
+    # Test with a single data variable
     source_coords = region_job.generate_source_file_coords(
         processing_region_ds, template_config.data_vars[:1]
     )
@@ -175,7 +174,7 @@ def test_region_job_generate_source_file_coords() -> None:
 
     # Check that all coordinates are HRRRSourceFileCoord instances
     for coord in source_coords:
-        assert isinstance(coord, HRRRSourceFileCoord)
+        assert isinstance(coord, NoaaHrrrSourceFileCoord)
         assert coord.domain == "conus"
         assert (
             coord.file_type
@@ -215,7 +214,7 @@ def test_region_job_generate_source_file_coords_filters_hour_0() -> None:
 
     # All coordinates should be valid
     for coord in source_coords:
-        assert isinstance(coord, HRRRSourceFileCoord)
+        assert isinstance(coord, NoaaHrrrSourceFileCoord)
 
 
 def test_region_job_48h_forecasts() -> None:
@@ -250,7 +249,7 @@ def test_region_job_48h_forecasts() -> None:
 
     # All coordinates should be valid HRRRSourceFileCoord instances
     for coord in source_coords:
-        assert isinstance(coord, HRRRSourceFileCoord)
+        assert isinstance(coord, NoaaHrrrSourceFileCoord)
         assert coord.domain == "conus"  # Always CONUS for this dataset
         # Lead time should be <= 48h (dataset maximum)
         assert coord.lead_time <= pd.Timedelta("48h")
@@ -260,7 +259,7 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test HRRR file download with mocked network calls."""
     template_config = NoaaHrrrForecast48HourTemplateConfig()
 
-    coord = HRRRSourceFileCoord(
+    coord = NoaaHrrrSourceFileCoord(
         init_time=pd.Timestamp("2024-02-29T00:00"),
         lead_time=pd.Timedelta(hours=0),
         domain="conus",
@@ -319,7 +318,7 @@ def test_region_job_read_data(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test HRRR data reading with mocked file operations."""
     template_config = NoaaHrrrForecast48HourTemplateConfig()
 
-    coord = HRRRSourceFileCoord(
+    coord = NoaaHrrrSourceFileCoord(
         init_time=pd.Timestamp("2024-02-29T00:00"),
         lead_time=pd.Timedelta(hours=0),
         domain="conus",
@@ -358,3 +357,46 @@ def test_region_job_read_data(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.dtype == np.float32
 
     rasterio_reader.read.assert_called_once_with(1, out_dtype=np.float32)
+
+
+def test_operational_update_jobs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    template_config = NoaaHrrrForecast48HourTemplateConfig()
+    store_factory = StoreFactory(
+        primary_storage_config=StorageConfig(
+            base_path="fake-prod-path",
+            format=DatasetFormat.ZARR3,
+        ),
+        dataset_id="test-dataset-A",
+        template_config_version="test-version",
+    )
+
+    # Set the append_dim_end for the update
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2022-01-01T12:34")),
+    )
+    # Set the append_dim_start for the update
+    # Use a template_ds as a lightweight way to create a mock dataset with a known max append dim coordinate
+    existing_ds = template_config.get_template(
+        pd.Timestamp("2022-01-01T06:01")  # 06 will be max existing init time
+    )
+    template_utils.write_metadata(existing_ds, store_factory)
+
+    jobs, template_ds = NoaaHrrrForecast48HourRegionJob.operational_update_jobs(
+        primary_store=store_factory.primary_store(),
+        tmp_store=tmp_path / "tmp_ds.zarr",
+        get_template_fn=template_config.get_template,
+        append_dim=template_config.append_dim,
+        all_data_vars=template_config.data_vars,
+        reformat_job_name="test_job",
+    )
+
+    assert template_ds.init_time.max() == pd.Timestamp("2022-01-01T12:00")
+
+    assert len(jobs) == 2  # 06 and 12 UTC init times
+    for job in jobs:
+        assert isinstance(job, NoaaHrrrForecast48HourRegionJob)
+        assert job.data_vars == template_config.data_vars

@@ -19,10 +19,10 @@ def check_data_is_current(ds: xr.Dataset) -> validation.ValidationResult:
 
     hours_since_latest = (now - latest_init_time).total_seconds() / 3600
 
-    if hours_since_latest > 24:
+    if hours_since_latest > 7:
         return validation.ValidationResult(
             passed=False,
-            message=f"Latest init_time is {hours_since_latest:.1f} hours old (more than 24 hours)",
+            message=f"Latest init_time is {hours_since_latest:.1f} hours old (more than 7 hours)",
         )
 
     return validation.ValidationResult(
@@ -100,8 +100,7 @@ def check_spatial_coverage(ds: xr.Dataset) -> validation.ValidationResult:
         nan_percentage = da.isnull().mean().compute().item() * 100
 
         # HRRR over CONUS should have very few NaN values
-        # Allow up to 5% for coastal/boundary effects
-        if nan_percentage > 5.0:
+        if nan_percentage > 0.5:
             problems.append(f"{var_name}: {nan_percentage:.1f}% NaN values")
 
     if problems:

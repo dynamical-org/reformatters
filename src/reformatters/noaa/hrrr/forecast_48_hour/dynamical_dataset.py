@@ -8,11 +8,11 @@ from reformatters.common.kubernetes import (  # noqa: F401
     ReformatCronJob,
     ValidationCronJob,
 )
-from reformatters.noaa.hrrr.hrrr_config_models import HRRRDataVar
+from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 
 from .region_job import (
-    HRRRSourceFileCoord,
     NoaaHrrrForecast48HourRegionJob,
+    NoaaHrrrSourceFileCoord,
 )
 from .template_config import NoaaHrrrForecast48HourTemplateConfig
 from .validators import (
@@ -22,7 +22,9 @@ from .validators import (
 )
 
 
-class NoaaHrrrForecast48HourDataset(DynamicalDataset[HRRRDataVar, HRRRSourceFileCoord]):
+class NoaaHrrrForecast48HourDataset(
+    DynamicalDataset[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]
+):
     """DynamicalDataset implementation for NOAA HRRR 48-hour forecast data."""
 
     template_config: NoaaHrrrForecast48HourTemplateConfig = (

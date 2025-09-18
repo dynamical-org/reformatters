@@ -8,7 +8,7 @@ import xarray as xr
 
 from reformatters.common.download import http_download_to_disk
 from reformatters.noaa.hrrr.forecast_48_hour.region_job import (
-    HRRRSourceFileCoord,
+    NoaaHrrrSourceFileCoord,
 )
 from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
     NoaaHrrrForecast48HourTemplateConfig,
@@ -40,7 +40,7 @@ def test_update_template(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Non
     assert existing_template == updated_template
 
 
-def test_get_template_coordinates() -> None:
+def test_spatial_coordinates() -> None:
     """Ensure the template has the expected coordinate system."""
     template_config = NoaaHrrrForecast48HourTemplateConfig()
     ds = template_config.get_template(
@@ -123,6 +123,12 @@ def test_dimension_coordinates() -> None:
     assert "x" in dim_coords
     assert "y" in dim_coords
 
+    # Check init time
+    assert (
+        dim_coords["init_time"]
+        == pd.date_range("2018-07-13T12:00", "2018-07-13T12:00", freq="6h")
+    ).all()
+
     # Check lead_time goes from 0 to 48 hours
     lead_times = dim_coords["lead_time"]
     assert lead_times[0] == pd.Timedelta("0h")
@@ -202,7 +208,7 @@ def test_spatial_info_matches_file() -> None:
     config = NoaaHrrrForecast48HourTemplateConfig()
     shape, bounds, resolution, crs = config._spatial_info()
 
-    coord = HRRRSourceFileCoord(
+    coord = NoaaHrrrSourceFileCoord(
         init_time=pd.Timestamp("2023-10-01T00:00"),
         lead_time=pd.Timedelta("0h"),
         domain="conus",
