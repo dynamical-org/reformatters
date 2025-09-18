@@ -17,7 +17,7 @@ from reformatters.common.config_models import (
     StatisticsApproximate,  # noqa: F401
 )
 from reformatters.common.template_config import (
-    SPATIAL_REF_COORDS,  # noqa: F401
+    SPATIAL_REF_COORDS,
     TemplateConfig,
 )
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
@@ -46,44 +46,46 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
 ):
     dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
     append_dim: AppendDim = "init_time"
-    append_dim_start: Timestamp = pd.Timestamp("2020-01-01T00:00")
-    append_dim_frequency: Timedelta = pd.Timedelta("6h")
+    # forecasts available from same s3 bucket since 2023-01-18, but only with 0.4deg resolution from dataset start through 2024-01-31.
+    append_dim_start: Timestamp = pd.Timestamp("2024-02-01T00:00")
+    # starting with just 0z forecasts for now. 12z also available with same forecast length; 6 & 18z also available with 144hr max lead time.
+    append_dim_frequency: Timedelta = pd.Timedelta("24h")
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def dataset_attributes(self) -> DatasetAttributes:
-        # return DatasetAttributes(
-        #     dataset_id="producer-model-variant",
-        #     dataset_version="0.1.0",
-        #     name="Producer Model Variant",
-        #     description="Weather data from the Model operated by Producer.",
-        #     attribution="Producer Model Variant data processed by dynamical.org from Producer Model.",
-        #     spatial_domain="Global",
-        #     spatial_resolution="0.25 degrees (~20km)",
-        #     time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
-        #     time_resolution=f"Forecasts initialized every {self.append_dim_frequency.total_seconds() / 3600:.0f} hours",
-        #     forecast_domain="Forecast lead time 0-384 hours (0-16 days) ahead",
-        #     forecast_resolution="Forecast step 0-120 hours: hourly, 123-384 hours: 3 hourly",
-        # )
-        raise NotImplementedError("Subclasses implement `dataset_attributes`")
+        return DatasetAttributes(
+            dataset_id="ecmwf-ifs-ens-forecast-15-day-0-25-degree",
+            dataset_version="0.1.0",
+            name="ECMWF IFS Ensemble (ENS) Forecast, 15 day, 0.25 degree",
+            description="Ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS) - 15 day forecasts, 0.25 degree resolution.",
+            attribution="ECMWF IFS Ensemble Forecast data processed by dynamical.org from ECMWF Open Data.",  # TODO correct all this
+            spatial_domain="Global",
+            spatial_resolution="0.25 degrees (~20km)",
+            time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
+            time_resolution=f"Forecasts initialized every {self.append_dim_frequency.total_seconds() / 3600:.0f} hours",
+            forecast_domain="Forecast lead time 0-360 hours (0-15 days) ahead",
+            forecast_resolution="Forecast step 0-144 hours: 3 hourly, 145-360 hours: 6 hourly",
+        )
 
     def dimension_coordinates(self) -> dict[str, Any]:
         """
         Returns a dictionary of dimension names to coordinates for the dataset.
         """
-        # return {
-        #     self.append_dim: self.append_dim_coordinates(
-        #         self.append_dim_start + self.append_dim_frequency
-        #     ),
-        #     "lead_time": (
-        #         pd.timedelta_range("0h", "120h", freq="1h").union(
-        #             pd.timedelta_range("123h", "384h", freq="3h")
-        #         )
-        #     ),
-        #     "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
-        #     "longitude": np.arange(-180, 180, 0.25),
-        # }
-        raise NotImplementedError("Subclasses implement `dimension_coordinates`")
+        return {
+            self.append_dim: self.append_dim_coordinates(
+                self.append_dim_start + self.append_dim_frequency
+            ),
+            "lead_time": (
+                pd.timedelta_range("0h", "144h", freq="3h").union(
+                    pd.timedelta_range("145h", "360h", freq="6h")
+                )
+            ),
+            "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
+            "longitude": np.arange(
+                -180, 180, 0.25
+            ),  # TODO: does ECMWF use -180 to 180 or 0 to 360
+        }
 
     def derive_coordinates(
         self, ds: xr.Dataset
@@ -95,15 +97,22 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
         # Non-dimension coordinates are additional labels for data along
         # one or more dimensions. Use them to make it easier to use and
         # understand your dataset.
-        # return {
-        #     "valid_time": ds["init_time"] + ds["lead_time"],
-        #     "ingested_forecast_length": (
-        #         (self.append_dim,),
-        #         np.full(ds[self.append_dim].size, np.timedelta64("NaT", "ns")),
-        #     ),
-        #     "spatial_ref": SPATIAL_REF_COORDS,
-        # }
-        raise NotImplementedError("Subclasses implement `derive_coordinates`")
+        return {
+            "valid_time": ds["init_time"] + ds["lead_time"],
+            "ingested_forecast_length": (
+                (self.append_dim,),
+                np.full(ds[self.append_dim].size, np.timedelta64("NaT", "ns")),
+            ),
+            "expected_forecast_length": (
+                (self.append_dim,),
+                np.full(
+                    ds[self.append_dim].size,
+                    ds["lead_time"].max(),
+                    dtype="timedelta64[ns]",
+                ),
+            ),
+            "spatial_ref": SPATIAL_REF_COORDS,  # TODO what should this be? seems wrong but other template_configs use it?
+        }
 
     @computed_field  # type: ignore[prop-decorator]
     @property
