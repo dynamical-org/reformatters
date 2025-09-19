@@ -1,9 +1,9 @@
 from collections.abc import Iterable, Sequence
-from datetime import timedelta  # noqa: F401
+from datetime import timedelta
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import (  # noqa: F401
+from reformatters.common.kubernetes import (
     CronJob,
     ReformatCronJob,
     ValidationCronJob,
@@ -34,45 +34,41 @@ class NoaaHrrrForecast48HourDataset(
         NoaaHrrrForecast48HourRegionJob
     )
 
+    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
+        """Define Kubernetes cron jobs for operational updates and validation."""
+        # Update every 6 hours at 1h50m after the init time when all steps are available
+        # We pull the 0, 6, 12, and 18 init times in this dataset
+        # First file typically becomes available at 51 mins and 48th hour at 1h47m
+        operational_update_cron_job = ReformatCronJob(
+            name=f"{self.dataset_id}-operational-update",
+            schedule="50 1,7,13,19 * * *",
+            pod_active_deadline=timedelta(hours=30),
+            image=image_tag,
+            dataset_id=self.dataset_id,
+            cpu="3",
+            memory="14",
+            shared_memory="400M",
+            ephemeral_storage="30G",
+            secret_names=self.store_factory.k8s_secret_names(),
+        )
+
+        # Validation job - run 1 hour after operational update
+        validation_cron_job = ValidationCronJob(
+            name=f"{self.dataset_id}-validation",
+            schedule="30 2,8,14,20 * * *",
+            pod_active_deadline=timedelta(minutes=10),
+            image=image_tag,
+            dataset_id=self.dataset_id,
+            cpu="2",
+            memory="8G",
+            secret_names=self.store_factory.k8s_secret_names(),
+        )
+
+        return [operational_update_cron_job, validation_cron_job]
+
     def validators(self) -> Sequence[validation.DataValidator]:
-        """Return validation functions for HRRR forecast data quality checks."""
         return (
             check_data_is_current,
             check_forecast_completeness,
             check_spatial_coverage,
         )
-
-    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
-        """Define Kubernetes cron jobs for operational updates and validation."""
-
-        raise NotImplementedError("Disabled until we deploy operationally.")
-
-        # # HRRR operational update job
-        # # Run every 6 hours at :30 to catch new 48-hour forecasts (00, 06, 12, 18 UTC)
-        # # HRRR data typically becomes available ~30-45 minutes after init time (TODO confim)
-        # operational_update_cron_job = ReformatCronJob(
-        #     name=f"{self.dataset_id}-operational-update",
-        #     schedule="30 0,6,12,18 * * *",  # Every 6 hours at :30 minutes
-        #     pod_active_deadline=timedelta(hours=30),
-        #     image=image_tag,
-        #     dataset_id=self.dataset_id,
-        #     cpu="3",
-        #     memory="14",
-        #     shared_memory="1G",
-        #     ephemeral_storage="30G",
-        #     secret_names=self.store_factory.k8s_secret_names(),
-        # )
-
-        # # Validation job - run 1 hour after operational update
-        # validation_cron_job = ValidationCronJob(
-        #     name=f"{self.dataset_id}-validation",
-        #     schedule="30 1,7,13,19 * * *",  # 1 hour after operational updates
-        #     pod_active_deadline=timedelta(minutes=10),
-        #     image=image_tag,
-        #     dataset_id=self.dataset_id,
-        #     cpu="2",
-        #     memory="8G",
-        #     secret_names=self.store_factory.k8s_secret_names(),
-        # )
-
-        # return [operational_update_cron_job, validation_cron_job]
