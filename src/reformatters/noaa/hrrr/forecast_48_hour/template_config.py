@@ -543,7 +543,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CPOFP",
-                    grib_description="Percent frozen precipitation [%]",
+                    grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
                     index_position=82,
                     keep_mantissa_bits=default_keep_mantissa_bits,
@@ -579,7 +579,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CICEP",
-                    grib_description="Categorical ice pellets [0=No; 1=Yes; 2-191=Reserved; 192-254=Reserved for local use; 255=Missing]",
+                    grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
                     index_position=91,
                     keep_mantissa_bits="no-rounding",
@@ -597,7 +597,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CSNOW",
-                    grib_description="Categorical snow [0=No; 1=Yes; 2-191=Reserved; 192-254=Reserved for local use; 255=Missing]",
+                    grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
                     index_position=90,
                     keep_mantissa_bits="no-rounding",
@@ -615,7 +615,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CFRZR",
-                    grib_description="Categorical freezing rain [0=No; 1=Yes; 2-191=Reserved; 192-254=Reserved for local use; 255=Missing]",
+                    grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
                     index_position=92,
                     keep_mantissa_bits="no-rounding",
@@ -633,7 +633,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CRAIN",
-                    grib_description="Categorical rain [0=No; 1=Yes; 2-191=Reserved; 192-254=Reserved for local use; 255=Missing]",
+                    grib_description='0[-] SFC="Ground or water surface"',
                     grib_index_level="surface",
                     index_position=93,
                     keep_mantissa_bits="no-rounding",
@@ -651,7 +651,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="RH",
-                    grib_description="Relative humidity [%]",
+                    grib_description='2[m] HTGL="Specified height level above ground"',
                     grib_index_level="2 m above ground",
                     index_position=75,
                     keep_mantissa_bits=default_keep_mantissa_bits,
@@ -669,7 +669,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="HGT",
-                    grib_description="Geopotential height (cloud ceiling)",
+                    grib_description='0[-] CEIL="Cloud ceiling"',
                     grib_index_level="cloud ceiling",
                     index_position=117,
                     keep_mantissa_bits=8,
