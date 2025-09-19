@@ -32,14 +32,29 @@ def align_reference_spatially(ds: xr.Dataset, reference_ds: xr.Dataset) -> xr.Da
     )
 
 
-def align_to_random_valid_time(
-    ds: xr.Dataset, reference_ds: xr.Dataset
+def align_to_valid_time(
+    ds: xr.Dataset,
+    reference_ds: xr.Dataset,
+    init_time: str | None,
+    lead_time: str | None,
 ) -> tuple[xr.Dataset, xr.Dataset]:
+    selected_init_time: pd.Timestamp
+    selected_lead_time: pd.Timedelta
+
+    if init_time is None:
+        selected_init_time = pd.Timestamp(np.random.choice(ds.init_time, 1)[0])
+    else:
+        selected_init_time = pd.Timestamp(init_time)
+
+    if lead_time is None:
+        selected_lead_time = pd.Timedelta(np.random.choice(ds.lead_time, 1)[0])
+    else:
+        selected_lead_time = pd.Timedelta(lead_time)
+
     ds = ds.sel(
-        init_time=np.random.choice(ds.init_time, 1),
-        lead_time=np.random.choice(ds.lead_time, 1),
+        init_time=selected_init_time,
+        lead_time=selected_lead_time,
     )
-    ds = ds.squeeze(["init_time", "lead_time"])
 
     valid_time = pd.Timestamp(ds.valid_time.item())
 
@@ -63,6 +78,8 @@ def create_comparison_plot(
     reference_ds: xr.Dataset,
     variables: list[str],
     ensemble_member: int | None = None,
+    init_time: str | None = None,
+    lead_time: str | None = None,
 ) -> None:
     """Create comparison plot matching the example image format"""
 
@@ -70,7 +87,12 @@ def create_comparison_plot(
     plt.figure(figsize=(15, 3 * n_vars))
 
     for i, var in enumerate(variables):
-        ds, ref_ds = align_to_random_valid_time(validation_ds, reference_ds)
+        ds, ref_ds = align_to_valid_time(
+            validation_ds,
+            reference_ds,
+            init_time,
+            lead_time,
+        )
 
         # Get validation data array
         data = ds[var].load()
@@ -87,7 +109,9 @@ def create_comparison_plot(
             vmax = float(data.max())
 
         # Dataset titles with timestamps
-        ds_time = pd.Timestamp(ds.valid_time.item()).strftime("%Y-%m-%dT%H:%M")
+        ds_init_time = pd.Timestamp(ds.init_time.item()).strftime("%Y-%m-%dT%H:%M")
+        ds_lead_time = pd.Timestamp(ds.lead_time.item()).strftime("%H:%M")
+        ds_time = f"{ds_init_time}+{ds_lead_time}"
         ref_time = pd.Timestamp(ref_ds.time.item()).strftime("%Y-%m-%dT%H:%M")
 
         if var_in_reference:
@@ -274,6 +298,8 @@ def compare(
     reference_url: str | None = GEFS_ANALYSIS_URL,
     variables: list[str] | None = variables_option,
     show_plot: bool = False,
+    init_time: str | None = None,
+    lead_time: str | None = None,
 ) -> None:
     """Create comparison plots between two zarr datasets."""
 
@@ -316,6 +342,8 @@ def compare(
         spatially_aligned_reference_ds,
         selected_vars,
         ensemble_member,
+        init_time,
+        lead_time,
     )
 
     if show_plot:
