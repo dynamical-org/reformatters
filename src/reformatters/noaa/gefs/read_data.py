@@ -1,10 +1,6 @@
-import hashlib
 import os
-import re
 import warnings
-from collections.abc import Iterable, Sequence
-from pathlib import Path
-from typing import Any, Final, Literal, TypedDict, assert_never
+from typing import Literal, assert_never
 
 import numpy as np
 import pandas as pd
@@ -12,291 +8,14 @@ import rasterio  # type: ignore
 import xarray as xr
 
 from reformatters.common.config import Config
-from reformatters.common.config_models import EnsembleStatistic
-from reformatters.common.download import download_to_disk, http_store
-from reformatters.common.logging import get_logger
-from reformatters.common.types import Array2D
+from reformatters.common.types import Array2D, ArrayFloat32
 from reformatters.noaa.gefs.gefs_config_models import (
-    GEFS_B22_TRANSITION_DATE,
-    GEFS_S_FILE_MAX,
+    GEFS_ACCUMULATION_RESET_HOURS,
     GEFSDataVar,
-    GEFSFileType,
+    GefsSourceFileCoord,
+    get_grib_element,
+    is_v12,
 )
-from reformatters.noaa.noaa_utils import has_hour_0_values
-
-log = get_logger(__name__)
-
-FILE_RESOLUTIONS = {
-    "s": "0p25",
-    "a": "0p50",
-    "b": "0p50",
-}
-
-DOWNLOAD_DIR = Path("data/download/")
-
-
-class EnsembleSourceFileCoords(TypedDict):
-    init_time: pd.Timestamp
-    ensemble_member: int
-    lead_time: pd.Timedelta
-
-
-class StatisticSourceFileCoords(TypedDict):
-    init_time: pd.Timestamp
-    statistic: EnsembleStatistic
-    lead_time: pd.Timedelta
-
-
-type SourceFileCoords = EnsembleSourceFileCoords | StatisticSourceFileCoords
-
-
-class ChunkCoordinates(TypedDict):
-    ensemble: Sequence[EnsembleSourceFileCoords]
-    statistic: Sequence[StatisticSourceFileCoords]
-
-
-# We pull data from three different periods of GEFS.
-#
-# 1. The current configuration archive, which is 0.25 degree data from 2020-09-23T12 the present.
-# 2. The pre GEFS v12 archive, which is 1.0 degree data that we use from 2020-01-01T00 to 2020-09-23T06.
-# 3. The GEFS v12 retrospective (reforecast) archive, which is 0.25 degree data from 2000-01-01T03 to 2019-12-31T21.
-#
-GEFS_CURRENT_ARCHIVE_START = pd.Timestamp("2020-09-23T12:00")
-GEFS_REFORECAST_END = pd.Timestamp("2020-01-01T00:00")  # exclusive end point
-GEFS_REFORECAST_START = pd.Timestamp("2000-01-01T00:00")
-
-GEFS_REFORECAST_INIT_TIME_FREQUENCY = pd.Timedelta("24h")
-GEFS_INIT_TIME_FREQUENCY: Final[pd.Timedelta] = pd.Timedelta("6h")
-
-# Accumulations are reset every 6 hours in all periods of GEFS data
-GEFS_ACCUMULATION_RESET_FREQUENCY: Final[pd.Timedelta] = pd.Timedelta("6h")
-GEFS_ACCUMULATION_RESET_HOURS: Final[int] = int(
-    GEFS_ACCUMULATION_RESET_FREQUENCY.total_seconds() / (60 * 60)
-)
-assert GEFS_ACCUMULATION_RESET_FREQUENCY == pd.Timedelta(
-    hours=GEFS_ACCUMULATION_RESET_HOURS
-)
-
-# Short names are used in the file names of the GEFS v12 reforecast
-GEFS_REFORECAST_LEVELS_SHORT = {
-    "entire atmosphere": "eatm",
-    "entire atmosphere (considered as a single layer)": "eatm",
-    "cloud ceiling": "ceiling",
-    "surface": "sfc",
-    "mean sea level": "msl",
-    "2 m above ground": "2m",
-    "10 m above ground": "hgt",
-    "100 m above ground": "hgt",
-}
-GEFS_REFORECAST_GRIB_ELEMENT_RENAME = {
-    "PRMSL": "PRES",  # In the reforecast, PRMSL is PRES with level "mean sea level"
-}
-
-
-def is_v12(init_time: pd.Timestamp) -> bool:
-    return init_time < GEFS_REFORECAST_END or GEFS_CURRENT_ARCHIVE_START <= init_time
-
-
-def is_v12_index(times: pd.DatetimeIndex) -> np.ndarray[Any, np.dtype[np.bool]]:
-    return (times < GEFS_REFORECAST_END) | (GEFS_CURRENT_ARCHIVE_START <= times)
-
-
-def download_file(
-    coords: SourceFileCoords,
-    gefs_file_type: GEFSFileType,
-    gefs_idx_data_vars: Sequence[GEFSDataVar],
-) -> tuple[SourceFileCoords, Path | None]:
-    init_time = coords["init_time"]
-    lead_time = coords["lead_time"]
-
-    lead_time_hours = lead_time.total_seconds() / (60 * 60)
-    if lead_time_hours != round(lead_time_hours):
-        raise ValueError(f"Lead time {lead_time} must be a whole number of hours")
-
-    init_date_str = init_time.strftime("%Y%m%d")
-    init_hour_str = init_time.strftime("%H")
-
-    if isinstance(ensemble_member := coords.get("ensemble_member"), int | np.integer):
-        # control (c) or perterbed (p) ensemble member
-        prefix = "c" if ensemble_member == 0 else "p"
-        ensemble_or_statistic_str = f"{prefix}{ensemble_member:02}"
-    elif isinstance(statistic := coords.get("statistic"), str):
-        ensemble_or_statistic_str = statistic
-    else:
-        raise ValueError(f"coords must be ensemble or statistic coord, found {coords}.")
-
-    # Accumulated and last N hour avg values don't exist in the 0-hour forecast.
-    if lead_time_hours == 0:
-        gefs_idx_data_vars = [
-            data_var for data_var in gefs_idx_data_vars if has_hour_0_values(data_var)
-        ]
-        if len(gefs_idx_data_vars) == 0:
-            return coords, None
-
-    true_gefs_file_type = get_gefs_file_type(init_time, lead_time, gefs_idx_data_vars)
-
-    if coords["init_time"] >= GEFS_CURRENT_ARCHIVE_START:
-        resolution_str = FILE_RESOLUTIONS[true_gefs_file_type]
-        base_path = (
-            f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2{true_gefs_file_type}{resolution_str.strip('0')}/"
-            f"ge{ensemble_or_statistic_str}.t{init_hour_str}z.pgrb2{true_gefs_file_type}.{resolution_str}.f{lead_time_hours:03.0f}"
-        )
-        store = http_store("https://noaa-gefs-pds.s3.amazonaws.com")
-    elif coords["init_time"] >= GEFS_REFORECAST_END:
-        base_path = (
-            f"gefs.{init_date_str}/{init_hour_str}/pgrb2{true_gefs_file_type}/"
-            f"ge{ensemble_or_statistic_str}.t{init_hour_str}z.pgrb2{true_gefs_file_type}f{lead_time_hours:02.0f}"
-        )
-        store = http_store("https://noaa-gefs-pds.s3.amazonaws.com")
-    else:
-        assert len(gefs_idx_data_vars) == 1, "Only one data variable per file in GEFS v12 reforecast"  # fmt: skip
-        data_var = gefs_idx_data_vars[0]
-        days_str = "Days:1-10" if lead_time <= pd.Timedelta(hours=240) else "Days:10-16"
-        grib_element = get_grib_element(data_var, init_time)
-        level_str = GEFS_REFORECAST_LEVELS_SHORT[data_var.internal_attrs.grib_index_level]  # fmt: skip
-        base_path = (
-            f"GEFSv12/reforecast/{coords['init_time'].year}/{init_date_str}{init_hour_str}/"
-            f"{ensemble_or_statistic_str}/{days_str}/"
-            f"{grib_element.lower()}_{level_str}_"
-            f"{init_date_str}{init_hour_str}_{ensemble_or_statistic_str}.grib2"
-        )
-
-        store = http_store("https://noaa-gefs-retrospective.s3.amazonaws.com/")
-
-    idx_remote_path = f"{base_path}.idx"
-    idx_local_path = Path(DOWNLOAD_DIR, f"{base_path}.idx")
-
-    # Create a unique, human debuggable suffix representing the data vars stored in the output file
-    vars_str = "-".join(
-        var_info.internal_attrs.grib_element for var_info in gefs_idx_data_vars
-    )
-    vars_hash = digest(
-        format_gefs_idx_var(var_info, init_time, lead_time_hours)
-        for var_info in gefs_idx_data_vars
-    )
-    vars_suffix = f"{lead_time_hours:03.0f}-{vars_str}-{vars_hash}"
-    local_path = Path(DOWNLOAD_DIR, f"{base_path}.{vars_suffix}")
-
-    try:
-        download_to_disk(
-            store,
-            idx_remote_path,
-            idx_local_path,
-            overwrite_existing=not Config.is_dev,
-        )
-
-        byte_range_starts, byte_range_ends = parse_index_byte_ranges(
-            idx_local_path, gefs_idx_data_vars, init_time, lead_time_hours
-        )
-
-        download_to_disk(
-            store,
-            base_path,
-            local_path,
-            overwrite_existing=not Config.is_dev,
-            byte_ranges=(byte_range_starts, byte_range_ends),
-        )
-
-        return coords, local_path
-
-    except FileNotFoundError as e:
-        # For recent files, we expect some files to not exist yet, just log the path
-        if init_time > (pd.Timestamp.now() - pd.Timedelta(hours=24)):
-            log.info(" ".join(str(e).split("\n")[:2]))
-        else:
-            log.exception("File not found")
-        return coords, None
-
-    except Exception:
-        log.exception("Download failed")
-        return coords, None
-
-
-def get_gefs_file_type(
-    init_time: pd.Timestamp, lead_time: pd.Timedelta, data_vars: Sequence[GEFSDataVar]
-) -> Literal["a", "b", "s", "reforecast"]:
-    # See `GEFSFileType` for details on the different types of files.
-
-    gefs_file_types = {data_var.internal_attrs.gefs_file_type for data_var in data_vars}
-    assert len(gefs_file_types) == 1, (
-        f"All data vars must have the same gefs file type. Received {gefs_file_types}"
-    )
-    gefs_file_type = gefs_file_types.pop()
-
-    if init_time >= GEFS_CURRENT_ARCHIVE_START:
-        if gefs_file_type == "s+a":
-            if lead_time <= GEFS_S_FILE_MAX:
-                return "s"
-            else:
-                return "a"
-        elif gefs_file_type == "s+b":
-            if lead_time <= GEFS_S_FILE_MAX:
-                return "s"
-            else:
-                return "b"
-        elif gefs_file_type == "s+b-b22":
-            if init_time >= GEFS_B22_TRANSITION_DATE:
-                if lead_time <= GEFS_S_FILE_MAX:
-                    return "s"
-                else:
-                    return "b"
-            else:
-                return "b"
-        else:
-            return gefs_file_type
-
-    elif init_time >= GEFS_REFORECAST_END:
-        match gefs_file_type:
-            case "s+a" | "a":
-                return "a"
-            case "s+b" | "s+b-b22" | "b":
-                return "b"
-            case _ as unreachable:
-                assert_never(unreachable)
-    elif init_time >= GEFS_REFORECAST_START:
-        return "reforecast"
-    else:
-        raise ValueError(f"Unexpected init time: {init_time}")
-
-
-def parse_index_byte_ranges(
-    idx_local_path: Path,
-    gefs_idx_data_vars: Sequence[GEFSDataVar],
-    init_time: pd.Timestamp,
-    lead_time_hours: float,
-) -> tuple[list[int], list[int]]:
-    with open(idx_local_path) as index_file:
-        index_contents = index_file.read()
-    byte_range_starts = []
-    byte_range_ends = []
-    for var_info in gefs_idx_data_vars:
-        var_match_str = re.escape(
-            format_gefs_idx_var(var_info, init_time, lead_time_hours)
-        )
-        regex = f"\\d+:(\\d+):.+:{var_match_str}.+(\\n\\d+:(\\d+))?"
-        matches = re.findall(regex, index_contents)
-        assert len(matches) == 1, (
-            f"Expected exactly 1 match, found {len(matches)}, {var_info.name} `{regex}` {idx_local_path} {len(index_contents)}"
-        )
-        match = matches[0]
-        start_byte = int(match[0])
-        if match[2] != "":
-            end_byte = int(match[2])
-        else:
-            # obstore does not support omitting the end byte
-            # to go all the way to the end of the file, but if
-            # you give a value off the end of the file you get
-            # the rest of the bytes in the file and no more.
-            # So we add a big number, but not too big because
-            # it has to fit in a usize in rust object store,
-            # and hope this code is never adapted to pull
-            # individual grib messages > 10 GiB.
-            # GEFS messages are ~0.5MB.
-            end_byte = start_byte + (10 * (2**30))  # +10 GiB
-
-        byte_range_starts.append(start_byte)
-        byte_range_ends.append(end_byte)
-    return byte_range_starts, byte_range_ends
 
 
 def get_hours_str(var_info: GEFSDataVar, lead_time_hours: float) -> str:
@@ -314,14 +33,6 @@ def get_hours_str(var_info: GEFSDataVar, lead_time_hours: float) -> str:
     return hours_str
 
 
-def get_grib_element(var_info: GEFSDataVar, init_time: pd.Timestamp) -> str:
-    grib_element = var_info.internal_attrs.grib_element
-    if init_time < GEFS_REFORECAST_END:
-        return GEFS_REFORECAST_GRIB_ELEMENT_RENAME.get(grib_element, grib_element)
-    else:
-        return grib_element
-
-
 def format_gefs_idx_var(
     var_info: GEFSDataVar, init_time: pd.Timestamp, lead_time_hours: float
 ) -> str:
@@ -330,28 +41,14 @@ def format_gefs_idx_var(
     return f"{grib_element}:{var_info.internal_attrs.grib_index_level}:{hours_str}"
 
 
-def digest(data: str | Iterable[str], length: int = 8) -> str:
-    """Consistent, likely collision free string digest of one or more strings."""
-    if isinstance(data, str):
-        data = [data]
-    message = hashlib.sha256()
-    for string in data:
-        message.update(string.encode())
-    return message.hexdigest()[:length]
-
-
-def read_into(
-    out: xr.DataArray,
-    coords: SourceFileCoords,
-    path: os.PathLike[str] | None,
+def read_data(
+    template: xr.Dataset,
+    coord: GefsSourceFileCoord,
     data_var: GEFSDataVar,
-) -> None:
-    if path is None:
-        return  # in rare case file is missing there's nothing to do
-
-    grib_element = get_grib_element(data_var, coords["init_time"])
+) -> ArrayFloat32:
+    grib_element = get_grib_element(data_var, coord.init_time)
     if data_var.internal_attrs.include_lead_time_suffix:
-        lead_hours = coords["lead_time"].total_seconds() / (60 * 60)
+        lead_hours = coord.lead_time.total_seconds() / (60 * 60)
         if lead_hours % GEFS_ACCUMULATION_RESET_HOURS == 0:
             grib_element += "06"
         elif lead_hours % GEFS_ACCUMULATION_RESET_HOURS == 3:
@@ -359,36 +56,17 @@ def read_into(
         else:
             raise AssertionError(f"Unexpected lead time hours: {lead_hours}")
 
-    true_gefs_file_type = get_gefs_file_type(
-        coords["init_time"], coords["lead_time"], [data_var]
+    assert coord.downloaded_path is not None
+    return read_rasterio(
+        coord.downloaded_path,
+        grib_element,
+        data_var.internal_attrs.grib_description,
+        template.rio.shape,
+        template.rio.transform(),
+        template.rio.crs,
+        coord,
+        coord.gefs_file_type,
     )
-
-    try:
-        raw_data = read_rasterio(
-            path,
-            grib_element,
-            data_var.internal_attrs.grib_description,
-            out.rio.shape,
-            out.rio.transform(),
-            out.rio.crs,
-            coords,
-            true_gefs_file_type,
-        )
-    except Exception:
-        log.exception("Read failed")
-        return
-
-    if "init_time" in out.dims:
-        assert "lead_time" in out.dims
-        out_coords = dict(coords)
-    elif "time" in out.dims:
-        # Flatten the init and lead time dimensions into a single time dimension
-        # and drop the ensemble member coordinate for our analysis dataset
-        out_coords = {"time": coords["init_time"] + coords["lead_time"]}
-    else:
-        raise ValueError(f"Unexpected dimensions: {out.dims}")
-
-    out.loc[out_coords] = raw_data
 
 
 def read_rasterio(
@@ -398,7 +76,7 @@ def read_rasterio(
     out_spatial_shape: tuple[int, int],
     out_transform: rasterio.transform.Affine,
     out_crs: rasterio.crs.CRS,
-    coords: SourceFileCoords,
+    coord: GefsSourceFileCoord,
     true_gefs_file_type: Literal["a", "b", "s", "reforecast"],
 ) -> Array2D[np.float32]:
     with warnings.catch_warnings():
@@ -441,7 +119,7 @@ def read_rasterio(
                     )
                     if not Config.is_prod:
                         # Because the pixel centers are aligned we exactly retain the source data
-                        step = 2 if is_v12(coords["init_time"]) else 4
+                        step = 2 if is_v12(coord.init_time) else 4
                         assert np.array_equal(raw, result[::step, ::step])
                     return result
                 case "s" | "reforecast":

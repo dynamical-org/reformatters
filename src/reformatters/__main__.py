@@ -14,8 +14,6 @@ import sentry_sdk
 import typer
 from sentry_sdk.integrations.typer import TyperIntegration
 
-import reformatters.noaa.gefs.analysis.cli as noaa_gefs_analysis
-import reformatters.noaa.gefs.forecast_35_day.cli as noaa_gefs_forecast_35_day
 from reformatters.common import deploy
 from reformatters.common.config import Config
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -26,6 +24,10 @@ from reformatters.contrib.noaa.ndvi_cdr.analysis import (
 from reformatters.contrib.uarizona.swann.analysis import UarizonaSwannAnalysisDataset
 from reformatters.dwd.icon_eu.forecast import DwdIconEuForecastDataset
 from reformatters.example.new_dataset import initialize_new_integration
+from reformatters.noaa.gefs.analysis.dynamical_dataset import GefsAnalysisDataset
+from reformatters.noaa.gefs.forecast_35_day.dynamical_dataset import (
+    GefsForecast35DayDataset,
+)
 from reformatters.noaa.gfs.forecast import NoaaGfsForecastDataset
 from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
     NoaaHrrrForecast48HourDataset,
@@ -82,6 +84,8 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         replica_storage_configs=[NoaaGfsAwsOpenDataDatasetStorageConfig()],
     ),
     DwdIconEuForecastDataset(primary_storage_config=SourceCoopDatasetStorageConfig()),
+    GefsAnalysisDataset(primary_storage_config=SourceCoopDatasetStorageConfig()),
+    GefsForecast35DayDataset(primary_storage_config=SourceCoopDatasetStorageConfig()),
     NoaaHrrrForecast48HourDataset(
         primary_storage_config=NoaaHrrrAwsOpenDataDatasetStorageConfig(),
         replica_storage_configs=[
@@ -108,8 +112,6 @@ if Config.is_sentry_enabled:
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
 app.command()(initialize_new_integration)
-app.add_typer(noaa_gefs_forecast_35_day.app, name=noaa_gefs_forecast_35_day.DATASET_ID)
-app.add_typer(noaa_gefs_analysis.app, name=noaa_gefs_analysis.DATASET_ID)
 
 
 for dataset in DYNAMICAL_DATASETS:

@@ -33,6 +33,7 @@ from reformatters.common.types import (
     Dim,
     Timestamp,
 )
+from reformatters.common.update_progress_tracker import UpdateProgressTracker
 from reformatters.common.zarr import copy_data_var
 
 log = get_logger(__name__)
@@ -452,6 +453,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         self,
         primary_store: zarr.abc.store.Store,
         replica_stores: list[zarr.abc.store.Store],
+        *,
+        progress_tracker: UpdateProgressTracker | None = None,
     ) -> Mapping[str, Sequence[SOURCE_FILE_COORD]]:
         """
         Orchestrate the full region job processing pipeline.
@@ -473,7 +476,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         processing_region_ds, output_region_ds = self._get_region_datasets()
 
-        data_var_groups = self.source_groups(self.data_vars)
+        if progress_tracker is not None:
+            data_vars_to_process: Sequence[DATA_VAR] = progress_tracker.get_unprocessed(
+                self.data_vars
+            )  # type: ignore  # Cast shouldn't be needed but can't get mypy to be happy
+            data_var_groups = self.source_groups(data_vars_to_process)
+        else:
+            data_var_groups = self.source_groups(self.data_vars)
         if self.max_vars_per_download_group is not None:
             data_var_groups = self._maybe_split_groups(
                 data_var_groups, self.max_vars_per_download_group
@@ -533,6 +542,11 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         self.tmp_store,
                     )
 
+                    def track_progress_callback(data_var: DATA_VAR = data_var) -> None:
+                        if progress_tracker is None:
+                            return
+                        progress_tracker.record_completion(data_var.name)
+
                     upload_futures.append(
                         upload_executor.submit(
                             copy_data_var,
@@ -543,6 +557,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                             self.tmp_store,
                             primary_store,
                             replica_stores=replica_stores,
+                            track_progress_callback=track_progress_callback,
                         )
                     )
 
