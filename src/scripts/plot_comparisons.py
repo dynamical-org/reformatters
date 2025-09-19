@@ -58,11 +58,6 @@ def select_random_enseble_member(ds: xr.Dataset) -> tuple[xr.Dataset, int | None
     )
 
 
-def get_common_variables(ds1: xr.Dataset, ds2: xr.Dataset) -> list[str]:
-    """Get variables that exist in both datasets"""
-    return [str(var) for var in ds1.data_vars if var in ds2.data_vars]
-
-
 def create_comparison_plot(
     validation_ds: xr.Dataset,
     reference_ds: xr.Dataset,
@@ -77,49 +72,93 @@ def create_comparison_plot(
     for i, var in enumerate(variables):
         ds, ref_ds = align_to_random_valid_time(validation_ds, reference_ds)
 
-        # Get data arrays
+        # Get validation data array
         data = ds[var].load()
-        ref_data = ref_ds[var].load()
+
+        # Check if variable exists in reference dataset
+        var_in_reference = var in reference_ds.data_vars
+
+        if var_in_reference:
+            ref_data = ref_ds[var].load()
+            vmin = min(float(data.min()), float(ref_data.min()))
+            vmax = max(float(data.max()), float(ref_data.max()))
+        else:
+            vmin = float(data.min())
+            vmax = float(data.max())
 
         # Dataset titles with timestamps
         ds_time = pd.Timestamp(ds.valid_time.item()).strftime("%Y-%m-%dT%H:%M")
         ref_time = pd.Timestamp(ref_ds.time.item()).strftime("%Y-%m-%dT%H:%M")
-        log.info(
-            f"Plotting {var} for {ds.attrs['name']} ({ds_time}) and {ref_ds.attrs['name']} ({ref_time})"
-        )
+
+        if var_in_reference:
+            log.info(
+                f"Plotting {var} for {ds.attrs['name']} ({ds_time}) and {ref_ds.attrs['name']} ({ref_time})"
+            )
+        else:
+            log.info(
+                f"Plotting {var} for {ds.attrs['name']} ({ds_time}) - variable not found in reference dataset"
+            )
 
         ds_title = f"{ds.attrs['name']}"
         if ensemble_member is not None:
             ds_title += f" (Ensemble Member {ensemble_member})"
         ds_title += f" - {var}\n{ds_time}"
-        ref_title = f"{ref_ds.attrs['name']} - {var}\n{ref_time}"
 
-        # Determine shared color limits for consistent comparison
-        vmin = min(float(data.min()), float(ref_data.min()))
-        vmax = max(float(data.max()), float(ref_data.max()))
+        if var_in_reference:
+            ref_title = f"{ref_ds.attrs['name']} - {var}\n{ref_time}"
+        else:
+            ref_title = f"{ref_ds.attrs['name']} - {var}\n(Variable not available)"
 
-        # Left plot - ref dataset
+        # Left plot - reference dataset (or empty if variable doesn't exist)
         ax1 = plt.subplot(n_vars, 3, i * 3 + 1)
-        im1 = ax1.pcolormesh(
-            ref_data.longitude,
-            ref_data.latitude,
-            ref_data.values,
-            vmin=vmin,
-            vmax=vmax,
-        )
-        plt.colorbar(im1, ax=ax1)
+
+        if var_in_reference:
+            im1 = ax1.pcolormesh(
+                ref_data.longitude,
+                ref_data.latitude,
+                ref_data.values,
+                vmin=vmin,
+                vmax=vmax,
+            )
+            plt.colorbar(im1, ax=ax1)
+
+            lon_min, lon_max = (
+                float(ref_data.longitude.min()),
+                float(ref_data.longitude.max()),
+            )
+            lat_min, lat_max = (
+                float(ref_data.latitude.min()),
+                float(ref_data.latitude.max()),
+            )
+        else:
+            # Show empty plot for missing variable
+            ax1.text(
+                0.5,
+                0.5,
+                "Variable not\navailable in\nreference dataset",
+                ha="center",
+                va="center",
+                transform=ax1.transAxes,
+                fontsize=12,
+                color="gray",
+            )
+            ax1.set_xlim(0, 1)
+            ax1.set_ylim(0, 1)
+
+            # Use validation dataset spatial bounds for consistency
+            lon_min, lon_max = (
+                float(data.longitude.min()),
+                float(data.longitude.max()),
+            )
+            lat_min, lat_max = (
+                float(data.latitude.min()),
+                float(data.latitude.max()),
+            )
+
         ax1.set_title(ref_title)
         ax1.set_aspect("auto")
         ax1.set_xlabel("Longitude")
         ax1.set_ylabel("Latitude")
-        lon_min, lon_max = (
-            float(ref_data.longitude.min()),
-            float(ref_data.longitude.max()),
-        )
-        lat_min, lat_max = (
-            float(ref_data.latitude.min()),
-            float(ref_data.latitude.max()),
-        )
 
         # Create reasonable tick spacing within data bounds
         lon_start = np.ceil(lon_min / 50) * 50
@@ -130,15 +169,16 @@ def create_comparison_plot(
         lon_ticks = np.arange(lon_start, lon_end + 1, 50)
         lat_ticks = np.arange(lat_start, lat_end + 1, 25)
 
-        ax1.set_xticks(lon_ticks)
-        ax1.set_yticks(lat_ticks)
+        if var_in_reference:
+            ax1.set_xticks(lon_ticks)
+            ax1.set_yticks(lat_ticks)
 
-        # Middle plot - validation dataset (was first dataset)
+        # Middle plot - validation dataset
         ax2 = plt.subplot(n_vars, 3, i * 3 + 2)
         im2 = ax2.pcolormesh(
             data.longitude,
             data.latitude,
-            data.values,
+            data.values,  # Just call it directly
             vmin=vmin,
             vmax=vmax,
         )
@@ -153,33 +193,45 @@ def create_comparison_plot(
         # Right plot - histogram comparison
         ax3 = plt.subplot(n_vars, 3, i * 3 + 3)
 
-        # Flatten arrays and remove NaN values
-        data_flat = data.values.flatten()
-        ref_flat = ref_data.values.flatten()
-        data_clean = data_flat[~np.isnan(data_flat)]
-        ref_clean = ref_flat[~np.isnan(ref_flat)]
+        # Flatten validation data and remove NaN values in one step
+        data_values_flat = data.values.flat
+        data_clean = data_values_flat[~np.isnan(data_values_flat)]
 
-        # Calculate combined range for consistent bins
-        data_min, data_max = (
-            min(np.min(data_clean), np.min(ref_clean)),
-            max(np.max(data_clean), np.max(ref_clean)),
-        )
-        # Create histograms with consistent bins
-        ax3.hist(
-            ref_clean,
-            bins="auto",
-            alpha=0.7,
-            label=ref_ds.attrs["name"],
-            color="blue",
-            range=(data_min, data_max),
-        )
+        if var_in_reference and not np.isnan(ref_data.values).all():
+            # Include reference data in histogram if available
+            ref_values_flat = ref_data.values.flat
+            ref_clean = ref_values_flat[~np.isnan(ref_values_flat)]
+
+            # Calculate combined range for consistent bins
+            data_min, data_max = (
+                min(np.min(data_clean), np.min(ref_clean)),
+                max(np.max(data_clean), np.max(ref_clean)),
+            )
+
+            # Create histograms with consistent bins
+            ax3.hist(
+                ref_clean,
+                bins=40,
+                alpha=0.7,
+                label=ref_ds.attrs["name"],
+                color="blue",
+                range=(data_min, data_max),
+                density=True,
+                stacked=True,
+            )
+        else:
+            # Only validation data available
+            data_min, data_max = np.min(data_clean), np.max(data_clean)
+
         ax3.hist(
             data_clean,
-            bins="auto",
+            bins=40,
             alpha=0.7,
             label=ds.attrs["name"],
             color="red",
             range=(data_min, data_max),
+            density=True,
+            stacked=True,
         )
 
         # Set x-axis limits to match the data range
@@ -235,22 +287,22 @@ def compare(
     log.info(f"Loading reference dataset from: {reference_url}")
     reference_ds = xr.open_zarr(reference_url, chunks=None)
 
-    common_variables = get_common_variables(validation_ds, reference_ds)
-    log.info(f"Found {len(common_variables)} common variables")
+    validation_vars = list(validation_ds.data_vars.keys())
+    log.info(f"Found {len(validation_vars)} variables in validation dataset")
 
     if variables:
-        # Use specified variables that exist in both datasets
-        selected_vars = list(set(variables) & set(common_variables))
-        missing_vars = set(variables) - set(common_variables)
+        # Use specified variables that exist in validation dataset
+        selected_vars = [var for var in variables if var in validation_ds.data_vars]
+        missing_vars = set(variables) - set(validation_ds.data_vars.keys())
 
         if missing_vars:
-            log.warning(f"Variables not found in both datasets: {missing_vars}")
+            log.warning(f"Variables not found in validation dataset: {missing_vars}")
 
         if not selected_vars:
             typer.echo("Error: No valid variables specified", err=True)
             raise typer.Exit(1)
     else:
-        selected_vars = common_variables
+        selected_vars = validation_vars
 
     log.info(f"Plotting variables: {selected_vars}")
 
@@ -278,7 +330,6 @@ def list_variables(
 
     log.info(f"Loading dataset from: {dataset_url}")
     ds = xr.open_zarr(dataset_url, chunks=None, decode_timedelta=True)
-
     variables = list(ds.data_vars.keys())
     typer.echo(f"Dataset contains {len(variables)} variables:")
     for var in sorted(variables):
