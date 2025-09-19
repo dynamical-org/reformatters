@@ -9,12 +9,12 @@ from pydantic import computed_field
 from reformatters.common.config_models import (
     BaseInternalAttrs,
     Coordinate,
-    CoordinateAttrs,  # noqa: F401
+    CoordinateAttrs,
     DatasetAttributes,
     DataVar,
-    DataVarAttrs,  # noqa: F401
-    Encoding,  # noqa: F401
-    StatisticsApproximate,  # noqa: F401
+    DataVarAttrs,
+    Encoding,
+    StatisticsApproximate,
 )
 from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
@@ -22,8 +22,8 @@ from reformatters.common.template_config import (
 )
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 from reformatters.common.zarr import (
-    BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,  # noqa: F401
-    BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,  # noqa: F401
+    BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
+    BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
 
 """
@@ -84,8 +84,16 @@ class EcmwfIfsEnsInternalAttrs(BaseInternalAttrs):
     Not written to the dataset.
     """
 
-    # For example,
+    # TODO skipping this for now! to come back and do
+
+    # NOAA examples:
     # grib_element: str
+    # grib_description: str
+    # grib_index_level: str
+    # index_position: int
+    # include_lead_time_suffix: bool = False
+    # # for step_type != "instant"
+    # window_reset_frequency: Timedelta | None = None
 
 
 class EcmwfIfsEnsDataVar(DataVar[EcmwfIfsEnsInternalAttrs]):
@@ -95,7 +103,13 @@ class EcmwfIfsEnsDataVar(DataVar[EcmwfIfsEnsInternalAttrs]):
 class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
     TemplateConfig[EcmwfIfsEnsDataVar]
 ):
-    dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
+    dims: tuple[Dim, ...] = (
+        "init_time",
+        "lead_time",
+        "ensemble_member",
+        "latitude",
+        "longitude",
+    )
     append_dim: AppendDim = "init_time"
     # forecasts available from same s3 bucket since 2023-01-18, but only with 0.4deg resolution from dataset start through 2024-01-31.
     append_dim_start: Timestamp = pd.Timestamp("2024-02-01T00:00")
@@ -132,10 +146,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     pd.timedelta_range("145h", "360h", freq="6h")
                 )
             ),
+            "ensemble_member": np.arange(1, 51),
             "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
-            "longitude": np.arange(
-                -180, 180, 0.25
-            ),  # TODO: does ECMWF use -180 to 180 or 0 to 360
+            "longitude": np.arange(-180, 180, 0.25),
         }
 
     def derive_coordinates(
@@ -169,279 +182,262 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
     @property
     def coords(self) -> Sequence[Coordinate]:
         """Define metadata and encoding for each coordinate."""
-        # dim_coords = self.dimension_coordinates()
-        # append_dim_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
+        dim_coords = self.dimension_coordinates()
+        append_dim_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
 
-        # return [
-        #     Coordinate(
-        #         name=self.append_dim,
-        #         encoding=Encoding(
-        #             dtype="int64",
-        #             fill_value=0,
-        #             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-        #             calendar="proleptic_gregorian",
-        #             units="seconds since 1970-01-01 00:00:00",
-        #             chunks=append_dim_coordinate_chunk_size,
-        #             shards=None,
-        #         ),
-        #         attrs=CoordinateAttrs(
-        #             units="seconds since 1970-01-01 00:00:00",
-        #             statistics_approximate=StatisticsApproximate(
-        #                 min=dim_coords[self.append_dim].min().isoformat(), max="Present"
-        #             ),
-        #         ),
-        #     ),
-        #     Coordinate(
-        #         name="lead_time",
-        #         encoding=Encoding(
-        #             dtype="int64",
-        #             fill_value=-1,
-        #             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-        #             units="seconds",
-        #             chunks=len(dim_coords["lead_time"]),
-        #             shards=None,
-        #         ),
-        #         attrs=CoordinateAttrs(
-        #             units="seconds",
-        #             statistics_approximate=StatisticsApproximate(
-        #                 min=str(dim_coords["lead_time"].min()),
-        #                 max=str(dim_coords["lead_time"].max()),
-        #             ),
-        #         ),
-        #     ),
-        #     Coordinate(
-        #         name="latitude",
-        #         encoding=Encoding(
-        #             dtype="float64",
-        #             fill_value=np.nan,
-        #             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-        #             chunks=len(dim_coords["latitude"]),
-        #             shards=None,
-        #         ),
-        #         attrs=CoordinateAttrs(
-        #             units="degrees_north",
-        #             statistics_approximate=StatisticsApproximate(
-        #                 min=float(dim_coords["latitude"].min()),
-        #                 max=float(dim_coords["latitude"].max()),
-        #             ),
-        #         ),
-        #     ),
-        #     Coordinate(
-        #         name="longitude",
-        #         encoding=Encoding(
-        #             dtype="float64",
-        #             fill_value=np.nan,
-        #             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-        #             chunks=len(dim_coords["longitude"]),
-        #             shards=None,
-        #         ),
-        #         attrs=CoordinateAttrs(
-        #             units="degrees_east",
-        #             statistics_approximate=StatisticsApproximate(
-        #                 min=float(dim_coords["longitude"].min()),
-        #                 max=float(dim_coords["longitude"].max()),
-        #             ),
-        #         ),
-        #     ),
-        #     Coordinate(
-        #         name="valid_time",
-        #         encoding=Encoding(
-        #             dtype="int64",
-        #             fill_value=0,
-        #             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-        #             calendar="proleptic_gregorian",
-        #             units="seconds since 1970-01-01 00:00:00",
-        #             chunks=(
-        #                 append_dim_coordinate_chunk_size,
-        #                 len(dim_coords["lead_time"]),
-        #             ),
-        #             shards=None,
-        #         ),
-        #         attrs=CoordinateAttrs(
-        #             units="seconds since 1970-01-01 00:00:00",
-        #             statistics_approximate=StatisticsApproximate(
-        #                 min=self.append_dim_start.isoformat(),
-        #                 max="Present + 16 days",
-        #             ),
-        #         ),
-        #     ),
-        #     Coordinate(
-        #         name="ingested_forecast_length",
-        #         encoding=Encoding(
-        #             dtype="int64",
-        #             fill_value=-1,
-        #             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-        #             units="seconds",
-        #             chunks=append_dim_coordinate_chunk_size,
-        #             shards=None,
-        #         ),
-        #         attrs=CoordinateAttrs(
-        #             units="seconds",
-        #             statistics_approximate=StatisticsApproximate(
-        #                 min=str(dim_coords["lead_time"].min()),
-        #                 max=str(dim_coords["lead_time"].max()),
-        #             ),
-        #         ),
-        #     ),
-        #     Coordinate(
-        #         name="spatial_ref",
-        #         encoding=Encoding(
-        #             dtype="int64",
-        #             fill_value=0,
-        #             chunks=(),  # Scalar coordinate
-        #             shards=None,
-        #         ),
-        #         attrs=CoordinateAttrs(
-        #             units=None,
-        #             statistics_approximate=None,
-        #             # Deterived by running `ds.rio.write_crs("+proj=longlat +a=6371229 +b=6371229 +no_defs +type=crs")["spatial_ref"].attrs
-        #             crs_wkt='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
-        #             semi_major_axis=6371229.0,
-        #             semi_minor_axis=6371229.0,
-        #             inverse_flattening=0.0,
-        #             reference_ellipsoid_name="unknown",
-        #             longitude_of_prime_meridian=0.0,
-        #             prime_meridian_name="Greenwich",
-        #             geographic_crs_name="unknown",
-        #             horizontal_datum_name="unknown",
-        #             grid_mapping_name="latitude_longitude",
-        #             spatial_ref='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
-        #             comment="This coordinate reference system matches the source data which follows WMO conventions of assuming the earth is a perfect sphere with a radius of 6,371,229m. It is similar to EPSG:4326, but EPSG:4326 uses a more accurate representation of the earth's shape.",
-        #         ),
-        #     ),
-        # ]
-        raise NotImplementedError("Subclasses implement `coords`")
+        return [
+            Coordinate(
+                name=self.append_dim,
+                encoding=Encoding(
+                    dtype="int64",
+                    fill_value=0,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    calendar="proleptic_gregorian",
+                    units="seconds since 1970-01-01 00:00:00",
+                    chunks=append_dim_coordinate_chunk_size,
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    units="seconds since 1970-01-01 00:00:00",
+                    statistics_approximate=StatisticsApproximate(
+                        min=dim_coords[self.append_dim].min().isoformat(), max="Present"
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="lead_time",
+                encoding=Encoding(
+                    dtype="int64",
+                    fill_value=-1,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    units="seconds",
+                    chunks=len(dim_coords["lead_time"]),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    units="seconds",
+                    statistics_approximate=StatisticsApproximate(
+                        min=str(dim_coords["lead_time"].min()),
+                        max=str(dim_coords["lead_time"].max()),
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="ensemble_member",
+                encoding=Encoding(
+                    dtype="int32",
+                    fill_value=-1,
+                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    chunks=len(dim_coords["number"]),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    units="realization",  # TODO what does this mean lol I stole it from gefs
+                    statistics_approximate=StatisticsApproximate(
+                        min=int(dim_coords["number"].min()),
+                        max=int(dim_coords["number"].max()),
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="latitude",
+                encoding=Encoding(
+                    dtype="float64",
+                    fill_value=np.nan,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    chunks=len(dim_coords["latitude"]),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    units="degrees_north",
+                    statistics_approximate=StatisticsApproximate(
+                        min=float(dim_coords["latitude"].min()),
+                        max=float(dim_coords["latitude"].max()),
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="longitude",
+                encoding=Encoding(
+                    dtype="float64",
+                    fill_value=np.nan,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    chunks=len(dim_coords["longitude"]),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    units="degrees_east",
+                    statistics_approximate=StatisticsApproximate(
+                        min=float(dim_coords["longitude"].min()),
+                        max=float(dim_coords["longitude"].max()),
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="valid_time",
+                encoding=Encoding(
+                    dtype="int64",
+                    fill_value=0,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    calendar="proleptic_gregorian",
+                    units="seconds since 1970-01-01 00:00:00",
+                    chunks=(
+                        append_dim_coordinate_chunk_size,
+                        len(dim_coords["lead_time"]),
+                    ),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    units="seconds since 1970-01-01 00:00:00",
+                    statistics_approximate=StatisticsApproximate(
+                        min=self.append_dim_start.isoformat(),
+                        max="Present + 15 days",
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="ingested_forecast_length",
+                encoding=Encoding(
+                    dtype="int64",
+                    fill_value=-1,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    units="seconds",
+                    chunks=append_dim_coordinate_chunk_size,
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    units="seconds",
+                    statistics_approximate=StatisticsApproximate(
+                        min=str(dim_coords["lead_time"].min()),
+                        max=str(dim_coords["lead_time"].max()),
+                    ),
+                ),
+            ),
+            # TODO: add expected forecast length?
+            Coordinate(
+                name="spatial_ref",
+                encoding=Encoding(
+                    dtype="int64",
+                    fill_value=0,
+                    chunks=(),  # Scalar coordinate
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    units=None,
+                    statistics_approximate=None,
+                    # TODO: Verify this CRS matches ECMWF data - copied from NOAA example
+                    crs_wkt='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
+                    semi_major_axis=6371229.0,
+                    semi_minor_axis=6371229.0,
+                    inverse_flattening=0.0,
+                    reference_ellipsoid_name="unknown",
+                    longitude_of_prime_meridian=0.0,
+                    prime_meridian_name="Greenwich",
+                    geographic_crs_name="unknown",
+                    horizontal_datum_name="unknown",
+                    grid_mapping_name="latitude_longitude",
+                    spatial_ref='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
+                    comment="This coordinate reference system matches the source data which follows WMO conventions of assuming the earth is a perfect sphere with a radius of 6,371,229m. It is similar to EPSG:4326, but EPSG:4326 uses a more accurate representation of the earth's shape.",
+                ),
+            ),
+        ]
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def data_vars(self) -> Sequence[EcmwfIfsEnsDataVar]:
         """Define metadata and encoding for each data variable."""
-        # # Data variable chunking and sharding
-        # #
-        # # Aim for one of these roughly equivalent quantities:
-        # # 1-2mb chunks compressed
-        # # 4-8mb uncompressed
-        # # 4-8 million float32 values
-        # var_chunks: dict[Dim, int] = {
-        #     "init_time": 1,
-        #     "lead_time": 105,
-        #     "latitude": 121,
-        #     "longitude": 121,
-        # }
-        # # Aim for one of these roughly equivalent quantities:
-        # # 64-256MB shards compressed
-        # # 256-1024MB uncompressed
-        # # 256 million to 1 billion float32 values
-        # var_shards: dict[Dim, int] = {
-        #     "init_time": 1,
-        #     "lead_time": 105 * 2,
-        #     "latitude": 121 * 6,
-        #     "longitude": 121 * 6,
-        # }
+        # Data variable chunking and sharding
+        #
+        # Aim for one of these roughly equivalent quantities:
+        # 1-2mb chunks compressed
+        # 4-8mb uncompressed
+        # 4-8 million float32 values
+        # TODO check the math on these chunks & shards being reasonable. reference slack notes
+        var_chunks: dict[Dim, int] = {
+            "init_time": 1,
+            "lead_time": 61,  # Updated for ECMWF 61-step forecast # TODO should be 83??
+            "ensemble_member": 50,  # All ensemble members
+            "latitude": 144,  # ~721/5 for reasonable chunk size
+            "longitude": 144,  # ~1440/10 for reasonable chunk size
+        }
+        # Aim for one of these roughly equivalent quantities:
+        # 64-256MB shards compressed
+        # 256-1024MB uncompressed
+        # 256 million to 1 billion float32 values
+        var_shards: dict[Dim, int] = {
+            "init_time": 1,
+            "lead_time": 61 * 2,  # TODO should be 83 * 2??
+            "ensemble_member": 50,
+            "latitude": 144 * 5,
+            "longitude": 144 * 5,
+        }
 
-        # encoding_float32_default = Encoding(
-        #     dtype="float32",
-        #     fill_value=np.nan,
-        #     chunks=tuple(var_chunks[d] for d in self.dims),
-        #     shards=tuple(var_shards[d] for d in self.dims),
-        #     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-        # )
+        encoding_float32_default = Encoding(
+            dtype="float32",
+            fill_value=np.nan,
+            chunks=tuple(var_chunks[d] for d in self.dims),
+            shards=tuple(var_shards[d] for d in self.dims),
+            compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
+        )
 
         # default_keep_mantissa_bits = 7
+        # TODO what does this mean ^? (gefs also has keep_mantissa_bits_categorical?)
 
-        # # return [
-        #     EcmwfIfsEnsDataVar(
-        #         name="temperature_2m",
-        #         encoding=encoding_float32_default,
-        #         attrs=DataVarAttrs(
-        #             short_name="t2m",
-        #             long_name="2 metre temperature",
-        #             units="C",
-        #             step_type="instant",
-        #             standard_name="air_temperature",
-        #         ),
-        #         internal_attrs=EcmwfIfsEnsInternalAttrs(
-        #             grib_element="TMP",
-        #             grib_comment='2[m] HTGL="Specified height level above ground"',
-        #             grib_index_level="2 m above ground",
-        #             index_position=580,
-        #             keep_mantissa_bits=default_keep_mantissa_bits,
-        #         ),
-        #     ),
-        #     EcmwfIfsEnsDataVar(
-        #         name="precipitation_surface",
-        #         encoding=encoding_float32_default,
-        #         attrs=DataVarAttrs(
-        #             short_name="tp",
-        #             long_name="Total Precipitation",
-        #             units="mm/s",
-        #             comment="Average precipitation rate since the previous forecast step.",
-        #             step_type="avg",
-        #         ),
-        #         internal_attrs=EcmwfIfsEnsInternalAttrs(
-        #             grib_element="APCP",
-        #             grib_comment='0[-] SFC="Ground or water surface"',
-        #             grib_index_level="surface",
-        #             index_position=595,
-        #             include_lead_time_suffix=True,
-        #             deaccumulate_to_rate=True,
-        #             window_reset_frequency=pd.Timedelta("6h"),
-        #             keep_mantissa_bits=default_keep_mantissa_bits,
-        #         ),
-        #     ),
-        #     EcmwfIfsEnsDataVar(
-        #         name="pressure_surface",
-        #         encoding=encoding_float32_default,
-        #         attrs=DataVarAttrs(
-        #             short_name="sp",
-        #             long_name="Surface pressure",
-        #             units="Pa",
-        #             step_type="instant",
-        #             standard_name="surface_air_pressure",
-        #         ),
-        #         internal_attrs=EcmwfIfsEnsInternalAttrs(
-        #             grib_element="PRES",
-        #             grib_comment='0[-] SFC="Ground or water surface"',
-        #             grib_index_level="surface",
-        #             index_position=560,
-        #             keep_mantissa_bits=10,
-        #         ),
-        #     ),
-        #     EcmwfIfsEnsDataVar(
-        #         name="categorical_snow_surface",
-        #         encoding=encoding_float32_default,
-        #         attrs=DataVarAttrs(
-        #             short_name="csnow",
-        #             long_name="Categorical snow",
-        #             units="0=no; 1=yes",
-        #             step_type="avg",
-        #         ),
-        #         internal_attrs=EcmwfIfsEnsInternalAttrs(
-        #             grib_element="CSNOW",
-        #             grib_comment='0[-] SFC="Ground or water surface"',
-        #             grib_index_level="surface",
-        #             index_position=604,
-        #             window_reset_frequency=pd.Timedelta("6h"),
-        #             keep_mantissa_bits="no-rounding",
-        #         ),
-        #     ),
-        #     EcmwfIfsEnsDataVar(
-        #         name="total_cloud_cover_atmosphere",
-        #         encoding=encoding_float32_default,
-        #         attrs=DataVarAttrs(
-        #             short_name="tcc",
-        #             long_name="Total Cloud Cover",
-        #             units="%",
-        #             step_type="avg",
-        #         ),
-        #         internal_attrs=EcmwfIfsEnsInternalAttrs(
-        #             grib_element="TCDC",
-        #             grib_comment='0[-] EATM="Entire Atmosphere"',
-        #             grib_index_level="entire atmosphere",
-        #             index_position=635,
-        #             window_reset_frequency=pd.Timedelta("6h"),
-        #             keep_mantissa_bits=default_keep_mantissa_bits,
-        #         ),
-        #     ),
-        # ]
-        raise NotImplementedError("Subclasses implement `data_vars`")
+        return [
+            EcmwfIfsEnsDataVar(
+                name="temperature_2m",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="t2m",
+                    long_name="2 metre temperature",
+                    units="K",  # From GRIB metadata - Kelvin not Celsius
+                    step_type="instant",
+                    standard_name="air_temperature",
+                ),
+                internal_attrs=EcmwfIfsEnsInternalAttrs(
+                    # TODO: Determine correct GRIB element name and other metadata from ECMWF-specific format
+                ),
+            ),
+            EcmwfIfsEnsDataVar(
+                name="wind_u_10m",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="u10",
+                    long_name="10 metre U wind component",
+                    units="m s**-1",
+                    step_type="instant",
+                    standard_name="eastward_wind",
+                ),
+                internal_attrs=EcmwfIfsEnsInternalAttrs(
+                    # TODO: Determine correct GRIB element name and other metadata from ECMWF-specific format
+                ),
+            ),
+            EcmwfIfsEnsDataVar(
+                name="wind_v_10m",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="v10",
+                    long_name="10 metre V wind component",
+                    units="m s**-1",
+                    step_type="instant",
+                    standard_name="northward_wind",
+                ),
+                internal_attrs=EcmwfIfsEnsInternalAttrs(
+                    # TODO: Determine correct GRIB element name and other metadata from ECMWF-specific format
+                ),
+            ),
+            EcmwfIfsEnsDataVar(
+                name="precipitation_total",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="tp",
+                    long_name="Total precipitation",
+                    units="m",  # From GRIB metadata - meters not mm/s
+                    step_type="accum",  # From GRIB metadata - accumulated not instantaneous
+                    comment="Accumulated precipitation since forecast start time.",
+                ),
+                internal_attrs=EcmwfIfsEnsInternalAttrs(
+                    # TODO: Determine if deaccumulation needed and correct GRIB processing parameters
+                ),
+            ),
+        ]
