@@ -524,7 +524,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
-                    grib_element="MSLMA",
+                    grib_element="PRMSL",
                     grib_description='0[-] MSL="Mean sea level"',
                     grib_index_level="mean sea level",
                     index_position=41,
@@ -688,7 +688,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="UGRD",
-                    grib_description="u-component of wind [m/s]",
+                    grib_description='80[m] HTGL="Specified height level above ground"',
                     grib_index_level="80 m above ground",
                     index_position=60,
                     keep_mantissa_bits=6,
@@ -707,7 +707,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="VGRD",
-                    grib_description="v-component of wind [m/s]",
+                    grib_description='80[m] HTGL="Specified height level above ground"',
                     grib_index_level="80 m above ground",
                     index_position=61,
                     keep_mantissa_bits=6,
