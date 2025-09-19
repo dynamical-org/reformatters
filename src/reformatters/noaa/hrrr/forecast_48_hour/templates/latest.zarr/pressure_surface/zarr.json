@@ -68,11 +68,10 @@
     }
   ],
   "attributes": {
-    "long_name": "Total Precipitation",
-    "short_name": "tp",
-    "units": "mm/s",
-    "comment": "Average precipitation rate since the previous forecast step.",
-    "step_type": "avg",
+    "long_name": "Surface pressure",
+    "short_name": "sp",
+    "units": "Pa",
+    "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },

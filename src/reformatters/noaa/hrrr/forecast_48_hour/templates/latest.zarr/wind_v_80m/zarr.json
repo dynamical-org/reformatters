@@ -68,11 +68,11 @@
     }
   ],
   "attributes": {
-    "long_name": "Total Precipitation",
-    "short_name": "tp",
-    "units": "mm/s",
-    "comment": "Average precipitation rate since the previous forecast step.",
-    "step_type": "avg",
+    "long_name": "V-component of wind (80 m above ground)",
+    "short_name": "v80",
+    "standard_name": "northward_wind",
+    "units": "m/s",
+    "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },
