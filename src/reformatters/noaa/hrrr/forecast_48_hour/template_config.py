@@ -524,7 +524,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
-                    grib_element="PRMSL",
+                    grib_element="MSLMA",
                     grib_description='0[-] MSL="Mean sea level"',
                     grib_index_level="mean sea level",
                     index_position=41,
@@ -676,6 +676,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     hrrr_file_type="sfc",
                 ),
             ),
+            # HRRR provides 80m but not 100m winds
             NoaaHrrrDataVar(
                 name="wind_u_80m",
                 encoding=encoding_float32_default,
