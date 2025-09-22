@@ -1,12 +1,12 @@
 import typer
 
-from scripts.validation.compare_vars import compare_vars
-from scripts.validation.nulls_over_time import plot_nulls
+from scripts.validation.compare_spatial import compare_spatial
+from scripts.validation.report_nulls import report_nulls
 
 app = typer.Typer(help="Dataset validation plotting tools")
 
-app.command("compare-vars", help="Compare two datasets")(compare_vars)
-app.command("plot-nulls", help="Analyze null values")(plot_nulls)
+app.command("compare-spatial", help="Compare two datasets")(compare_spatial)
+app.command("report-nulls", help="Analyze null values")(report_nulls)
 
 if __name__ == "__main__":
     app()

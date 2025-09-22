@@ -35,7 +35,7 @@ def get_spatial_points_and_select(ds: xr.Dataset) -> tuple[xr.Dataset, xr.Datase
     return ds_p1, ds_p2
 
 
-def plot_nulls(
+def report_nulls(
     dataset_url: str,
     variables: list[str] | None = variables_option,
     show_plot: bool = False,

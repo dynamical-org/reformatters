@@ -266,7 +266,7 @@ def create_comparison_plot(
     log.info(f"Comparison plot saved to {filepath}")
 
 
-def compare_vars(
+def compare_spatial(
     validation_url: str,
     reference_url: str | None = GEFS_ANALYSIS_URL,
     variables: list[str] | None = variables_option,
