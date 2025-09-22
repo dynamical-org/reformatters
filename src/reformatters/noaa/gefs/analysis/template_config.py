@@ -1,7 +1,8 @@
 from collections.abc import Sequence
-from typing import Any, Final, Literal
+from typing import Any
 
 import pandas as pd
+from pydantic import computed_field
 
 from reformatters.common.config_models import (
     Coordinate,
@@ -10,7 +11,8 @@ from reformatters.common.config_models import (
     Encoding,
     StatisticsApproximate,
 )
-from reformatters.common.types import DatetimeLike
+from reformatters.common.template_config import TemplateConfig
+from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
 from reformatters.noaa.gefs.common_gefs_template_config import (
     get_shared_coordinate_configs,
@@ -19,100 +21,98 @@ from reformatters.noaa.gefs.common_gefs_template_config import (
 )
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
 
-DATASET_ID = "noaa-gefs-analysis"
-DATASET_VERSION = "0.1.2"
 
-TIME_START = pd.Timestamp("2000-01-01T00:00")
-TIME_FREQUENCY = pd.Timedelta("3h")
+class GefsAnalysisTemplateConfig(TemplateConfig[GEFSDataVar]):
+    """Template configuration for GEFS analysis dataset."""
 
-DATASET_ATTRIBUTES = DatasetAttributes(
-    dataset_id=DATASET_ID,
-    dataset_version=DATASET_VERSION,
-    name="NOAA GEFS analysis",
-    description="Weather analysis from the Global Ensemble Forecast System (GEFS) operated by NOAA NWS NCEP.",
-    attribution="NOAA NWS NCEP GEFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
-    spatial_domain="Global",
-    spatial_resolution="0.25 degrees (~20km)",
-    time_domain=f"{TIME_START} UTC to Present",
-    time_resolution=f"{TIME_FREQUENCY.total_seconds() / (60 * 60)} hours",
-)
+    dims: tuple[Dim, ...] = ("time", "latitude", "longitude")
+    append_dim: AppendDim = "time"
+    append_dim_start: Timestamp = pd.Timestamp("2000-01-01T00:00")
+    append_dim_frequency: Timedelta = pd.Timedelta("3h")
 
-# Silly to list dims twice, but typing.get_args() doesn't guarantee the return order,
-# the order in DIMS is important, and type parameters can't be constants.
-type Dim =       Literal["time", "latitude", "longitude"]  # fmt: off
-DIMS: tuple[Dim, ...] = ("time", "latitude", "longitude")  # fmt: off
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def dataset_attributes(self) -> DatasetAttributes:
+        """Dataset metadata attributes."""
+        return DatasetAttributes(
+            dataset_id="noaa-gefs-analysis",
+            dataset_version="0.1.2",
+            name="NOAA GEFS analysis",
+            description="Weather analysis from the Global Ensemble Forecast System (GEFS) operated by NOAA NWS NCEP.",
+            attribution="NOAA NWS NCEP GEFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
+            spatial_domain="Global",
+            spatial_resolution="0.25 degrees (~20km)",
+            time_domain=f"{self.append_dim_start} UTC to Present",
+            time_resolution=f"{self.append_dim_frequency.total_seconds() / (60 * 60)} hours",
+        )
 
-APPEND_DIMENSION: Final[Dim] = "time"
+    def append_dim_coordinate_chunk_size(self) -> int:
+        """
+        Returns a stable, fixed chunk size for the append dimension to allow
+        expansion while making an effort to keep all coordinates in a single chunk.
+        """
+        # Use 50 years (instead of the default impl) to match the existing dataset
+        # that existed before refactoring things to use TemplateConfig/etc.
+        return int(pd.Timedelta(days=365 * 50) / self.append_dim_frequency)
 
-ANALYSIS_ENSEMBLE_MEMBER = 0  # the GEFS control member
-
-
-def get_template_dimension_coordinates() -> dict[str, Any]:
-    return {
-        "time": get_time_coordinates(TIME_START + TIME_FREQUENCY),
-        **get_shared_template_dimension_coordinates(),
-    }
-
-
-def get_time_coordinates(
-    time_end: DatetimeLike,
-) -> pd.DatetimeIndex:
-    return pd.date_range(TIME_START, time_end, freq=TIME_FREQUENCY, inclusive="left")
-
-
-# CHUNKS
-VAR_CHUNKS: dict[Dim, int] = {
-    "time": 180 * (24 // 3),  # 180 days of 3 hourly data
-    "latitude": 32,  # 23 chunks over 721 pixels
-    "longitude": 32,  # 45 chunks over 1440 pixels
-}
-
-# SHARDS
-VAR_SHARDS: dict[Dim, int] = {
-    "time": VAR_CHUNKS["time"] * 2,
-    "latitude": VAR_CHUNKS["latitude"] * 12,  # 2 shards over 721 pixels
-    "longitude": VAR_CHUNKS["longitude"] * 12,  # 4 shards over 1440 pixels
-}
-assert DIMS == tuple(VAR_CHUNKS.keys())
-VAR_CHUNKS_ORDERED = tuple(VAR_CHUNKS[dim] for dim in DIMS)
-VAR_SHARDS_ORDERED = tuple(VAR_SHARDS[dim] for dim in DIMS)
-
-
-# The time dimension is our append dimension during updates.
-# We also want coordinates to be in a single chunk for dataset open speed.
-# By fixing the chunk size for coordinates along the append dimension to
-# something much larger than we will really use, the array is always
-# a fixed underlying chunk size and values in it can be safely updated
-# prior to metadata document updates that increase the reported array size.
-# This is a zarr format hack to allow expanding an array safely and requires
-# that new array values are written strictly before new metadata is written
-# (doing this correctly is a key benefit of icechunk).
-TIME_COORDINATE_CHUNK_SIZE = int(pd.Timedelta(days=365 * 50) / TIME_FREQUENCY)
-
-
-COORDINATES: Sequence[Coordinate] = (
-    *get_shared_coordinate_configs(),
-    Coordinate(
-        name="time",
-        encoding=Encoding(
-            dtype="int64",
-            fill_value=0,
-            compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-            calendar="proleptic_gregorian",
-            units="seconds since 1970-01-01 00:00:00",
-            chunks=TIME_COORDINATE_CHUNK_SIZE,
-            shards=TIME_COORDINATE_CHUNK_SIZE,
-        ),
-        attrs=CoordinateAttrs(
-            units="seconds since 1970-01-01 00:00:00",
-            statistics_approximate=StatisticsApproximate(
-                min=TIME_START.isoformat(), max="Present"
+    def dimension_coordinates(self) -> dict[str, Any]:
+        """Returns dimension coordinates for the dataset."""
+        return {
+            "time": self.append_dim_coordinates(
+                self.append_dim_start + self.append_dim_frequency
             ),
-        ),
-    ),
-)
+            **get_shared_template_dimension_coordinates(),
+        }
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def coords(self) -> Sequence[Coordinate]:
+        """Define metadata and encoding for each coordinate."""
+        append_dim_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
 
-DATA_VARIABLES: Sequence[GEFSDataVar] = get_shared_data_var_configs(
-    VAR_CHUNKS_ORDERED, VAR_SHARDS_ORDERED
-)
+        return (
+            *get_shared_coordinate_configs(),
+            Coordinate(
+                name="time",
+                encoding=Encoding(
+                    dtype="int64",
+                    fill_value=0,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    calendar="proleptic_gregorian",
+                    units="seconds since 1970-01-01 00:00:00",
+                    chunks=append_dim_coordinate_chunk_size,
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    units="seconds since 1970-01-01 00:00:00",
+                    statistics_approximate=StatisticsApproximate(
+                        min=self.append_dim_start.isoformat(), max="Present"
+                    ),
+                ),
+            ),
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def data_vars(self) -> Sequence[GEFSDataVar]:
+        """Define metadata and encoding for each data variable."""
+        # CHUNKS
+        var_chunks: dict[Dim, int] = {
+            "time": 180 * (24 // 3),  # 180 days of 3 hourly data
+            "latitude": 32,  # 23 chunks over 721 pixels
+            "longitude": 32,  # 45 chunks over 1440 pixels
+        }
+
+        # SHARDS
+        var_shards: dict[Dim, int] = {
+            "time": var_chunks["time"] * 2,
+            "latitude": var_chunks["latitude"] * 12,  # 2 shards over 721 pixels
+            "longitude": var_chunks["longitude"] * 12,  # 4 shards over 1440 pixels
+        }
+
+        assert self.dims == tuple(var_chunks.keys())
+
+        var_chunks_ordered = tuple(var_chunks[dim] for dim in self.dims)
+        var_shards_ordered = tuple(var_shards[dim] for dim in self.dims)
+
+        return get_shared_data_var_configs(var_chunks_ordered, var_shards_ordered)

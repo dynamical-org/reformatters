@@ -37,7 +37,7 @@ def get_shared_coordinate_configs() -> Sequence[Coordinate]:
                 fill_value=np.nan,
                 compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
                 chunks=len(_dim_coords["latitude"]),
-                shards=len(_dim_coords["latitude"]),
+                shards=None,
             ),
             attrs=CoordinateAttrs(
                 units="degrees_north",
@@ -54,7 +54,7 @@ def get_shared_coordinate_configs() -> Sequence[Coordinate]:
                 fill_value=np.nan,
                 compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
                 chunks=len(_dim_coords["longitude"]),
-                shards=len(_dim_coords["longitude"]),
+                shards=None,
             ),
             attrs=CoordinateAttrs(
                 units="degrees_east",
@@ -69,15 +69,25 @@ def get_shared_coordinate_configs() -> Sequence[Coordinate]:
             encoding=Encoding(
                 dtype="int64",
                 fill_value=0,
-                chunks=1,  # Scalar coordinate
-                shards=1,
+                chunks=(),  # Scalar coordinate
+                shards=None,
             ),
             attrs=CoordinateAttrs(
-                units="unitless",
-                statistics_approximate=StatisticsApproximate(
-                    min=0,
-                    max=0,
-                ),
+                units=None,
+                statistics_approximate=None,
+                # Deterived by running `ds.rio.write_crs("+proj=longlat +a=6371229 +b=6371229 +no_defs +type=crs")["spatial_ref"].attrs
+                crs_wkt='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
+                semi_major_axis=6371229.0,
+                semi_minor_axis=6371229.0,
+                inverse_flattening=0.0,
+                reference_ellipsoid_name="unknown",
+                longitude_of_prime_meridian=0.0,
+                prime_meridian_name="Greenwich",
+                geographic_crs_name="unknown",
+                horizontal_datum_name="unknown",
+                grid_mapping_name="latitude_longitude",
+                spatial_ref='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
+                comment="This coordinate reference system matches the source data which follows WMO conventions of assuming the earth is a perfect sphere with a radius of 6,371,229m. It is similar to EPSG:4326, but EPSG:4326 uses a more accurate representation of the earth's shape.",
             ),
         ),
     )
