@@ -70,7 +70,7 @@ class NoaaHrrrForecast48HourRegionJob(
 ):
     """Region job for HRRR 48-hour forecast data processing."""
 
-    max_vars_per_download_group = 8  # currently a best guess
+    max_vars_per_download_group = 5
 
     @classmethod
     def source_groups(
