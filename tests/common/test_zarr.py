@@ -78,7 +78,7 @@ def test_copy_zarr_metadata_calls_copy_metadata_files_for_all_stores(
     # Instead of exact call matching, check the calls contain the right elements
     assert len(calls) == 3
     for call_args in calls:
-        files, store_path, store = call_args[0]
+        files, _store_path, _store = call_args[0]
         # Verify the files list contains the expected files (order-independent)
         assert set(files) == set(expected_metadata_files)
 
@@ -127,7 +127,7 @@ def test_copy_zarr_metadata_noops_when_icechunk_only_and_no_icechunk_store(
     template_ds: xr.Dataset,
     tmp_store_and_metadata_files: tuple[Path, list[Path]],
 ) -> None:
-    tmp_store, expected_metadata_files = tmp_store_and_metadata_files
+    tmp_store, _expected_metadata_files = tmp_store_and_metadata_files
 
     mock_copy_metadata_files = Mock()
     monkeypatch.setattr(zarr_module, "_copy_metadata_files", mock_copy_metadata_files)

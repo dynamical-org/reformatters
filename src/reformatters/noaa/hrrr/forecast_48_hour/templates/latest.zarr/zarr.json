@@ -42,7 +42,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -129,7 +129,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -216,7 +216,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -303,7 +303,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -390,7 +390,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -477,7 +477,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -564,7 +564,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -645,7 +645,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0,
+        "fill_value": -1,
         "codecs": [
           {
             "name": "bytes",
@@ -669,6 +669,7 @@
             "min": "0 days 00:00:00",
             "max": "2 days 00:00:00"
           },
+          "dtype": "timedelta64[ns]",
           "units": "seconds"
         },
         "dimension_names": [
@@ -703,7 +704,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -784,7 +785,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0,
+        "fill_value": -1,
         "codecs": [
           {
             "name": "bytes",
@@ -808,6 +809,7 @@
             "min": "0 days 00:00:00",
             "max": "2 days 00:00:00"
           },
+          "dtype": "timedelta64[ns]",
           "units": "seconds"
         },
         "dimension_names": [
@@ -891,7 +893,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "bytes",
@@ -945,7 +947,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0,
+        "fill_value": -1,
         "codecs": [
           {
             "name": "bytes",
@@ -969,6 +971,7 @@
             "min": "0 days 00:00:00",
             "max": "2 days 00:00:00"
           },
+          "dtype": "timedelta64[ns]",
           "units": "seconds"
         },
         "dimension_names": [
@@ -999,7 +1002,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "bytes",
@@ -1059,7 +1062,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1146,7 +1149,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1233,7 +1236,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1321,7 +1324,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1408,7 +1411,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1495,7 +1498,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1640,7 +1643,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1728,7 +1731,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1871,7 +1874,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1959,7 +1962,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -2047,7 +2050,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -2135,7 +2138,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -2217,7 +2220,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "bytes",
@@ -2270,7 +2273,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "bytes",

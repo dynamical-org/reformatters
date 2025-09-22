@@ -102,7 +102,7 @@ def make_empty_variable(
 ) -> xr.Variable:
     shape = tuple(len(coords[dim]) for dim in dims)
 
-    array = dask.array.full(  # type: ignore[no-untyped-call,attr-defined]
+    array = dask.array.full(  # type: ignore[no-untyped-call]
         shape=shape,
         fill_value=np.nan,
         dtype=dtype,
@@ -155,7 +155,7 @@ def empty_copy_with_reindex(
         ds[coord_name].encoding = template_coord.encoding.copy()
 
     for var_name, var in template_ds.data_vars.items():
-        nan_array = dask.array.full(  # type:ignore[no-untyped-call,attr-defined]
+        nan_array = dask.array.full(  # type:ignore[no-untyped-call]
             fill_value=np.nan,
             shape=[ds.sizes[dim] for dim in var.dims],
             dtype=var.dtype,
