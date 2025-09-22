@@ -146,14 +146,11 @@ def create_comparison_plot(
             )
             plt.colorbar(im1, ax=ax1)
 
-            lon_min, lon_max = (
-                float(ref_data.longitude.min()),
-                float(ref_data.longitude.max()),
-            )
-            lat_min, lat_max = (
-                float(ref_data.latitude.min()),
-                float(ref_data.latitude.max()),
-            )
+            # Use combined bounds from both datasets for consistent axis ranges
+            lon_min = min(float(ref_data.longitude.min()), float(data.longitude.min()))
+            lon_max = max(float(ref_data.longitude.max()), float(data.longitude.max()))
+            lat_min = min(float(ref_data.latitude.min()), float(data.latitude.min()))
+            lat_max = max(float(ref_data.latitude.max()), float(data.latitude.max()))
         else:
             # Show empty plot for missing variable
             ax1.text(
@@ -169,40 +166,23 @@ def create_comparison_plot(
             ax1.set_xlim(0, 1)
             ax1.set_ylim(0, 1)
 
-            # Use validation dataset spatial bounds for consistency
-            lon_min, lon_max = (
-                float(data.longitude.min()),
-                float(data.longitude.max()),
-            )
-            lat_min, lat_max = (
-                float(data.latitude.min()),
-                float(data.latitude.max()),
-            )
+            # Use validation dataset bounds when reference doesn't have the variable
+            lon_min = float(data.longitude.min())
+            lon_max = float(data.longitude.max())
+            lat_min = float(data.latitude.min())
+            lat_max = float(data.latitude.max())
 
         ax1.set_title(ref_title)
         ax1.set_aspect("auto")
         ax1.set_xlabel("Longitude")
         ax1.set_ylabel("Latitude")
 
-        # Create reasonable tick spacing within data bounds
-        lon_start = np.ceil(lon_min / 50) * 50
-        lon_end = np.floor(lon_max / 50) * 50
-        lat_start = np.ceil(lat_min / 25) * 25
-        lat_end = np.floor(lat_max / 25) * 25
-
-        lon_ticks = np.arange(lon_start, lon_end + 1, 50)
-        lat_ticks = np.arange(lat_start, lat_end + 1, 25)
-
-        if var_in_reference:
-            ax1.set_xticks(lon_ticks)
-            ax1.set_yticks(lat_ticks)
-
         # Middle plot - validation dataset
         ax2 = plt.subplot(n_vars, 3, i * 3 + 2)
         im2 = ax2.pcolormesh(
             data.longitude,
             data.latitude,
-            data.values,  # Just call it directly
+            data.values,
             vmin=vmin,
             vmax=vmax,
         )
@@ -211,8 +191,11 @@ def create_comparison_plot(
         ax2.set_aspect("auto")
         ax2.set_xlabel("Longitude")
         ax2.set_ylabel("Latitude")
-        ax2.set_xticks(lon_ticks)
-        ax2.set_yticks(lat_ticks)
+
+        ax2.set_xlim(lon_min, lon_max)
+        ax2.set_ylim(lat_min, lat_max)
+
+        # Let matplotlib auto-generate nice ticks within these ranges
 
         # Right plot - histogram comparison
         ax3 = plt.subplot(n_vars, 3, i * 3 + 3)
@@ -258,8 +241,10 @@ def create_comparison_plot(
             stacked=True,
         )
 
-        # Set x-axis limits to match the data range
-        ax3.set_xlim(data_min, data_max)
+        # Set x-axis limits to match the data range (only if there's actual range)
+        # If data_min == data_max, let matplotlib auto-scale the axes
+        if data_min != data_max:
+            ax3.set_xlim(data_min, data_max)
 
         ax3.set_xlabel(f"{var}")
         ax3.set_ylabel("Frequency")
