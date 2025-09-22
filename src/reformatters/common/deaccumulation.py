@@ -1,13 +1,9 @@
-from typing import Final
-
 import numpy as np
 import pandas as pd
 import xarray as xr
 from numba import njit, prange  # type: ignore
 
 from reformatters.common.types import Array1D, ArrayFloat32
-
-SECONDS_PER_6_HOUR: Final[int] = 6 * 60 * 60
 
 
 def deaccumulate_to_rates_inplace(

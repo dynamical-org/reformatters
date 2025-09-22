@@ -59,15 +59,6 @@ class UpdateProgressTracker:
     def record_completion(self, var: str) -> None:
         self.queue.put(var)
 
-    def get_unprocessed_str(self, all_vars: Sequence[str]) -> list[str]:
-        # Method used by pre-RegionJob reformatters.
-        unprocessed = [v for v in all_vars if v not in self.processed_variables]
-        # Edge case: if all variables have been processed, but the job failed on writing metadata,
-        # reprocess (any) one variable to ensure metadata is written.
-        if len(unprocessed) == 0:
-            return [all_vars[0]]
-        return unprocessed
-
     def get_unprocessed[T: BaseInternalAttrs](
         self, all_vars: Sequence[DataVar[T]]
     ) -> list[DataVar[T]]:

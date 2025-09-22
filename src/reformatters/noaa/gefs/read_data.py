@@ -3,7 +3,6 @@ import warnings
 from typing import Literal, assert_never
 
 import numpy as np
-import pandas as pd
 import rasterio  # type: ignore
 import xarray as xr
 
@@ -31,14 +30,6 @@ def get_hours_str(var_info: GEFSDataVar, lead_time_hours: float) -> str:
             reset_hour = lead_time_hours - diff_hours
         hours_str = f"{reset_hour:.0f}-{lead_time_hours:.0f} hour"
     return hours_str
-
-
-def format_gefs_idx_var(
-    var_info: GEFSDataVar, init_time: pd.Timestamp, lead_time_hours: float
-) -> str:
-    hours_str = get_hours_str(var_info, lead_time_hours)
-    grib_element = get_grib_element(var_info, init_time)
-    return f"{grib_element}:{var_info.internal_attrs.grib_index_level}:{hours_str}"
 
 
 def read_data(
