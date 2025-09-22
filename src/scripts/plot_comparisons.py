@@ -110,7 +110,9 @@ def create_comparison_plot(
 
         # Dataset titles with timestamps
         ds_init_time = pd.Timestamp(ds.init_time.item()).strftime("%Y-%m-%dT%H:%M")
-        ds_lead_time = pd.Timestamp(ds.lead_time.item()).strftime("%H:%M")
+        ds_lead_time = (
+            f"{(pd.Timedelta(ds.lead_time.item()).total_seconds()) / 3600:g}h"
+        )
         ds_time = f"{ds_init_time}+{ds_lead_time}"
         ref_time = pd.Timestamp(ref_ds.time.item()).strftime("%Y-%m-%dT%H:%M")
 
