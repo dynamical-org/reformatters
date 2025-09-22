@@ -192,15 +192,15 @@ def test_backfill_local_and_operational_update(
         dataset.store_factory.primary_store(), chunks=None, decode_timedelta=True
     )
 
-    np.testing.assert_array_equal(
-        updated_ds.time,
-        pd.date_range(
-            init_time_start,
-            init_time_end,
-            freq=dataset.template_config.append_dim_frequency,
-            inclusive="left",
-        ),
-    )
+    # We slice off the last hour because most variables (except precip) lack hour 0 values.
+    # (see GefsAnalysisRegionJob.update_template_with_results)
+    expected_times = pd.date_range(
+        init_time_start,
+        init_time_end,
+        freq=dataset.template_config.append_dim_frequency,
+        inclusive="left",
+    )[:-1]
+    np.testing.assert_array_equal(updated_ds.time, expected_times)
 
     space_subset_ds = updated_ds.sel(
         latitude=slice(10, 0),
