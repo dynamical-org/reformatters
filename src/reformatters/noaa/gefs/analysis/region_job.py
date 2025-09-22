@@ -241,3 +241,15 @@ class GefsAnalysisRegionJob(RegionJob[GEFSDataVar, GefsAnalysisSourceFileCoord])
             filter_start=append_dim_start,
         )
         return jobs, template_ds
+
+    def update_template_with_results(
+        self, process_results: Mapping[str, Sequence[GefsAnalysisSourceFileCoord]]
+    ) -> xr.Dataset:
+        # Remove the last hour because most variables (except precip) lack hour 0 values.
+        # Precipitation extends to hour 6 of the latest forecast, but other variables do not,
+        # so we trim the final hour to keep all variables aligned.
+        return (
+            super()
+            .update_template_with_results(process_results)
+            .isel(time=slice(None, -1))
+        )

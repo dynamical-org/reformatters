@@ -10,6 +10,7 @@ import xarray as xr
 
 from reformatters.common.config_models import DataVarAttrs, Encoding
 from reformatters.common.pydantic import replace
+from reformatters.common.region_job import SourceFileStatus
 from reformatters.common.storage import (
     DatasetFormat,
     StorageConfig,
@@ -573,3 +574,28 @@ def test_operational_update_jobs(
             mock_open_zarr.assert_called_once_with(
                 store_factory.primary_store(), decode_timedelta=True, chunks=None
             )
+
+
+def test_update_template_with_results(
+    template_ds: xr.Dataset, example_data_vars: list[GEFSDataVar]
+) -> None:
+    data_vars = example_data_vars[:1]
+    job = GefsAnalysisRegionJob(
+        tmp_store=get_local_tmp_store(),
+        template_ds=template_ds,
+        data_vars=example_data_vars,
+        append_dim="time",
+        region=slice(0, 8),
+        reformat_job_name="test-job",
+    )
+    coord = GefsAnalysisSourceFileCoord(
+        init_time=pd.Timestamp("2000-01-03T21:00"),
+        lead_time=pd.Timedelta("6h"),
+        data_vars=data_vars,
+        status=SourceFileStatus.Succeeded,
+    )
+    process_results = {
+        "temperature_2m": [coord],
+    }
+    updated_template = job.update_template_with_results(process_results)
+    assert updated_template.time.max() == pd.Timestamp("2000-01-03T18:00")
