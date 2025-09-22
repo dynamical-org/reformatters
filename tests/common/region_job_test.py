@@ -196,6 +196,11 @@ def test_source_file_coord_out_loc_default_impl() -> None:
     assert coord.out_loc() == {"time": pd.Timestamp("2025-01-01T00")}
 
 
+def test_source_file_coord_append_dim_coord() -> None:
+    coord = ExampleSourceFileCoords(time=pd.Timestamp("2025-01-01T00"))
+    assert coord.append_dim_coord == pd.Timestamp("2025-01-01T00")
+
+
 def test_get_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
     data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
     tmp_store = get_local_tmp_store()

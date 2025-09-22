@@ -315,6 +315,17 @@ def test_source_file_coord_out(
     }
 
 
+def test_source_file_coord_append_dim_coord(
+    example_data_vars: list[GEFSDataVar],
+) -> None:
+    coord = GefsAnalysisSourceFileCoord(
+        init_time=pd.Timestamp("2021-01-01T00:00"),  # Use current archive period
+        lead_time=pd.Timedelta("6h"),
+        data_vars=example_data_vars[:1],
+    )
+    assert coord.append_dim_coord == pd.Timestamp("2021-01-01T06:00")
+
+
 def test_download_file(
     template_ds: xr.Dataset,
     example_data_vars: list[GEFSDataVar],
