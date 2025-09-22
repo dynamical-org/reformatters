@@ -6,23 +6,13 @@ import xarray as xr
 import zarr
 
 from reformatters.common.logging import get_logger
+from scripts.validation.utils import OUTPUT_DIR, variables_option
 
 log = get_logger(__name__)
 
 zarr.config.set({"async.concurrency": 128})
 
 GEFS_ANALYSIS_URL = "https://data.dynamical.org/noaa/gefs/analysis/latest.zarr"
-OUTPUT_DIR = "data/output"
-
-app = typer.Typer()
-
-variables_option = typer.Option(
-    None,
-    "--variable",
-    "-v",
-    help="Variable to plot (can be used multiple times). "
-    "If not provided, will plot all common variables.",
-)
 
 
 def align_reference_spatially(ds: xr.Dataset, reference_ds: xr.Dataset) -> xr.Dataset:
@@ -197,8 +187,6 @@ def create_comparison_plot(
         ax2.set_xlim(lon_min, lon_max)
         ax2.set_ylim(lat_min, lat_max)
 
-        # Let matplotlib auto-generate nice ticks within these ranges
-
         # Right plot - histogram comparison
         ax3 = plt.subplot(n_vars, 3, i * 3 + 3)
 
@@ -244,7 +232,6 @@ def create_comparison_plot(
         )
 
         # Set x-axis limits to match the data range (only if there's actual range)
-        # If data_min == data_max, let matplotlib auto-scale the axes
         if data_min != data_max:
             ax3.set_xlim(data_min, data_max)
 
@@ -279,8 +266,7 @@ def create_comparison_plot(
     log.info(f"Comparison plot saved to {filepath}")
 
 
-@app.command()
-def compare(
+def compare_vars(
     validation_url: str,
     reference_url: str | None = GEFS_ANALYSIS_URL,
     variables: list[str] | None = variables_option,
@@ -335,21 +321,3 @@ def compare(
 
     if show_plot:
         plt.show()
-
-
-@app.command()
-def list_variables(
-    dataset_url: str = typer.Argument(help="URL of the dataset to examine"),
-) -> None:
-    """List all variables in a zarr dataset."""
-
-    log.info(f"Loading dataset from: {dataset_url}")
-    ds = xr.open_zarr(dataset_url, chunks=None, decode_timedelta=True)
-    variables = list(ds.data_vars.keys())
-    typer.echo(f"Dataset contains {len(variables)} variables:")
-    for var in sorted(variables):
-        typer.echo(f"  {var}")
-
-
-if __name__ == "__main__":
-    app()
