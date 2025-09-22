@@ -8,7 +8,7 @@ from enum import Enum, auto
 from itertools import batched, chain
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar
+from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar, get_args
 
 import numpy as np
 import pandas as pd
@@ -86,6 +86,15 @@ class SourceFileCoord(FrozenBaseModel):
         """
         # .model_dump() returns a dict from attribute names to values
         return self.model_dump(exclude=["status", "downloaded_path"])  # type: ignore
+
+    @property
+    def append_dim_coord(self) -> CoordinateValueOrRange:
+        """Return the coordinate value or range for the append dimension."""
+        out_loc = self.out_loc()
+        for d in get_args(AppendDim.__value__):
+            if coord := out_loc.get(d):
+                return coord
+        return pd.Timestamp.min
 
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
@@ -613,7 +622,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
                 # For recent files, we expect some files to not exist yet, just log the path
                 # else, log exception so it is caught by error reporting but doesn't stop processing
-                append_dim_coord = getattr(coord, self.append_dim, pd.Timestamp.min)
+                append_dim_coord = coord.append_dim_coord
                 if isinstance(append_dim_coord, slice):
                     append_dim_coord = append_dim_coord.start
                 two_days_ago = pd.Timestamp.now() - pd.Timedelta(hours=48)
