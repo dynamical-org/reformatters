@@ -9,12 +9,12 @@ from matplotlib.figure import Figure
 from reformatters.common.logging import get_logger
 from scripts.validation.utils import (
     OUTPUT_DIR,
-    _scope_time_period,
     end_date_option,
     get_two_random_points,
     is_forecast_dataset,
     load_zarr_dataset,
-    select_ensemble_member,
+    scope_time_period,
+    select_random_ensemble_member,
     select_variables_for_plotting,
     start_date_option,
     variables_option,
@@ -170,12 +170,12 @@ def compare_timeseries(
 
     validation_ds = load_zarr_dataset(validation_url, decode_timedelta=True)
     if start_date or end_date:
-        validation_ds = _scope_time_period(validation_ds, start_date, end_date)
+        validation_ds = scope_time_period(validation_ds, start_date, end_date)
     reference_ds = load_zarr_dataset(reference_url)
 
     selected_vars = select_variables_for_plotting(validation_ds, variables)
 
-    validation_ds = select_ensemble_member(validation_ds)
+    validation_ds, ensemble_member = select_random_ensemble_member(validation_ds)
 
     point1_sel, point2_sel, (lat1, lon1), (lat2, lon2) = get_two_random_points(
         validation_ds
@@ -225,6 +225,12 @@ def compare_timeseries(
         )
 
     dataset_id = validation_ds.attrs.get("dataset_id", "")
-    fig.suptitle(f"Timeseries Comparison\n{title_suffix}", fontsize=14)
+    ds_title = validation_ds.attrs.get("name", "")
+    if ensemble_member is not None:
+        ds_title += f" (Ensemble Member {ensemble_member})"
+    ref_title = reference_ds.attrs.get("name", "")
+    fig.suptitle(
+        f"Timeseries Comparison\n{ds_title} vs {ref_title}\n{title_suffix}", fontsize=14
+    )
 
     save_and_show_plot(fig, dataset_id, show_plot)

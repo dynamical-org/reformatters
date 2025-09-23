@@ -8,10 +8,10 @@ import zarr
 from reformatters.common.logging import get_logger
 from scripts.validation.utils import (
     OUTPUT_DIR,
-    _scope_time_period,
     end_date_option,
     load_zarr_dataset,
-    select_random_enseble_member,
+    scope_time_period,
+    select_random_ensemble_member,
     start_date_option,
     variables_option,
 )
@@ -282,7 +282,7 @@ def compare_spatial(
     log.info(f"Loading validation dataset from: {validation_url}")
     validation_ds = load_zarr_dataset(validation_url)
     if start_date or end_date:
-        validation_ds = _scope_time_period(validation_ds, start_date, end_date)
+        validation_ds = scope_time_period(validation_ds, start_date, end_date)
 
     log.info(f"Loading reference dataset from: {reference_url}")
     reference_ds = load_zarr_dataset(reference_url)
@@ -306,7 +306,7 @@ def compare_spatial(
 
     log.info(f"Plotting variables: {selected_vars}")
 
-    validation_ds, ensemble_member = select_random_enseble_member(validation_ds)
+    validation_ds, ensemble_member = select_random_ensemble_member(validation_ds)
     spatially_aligned_reference_ds = align_reference_spatially(
         validation_ds, reference_ds
     )

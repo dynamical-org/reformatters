@@ -4,10 +4,10 @@ import zarr
 from reformatters.common.logging import get_logger
 from scripts.validation.utils import (
     OUTPUT_DIR,
-    _scope_time_period,
     end_date_option,
     get_two_random_points,
     load_zarr_dataset,
+    scope_time_period,
     select_variables_for_plotting,
     start_date_option,
     variables_option,
@@ -29,7 +29,7 @@ def report_nulls(
 
     ds = load_zarr_dataset(dataset_url, decode_timedelta=True)
     if start_date or end_date:
-        ds = _scope_time_period(ds, start_date, end_date)
+        ds = scope_time_period(ds, start_date, end_date)
 
     selected_vars = select_variables_for_plotting(ds, variables)
 

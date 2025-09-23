@@ -32,7 +32,7 @@ def is_forecast_dataset(ds: xr.Dataset) -> bool:
     return "init_time" in ds.dims and "lead_time" in ds.dims
 
 
-def _scope_time_period(
+def scope_time_period(
     ds: xr.Dataset, start_date: str | None, end_date: str | None
 ) -> xr.Dataset:
     if is_forecast_dataset(ds):
@@ -107,20 +107,12 @@ def select_variables_for_plotting(
     return selected_vars
 
 
-# Utility: Select a random ensemble member if present
-def select_ensemble_member(ds: xr.Dataset) -> xr.Dataset:
-    if "ensemble_member" in ds.dims:
-        ensemble_member = np.random.choice(ds.ensemble_member, 1)[0]
-        ds = ds.sel(ensemble_member=ensemble_member)
-    return ds
-
-
 # Utility: Select a random ensemble member and return the member index
-def select_random_enseble_member(ds: xr.Dataset) -> tuple[xr.Dataset, int | None]:
+def select_random_ensemble_member(ds: xr.Dataset) -> tuple[xr.Dataset, int | None]:
     if "ensemble_member" not in ds.dims:
         return ds, None
     ensemble_member = np.random.choice(ds.ensemble_member, 1)[0]
     return (
-        ds.sel(ensemble_member=ensemble_member).squeeze("ensemble_member"),
+        ds.sel(ensemble_member=ensemble_member),
         ensemble_member,
     )
