@@ -29,7 +29,7 @@ class GefsForecast35DayDataset(
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="6",  # fit on 8 vCPU node
-            memory="60G",  # fit on 64GB node
+            memory="120G",  # fit on 128GB node (more than needed)
             shared_memory="24G",
             ephemeral_storage="150G",
             secret_names=self.store_factory.k8s_secret_names(),
