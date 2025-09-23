@@ -42,6 +42,8 @@ dev = [
     "pre-commit==4.3.0",
     "pyqt6>=6.7.1",
     "pytest~=8.4",
+    "pytest-sugar~=1.0",
+    "pytest-xdist~=3.8",
     # NOTE: keep this in sync with .pre-commit-config.yaml
     "ruff==0.13.1",
     "types-requests~=2.32",
@@ -86,3 +88,12 @@ warn_required_dynamic_aliases = true
 
 [project.package-data]
 reformatters = ["py.typed"]
+
+[tool.pytest.ini_options]
+pythonpath = "src/reformatters"
+testpaths = ["tests/"]
+addopts = "-n auto --dist loadfile"
+markers = [
+    "slow: slow running tests.",
+    "skip_set_local_zarr_store_base_path: opt out of automatically writing zarrs to a tmp directory during tests",
+]

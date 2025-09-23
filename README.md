@@ -28,7 +28,9 @@ We use
 * Lint: `uv run ruff check`
 * Type check: `uv run mypy`
 * Format: `uv run ruff format`
-* Test: `uv run pytest`
+* Tests: 
+   * Run tests in parallel on all available cores: `uv run pytest`
+   * Run tests serially: `uv run pytest -n 0`
 
 ## Deploying to the cloud
 
