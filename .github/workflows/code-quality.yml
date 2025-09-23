@@ -46,7 +46,7 @@ jobs:
           DISABLE_NUMCODECS_SSE2: 1
           DISABLE_NUMCODECS_AVX2: 1
           CFLAGS: "-Wno-implicit-function-declaration" 
-        run: uv sync --all-extras --dev
+        run: uv sync --all-extras --dev --locked
 
       - name: Install this project
         run: "uv pip install -e ."
