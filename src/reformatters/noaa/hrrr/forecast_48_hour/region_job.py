@@ -199,7 +199,7 @@ class NoaaHrrrForecast48HourRegionJob(
     @classmethod
     def _update_append_dim_end(cls) -> pd.Timestamp:
         """Get the end time for operational updates."""
-        return pd.Timestamp.now(tz="UTC")
+        return pd.Timestamp.now()
 
     @classmethod
     def _update_append_dim_start(cls, existing_ds: xr.Dataset) -> pd.Timestamp:
