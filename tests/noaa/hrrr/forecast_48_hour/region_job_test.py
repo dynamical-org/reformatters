@@ -400,3 +400,15 @@ def test_operational_update_jobs(
     for job in jobs:
         assert isinstance(job, NoaaHrrrForecast48HourRegionJob)
         assert job.data_vars == template_config.data_vars
+
+
+def test_update_append_dim_end_is_tz_naive() -> None:
+    region_job = NoaaHrrrForecast48HourRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=Mock(),
+        data_vars=Mock(),
+        append_dim=Mock(),
+        region=Mock(),
+        reformat_job_name="test",
+    )
+    assert region_job._update_append_dim_end().tzinfo is None
