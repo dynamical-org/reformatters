@@ -11,7 +11,7 @@ def check_data_is_current(ds: xr.Dataset) -> validation.ValidationResult:
     HRRR provides 48-hour forecasts every 6 hours, so we should have
     recent init_time data within the last day.
     """
-    now = pd.Timestamp.now(tz="UTC")
+    now = pd.Timestamp.now()
     latest_init_time = ds["init_time"].max().item()
 
     # Convert to pandas timestamp for comparison
