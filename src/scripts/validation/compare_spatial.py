@@ -6,23 +6,21 @@ import xarray as xr
 import zarr
 
 from reformatters.common.logging import get_logger
+from scripts.validation.utils import (
+    OUTPUT_DIR,
+    end_date_option,
+    load_zarr_dataset,
+    scope_time_period,
+    select_random_ensemble_member,
+    start_date_option,
+    variables_option,
+)
 
 log = get_logger(__name__)
 
 zarr.config.set({"async.concurrency": 128})
 
 GEFS_ANALYSIS_URL = "https://data.dynamical.org/noaa/gefs/analysis/latest.zarr"
-OUTPUT_DIR = "data/output"
-
-app = typer.Typer()
-
-variables_option = typer.Option(
-    None,
-    "--variable",
-    "-v",
-    help="Variable to plot (can be used multiple times). "
-    "If not provided, will plot all common variables.",
-)
 
 
 def align_reference_spatially(ds: xr.Dataset, reference_ds: xr.Dataset) -> xr.Dataset:
@@ -39,7 +37,7 @@ def align_to_valid_time(
     lead_time: str | None,
 ) -> tuple[xr.Dataset, xr.Dataset]:
     selected_init_time: pd.Timestamp
-    selected_lead_time: pd.Timedelta
+    selected_lead_time: str
 
     if init_time is None:
         selected_init_time = pd.Timestamp(np.random.choice(ds.init_time, 1)[0])
@@ -47,9 +45,9 @@ def align_to_valid_time(
         selected_init_time = pd.Timestamp(init_time)
 
     if lead_time is None:
-        selected_lead_time = pd.Timedelta(np.random.choice(ds.lead_time, 1)[0])
+        selected_lead_time = np.random.choice(ds.lead_time, 1)[0]
     else:
-        selected_lead_time = pd.Timedelta(lead_time)
+        selected_lead_time = lead_time
 
     ds = ds.sel(
         init_time=selected_init_time,
@@ -60,17 +58,6 @@ def align_to_valid_time(
 
     reference_ds = reference_ds.sel(time=valid_time, method="nearest")
     return ds, reference_ds
-
-
-def select_random_enseble_member(ds: xr.Dataset) -> tuple[xr.Dataset, int | None]:
-    if "ensemble_member" not in ds.dims:
-        return ds, None
-
-    ensemble_member = np.random.choice(ds.ensemble_member, 1)[0]
-    return (
-        ds.sel(ensemble_member=ensemble_member).squeeze("ensemble_member"),
-        ensemble_member,
-    )
 
 
 def create_comparison_plot(
@@ -111,9 +98,13 @@ def create_comparison_plot(
         # Dataset titles with timestamps
         ds_init_time = pd.Timestamp(ds.init_time.item()).strftime("%Y-%m-%dT%H:%M")
         ds_lead_time = (
-            f"{(pd.Timedelta(ds.lead_time.item()).total_seconds()) / 3600:g}h"
+            pd.Timedelta(
+                **{validation_ds.lead_time.attrs["units"]: ds.lead_time.item()}
+            ).total_seconds()
+            // 3600
         )
-        ds_time = f"{ds_init_time}+{ds_lead_time}"
+        ds_lead_time_str = f"{ds_lead_time:g}h"
+        ds_time = f"{ds_init_time}+{ds_lead_time_str}"
         ref_time = pd.Timestamp(ref_ds.time.item()).strftime("%Y-%m-%dT%H:%M")
 
         if var_in_reference:
@@ -197,8 +188,6 @@ def create_comparison_plot(
         ax2.set_xlim(lon_min, lon_max)
         ax2.set_ylim(lat_min, lat_max)
 
-        # Let matplotlib auto-generate nice ticks within these ranges
-
         # Right plot - histogram comparison
         ax3 = plt.subplot(n_vars, 3, i * 3 + 3)
 
@@ -244,7 +233,6 @@ def create_comparison_plot(
         )
 
         # Set x-axis limits to match the data range (only if there's actual range)
-        # If data_min == data_max, let matplotlib auto-scale the axes
         if data_min != data_max:
             ax3.set_xlim(data_min, data_max)
 
@@ -279,26 +267,25 @@ def create_comparison_plot(
     log.info(f"Comparison plot saved to {filepath}")
 
 
-@app.command()
-def compare(
+def compare_spatial(
     validation_url: str,
-    reference_url: str | None = GEFS_ANALYSIS_URL,
-    variables: list[str] | None = variables_option,
+    reference_url: str = GEFS_ANALYSIS_URL,
+    variables: list[str] = variables_option,
     show_plot: bool = False,
     init_time: str | None = None,
     lead_time: str | None = None,
+    start_date: str | None = start_date_option,
+    end_date: str | None = end_date_option,
 ) -> None:
     """Create comparison plots between two zarr datasets."""
 
     log.info(f"Loading validation dataset from: {validation_url}")
-    validation_ds = xr.open_zarr(
-        validation_url,
-        chunks=None,
-        decode_timedelta=True,
-    )
+    validation_ds = load_zarr_dataset(validation_url)
+    if start_date or end_date:
+        validation_ds = scope_time_period(validation_ds, start_date, end_date)
 
     log.info(f"Loading reference dataset from: {reference_url}")
-    reference_ds = xr.open_zarr(reference_url, chunks=None)
+    reference_ds = load_zarr_dataset(reference_url)
 
     validation_vars = list(validation_ds.data_vars.keys())
     log.info(f"Found {len(validation_vars)} variables in validation dataset")
@@ -319,7 +306,7 @@ def compare(
 
     log.info(f"Plotting variables: {selected_vars}")
 
-    validation_ds, ensemble_member = select_random_enseble_member(validation_ds)
+    validation_ds, ensemble_member = select_random_ensemble_member(validation_ds)
     spatially_aligned_reference_ds = align_reference_spatially(
         validation_ds, reference_ds
     )
@@ -335,21 +322,3 @@ def compare(
 
     if show_plot:
         plt.show()
-
-
-@app.command()
-def list_variables(
-    dataset_url: str = typer.Argument(help="URL of the dataset to examine"),
-) -> None:
-    """List all variables in a zarr dataset."""
-
-    log.info(f"Loading dataset from: {dataset_url}")
-    ds = xr.open_zarr(dataset_url, chunks=None, decode_timedelta=True)
-    variables = list(ds.data_vars.keys())
-    typer.echo(f"Dataset contains {len(variables)} variables:")
-    for var in sorted(variables):
-        typer.echo(f"  {var}")
-
-
-if __name__ == "__main__":
-    app()
