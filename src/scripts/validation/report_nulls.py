@@ -42,7 +42,7 @@ def report_nulls(
     log.info(f"Point 2: lat={lat2:.2f}, lon={lon2:.2f}")
 
     # Create plots
-    fig, axes = plt.subplots(
+    _fig, axes = plt.subplots(
         len(selected_vars), 2, figsize=(12, 4 * len(selected_vars)), squeeze=False
     )
 
