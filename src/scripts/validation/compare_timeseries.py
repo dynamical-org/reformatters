@@ -97,7 +97,6 @@ def plot_single_variable_at_point(
     val_point_data = validation_subset[var].isel(point_sel)
 
     # Debug the data
-    log.info(f"Validation data shape for {var}: {val_point_data.shape}")
     log.info(
         f"Validation data min/max for {var}: {float(val_point_data.min()):.3f} / {float(val_point_data.max()):.3f}"
     )
@@ -118,6 +117,12 @@ def plot_single_variable_at_point(
 
     # Plot reference data if variable exists
     if var in reference_subset.data_vars:
+        assert (
+            "latitude" in reference_subset.dims and "longitude" in reference_subset.dims
+        ), (
+            "Reference datasets with no latitude and longitude dimensions are not currently supported"
+        )
+
         ref_point_data = reference_subset[var].sel(
             latitude=lat, longitude=lon, method="nearest"
         )
