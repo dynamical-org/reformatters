@@ -9,10 +9,14 @@ from matplotlib.figure import Figure
 from reformatters.common.logging import get_logger
 from scripts.validation.utils import (
     OUTPUT_DIR,
+    _scope_time_period,
+    end_date_option,
     get_two_random_points,
+    is_forecast_dataset,
     load_zarr_dataset,
     select_ensemble_member,
     select_variables_for_plotting,
+    start_date_option,
     variables_option,
 )
 
@@ -21,11 +25,6 @@ log = get_logger(__name__)
 zarr.config.set({"async.concurrency": 128})
 
 GEFS_ANALYSIS_URL = "https://data.dynamical.org/noaa/gefs/analysis/latest.zarr"
-
-
-def is_forecast_dataset(ds: xr.Dataset) -> bool:
-    """Check if dataset is a forecast (has init_time and lead_time) or analysis (has time)."""
-    return "init_time" in ds.dims and "lead_time" in ds.dims
 
 
 def select_time_period_for_comparison(
@@ -159,10 +158,14 @@ def compare_timeseries(
     reference_url: str = GEFS_ANALYSIS_URL,
     variables: list[str] | None = variables_option,
     show_plot: bool = False,
+    start_date: str | None = start_date_option,
+    end_date: str | None = end_date_option,
 ) -> None:
     """Compare timeseries between validation and reference datasets."""
 
     validation_ds = load_zarr_dataset(validation_url, decode_timedelta=True)
+    if start_date or end_date:
+        validation_ds = _scope_time_period(validation_ds, start_date, end_date)
     reference_ds = load_zarr_dataset(reference_url)
 
     selected_vars = select_variables_for_plotting(validation_ds, variables)

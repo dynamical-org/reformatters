@@ -14,6 +14,37 @@ variables_option = typer.Option(
     "If not provided, will plot all common variables.",
 )
 
+start_date_option = typer.Option(
+    None,
+    "--start-date",
+    help="Scope analysis to times after this date",
+)
+
+end_date_option = typer.Option(
+    None,
+    "--end-date",
+    help="Scope analysis to times before this date",
+)
+
+
+def is_forecast_dataset(ds: xr.Dataset) -> bool:
+    """Check if dataset is a forecast (has init_time and lead_time) or analysis (has time)."""
+    return "init_time" in ds.dims and "lead_time" in ds.dims
+
+
+def _scope_time_period(
+    ds: xr.Dataset, start_date: str | None, end_date: str | None
+) -> xr.Dataset:
+    if is_forecast_dataset(ds):
+        append_dim = "init_time"
+    else:
+        append_dim = "time"
+    if start_date:
+        ds = ds.sel({append_dim: slice(start_date, end_date)})
+    if end_date:
+        ds = ds.sel({append_dim: slice(start_date, end_date)})
+    return ds
+
 
 # Utility: Load a zarr dataset as xarray.Dataset
 def load_zarr_dataset(url: str, decode_timedelta: bool = False) -> xr.Dataset:

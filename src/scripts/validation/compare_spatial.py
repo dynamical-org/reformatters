@@ -8,8 +8,11 @@ import zarr
 from reformatters.common.logging import get_logger
 from scripts.validation.utils import (
     OUTPUT_DIR,
+    _scope_time_period,
+    end_date_option,
     load_zarr_dataset,
     select_random_enseble_member,
+    start_date_option,
     variables_option,
 )
 
@@ -271,12 +274,15 @@ def compare_spatial(
     show_plot: bool = False,
     init_time: str | None = None,
     lead_time: str | None = None,
+    start_date: str | None = start_date_option,
+    end_date: str | None = end_date_option,
 ) -> None:
     """Create comparison plots between two zarr datasets."""
 
     log.info(f"Loading validation dataset from: {validation_url}")
     validation_ds = load_zarr_dataset(validation_url)
-    validation_ds = validation_ds.sel(init_time=slice("2025-09-01T00", "2025-09-22T00"))
+    if start_date or end_date:
+        validation_ds = _scope_time_period(validation_ds, start_date, end_date)
 
     log.info(f"Loading reference dataset from: {reference_url}")
     reference_ds = load_zarr_dataset(reference_url)

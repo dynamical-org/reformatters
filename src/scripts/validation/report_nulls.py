@@ -4,9 +4,12 @@ import zarr
 from reformatters.common.logging import get_logger
 from scripts.validation.utils import (
     OUTPUT_DIR,
+    _scope_time_period,
+    end_date_option,
     get_two_random_points,
     load_zarr_dataset,
     select_variables_for_plotting,
+    start_date_option,
     variables_option,
 )
 
@@ -19,11 +22,14 @@ def report_nulls(
     dataset_url: str,
     variables: list[str] | None = variables_option,
     show_plot: bool = False,
+    start_date: str | None = start_date_option,
+    end_date: str | None = end_date_option,
 ) -> None:
     """Analyze null values at two spatial points across time dimensions."""
 
     ds = load_zarr_dataset(dataset_url, decode_timedelta=True)
-    ds = ds.sel(init_time=slice("2025-09-01T00", "2025-09-22T00"))
+    if start_date or end_date:
+        ds = _scope_time_period(ds, start_date, end_date)
 
     selected_vars = select_variables_for_plotting(ds, variables)
 
