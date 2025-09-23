@@ -22,10 +22,11 @@ from reformatters.common.config_models import DataVar
 from reformatters.common.iterating import dimension_slices, get_worker_jobs
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel, replace
-from reformatters.common.reformat_utils import (
+from reformatters.common.shared_memory_utils import (
     create_data_array_and_template,
+    make_shared_buffer,
+    write_shards,
 )
-from reformatters.common.shared_memory_utils import make_shared_buffer, write_shards
 from reformatters.common.types import (
     AppendDim,
     ArrayND,
