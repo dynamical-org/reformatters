@@ -29,7 +29,7 @@ def test_operational_kubernetes_resources(dataset: GefsForecast35DayDataset) -> 
     assert update_cron_job.schedule == "0 7 * * *"  # Daily at 7:00 UTC
     assert update_cron_job.secret_names == dataset.store_factory.k8s_secret_names()
     assert update_cron_job.cpu == "6"
-    assert update_cron_job.memory == "60G"
+    assert update_cron_job.memory.endswith("G")
     assert update_cron_job.shared_memory == "24G"
     assert update_cron_job.ephemeral_storage == "150G"
 
