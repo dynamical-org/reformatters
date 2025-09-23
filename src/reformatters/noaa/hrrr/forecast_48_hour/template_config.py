@@ -47,7 +47,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
             dataset_id="noaa-hrrr-forecast-48-hour",
-            dataset_version="0.0.6",
+            dataset_version="0.1.0",
             name="NOAA HRRR forecast, 48 hour",
             description="Weather forecasts from the High Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
             attribution="NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
@@ -528,7 +528,7 @@ class NoaaHrrrForecast48HourTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     grib_description='0[-] MSL="Mean sea level"',
                     grib_index_level="mean sea level",
                     index_position=41,
-                    keep_mantissa_bits=10,
+                    keep_mantissa_bits=13,
                     hrrr_file_type="sfc",
                 ),
             ),
