@@ -6,7 +6,12 @@ import xarray as xr
 import zarr
 
 from reformatters.common.logging import get_logger
-from scripts.validation.utils import OUTPUT_DIR, variables_option
+from scripts.validation.utils import (
+    OUTPUT_DIR,
+    load_zarr_dataset,
+    select_random_enseble_member,
+    variables_option,
+)
 
 log = get_logger(__name__)
 
@@ -29,7 +34,7 @@ def align_to_valid_time(
     lead_time: str | None,
 ) -> tuple[xr.Dataset, xr.Dataset]:
     selected_init_time: pd.Timestamp
-    selected_lead_time: pd.Timedelta
+    selected_lead_time: str
 
     if init_time is None:
         selected_init_time = pd.Timestamp(np.random.choice(ds.init_time, 1)[0])
@@ -37,9 +42,9 @@ def align_to_valid_time(
         selected_init_time = pd.Timestamp(init_time)
 
     if lead_time is None:
-        selected_lead_time = pd.Timedelta(np.random.choice(ds.lead_time, 1)[0])
+        selected_lead_time = np.random.choice(ds.lead_time, 1)[0]
     else:
-        selected_lead_time = pd.Timedelta(lead_time)
+        selected_lead_time = lead_time
 
     ds = ds.sel(
         init_time=selected_init_time,
@@ -50,17 +55,6 @@ def align_to_valid_time(
 
     reference_ds = reference_ds.sel(time=valid_time, method="nearest")
     return ds, reference_ds
-
-
-def select_random_enseble_member(ds: xr.Dataset) -> tuple[xr.Dataset, int | None]:
-    if "ensemble_member" not in ds.dims:
-        return ds, None
-
-    ensemble_member = np.random.choice(ds.ensemble_member, 1)[0]
-    return (
-        ds.sel(ensemble_member=ensemble_member).squeeze("ensemble_member"),
-        ensemble_member,
-    )
 
 
 def create_comparison_plot(
@@ -101,9 +95,13 @@ def create_comparison_plot(
         # Dataset titles with timestamps
         ds_init_time = pd.Timestamp(ds.init_time.item()).strftime("%Y-%m-%dT%H:%M")
         ds_lead_time = (
-            f"{(pd.Timedelta(ds.lead_time.item()).total_seconds()) / 3600:g}h"
+            pd.Timedelta(
+                **{validation_ds.lead_time.attrs["units"]: ds.lead_time.item()}
+            ).total_seconds()
+            // 3600
         )
-        ds_time = f"{ds_init_time}+{ds_lead_time}"
+        ds_lead_time_str = f"{ds_lead_time:g}h"
+        ds_time = f"{ds_init_time}+{ds_lead_time_str}"
         ref_time = pd.Timestamp(ref_ds.time.item()).strftime("%Y-%m-%dT%H:%M")
 
         if var_in_reference:
@@ -268,8 +266,8 @@ def create_comparison_plot(
 
 def compare_spatial(
     validation_url: str,
-    reference_url: str | None = GEFS_ANALYSIS_URL,
-    variables: list[str] | None = variables_option,
+    reference_url: str = GEFS_ANALYSIS_URL,
+    variables: list[str] = variables_option,
     show_plot: bool = False,
     init_time: str | None = None,
     lead_time: str | None = None,
@@ -277,14 +275,11 @@ def compare_spatial(
     """Create comparison plots between two zarr datasets."""
 
     log.info(f"Loading validation dataset from: {validation_url}")
-    validation_ds = xr.open_zarr(
-        validation_url,
-        chunks=None,
-        decode_timedelta=True,
-    )
+    validation_ds = load_zarr_dataset(validation_url)
+    validation_ds = validation_ds.sel(init_time=slice("2025-09-01T00", "2025-09-22T00"))
 
     log.info(f"Loading reference dataset from: {reference_url}")
-    reference_ds = xr.open_zarr(reference_url, chunks=None)
+    reference_ds = load_zarr_dataset(reference_url)
 
     validation_vars = list(validation_ds.data_vars.keys())
     log.info(f"Found {len(validation_vars)} variables in validation dataset")

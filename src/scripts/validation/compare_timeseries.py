@@ -1,14 +1,20 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import typer
 import xarray as xr
 import zarr
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
 from reformatters.common.logging import get_logger
-from scripts.validation.utils import OUTPUT_DIR, variables_option
+from scripts.validation.utils import (
+    OUTPUT_DIR,
+    get_two_random_points,
+    load_zarr_dataset,
+    select_ensemble_member,
+    select_variables_for_plotting,
+    variables_option,
+)
 
 log = get_logger(__name__)
 
@@ -20,92 +26,6 @@ GEFS_ANALYSIS_URL = "https://data.dynamical.org/noaa/gefs/analysis/latest.zarr"
 def is_forecast_dataset(ds: xr.Dataset) -> bool:
     """Check if dataset is a forecast (has init_time and lead_time) or analysis (has time)."""
     return "init_time" in ds.dims and "lead_time" in ds.dims
-
-
-def load_zarr_dataset(url: str, decode_timedelta: bool = False) -> xr.Dataset:
-    """Loads an xarray dataset from a Zarr URL."""
-    log.info(f"Loading dataset from: {url}")
-    ds: xr.Dataset = xr.open_zarr(url, chunks=None, decode_timedelta=decode_timedelta)
-    return ds
-
-
-def get_spatial_dimensions(ds: xr.Dataset) -> tuple[str, str]:
-    """Determine spatial dimension names based on dataset."""
-    if "latitude" in ds.dims and "longitude" in ds.dims:
-        return "latitude", "longitude"
-    return "y", "x"
-
-
-def get_random_spatial_indices(
-    ds: xr.Dataset, lat_dim: str, lon_dim: str
-) -> tuple[dict[str, int], dict[str, int]]:
-    """Get two random spatial indices for plotting, ensuring different quartiles."""
-    lat_size = ds.sizes[lat_dim]
-    lon_size = ds.sizes[lon_dim]
-
-    lat1_idx = np.random.randint(0, lat_size // 4)
-    lon1_idx = np.random.randint(0, lon_size // 4)
-    lat2_idx = np.random.randint(3 * lat_size // 4, lat_size)
-    lon2_idx = np.random.randint(3 * lon_size // 4, lon_size)
-
-    point1_sel = {lat_dim: lat1_idx, lon_dim: lon1_idx}
-    point2_sel = {lat_dim: lat2_idx, lon_dim: lon2_idx}
-
-    log.info(f"Selected indices: Point 1: {point1_sel}, Point 2: {point2_sel}")
-    log.info(f"Spatial dimensions: {lat_dim}={lat_size}, {lon_dim}={lon_size}")
-
-    return point1_sel, point2_sel
-
-
-def get_two_random_points(
-    ds: xr.Dataset,
-) -> tuple[dict[str, int], dict[str, int], tuple[float, float], tuple[float, float]]:
-    """Get two random spatial points (indices and coordinates) for plotting."""
-    lat_dim, lon_dim = get_spatial_dimensions(ds)
-    point1_sel, point2_sel = get_random_spatial_indices(ds, lat_dim, lon_dim)
-
-    if lat_dim == "latitude" and lon_dim == "longitude":
-        lat1 = float(ds.latitude[point1_sel["latitude"]])
-        lon1 = float(ds.longitude[point1_sel["longitude"]])
-        lat2 = float(ds.latitude[point2_sel["latitude"]])
-        lon2 = float(ds.longitude[point2_sel["longitude"]])
-    else:  # Projected grids (y, x)
-        lat1 = float(ds.latitude[point1_sel["y"], point1_sel["x"]])
-        lon1 = float(ds.longitude[point1_sel["y"], point1_sel["x"]])
-        lat2 = float(ds.latitude[point2_sel["y"], point2_sel["x"]])
-        lon2 = float(ds.longitude[point2_sel["y"], point2_sel["x"]])
-
-    log.info(f"Point 1: lat={lat1:.2f}, lon={lon1:.2f}")
-    log.info(f"Point 2: lat={lat2:.2f}, lon={lon2:.2f}")
-    return point1_sel, point2_sel, (lat1, lon1), (lat2, lon2)
-
-
-def select_variables_for_plotting(
-    ds: xr.Dataset, requested_vars: list[str] | None
-) -> list[str]:
-    """Selects and validates variables for plotting."""
-    available_vars = list(ds.data_vars.keys())
-    log.info(f"Found {len(available_vars)} variables in dataset")
-
-    if requested_vars:
-        selected_vars = [var for var in requested_vars if var in available_vars]
-        if not selected_vars:
-            typer.echo("Error: No valid variables specified", err=True)
-            raise typer.Exit(1)
-    else:
-        selected_vars = available_vars
-
-    log.info(f"Plotting variables: {selected_vars}")
-    return selected_vars
-
-
-def select_ensemble_member(ds: xr.Dataset) -> xr.Dataset:
-    """Selects a random ensemble member if the dimension exists."""
-    if "ensemble_member" in ds.dims:
-        ensemble_member = np.random.choice(ds.ensemble_member, 1)[0]
-        ds = ds.sel(ensemble_member=ensemble_member)
-        log.info(f"Selected ensemble member: {ensemble_member}")
-    return ds
 
 
 def select_time_period_for_comparison(
@@ -226,8 +146,6 @@ def plot_single_variable_at_point(
 
 
 def save_and_show_plot(fig: Figure, dataset_id: str, show_plot: bool) -> None:
-    fig.tight_layout()
-    fig.subplots_adjust(top=0.85)
     filename = f"{dataset_id}_timeseries_comparison.png"
     filepath = f"{OUTPUT_DIR}/{filename}"
     fig.savefig(filepath, dpi=300, bbox_inches="tight")
@@ -245,9 +163,6 @@ def compare_timeseries(
     """Compare timeseries between validation and reference datasets."""
 
     validation_ds = load_zarr_dataset(validation_url, decode_timedelta=True)
-    # TODO: Make the time slice configurable or remove if not always needed.
-    # validation_ds = validation_ds.sel(init_time=slice("2025-09-01T00", "2025-09-22T00"))
-
     reference_ds = load_zarr_dataset(reference_url)
 
     selected_vars = select_variables_for_plotting(validation_ds, variables)
@@ -267,7 +182,11 @@ def compare_timeseries(
     ) = select_time_period_for_comparison(validation_ds, reference_ds)
 
     fig, axes = plt.subplots(
-        len(selected_vars), 2, figsize=(12, 4 * len(selected_vars)), squeeze=False
+        len(selected_vars),
+        2,
+        figsize=(12, 4 * len(selected_vars)),
+        squeeze=False,
+        constrained_layout=True,
     )
 
     for i, var in enumerate(selected_vars):
@@ -298,6 +217,6 @@ def compare_timeseries(
         )
 
     dataset_id = validation_ds.attrs.get("dataset_id", "")
-    fig.suptitle(f"Timeseries Comparison\n{title_suffix}", fontsize=14, y=0.95)
+    fig.suptitle(f"Timeseries Comparison\n{title_suffix}", fontsize=14)
 
     save_and_show_plot(fig, dataset_id, show_plot)
