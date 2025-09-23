@@ -1,4 +1,5 @@
 import multiprocessing
+import os
 from collections.abc import Sequence
 from typing import Any
 
@@ -104,10 +105,14 @@ if Config.is_sentry_enabled:
         project_root="src/",
         in_app_include=["reformatters"],
         default_integrations=True,
+        enable_logs=True,
         integrations=[
             TyperIntegration(),
         ],
     )
+    sentry_sdk.set_tag("env", Config.env.value)
+    sentry_sdk.set_tag("job_name", os.getenv("JOB_NAME"))
+    sentry_sdk.set_tag("cron_job_name", os.getenv("CRON_JOB_NAME"))
 
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
