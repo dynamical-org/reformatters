@@ -1,4 +1,4 @@
-from typing import Final
+from typing import Final, cast
 
 import numpy as np
 from numba import njit, prange  # type: ignore
@@ -36,7 +36,7 @@ def round_float32_inplace(value: ArrayFloat32, keep_mantissa_bits: int) -> Array
     bits = _round_float32_inplace_numba(
         bits, keep_mantissa_bits, MANTISSA_BITS, MANTISSA_MASK, EXPONENT_MASK, SIGN_MASK
     )
-    return bits.view(np.float32)
+    return cast(ArrayFloat32, bits.view(np.float32))
 
 
 @njit(parallel=True)  # type: ignore

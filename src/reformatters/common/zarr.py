@@ -3,6 +3,7 @@ from pathlib import Path
 
 import xarray as xr
 import zarr
+import zarr.buffer
 from icechunk.store import IcechunkStore
 
 from reformatters.common.logging import get_logger
@@ -160,7 +161,7 @@ def sync_to_store(store: zarr.abc.store.Store, key: str, data: bytes) -> None:
         lambda: zarr.core.sync.sync(
             store.set(
                 key,
-                zarr.core.buffer.default_buffer_prototype().buffer.from_bytes(data),
+                zarr.buffer.default_buffer_prototype().buffer.from_bytes(data),
             ),
             timeout=90,  # In seconds. Timeout needs to be long enough to upload a large shard.
         ),

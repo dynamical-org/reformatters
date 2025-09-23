@@ -21,7 +21,7 @@
       "separator": "/"
     }
   },
-  "fill_value": 0,
+  "fill_value": -32767,
   "codecs": [
     {
       "name": "sharding_indexed",

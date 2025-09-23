@@ -71,7 +71,7 @@ def test_spatial_coordinates() -> None:
 
     # Check values in our computed latitude and longitude coordinates
     assert ds.latitude.min() == 21.138123
-    assert ds.latitude.mean() == 37.15252
+    assert ds.latitude.mean() == 37.152527
     # Note the maximum latitude is in the center north of CONUS, so this
     # max is larger than either of the upper corners latitudes.
     assert ds.latitude.max() == 52.615654
@@ -81,7 +81,7 @@ def test_spatial_coordinates() -> None:
     assert np.isclose(ds.latitude.diff(dim="y").max(), -0.0245285)
 
     assert ds.longitude.min() == -134.09547
-    assert ds.longitude.mean() == -97.50584
+    assert ds.longitude.mean() == -97.50583
     assert ds.longitude.max() == -60.917194
     # longitude increases as we go west to east
     # and the min and max diff in the x direction should be similar
