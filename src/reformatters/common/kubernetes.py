@@ -213,6 +213,12 @@ class CronJob(Job):
 
     def as_kubernetes_object(self) -> dict[str, Any]:
         job_spec = super().as_kubernetes_object()["spec"]
+        job_spec["template"]["spec"]["containers"][0]["env"].append(
+            {
+                "name": "CRON_JOB_NAME",
+                "value": self.name,
+            }
+        )
         return {
             "apiVersion": "batch/v1",
             "kind": "CronJob",
