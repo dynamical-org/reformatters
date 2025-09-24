@@ -12,7 +12,7 @@ from reformatters.common.storage import (
 
 
 @pytest.mark.parametrize(
-    "env,format,expected_base,expected_extension",
+    "env,dataset_format,expected_base,expected_extension",
     [
         (Env.prod, DatasetFormat.ZARR3, "s3://prod-bucket/data", ".zarr"),
         (Env.prod, DatasetFormat.ICECHUNK, "s3://prod-bucket/data", ".icechunk"),
