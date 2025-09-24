@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from typing import Annotated, Any, Generic, Literal, TypeVar
 
-import numcodecs  # type: ignore
+import numcodecs  # type: ignore[import-untyped]
 import pydantic
 from pydantic import Field
 
@@ -139,11 +139,13 @@ class BaseInternalAttrs(FrozenBaseModel):
     deaccumulate_to_rate: bool = False
 
 
-INTERNAL_ATTRS = TypeVar("INTERNAL_ATTRS", bound=BaseInternalAttrs, covariant=True)
+INTERNAL_ATTRS_co = TypeVar(
+    "INTERNAL_ATTRS_co", bound=BaseInternalAttrs, covariant=True
+)
 
 
-class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS]):
+class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS_co]):
     name: str
     encoding: Encoding
     attrs: DataVarAttrs
-    internal_attrs: INTERNAL_ATTRS
+    internal_attrs: INTERNAL_ATTRS_co

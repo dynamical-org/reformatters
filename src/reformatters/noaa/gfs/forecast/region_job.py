@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import rasterio  # type: ignore
+import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 import zarr
 
@@ -169,7 +169,6 @@ class NoaaGfsForecastRegionJob(RegionJob[NoaaDataVar, NoaaGfsForecastSourceFileC
         self, process_results: Mapping[str, Sequence[NoaaGfsForecastSourceFileCoord]]
     ) -> xr.Dataset:
         """Update template dataset based on processing results."""
-        # TODO: add and update ingested forecast length coord
         return super().update_template_with_results(process_results)
 
     @classmethod

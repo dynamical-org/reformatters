@@ -60,7 +60,7 @@ def align_to_valid_time(
     return ds, reference_ds
 
 
-def create_comparison_plot(
+def create_comparison_plot(  # noqa: PLR0915 PLR0912
     validation_ds: xr.Dataset,
     reference_ds: xr.Dataset,
     variables: list[str],

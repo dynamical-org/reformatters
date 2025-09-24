@@ -60,10 +60,9 @@ class GefsForecast35DayRegionJob(
         groups = []
         for idx_data_vars in grouper.values():
             # Sort by index position for better coalescing of byte range requests to the grib
-            idx_data_vars = sorted(
-                idx_data_vars, key=lambda dv: dv.internal_attrs.index_position
+            groups.append(
+                sorted(idx_data_vars, key=lambda dv: dv.internal_attrs.index_position)
             )
-            groups.append(idx_data_vars)
 
         # Sort groups for consistent ordering
         return sorted(groups, key=lambda g: str(g[0].internal_attrs.gefs_file_type))

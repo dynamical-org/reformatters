@@ -10,7 +10,7 @@ from typing import Any, Literal, assert_never
 from urllib.parse import urlparse
 from uuid import uuid4
 
-import fsspec  # type: ignore
+import fsspec  # type: ignore[import-untyped]
 import icechunk
 import zarr
 from icechunk.store import IcechunkStore

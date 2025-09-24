@@ -40,8 +40,7 @@
 #     )
 #     original_attrs = deepcopy(ds.spatial_ref.attrs)
 
-#     # TODO: Update to the CRS of your dataset. e.g. "EPSG:4269"
-#     expected_crs = None
+#     expected_crs = "Your dataset's proj4 or EPSG:XXXX string"
 #     calculated_spatial_ref_attrs = ds.rio.write_crs(expected_crs).spatial_ref.attrs
 #     assert set(original_attrs) - set(calculated_spatial_ref_attrs) == {"comment"}
 #     original_attrs.pop("comment")

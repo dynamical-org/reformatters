@@ -23,7 +23,7 @@ from reformatters.common.storage import (
 def test_get_store_path(
     monkeypatch: pytest.MonkeyPatch,
     env: Env,
-    format: DatasetFormat,
+    dataset_format: DatasetFormat,
     expected_base: str,
     expected_extension: str,
 ) -> None:
@@ -35,7 +35,7 @@ def test_get_store_path(
 
     config = StorageConfig(
         base_path="s3://prod-bucket/data",
-        format=format,
+        format=dataset_format,
     )
 
     result = _get_store_path("dataset", "1.0", config)

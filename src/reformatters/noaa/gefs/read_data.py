@@ -3,7 +3,7 @@ import warnings
 from typing import Literal, assert_never
 
 import numpy as np
-import rasterio  # type: ignore
+import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 
 from reformatters.common.config import Config
@@ -42,7 +42,7 @@ def read_data(
         lead_hours = coord.lead_time.total_seconds() / (60 * 60)
         if lead_hours % GEFS_ACCUMULATION_RESET_HOURS == 0:
             grib_element += "06"
-        elif lead_hours % GEFS_ACCUMULATION_RESET_HOURS == 3:
+        elif lead_hours % GEFS_ACCUMULATION_RESET_HOURS == 3:  # noqa: PLR2004
             grib_element += "03"
         else:
             raise AssertionError(f"Unexpected lead time hours: {lead_hours}")

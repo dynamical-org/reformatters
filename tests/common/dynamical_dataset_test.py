@@ -9,6 +9,7 @@ from unittest.mock import Mock
 import numpy as np
 import pandas as pd
 import pytest
+import sentry_sdk
 import xarray as xr
 from pydantic import computed_field
 
@@ -400,8 +401,6 @@ def test_validate_dataset_calls_validators(
 
 
 def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    import sentry_sdk
-
     monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
 
     dataset = ExampleDataset(

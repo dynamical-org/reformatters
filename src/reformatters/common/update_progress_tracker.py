@@ -3,7 +3,7 @@ import queue
 import threading
 from collections.abc import Sequence
 
-import fsspec  # type: ignore
+import fsspec  # type: ignore[import-untyped]
 
 from reformatters.common.config_models import BaseInternalAttrs, DataVar
 from reformatters.common.logging import get_logger
