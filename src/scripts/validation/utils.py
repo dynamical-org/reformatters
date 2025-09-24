@@ -1,6 +1,8 @@
 import numpy as np
+import obstore
 import typer
 import xarray as xr
+from zarr.storage import ObjectStore, StoreLike
 
 # Common constants
 OUTPUT_DIR = "data/output"
@@ -47,8 +49,18 @@ def scope_time_period(
 
 
 # Utility: Load a zarr dataset as xarray.Dataset
-def load_zarr_dataset(url: str, decode_timedelta: bool = False) -> xr.Dataset:
-    ds: xr.Dataset = xr.open_zarr(url, chunks=None, decode_timedelta=decode_timedelta)
+def load_zarr_dataset(url: str) -> xr.Dataset:
+    if url.startswith("s3://"):
+        store: StoreLike = ObjectStore(
+            obstore.store.from_url(url, region="us-west-2", skip_signature=True)
+        )
+    else:
+        store = url
+
+    ds: xr.Dataset = xr.open_zarr(store, chunks=None, decode_timedelta=True)
+    if "longitude" in ds.coords and "latitude" in ds.coords:
+        ds.longitude.load()
+        ds.latitude.load()
     return ds
 
 

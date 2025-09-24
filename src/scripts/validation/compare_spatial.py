@@ -6,6 +6,7 @@ import xarray as xr
 import zarr
 
 from reformatters.common.logging import get_logger
+from reformatters.common.time_utils import whole_hours
 from scripts.validation.utils import (
     OUTPUT_DIR,
     end_date_option,
@@ -97,13 +98,8 @@ def create_comparison_plot(  # noqa: PLR0915 PLR0912
 
         # Dataset titles with timestamps
         ds_init_time = pd.Timestamp(ds.init_time.item()).strftime("%Y-%m-%dT%H:%M")
-        ds_lead_time = (
-            pd.Timedelta(
-                **{validation_ds.lead_time.attrs["units"]: ds.lead_time.item()}
-            ).total_seconds()
-            // 3600
-        )
-        ds_lead_time_str = f"{ds_lead_time:g}h"
+        ds_lead_time_hours = whole_hours(pd.Timedelta(ds.lead_time.item()))
+        ds_lead_time_str = f"{ds_lead_time_hours:g}h"
         ds_time = f"{ds_init_time}+{ds_lead_time_str}"
         ref_time = pd.Timestamp(ref_ds.time.item()).strftime("%Y-%m-%dT%H:%M")
 
@@ -194,6 +190,21 @@ def create_comparison_plot(  # noqa: PLR0915 PLR0912
         # Flatten validation data and remove NaN values in one step
         data_values_flat = data.values.flat
         data_clean = data_values_flat[~np.isnan(data_values_flat)]
+
+        if len(data_clean) == 0:
+            ax3.text(
+                0.5,
+                0.5,
+                "All data in validated\ndataset is nan at this step",
+                ha="center",
+                va="center",
+                transform=ax3.transAxes,
+                fontsize=12,
+                color="gray",
+            )
+            ax1.set_xlim(0, 1)
+            ax1.set_ylim(0, 1)
+            continue
 
         if var_in_reference and not np.isnan(ref_data.values).all():
             # Include reference data in histogram if available

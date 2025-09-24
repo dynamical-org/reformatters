@@ -168,7 +168,7 @@ def compare_timeseries(
 ) -> None:
     """Compare timeseries between validation and reference datasets."""
 
-    validation_ds = load_zarr_dataset(validation_url, decode_timedelta=True)
+    validation_ds = load_zarr_dataset(validation_url)
     if start_date or end_date:
         validation_ds = scope_time_period(validation_ds, start_date, end_date)
     reference_ds = load_zarr_dataset(reference_url)

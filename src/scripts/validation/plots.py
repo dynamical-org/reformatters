@@ -4,7 +4,9 @@ from scripts.validation.compare_spatial import compare_spatial
 from scripts.validation.compare_timeseries import compare_timeseries
 from scripts.validation.report_nulls import report_nulls
 
-app = typer.Typer(help="Dataset validation plotting tools")
+app = typer.Typer(
+    help="Dataset validation plotting tools", pretty_exceptions_show_locals=False
+)
 
 app.command("compare-spatial", help="Compare two datasets")(compare_spatial)
 app.command("compare-timeseries", help="Compare timeseries between datasets")(
