@@ -95,7 +95,7 @@ class GefsSourceFileCoord(SourceFileCoord):
     data_vars: Sequence[GEFSDataVar]
 
     @property
-    def gefs_file_type(self) -> Literal["a", "b", "s", "reforecast"]:
+    def gefs_file_type(self) -> Literal["a", "b", "s", "reforecast"]:  # noqa: PLR0912 PLR0911
         # See `GEFSFileType` for details on the different types of files.
 
         gefs_file_types = {

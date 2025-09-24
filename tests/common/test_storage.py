@@ -12,7 +12,7 @@ from reformatters.common.storage import (
 
 
 @pytest.mark.parametrize(
-    "env,format,expected_base,expected_extension",
+    "env,dataset_format,expected_base,expected_extension",
     [
         (Env.prod, DatasetFormat.ZARR3, "s3://prod-bucket/data", ".zarr"),
         (Env.prod, DatasetFormat.ICECHUNK, "s3://prod-bucket/data", ".icechunk"),
@@ -23,7 +23,7 @@ from reformatters.common.storage import (
 def test_get_store_path(
     monkeypatch: pytest.MonkeyPatch,
     env: Env,
-    format: DatasetFormat,
+    dataset_format: DatasetFormat,
     expected_base: str,
     expected_extension: str,
 ) -> None:
@@ -35,7 +35,7 @@ def test_get_store_path(
 
     config = StorageConfig(
         base_path="s3://prod-bucket/data",
-        format=format,
+        format=dataset_format,
     )
 
     result = _get_store_path("dataset", "1.0", config)

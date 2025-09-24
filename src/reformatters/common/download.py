@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 import functools
-import os
 import uuid
 from collections.abc import Sequence
 from datetime import timedelta
@@ -51,8 +50,8 @@ def download_to_disk(
 
     except Exception:
         with contextlib.suppress(FileNotFoundError):
-            os.remove(temp_path)
-            os.remove(local_path)
+            temp_path.unlink()
+            local_path.unlink()
 
         raise
 

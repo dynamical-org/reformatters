@@ -60,20 +60,38 @@ select = [
     "ASYNC", # async
     "S",     # security
     "B",     # bugs
+    "A",     # shadowing builtins
     "C4",    # comprehensions
     "T10",   # debugger
+    "T20",   # print
     "RUF",   # ruff
     "FURB",  # refurb
     "INP",   # missing __init__.py
     "PIE",   # misc flake8
+    "PL",    # pylint
+    "PGH",   # pygrep-hooks
+    "PTH",   # use pathlib
+    "LOG",   # logging
+    "G",     # logging format
+    "TD",    # todos
 ]
 ignore = [
-    "S101",  # disallow asserts
-    "E501",  # line too long
-    "W293",  # black line contains whitespace
-    "UP046", # non-pep695-generic-class - mypy doesn't support this yet
-    "UP047", # non-pep695-generic-function - mypy doesn't support this yet
+    "S101",    # disallow asserts
+    "E501",    # line too long
+    "W293",    # black line contains whitespace
+    "UP046",   # non-pep695-generic-class - mypy doesn't support this yet
+    "UP047",   # non-pep695-generic-function - mypy doesn't support this yet
+    "PLC0414", # import aliases to same name - we use to specifically re-export
+    "PLR0913", # too many arguments
+    "TD003",   # don't require issue link
+    "PTH123",  # allow `open`
+    "G004",    # allow f-string in logging
 ]
+
+[tool.ruff.lint.per-file-ignores]
+    "tests/*" = [
+        "PLR2004", # magic value used in comparison - useful in tests
+    ]
 
 
 [tool.mypy]

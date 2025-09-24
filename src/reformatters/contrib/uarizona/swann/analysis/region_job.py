@@ -66,7 +66,9 @@ class UarizonaSwannAnalysisSourceFileCoord(SourceFileCoord):
         return {"time": self.time}
 
     def get_water_year(self) -> int:
-        return self.time.year if self.time.month < 10 else self.time.year + 1
+        """A water year starts October 1st."""
+        october = 10
+        return self.time.year if self.time.month < october else self.time.year + 1
 
     def get_data_status(self) -> str:
         return self.remaining_data_statuses[0]
@@ -135,9 +137,10 @@ class UarizonaSwannAnalysisRegionJob(
         var_name = data_var.internal_attrs.netcdf_var_name
         netcdf_path = f"netcdf:{coord.downloaded_path}:{var_name}"
         band = 1  # because rasterio netcdf requires selecting the band in the file path we always want band 1
+        no_data_value = -999
         with rasterio.open(netcdf_path) as reader:
             result: Array2D[np.float32] = reader.read(band, out_dtype=np.float32)
-            result[result == -999] = np.nan
+            result[result == no_data_value] = np.nan
             assert result.shape == (621, 1405)
             return result
 

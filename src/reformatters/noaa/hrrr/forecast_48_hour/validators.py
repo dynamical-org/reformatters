@@ -11,23 +11,24 @@ def check_data_is_current(ds: xr.Dataset) -> validation.ValidationResult:
     HRRR provides 48-hour forecasts every 6 hours, so we should have
     recent init_time data within the last day.
     """
+    init_time_age_threshold = pd.Timedelta("7h")
     now = pd.Timestamp.now()
     latest_init_time = ds["init_time"].max().item()
 
     # Convert to pandas timestamp for comparison
     latest_init_time = pd.Timestamp(latest_init_time)
 
-    hours_since_latest = (now - latest_init_time).total_seconds() / 3600
+    time_since_latest = now - latest_init_time
 
-    if hours_since_latest > 7:
+    if time_since_latest > init_time_age_threshold:
         return validation.ValidationResult(
             passed=False,
-            message=f"Latest init_time is {hours_since_latest:.1f} hours old (more than 7 hours)",
+            message=f"Latest init_time is {time_since_latest} old (> {init_time_age_threshold})",
         )
 
     return validation.ValidationResult(
         passed=True,
-        message=f"Data is current: latest init_time is {hours_since_latest:.1f} hours old",
+        message=f"Data is current: latest init_time is {time_since_latest} hours old",
     )
 
 
@@ -85,7 +86,10 @@ def check_forecast_completeness(ds: xr.Dataset) -> validation.ValidationResult:
     )
 
 
-def check_spatial_coverage(ds: xr.Dataset) -> validation.ValidationResult:
+def check_spatial_coverage(
+    ds: xr.Dataset,
+    max_nan_percent: float = 0.5,  # half of 1%
+) -> validation.ValidationResult:
     """
     Check that the data covers the expected HRRR CONUS domain.
 
@@ -100,7 +104,7 @@ def check_spatial_coverage(ds: xr.Dataset) -> validation.ValidationResult:
         nan_percentage = da.isnull().mean().compute().item() * 100
 
         # HRRR over CONUS should have very few NaN values
-        if nan_percentage > 0.5:
+        if nan_percentage > max_nan_percent:
             problems.append(f"{var_name}: {nan_percentage:.1f}% NaN values")
 
     if problems:

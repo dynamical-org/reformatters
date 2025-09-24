@@ -1,6 +1,6 @@
 import numpy as np
 import xarray as xr
-from numba import njit, prange  # type: ignore
+from numba import njit, prange  # type: ignore[import-untyped]
 
 from reformatters.common.types import Array1D, ArrayFloat32
 
@@ -18,7 +18,7 @@ def linear_interpolate_1d_inplace(
     Mutates `data_array` in place.
     """
     assert data_array.dims.index(dim) == 0
-    assert data_array.ndim == 3
+    assert data_array.ndim == 3  # noqa: PLR2004
     assert where.ndim == 1
     assert where.shape[0] == data_array.shape[0]
     assert not np.any(where[1:] & where[:-1]), "Cannot interpolate consecutive values"
@@ -26,7 +26,7 @@ def linear_interpolate_1d_inplace(
     return data_array
 
 
-@njit(parallel=True)  # type: ignore
+@njit(parallel=True)  # type: ignore[misc]
 def _linear_interpolate_zero_dim_1d_inplace_numba(
     values: ArrayFloat32, where: Array1D[np.bool]
 ) -> None:

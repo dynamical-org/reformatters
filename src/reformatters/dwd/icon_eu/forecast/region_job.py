@@ -121,7 +121,6 @@ class DwdIconEuForecastRegionJob(
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
         # with rasterio.open(coord.downloaded_file_path) as reader:
-        #     TODO: make a band index based on tag matching utility function
         #     matching_indexes = [
         #         i
         #         for i in range(reader.count)

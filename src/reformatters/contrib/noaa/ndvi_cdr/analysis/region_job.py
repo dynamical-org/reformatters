@@ -236,9 +236,11 @@ class NoaaNdviCdrAnalysisRegionJob(
         # NCEI for the 2025 files.
         #
         # We hardcode 2025 as the earliest year to check NCEI, since as of this writing,
-        # we know S3 is up to date through June 2025. Backfills should go through S3.
+        # we know S3 is up to date through June 2025 and 2024 is complate.
+        # Backfills should go through S3.
+        known_complete_aws_year = 2024
         current_year = pd.Timestamp.now().year
-        if year >= 2025 and year in (current_year, current_year - 1):
+        if year > known_complete_aws_year and year in (current_year, current_year - 1):
             return self._list_ncei_source_files(year)
         else:
             return self._list_s3_source_files(year)

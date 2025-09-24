@@ -42,7 +42,7 @@ class ExampleConfig(TemplateConfig[ExampleDataVar]):
 
     @property
     def dataset_attributes(self) -> ExampleDatasetAttributes:
-        return SimpleNamespace(dataset_id="simple_dataset")  # type: ignore
+        return SimpleNamespace(dataset_id="simple_dataset")  # type: ignore[return-value]
 
     @property
     def coords(self) -> list[Coordinate]:
@@ -70,7 +70,7 @@ class BadCoordsConfig(ExampleConfig):
     @property
     def coords(self) -> list[Coordinate]:
         # name "bad" is not in self.dims
-        return [SimpleNamespace(name="bad")]  # type: ignore
+        return [SimpleNamespace(name="bad")]  # type: ignore[list-item]
 
 
 @pytest.fixture

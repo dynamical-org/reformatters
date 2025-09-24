@@ -86,7 +86,7 @@ class SourceFileCoord(FrozenBaseModel):
         - For an analysis dataset created from forecast data: {"time": self.init_time + self.lead_time}
         """
         # .model_dump() returns a dict from attribute names to values
-        return self.model_dump(exclude=["status", "downloaded_path"])  # type: ignore
+        return self.model_dump(exclude=["status", "downloaded_path"])  # type: ignore[arg-type,return-value]
 
     @property
     def append_dim_coord(self) -> CoordinateValueOrRange:
@@ -489,7 +489,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         if progress_tracker is not None:
             data_vars_to_process: Sequence[DATA_VAR] = progress_tracker.get_unprocessed(
                 self.data_vars
-            )  # type: ignore  # Cast shouldn't be needed but can't get mypy to be happy
+            )  # type: ignore[assignment]
             data_var_groups = self.source_groups(data_vars_to_process)
         else:
             data_var_groups = self.source_groups(self.data_vars)
@@ -612,7 +612,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
 
         def _call_download_file(coord: SOURCE_FILE_COORD) -> SOURCE_FILE_COORD:
-            # TODO: move exception handling to the download_file method
             try:
                 path = self.download_file(coord)
                 return replace(coord, downloaded_path=path)

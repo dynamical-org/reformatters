@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import xarray as xr
-from numba import njit, prange  # type: ignore
+from numba import njit, prange  # type: ignore[import-untyped]
 
 from reformatters.common.types import Array1D, ArrayFloat32
 
@@ -62,7 +62,7 @@ def deaccumulate_to_rates_inplace(
     return data_array
 
 
-@njit(parallel=True)  # type: ignore
+@njit(parallel=True)  # type: ignore[misc]
 def _deaccumulate_to_rates_numba(
     values: ArrayFloat32,
     seconds: Array1D[np.int64],
@@ -87,7 +87,7 @@ def _deaccumulate_to_rates_numba(
         skip_step: 1D array of booleans where True indicates the step should be skipped
         invalid_below_threshold_rate: Threshold below which values are considered invalid
     """
-    assert values.ndim == 3
+    assert values.ndim == 3  # noqa: PLR2004
     assert seconds.ndim == 1
     assert reset_after.ndim == 1
     assert skip_step.ndim == 1
@@ -135,5 +135,5 @@ def _deaccumulate_to_rates_numba(
 
     if negative_count > 0:
         raise ValueError(f"Found {negative_count} values below threshold")
-    if clamped_count / values.size > 0.05:
+    if clamped_count / values.size > 0.05:  # noqa: PLR2004
         raise ValueError(f"Over 5% ({clamped_count} total) values were clamped to 0")
