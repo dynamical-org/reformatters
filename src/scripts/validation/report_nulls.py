@@ -27,7 +27,7 @@ def report_nulls(
 ) -> None:
     """Analyze null values at two spatial points across time dimensions."""
 
-    ds = load_zarr_dataset(dataset_url, decode_timedelta=True)
+    ds = load_zarr_dataset(dataset_url)
     if start_date or end_date:
         ds = scope_time_period(ds, start_date, end_date)
 
@@ -119,8 +119,16 @@ def report_nulls(
                     log_null_data > 0, drop=True
                 )
                 if len(missing_times) > 0:
+                    missing_timestamp_strs = missing_times.dt.strftime(
+                        "%Y-%m-%dT%H:%M:%S"
+                    ).values.tolist()
                     log.info(
-                        f"{point_name} - {var} missing at: {list(missing_times.values)}"
+                        f"{point_name} - {var} missing at: {missing_timestamp_strs}"
+                    )
+                    log.info(
+                        " ".join(
+                            f"--filter-contains {m}" for m in missing_timestamp_strs
+                        ),
                     )
             else:
                 log.info(f"{point_name} - {var}: No missing values found")
