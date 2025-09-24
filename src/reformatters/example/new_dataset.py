@@ -77,17 +77,14 @@ def initialize_new_integration(
         f"from .dynamical_dataset import {dataset_class_name} as {dataset_class_name}\n"
     )
 
-    # rewrite this into 1 print AI!
-    print(f"Created new dataset integration at {src_path} and {test_path}")
-    print("\nNext steps:")
-    print("1. Register your dataset in src/reformatters/__main__.py")
     print(
-        f"2. Implement your {example_to_actual_mappings['ExampleTemplateConfig']} subclass"
+        f"Created new dataset integration at {src_path} and {test_path}\n\n"
+        "Next steps:\n"
+        "1. Register your dataset in src/reformatters/__main__.py\n"
+        f"2. Implement your {example_to_actual_mappings['ExampleTemplateConfig']} subclass\n"
+        f"3. Implement your {example_to_actual_mappings['ExampleRegionJob']} subclass\n"
+        f"4. Implement your {example_to_actual_mappings['ExampleDataset']} subclass"
     )
-    print(
-        f"3. Implement your {example_to_actual_mappings['ExampleRegionJob']} subclass"
-    )
-    print(f"4. Implement your {example_to_actual_mappings['ExampleDataset']} subclass")
 
 
 def _sanitize_identifier(s: str) -> str:
