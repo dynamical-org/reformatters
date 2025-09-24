@@ -77,6 +77,7 @@ def initialize_new_integration(
         f"from .dynamical_dataset import {dataset_class_name} as {dataset_class_name}\n"
     )
 
+    # rewrite this into 1 print AI!
     print(f"Created new dataset integration at {src_path} and {test_path}")
     print("\nNext steps:")
     print("1. Register your dataset in src/reformatters/__main__.py")
