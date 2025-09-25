@@ -1,4 +1,5 @@
 import itertools
+import json
 from collections.abc import Sequence
 from datetime import timedelta
 from functools import partial
@@ -212,6 +213,7 @@ def check_for_expected_shards(
     log.info(f"Checking for expected shards in {store}")
 
     problem_vars = []
+    var_missing_shard_indexes = {}
 
     for var in ds.data_vars.keys():
         ordered_dims = ds[var].dims
@@ -235,13 +237,16 @@ def check_for_expected_shards(
         # in the store, but the metadata has been trimmed such that they are not exposed.
         # As such, we don't expect these two sets to necessarily be equal, but we do expect
         # that expected_shard_indexes should be a proper subset of actual_var_shard_indexes.
-        if len(expected_shard_indexes - actual_var_shard_indexes) > 0:
+        missing_shard_indexes = expected_shard_indexes - actual_var_shard_indexes
+        if len(missing_shard_indexes) > 0:
             problem_vars.append(var)
+            var_missing_shard_indexes[var] = sorted(missing_shard_indexes)
 
     if len(problem_vars) > 0:
+        var_missing_shards_json = json.dumps(var_missing_shard_indexes)
         return ValidationResult(
             passed=False,
-            message=f"{problem_vars} are missing expected shards",
+            message=f"{problem_vars} are missing expected shards: {var_missing_shards_json[:2000]}",
         )
 
     return ValidationResult(
