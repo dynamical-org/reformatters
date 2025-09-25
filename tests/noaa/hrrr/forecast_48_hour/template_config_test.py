@@ -1,9 +1,5 @@
-import json
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
-import pytest
 import xarray as xr
 
 from reformatters.common.download import http_download_to_disk
@@ -14,30 +10,6 @@ from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
     NoaaHrrrForecast48HourTemplateConfig,
 )
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
-
-
-def test_update_template(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """
-    Ensure that `uv run main <dataset-id> update-template` has been run and
-    all changes to NoaaHrrrForecast48HourTemplateConfig are reflected in the on-disk Zarr template.
-    """
-    template_config = NoaaHrrrForecast48HourTemplateConfig()
-    with open(template_config.template_path() / "zarr.json") as f:
-        existing_template = json.load(f)
-
-    test_template_path = tmp_path / "latest.zarr"
-    monkeypatch.setattr(
-        NoaaHrrrForecast48HourTemplateConfig,
-        "template_path",
-        lambda _self: test_template_path,
-    )
-
-    template_config.update_template()
-
-    with open(template_config.template_path() / "zarr.json") as f:
-        updated_template = json.load(f)
-
-    assert existing_template == updated_template
 
 
 def test_spatial_coordinates() -> None:

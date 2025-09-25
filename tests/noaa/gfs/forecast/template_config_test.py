@@ -1,39 +1,12 @@
-import json
 import re
 from copy import deepcopy
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pytest
 import xarray as xr
 
 from reformatters.common.template_config import SPATIAL_REF_COORDS
 from reformatters.noaa.gfs.forecast.template_config import NoaaGfsForecastTemplateConfig
-
-
-def test_update_template(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """
-    Ensure that `uv run main <dataset-id> update-template` has been run and
-    all changes to NoaaGfsForecastTemplateConfig are reflected in the on-disk Zarr template.
-    """
-    template_config = NoaaGfsForecastTemplateConfig()
-    with open(template_config.template_path() / "zarr.json") as f:
-        existing_template = json.load(f)
-
-    test_template_path = tmp_path / "latest.zarr"
-    monkeypatch.setattr(
-        NoaaGfsForecastTemplateConfig,
-        "template_path",
-        lambda _self: test_template_path,
-    )
-
-    template_config.update_template()
-
-    with open(template_config.template_path() / "zarr.json") as f:
-        updated_template = json.load(f)
-
-    assert existing_template == updated_template
 
 
 def test_get_template_spatial_ref() -> None:

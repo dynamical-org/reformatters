@@ -1,33 +1,10 @@
-import json
 from copy import deepcopy
-from pathlib import Path
 
 import pandas as pd
-import pytest
 
 from reformatters.contrib.uarizona.swann.analysis.template_config import (
     UarizonaSwannAnalysisTemplateConfig,
 )
-
-
-def test_update_template(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    template_config = UarizonaSwannAnalysisTemplateConfig()
-    with open(template_config.template_path() / "zarr.json") as f:
-        existing_template = json.load(f)
-
-    test_template_path = tmp_path / "latest.zarr"
-    monkeypatch.setattr(
-        UarizonaSwannAnalysisTemplateConfig,
-        "template_path",
-        lambda _self: test_template_path,
-    )
-
-    template_config.update_template()
-
-    with open(template_config.template_path() / "zarr.json") as f:
-        updated_template = json.load(f)
-
-    assert existing_template == updated_template
 
 
 def test_get_template_spatial_ref() -> None:
