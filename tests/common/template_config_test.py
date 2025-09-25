@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -7,12 +9,14 @@ import pytest
 import xarray as xr
 
 # Use a dummy DataVar that is a subtype of BaseInternalAttrs, as required by the type var
+from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common.config_models import (
     BaseInternalAttrs,
     Coordinate,
     DatasetAttributes,
     DataVar,
 )
+from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
     TemplateConfig,
@@ -144,3 +148,33 @@ def test_derive_coordinates_raises_if_coords_not_returned() -> None:
         match=r"Coordinates {'bad'} are defined.*derive_coordinates",
     ):
         bad.derive_coordinates(xr.Dataset())
+
+
+@pytest.mark.parametrize(
+    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+)
+def test_update_template_integration_test(
+    dataset: DynamicalDataset[Any, Any], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """
+    Ensure that `uv run main <dataset-id> update-template` has been run and
+    all changes to the dataset's TemplateConfig are reflected in the on-disk Zarr template.
+    """
+    template_config = dataset.template_config
+
+    with open(template_config.template_path() / "zarr.json") as f:
+        existing_template = json.load(f)
+
+    test_template_path = tmp_path / "latest.zarr"
+    monkeypatch.setattr(
+        type(template_config),
+        "template_path",
+        lambda _self: test_template_path,
+    )
+
+    template_config.update_template()
+
+    with open(template_config.template_path() / "zarr.json") as f:
+        updated_template = json.load(f)
+
+    assert existing_template == updated_template
