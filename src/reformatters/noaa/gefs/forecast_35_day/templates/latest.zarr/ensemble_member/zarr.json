@@ -2,7 +2,7 @@
   "shape": [
     31
   ],
-  "data_type": "uint16",
+  "data_type": "int16",
   "chunk_grid": {
     "name": "regular",
     "configuration": {
@@ -17,7 +17,7 @@
       "separator": "/"
     }
   },
-  "fill_value": 0,
+  "fill_value": -1,
   "codecs": [
     {
       "name": "bytes",

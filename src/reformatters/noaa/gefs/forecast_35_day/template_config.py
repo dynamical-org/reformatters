@@ -152,7 +152,7 @@ class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
             Coordinate(
                 name="ensemble_member",
                 encoding=Encoding(
-                    dtype="uint16",
+                    dtype="int16",
                     fill_value=-1,
                     chunks=len(dim_coords["ensemble_member"]),
                     shards=None,

@@ -100,7 +100,11 @@ def get_shared_data_var_configs(
 
     encoding_float32 = Encoding(
         dtype="float32",
-        fill_value=np.nan,
+        # Note: fill_value was previously 0, which caused a subtle bug:
+        # for some categorical variables, shards filled with 0 (a valid value) were skipped (zarr writes default to write_empty_chunks=False),
+        # so unwritten shards were interpreted as all 0. After upgrading to use np.nan as fill_value, unwritten shards are now interpreted as all nan,
+        # which is incorrect for those variables. For now, we're setting fill_value to 0 to ensure that those values are read correctly.
+        fill_value=0,
         chunks=chunks,
         shards=shards,
         compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
