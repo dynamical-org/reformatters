@@ -168,7 +168,7 @@ def test_coordinates_configuration(
 
     # Test ensemble_member coordinate
     ensemble_coord = next(coord for coord in coords if coord.name == "ensemble_member")
-    assert ensemble_coord.encoding.dtype == "uint16"
+    assert ensemble_coord.encoding.dtype == "int16"
     assert ensemble_coord.encoding.chunks == 31  # All ensemble members in one chunk
     assert ensemble_coord.encoding.shards is None  # Coordinates don't have shards
 
