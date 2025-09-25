@@ -96,11 +96,14 @@ def check_spatial_coverage(
     HRRR should have minimal NaN values over CONUS, as it's designed
     for the continental United States.
     """
-    # Sample the latest init_time and a few lead times
-    sample_ds = ds.isel(init_time=-1, lead_time=[0, 6, 12])
+    # Sample the latest init_time
+    sample_ds = ds.isel(init_time=-1)
 
     problems = []
     for var_name, da in sample_ds.data_vars.items():
+        # skip lead_time=0 for accumulations
+        if da.attrs["step_type"] != "instant":
+            da = da.isel(lead_time=slice(1, None))  # noqa: PLW2901
         nan_percentage = da.isnull().mean().compute().item() * 100
 
         # HRRR over CONUS should have very few NaN values
@@ -115,6 +118,5 @@ def check_spatial_coverage(
         )
 
     return validation.ValidationResult(
-        passed=True,
-        message="Spatial coverage is good: all variables have <5% NaN values",
+        passed=True, message="Perfecnt NaN values are within acceptable limit"
     )
