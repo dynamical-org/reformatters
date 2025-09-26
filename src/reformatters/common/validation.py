@@ -239,6 +239,17 @@ def check_for_expected_shards(
         # that expected_shard_indexes should be a proper subset of actual_var_shard_indexes.
         missing_shard_indexes = expected_shard_indexes - actual_var_shard_indexes
         if len(missing_shard_indexes) > 0:
+            # HRRR categorical variables have enough 0s that some shards are not written
+            # We will remove this skip when fill_value is updated to nan / write_empty_chunks is true
+            if (
+                ds.attrs["dataset_id"] == "noaa-hrrr-forecast-48-hour"
+                and "categorical" in var
+            ):
+                log.info(
+                    f"Expecting to find fewer than the maximum shards for categorical hrrr variable ({var}) due to fill value 0 and write empty chunks false"
+                )
+                continue
+
             problem_vars.append(var)
             var_missing_shard_indexes[var] = sorted(missing_shard_indexes)
 
