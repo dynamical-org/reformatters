@@ -10,6 +10,7 @@ import xarray as xr
 
 # Use a dummy DataVar that is a subtype of BaseInternalAttrs, as required by the type var
 from reformatters.__main__ import DYNAMICAL_DATASETS
+from reformatters.common import template_utils
 from reformatters.common.config_models import (
     BaseInternalAttrs,
     Coordinate,
@@ -159,8 +160,13 @@ def test_update_template_integration_test(
     """
     Ensure that `uv run main <dataset-id> update-template` has been run and
     all changes to the dataset's TemplateConfig are reflected in the on-disk Zarr template.
+
+    Also ensure that the get_template() -> write_metadata() round trip produces exactly
+    the same zarr.json as already exists on disk.
     """
     template_config = dataset.template_config
+
+    # 1. Ensure that update_template() is a no-op
 
     with open(template_config.template_path() / "zarr.json") as f:
         existing_template = json.load(f)
@@ -178,3 +184,22 @@ def test_update_template_integration_test(
         updated_template = json.load(f)
 
     assert existing_template == updated_template
+
+    # 2. Ensure that get_template() -> write_metadata() round trips without any changes
+
+    # Compute an end_time to pass to get_template()
+    dim_coords = template_config.dimension_coordinates()
+    append_dim_coords = dim_coords[template_config.append_dim]
+    end_time = append_dim_coords[-1] + pd.Timedelta(milliseconds=1)
+
+    template_ds = template_config.get_template(end_time)
+
+    test_write_metadata_path = tmp_path / "write_metadata_test.zarr"
+    template_utils.write_metadata(
+        template_ds,
+        test_write_metadata_path,
+    )
+    with open(test_write_metadata_path / "zarr.json") as f:
+        written_template = json.load(f)
+
+    assert existing_template == written_template
