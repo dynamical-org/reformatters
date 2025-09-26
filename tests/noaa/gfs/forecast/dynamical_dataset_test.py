@@ -90,6 +90,26 @@ def test_backfill_local_and_operational_update(
             .to_array()
             .all()
         )
+        assert (
+            (
+                space_subset_ds[
+                    [
+                        "precipitation_surface",
+                        "maximum_temperature_2m",
+                        "minimum_temperature_2m",
+                        "categorical_freezing_rain_surface",
+                    ]
+                ]
+                # All null at lead time 0
+                .isel(lead_time=0)
+                .isnull()
+                .mean()
+                == 1
+            )
+            .all()
+            .to_array()
+            .all()
+        )
 
         point_ds = original_ds.sel(
             latitude=0,
