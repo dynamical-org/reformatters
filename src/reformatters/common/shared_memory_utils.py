@@ -100,7 +100,18 @@ def create_data_array_and_template(
     # Important:
     # We rely on initializing with a fill value so failed reads (eg. corrupt source data)
     # leave the fill value and to reuse the same shared buffer for each variable.
-    shared_array[:] = fill_value
+    if np.issubdtype(data_array.dtype, np.floating):
+        # Temporary change: use NaN rather than passed in fill_value for floats.
+        # We want our fill value to be NaN for floats.
+        # However, due to an earlier xarray bug, older data was backfilled with an effective fill value of 0
+        # which, along with write_empty_chunks defaulting to False, means we need to retain the
+        # fill_value=0 in the zarr encoding until we reprocess those shards. We do want to keep writing
+        # nans for any missing elements within a chunk so we initialize with nan here.
+        # This behavior of initializing with NaNs matches the effective behavior prior to updating to xarray with the bug fix.
+        shared_array[:] = np.nan
+    else:
+        shared_array[:] = fill_value
+
     data_array.data = shared_array
 
     return data_array, data_array_template

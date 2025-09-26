@@ -155,13 +155,32 @@ def test_backfill_local_and_operational_update(
                 [
                     "precipitation_surface",
                     "maximum_temperature_2m",
-                    "downward_short_wave_radiation_flux_surface",
+                    "categorical_freezing_rain_surface",
                 ]
             ]
             .sel(lead_time=slice("1h", None))
             .isnull()
             .mean()
             == 0
+        )
+        .all()
+        .to_array()
+        .all()
+    )
+    assert (
+        (
+            space_subset_ds[
+                [
+                    "precipitation_surface",
+                    "maximum_temperature_2m",
+                    "categorical_freezing_rain_surface",
+                ]
+            ]
+            # All null at lead time 0
+            .isel(lead_time=0)
+            .isnull()
+            .mean()
+            == 1
         )
         .all()
         .to_array()
@@ -179,7 +198,6 @@ def test_backfill_local_and_operational_update(
     assert point_ds["temperature_2m"] == 23.25
     assert point_ds["precipitation_surface"] == 1.2040138e-05
     assert point_ds["maximum_temperature_2m"] == 23.875
-    assert point_ds["downward_short_wave_radiation_flux_surface"] == 0.0
 
     # Operational update
     # Advance the init_time_end to the next day to ensure we get the next day's data
@@ -233,13 +251,32 @@ def test_backfill_local_and_operational_update(
                 [
                     "precipitation_surface",
                     "maximum_temperature_2m",
-                    "downward_short_wave_radiation_flux_surface",
+                    "categorical_freezing_rain_surface",
                 ]
             ]
             .sel(lead_time=slice("1h", None))
             .isnull()
             .mean()
             == 0
+        )
+        .all()
+        .to_array()
+        .all()
+    )
+    assert (
+        (
+            space_subset_ds[
+                [
+                    "precipitation_surface",
+                    "maximum_temperature_2m",
+                    "categorical_freezing_rain_surface",
+                ]
+            ]
+            # All null at lead time 0
+            .isel(lead_time=0)
+            .isnull()
+            .mean()
+            == 1
         )
         .all()
         .to_array()
@@ -257,4 +294,3 @@ def test_backfill_local_and_operational_update(
     assert point_ds["temperature_2m"] == 23.25
     assert point_ds["precipitation_surface"] == 1.2040138e-05
     assert point_ds["maximum_temperature_2m"] == 23.875
-    assert point_ds["downward_short_wave_radiation_flux_surface"] == 0.0
