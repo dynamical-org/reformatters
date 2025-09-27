@@ -55,7 +55,10 @@ def validate_dataset(
     for validator in validators:
         result = validator(ds)
         if not result.passed:
+            log.error(f"Failed validation: {result.message}")
             failed_validations.append(result.message)
+        else:
+            log.info(f"Passed validation: {result.message}")
 
     if failed_validations:
         raise ValueError(

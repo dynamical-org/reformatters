@@ -35,15 +35,15 @@ from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
 )
 
 
-class NoaaHrrrAwsOpenDataDatasetStorageConfig(StorageConfig):
+class NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
     """Configuration for the storage of a AWS Open Data dataset."""
 
     base_path: str = "s3://dynamical-noaa-hrrr"
-    k8s_secret_name: str = "aws-open-data-storage-options-key"  # noqa:S105
-    format: DatasetFormat = DatasetFormat.ZARR3
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
 
 
-class NoaaGfsAwsOpenDataDatasetStorageConfig(StorageConfig):
+class NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
     """NOAA GFS in Icechunk on AWS Open Data."""
 
     base_path: str = "s3://dynamical-noaa-gfs"
@@ -51,7 +51,7 @@ class NoaaGfsAwsOpenDataDatasetStorageConfig(StorageConfig):
     format: DatasetFormat = DatasetFormat.ICECHUNK
 
 
-class SourceCoopDatasetStorageConfig(StorageConfig):
+class SourceCoopZarrDatasetStorageConfig(StorageConfig):
     """Configuration for the storage of a SourceCoop dataset."""
 
     base_path: str = "s3://us-west-2.opendata.source.coop/dynamical"
@@ -81,20 +81,19 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         primary_storage_config=UpstreamGriddedZarrsDatasetStorageConfig()
     ),
     NoaaGfsForecastDataset(
-        primary_storage_config=SourceCoopDatasetStorageConfig(),
-        replica_storage_configs=[NoaaGfsAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
+        replica_storage_configs=[NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig()],
     ),
-    DwdIconEuForecastDataset(primary_storage_config=SourceCoopDatasetStorageConfig()),
-    GefsAnalysisDataset(primary_storage_config=SourceCoopDatasetStorageConfig()),
-    GefsForecast35DayDataset(primary_storage_config=SourceCoopDatasetStorageConfig()),
+    DwdIconEuForecastDataset(
+        primary_storage_config=SourceCoopZarrDatasetStorageConfig()
+    ),
+    GefsAnalysisDataset(primary_storage_config=SourceCoopZarrDatasetStorageConfig()),
+    GefsForecast35DayDataset(
+        primary_storage_config=SourceCoopZarrDatasetStorageConfig()
+    ),
     NoaaHrrrForecast48HourDataset(
-        primary_storage_config=NoaaHrrrAwsOpenDataDatasetStorageConfig(),
-        replica_storage_configs=[
-            NoaaHrrrAwsOpenDataDatasetStorageConfig(
-                k8s_secret_name="aws-open-data-icechunk-storage-options-key",  # noqa: S106
-                format=DatasetFormat.ICECHUNK,
-            )
-        ],
+        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
+        replica_storage_configs=[NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig()],
     ),
 ]
 
