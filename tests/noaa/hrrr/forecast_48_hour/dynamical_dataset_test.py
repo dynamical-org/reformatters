@@ -84,7 +84,8 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     )
 
     assert point_ds["temperature_2m"] == 22.875
-    assert point_ds["precipitation_surface"] == 0.16992188
+    # deaccumulated to rate
+    assert point_ds["precipitation_surface"] == 4.720688e-05
     assert point_ds["downward_short_wave_radiation_flux_surface"] == 8.1875
 
     # Operational update
@@ -144,8 +145,10 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     assert_array_equal(
         point_ds["temperature_2m"].values, [[21.0, 21.375], [20.75, 23.75]]
     )
-    assert_array_equal(
-        point_ds["precipitation_surface"].values, [[np.nan, 0.6484375], [np.nan, 0.0]]
+    # deaccumulated to rate
+    np.testing.assert_allclose(
+        point_ds["precipitation_surface"].values,
+        [[np.nan, 0.00018024445], [np.nan, 0.0]],
     )
     assert_array_equal(
         point_ds["downward_short_wave_radiation_flux_surface"].values,

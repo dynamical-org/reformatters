@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 import numpy as np
 import obstore
 import typer
@@ -52,7 +54,21 @@ def scope_time_period(
 def load_zarr_dataset(url: str) -> xr.Dataset:
     if url.startswith("s3://"):
         store: StoreLike = ObjectStore(
-            obstore.store.from_url(url, region="us-west-2", skip_signature=True)
+            obstore.store.from_url(
+                url,
+                region="us-west-2",
+                skip_signature=True,
+                retry_config={
+                    "max_retries": 16,
+                    "backoff": {
+                        "base": 2,
+                        "init_backoff": timedelta(seconds=1),
+                        "max_backoff": timedelta(seconds=16),
+                    },
+                    # A backstop, shouldn't hit this with the above backoff settings
+                    "retry_timeout": timedelta(minutes=5),
+                },
+            )
         )
     else:
         store = url

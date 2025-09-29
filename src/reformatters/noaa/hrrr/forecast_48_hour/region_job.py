@@ -7,6 +7,8 @@ import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 import zarr
 
+from reformatters.common.binary_rounding import round_float32_inplace
+from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import digest, group_by, item
 from reformatters.common.logging import get_logger
@@ -195,6 +197,27 @@ class NoaaHrrrForecast48HourRegionJob(
                 rasterio_band_index, out_dtype=np.float32
             )
             return result
+
+    def apply_data_transformations(
+        self, data_array: xr.DataArray, data_var: NoaaHrrrDataVar
+    ) -> None:
+        """Apply in-place data transformations to the output data array for a given data variable."""
+        if data_var.internal_attrs.deaccumulate_to_rate:
+            assert data_var.internal_attrs.window_reset_frequency is not None
+            log.info(f"Converting {data_var.name} from accumulations to rates")
+            try:
+                deaccumulate_to_rates_inplace(
+                    data_array,
+                    dim="lead_time",
+                    reset_frequency=data_var.internal_attrs.window_reset_frequency,
+                )
+            except ValueError:
+                # Log exception so we are notified if deaccumulation errors are larger than expected.
+                log.exception(f"Error deaccumulating {data_var.name}")
+
+        keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
+        if isinstance(keep_mantissa_bits, int):
+            round_float32_inplace(data_array.values, keep_mantissa_bits)
 
     @classmethod
     def _update_append_dim_end(cls) -> pd.Timestamp:
