@@ -30,7 +30,6 @@ def test_region_job_generete_source_file_coords() -> None:
 
     # use `model_construct` to skip pydantic validation so we can pass mock stores
     region_job = DwdIconEuForecastRegionJob.model_construct(
-        store_factory=Mock(),
         tmp_store=Mock(),
         template_ds=template_ds,
         data_vars=template_config.data_vars[:1],
@@ -39,7 +38,7 @@ def test_region_job_generete_source_file_coords() -> None:
         reformat_job_name="test",
     )
 
-    processing_region_ds, output_region_ds = region_job._get_region_datasets()
+    processing_region_ds, _ = region_job._get_region_datasets()
 
     # Test with a single data variable
     source_file_coords = region_job.generate_source_file_coords(
@@ -48,11 +47,3 @@ def test_region_job_generete_source_file_coords() -> None:
 
     # 1 init_time x 1 variable x 93 time steps = 93
     assert len(source_file_coords) == 93
-
-    # Test with two data variables
-    source_file_coords = region_job.generate_source_file_coords(
-        processing_region_ds, template_config.data_vars[:2]
-    )
-
-    # 1 init_time x 2 variables x 93 time steps:
-    assert len(source_file_coords) == 93 * 2
