@@ -362,6 +362,35 @@ def test_deaccumulate_skip_steps_all_false() -> None:
     np.testing.assert_equal(result.values, expected)
 
 
+def test_deaccumulate_1d_hourly_window_and_step() -> None:
+    reset_frequency = pd.Timedelta(hours=1)
+    sec = float(SECONDS_PER_HOUR)
+
+    values = [
+        {"lt": 0, "in": np.nan, "out": np.nan},  # no deaccum on first step
+        {"lt": 1, "in": 4 * sec, "out": 4.0},
+        {"lt": 2, "in": 0 * sec, "out": 0.0},
+        {"lt": 3, "in": 5 * sec, "out": 5.0},
+    ]  # fmt: off
+
+    lead_times = pd.to_timedelta([step["lt"] for step in values], unit="h")
+    data = np.array([step["in"] for step in values], dtype=np.float32)
+    expected = np.array([step["out"] for step in values], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        data,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "mm/s"},
+    )
+
+    result = deaccumulate_to_rates_inplace(
+        data_array, dim="lead_time", reset_frequency=reset_frequency
+    )
+
+    np.testing.assert_equal(result.values, expected)
+
+
 def test_deaccumulate_1d_skip_every_other_step() -> None:
     reset_frequency = pd.Timedelta(hours=6)
     sec = float(SECONDS_PER_HOUR)
