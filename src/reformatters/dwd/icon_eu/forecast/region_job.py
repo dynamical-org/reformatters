@@ -271,9 +271,6 @@ class DwdIconEuForecastRegionJob(
         xr.Dataset
             The template_ds for the operational update.
         """
-        # TODO(Jack): The implementation below is the unmodified code from
-        #             the dynamical.org example code. I _think_ this is what
-        #             ICON-EU needs, but I'm not 100% sure TBH!
         existing_ds = xr.open_zarr(primary_store)
         append_dim_start = existing_ds[append_dim].max()
         append_dim_end = pd.Timestamp.now()
