@@ -14,6 +14,7 @@ except RuntimeError:
 import sentry_sdk
 import typer
 from sentry_sdk.integrations.typer import TyperIntegration
+from sentry_sdk.types import Hint, Log
 
 from reformatters.common import deploy
 from reformatters.common.config import Config
@@ -98,6 +99,16 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
 ]
 
 if Config.is_sentry_enabled:
+    job_name = os.getenv("JOB_NAME")
+    cron_job_name = os.getenv("CRON_JOB_NAME")
+
+    def before_log(log: Log, _hint: Hint) -> Log | None:
+        if job_name:
+            log["attributes"]["job_name"] = job_name
+        if cron_job_name:
+            log["attributes"]["cron_job_name"] = cron_job_name
+        return log
+
     sentry_sdk.init(
         dsn=Config.sentry_dsn,
         environment=Config.env.value,
@@ -105,13 +116,14 @@ if Config.is_sentry_enabled:
         in_app_include=["reformatters"],
         default_integrations=True,
         enable_logs=True,
+        before_send_log=before_log,
         integrations=[
             TyperIntegration(),
         ],
     )
     sentry_sdk.set_tag("env", Config.env.value)
-    sentry_sdk.set_tag("job_name", os.getenv("JOB_NAME"))
-    sentry_sdk.set_tag("cron_job_name", os.getenv("CRON_JOB_NAME"))
+    sentry_sdk.set_tag("job_name", job_name)
+    sentry_sdk.set_tag("cron_job_name", cron_job_name)
 
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
