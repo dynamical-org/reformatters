@@ -8,6 +8,7 @@ import xarray as xr
 import zarr
 
 from reformatters.common.download import http_download_to_disk
+from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
@@ -64,23 +65,43 @@ class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
 class DwdIconEuForecastRegionJob(
     RegionJob[DwdIconEuDataVar, DwdIconEuForecastSourceFileCoord]
 ):
+    @classmethod
+    def source_groups(
+        cls,
+        data_vars: Sequence[DwdIconEuDataVar],
+    ) -> Sequence[Sequence[DwdIconEuDataVar]]:
+        """Return a sequence of one-element sequences `[[var1], [var2], ...]`.
+
+        In the `reformatters` API, this function can be used to return groups of variables,
+        where all variables in a group can be retrieved from the same source file.
+
+        But, in the case of ICON-EU, each grib file from DWD holds only one variable. So there's
+        no ability/benefit from downloading multiple variables from the same file at the same time.
+        """
+        return [[var] for var in data_vars]
+
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[DwdIconEuDataVar],
     ) -> Sequence[DwdIconEuForecastSourceFileCoord]:
         """Return a sequence of coords, one for each source file required to
-        process the data covered by processing_region_ds."""
+        process the data covered by processing_region_ds.
+
+        Parameters
+        ----------
+        processing_region_ds : xr.Dataset
+        data_var_group : Sequence[DwdIconEuDataVar]
+            A sequence containing a single `DwdIconEuDataVar` (because each ICON-EU grib file contains a
+            single variable).
+        """
         init_times = pd.to_datetime(processing_region_ds["init_time"].values)
         lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
-        grib_elements = [
-            data_var.internal_attrs.grib_element for data_var in data_var_group
-        ]
+        grib_element = item(data_var_group).internal_attrs.grib_element
 
         # Sanity checks
         assert len(init_times) > 0
         assert len(lead_times) > 0
-        assert len(grib_elements) > 0
 
         return [
             DwdIconEuForecastSourceFileCoord(
@@ -90,7 +111,6 @@ class DwdIconEuForecastRegionJob(
             )
             for init_time in init_times
             for lead_time in lead_times
-            for grib_element in grib_elements
         ]
 
     def download_file(self, coord: DwdIconEuForecastSourceFileCoord) -> Path:
