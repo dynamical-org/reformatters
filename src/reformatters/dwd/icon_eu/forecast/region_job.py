@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import rasterio  # type: ignore
+import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 import zarr
 
@@ -254,14 +254,13 @@ class DwdIconEuForecastRegionJob(
         # TODO(Jack): The implementation below is the unmodified code from
         #             the dynamical.org example code. I _think_ this is what
         #             ICON-EU needs, but I'm not 100% sure TBH!
-        existing_ds = xr.open_zarr(store_factory.primary_store())
+        existing_ds = xr.open_zarr(primary_store)
         append_dim_start = existing_ds[append_dim].max()
         append_dim_end = pd.Timestamp.now()
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
             kind="operational-update",
-            store_factory=store_factory,
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=append_dim,
