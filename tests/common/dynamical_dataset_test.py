@@ -11,10 +11,11 @@ import pandas as pd
 import pytest
 import sentry_sdk
 import xarray as xr
+import zarr
 from pydantic import computed_field
 
 from reformatters.common import docker, storage, template_utils, validation
-from reformatters.common.config import Config
+from reformatters.common.config import Config, Env
 from reformatters.common.config_models import (
     BaseInternalAttrs,
     DataVar,
@@ -467,7 +468,20 @@ def test_backfill_kubernetes_overwrite_existing_flag(
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
+        primary_storage_config=ExampleDatasetStorageConfig(
+            base_path="s3://bucket/data",
+            format=DatasetFormat.ZARR3,
+        ),
+        replica_storage_configs=[
+            ExampleDatasetStorageConfig(
+                base_path="s3://bucket/data",
+                format=DatasetFormat.ICECHUNK,
+            ),
+        ],
     )
+
+    monkeypatch.setattr(xr, "open_zarr", Mock())
+
     monkeypatch.setattr(
         docker, "build_and_push_image", Mock(return_value="test-image-tag")
     )
@@ -500,3 +514,64 @@ def test_backfill_kubernetes_overwrite_existing_flag(
         overwrite_existing=False,
     )
     mock_write_metadata.assert_called_once()
+
+
+def test_backfill_kubernetes_overwrite_existing_flag_fails_if_not_all_stores_exist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        DynamicalDataset, "_can_run_in_kubernetes", Mock(return_value=True)
+    )
+    monkeypatch.setattr(
+        xr,
+        "open_zarr",
+        Mock(side_effect=zarr.errors.GroupNotFoundError("Group not found")),
+    )
+    monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
+
+    monkeypatch.setattr(
+        docker, "build_and_push_image", Mock(return_value="test-image-tag")
+    )
+    monkeypatch.setattr(subprocess, "run", Mock())
+
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(),
+        region_job_class=ExampleRegionJob,
+        primary_storage_config=ExampleDatasetStorageConfig(
+            base_path="s3://bucket/data",
+            format=DatasetFormat.ZARR3,
+        ),
+    )
+
+    with pytest.raises(
+        AssertionError,
+        match="Not all stores exist, cannot run with overwrite_existing=True",
+    ):
+        dataset.backfill_kubernetes(
+            append_dim_end=pd.Timestamp("2000-01-02"),
+            jobs_per_pod=1,
+            max_parallelism=1,
+            overwrite_existing=True,
+        )
+
+
+@pytest.mark.parametrize("env", [Env.dev, Env.test])
+def test_backfill_kubernetes_overwrite_existing_flag_fails_in_wrong_environment(
+    monkeypatch: pytest.MonkeyPatch,
+    env: Env,
+) -> None:
+    monkeypatch.setattr(Config, "env", env)
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(),
+        region_job_class=ExampleRegionJob,
+    )
+    with pytest.raises(
+        AssertionError,
+        match="backfill_kubernetes is only supported in prod environment",
+    ):
+        dataset.backfill_kubernetes(
+            append_dim_end=pd.Timestamp("2000-01-02"),
+            jobs_per_pod=1,
+            max_parallelism=1,
+            overwrite_existing=True,
+        )
