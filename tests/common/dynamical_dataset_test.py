@@ -278,7 +278,7 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
 
 
 def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    # Generally this monkeypatching _can_run_in_kuberneretes is dangerous.
+    # Generally monkeypatching _can_run_in_kuberneretes is dangerous.
     # However, we need to test the internals of backfill_kubernetes so we override this here.
     monkeypatch.setattr(
         DynamicalDataset, "_can_run_in_kubernetes", Mock(return_value=True)
@@ -458,7 +458,7 @@ def test_monitor_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_backfill_kubernetes_overwrite_existing_flag(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Generally this monkeypatching _can_run_in_kuberneretes is dangerous.
+    # Generally monkeypatching _can_run_in_kuberneretes is dangerous.
     # However, we need to test the internals of backfill_kubernetes so we override this here.
     monkeypatch.setattr(
         DynamicalDataset, "_can_run_in_kubernetes", Mock(return_value=True)
