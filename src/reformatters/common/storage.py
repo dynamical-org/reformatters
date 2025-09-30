@@ -164,7 +164,7 @@ class StoreFactory(FrozenBaseModel):
         """Check if all stores exist."""
         for store in [self.primary_store(), *self.replica_stores()]:
             try:
-                xr.open_zarr(store)
+                xr.open_zarr(store, decode_timedelta=True)
             except Exception:
                 log.error(f"Store {store} does not exist")
                 return False
