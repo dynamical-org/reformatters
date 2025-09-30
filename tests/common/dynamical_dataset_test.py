@@ -575,3 +575,19 @@ def test_backfill_kubernetes_overwrite_existing_flag_fails_in_wrong_environment(
             max_parallelism=1,
             overwrite_existing=True,
         )
+
+
+def test_backfill_local_fails_in_wrong_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(Config, "env", Mock(return_value="not-dev-or-test"))
+
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(),
+        region_job_class=ExampleRegionJob,
+    )
+    with pytest.raises(
+        AssertionError,
+        match="backfill_local is only supported in dev or test environments",
+    ):
+        dataset.backfill_local(append_dim_end=pd.Timestamp("2000-01-02"))
