@@ -577,17 +577,26 @@ def test_backfill_kubernetes_overwrite_existing_flag_fails_in_wrong_environment(
         )
 
 
+@pytest.mark.parametrize("env", [Env.dev, Env.test, "not-dev-or-test"])
 def test_backfill_local_fails_in_wrong_environment(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, env: Env | str
 ) -> None:
-    monkeypatch.setattr(Config, "env", Mock(return_value="not-dev-or-test"))
+    monkeypatch.setattr(Config, "env", env)
+    monkeypatch.setattr(template_utils, "write_metadata", Mock())
+    monkeypatch.setattr(DynamicalDataset, "process_backfill_region_jobs", Mock())
+    monkeypatch.setattr(
+        DynamicalDataset, "_get_template", Mock(return_value=xr.Dataset())
+    )
 
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
     )
-    with pytest.raises(
-        AssertionError,
-        match="backfill_local is only supported in dev or test environments",
-    ):
+    if env == "not-dev-or-test":
+        with pytest.raises(
+            AssertionError,
+            match="backfill_local is only supported in dev or test environments",
+        ):
+            dataset.backfill_local(append_dim_end=pd.Timestamp("2000-01-02"))
+    else:
         dataset.backfill_local(append_dim_end=pd.Timestamp("2000-01-02"))
