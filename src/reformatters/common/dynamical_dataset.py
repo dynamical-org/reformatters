@@ -458,6 +458,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         return self.template_config.get_template(pd.Timestamp(append_dim_end))
 
     def _can_run_in_kubernetes(self) -> bool:
+        # This is a method to support testing without changing the Config.env
         return Config.is_prod
 
     @contextmanager
