@@ -13,7 +13,7 @@ import sentry_sdk
 import xarray as xr
 from pydantic import computed_field
 
-from reformatters.common import storage, template_utils, validation
+from reformatters.common import docker, storage, template_utils, validation
 from reformatters.common.config import Config
 from reformatters.common.config_models import (
     BaseInternalAttrs,
@@ -278,6 +278,11 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
 
 
 def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Generally this monkeypatching _can_run_in_kuberneretes is dangerous.
+    # However, we need to test the internals of backfill_kubernetes so we override this here.
+    monkeypatch.setattr(
+        DynamicalDataset, "_can_run_in_kubernetes", Mock(return_value=True)
+    )
     mock_run = Mock()
     monkeypatch.setattr(subprocess, "run", mock_run)
 
@@ -448,3 +453,50 @@ def test_monitor_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
     # this should not raise
     with dataset._monitor(ReformatCronJob, "job"):
         pass
+
+
+def test_backfill_kubernetes_overwrite_existing_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Generally this monkeypatching _can_run_in_kuberneretes is dangerous.
+    # However, we need to test the internals of backfill_kubernetes so we override this here.
+    monkeypatch.setattr(
+        DynamicalDataset, "_can_run_in_kubernetes", Mock(return_value=True)
+    )
+
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(),
+        region_job_class=ExampleRegionJob,
+    )
+    monkeypatch.setattr(
+        docker, "build_and_push_image", Mock(return_value="test-image-tag")
+    )
+    monkeypatch.setattr(subprocess, "run", Mock())
+    monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
+    monkeypatch.setattr(
+        ExampleRegionJob, "get_jobs", Mock(return_value=[Mock(spec=ExampleRegionJob)])
+    )
+    monkeypatch.setattr(
+        ExampleDataset,
+        "process_backfill_region_jobs",
+        Mock(),
+    )
+    mock_write_metadata = Mock()
+    monkeypatch.setattr(template_utils, "write_metadata", mock_write_metadata)
+
+    dataset.backfill_kubernetes(
+        append_dim_end=pd.Timestamp("2000-01-02"),
+        jobs_per_pod=1,
+        max_parallelism=1,
+        overwrite_existing=True,
+    )
+    mock_write_metadata.assert_not_called()
+    mock_write_metadata.reset_mock()
+
+    dataset.backfill_kubernetes(
+        append_dim_end=pd.Timestamp("2000-01-02"),
+        jobs_per_pod=1,
+        max_parallelism=1,
+        overwrite_existing=False,
+    )
+    mock_write_metadata.assert_called_once()

@@ -213,12 +213,21 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         filter_contains: list[datetime] | None = None,
         filter_variable_names: list[str] | None = None,
         docker_image: str | None = None,
+        overwrite_existing: bool = False,
     ) -> None:
         """Run dataset reformatting using Kubernetes index jobs."""
+        assert self._can_run_in_kubernetes(), (
+            "backfill_kubernetes is only supported in prod environment"
+        )
+
         image_tag = docker_image or docker.build_and_push_image()
 
         template_ds = self._get_template(append_dim_end)
-        template_utils.write_metadata(template_ds, self.store_factory)
+
+        if overwrite_existing:
+            log.info("Writing to existing store")
+        else:
+            template_utils.write_metadata(template_ds, self.store_factory)
 
         num_jobs = len(
             self.region_job_class.get_jobs(
@@ -308,6 +317,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         filter_variable_names: list[str] | None = None,
     ) -> None:
         """Run dataset reformatting locally in this process."""
+        assert Config.is_dev or Config.is_test, (
+            "backfill_local is only supported in dev or test environments"
+        )
+
         template_ds = self._get_template(append_dim_end)
         template_utils.write_metadata(template_ds, self.store_factory)
 
@@ -443,6 +456,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def _get_template(self, append_dim_end: DatetimeLike) -> xr.Dataset:
         return self.template_config.get_template(pd.Timestamp(append_dim_end))
+
+    def _can_run_in_kubernetes(self) -> bool:
+        return Config.is_prod
 
     @contextmanager
     def _monitor(
