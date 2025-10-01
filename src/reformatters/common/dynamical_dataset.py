@@ -225,10 +225,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         template_ds = self._get_template(append_dim_end)
 
         if overwrite_existing:
-            log.info("Writing to existing stores, skipping metadata write.")
             assert self.store_factory.all_stores_exist(), (
                 "Not all stores exist, cannot run with overwrite_existing=True"
             )
+            log.info("Writing to existing stores, skipping metadata write.")
         else:
             template_utils.write_metadata(template_ds, self.store_factory)
 
