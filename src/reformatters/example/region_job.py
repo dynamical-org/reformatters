@@ -31,11 +31,10 @@ class ExampleSourceFileCoord(SourceFileCoord):
     def out_loc(
         self,
     ) -> Mapping[Dim, CoordinateValueOrRange]:
-        """Returns a data array indexer which identifies the region in the
-        output dataset to write the data from the source file.
-
-        The indexer is a dict from dimension names to coordinate values
-        or slices.
+        """
+        Returns a data array indexer which identifies the region in the output dataset
+        to write the data from the source file. The indexer is a dict from dimension
+        names to coordinate values or slices.
         """
         # If the names of the coordinate attributes of your SourceFileCoord subclass are also all
         # dimension names in the output dataset (e.g. init_time and lead_time),
@@ -89,8 +88,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
     def generate_source_file_coords(
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[ExampleDataVar]
     ) -> Sequence[ExampleSourceFileCoord]:
-        """Return a sequence of coords, one for each source file required to
-        process the data covered by processing_region_ds."""
+        """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
         # return [
         #     ExampleSourceFileCoord(
         #         init_time=init_time,
@@ -106,8 +104,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
         )
 
     def download_file(self, coord: ExampleSourceFileCoord) -> Path:
-        """Download the file for the given coordinate and return the local
-        path."""
+        """Download the file for the given coordinate and return the local path."""
         # return http_download_to_disk(coord.get_url(), self.dataset_id)
         raise NotImplementedError(
             "Download the file for the given coordinate and return the local path."
@@ -118,8 +115,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
         coord: ExampleSourceFileCoord,
         data_var: ExampleDataVar,
     ) -> ArrayFloat32:
-        """Read and return an array of data for the given variable and source
-        file coordinate."""
+        """Read and return an array of data for the given variable and source file coordinate."""
         # with rasterio.open(coord.downloaded_file_path) as reader:
         #     matching_indexes = [
         #         i
@@ -163,8 +159,8 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
     def update_template_with_results(
         self, process_results: Mapping[str, Sequence[ExampleSourceFileCoord]]
     ) -> xr.Dataset:
-        """Update template dataset based on processing results. This method is
-        called during operational updates.
+        """Update template dataset based on processing results. This method is called
+        during operational updates.
 
         Subclasses should implement this method to apply dataset-specific adjustments
         based on the processing results. Examples include:
@@ -225,8 +221,9 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
     ) -> tuple[
         Sequence["RegionJob[ExampleDataVar, ExampleSourceFileCoord]"], xr.Dataset
     ]:
-        """Return the sequence of RegionJob instances necessary to update the
-        dataset from its current state to include the latest available data.
+        """
+        Return the sequence of RegionJob instances necessary to update the dataset
+        from its current state to include the latest available data.
 
         Also return the template_ds, expanded along append_dim through the end of
         the data to process. The dataset returned here may extend beyond the
