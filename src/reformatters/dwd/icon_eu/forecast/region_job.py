@@ -139,11 +139,11 @@ class DwdIconEuForecastRegionJob(
             matching_indexes = [
                 i
                 for i in range(reader.count)
-                if (reader.tags(i))["GRIB_ELEMENT"]
+                if (reader.tags(i + 1))["GRIB_ELEMENT"]
                 == data_var.internal_attrs.grib_element
             ]
             assert len(matching_indexes) == 1, (
-                f"Expected exactly 1 matching band, found {matching_indexes}. "
+                f"Expected exactly 1 matching band, found {len(matching_indexes)}. "
                 f"{data_var.internal_attrs.grib_element=}, "
                 f"{coord.downloaded_path=}"
             )
