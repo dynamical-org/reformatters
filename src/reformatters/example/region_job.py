@@ -159,7 +159,8 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
     def update_template_with_results(
         self, process_results: Mapping[str, Sequence[ExampleSourceFileCoord]]
     ) -> xr.Dataset:
-        """Update template dataset based on processing results. This method is called
+        """
+        Update template dataset based on processing results. This method is called
         during operational updates.
 
         Subclasses should implement this method to apply dataset-specific adjustments
