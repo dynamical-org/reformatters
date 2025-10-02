@@ -1,3 +1,5 @@
+import bz2
+import shutil
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
@@ -115,8 +117,15 @@ class DwdIconEuForecastRegionJob(
 
     def download_file(self, coord: DwdIconEuForecastSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local
-        path."""
-        return http_download_to_disk(coord.get_url(), self.dataset_id)
+        path.
+
+        Downloads the `.bz2` file from DWD, decompressed the `.bz2` file, deletes the `.bz2` file,
+        and returns the `Path` of the decompressed file.
+        """
+        bz2_file_path = http_download_to_disk(coord.get_url(), self.dataset_id)
+        grib_file_path = decompress_bz2_file(compressed_file_path=bz2_file_path)
+        bz2_file_path.unlink()  # Remove the bz2 file after decompressing it.
+        return grib_file_path
 
     def read_data(
         self,
@@ -286,3 +295,20 @@ class DwdIconEuForecastRegionJob(
             filter_start=append_dim_start,
         )
         return jobs, template_ds
+
+
+def decompress_bz2_file(compressed_file_path: Path) -> Path:
+    """Decompress a `.bz2` file to a new file.
+
+    Returns the filename of the uncompressed file.
+    """
+    if compressed_file_path.suffix != ".bz2":
+        raise ValueError(
+            f"compressed_file_path must end in .bz2. Instead, {compressed_file_path=}"
+        )
+    decompressed_file_path = compressed_file_path.with_suffix("")
+    with bz2.open(compressed_file_path, "rb") as src_file_object:
+        with open(decompressed_file_path, "wb") as dst_file_object:
+            # Use shutil.copyfileobj for efficient memory usage
+            shutil.copyfileobj(src_file_object, dst_file_object)
+    return decompressed_file_path
