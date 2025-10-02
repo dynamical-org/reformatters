@@ -38,6 +38,7 @@ class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
     init_time: Timestamp
     lead_time: Timedelta
     grib_element: str
+    variable_name_in_filename: str
 
     def get_url(self) -> str:
         """Return URLs to .grib2.bz2 files on DWD's HTTP server.
@@ -53,7 +54,7 @@ class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
         init_date_str: str = self.init_time.strftime("%Y%m%d%H")
         init_hour_str: str = self.init_time.strftime("%H")
 
-        return f"https://opendata.dwd.de/weather/nwp/icon-eu/grib/{init_hour_str}/{self.grib_element}/icon-eu_europe_regular-lat-lon_single-level_{init_date_str}_{lead_time_hours:03d}_{self.grib_element.upper()}.grib2.bz2"
+        return f"https://opendata.dwd.de/weather/nwp/icon-eu/grib/{init_hour_str}/{self.variable_name_in_filename}/icon-eu_europe_regular-lat-lon_single-level_{init_date_str}_{lead_time_hours:03d}_{self.variable_name_in_filename.upper()}.grib2.bz2"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
         """Return the output location for this file's data in the dataset."""
@@ -99,7 +100,7 @@ class DwdIconEuForecastRegionJob(
         """
         init_times = pd.to_datetime(processing_region_ds["init_time"].values)
         lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
-        grib_element = item(data_var_group).internal_attrs.grib_element
+        internal_attrs = item(data_var_group).internal_attrs
 
         # Sanity checks
         assert len(init_times) > 0
@@ -109,7 +110,8 @@ class DwdIconEuForecastRegionJob(
             DwdIconEuForecastSourceFileCoord(
                 init_time=init_time,
                 lead_time=lead_time,
-                grib_element=grib_element,
+                grib_element=internal_attrs.grib_element,
+                variable_name_in_filename=internal_attrs.variable_name_in_filename,
             )
             for init_time in init_times
             for lead_time in lead_times
@@ -119,7 +121,7 @@ class DwdIconEuForecastRegionJob(
         """Download the file for the given coordinate and return the local
         path.
 
-        Downloads the `.bz2` file from DWD, decompressed the `.bz2` file, deletes the `.bz2` file,
+        Downloads the `.bz2` file from DWD, decompresses the `.bz2` file, deletes the `.bz2` file,
         and returns the `Path` of the decompressed file.
         """
         bz2_file_path = http_download_to_disk(coord.get_url(), self.dataset_id)
@@ -138,17 +140,18 @@ class DwdIconEuForecastRegionJob(
         with rasterio.open(coord.downloaded_path) as reader:
             matching_indexes = [
                 i
-                for i in range(reader.count)
-                if (reader.tags(i + 1))["GRIB_ELEMENT"]
+                for i in range(1, reader.count + 1)  # rasterio is 1-indexed
+                if reader.tags(i)["GRIB_ELEMENT"]
                 == data_var.internal_attrs.grib_element
             ]
             assert len(matching_indexes) == 1, (
                 f"Expected exactly 1 matching band, found {len(matching_indexes)}. "
-                f"{data_var.internal_attrs.grib_element=}, "
+                f"{data_var.internal_attrs.variable_name_in_filename=}, "
                 f"{coord.downloaded_path=}"
             )
-            rasterio_band_index = 1 + matching_indexes[0]  # rasterio is 1-indexed
-            result: ArrayFloat32 = reader.read(rasterio_band_index, dtype=np.float32)
+            result: ArrayFloat32 = reader.read(
+                matching_indexes[0], out_dtype=np.float32
+            )
             return result
 
     # Implement this to apply transformations to the array (e.g. deaccumulation)
