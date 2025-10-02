@@ -120,13 +120,13 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
         #     matching_indexes = [
         #         i
         #         for i in range(reader.count)
-        #         if (tags := reader.tags(i))["GRIB_ELEMENT"]
+        #         if (tags := reader.tags(i + 1))["GRIB_ELEMENT"]
         #         == data_var.internal_attrs.grib_element
         #         and tags["GRIB_COMMENT"] == data_var.internal_attrs.grib_comment
         #     ]
         #     assert len(matching_indexes) == 1, f"Expected exactly 1 matching band, found {matching_indexes}. {data_var.internal_attrs.grib_element=}, {data_var.internal_attrs.grib_description=}, {coord.downloaded_file_path=}"
         #     rasterio_band_index = 1 + matching_indexes[0]  # rasterio is 1-indexed
-        #     return reader.read(rasterio_band_index, dtype=np.float32)
+        #     return reader.read(rasterio_band_index, out_dtype=np.float32)
         raise NotImplementedError(
             "Read and return data for the given variable and source file coordinate."
         )
