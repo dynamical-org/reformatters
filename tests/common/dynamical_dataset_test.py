@@ -11,10 +11,11 @@ import pandas as pd
 import pytest
 import sentry_sdk
 import xarray as xr
+import zarr
 from pydantic import computed_field
 
-from reformatters.common import storage, template_utils, validation
-from reformatters.common.config import Config
+from reformatters.common import docker, storage, template_utils, validation
+from reformatters.common.config import Config, Env
 from reformatters.common.config_models import (
     BaseInternalAttrs,
     DataVar,
@@ -278,6 +279,11 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
 
 
 def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Generally monkeypatching _can_run_in_kuberneretes is dangerous.
+    # However, we need to test the internals of backfill_kubernetes so we override this here.
+    monkeypatch.setattr(
+        DynamicalDataset, "_can_run_in_kubernetes", Mock(return_value=True)
+    )
     mock_run = Mock()
     monkeypatch.setattr(subprocess, "run", mock_run)
 
@@ -448,3 +454,149 @@ def test_monitor_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
     # this should not raise
     with dataset._monitor(ReformatCronJob, "job"):
         pass
+
+
+def test_backfill_kubernetes_overwrite_existing_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Generally monkeypatching _can_run_in_kuberneretes is dangerous.
+    # However, we need to test the internals of backfill_kubernetes so we override this here.
+    monkeypatch.setattr(
+        DynamicalDataset, "_can_run_in_kubernetes", Mock(return_value=True)
+    )
+
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(),
+        region_job_class=ExampleRegionJob,
+        primary_storage_config=ExampleDatasetStorageConfig(
+            base_path="s3://bucket/data",
+            format=DatasetFormat.ZARR3,
+        ),
+        replica_storage_configs=[
+            ExampleDatasetStorageConfig(
+                base_path="s3://bucket/data",
+                format=DatasetFormat.ICECHUNK,
+            ),
+        ],
+    )
+
+    monkeypatch.setattr(xr, "open_zarr", Mock())
+
+    monkeypatch.setattr(
+        docker, "build_and_push_image", Mock(return_value="test-image-tag")
+    )
+    monkeypatch.setattr(subprocess, "run", Mock())
+    monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
+    monkeypatch.setattr(
+        ExampleRegionJob, "get_jobs", Mock(return_value=[Mock(spec=ExampleRegionJob)])
+    )
+    monkeypatch.setattr(
+        ExampleDataset,
+        "process_backfill_region_jobs",
+        Mock(),
+    )
+    mock_write_metadata = Mock()
+    monkeypatch.setattr(template_utils, "write_metadata", mock_write_metadata)
+
+    dataset.backfill_kubernetes(
+        append_dim_end=pd.Timestamp("2000-01-02"),
+        jobs_per_pod=1,
+        max_parallelism=1,
+        overwrite_existing=True,
+    )
+    mock_write_metadata.assert_not_called()
+    mock_write_metadata.reset_mock()
+
+    dataset.backfill_kubernetes(
+        append_dim_end=pd.Timestamp("2000-01-02"),
+        jobs_per_pod=1,
+        max_parallelism=1,
+        overwrite_existing=False,
+    )
+    mock_write_metadata.assert_called_once()
+
+
+def test_backfill_kubernetes_overwrite_existing_flag_fails_if_not_all_stores_exist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        DynamicalDataset, "_can_run_in_kubernetes", Mock(return_value=True)
+    )
+    monkeypatch.setattr(
+        xr,
+        "open_zarr",
+        Mock(side_effect=zarr.errors.GroupNotFoundError("Group not found")),
+    )
+    monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
+
+    monkeypatch.setattr(
+        docker, "build_and_push_image", Mock(return_value="test-image-tag")
+    )
+    monkeypatch.setattr(subprocess, "run", Mock())
+
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(),
+        region_job_class=ExampleRegionJob,
+        primary_storage_config=ExampleDatasetStorageConfig(
+            base_path="s3://bucket/data",
+            format=DatasetFormat.ZARR3,
+        ),
+    )
+
+    with pytest.raises(
+        AssertionError,
+        match="Not all stores exist, cannot run with overwrite_existing=True",
+    ):
+        dataset.backfill_kubernetes(
+            append_dim_end=pd.Timestamp("2000-01-02"),
+            jobs_per_pod=1,
+            max_parallelism=1,
+            overwrite_existing=True,
+        )
+
+
+@pytest.mark.parametrize("env", [Env.dev, Env.test])
+def test_backfill_kubernetes_overwrite_existing_flag_fails_in_wrong_environment(
+    monkeypatch: pytest.MonkeyPatch,
+    env: Env,
+) -> None:
+    monkeypatch.setattr(Config, "env", env)
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(),
+        region_job_class=ExampleRegionJob,
+    )
+    with pytest.raises(
+        AssertionError,
+        match="backfill_kubernetes is only supported in prod environment",
+    ):
+        dataset.backfill_kubernetes(
+            append_dim_end=pd.Timestamp("2000-01-02"),
+            jobs_per_pod=1,
+            max_parallelism=1,
+            overwrite_existing=True,
+        )
+
+
+@pytest.mark.parametrize("env", [Env.dev, Env.test, "not-dev-or-test"])
+def test_backfill_local_fails_in_wrong_environment(
+    monkeypatch: pytest.MonkeyPatch, env: Env | str
+) -> None:
+    monkeypatch.setattr(Config, "env", env)
+    monkeypatch.setattr(template_utils, "write_metadata", Mock())
+    monkeypatch.setattr(DynamicalDataset, "process_backfill_region_jobs", Mock())
+    monkeypatch.setattr(
+        DynamicalDataset, "_get_template", Mock(return_value=xr.Dataset())
+    )
+
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(),
+        region_job_class=ExampleRegionJob,
+    )
+    if env == "not-dev-or-test":
+        with pytest.raises(
+            AssertionError,
+            match="backfill_local is only supported in dev or test environments",
+        ):
+            dataset.backfill_local(append_dim_end=pd.Timestamp("2000-01-02"))
+    else:
+        dataset.backfill_local(append_dim_end=pd.Timestamp("2000-01-02"))

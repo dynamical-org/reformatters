@@ -12,14 +12,18 @@ from uuid import uuid4
 
 import fsspec  # type: ignore[import-untyped]
 import icechunk
+import xarray as xr
 import zarr
 from icechunk.store import IcechunkStore
 from pydantic import Field, computed_field, field_validator
 
 from reformatters.common import kubernetes
 from reformatters.common.config import Config, Env
+from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.retry import retry
+
+log = get_logger(__name__)
 
 _LOCAL_ZARR_STORE_BASE_PATH = "data/output"
 _SECRET_MOUNT_PATH = "/secrets"  # noqa: S105 this not a real secret
@@ -155,6 +159,16 @@ class StoreFactory(FrozenBaseModel):
         assert isinstance(fs, fsspec.spec.AbstractFileSystem)
 
         return fs, relative_path
+
+    def all_stores_exist(self) -> bool:
+        """Check if all stores exist."""
+        for store in [self.primary_store(), *self.replica_stores()]:
+            try:
+                xr.open_zarr(store, decode_timedelta=True)
+            except Exception:
+                log.error(f"Store {store} does not exist")
+                return False
+        return True
 
 
 @cache
