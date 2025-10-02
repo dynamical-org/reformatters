@@ -248,13 +248,12 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
     monkeypatch.setattr(storage, "_get_store_path", _get_store_path)
 
     mock_job0.process = Mock(
-        return_value=(
+        side_effect=lambda *args, **kwargs: (
             {},
             dataset.store_factory.primary_store(),
             dataset.store_factory.replica_stores(),
         )
     )
-
     dataset.backfill_local(pd.Timestamp("2000-01-02"))
 
     assert (

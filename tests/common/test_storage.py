@@ -149,6 +149,7 @@ def test_store_factory_returns_correct_store_types(
         ],
         dataset_id="test-dataset",
         template_config_version="v1.0",
+        stores_are_writable=True,
     )
 
     assert isinstance(factory.primary_store(), zarr.storage.LocalStore)
