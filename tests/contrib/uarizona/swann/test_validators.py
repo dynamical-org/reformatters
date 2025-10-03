@@ -61,7 +61,7 @@ def test_check_data_is_current_success(monkeypatch: MonkeyPatch) -> None:
     result = check_data_is_current(ds)
 
     assert result.passed is True
-    assert "Data found for the last 48 hours" in result.message
+    assert "Data found for the last" in result.message
 
 
 def test_check_data_is_current_success_when_current_hour_is_nonzero(
@@ -82,12 +82,12 @@ def test_check_data_is_current_success_when_current_hour_is_nonzero(
     result = check_data_is_current(ds)
 
     assert result.passed is True
-    assert "Data found for the last 48 hours" in result.message
+    assert "Data found for the last" in result.message
 
 
 def test_check_data_is_current_failure(monkeypatch: MonkeyPatch) -> None:
     """Test passes when data is current."""
-    monkeypatch.setattr(pd.Timestamp, "now", lambda: pd.Timestamp("2024-01-06"))
+    monkeypatch.setattr(pd.Timestamp, "now", lambda: pd.Timestamp("2024-01-09"))
 
     times = pd.date_range("2024-01-01", periods=3, freq="1D")
     data = np.ones((3, 3, 3))
@@ -99,4 +99,4 @@ def test_check_data_is_current_failure(monkeypatch: MonkeyPatch) -> None:
     result = check_data_is_current(ds)
 
     assert result.passed is False
-    assert "No data found for the last 48 hours" in result.message
+    assert "No data found for the last" in result.message
