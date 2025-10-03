@@ -342,14 +342,19 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         #         ),
         #     ),
         # ]
+        dim_coords = self.dimension_coordinates()
+        var_chunks = (1, len(dim_coords["latitude"]), len(dim_coords["longitude"]))
+        default_encoding = Encoding(
+            dtype="float32",
+            fill_value=np.nan,
+            chunks=var_chunks,
+            shards=None,
+            compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
+        )
         return [
             NasaSmapDataVar(
                 name="soil_moisture_am",
-                dims=self.dims,
-                dtype="float32",
-                encoding=Encoding(
-                    dtype="float32", fill_value=np.nan, chunks=(), shards=()
-                ),
+                encoding=default_encoding,
                 attrs=DataVarAttrs(
                     short_name="soil_moisture_am",
                     long_name="AM Soil Moisture",
@@ -360,11 +365,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
             ),
             NasaSmapDataVar(
                 name="soil_moisture_pm",
-                dims=self.dims,
-                dtype="float32",
-                encoding=Encoding(
-                    dtype="float32", fill_value=np.nan, chunks=(), shards=()
-                ),
+                encoding=default_encoding,
                 attrs=DataVarAttrs(
                     short_name="soil_moisture_pm",
                     long_name="PM Soil Moisture",
