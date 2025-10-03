@@ -44,40 +44,33 @@ class NasaSmapDataVar(DataVar[NasaSmapInternalAttrs]):
 class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
     dims: tuple[Dim, ...] = ("time", "latitude", "longitude")
     append_dim: AppendDim = "time"
-    append_dim_start: Timestamp = pd.Timestamp("2020-01-01T00:00")
-    append_dim_frequency: Timedelta = pd.Timedelta("6h")
+    append_dim_start: Timestamp = pd.Timestamp("2015-04-01T00:00")
+    append_dim_frequency: Timedelta = pd.Timedelta("1d")
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
-            dataset_id="smap-l3-36km-v009",
-            dataset_version="0.9.0",
-            name="SMAP L3 Passive Soil Moisture 36km v009",
-            description="Passive soil moisture retrievals AM and PM from the SMAP radiometer on 36 km EASE-Grid",
-            attribution="NASA/NSIDC SMAP L3 Passive Soil Moisture data",
+            dataset_id="nasa-smap-level3-36km-v9",
+            dataset_version="0.0.1",
+            name="NASA SMAP L3 Radiometer Global Daily 36 km EASE-Grid Soil Moisture V009",
+            description="Soil moisture gridded Level-3 (L3) daily data from the NASA SMAP passive microwave radiometer.",
+            attribution="NASA/NSIDC SMAP L3 data processed by dynamical.org",
             spatial_domain="Global",
             spatial_resolution="36 km",
             time_domain=f"Retrievals from {self.append_dim_start} to Present",
-            time_resolution="12-hour (AM/PM) time resolution",
-            forecast_domain="",
-            forecast_resolution="",
+            time_resolution="Daily AM and PM observations",
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
-        """
-        Returns a dictionary of dimension names to coordinates for the dataset.
-        """
+        """Returns a dictionary of dimension names to coordinates for the dataset."""
         times = self.append_dim_coordinates(
             self.append_dim_start + self.append_dim_frequency
         )
-        lat = np.linspace(-85.04450225830078, 85.04450225830078, 406)
-        lon = np.linspace(-180.0, 180.0, 964, endpoint=False)
-        return {
-            "time": times,
-            "latitude": lat,
-            "longitude": lon,
-        }
+        latitudes = np.linspace(-85.04450225830078, 85.04450225830078, 406)
+        longitudes = np.linspace(-180.0, 180.0, 964, endpoint=False)
+
+        return {"time": times, "latitude": latitudes, "longitude": longitudes}
 
     def derive_coordinates(
         self, ds: xr.Dataset
@@ -92,197 +85,129 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
     @property
     def coords(self) -> Sequence[Coordinate]:
         """Define metadata and encoding for each coordinate."""
-        # dim_coords = self.dimension_coordinates()
-        # append_dim_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
+        dim_coords = self.dimension_coordinates()
+        append_dim_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
 
-        # return [
-        #     Coordinate(
-        #         name=self.append_dim,
-        #         encoding=Encoding(
-        #             dtype="int64",
-        #             fill_value=0,
-        #             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-        #             calendar="proleptic_gregorian",
-        #             units="seconds since 1970-01-01 00:00:00",
-        #             chunks=append_dim_coordinate_chunk_size,
-        #             shards=None,
-        #         ),
-        #         attrs=CoordinateAttrs(
-        #             units="seconds since 1970-01-01 00:00:00",
-        #             statistics_approximate=StatisticsApproximate(
-        #                 min=dim_coords[self.append_dim].min().isoformat(), max="Present"
-        #             ),
-        #         ),
-        #     ),
-        #     Coordinate(
-        #         name="lead_time",
-        #         encoding=Encoding(
-        #             dtype="int64",
-        #             fill_value=-1,
-        #             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-        #             units="seconds",
-        #             chunks=len(dim_coords["lead_time"]),
-        #             shards=None,
-        #         ),
-        #         attrs=CoordinateAttrs(
-        #             units="seconds",
-        #             statistics_approximate=StatisticsApproximate(
-        #                 min=str(dim_coords["lead_time"].min()),
-        #                 max=str(dim_coords["lead_time"].max()),
-        #             ),
-        #         ),
-        #     ),
-        #     Coordinate(
-        #         name="latitude",
-        #         encoding=Encoding(
-        #             dtype="float64",
-        #             fill_value=np.nan,
-        #             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-        #             chunks=len(dim_coords["latitude"]),
-        #             shards=None,
-        #         ),
-        #         attrs=CoordinateAttrs(
-        #             units="degrees_north",
-        #             statistics_approximate=StatisticsApproximate(
-        #                 min=float(dim_coords["latitude"].min()),
-        #                 max=float(dim_coords["latitude"].max()),
-        #             ),
-        #         ),
-        #     ),
-        #     Coordinate(
-        #         name="longitude",
-        #         encoding=Encoding(
-        #             dtype="float64",
-        #             fill_value=np.nan,
-        #             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-        #             chunks=len(dim_coords["longitude"]),
-        #             shards=None,
-        #         ),
-        #         attrs=CoordinateAttrs(
-        #             units="degrees_east",
-        #             statistics_approximate=StatisticsApproximate(
-        #                 min=float(dim_coords["longitude"].min()),
-        #                 max=float(dim_coords["longitude"].max()),
-        #             ),
-        #         ),
-        #     ),
-        #     Coordinate(
-        #         name="valid_time",
-        #         encoding=Encoding(
-        #             dtype="int64",
-        #             fill_value=0,
-        #             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-        #             calendar="proleptic_gregorian",
-        #             units="seconds since 1970-01-01 00:00:00",
-        #             chunks=(
-        #                 append_dim_coordinate_chunk_size,
-        #                 len(dim_coords["lead_time"]),
-        #             ),
-        #             shards=None,
-        #         ),
-        #         attrs=CoordinateAttrs(
-        #             units="seconds since 1970-01-01 00:00:00",
-        #             statistics_approximate=StatisticsApproximate(
-        #                 min=self.append_dim_start.isoformat(),
-        #                 max="Present + 16 days",
-        #             ),
-        #         ),
-        #     ),
-        #     Coordinate(
-        #         name="ingested_forecast_length",
-        #         encoding=Encoding(
-        #             dtype="int64",
-        #             fill_value=-1,
-        #             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-        #             units="seconds",
-        #             chunks=append_dim_coordinate_chunk_size,
-        #             shards=None,
-        #         ),
-        #         attrs=CoordinateAttrs(
-        #             units="seconds",
-        #             statistics_approximate=StatisticsApproximate(
-        #                 min=str(dim_coords["lead_time"].min()),
-        #                 max=str(dim_coords["lead_time"].max()),
-        #             ),
-        #         ),
-        #     ),
-        #     Coordinate(
-        #         name="spatial_ref",
-        #         encoding=Encoding(
-        #             dtype="int64",
-        #             fill_value=0,
-        #             chunks=(),  # Scalar coordinate
-        #             shards=None,
-        #         ),
-        #         attrs=CoordinateAttrs(
-        #             units=None,
-        #             statistics_approximate=None,
-        #             # Deterived by running `ds.rio.write_crs("+proj=longlat +a=6371229 +b=6371229 +no_defs +type=crs")["spatial_ref"].attrs
-        #             crs_wkt='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
-        #             semi_major_axis=6371229.0,
-        #             semi_minor_axis=6371229.0,
-        #             inverse_flattening=0.0,
-        #             reference_ellipsoid_name="unknown",
-        #             longitude_of_prime_meridian=0.0,
-        #             prime_meridian_name="Greenwich",
-        #             geographic_crs_name="unknown",
-        #             horizontal_datum_name="unknown",
-        #             grid_mapping_name="latitude_longitude",
-        #             spatial_ref='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
-        #             comment="This coordinate reference system matches the source data which follows WMO conventions of assuming the earth is a perfect sphere with a radius of 6,371,229m. It is similar to EPSG:4326, but EPSG:4326 uses a more accurate representation of the earth's shape.",
-        #         ),
-        #     ),
-        # ]
-        dims_coords = self.dimension_coordinates()
-        times = dims_coords["time"]
-        lat = dims_coords["latitude"]
-        lon = dims_coords["longitude"]
         return [
             Coordinate(
-                name="time",
+                name=self.append_dim,
                 encoding=Encoding(
                     dtype="int64",
                     fill_value=0,
-                    chunks=self.append_dim_coordinate_chunk_size(),
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    calendar="proleptic_gregorian",
+                    units="seconds since 1970-01-01 00:00:00",
+                    chunks=append_dim_coordinate_chunk_size,
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
-                    units="ns since 1970-01-01",
+                    units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
-                        min=times.min().isoformat(), max="Present"
+                        min=dim_coords[self.append_dim].min().isoformat(), max="Present"
                     ),
                 ),
             ),
             Coordinate(
                 name="latitude",
                 encoding=Encoding(
-                    dtype="float32",
+                    dtype="float64",
                     fill_value=np.nan,
-                    chunks=len(lat),
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    chunks=len(dim_coords["latitude"]),
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
                     units="degrees_north",
                     statistics_approximate=StatisticsApproximate(
-                        min=float(lat.min()), max=float(lat.max())
+                        min=float(dim_coords["latitude"].min()),
+                        max=float(dim_coords["latitude"].max()),
                     ),
                 ),
             ),
             Coordinate(
                 name="longitude",
                 encoding=Encoding(
-                    dtype="float32",
+                    dtype="float64",
                     fill_value=np.nan,
-                    chunks=len(lon),
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    chunks=len(dim_coords["longitude"]),
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
                     units="degrees_east",
                     statistics_approximate=StatisticsApproximate(
-                        min=float(lon.min()), max=float(lon.max())
+                        min=float(dim_coords["longitude"].min()),
+                        max=float(dim_coords["longitude"].max()),
                     ),
                 ),
             ),
+            Coordinate(
+                name="valid_time",
+                encoding=Encoding(
+                    dtype="int64",
+                    fill_value=0,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    calendar="proleptic_gregorian",
+                    units="seconds since 1970-01-01 00:00:00",
+                    chunks=(
+                        append_dim_coordinate_chunk_size,
+                        len(dim_coords["lead_time"]),
+                    ),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    units="seconds since 1970-01-01 00:00:00",
+                    statistics_approximate=StatisticsApproximate(
+                        min=self.append_dim_start.isoformat(),
+                        max="Present + 16 days",
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="ingested_forecast_length",
+                encoding=Encoding(
+                    dtype="int64",
+                    fill_value=-1,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    units="seconds",
+                    chunks=append_dim_coordinate_chunk_size,
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    units="seconds",
+                    statistics_approximate=StatisticsApproximate(
+                        min=str(dim_coords["lead_time"].min()),
+                        max=str(dim_coords["lead_time"].max()),
+                    ),
+                ),
+            ),
+            #     Coordinate(
+            #         name="spatial_ref",
+            #         encoding=Encoding(
+            #             dtype="int64",
+            #             fill_value=0,
+            #             chunks=(),  # Scalar coordinate
+            #             shards=None,
+            #         ),
+            #         attrs=CoordinateAttrs(
+            #             units=None,
+            #             statistics_approximate=None,
+            #             # Deterived by running `ds.rio.write_crs("+proj=longlat +a=6371229 +b=6371229 +no_defs +type=crs")["spatial_ref"].attrs
+            #             crs_wkt='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
+            #             semi_major_axis=6371229.0,
+            #             semi_minor_axis=6371229.0,
+            #             inverse_flattening=0.0,
+            #             reference_ellipsoid_name="unknown",
+            #             longitude_of_prime_meridian=0.0,
+            #             prime_meridian_name="Greenwich",
+            #             geographic_crs_name="unknown",
+            #             horizontal_datum_name="unknown",
+            #             grid_mapping_name="latitude_longitude",
+            #             spatial_ref='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
+            #             comment="This coordinate reference system matches the source data which follows WMO conventions of assuming the earth is a perfect sphere with a radius of 6,371,229m. It is similar to EPSG:4326, but EPSG:4326 uses a more accurate representation of the earth's shape.",
+            #         ),
+            #     ),
+            # ]
         ]
 
     @computed_field  # type: ignore[prop-decorator]
