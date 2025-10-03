@@ -26,57 +26,6 @@ from reformatters.common.zarr import (
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
 
-"""
-xr.open_dataset("data/2025-03-01T00:00:00.000000000.grib2", engine="cfgrib"), filter_by_keys={"dataType": "pf"})
-
-=== GRIB2 File Information ===
-File size: ~5.9 GB
-Grid: 721 x 1440 (lat x lon)
-Resolution: ~0.25°
-Ensemble members: 50
-Pressure levels: 13 levels
-Time: 2025-03-01T00:00:00.000000000
-Forecast step: 0 nanoseconds hours
-
-=== Available Variables ===
-asn        - Snow albedo [(0 - 1)]
-d          - Divergence [s**-1]
-ewss       - Time-integrated eastward turbulent surface stress [N m**-2 s]
-gh         - Geopotential height [gpm]
-lsm        - Land-sea mask [(0 - 1)]
-msl        - Mean sea level pressure [Pa]
-mucape     - Most-unstable CAPE [J kg**-1]
-nsss       - Time-integrated northward turbulent surface stress [N m**-2 s]
-ptype      - Precipitation type [(Code table 4.201)]
-q          - Specific humidity [kg kg**-1]
-r          - Relative humidity [%]
-ro         - Runoff [m]
-sithick    - Sea ice thickness [m]
-skt        - Skin temperature [K]
-sot        - Soil temperature [K]
-sp         - Surface pressure [Pa]
-ssr        - Surface net short-wave (solar) radiation [J m**-2]
-ssrd       - Surface short-wave (solar) radiation downwards [J m**-2]
-str        - Surface net long-wave (thermal) radiation [J m**-2]
-strd       - Surface long-wave (thermal) radiation downwards [J m**-2]
-sve        - Eastward surface sea water velocity [m s**-1]
-svn        - Northward surface sea water velocity [m s**-1]
-t          - Temperature [K]
-tcw        - Total column water [kg m**-2]
-tcwv       - Total column vertically-integrated water vapour [kg m**-2]
-tp         - Total precipitation [m]
-tprate     - Total precipitation rate [kg m**-2 s**-1]
-ttr        - Top net long-wave (thermal) radiation [J m**-2]
-u          - U component of wind [m s**-1]
-u100       - 100 metre U wind component [m s**-1]
-v          - V component of wind [m s**-1]
-v100       - 100 metre V wind component [m s**-1]
-vo         - Vorticity (relative) [s**-1]
-vsw        - Volumetric soil moisture [m**3 m**-3]
-w          - Vertical velocity [Pa s**-1]
-zos        - Sea surface height [m]
-"""
-
 
 class EcmwfIfsEnsInternalAttrs(BaseInternalAttrs):
     """
@@ -84,16 +33,11 @@ class EcmwfIfsEnsInternalAttrs(BaseInternalAttrs):
     Not written to the dataset.
     """
 
-    # TODO skipping this for now! to come back and do
-
-    # NOAA examples:
-    # grib_element: str
+    # TODO (skipping this for now, will come back and add when developing processing for real)
+    # grib_band_index: int
+    # grib_element_name: str
     # grib_description: str
     # grib_index_level: str
-    # index_position: int
-    # include_lead_time_suffix: bool = False
-    # # for step_type != "instant"
-    # window_reset_frequency: Timedelta | None = None
 
 
 class EcmwfIfsEnsDataVar(DataVar[EcmwfIfsEnsInternalAttrs]):
@@ -130,7 +74,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
             time_resolution=f"Forecasts initialized every {self.append_dim_frequency.total_seconds() / 3600:.0f} hours",
             forecast_domain="Forecast lead time 0-360 hours (0-15 days) ahead",
-            forecast_resolution="Forecast step 0-144 hours: 3 hourly, 145-360 hours: 6 hourly",
+            forecast_resolution="Forecast step 0-144 hours: 3 hourly, 144-360 hours: 6 hourly",
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
@@ -142,8 +86,8 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                 self.append_dim_start + self.append_dim_frequency
             ),
             "lead_time": (
-                pd.timedelta_range("0h", "144h", freq="3h").union(
-                    pd.timedelta_range("145h", "360h", freq="6h")
+                pd.timedelta_range("0h", "145h", freq="3h").union(
+                    pd.timedelta_range("150h", "361h", freq="6h")
                 )
             ),
             "ensemble_member": np.arange(1, 51),
@@ -167,15 +111,15 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                 (self.append_dim,),
                 np.full(ds[self.append_dim].size, np.timedelta64("NaT", "ns")),
             ),
-            "expected_forecast_length": (
-                (self.append_dim,),
-                np.full(
-                    ds[self.append_dim].size,
-                    ds["lead_time"].max(),
-                    dtype="timedelta64[ns]",
-                ),
-            ),
-            "spatial_ref": SPATIAL_REF_COORDS,  # TODO what should this be? seems wrong but other template_configs use it?
+            # "expected_forecast_length": (
+            #     (self.append_dim,),
+            #     np.full(
+            #         ds[self.append_dim].size,
+            #         ds["lead_time"].max(),
+            #         dtype="timedelta64[ns]",
+            #     ),
+            # ),
+            "spatial_ref": SPATIAL_REF_COORDS,
         }
 
     @computed_field  # type: ignore[prop-decorator]
@@ -228,14 +172,14 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     dtype="int32",
                     fill_value=-1,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    chunks=len(dim_coords["number"]),
+                    chunks=len(dim_coords["ensemble_member"]),
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
                     units="realization",  # TODO what does this mean lol I stole it from gefs
                     statistics_approximate=StatisticsApproximate(
-                        min=int(dim_coords["number"].min()),
-                        max=int(dim_coords["number"].max()),
+                        min=int(dim_coords["ensemble_member"].min()),
+                        max=int(dim_coords["ensemble_member"].max()),
                     ),
                 ),
             ),
@@ -313,7 +257,6 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     ),
                 ),
             ),
-            # TODO: add expected forecast length?
             Coordinate(
                 name="spatial_ref",
                 encoding=Encoding(
@@ -325,7 +268,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                 attrs=CoordinateAttrs(
                     units=None,
                     statistics_approximate=None,
-                    # TODO: Verify this CRS matches ECMWF data - copied from NOAA example
+                    # Derived by running `ds.rio.write_crs("+proj=longlat +a=6371229 +b=6371229 +no_defs +type=crs")["spatial_ref"].attrs
                     crs_wkt='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
                     semi_major_axis=6371229.0,
                     semi_minor_axis=6371229.0,
@@ -340,6 +283,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     comment="This coordinate reference system matches the source data which follows WMO conventions of assuming the earth is a perfect sphere with a radius of 6,371,229m. It is similar to EPSG:4326, but EPSG:4326 uses a more accurate representation of the earth's shape.",
                 ),
             ),
+            # TODO: add expected forecast length?
         ]
 
     @computed_field  # type: ignore[prop-decorator]
@@ -355,7 +299,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
         # TODO check the math on these chunks & shards being reasonable. reference slack notes
         var_chunks: dict[Dim, int] = {
             "init_time": 1,
-            "lead_time": 61,  # Updated for ECMWF 61-step forecast # TODO should be 83??
+            "lead_time": 61,  # Updated for ECMWF 61-step forecast # TODO should be 83? 85?
             "ensemble_member": 50,  # All ensemble members
             "latitude": 144,  # ~721/5 for reasonable chunk size
             "longitude": 144,  # ~1440/10 for reasonable chunk size
@@ -366,7 +310,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
         # 256 million to 1 billion float32 values
         var_shards: dict[Dim, int] = {
             "init_time": 1,
-            "lead_time": 61 * 2,  # TODO should be 83 * 2??
+            "lead_time": 61 * 2,  # TODO should be 83/85 * 2??
             "ensemble_member": 50,
             "latitude": 144 * 5,
             "longitude": 144 * 5,
@@ -380,8 +324,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
 
-        # default_keep_mantissa_bits = 7
-        # TODO what does this mean ^? (gefs also has keep_mantissa_bits_categorical?)
+        default_keep_mantissa_bits = 7
 
         return [
             EcmwfIfsEnsDataVar(
@@ -390,12 +333,12 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                 attrs=DataVarAttrs(
                     short_name="t2m",
                     long_name="2 metre temperature",
-                    units="K",  # From GRIB metadata - Kelvin not Celsius
+                    units="K",
                     step_type="instant",
                     standard_name="air_temperature",
                 ),
                 internal_attrs=EcmwfIfsEnsInternalAttrs(
-                    # TODO: Determine correct GRIB element name and other metadata from ECMWF-specific format
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             EcmwfIfsEnsDataVar(
@@ -409,7 +352,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     standard_name="eastward_wind",
                 ),
                 internal_attrs=EcmwfIfsEnsInternalAttrs(
-                    # TODO: Determine correct GRIB element name and other metadata from ECMWF-specific format
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             EcmwfIfsEnsDataVar(
@@ -423,7 +366,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     standard_name="northward_wind",
                 ),
                 internal_attrs=EcmwfIfsEnsInternalAttrs(
-                    # TODO: Determine correct GRIB element name and other metadata from ECMWF-specific format
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             EcmwfIfsEnsDataVar(
@@ -432,12 +375,49 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                 attrs=DataVarAttrs(
                     short_name="tp",
                     long_name="Total precipitation",
-                    units="m",  # From GRIB metadata - meters not mm/s
-                    step_type="accum",  # From GRIB metadata - accumulated not instantaneous
+                    units="m",
+                    step_type="accum",
                     comment="Accumulated precipitation since forecast start time.",
                 ),
                 internal_attrs=EcmwfIfsEnsInternalAttrs(
-                    # TODO: Determine if deaccumulation needed and correct GRIB processing parameters
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
         ]
+
+
+"""
+Band 39 Block=1440x1 Type=Float64, ColorInterp=Undefined
+  Description = 0[-] SFC="Ground or water surface"
+  Metadata:
+    GRIB_COMMENT=Total precipitation rate [kg/(m^2*s)]
+    GRIB_DISCIPLINE=0(Meteorological)
+    GRIB_ELEMENT=TPRATE
+    GRIB_FORECAST_SECONDS=0
+    GRIB_IDS=CENTER=98(ECMWF) SUBCENTER=0 MASTER_TABLE=34 LOCAL_TABLE=0 SIGNF_REF_TIME=1(Start_of_Forecast) REF_TIME=2025-03-01T00:00:00Z PROD_STATUS=0(Operational) TYPE=4(Perturbed_forecast)
+    GRIB_PDS_PDTN=1
+    GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES=1 52 4 255 158 0 0 1 0 1 0 0 255 -127 -2147483647 255 34 51
+    GRIB_PDS_TEMPLATE_NUMBERS=1 52 4 255 158 0 0 0 1 0 0 0 0 1 0 0 0 0 0 255 255 255 255 255 255 255 34 51
+    GRIB_REF_TIME=1740787200
+    GRIB_SHORT_NAME=0-SFC
+    GRIB_UNIT=[kg/(m^2*s)]
+    GRIB_VALID_TIME=1740787200
+
+
+Band 6165 Block=1440x1 Type=Float64, ColorInterp=Undefined
+  Description = 0[-] SFC="Ground or water surface"
+  Metadata:
+    GRIB_COMMENT=Total precipitation rate [kg/(m^2*s)]
+    GRIB_DISCIPLINE=0(Meteorological)
+    GRIB_ELEMENT=TPRATE
+    GRIB_FORECAST_SECONDS=0
+    GRIB_IDS=CENTER=98(ECMWF) SUBCENTER=0 MASTER_TABLE=34 LOCAL_TABLE=0 SIGNF_REF_TIME=1(Start_of_Forecast) REF_TIME=2025-03-01T00:00:00Z PROD_STATUS=0(Operational) TYPE=4(Perturbed_forecast)
+    GRIB_PDS_PDTN=1
+    GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES=1 52 4 255 158 0 0 1 0 1 0 0 255 -127 -2147483647 255 46 51
+    GRIB_PDS_TEMPLATE_NUMBERS=1 52 4 255 158 0 0 0 1 0 0 0 0 1 0 0 0 0 0 255 255 255 255 255 255 255 46 51
+    GRIB_REF_TIME=1740787200
+    GRIB_SHORT_NAME=0-SFC
+    GRIB_UNIT=[kg/(m^2*s)]
+    GRIB_VALID_TIME=1740787200
+
+"""
