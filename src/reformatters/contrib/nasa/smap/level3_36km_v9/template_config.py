@@ -42,7 +42,7 @@ class NasaSmapDataVar(DataVar[NasaSmapInternalAttrs]):
 
 
 class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
-    dims: tuple[Dim, ...] = ("time", "latitude", "longitude")
+    dims: tuple[Dim, ...] = ("time", "y", "x")
     append_dim: AppendDim = "time"
     append_dim_start: Timestamp = pd.Timestamp("2015-04-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("1d")
@@ -70,7 +70,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         latitudes = np.linspace(-85.04450225830078, 85.04450225830078, 406)
         longitudes = np.linspace(-180.0, 180.0, 964, endpoint=False)
 
-        return {"time": times, "latitude": latitudes, "longitude": longitudes}
+        return {"time": times, "y": latitudes, "x": longitudes}
 
     def derive_coordinates(
         self, ds: xr.Dataset
@@ -79,7 +79,14 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         Return a dictionary of non-dimension coordinates for the dataset.
         Called whenever len(ds.append_dim) changes.
         """
-        return {}
+        dim_coords = self.dimension_coordinates()
+        lat1d = dim_coords["y"]
+        lon1d = dim_coords["x"]
+        lat2d, lon2d = np.meshgrid(lat1d, lon1d, indexing="ij")
+        return {
+            "latitude": (("y", "x"), lat2d),
+            "longitude": (("y", "x"), lon2d),
+        }
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -108,36 +115,36 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                 ),
             ),
             Coordinate(
-                name="latitude",
+                name="y",
                 encoding=Encoding(
                     dtype="float64",
                     fill_value=np.nan,
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    chunks=len(dim_coords["latitude"]),
+                    chunks=len(dim_coords["y"]),
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
                     units="degrees_north",
                     statistics_approximate=StatisticsApproximate(
-                        min=float(dim_coords["latitude"].min()),
-                        max=float(dim_coords["latitude"].max()),
+                        min=float(dim_coords["y"].min()),
+                        max=float(dim_coords["y"].max()),
                     ),
                 ),
             ),
             Coordinate(
-                name="longitude",
+                name="x",
                 encoding=Encoding(
                     dtype="float64",
                     fill_value=np.nan,
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    chunks=len(dim_coords["longitude"]),
+                    chunks=len(dim_coords["x"]),
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
                     units="degrees_east",
                     statistics_approximate=StatisticsApproximate(
-                        min=float(dim_coords["longitude"].min()),
-                        max=float(dim_coords["longitude"].max()),
+                        min=float(dim_coords["x"].min()),
+                        max=float(dim_coords["x"].max()),
                     ),
                 ),
             ),
