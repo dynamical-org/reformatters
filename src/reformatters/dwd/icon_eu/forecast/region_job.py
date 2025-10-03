@@ -54,6 +54,8 @@ class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
         init_date_str: str = self.init_time.strftime("%Y%m%d%H")
         init_hour_str: str = self.init_time.strftime("%H")
 
+        # TODO(Jack): DWD plan to change their URL format. See this comment for details:
+        # https://github.com/dynamical-org/reformatters/issues/183#issuecomment-3365068327
         return f"https://opendata.dwd.de/weather/nwp/icon-eu/grib/{init_hour_str}/{self.variable_name_in_filename}/icon-eu_europe_regular-lat-lon_single-level_{init_date_str}_{lead_time_hours:03d}_{self.variable_name_in_filename.upper()}.grib2.bz2"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
