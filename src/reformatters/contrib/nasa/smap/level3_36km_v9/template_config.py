@@ -42,8 +42,8 @@ class NasaSmapDataVar(DataVar[NasaSmapInternalAttrs]):
 
 
 class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
-    dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
-    append_dim: AppendDim = "init_time"
+    dims: tuple[Dim, ...] = ("time", "latitude", "longitude")
+    append_dim: AppendDim = "time"
     append_dim_start: Timestamp = pd.Timestamp("2020-01-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
 
@@ -388,12 +388,34 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         return [
             NasaSmapDataVar(
                 name="soil_moisture_am",
-                encoding=Encoding(dtype="float32", fill_value=np.nan),
-                attrs=DataVarAttrs(units="cm³/cm³", long_name="AM Soil Moisture"),
+                dims=self.dims,
+                dtype="float32",
+                encoding=Encoding(
+                    dtype="float32", fill_value=np.nan,
+                    chunks=(), shards=()
+                ),
+                attrs=DataVarAttrs(
+                    short_name="soil_moisture_am",
+                    long_name="AM Soil Moisture",
+                    units="cm³/cm³",
+                    step_type="instant",
+                ),
+                internal_attrs=NasaSmapInternalAttrs(),
             ),
             NasaSmapDataVar(
                 name="soil_moisture_pm",
-                encoding=Encoding(dtype="float32", fill_value=np.nan),
-                attrs=DataVarAttrs(units="cm³/cm³", long_name="PM Soil Moisture"),
+                dims=self.dims,
+                dtype="float32",
+                encoding=Encoding(
+                    dtype="float32", fill_value=np.nan,
+                    chunks=(), shards=()
+                ),
+                attrs=DataVarAttrs(
+                    short_name="soil_moisture_pm",
+                    long_name="PM Soil Moisture",
+                    units="cm³/cm³",
+                    step_type="instant",
+                ),
+                internal_attrs=NasaSmapInternalAttrs(),
             ),
         ]
