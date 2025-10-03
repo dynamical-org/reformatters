@@ -37,7 +37,6 @@ class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
 
     init_time: Timestamp
     lead_time: Timedelta
-    grib_element: str
     variable_name_in_filename: str
 
     def get_url(self) -> str:
@@ -102,7 +101,9 @@ class DwdIconEuForecastRegionJob(
         """
         init_times = pd.to_datetime(processing_region_ds["init_time"].values)
         lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
-        internal_attrs = item(data_var_group).internal_attrs
+        variable_name_in_filename = item(
+            data_var_group
+        ).internal_attrs.variable_name_in_filename
 
         # Sanity checks
         assert len(init_times) > 0
@@ -112,8 +113,7 @@ class DwdIconEuForecastRegionJob(
             DwdIconEuForecastSourceFileCoord(
                 init_time=init_time,
                 lead_time=lead_time,
-                grib_element=internal_attrs.grib_element,
-                variable_name_in_filename=internal_attrs.variable_name_in_filename,
+                variable_name_in_filename=variable_name_in_filename,
             )
             for init_time in init_times
             for lead_time in lead_times
