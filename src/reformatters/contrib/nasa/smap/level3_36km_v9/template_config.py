@@ -231,7 +231,23 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         #         ),
         #     ),
         # ]
-        raise NotImplementedError("Subclasses implement `coords`")
+        return [
+            Coordinate(
+                name="time",
+                encoding=Encoding(dtype="datetime64[ns]"),
+                attrs=CoordinateAttrs(units="ns since 1970-01-01", calendar="proleptic_gregorian"),
+            ),
+            Coordinate(
+                name="latitude",
+                encoding=Encoding(dtype="float32"),
+                attrs=CoordinateAttrs(units="degrees_north"),
+            ),
+            Coordinate(
+                name="longitude",
+                encoding=Encoding(dtype="float32"),
+                attrs=CoordinateAttrs(units="degrees_east"),
+            ),
+        ]
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -365,4 +381,15 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         #         ),
         #     ),
         # ]
-        raise NotImplementedError("Subclasses implement `data_vars`")
+        return [
+            NasaSmapDataVar(
+                name="soil_moisture_am",
+                encoding=Encoding(dtype="float32", fill_value=np.nan),
+                attrs=DataVarAttrs(units="cm³/cm³", long_name="AM Soil Moisture"),
+            ),
+            NasaSmapDataVar(
+                name="soil_moisture_pm",
+                encoding=Encoding(dtype="float32", fill_value=np.nan),
+                attrs=DataVarAttrs(units="cm³/cm³", long_name="PM Soil Moisture"),
+            ),
+        ]
