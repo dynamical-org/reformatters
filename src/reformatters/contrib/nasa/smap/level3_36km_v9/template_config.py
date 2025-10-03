@@ -233,23 +233,50 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         #         ),
         #     ),
         # ]
+        dims_coords = self.dimension_coordinates()
+        times = dims_coords["time"]
+        lat = dims_coords["latitude"]
+        lon = dims_coords["longitude"]
         return [
             Coordinate(
                 name="time",
-                encoding=Encoding(dtype="datetime64[ns]"),
+                encoding=Encoding(
+                    dtype="int64", fill_value=0,
+                    chunks=self.append_dim_coordinate_chunk_size(),
+                    shards=None,
+                ),
                 attrs=CoordinateAttrs(
-                    units="ns since 1970-01-01", calendar="proleptic_gregorian"
+                    units="ns since 1970-01-01",
+                    statistics_approximate=StatisticsApproximate(
+                        min=times.min().isoformat(), max="Present"
+                    ),
                 ),
             ),
             Coordinate(
                 name="latitude",
-                encoding=Encoding(dtype="float32"),
-                attrs=CoordinateAttrs(units="degrees_north"),
+                encoding=Encoding(
+                    dtype="float32", fill_value=np.nan,
+                    chunks=len(lat), shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    units="degrees_north",
+                    statistics_approximate=StatisticsApproximate(
+                        min=float(lat.min()), max=float(lat.max())
+                    ),
+                ),
             ),
             Coordinate(
                 name="longitude",
-                encoding=Encoding(dtype="float32"),
-                attrs=CoordinateAttrs(units="degrees_east"),
+                encoding=Encoding(
+                    dtype="float32", fill_value=np.nan,
+                    chunks=len(lon), shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    units="degrees_east",
+                    statistics_approximate=StatisticsApproximate(
+                        min=float(lon.min()), max=float(lon.max())
+                    ),
+                ),
             ),
         ]
 
