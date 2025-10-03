@@ -22,8 +22,8 @@ from reformatters.common.template_config import (
 )
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 from reformatters.common.zarr import (
-    BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,  # noqa: F401
-    BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,  # noqa: F401
+    BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
+    BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
 
 
