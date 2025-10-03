@@ -33,11 +33,11 @@ class DwdIconEuInternalAttrs(BaseInternalAttrs):
     Not written to the dataset.
 
     Attributes:
-        grib_element (str): The name used in ICON-EU's GRIB filename for this variable.
+        variable_name_in_filename (str): The name used in ICON-EU's GRIB filename for this variable.
             For example, `alb_rad` (for `surface_albedo`).
     """
 
-    grib_element: str
+    variable_name_in_filename: str
 
 
 class DwdIconEuDataVar(DataVar[DwdIconEuInternalAttrs]):
@@ -48,7 +48,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
     dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = pd.Timestamp(
-        "2025-08-08T00:00"  # TODO @JackKelly: Update this when we actual deploy operationally.
+        "2025-10-03T00:00"  # TODO @JackKelly: Update this when we actual deploy operationally.
     )
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
 
@@ -327,7 +327,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     standard_name="Mean surface diffuse short-wave radiation flux",  # From ECMWF.
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="aswdifd_s",
+                    variable_name_in_filename="aswdifd_s",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -347,7 +347,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="aswdir_s",
+                    variable_name_in_filename="aswdir_s",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -362,7 +362,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     comment="Convective available potential energy",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="cape_con",
+                    variable_name_in_filename="cape_con",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -377,7 +377,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     comment="Cloud Cover (0 - 400 hPa). Different agencies use different short_names for this same parameter: ECMWF: HCC; WMO GRIB table: HCDC.",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="clch",
+                    variable_name_in_filename="clch",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -392,7 +392,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     comment="Cloud Cover (800 hPa - Soil). Different agencies use different short_names for this same parameter: ECMWF: LCC; WMO GRIB table: LCDC.",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="clcl",
+                    variable_name_in_filename="clcl",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -407,7 +407,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     comment="Cloud Cover (400 - 800 hPa). Different agencies use different short_names for this same parameter: ECMWF: MCC; WMO GRIB table: MCDC.",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="clcm",
+                    variable_name_in_filename="clcm",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -422,7 +422,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     comment="Total cloud cover. Different agencies use different short_names for this same parameter: ECMWF: TCC; NOAA & WMO: TCDC.",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="clct",
+                    variable_name_in_filename="clct",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -441,7 +441,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="h_snow",
+                    variable_name_in_filename="h_snow",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -456,7 +456,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     comment="Surface pressure reduced to MSL",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="pmsl",
+                    variable_name_in_filename="pmsl",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -472,7 +472,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     standard_name="relative_humidity",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="relhum_2m",
+                    variable_name_in_filename="relhum_2m",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -487,7 +487,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     comment="Soil water runoff (accumulated since model start)",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="runoff_g",
+                    variable_name_in_filename="runoff_g",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     deaccumulate_to_rate=True,
                 ),
@@ -506,7 +506,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="runoff_s",
+                    variable_name_in_filename="runoff_s",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     deaccumulate_to_rate=True,
                 ),
@@ -525,7 +525,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     standard_name="air_temperature",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="t_2m",
+                    variable_name_in_filename="t_2m",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -543,7 +543,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="tot_prec",
+                    variable_name_in_filename="tot_prec",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     deaccumulate_to_rate=True,
                 ),
@@ -560,7 +560,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     comment="Zonal wind at 10m above ground",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="u_10m",
+                    variable_name_in_filename="u_10m",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -576,7 +576,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     comment="Meridional wind at 10m above ground",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="v_10m",
+                    variable_name_in_filename="v_10m",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -597,7 +597,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="vmax_10m",
+                    variable_name_in_filename="vmax_10m",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -615,7 +615,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    grib_element="w_snow",
+                    variable_name_in_filename="w_snow",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),

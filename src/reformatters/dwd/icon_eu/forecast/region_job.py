@@ -1,20 +1,30 @@
+import bz2
+import shutil
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 import zarr
 
+from reformatters.common.download import http_download_to_disk
+from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
     RegionJob,
     SourceFileCoord,
 )
+from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     AppendDim,
     ArrayFloat32,
     DatetimeLike,
     Dim,
+    Timedelta,
+    Timestamp,
 )
 
 from .template_config import DwdIconEuDataVar
@@ -25,115 +35,118 @@ log = get_logger(__name__)
 class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
     """Coordinates of a single source file to process."""
 
-    def get_url(self) -> str:
-        raise NotImplementedError("Return the URL of the source file.")
+    init_time: Timestamp
+    lead_time: Timedelta
+    variable_name_in_filename: str
 
-    def out_loc(
-        self,
-    ) -> Mapping[Dim, CoordinateValueOrRange]:
+    def get_url(self) -> str:
+        """Return URLs to .grib2.bz2 files on DWD's HTTP server.
+
+        Note that this only handles single-level variables. Also note
+        that, unlike NOAA's NWPs, ICON-EU is published as one GRIB2 file
+        per variable.
         """
-        Returns a data array indexer which identifies the region in the output dataset
-        to write the data from the source file. The indexer is a dict from dimension
-        names to coordinate values or slices.
-        """
-        # If the names of the coordinate attributes of your SourceFileCoord subclass are also all
-        # dimension names in the output dataset (e.g. init_time and lead_time),
-        # delete this implementation and use the default implementation of this method.
-        #
-        # Examples where you would override this method:
-        # - An analysis dataset created from forecast data:
-        #   return {"time": self.init_time + self.lead_time}
-        return super().out_loc()
+        # Example DWD URL:
+        # https://opendata.dwd.de/weather/nwp/icon-eu/grib/00/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2025090700_000_ALB_RAD.grib2.bz2
+
+        lead_time_hours: int = whole_hours(self.lead_time)
+        init_date_str: str = self.init_time.strftime("%Y%m%d%H")
+        init_hour_str: str = self.init_time.strftime("%H")
+
+        # TODO(Jack): DWD plan to change their URL format. See this comment for details:
+        # https://github.com/dynamical-org/reformatters/issues/183#issuecomment-3365068327
+        return f"https://opendata.dwd.de/weather/nwp/icon-eu/grib/{init_hour_str}/{self.variable_name_in_filename}/icon-eu_europe_regular-lat-lon_single-level_{init_date_str}_{lead_time_hours:03d}_{self.variable_name_in_filename.upper()}.grib2.bz2"
+
+    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+        """Return the output location for this file's data in the dataset."""
+        # Map to the standard dimension names used in the template
+        return {
+            "init_time": self.init_time,
+            "lead_time": self.lead_time,
+        }
 
 
 class DwdIconEuForecastRegionJob(
     RegionJob[DwdIconEuDataVar, DwdIconEuForecastSourceFileCoord]
 ):
-    # Optionally, limit the number of variables downloaded together.
-    # If set to a value less than len(data_vars), downloading, reading/recompressing,
-    # and uploading steps will be pipelined within a region job.
-    # 5 is a reasonable default if it is possible to download less than all
-    # variables in a single file (e.g. you have a grib index).
-    # Leave unset if you have to download a whole file to get one variable out
-    # to avoid re-downloading the same file multiple times.
-    #
-    # max_vars_per_download_group: ClassVar[int | None] = None
+    @classmethod
+    def source_groups(
+        cls,
+        data_vars: Sequence[DwdIconEuDataVar],
+    ) -> Sequence[Sequence[DwdIconEuDataVar]]:
+        """Return a sequence of one-element sequences `[[var1], [var2], ...]`.
 
-    # Implement this method only if different variables must be retrieved from different urls
-    #
-    # # @classmethod
-    # def source_groups(
-    #     cls,
-    #     data_vars: Sequence[DwdIconEuDataVar],
-    # ) -> Sequence[Sequence[DwdIconEuDataVar]]:
-    #     """
-    #     Return groups of variables, where all variables in a group can be retrieived from the same source file.
-    #     """
-    #     grouped = defaultdict(list)
-    #     for data_var in data_vars:
-    #         grouped[data_var.internal_attrs.file_type].append(data_var)
-    #     return list(grouped.values())
+        In the `reformatters` API, this function can be used to return groups of variables,
+        where all variables in a group can be retrieved from the same source file.
 
-    # Implement this method only if specific post processing in this dataset
-    # requires data from outside the region defined by self.region,
-    # e.g. for deaccumulation or interpolation along append_dim in an analysis dataset.
-    #
-    # def get_processing_region(self) -> slice:
-    #     """
-    #     Return a slice of integer offsets into self.template_ds along self.append_dim that identifies
-    #     the region to process. In most cases this is exactly self.region, but if additional data outside
-    #     the region is required, for example for correct interpolation or deaccumulation, this method can
-    #     return a modified slice (e.g. `slice(self.region.start - 1, self.region.stop + 1)`).
-    #     """
-    #     return self.region
+        But, in the case of ICON-EU, each grib file from DWD holds only one variable. So there's
+        no ability/benefit from downloading multiple variables from the same file at the same time.
+        """
+        return [[var] for var in data_vars]
 
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[DwdIconEuDataVar],
     ) -> Sequence[DwdIconEuForecastSourceFileCoord]:
-        """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
-        # return [
-        #     DwdIconEuForecastSourceFileCoord(
-        #         init_time=init_time,
-        #         lead_time=lead_time,
-        #     )
-        #     for init_time, lead_time in itertools.product(
-        #         processing_region_ds["init_time"].values,
-        #         processing_region_ds["lead_time"].values,
-        #     )
-        # ]
-        raise NotImplementedError(
-            "Return a sequence of SourceFileCoord objects, one for each source file required to process the data covered by processing_region_ds."
-        )
+        """Return a sequence of coords, one for each source file required to
+        process the data covered by processing_region_ds.
+
+        Parameters
+        ----------
+        processing_region_ds : xr.Dataset
+        data_var_group : Sequence[DwdIconEuDataVar]
+            A sequence containing a single `DwdIconEuDataVar` (because each ICON-EU grib file contains a
+            single variable).
+        """
+        init_times = pd.to_datetime(processing_region_ds["init_time"].values)
+        lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
+        variable_name_in_filename = item(
+            data_var_group
+        ).internal_attrs.variable_name_in_filename
+
+        # Sanity checks
+        assert len(init_times) > 0
+        assert len(lead_times) > 0
+
+        return [
+            DwdIconEuForecastSourceFileCoord(
+                init_time=init_time,
+                lead_time=lead_time,
+                variable_name_in_filename=variable_name_in_filename,
+            )
+            for init_time in init_times
+            for lead_time in lead_times
+        ]
 
     def download_file(self, coord: DwdIconEuForecastSourceFileCoord) -> Path:
-        """Download the file for the given coordinate and return the local path."""
-        # return http_download_to_disk(coord.get_url(), self.dataset_id)
-        raise NotImplementedError(
-            "Download the file for the given coordinate and return the local path."
-        )
+        """Download the file for the given coordinate and return the local
+        path.
+
+        Downloads the `.bz2` file from DWD, decompresses the `.bz2` file, deletes the `.bz2` file,
+        and returns the `Path` of the decompressed file.
+        """
+        bz2_file_path = http_download_to_disk(coord.get_url(), self.dataset_id)
+        grib_file_path = decompress_bz2_file(compressed_file_path=bz2_file_path)
+        bz2_file_path.unlink()  # Remove the bz2 file after decompressing it.
+        return grib_file_path
 
     def read_data(
         self,
         coord: DwdIconEuForecastSourceFileCoord,
         data_var: DwdIconEuDataVar,
     ) -> ArrayFloat32:
-        """Read and return an array of data for the given variable and source file coordinate."""
-        # with rasterio.open(coord.downloaded_file_path) as reader:
-        #     matching_indexes = [
-        #         i
-        #         for i in range(reader.count)
-        #         if (tags := reader.tags(i))["GRIB_ELEMENT"]
-        #         == data_var.internal_attrs.grib_element
-        #         and tags["GRIB_COMMENT"] == data_var.internal_attrs.grib_comment
-        #     ]
-        #     assert len(matching_indexes) == 1, f"Expected exactly 1 matching band, found {matching_indexes}. {data_var.internal_attrs.grib_element=}, {data_var.internal_attrs.grib_description=}, {coord.downloaded_file_path=}"
-        #     rasterio_band_index = 1 + matching_indexes[0]  # rasterio is 1-indexed
-        #     return reader.read(rasterio_band_index, dtype=np.float32)
-        raise NotImplementedError(
-            "Read and return data for the given variable and source file coordinate."
-        )
+        """Read and return an array of data for the given variable and source
+        file coordinate."""
+        assert coord.downloaded_path is not None  # for type check, system guarantees it
+        with rasterio.open(coord.downloaded_path) as reader:
+            assert reader.count == 1, (
+                f"Expected exactly 1 element in each ICON-EU grib file, found {reader.count=}. "
+                f"{data_var.internal_attrs.variable_name_in_filename=}, "
+                f"{coord.downloaded_path=}"
+            )
+            result: ArrayFloat32 = reader.read(indexes=1, out_dtype=np.float32)
+            return result
 
     # Implement this to apply transformations to the array (e.g. deaccumulation)
     #
@@ -163,9 +176,8 @@ class DwdIconEuForecastRegionJob(
     def update_template_with_results(
         self, process_results: Mapping[str, Sequence[DwdIconEuForecastSourceFileCoord]]
     ) -> xr.Dataset:
-        """
-        Update template dataset based on processing results. This method is called
-        during operational updates.
+        """Update template dataset based on processing results. This method is
+        called during operational updates.
 
         Subclasses should implement this method to apply dataset-specific adjustments
         based on the processing results. Examples include:
@@ -227,9 +239,8 @@ class DwdIconEuForecastRegionJob(
         Sequence["RegionJob[DwdIconEuDataVar, DwdIconEuForecastSourceFileCoord]"],
         xr.Dataset,
     ]:
-        """
-        Return the sequence of RegionJob instances necessary to update the dataset
-        from its current state to include the latest available data.
+        """Return the sequence of RegionJob instances necessary to update the
+        dataset from its current state to include the latest available data.
 
         Also return the template_ds, expanded along append_dim through the end of
         the data to process. The dataset returned here may extend beyond the
@@ -266,22 +277,35 @@ class DwdIconEuForecastRegionJob(
         xr.Dataset
             The template_ds for the operational update.
         """
-        # existing_ds = xr.open_zarr(primary_store)
-        # append_dim_start = existing_ds[append_dim].max()
-        # append_dim_end = pd.Timestamp.now()
-        # template_ds = get_template_fn(append_dim_end)
+        existing_ds = xr.open_zarr(primary_store)
+        append_dim_start = existing_ds[append_dim].max()
+        append_dim_end = pd.Timestamp.now()
+        template_ds = get_template_fn(append_dim_end)
 
-        # jobs = cls.get_jobs(
-        #     kind="operational-update",
-        #     tmp_store=tmp_store,
-        #     template_ds=template_ds,
-        #     append_dim=append_dim,
-        #     all_data_vars=all_data_vars,
-        #     reformat_job_name=reformat_job_name,
-        #     filter_start=append_dim_start,
-        # )
-        # return jobs, template_ds
-
-        raise NotImplementedError(
-            "Subclasses implement operational_update_jobs() with dataset-specific logic"
+        jobs = cls.get_jobs(
+            kind="operational-update",
+            tmp_store=tmp_store,
+            template_ds=template_ds,
+            append_dim=append_dim,
+            all_data_vars=all_data_vars,
+            reformat_job_name=reformat_job_name,
+            filter_start=append_dim_start,
         )
+        return jobs, template_ds
+
+
+def decompress_bz2_file(compressed_file_path: Path) -> Path:
+    """Decompress a `.bz2` file to a new file.
+
+    Returns the filename of the uncompressed file.
+    """
+    if compressed_file_path.suffix != ".bz2":
+        raise ValueError(
+            f"compressed_file_path must end in .bz2. Instead, {compressed_file_path=}"
+        )
+    decompressed_file_path = compressed_file_path.with_suffix("")
+    with bz2.open(compressed_file_path, "rb") as src_file_object:
+        with open(decompressed_file_path, "wb") as dst_file_object:
+            # Use shutil.copyfileobj for efficient memory usage
+            shutil.copyfileobj(src_file_object, dst_file_object)
+    return decompressed_file_path
