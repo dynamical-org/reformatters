@@ -9,11 +9,11 @@ from pydantic import computed_field
 from reformatters.common.config_models import (
     BaseInternalAttrs,
     Coordinate,
-    CoordinateAttrs,  # noqa: F401
+    CoordinateAttrs,
     DatasetAttributes,
     DataVar,
-    DataVarAttrs,  # noqa: F401
-    Encoding,  # noqa: F401
+    DataVarAttrs,
+    Encoding,
     StatisticsApproximate,  # noqa: F401
 )
 from reformatters.common.template_config import (
@@ -68,7 +68,9 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         """
         Returns a dictionary of dimension names to coordinates for the dataset.
         """
-        times = self.append_dim_coordinates(self.append_dim_start + self.append_dim_frequency)
+        times = self.append_dim_coordinates(
+            self.append_dim_start + self.append_dim_frequency
+        )
         lat = np.linspace(-85.04450225830078, 85.04450225830078, 406)
         lon = np.linspace(-180.0, 180.0, 964, endpoint=False)
         return {
@@ -235,7 +237,9 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
             Coordinate(
                 name="time",
                 encoding=Encoding(dtype="datetime64[ns]"),
-                attrs=CoordinateAttrs(units="ns since 1970-01-01", calendar="proleptic_gregorian"),
+                attrs=CoordinateAttrs(
+                    units="ns since 1970-01-01", calendar="proleptic_gregorian"
+                ),
             ),
             Coordinate(
                 name="latitude",
