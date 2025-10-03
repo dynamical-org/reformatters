@@ -148,46 +148,6 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                     ),
                 ),
             ),
-            Coordinate(
-                name="valid_time",
-                encoding=Encoding(
-                    dtype="int64",
-                    fill_value=0,
-                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    calendar="proleptic_gregorian",
-                    units="seconds since 1970-01-01 00:00:00",
-                    chunks=(
-                        append_dim_coordinate_chunk_size,
-                        len(dim_coords["lead_time"]),
-                    ),
-                    shards=None,
-                ),
-                attrs=CoordinateAttrs(
-                    units="seconds since 1970-01-01 00:00:00",
-                    statistics_approximate=StatisticsApproximate(
-                        min=self.append_dim_start.isoformat(),
-                        max="Present + 16 days",
-                    ),
-                ),
-            ),
-            Coordinate(
-                name="ingested_forecast_length",
-                encoding=Encoding(
-                    dtype="int64",
-                    fill_value=-1,
-                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    units="seconds",
-                    chunks=append_dim_coordinate_chunk_size,
-                    shards=None,
-                ),
-                attrs=CoordinateAttrs(
-                    units="seconds",
-                    statistics_approximate=StatisticsApproximate(
-                        min=str(dim_coords["lead_time"].min()),
-                        max=str(dim_coords["lead_time"].max()),
-                    ),
-                ),
-            ),
             #     Coordinate(
             #         name="spatial_ref",
             #         encoding=Encoding(
@@ -229,7 +189,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         # 4-8 million float32 values
         var_chunks: dict[Dim, int] = {
             "time": 180,
-            "latitude": 121,
+            "latitude": 82,
             "longitude": 121,
         }
         # Aim for one of these roughly equivalent quantities:
@@ -238,7 +198,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         # 256 million to 1 billion float32 values
         var_shards: dict[Dim, int] = {
             "time": 360,
-            "latitude": ,
+            "latitude": 1000,
             "longitude": 121 * 6,
         }
 
@@ -263,7 +223,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                     step_type="instant",
                 ),
                 internal_attrs=NasaSmapInternalAttrs(
-                    keep_maintissa_bits=default_keep_mantissa_bits
+                    keep_mantissa_bits=default_keep_mantissa_bits
                 ),
             ),
             NasaSmapDataVar(
