@@ -50,38 +50,32 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def dataset_attributes(self) -> DatasetAttributes:
-        # return DatasetAttributes(
-        #     dataset_id="producer-model-variant",
-        #     dataset_version="0.1.0",
-        #     name="Producer Model Variant",
-        #     description="Weather data from the Model operated by Producer.",
-        #     attribution="Producer Model Variant data processed by dynamical.org from Producer Model.",
-        #     spatial_domain="Global",
-        #     spatial_resolution="0.25 degrees (~20km)",
-        #     time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
-        #     time_resolution=f"Forecasts initialized every {self.append_dim_frequency.total_seconds() / 3600:.0f} hours",
-        #     forecast_domain="Forecast lead time 0-384 hours (0-16 days) ahead",
-        #     forecast_resolution="Forecast step 0-120 hours: hourly, 123-384 hours: 3 hourly",
-        # )
-        raise NotImplementedError("Subclasses implement `dataset_attributes`")
+        return DatasetAttributes(
+            dataset_id="smap-l3-36km-v009",
+            dataset_version="0.9.0",
+            name="SMAP L3 Passive Soil Moisture 36km v009",
+            description="Passive soil moisture retrievals AM and PM from the SMAP radiometer on 36 km EASE-Grid",
+            attribution="NASA/NSIDC SMAP L3 Passive Soil Moisture data",
+            spatial_domain="Global",
+            spatial_resolution="36 km",
+            time_domain=f"Retrievals from {self.append_dim_start} to Present",
+            time_resolution="12-hour (AM/PM) time resolution",
+            forecast_domain="",
+            forecast_resolution="",
+        )
 
     def dimension_coordinates(self) -> dict[str, Any]:
         """
         Returns a dictionary of dimension names to coordinates for the dataset.
         """
-        # return {
-        #     self.append_dim: self.append_dim_coordinates(
-        #         self.append_dim_start + self.append_dim_frequency
-        #     ),
-        #     "lead_time": (
-        #         pd.timedelta_range("0h", "120h", freq="1h").union(
-        #             pd.timedelta_range("123h", "384h", freq="3h")
-        #         )
-        #     ),
-        #     "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
-        #     "longitude": np.arange(-180, 180, 0.25),
-        # }
-        raise NotImplementedError("Subclasses implement `dimension_coordinates`")
+        times = self.append_dim_coordinates(self.append_dim_start + self.append_dim_frequency)
+        lat = np.linspace(-85.04450225830078, 85.04450225830078, 406)
+        lon = np.linspace(-180.0, 180.0, 964, endpoint=False)
+        return {
+            "time": times,
+            "latitude": lat,
+            "longitude": lon,
+        }
 
     def derive_coordinates(
         self, ds: xr.Dataset
@@ -90,18 +84,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         Return a dictionary of non-dimension coordinates for the dataset.
         Called whenever len(ds.append_dim) changes.
         """
-        # Non-dimension coordinates are additional labels for data along
-        # one or more dimensions. Use them to make it easier to use and
-        # understand your dataset.
-        # return {
-        #     "valid_time": ds["init_time"] + ds["lead_time"],
-        #     "ingested_forecast_length": (
-        #         (self.append_dim,),
-        #         np.full(ds[self.append_dim].size, np.timedelta64("NaT", "ns")),
-        #     ),
-        #     "spatial_ref": SPATIAL_REF_COORDS,
-        # }
-        raise NotImplementedError("Subclasses implement `derive_coordinates`")
+        return {}
 
     @computed_field  # type: ignore[prop-decorator]
     @property
