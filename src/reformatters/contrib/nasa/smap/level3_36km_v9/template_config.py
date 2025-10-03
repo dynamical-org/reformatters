@@ -14,7 +14,7 @@ from reformatters.common.config_models import (
     DataVar,
     DataVarAttrs,
     Encoding,
-    StatisticsApproximate,  # noqa: F401
+    StatisticsApproximate,
 )
 from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,  # noqa: F401
@@ -241,7 +241,8 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
             Coordinate(
                 name="time",
                 encoding=Encoding(
-                    dtype="int64", fill_value=0,
+                    dtype="int64",
+                    fill_value=0,
                     chunks=self.append_dim_coordinate_chunk_size(),
                     shards=None,
                 ),
@@ -255,8 +256,10 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
             Coordinate(
                 name="latitude",
                 encoding=Encoding(
-                    dtype="float32", fill_value=np.nan,
-                    chunks=len(lat), shards=None,
+                    dtype="float32",
+                    fill_value=np.nan,
+                    chunks=len(lat),
+                    shards=None,
                 ),
                 attrs=CoordinateAttrs(
                     units="degrees_north",
@@ -268,8 +271,10 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
             Coordinate(
                 name="longitude",
                 encoding=Encoding(
-                    dtype="float32", fill_value=np.nan,
-                    chunks=len(lon), shards=None,
+                    dtype="float32",
+                    fill_value=np.nan,
+                    chunks=len(lon),
+                    shards=None,
                 ),
                 attrs=CoordinateAttrs(
                     units="degrees_east",
@@ -418,8 +423,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                 dims=self.dims,
                 dtype="float32",
                 encoding=Encoding(
-                    dtype="float32", fill_value=np.nan,
-                    chunks=(), shards=()
+                    dtype="float32", fill_value=np.nan, chunks=(), shards=()
                 ),
                 attrs=DataVarAttrs(
                     short_name="soil_moisture_am",
@@ -434,8 +438,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                 dims=self.dims,
                 dtype="float32",
                 encoding=Encoding(
-                    dtype="float32", fill_value=np.nan,
-                    chunks=(), shards=()
+                    dtype="float32", fill_value=np.nan, chunks=(), shards=()
                 ),
                 attrs=DataVarAttrs(
                     short_name="soil_moisture_pm",
