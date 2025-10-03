@@ -38,7 +38,7 @@
   ],
   "attributes": {
     "statistics_approximate": {
-      "min": "2025-08-08T00:00:00",
+      "min": "2025-10-03T00:00:00",
       "max": "Present"
     },
     "units": "seconds since 1970-01-01",
