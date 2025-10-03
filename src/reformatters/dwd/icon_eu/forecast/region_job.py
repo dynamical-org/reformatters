@@ -140,20 +140,12 @@ class DwdIconEuForecastRegionJob(
         file coordinate."""
         assert coord.downloaded_path is not None  # for type check, system guarantees it
         with rasterio.open(coord.downloaded_path) as reader:
-            matching_indexes = [
-                i
-                for i in range(1, reader.count + 1)  # rasterio is 1-indexed
-                if reader.tags(i)["GRIB_ELEMENT"]
-                == data_var.internal_attrs.grib_element
-            ]
-            assert len(matching_indexes) == 1, (
-                f"Expected exactly 1 matching band, found {len(matching_indexes)}. "
+            assert reader.count == 1, (
+                f"Expected exactly 1 element in each ICON-EU grib file, found {reader.count=}. "
                 f"{data_var.internal_attrs.variable_name_in_filename=}, "
                 f"{coord.downloaded_path=}"
             )
-            result: ArrayFloat32 = reader.read(
-                matching_indexes[0], out_dtype=np.float32
-            )
+            result: ArrayFloat32 = reader.read(indexes=1, out_dtype=np.float32)
             return result
 
     # Implement this to apply transformations to the array (e.g. deaccumulation)
