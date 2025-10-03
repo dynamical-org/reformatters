@@ -214,164 +214,62 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
     @property
     def data_vars(self) -> Sequence[NasaSmapDataVar]:
         """Define metadata and encoding for each data variable."""
-        # # Data variable chunking and sharding
-        # #
-        # # Aim for one of these roughly equivalent quantities:
-        # # 1-2mb chunks compressed
-        # # 4-8mb uncompressed
-        # # 4-8 million float32 values
-        # var_chunks: dict[Dim, int] = {
-        #     "init_time": 1,
-        #     "lead_time": 105,
-        #     "latitude": 121,
-        #     "longitude": 121,
-        # }
-        # # Aim for one of these roughly equivalent quantities:
-        # # 64-256MB shards compressed
-        # # 256-1024MB uncompressed
-        # # 256 million to 1 billion float32 values
-        # var_shards: dict[Dim, int] = {
-        #     "init_time": 1,
-        #     "lead_time": 105 * 2,
-        #     "latitude": 121 * 6,
-        #     "longitude": 121 * 6,
-        # }
+        # Data variable chunking and sharding
+        #
+        # Aim for one of these roughly equivalent quantities:
+        # 1-2mb chunks compressed
+        # 4-8mb uncompressed
+        # 4-8 million float32 values
+        var_chunks: dict[Dim, int] = {
+            "time": 180,
+            "latitude": 121,
+            "longitude": 121,
+        }
+        # Aim for one of these roughly equivalent quantities:
+        # 64-256MB shards compressed
+        # 256-1024MB uncompressed
+        # 256 million to 1 billion float32 values
+        var_shards: dict[Dim, int] = {
+            "time": 360,
+            "latitude": ,
+            "longitude": 121 * 6,
+        }
 
-        # encoding_float32_default = Encoding(
-        #     dtype="float32",
-        #     fill_value=np.nan,
-        #     chunks=tuple(var_chunks[d] for d in self.dims),
-        #     shards=tuple(var_shards[d] for d in self.dims),
-        #     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-        # )
-
-        # default_keep_mantissa_bits = 7
-
-        # # return [
-        #     NasaSmapDataVar(
-        #         name="temperature_2m",
-        #         encoding=encoding_float32_default,
-        #         attrs=DataVarAttrs(
-        #             short_name="t2m",
-        #             long_name="2 metre temperature",
-        #             units="C",
-        #             step_type="instant",
-        #             standard_name="air_temperature",
-        #         ),
-        #         internal_attrs=NasaSmapInternalAttrs(
-        #             grib_element="TMP",
-        #             grib_comment='2[m] HTGL="Specified height level above ground"',
-        #             grib_index_level="2 m above ground",
-        #             index_position=580,
-        #             keep_mantissa_bits=default_keep_mantissa_bits,
-        #         ),
-        #     ),
-        #     NasaSmapDataVar(
-        #         name="precipitation_surface",
-        #         encoding=encoding_float32_default,
-        #         attrs=DataVarAttrs(
-        #             short_name="tp",
-        #             long_name="Total Precipitation",
-        #             units="mm/s",
-        #             comment="Average precipitation rate since the previous forecast step.",
-        #             step_type="avg",
-        #         ),
-        #         internal_attrs=NasaSmapInternalAttrs(
-        #             grib_element="APCP",
-        #             grib_comment='0[-] SFC="Ground or water surface"',
-        #             grib_index_level="surface",
-        #             index_position=595,
-        #             include_lead_time_suffix=True,
-        #             deaccumulate_to_rate=True,
-        #             window_reset_frequency=pd.Timedelta("6h"),
-        #             keep_mantissa_bits=default_keep_mantissa_bits,
-        #         ),
-        #     ),
-        #     NasaSmapDataVar(
-        #         name="pressure_surface",
-        #         encoding=encoding_float32_default,
-        #         attrs=DataVarAttrs(
-        #             short_name="sp",
-        #             long_name="Surface pressure",
-        #             units="Pa",
-        #             step_type="instant",
-        #             standard_name="surface_air_pressure",
-        #         ),
-        #         internal_attrs=NasaSmapInternalAttrs(
-        #             grib_element="PRES",
-        #             grib_comment='0[-] SFC="Ground or water surface"',
-        #             grib_index_level="surface",
-        #             index_position=560,
-        #             keep_mantissa_bits=10,
-        #         ),
-        #     ),
-        #     NasaSmapDataVar(
-        #         name="categorical_snow_surface",
-        #         encoding=encoding_float32_default,
-        #         attrs=DataVarAttrs(
-        #             short_name="csnow",
-        #             long_name="Categorical snow",
-        #             units="0=no; 1=yes",
-        #             step_type="avg",
-        #         ),
-        #         internal_attrs=NasaSmapInternalAttrs(
-        #             grib_element="CSNOW",
-        #             grib_comment='0[-] SFC="Ground or water surface"',
-        #             grib_index_level="surface",
-        #             index_position=604,
-        #             window_reset_frequency=pd.Timedelta("6h"),
-        #             keep_mantissa_bits="no-rounding",
-        #         ),
-        #     ),
-        #     NasaSmapDataVar(
-        #         name="total_cloud_cover_atmosphere",
-        #         encoding=encoding_float32_default,
-        #         attrs=DataVarAttrs(
-        #             short_name="tcc",
-        #             long_name="Total Cloud Cover",
-        #             units="%",
-        #             step_type="avg",
-        #         ),
-        #         internal_attrs=NasaSmapInternalAttrs(
-        #             grib_element="TCDC",
-        #             grib_comment='0[-] EATM="Entire Atmosphere"',
-        #             grib_index_level="entire atmosphere",
-        #             index_position=635,
-        #             window_reset_frequency=pd.Timedelta("6h"),
-        #             keep_mantissa_bits=default_keep_mantissa_bits,
-        #         ),
-        #     ),
-        # ]
-        dim_coords = self.dimension_coordinates()
-        var_chunks = (1, len(dim_coords["latitude"]), len(dim_coords["longitude"]))
-        default_encoding = Encoding(
+        encoding_float32_default = Encoding(
             dtype="float32",
             fill_value=np.nan,
-            chunks=var_chunks,
-            shards=None,
+            chunks=tuple(var_chunks[d] for d in self.dims),
+            shards=tuple(var_shards[d] for d in self.dims),
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
+
+        default_keep_mantissa_bits = 7
+
         return [
             NasaSmapDataVar(
                 name="soil_moisture_am",
-                encoding=default_encoding,
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="soil_moisture_am",
-                    long_name="AM Soil Moisture",
-                    units="cm³/cm³",
+                    long_name="Soil Moisture (AM)",
+                    units="m³/m³",
                     step_type="instant",
                 ),
-                internal_attrs=NasaSmapInternalAttrs(),
+                internal_attrs=NasaSmapInternalAttrs(
+                    keep_maintissa_bits=default_keep_mantissa_bits
+                ),
             ),
             NasaSmapDataVar(
                 name="soil_moisture_pm",
-                encoding=default_encoding,
+                encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="soil_moisture_pm",
-                    long_name="PM Soil Moisture",
-                    units="cm³/cm³",
+                    long_name="Soil Moisture (PM)",
+                    units="m³/m³",
                     step_type="instant",
                 ),
-                internal_attrs=NasaSmapInternalAttrs(),
+                internal_attrs=NasaSmapInternalAttrs(
+                    keep_mantissa_bits=default_keep_mantissa_bits
+                ),
             ),
         ]
