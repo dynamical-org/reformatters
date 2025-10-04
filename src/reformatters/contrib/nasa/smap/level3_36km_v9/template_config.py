@@ -47,7 +47,13 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
     append_dim_start: Timestamp = pd.Timestamp("2015-04-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("1d")
 
-    epsg: str = "EPSG:6933"  # EASE-Grid 2.0 Global
+    epsg: str = "EPSG:6933"
+
+    x_size: int = 964
+    y_size: int = 406
+    cell_size: float = 36032.22
+    upper_left_x: float = -17367530.0
+    upper_left_y: float = 7314540.0
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -74,23 +80,15 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
             self.append_dim_start + self.append_dim_frequency
         )
 
-        x_size = 964
-        y_size = 406
-        cell_size = 36032.22  # meters
-        upper_left_x = -17367530.0
-        upper_left_y = 7314540.0
-
-        # Calculate x coordinates (center of the cells)
         x = np.arange(
-            upper_left_x + cell_size / 2,
-            upper_left_x + x_size * cell_size,
-            cell_size,
+            self.upper_left_x + self.cell_size / 2,
+            self.upper_left_x + self.x_size * self.cell_size,
+            self.cell_size,
         )
-        # Calculate y coordinates (center of the cells), decreasing from top to bottom
         y = np.arange(
-            upper_left_y - cell_size / 2,
-            upper_left_y - y_size * cell_size,
-            -cell_size,
+            self.upper_left_y - self.cell_size / 2,
+            self.upper_left_y - self.y_size * self.cell_size,
+            -self.cell_size,
         )
 
         return {"time": times, "y": y, "x": x}
@@ -211,13 +209,12 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                 encoding=Encoding(
                     dtype="int64",
                     fill_value=0,
-                    chunks=(),  # Scalar coordinate
+                    chunks=(),
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
                     units=None,
                     statistics_approximate=None,
-                    # See template_config_test.py for test for how to derive these attributes
                     crs_wkt='PROJCS["WGS 84 / NSIDC EASE-Grid 2.0 Global",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Cylindrical_Equal_Area"],PARAMETER["standard_parallel_1",30],PARAMETER["central_meridian",0],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","6933"]]',
                     semi_major_axis=6378137.0,
                     semi_minor_axis=6356752.314245179,
