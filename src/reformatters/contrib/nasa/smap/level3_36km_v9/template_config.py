@@ -168,25 +168,23 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
-                    units=None,
-                    statistics_approximate=None,
-                    crs_wkt='PROJCRS["EASE-Grid 2.0 Global",BASEGEOGCRS["WGS 84",DATUM["World Geodetic System 1984",ELLIPSOID["WGS 84",6378137,298.257223563,LENGTHUNIT["metre",1]]],PRIMEM["Greenwich",0,ANGLEUNIT["degree",0.0174532925199433]],ID["EPSG",4326]],CONVERSION["unnamed",METHOD["Lambert Cylindrical Equal Area",ID["EPSG",9835]],PARAMETER["Latitude of natural origin",0,ANGLEUNIT["degree",0.0174532925199433],ID["EPSG",8801]],PARAMETER["Longitude of natural origin",0,ANGLEUNIT["degree",0.0174532925199433],ID["EPSG",8802]],PARAMETER["Scale factor at natural origin",1,SCALEUNIT["unity",1],ID["EPSG",8805]],PARAMETER["False easting",0,LENGTHUNIT["metre",1],ID["EPSG",8806]],PARAMETER["False northing",0,LENGTHUNIT["metre",1],ID["EPSG",8807]]],CS[Cartesian,2],AXIS["(Y)",north,ORDER[1],LENGTHUNIT["metre",1]],AXIS["(X)",east,ORDER[2],LENGTHUNIT["metre",1]],ID["EPSG",6933]]',
-                    semi_major_axis=6378137.0,
-                    semi_minor_axis=6356752.314245179,
-                    inverse_flattening=298.257223563,
-                    reference_ellipsoid_name="WGS 84",
-                    longitude_of_prime_meridian=0.0,
-                    prime_meridian_name="Greenwich",
-                    geographic_crs_name="WGS 84",
-                    horizontal_datum_name="World Geodetic System 1984",
-                    grid_mapping_name="lambert_cylindrical_equal_area",
-                    spatial_ref="+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +ellps=WGS84 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs",
-                    false_easting=0.0,
-                    false_northing=0.0,
-                    latitude_of_projection_origin=0.0,
-                    longitude_of_central_meridian=0.0,
-                    projected_crs_name="EASE-Grid 2.0 Global",
-                    standard_parallel=(30.0, 30.0),
+                    # attr=value format AI!
+                    "crs_wkt": 'PROJCS["WGS 84 / NSIDC EASE-Grid 2.0 Global",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Cylindrical_Equal_Area"],PARAMETER["standard_parallel_1",30],PARAMETER["central_meridian",0],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","6933"]]',
+                    "semi_major_axis": 6378137.0,
+                    "semi_minor_axis": 6356752.314245179,
+                    "inverse_flattening": 298.257223563,
+                    "reference_ellipsoid_name": "WGS 84",
+                    "longitude_of_prime_meridian": 0.0,
+                    "prime_meridian_name": "Greenwich",
+                    "geographic_crs_name": "WGS 84",
+                    "horizontal_datum_name": "World Geodetic System 1984",
+                    "projected_crs_name": "WGS 84 / NSIDC EASE-Grid 2.0 Global",
+                    "grid_mapping_name": "lambert_cylindrical_equal_area",
+                    "standard_parallel": 30.0,
+                    "longitude_of_central_meridian": 0.0,
+                    "false_easting": 0.0,
+                    "false_northing": 0.0,
+                    "spatial_ref": 'PROJCS["WGS 84 / NSIDC EASE-Grid 2.0 Global",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Cylindrical_Equal_Area"],PARAMETER["standard_parallel_1",30],PARAMETER["central_meridian",0],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","6933"]]',
                     comment="This coordinate reference system describes the EASE-Grid 2.0 Global projection (EPSG:6933).",
                 ),
             ),
@@ -204,7 +202,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         var_shards: dict[Dim, int] = {
             "time": var_chunks["time"],
             "y": var_chunks["y"] * 3,
-            "x": var_chunks["x"] * 6,
+            "x": var_chunks["x"] * 7,
         }
 
         encoding_float32_default = Encoding(
@@ -247,3 +245,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                 ),
             ),
         ]
+
+
+d = {
+}
