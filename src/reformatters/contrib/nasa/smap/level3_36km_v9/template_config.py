@@ -185,3 +185,67 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
             #     ),
             # ]
         ]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def data_vars(self) -> Sequence[NasaSmapDataVar]:
+        """Define metadata and encoding for each data variable."""
+        # Data variable chunking and sharding
+        #
+        # Aim for one of these roughly equivalent quantities:
+        # 1-2mb chunks compressed
+        # 4-8mb uncompressed
+        # 4-8 million float32 values
+        var_chunks: dict[Dim, int] = {
+            "time": 180,
+            "latitude": 82,
+            "longitude": 121,
+        }
+        # Aim for one of these roughly equivalent quantities:
+        # 64-256MB shards compressed
+        # 256-1024MB uncompressed
+        # 256 million to 1 billion float32 values
+        var_shards: dict[Dim, int] = {
+            "time": 360,
+            "latitude": 1000,
+            "longitude": 121 * 6,
+        }
+
+        encoding_float32_default = Encoding(
+            dtype="float32",
+            fill_value=np.nan,
+            chunks=tuple(var_chunks[d] for d in self.dims),
+            shards=tuple(var_shards[d] for d in self.dims),
+            compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
+        )
+
+        default_keep_mantissa_bits = 7
+
+        return [
+            NasaSmapDataVar(
+                name="soil_moisture_am",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="soil_moisture_am",
+                    long_name="Soil Moisture (AM)",
+                    units="m³/m³",
+                    step_type="instant",
+                ),
+                internal_attrs=NasaSmapInternalAttrs(
+                    keep_mantissa_bits=default_keep_mantissa_bits
+                ),
+            ),
+            NasaSmapDataVar(
+                name="soil_moisture_pm",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="soil_moisture_pm",
+                    long_name="Soil Moisture (PM)",
+                    units="m³/m³",
+                    step_type="instant",
+                ),
+                internal_attrs=NasaSmapInternalAttrs(
+                    keep_mantissa_bits=default_keep_mantissa_bits
+                ),
+            ),
+        ]
