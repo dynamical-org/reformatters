@@ -20,6 +20,7 @@ from reformatters.common import deploy
 from reformatters.common.config import Config
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.storage import DatasetFormat, StorageConfig
+from reformatters.contrib.nasa.smap.level3_36km_v9 import NasaSmapLevel336KmV9Dataset
 from reformatters.contrib.noaa.ndvi_cdr.analysis import (
     NoaaNdviCdrAnalysisDataset,
 )
@@ -75,12 +76,6 @@ class UpstreamGriddedZarrsDatasetStorageConfig(StorageConfig):
 # Datasets that have not yet been ported over to the new DynamicalDataset pattern
 # are excluded here until they are refactored.
 DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
-    UarizonaSwannAnalysisDataset(
-        primary_storage_config=UpstreamGriddedZarrsDatasetStorageConfig()
-    ),
-    NoaaNdviCdrAnalysisDataset(
-        primary_storage_config=UpstreamGriddedZarrsDatasetStorageConfig()
-    ),
     NoaaGfsForecastDataset(
         primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
         replica_storage_configs=[NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig()],
@@ -95,6 +90,16 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     NoaaHrrrForecast48HourDataset(
         primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
         replica_storage_configs=[NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig()],
+    ),
+    # Contrib
+    UarizonaSwannAnalysisDataset(
+        primary_storage_config=UpstreamGriddedZarrsDatasetStorageConfig()
+    ),
+    NoaaNdviCdrAnalysisDataset(
+        primary_storage_config=UpstreamGriddedZarrsDatasetStorageConfig()
+    ),
+    NasaSmapLevel336KmV9Dataset(
+        primary_storage_config=UpstreamGriddedZarrsDatasetStorageConfig()
     ),
 ]
 
