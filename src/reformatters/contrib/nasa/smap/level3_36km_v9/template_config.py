@@ -16,7 +16,7 @@ from reformatters.common.config_models import (
     StatisticsApproximate,
 )
 from reformatters.common.template_config import (
-    SPATIAL_REF_COORDS,  # noqa: F401
+    SPATIAL_REF_COORDS,
     TemplateConfig,
 )
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
