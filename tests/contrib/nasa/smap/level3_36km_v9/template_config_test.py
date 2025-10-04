@@ -89,6 +89,5 @@ def test_latitude_longitude_coordinates() -> None:
     mid_y = lat.shape[0] // 2
     assert lon[mid_y, 0] < lon[mid_y, -1]
 
-    # is finiti all AI!
-    assert not np.any(np.isnan(lat))
-    assert not np.any(np.isnan(lon))
+    assert np.all(np.isfinite(lat))
+    assert np.all(np.isfinite(lon))
