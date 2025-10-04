@@ -198,13 +198,13 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         """Define metadata and encoding for each data variable."""
         var_chunks: dict[Dim, int] = {
             "time": 360,
-            "latitude": 136,
-            "longitude": 138,
+            "y": 136,
+            "x": 138,
         }
         var_shards: dict[Dim, int] = {
             "time": var_chunks["time"],
-            "latitude": var_chunks["latitude"] * 3,
-            "longitude": var_chunks["longitude"] * 6,
+            "y": var_chunks["y"] * 3,
+            "x": var_chunks["x"] * 6,
         }
 
         encoding_float32_default = Encoding(
