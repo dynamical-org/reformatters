@@ -69,7 +69,7 @@
     "short_name": "soil_moisture_am",
     "units": "m\u00b3/m\u00b3",
     "step_type": "instant",
-    "coordinates": "spatial_ref",
+    "coordinates": "latitude longitude spatial_ref",
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [
