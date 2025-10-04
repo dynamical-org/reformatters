@@ -70,8 +70,23 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         times = self.append_dim_coordinates(
             self.append_dim_start + self.append_dim_frequency
         )
-        y = ...
-        x = ...
+
+        # From gdalinfo output:
+        # Size is 964, 406 (x, y)
+        # ulxmap – x-axis map coordinate of the outer edge of the upper-left pixel - 17367530.
+        # ulymap – y-axis map coordinate of the outer edge of the upper-left pixel 7314540.
+        # Grid cell size (x, y pixel dimensions) 36,032.22 m (x) 36,032.22 m (y)
+
+        x_size = 964
+        y_size = 406
+        cell_size = 36032.22  # meters
+        ulxmap = -17367530.0
+        ulymap = 7314540.0
+
+        # Calculate x coordinates (center of the cells)
+        x = np.arange(ulxmap + cell_size / 2, ulxmap + x_size * cell_size, cell_size)
+        # Calculate y coordinates (center of the cells), decreasing from top to bottom
+        y = np.arange(ulymap - cell_size / 2, ulymap - y_size * cell_size, -cell_size)
 
         return {"time": times, "y": y, "x": x}
 
@@ -120,7 +135,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
-                    units="??",
+                    units="m",
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["y"].min()),
                         max=float(dim_coords["y"].max()),
@@ -137,7 +152,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
-                    units="??",
+                    units="m",
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["x"].min()),
                         max=float(dim_coords["x"].max()),
@@ -171,61 +186,4 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
             #         ),
             #     ),
             # ]
-        ]
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def data_vars(self) -> Sequence[NasaSmapDataVar]:
-        """Define metadata and encoding for each data variable."""
-        # 27MB uncompressed, ~5MB compressed
-        var_chunks: dict[Dim, int] = {
-            "time": 360,
-            "latitude": 136,
-            "longitude": 138,
-        }
-        var_shards: dict[Dim, int] = {
-            "time": var_chunks["time"],
-            "latitude": var_chunks["latitude"] * 3,  # all chunks in one shard
-            "longitude": var_chunks["longitude"] * 7,  # all chunks in one shard
-        }
-
-        encoding_float32_default = Encoding(
-            dtype="float32",
-            fill_value=np.nan,
-            chunks=tuple(var_chunks[d] for d in self.dims),
-            shards=tuple(var_shards[d] for d in self.dims),
-            compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-        )
-
-        default_keep_mantissa_bits = 7
-
-        return [
-            NasaSmapDataVar(
-                name="soil_moisture_am",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="soil_moisture_am",
-                    long_name="Soil Moisture (AM)",
-                    units="m³/m³",
-                    step_type="instant",
-                ),
-                internal_attrs=NasaSmapInternalAttrs(
-                    h5_path="/Soil_Moisture_Retrieval_Data_AM/soil_moisture",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                ),
-            ),
-            NasaSmapDataVar(
-                name="soil_moisture_pm",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="soil_moisture_pm",
-                    long_name="Soil Moisture (PM)",
-                    units="m³/m³",
-                    step_type="instant",
-                ),
-                internal_attrs=NasaSmapInternalAttrs(
-                    h5_path="/Soil_Moisture_Retrieval_Data_PM/soil_moisture",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                ),
-            ),
         ]
