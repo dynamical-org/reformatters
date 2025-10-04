@@ -71,12 +71,6 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
             self.append_dim_start + self.append_dim_frequency
         )
 
-        # From gdalinfo output:
-        # Size is 964, 406 (x, y)
-        # ulxmap - x-axis map coordinate of the outer edge of the upper-left pixel - 17367530.
-        # ulymap - y-axis map coordinate of the outer edge of the upper-left pixel 7314540.
-        # Grid cell size (x, y pixel dimensions) 36,032.22 m (x) 36,032.22 m (y)
-
         x_size = 964
         y_size = 406
         cell_size = 36032.22  # meters
@@ -247,6 +241,3 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                 ),
             ),
         ]
-
-
-d = {}
