@@ -240,7 +240,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                 ),
                 internal_attrs=NasaSmapInternalAttrs(
                     h5_path="//Soil_Moisture_Retrieval_Data_PM/soil_moisture_pm",
-                    keep_mantissa_bits=default_mantissa_bits,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
         ]
