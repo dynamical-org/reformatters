@@ -1,7 +1,8 @@
 from copy import deepcopy
 
 import pandas as pd
-from reformatters.nasa.smap.level3_36km_v9.template_config import (
+
+from reformatters.contrib.nasa.smap.level3_36km_v9.template_config import (
     NasaSmapLevel336KmV9TemplateConfig,
 )
 
