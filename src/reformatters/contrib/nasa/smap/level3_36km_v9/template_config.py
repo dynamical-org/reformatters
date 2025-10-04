@@ -12,6 +12,7 @@ from reformatters.common.config_models import (
     CoordinateAttrs,
     DatasetAttributes,
     DataVar,
+    DataVarAttrs,
     Encoding,
     StatisticsApproximate,
 )
