@@ -246,5 +246,4 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         ]
 
 
-d = {
-}
+d = {}
