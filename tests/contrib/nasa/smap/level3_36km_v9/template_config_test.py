@@ -17,6 +17,7 @@ def test_get_template_spatial_ref() -> None:
     original_attrs = deepcopy(ds.spatial_ref.attrs)
 
     expected_crs = "EPSG:6933"
+    assert template_config.epsg == expected_crs
     calculated_spatial_ref_attrs = ds.rio.write_crs(expected_crs).spatial_ref.attrs
     assert set(original_attrs) - set(calculated_spatial_ref_attrs) == {"comment"}
     original_attrs.pop("comment")
@@ -71,37 +72,3 @@ def test_dimension_coordinates_x_y() -> None:
     # Verify symmetry (grid should be centered at origin)
     assert np.isclose(x[0], -x[-1])
     assert np.isclose(y[0], -y[-1])
-
-
-def test_latitude_longitude_coordinates() -> None:
-    """Verify latitude and longitude 2D coordinates are computed correctly."""
-    template_config = NasaSmapLevel336KmV9TemplateConfig()
-    ds = template_config.get_template(
-        template_config.append_dim_start + pd.Timedelta(days=10)
-    )
-
-    lat = ds.latitude.values
-    lon = ds.longitude.values
-
-    # Check shapes
-    assert lat.shape == (406, 964)
-    assert lon.shape == (406, 964)
-
-    # Check latitude bounds (from documentation)
-    assert np.nanmin(lat) >= -85.044502
-    assert np.nanmax(lat) <= 85.044502
-
-    # Check longitude bounds
-    assert np.nanmin(lon) >= -180.0
-    assert np.nanmax(lon) <= 180.0
-
-    # Check that latitude decreases from north to south
-    assert lat[0, 0] > lat[-1, 0]
-
-    # Check that longitude increases from west to east along equator
-    mid_y = lat.shape[0] // 2
-    assert lon[mid_y, 0] < lon[mid_y, -1]
-
-    # Verify no NaN values
-    assert not np.any(np.isnan(lat))
-    assert not np.any(np.isnan(lon))

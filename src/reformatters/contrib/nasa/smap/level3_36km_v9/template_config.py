@@ -47,6 +47,8 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
     append_dim_start: Timestamp = pd.Timestamp("2015-04-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("1d")
 
+    epsg: str = "EPSG:6933"  # EASE-Grid 2.0 Global
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def dataset_attributes(self) -> DatasetAttributes:
@@ -75,13 +77,21 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         x_size = 964
         y_size = 406
         cell_size = 36032.22  # meters
-        ulxmap = -17367530.0
-        ulymap = 7314540.0
+        upper_left_x = -17367530.0
+        upper_left_y = 7314540.0
 
         # Calculate x coordinates (center of the cells)
-        x = np.arange(ulxmap + cell_size / 2, ulxmap + x_size * cell_size, cell_size)
+        x = np.arange(
+            upper_left_x + cell_size / 2,
+            upper_left_x + x_size * cell_size,
+            cell_size,
+        )
         # Calculate y coordinates (center of the cells), decreasing from top to bottom
-        y = np.arange(ulymap - cell_size / 2, ulymap - y_size * cell_size, -cell_size)
+        y = np.arange(
+            upper_left_y - cell_size / 2,
+            upper_left_y - y_size * cell_size,
+            -cell_size,
+        )
 
         return {"time": times, "y": y, "x": x}
 
@@ -92,18 +102,14 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         Return a dictionary of non-dimension coordinates for the dataset.
         Called whenever len(ds.append_dim) changes.
         """
-        x = ds.x.values
-        y = ds.y.values
-
-        xx, yy = np.meshgrid(x, y)
-
-        transformer = Transformer.from_crs("EPSG:6933", "EPSG:4326", always_xy=True)
+        xx, yy = np.meshgrid(ds.x.values, ds.y.values)
+        transformer = Transformer.from_crs(self.epsg, "EPSG:4326", always_xy=True)
         lon, lat = transformer.transform(xx, yy)
 
         return {
-            "spatial_ref": SPATIAL_REF_COORDS,
             "latitude": (("y", "x"), lat),
             "longitude": (("y", "x"), lon),
+            "spatial_ref": SPATIAL_REF_COORDS,
         }
 
     @computed_field  # type: ignore[prop-decorator]
@@ -228,7 +234,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                     false_easting=0.0,
                     false_northing=0.0,
                     spatial_ref='PROJCS["WGS 84 / NSIDC EASE-Grid 2.0 Global",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Cylindrical_Equal_Area"],PARAMETER["standard_parallel_1",30],PARAMETER["central_meridian",0],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","6933"]]',
-                    comment="This coordinate reference system describes the EASE-Grid 2.0 Global projection (EPSG:6933).",
+                    comment=f"This coordinate reference system describes the EASE-Grid 2.0 Global projection ({self.epsg}).",
                 ),
             ),
         ]
