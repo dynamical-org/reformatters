@@ -78,12 +78,11 @@ def test_latitude_longitude_coordinates() -> None:
     assert lat.shape == (406, 964)
     assert lon.shape == (406, 964)
 
-    # make all these value checks more precise with isclose AI!
-    assert np.min(lat) >= -85.044502
-    assert np.max(lat) <= 85.044502
+    assert np.isclose(np.min(lat), -85.044502, atol=0.01)
+    assert np.isclose(np.max(lat), 85.044502, atol=0.01)
 
-    assert np.min(lon) >= -180.0
-    assert np.max(lon) <= 180.0
+    assert np.isclose(np.min(lon), -180.0, atol=0.01)
+    assert np.isclose(np.max(lon), 180.0, atol=0.01)
 
     assert lat[0, 0] > lat[-1, 0]
 
