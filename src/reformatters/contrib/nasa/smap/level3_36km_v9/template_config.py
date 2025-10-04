@@ -196,25 +196,15 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
     @property
     def data_vars(self) -> Sequence[NasaSmapDataVar]:
         """Define metadata and encoding for each data variable."""
-        # Data variable chunking and sharding
-        #
-        # Aim for one of these roughly equivalent quantities:
-        # 1-2mb chunks compressed
-        # 4-8mb uncompressed
-        # 4-8 million float32 values
         var_chunks: dict[Dim, int] = {
-            "time": 180,
-            "latitude": 82,
-            "longitude": 121,
-        }
-        # Aim for one of these roughly equivalent quantities:
-        # 64-256MB shards compressed
-        # 256-1024MB uncompressed
-        # 256 million to 1 billion float32 values
-        var_shards: dict[Dim, int] = {
             "time": 360,
-            "latitude": 1000,
-            "longitude": 121 * 6,
+            "latitude": 136,
+            "longitude": 138,
+        }
+        var_shards: dict[Dim, int] = {
+            "time": var_chunks["time"],
+            "latitude": var_chunks["latitude"] * 3,
+            "longitude": var_chunks["longitude"] * 6,
         }
 
         encoding_float32_default = Encoding(
@@ -238,7 +228,8 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                     step_type="instant",
                 ),
                 internal_attrs=NasaSmapInternalAttrs(
-                    keep_mantissa_bits=default_keep_mantissa_bits
+                    h5_path="//Soil_Moisture_Retrieval_Data_AM/soil_moisture_am",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             NasaSmapDataVar(
@@ -251,7 +242,8 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                     step_type="instant",
                 ),
                 internal_attrs=NasaSmapInternalAttrs(
-                    keep_mantissa_bits=default_keep_mantissa_bits
+                    h5_path="//Soil_Moisture_Retrieval_Data_PM/soil_moisture_pm",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
         ]
