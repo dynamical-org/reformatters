@@ -29,11 +29,6 @@ from reformatters.common.zarr import (
 
 
 class NasaSmapInternalAttrs(BaseInternalAttrs):
-    """
-    Variable specific attributes used internally to drive processing.
-    Not written to the dataset.
-    """
-
     h5_path: str
 
 
