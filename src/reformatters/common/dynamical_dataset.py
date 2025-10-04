@@ -1,3 +1,4 @@
+import contextvars
 import json
 import subprocess
 from collections.abc import Iterable, Iterator, Sequence
@@ -9,6 +10,7 @@ from typing import Annotated, Any, Generic, Literal, TypeVar
 
 import numpy as np
 import pandas as pd
+import pydantic
 import sentry_sdk
 import typer
 import xarray as xr
@@ -27,7 +29,12 @@ from reformatters.common.kubernetes import (
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.region_job import RegionJob, SourceFileCoord
-from reformatters.common.storage import StorageConfig, StoreFactory, get_local_tmp_store
+from reformatters.common.storage import (
+    StorageConfig,
+    StoreFactory,
+    allows_writes,
+    get_local_tmp_store,
+)
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike
 from reformatters.common.update_progress_tracker import UpdateProgressTracker
@@ -42,6 +49,8 @@ log = get_logger(__name__)
 class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     """Top level class managing a dataset configuration and processing."""
 
+    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+
     template_config: TemplateConfig[DATA_VAR]
     region_job_class: type[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
 
@@ -49,6 +58,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
 
     use_progress_tracker: bool = False
+    stores_are_writable_flag: contextvars.ContextVar[bool] = contextvars.ContextVar(
+        "stores_are_writable", default=False
+    )
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -58,6 +70,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             replica_storage_configs=self.replica_storage_configs,
             dataset_id=self.dataset_id,
             template_config_version=self.template_config.version,
+            stores_are_writable=self.stores_are_writable_flag.get(),
         )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
@@ -120,10 +133,12 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def dataset_id(self) -> str:
         return self.template_config.dataset_id
 
+    @allows_writes
     def update_template(self) -> None:
         """Generate and persist the dataset template using the template_config."""
         self.template_config.update_template()
 
+    @allows_writes
     def update(
         self,
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
@@ -203,6 +218,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             f"Operational update complete. Wrote to primary store: {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()} replicas"
         )
 
+    @allows_writes
     def backfill_kubernetes(
         self,
         append_dim_end: datetime,
@@ -310,6 +326,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         log.info(f"Submitted kubernetes job {kubernetes_job.job_name}")
 
+    @allows_writes
     def backfill_local(
         self,
         append_dim_end: datetime,
@@ -339,6 +356,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
         log.info(f"Done writing to {self.store_factory.primary_store()}")
 
+    @allows_writes
     def process_backfill_region_jobs(
         self,
         append_dim_end: datetime,
