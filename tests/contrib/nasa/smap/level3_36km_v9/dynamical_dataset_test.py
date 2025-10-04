@@ -4,7 +4,7 @@
 # import xarray as xr
 
 # from reformatters.common import validation
-# from reformatters.nasa.smap.level3_36km_v9.dynamical_dataset import NasaSmapLevel336KmV9Dataset
+# from reformatters.contrib.nasa.smap.level3_36km_v9.dynamical_dataset import NasaSmapLevel336KmV9Dataset
 # from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 
 
