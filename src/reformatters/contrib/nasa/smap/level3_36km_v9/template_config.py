@@ -33,8 +33,7 @@ class NasaSmapInternalAttrs(BaseInternalAttrs):
     Not written to the dataset.
     """
 
-    # For example,
-    # grib_element: str
+    h5_path: str
 
 
 class NasaSmapDataVar(DataVar[NasaSmapInternalAttrs]):
@@ -53,9 +52,13 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         return DatasetAttributes(
             dataset_id="nasa-smap-level3-36km-v9",
             dataset_version="0.0.1",
-            name="NASA SMAP L3 Radiometer Global Daily 36 km EASE-Grid Soil Moisture V009",
-            description="Soil moisture gridded Level-3 (L3) daily data from the NASA SMAP passive microwave radiometer.",
-            attribution="NASA/NSIDC SMAP L3 data processed by dynamical.org",
+            name="NASA SMAP L3 Radiometer Global Daily 36 km EASE-Grid Soil Moisture, Version 9",
+            description="Soil moisture data from the NASA SMAP passive microwave radiometer.",
+            attribution=(
+                "O'Neill, P. E., Chan, S., Njoku, E. G., Jackson, T., Bindlish, R. & Chaubell, J. (2023). "
+                "SMAP L3 Radiometer Global Daily 36 km EASE-Grid Soil Moisture. (SPL3SMP, Version 9). Boulder, Colorado USA. "
+                "NASA National Snow and Ice Data Center Distributed Active Archive Center. https://doi.org/10.5067/4XXOGX0OOW1S."
+            ),
             spatial_domain="Global",
             spatial_resolution="36 km",
             time_domain=f"Retrievals from {self.append_dim_start} to Present",
@@ -67,10 +70,10 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         times = self.append_dim_coordinates(
             self.append_dim_start + self.append_dim_frequency
         )
-        latitudes = np.linspace(-85.04450225830078, 85.04450225830078, 406)
-        longitudes = np.linspace(-180.0, 180.0, 964, endpoint=False)
+        y = ...
+        x = ...
 
-        return {"time": times, "y": latitudes, "x": longitudes}
+        return {"time": times, "y": y, "x": x}
 
     def derive_coordinates(
         self, ds: xr.Dataset
@@ -79,14 +82,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         Return a dictionary of non-dimension coordinates for the dataset.
         Called whenever len(ds.append_dim) changes.
         """
-        dim_coords = self.dimension_coordinates()
-        lat1d = dim_coords["y"]
-        lon1d = dim_coords["x"]
-        lat2d, lon2d = np.meshgrid(lat1d, lon1d, indexing="ij")
-        return {
-            "latitude": (("y", "x"), lat2d),
-            "longitude": (("y", "x"), lon2d),
-        }
+        return {}
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -124,7 +120,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
-                    units="degrees_north",
+                    units="??",
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["y"].min()),
                         max=float(dim_coords["y"].max()),
@@ -141,7 +137,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
-                    units="degrees_east",
+                    units="??",
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["x"].min()),
                         max=float(dim_coords["x"].max()),
@@ -181,25 +177,16 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
     @property
     def data_vars(self) -> Sequence[NasaSmapDataVar]:
         """Define metadata and encoding for each data variable."""
-        # Data variable chunking and sharding
-        #
-        # Aim for one of these roughly equivalent quantities:
-        # 1-2mb chunks compressed
-        # 4-8mb uncompressed
-        # 4-8 million float32 values
+        # 27MB uncompressed, ~5MB compressed
         var_chunks: dict[Dim, int] = {
-            "time": 180,
-            "latitude": 82,
-            "longitude": 121,
-        }
-        # Aim for one of these roughly equivalent quantities:
-        # 64-256MB shards compressed
-        # 256-1024MB uncompressed
-        # 256 million to 1 billion float32 values
-        var_shards: dict[Dim, int] = {
             "time": 360,
-            "latitude": 1000,
-            "longitude": 121 * 6,
+            "latitude": 136,
+            "longitude": 138,
+        }
+        var_shards: dict[Dim, int] = {
+            "time": var_chunks["time"],
+            "latitude": var_chunks["latitude"] * 3,  # all chunks in one shard
+            "longitude": var_chunks["longitude"] * 7,  # all chunks in one shard
         }
 
         encoding_float32_default = Encoding(
@@ -223,7 +210,8 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                     step_type="instant",
                 ),
                 internal_attrs=NasaSmapInternalAttrs(
-                    keep_mantissa_bits=default_keep_mantissa_bits
+                    h5_path="/Soil_Moisture_Retrieval_Data_AM/soil_moisture",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
             NasaSmapDataVar(
@@ -236,7 +224,8 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                     step_type="instant",
                 ),
                 internal_attrs=NasaSmapInternalAttrs(
-                    keep_mantissa_bits=default_keep_mantissa_bits
+                    h5_path="/Soil_Moisture_Retrieval_Data_PM/soil_moisture",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
         ]
