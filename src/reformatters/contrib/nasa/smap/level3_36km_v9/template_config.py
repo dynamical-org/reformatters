@@ -12,7 +12,6 @@ from reformatters.common.config_models import (
     CoordinateAttrs,
     DatasetAttributes,
     DataVar,
-    DataVarAttrs,
     Encoding,
     StatisticsApproximate,
 )
@@ -22,7 +21,6 @@ from reformatters.common.template_config import (
 )
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 from reformatters.common.zarr import (
-    BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
 
