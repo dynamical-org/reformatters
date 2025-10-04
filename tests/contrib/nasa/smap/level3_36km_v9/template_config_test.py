@@ -78,16 +78,17 @@ def test_latitude_longitude_coordinates() -> None:
     assert lat.shape == (406, 964)
     assert lon.shape == (406, 964)
 
-    assert np.nanmin(lat) >= -85.044502
-    assert np.nanmax(lat) <= 85.044502
+    assert np.min(lat) >= -85.044502
+    assert np.max(lat) <= 85.044502
 
-    assert np.nanmin(lon) >= -180.0
-    assert np.nanmax(lon) <= 180.0
+    assert np.min(lon) >= -180.0
+    assert np.max(lon) <= 180.0
 
     assert lat[0, 0] > lat[-1, 0]
 
     mid_y = lat.shape[0] // 2
     assert lon[mid_y, 0] < lon[mid_y, -1]
 
+    # is finiti all AI!
     assert not np.any(np.isnan(lat))
     assert not np.any(np.isnan(lon))
