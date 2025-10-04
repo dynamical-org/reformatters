@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from pydantic import computed_field
+from pyproj import Transformer
 
 from reformatters.common.config_models import (
     BaseInternalAttrs,
@@ -91,7 +92,19 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         Return a dictionary of non-dimension coordinates for the dataset.
         Called whenever len(ds.append_dim) changes.
         """
-        return {"spatial_ref": SPATIAL_REF_COORDS}
+        x = ds.x.values
+        y = ds.y.values
+
+        xx, yy = np.meshgrid(x, y)
+
+        transformer = Transformer.from_crs("EPSG:6933", "EPSG:4326", always_xy=True)
+        lon, lat = transformer.transform(xx, yy)
+
+        return {
+            "spatial_ref": SPATIAL_REF_COORDS,
+            "latitude": (("y", "x"), lat),
+            "longitude": (("y", "x"), lon),
+        }
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -150,6 +163,40 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["x"].min()),
                         max=float(dim_coords["x"].max()),
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="latitude",
+                encoding=Encoding(
+                    dtype="float32",
+                    fill_value=np.nan,
+                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    chunks=(len(dim_coords["y"]), len(dim_coords["x"])),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    units="degrees_north",
+                    statistics_approximate=StatisticsApproximate(
+                        min=-85.044502,
+                        max=85.044502,
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="longitude",
+                encoding=Encoding(
+                    dtype="float32",
+                    fill_value=np.nan,
+                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    chunks=(len(dim_coords["y"]), len(dim_coords["x"])),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    units="degrees_east",
+                    statistics_approximate=StatisticsApproximate(
+                        min=-180.0,
+                        max=180.0,
                     ),
                 ),
             ),
