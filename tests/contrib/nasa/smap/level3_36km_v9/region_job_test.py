@@ -35,7 +35,7 @@ def test_region_job_generate_source_file_coords() -> None:
         reformat_job_name="test",
     )
 
-    processing_region_ds, output_region_ds = region_job._get_region_datasets()
+    processing_region_ds, _output_region_ds = region_job._get_region_datasets()
 
     source_file_coords = region_job.generate_source_file_coords(
         processing_region_ds, [Mock()]
