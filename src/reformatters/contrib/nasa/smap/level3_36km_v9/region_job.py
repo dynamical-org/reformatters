@@ -24,6 +24,8 @@ from .template_config import NasaSmapDataVar
 
 log = get_logger(__name__)
 
+FILL_VALUE = -9999.0
+
 
 class NasaSmapLevel336KmV9SourceFileCoord(SourceFileCoord):
     """Coordinates of a single source file to process."""
@@ -107,7 +109,7 @@ class NasaSmapLevel336KmV9RegionJob(
         with h5py.File(coord.downloaded_file_path, "r") as f:
             data = f[data_var.internal_attrs.h5_path][:]
             # Convert -9999 to NaN
-            data = np.where(data == -9999.0, np.nan, data).astype(np.float32)
+            data = np.where(data == FILL_VALUE, np.nan, data).astype(np.float32)
         return data
 
     # Implement this to apply transformations to the array (e.g. deaccumulation)
@@ -176,16 +178,16 @@ class NasaSmapLevel336KmV9RegionJob(
         # if max_append_dim_processed is None:
         #     # No data was processed, trim the template to stop before this job's region
         #     # This is using isel's exclusive slice end behavior
-        #     return self.template_ds.isel(
-        #         {self.append_dim: slice(None, self.region.start)}
-        #     )
-        # else:
-        #     return self.template_ds.sel(
-        #         {self.append_dim: slice(None, max_append_dim_processed)}
-        #     )
-        #
-        # If you like the above behavior, skip implementing this method.
-        # If you need to customize the behavior, implement this method.
+    #     return self.template_ds.isel(
+    #         {self.append_dim: slice(None, self.region.start)}
+    #     )
+    # else:
+    #     return self.template_ds.sel(
+    #         {self.append_dim: slice(None, max_append_dim_processed)}
+    #     )
+    #
+    # If you like the above behavior, skip implementing this method.
+    # If you need to customize the behavior, implement this method.
 
         raise NotImplementedError(
             "Subclasses implement update_template_with_results() with dataset-specific logic"
