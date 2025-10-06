@@ -178,16 +178,16 @@ class NasaSmapLevel336KmV9RegionJob(
         # if max_append_dim_processed is None:
         #     # No data was processed, trim the template to stop before this job's region
         #     # This is using isel's exclusive slice end behavior
-    #     return self.template_ds.isel(
-    #         {self.append_dim: slice(None, self.region.start)}
-    #     )
-    # else:
-    #     return self.template_ds.sel(
-    #         {self.append_dim: slice(None, max_append_dim_processed)}
-    #     )
-    #
-    # If you like the above behavior, skip implementing this method.
-    # If you need to customize the behavior, implement this method.
+        #     return self.template_ds.isel(
+        #         {self.append_dim: slice(None, self.region.start)}
+        #     )
+        # else:
+        #     return self.template_ds.sel(
+        #         {self.append_dim: slice(None, max_append_dim_processed)}
+        #     )
+        #
+        # If you like the above behavior, skip implementing this method.
+        # If you need to customize the behavior, implement this method.
 
         raise NotImplementedError(
             "Subclasses implement update_template_with_results() with dataset-specific logic"
