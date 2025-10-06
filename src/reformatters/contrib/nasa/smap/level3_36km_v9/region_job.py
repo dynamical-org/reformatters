@@ -1,8 +1,6 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
-import h5py
-import numpy as np
 import xarray as xr
 import zarr
 
@@ -18,25 +16,26 @@ from reformatters.common.types import (
     ArrayFloat32,
     DatetimeLike,
     Dim,
+    Timestamp,
 )
 
 from .template_config import NasaSmapDataVar
 
 log = get_logger(__name__)
 
-FILL_VALUE = -9999.0
+_SOURCE_FILL_VALUE = -9999.0
 
 
 class NasaSmapLevel336KmV9SourceFileCoord(SourceFileCoord):
     """Coordinates of a single source file to process."""
 
-    time: DatetimeLike
+    time: Timestamp
 
     def get_url(self) -> str:
-        # URL pattern based on NSIDC: https://n5eil01u.ecs.nsidc.org/SMAP/SPL3SMP.009/YYYY.MM.DD/SMAP_L3_SM_P_YYYYMMDD_R19240_001.h5
-        date_str = self.time.strftime("%Y.%m.%d")
+        base = "https://data.nsidc.earthdatacloud.nasa.gov/nsidc-cumulus-prod-protected/SMAP/SPL3SMP/009"
+        year_month = self.time.strftime("%Y/%m")
         filename = f"SMAP_L3_SM_P_{self.time.strftime('%Y%m%d')}_R19240_001.h5"
-        return f"https://n5eil01u.ecs.nsidc.org/SMAP/SPL3SMP.009/{date_str}/{filename}"
+        return f"{base}/{year_month}/{filename}"
 
     def out_loc(
         self,
@@ -47,44 +46,6 @@ class NasaSmapLevel336KmV9SourceFileCoord(SourceFileCoord):
 class NasaSmapLevel336KmV9RegionJob(
     RegionJob[NasaSmapDataVar, NasaSmapLevel336KmV9SourceFileCoord]
 ):
-    # Optionally, limit the number of variables downloaded together.
-    # If set to a value less than len(data_vars), downloading, reading/recompressing,
-    # and uploading steps will be pipelined within a region job.
-    # 5 is a reasonable default if it is possible to download less than all
-    # variables in a single file (e.g. you have a grib index).
-    # Leave unset if you have to download a whole file to get one variable out
-    # to avoid re-downloading the same file multiple times.
-    #
-    # max_vars_per_download_group: ClassVar[int | None] = None
-
-    # Implement this method only if different variables must be retrieved from different urls
-    #
-    # # @classmethod
-    # def source_groups(
-    #     cls,
-    #     data_vars: Sequence[NasaSmapDataVar],
-    # ) -> Sequence[Sequence[NasaSmapDataVar]]:
-    #     """
-    #     Return groups of variables, where all variables in a group can be retrieived from the same source file.
-    #     """
-    #     grouped = defaultdict(list)
-    #     for data_var in data_vars:
-    #         grouped[data_var.internal_attrs.file_type].append(data_var)
-    #     return list(grouped.values())
-
-    # Implement this method only if specific post processing in this dataset
-    # requires data from outside the region defined by self.region,
-    # e.g. for deaccumulation or interpolation along append_dim in an analysis dataset.
-    #
-    # def get_processing_region(self) -> slice:
-    #     """
-    #     Return a slice of integer offsets into self.template_ds along self.append_dim that identifies
-    #     the region to process. In most cases this is exactly self.region, but if additional data outside
-    #     the region is required, for example for correct interpolation or deaccumulation, this method can
-    #     return a modified slice (e.g. `slice(self.region.start - 1, self.region.stop + 1)`).
-    #     """
-    #     return self.region
-
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
@@ -106,11 +67,8 @@ class NasaSmapLevel336KmV9RegionJob(
         data_var: NasaSmapDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
-        with h5py.File(coord.downloaded_file_path, "r") as f:
-            data = f[data_var.internal_attrs.h5_path][:]
-            # Convert -9999 to NaN
-            data = np.where(data == FILL_VALUE, np.nan, data).astype(np.float32)
-        return data
+        # Use rasterio to read hf5
+        raise NotImplementedError()
 
     # Implement this to apply transformations to the array (e.g. deaccumulation)
     #

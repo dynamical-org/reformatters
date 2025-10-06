@@ -13,7 +13,10 @@ from reformatters.contrib.nasa.smap.level3_36km_v9.template_config import (
 
 def test_source_file_coord_get_url() -> None:
     coord = NasaSmapLevel336KmV9SourceFileCoord(time=pd.Timestamp("2025-09-30"))
-    expected_url = "https://n5eil01u.ecs.nsidc.org/SMAP/SPL3SMP.009/2025.09.30/SMAP_L3_SM_P_20250930_R19240_001.h5"
+    expected_url = (
+        "https://data.nsidc.earthdatacloud.nasa.gov/nsidc-cumulus-prod-protected"
+        "/SMAP/SPL3SMP/009/2025/09/SMAP_L3_SM_P_20250930_R19240_001.h5"
+    )
     assert coord.get_url() == expected_url
 
 
