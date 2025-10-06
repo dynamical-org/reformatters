@@ -268,7 +268,8 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                     step_type="instant",
                 ),
                 internal_attrs=NasaSmapInternalAttrs(
-                    h5_path="//Soil_Moisture_Retrieval_Data_AM/soil_moisture_am",
+                    # Note this does not have an _am suffix in the HDF5 file
+                    h5_path="//Soil_Moisture_Retrieval_Data_AM/soil_moisture",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
