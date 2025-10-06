@@ -34,7 +34,7 @@ class GefsAnalysisDataset(DynamicalDataset[GEFSDataVar, GefsAnalysisSourceFileCo
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validation",
-            schedule="30 7,10,13,19 * * *",  # UTC 1.5 hours after update
+            schedule="10 0,6,12,18 * * *",  # UTC 10 minutes after update starts
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
