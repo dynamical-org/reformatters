@@ -1,9 +1,12 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
+import h5py
+import numpy as np
 import xarray as xr
 import zarr
 
+from reformatters.common.download import http_download_to_disk
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
@@ -25,25 +28,18 @@ log = get_logger(__name__)
 class NasaSmapLevel336KmV9SourceFileCoord(SourceFileCoord):
     """Coordinates of a single source file to process."""
 
+    time: DatetimeLike
+
     def get_url(self) -> str:
-        raise NotImplementedError("Return the URL of the source file.")
+        # URL pattern based on NSIDC: https://n5eil01u.ecs.nsidc.org/SMAP/SPL3SMP.009/YYYY.MM.DD/SMAP_L3_SM_P_YYYYMMDD_R19240_001.h5
+        date_str = self.time.strftime("%Y.%m.%d")
+        filename = f"SMAP_L3_SM_P_{self.time.strftime('%Y%m%d')}_R19240_001.h5"
+        return f"https://n5eil01u.ecs.nsidc.org/SMAP/SPL3SMP.009/{date_str}/{filename}"
 
     def out_loc(
         self,
     ) -> Mapping[Dim, CoordinateValueOrRange]:
-        """
-        Returns a data array indexer which identifies the region in the output dataset
-        to write the data from the source file. The indexer is a dict from dimension
-        names to coordinate values or slices.
-        """
-        # If the names of the coordinate attributes of your SourceFileCoord subclass are also all
-        # dimension names in the output dataset (e.g. init_time and lead_time),
-        # delete this implementation and use the default implementation of this method.
-        #
-        # Examples where you would override this method:
-        # - An analysis dataset created from forecast data:
-        #   return {"time": self.init_time + self.lead_time}
-        return super().out_loc()
+        return {"time": self.time}
 
 
 class NasaSmapLevel336KmV9RegionJob(
@@ -93,26 +89,14 @@ class NasaSmapLevel336KmV9RegionJob(
         data_var_group: Sequence[NasaSmapDataVar],
     ) -> Sequence[NasaSmapLevel336KmV9SourceFileCoord]:
         """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
-        # return [
-        #     NasaSmapLevel336KmV9SourceFileCoord(
-        #         init_time=init_time,
-        #         lead_time=lead_time,
-        #     )
-        #     for init_time, lead_time in itertools.product(
-        #         processing_region_ds["init_time"].values,
-        #         processing_region_ds["lead_time"].values,
-        #     )
-        # ]
-        raise NotImplementedError(
-            "Return a sequence of SourceFileCoord objects, one for each source file required to process the data covered by processing_region_ds."
-        )
+        return [
+            NasaSmapLevel336KmV9SourceFileCoord(time=time)
+            for time in processing_region_ds["time"].values
+        ]
 
     def download_file(self, coord: NasaSmapLevel336KmV9SourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
-        # return http_download_to_disk(coord.get_url(), self.dataset_id)
-        raise NotImplementedError(
-            "Download the file for the given coordinate and return the local path."
-        )
+        return http_download_to_disk(coord.get_url(), self.dataset_id)
 
     def read_data(
         self,
@@ -120,20 +104,11 @@ class NasaSmapLevel336KmV9RegionJob(
         data_var: NasaSmapDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
-        # with rasterio.open(coord.downloaded_file_path) as reader:
-        #     matching_indexes = [
-        #         i
-        #         for i in range(reader.count)
-        #         if (tags := reader.tags(i + 1))["GRIB_ELEMENT"]
-        #         == data_var.internal_attrs.grib_element
-        #         and tags["GRIB_COMMENT"] == data_var.internal_attrs.grib_comment
-        #     ]
-        #     assert len(matching_indexes) == 1, f"Expected exactly 1 matching band, found {matching_indexes}. {data_var.internal_attrs.grib_element=}, {data_var.internal_attrs.grib_description=}, {coord.downloaded_file_path=}"
-        #     rasterio_band_index = 1 + matching_indexes[0]  # rasterio is 1-indexed
-        #     return reader.read(rasterio_band_index, out_dtype=np.float32)
-        raise NotImplementedError(
-            "Read and return data for the given variable and source file coordinate."
-        )
+        with h5py.File(coord.downloaded_file_path, "r") as f:
+            data = f[data_var.internal_attrs.h5_path][:]
+            # Convert -9999 to NaN
+            data = np.where(data == -9999.0, np.nan, data).astype(np.float32)
+        return data
 
     # Implement this to apply transformations to the array (e.g. deaccumulation)
     #
@@ -170,7 +145,8 @@ class NasaSmapLevel336KmV9RegionJob(
 
         Subclasses should implement this method to apply dataset-specific adjustments
         based on the processing results. Examples include:
-        - Trimming dataset along append_dim to only include successfully processed data
+        - Trimming dataset along append_dim to end at the most recent
+            successfully processed coordinate (timestamp)
         - Loading existing coordinate values from the primary store and updating them based on results
         - Updating metadata based on what was actually processed vs what was planned
 
