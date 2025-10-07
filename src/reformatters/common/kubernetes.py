@@ -14,6 +14,7 @@ from kubernetes import client, config  # type: ignore[import-untyped]
 from reformatters.common.config import Config
 
 _SECRET_MOUNT_PATH = "/secrets"  # noqa: S105 this not a real secret
+_SECRET_CONTENTS_KEY = "contents"
 
 
 class Job(pydantic.BaseModel):
@@ -148,7 +149,7 @@ class Job(pydantic.BaseModel):
                                         {
                                             "name": secret_name,
                                             "mountPath": f"/secrets/{secret_name}.json",
-                                            "subPath": "contents",
+                                            "subPath": _SECRET_CONTENTS_KEY,
                                             "readOnly": True,
                                         }
                                         for secret_name in self.secret_names
@@ -281,16 +282,11 @@ def _load_secret_from_k8s_api(
     secret_name: str,
 ) -> dict[str, str | int | float | bool | None]:
     """Load secret directly from k8s API (for local development)."""
-    secret_data = load_secret_locally(secret_name)
-    contents_json = base64.b64decode(secret_data["contents"]).decode("utf-8")
-    contents = json.loads(contents_json)
-    assert isinstance(contents, dict)
-    return contents
-
-
-def load_secret_locally(secret_name: str) -> dict[str, Any]:
     config.load_kube_config()
     v1 = client.CoreV1Api()
     secret = v1.read_namespaced_secret(secret_name, "default")
     assert isinstance(secret.data, dict)
-    return secret.data
+    contents_json = base64.b64decode(secret.data[_SECRET_CONTENTS_KEY]).decode("utf-8")
+    contents = json.loads(contents_json)
+    assert isinstance(contents, dict)
+    return contents

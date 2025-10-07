@@ -107,13 +107,13 @@ def test_as_kubernetes_object_comprehensive() -> None:
                             {
                                 "name": "aws-creds",
                                 "mountPath": "/secrets/aws-creds.json",
-                                "subPath": "storage_options.json",
+                                "subPath": "contents",
                                 "readOnly": True,
                             },
                             {
                                 "name": "db-creds",
                                 "mountPath": "/secrets/db-creds.json",
-                                "subPath": "storage_options.json",
+                                "subPath": "contents",
                                 "readOnly": True,
                             },
                         ],
