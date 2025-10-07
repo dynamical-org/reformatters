@@ -25,7 +25,7 @@
       "separator": "/"
     }
   },
-  "fill_value": 0.0,
+  "fill_value": "NaN",
   "codecs": [
     {
       "name": "sharding_indexed",
@@ -76,7 +76,7 @@
     "standard_name": "northward_wind",
     "units": "m s**-1",
     "step_type": "instant",
-    "coordinates": "ingested_forecast_length spatial_ref valid_time",
+    "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [

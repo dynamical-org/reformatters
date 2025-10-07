@@ -54,8 +54,16 @@ def test_derive_coordinates() -> None:
 
     assert "spatial_ref" in derived
     assert derived["spatial_ref"][0] == ()  # Empty dimensions tuple
+
+    # 3 init times, all should have 360h expected forecast length
+    assert "expected_forecast_length" in derived
+    assert list(derived["expected_forecast_length"][1]) == [pd.Timedelta("360h")] * 3
+
+    # 3 init times, all should have NaT ingested forecast length
     assert "ingested_forecast_length" in derived
-    # TODO if adding expected_forecast_length, add that here
+    assert all(
+        np.isnat(ingested) for ingested in derived["ingested_forecast_length"][1]
+    )
 
 
 def test_dimension_coordinates_shapes_and_values() -> None:
@@ -106,6 +114,3 @@ def test_dimension_coordinates_shapes_and_values() -> None:
     em = dim_coords["ensemble_member"]
     assert isinstance(em, np.ndarray)
     assert all(em == np.arange(1, 51))
-
-
-# TODO more simple tests? some good examples in gefs & gfs

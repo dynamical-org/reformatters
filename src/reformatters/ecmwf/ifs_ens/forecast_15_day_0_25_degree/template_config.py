@@ -33,7 +33,7 @@ class EcmwfIfsEnsInternalAttrs(BaseInternalAttrs):
     Not written to the dataset.
     """
 
-    # TODO (skipping this for now, will come back and add when developing processing for real)
+    # TODO(lauren): skipping this for now, will come back and add when developing processing for real
     # grib_band_index: int
     # grib_element_name: str
     # grib_description: str
@@ -67,8 +67,8 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
             dataset_id="ecmwf-ifs-ens-forecast-15-day-0-25-degree",
             dataset_version="0.1.0",
             name="ECMWF IFS Ensemble (ENS) Forecast, 15 day, 0.25 degree",
-            description="Ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS) - 15 day forecasts, 0.25 degree resolution.",
-            attribution="ECMWF IFS Ensemble Forecast data processed by dynamical.org from ECMWF Open Data.",  # TODO correct all this
+            description="Ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS); 15 day forecasts, 0.25 degree resolution.",
+            attribution="ECMWF IFS Ensemble Forecast data processed by dynamical.org from ECMWF Open Data.",
             spatial_domain="Global",
             spatial_resolution="0.25 degrees (~20km)",
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
@@ -102,23 +102,20 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
         Return a dictionary of non-dimension coordinates for the dataset.
         Called whenever len(ds.append_dim) changes.
         """
-        # Non-dimension coordinates are additional labels for data along
-        # one or more dimensions. Use them to make it easier to use and
-        # understand your dataset.
         return {
             "valid_time": ds["init_time"] + ds["lead_time"],
             "ingested_forecast_length": (
                 (self.append_dim,),
                 np.full(ds[self.append_dim].size, np.timedelta64("NaT", "ns")),
             ),
-            # "expected_forecast_length": (
-            #     (self.append_dim,),
-            #     np.full(
-            #         ds[self.append_dim].size,
-            #         ds["lead_time"].max(),
-            #         dtype="timedelta64[ns]",
-            #     ),
-            # ),
+            "expected_forecast_length": (
+                (self.append_dim,),
+                np.full(
+                    ds[self.append_dim].size,
+                    self.dimension_coordinates()["lead_time"].max(),
+                    dtype="timedelta64[ns]",
+                ),
+            ),
             "spatial_ref": SPATIAL_REF_COORDS,
         }
 
@@ -258,6 +255,24 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                 ),
             ),
             Coordinate(
+                name="expected_forecast_length",
+                encoding=Encoding(
+                    dtype="int64",
+                    fill_value=-1,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    units="seconds",
+                    chunks=append_dim_coordinate_chunk_size,
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    units="seconds",
+                    statistics_approximate=StatisticsApproximate(
+                        min=str(dim_coords["lead_time"].min()),
+                        max=str(dim_coords["lead_time"].max()),
+                    ),
+                ),
+            ),
+            Coordinate(
                 name="spatial_ref",
                 encoding=Encoding(
                     dtype="int64",
@@ -283,7 +298,6 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     comment="This coordinate reference system matches the source data which follows WMO conventions of assuming the earth is a perfect sphere with a radius of 6,371,229m. It is similar to EPSG:4326, but EPSG:4326 uses a more accurate representation of the earth's shape.",
                 ),
             ),
-            # TODO: add expected forecast length?
         ]
 
     @computed_field  # type: ignore[prop-decorator]
@@ -299,7 +313,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
         # TODO check the math on these chunks & shards being reasonable. reference slack notes
         var_chunks: dict[Dim, int] = {
             "init_time": 1,
-            "lead_time": 61,  # Updated for ECMWF 61-step forecast # TODO should be 83? 85?
+            "lead_time": 85,
             "ensemble_member": 50,  # All ensemble members
             "latitude": 144,  # ~721/5 for reasonable chunk size
             "longitude": 144,  # ~1440/10 for reasonable chunk size
@@ -310,7 +324,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
         # 256 million to 1 billion float32 values
         var_shards: dict[Dim, int] = {
             "init_time": 1,
-            "lead_time": 61 * 2,  # TODO should be 83/85 * 2??
+            "lead_time": 85 * 2,
             "ensemble_member": 50,
             "latitude": 144 * 5,
             "longitude": 144 * 5,
@@ -384,40 +398,3 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                 ),
             ),
         ]
-
-
-"""
-Band 39 Block=1440x1 Type=Float64, ColorInterp=Undefined
-  Description = 0[-] SFC="Ground or water surface"
-  Metadata:
-    GRIB_COMMENT=Total precipitation rate [kg/(m^2*s)]
-    GRIB_DISCIPLINE=0(Meteorological)
-    GRIB_ELEMENT=TPRATE
-    GRIB_FORECAST_SECONDS=0
-    GRIB_IDS=CENTER=98(ECMWF) SUBCENTER=0 MASTER_TABLE=34 LOCAL_TABLE=0 SIGNF_REF_TIME=1(Start_of_Forecast) REF_TIME=2025-03-01T00:00:00Z PROD_STATUS=0(Operational) TYPE=4(Perturbed_forecast)
-    GRIB_PDS_PDTN=1
-    GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES=1 52 4 255 158 0 0 1 0 1 0 0 255 -127 -2147483647 255 34 51
-    GRIB_PDS_TEMPLATE_NUMBERS=1 52 4 255 158 0 0 0 1 0 0 0 0 1 0 0 0 0 0 255 255 255 255 255 255 255 34 51
-    GRIB_REF_TIME=1740787200
-    GRIB_SHORT_NAME=0-SFC
-    GRIB_UNIT=[kg/(m^2*s)]
-    GRIB_VALID_TIME=1740787200
-
-
-Band 6165 Block=1440x1 Type=Float64, ColorInterp=Undefined
-  Description = 0[-] SFC="Ground or water surface"
-  Metadata:
-    GRIB_COMMENT=Total precipitation rate [kg/(m^2*s)]
-    GRIB_DISCIPLINE=0(Meteorological)
-    GRIB_ELEMENT=TPRATE
-    GRIB_FORECAST_SECONDS=0
-    GRIB_IDS=CENTER=98(ECMWF) SUBCENTER=0 MASTER_TABLE=34 LOCAL_TABLE=0 SIGNF_REF_TIME=1(Start_of_Forecast) REF_TIME=2025-03-01T00:00:00Z PROD_STATUS=0(Operational) TYPE=4(Perturbed_forecast)
-    GRIB_PDS_PDTN=1
-    GRIB_PDS_TEMPLATE_ASSEMBLED_VALUES=1 52 4 255 158 0 0 1 0 1 0 0 255 -127 -2147483647 255 46 51
-    GRIB_PDS_TEMPLATE_NUMBERS=1 52 4 255 158 0 0 0 1 0 0 0 0 1 0 0 0 0 0 255 255 255 255 255 255 255 46 51
-    GRIB_REF_TIME=1740787200
-    GRIB_SHORT_NAME=0-SFC
-    GRIB_UNIT=[kg/(m^2*s)]
-    GRIB_VALID_TIME=1740787200
-
-"""

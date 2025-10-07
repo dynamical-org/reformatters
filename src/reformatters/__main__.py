@@ -100,7 +100,7 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         replica_storage_configs=[NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig()],
     ),
     EcmwfIfsEnsForecast15Day025DegreeDataset(
-        primary_storage_config=SourceCoopDatasetStorageConfig()
+        primary_storage_config=SourceCoopZarrDatasetStorageConfig()
     ),
 ]
 
