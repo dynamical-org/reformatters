@@ -303,9 +303,7 @@ def test_load_secret_from_k8s_api_when_local(
 
     secret_data = {"api_key": "secret123", "count": 99}
 
-    with patch(
-        "reformatters.common.kubernetes._load_secret_from_k8s_api"
-    ) as mock_load:
+    with patch("reformatters.common.kubernetes._load_secret_from_k8s_api") as mock_load:
         mock_load.return_value = secret_data
         result = load_secret("test-secret")
 
@@ -327,9 +325,7 @@ def test_load_secret_from_k8s_api() -> None:
 
     with (
         patch("reformatters.common.kubernetes.config.load_kube_config"),
-        patch(
-            "reformatters.common.kubernetes.client.CoreV1Api", return_value=mock_v1
-        ),
+        patch("reformatters.common.kubernetes.client.CoreV1Api", return_value=mock_v1),
     ):
         result = _load_secret_from_k8s_api("db-credentials")
 
