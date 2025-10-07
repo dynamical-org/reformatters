@@ -286,7 +286,7 @@ def test_load_secret_raises_when_file_missing_in_job(
     monkeypatch.setenv("JOB_NAME", "test-job")
 
     with pytest.raises(
-        FileNotFoundError, match="Secret file .* not found in production job"
+        FileNotFoundError, match=r"Secret file .* not found in production job"
     ):
         load_secret("missing-secret")
 
