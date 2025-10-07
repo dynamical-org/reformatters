@@ -256,10 +256,10 @@ class ValidationCronJob(CronJob):
 
 def load_secret(secret_name: str) -> dict[str, Any]:
     """
-    Load a secret from kubernetes, either from mounted file or directly from k8s API.
+    Load a secret from kubernetes, either from mounted file or directly from kubernetes API.
 
     Returns empty dict in non-prod environments.
-    When env is prod, loads from mounted secret file, or falls back to k8s API if running locally.
+    When env is prod, loads from mounted secret file, or falls back to kubernetes API if running locally.
     """
     if not Config.is_prod:
         return {}
@@ -274,7 +274,7 @@ def load_secret(secret_name: str) -> dict[str, Any]:
             )
         else:
             # Local case, e.g. to support backfill-kubernetes writing the zarr metadata
-            return _load_secret_from_k8s_api(secret_name)
+            return _load_secret_from_kubernetes_api(secret_name)
 
     with open(secret_file) as f:
         contents = json.load(f)
@@ -282,10 +282,10 @@ def load_secret(secret_name: str) -> dict[str, Any]:
         return contents
 
 
-def _load_secret_from_k8s_api(
+def _load_secret_from_kubernetes_api(
     secret_name: str,
 ) -> dict[str, Any]:
-    """Load secret directly from k8s API (for local development)."""
+    """Load secret directly from kubernetes API (for local development)."""
     config.load_kube_config()
     v1 = client.CoreV1Api()
     secret = v1.read_namespaced_secret(secret_name, "default")

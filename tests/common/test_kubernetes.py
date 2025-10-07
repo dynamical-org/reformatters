@@ -10,7 +10,7 @@ import pytest
 from reformatters.common.config import Config, Env
 from reformatters.common.kubernetes import (
     Job,
-    _load_secret_from_k8s_api,
+    _load_secret_from_kubernetes_api,
     load_secret,
 )
 
@@ -291,10 +291,10 @@ def test_load_secret_raises_when_file_missing_in_job(
         load_secret("missing-secret")
 
 
-def test_load_secret_from_k8s_api_when_local(
+def test_load_secret_from_kubernetes_api_when_local(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Test that load_secret falls back to k8s API when running locally (no JOB_NAME)."""
+    """Test that load_secret falls back to kubernetes API when running locally (no JOB_NAME)."""
     monkeypatch.setattr(Config, "env", Env.prod)
     monkeypatch.setattr(
         "reformatters.common.kubernetes._SECRET_MOUNT_PATH", str(tmp_path)
@@ -303,7 +303,9 @@ def test_load_secret_from_k8s_api_when_local(
 
     secret_data = {"api_key": "secret123", "count": 99}
 
-    with patch("reformatters.common.kubernetes._load_secret_from_k8s_api") as mock_load:
+    with patch(
+        "reformatters.common.kubernetes._load_secret_from_kubernetes_api"
+    ) as mock_load:
         mock_load.return_value = secret_data
         result = load_secret("test-secret")
 
@@ -311,8 +313,8 @@ def test_load_secret_from_k8s_api_when_local(
     mock_load.assert_called_once_with("test-secret")
 
 
-def test_load_secret_from_k8s_api() -> None:
-    """Test _load_secret_from_k8s_api loads and decodes secret from k8s API."""
+def test_load_secret_from_kubernetes_api() -> None:
+    """Test _load_secret_from_kubernetes_api loads and decodes secret from kubernetes API."""
     secret_data = {"username": "admin", "password": "secret", "port": 5432}
     secret_json = json.dumps(secret_data)
     encoded_secret = base64.b64encode(secret_json.encode("utf-8")).decode("utf-8")
@@ -327,7 +329,7 @@ def test_load_secret_from_k8s_api() -> None:
         patch("reformatters.common.kubernetes.config.load_kube_config"),
         patch("reformatters.common.kubernetes.client.CoreV1Api", return_value=mock_v1),
     ):
-        result = _load_secret_from_k8s_api("db-credentials")
+        result = _load_secret_from_kubernetes_api("db-credentials")
 
     assert result == secret_data
     mock_v1.read_namespaced_secret.assert_called_once_with("db-credentials", "default")
