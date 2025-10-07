@@ -254,7 +254,7 @@ class ValidationCronJob(CronJob):
     parallelism: int = 1
 
 
-def load_secret(secret_name: str) -> dict[str, str | int | float | bool | None]:
+def load_secret(secret_name: str) -> dict[str, Any]:
     """
     Load a secret from kubernetes, either from mounted file or directly from k8s API.
 
@@ -284,7 +284,7 @@ def load_secret(secret_name: str) -> dict[str, str | int | float | bool | None]:
 
 def _load_secret_from_k8s_api(
     secret_name: str,
-) -> dict[str, str | int | float | bool | None]:
+) -> dict[str, Any]:
     """Load secret directly from k8s API (for local development)."""
     config.load_kube_config()
     v1 = client.CoreV1Api()
