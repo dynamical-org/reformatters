@@ -1,11 +1,19 @@
+import base64
+import json
+import os
 import random
 import string
 from collections.abc import Sequence
 from datetime import timedelta
+from pathlib import Path
 from typing import Annotated, Any
 
 import pydantic
 from kubernetes import client, config  # type: ignore[import-untyped]
+
+from reformatters.common.config import Config
+
+_SECRET_MOUNT_PATH = "/secrets"  # noqa: S105 this not a real secret
 
 
 class Job(pydantic.BaseModel):
@@ -140,7 +148,7 @@ class Job(pydantic.BaseModel):
                                         {
                                             "name": secret_name,
                                             "mountPath": f"/secrets/{secret_name}.json",
-                                            "subPath": "storage_options.json",
+                                            "subPath": "contents",
                                             "readOnly": True,
                                         }
                                         for secret_name in self.secret_names
@@ -243,6 +251,41 @@ class ValidationCronJob(CronJob):
     command: Sequence[str] = ["validate"]
     workers_total: int = 1
     parallelism: int = 1
+
+
+def load_secret(secret_name: str) -> dict[str, str | int | float | bool | None]:
+    """Load a secret from k8s, either from mounted file or directly from k8s API.
+
+    Returns empty dict in non-prod environments.
+    In prod, loads from mounted secret file, or falls back to k8s API if running locally.
+    """
+    if not Config.is_prod:
+        return {}
+
+    secret_file = Path(_SECRET_MOUNT_PATH) / f"{secret_name}.json"
+
+    if not secret_file.exists():
+        if os.getenv("JOB_NAME") is not None:
+            raise FileNotFoundError(
+                f"Secret file {secret_file} not found in production job"
+            )
+        return _load_secret_from_k8s_api(secret_name)
+
+    with open(secret_file) as f:
+        contents = json.load(f)
+        assert isinstance(contents, dict)
+        return contents
+
+
+def _load_secret_from_k8s_api(
+    secret_name: str,
+) -> dict[str, str | int | float | bool | None]:
+    """Load secret directly from k8s API (for local development)."""
+    secret_data = load_secret_locally(secret_name)
+    contents_json = base64.b64decode(secret_data["contents"]).decode("utf-8")
+    contents = json.loads(contents_json)
+    assert isinstance(contents, dict)
+    return contents
 
 
 def load_secret_locally(secret_name: str) -> dict[str, Any]:
