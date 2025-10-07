@@ -69,7 +69,7 @@ class StorageConfig(FrozenBaseModel):
 
     def _load_storage_options_locally(self) -> dict[str, Any]:
         assert self.k8s_secret_name is not None
-        secret_data = kubernetes.load_k8s_secrets_locally(self.k8s_secret_name)
+        secret_data = kubernetes.load_secret_locally(self.k8s_secret_name)
         storage_options_json = base64.b64decode(
             secret_data[_STORAGE_OPTIONS_KEY]
         ).decode("utf-8")

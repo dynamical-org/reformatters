@@ -245,7 +245,7 @@ class ValidationCronJob(CronJob):
     parallelism: int = 1
 
 
-def load_k8s_secrets_locally(secret_name: str) -> dict[str, Any]:
+def load_secret_locally(secret_name: str) -> dict[str, Any]:
     config.load_kube_config()
     v1 = client.CoreV1Api()
     secret = v1.read_namespaced_secret(secret_name, "default")
