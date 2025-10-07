@@ -1,11 +1,20 @@
+import base64
+import json
+import os
 import random
 import string
 from collections.abc import Sequence
 from datetime import timedelta
+from pathlib import Path
 from typing import Annotated, Any
 
 import pydantic
 from kubernetes import client, config  # type: ignore[import-untyped]
+
+from reformatters.common.config import Config
+
+_SECRET_MOUNT_PATH = "/secrets"  # noqa: S105
+_SECRET_CONTENTS_KEY = "contents"  # noqa: S105
 
 
 class Job(pydantic.BaseModel):
@@ -24,9 +33,6 @@ class Job(pydantic.BaseModel):
     pod_active_deadline: timedelta = timedelta(hours=6)
 
     secret_names: Sequence[str] = pydantic.Field(default_factory=list)
-    # This is to support legacy datasets that have not yet been ported to the DynamicalDataset pattern
-    # (GEFS forecast and GEFS analysis).
-    env_var_secret_names: Sequence[str] = pydantic.Field(default_factory=list)
 
     @property
     def job_name(self) -> str:
@@ -112,10 +118,6 @@ class Job(pydantic.BaseModel):
                                         "value": f"{self.workers_total}",
                                     },
                                 ],
-                                "envFrom": [
-                                    {"secretRef": {"name": env_var_secret_name}}
-                                    for env_var_secret_name in self.env_var_secret_names
-                                ],
                                 "image": f"{self.image}",
                                 "name": "worker",
                                 "resources": {
@@ -140,7 +142,7 @@ class Job(pydantic.BaseModel):
                                         {
                                             "name": secret_name,
                                             "mountPath": f"/secrets/{secret_name}.json",
-                                            "subPath": "storage_options.json",
+                                            "subPath": _SECRET_CONTENTS_KEY,
                                             "readOnly": True,
                                         }
                                         for secret_name in self.secret_names
@@ -245,9 +247,43 @@ class ValidationCronJob(CronJob):
     parallelism: int = 1
 
 
-def load_k8s_secrets_locally(secret_name: str) -> dict[str, Any]:
+def load_secret(secret_name: str) -> dict[str, Any]:
+    """
+    Load a secret from kubernetes, either from mounted file or directly from kubernetes API.
+
+    Returns empty dict in non-prod environments.
+    When env is prod, loads from mounted secret file, or falls back to kubernetes API if running locally.
+    """
+    if not Config.is_prod:
+        return {}
+
+    secret_file = Path(_SECRET_MOUNT_PATH) / f"{secret_name}.json"
+
+    if not secret_file.exists():
+        if os.getenv("JOB_NAME") is not None:
+            # We're in a cluster, the secret should be mounted at the expected path
+            raise FileNotFoundError(
+                f"Secret file {secret_file} not found in production job"
+            )
+        else:
+            # Local case, e.g. to support backfill-kubernetes writing the zarr metadata
+            return _load_secret_from_kubernetes_api(secret_name)
+
+    with open(secret_file) as f:
+        contents = json.load(f)
+        assert isinstance(contents, dict)
+        return contents
+
+
+def _load_secret_from_kubernetes_api(
+    secret_name: str,
+) -> dict[str, Any]:
+    """Load secret directly from kubernetes API (for local development)."""
     config.load_kube_config()
     v1 = client.CoreV1Api()
     secret = v1.read_namespaced_secret(secret_name, "default")
     assert isinstance(secret.data, dict)
-    return secret.data
+    contents_json = base64.b64decode(secret.data[_SECRET_CONTENTS_KEY]).decode("utf-8")
+    contents = json.loads(contents_json)
+    assert isinstance(contents, dict)
+    return contents

@@ -45,7 +45,7 @@ We use
 1. Install `docker` and `kubectl`. Make sure `docker` can be found at /usr/bin/docker and `kubectl` at /usr/bin/kubectl.
 1. Setup a docker image repository and export the DOCKER_REPOSITORY environment variable in your local shell. eg. `export DOCKER_REPOSITORY=us-central1-docker.pkg.dev/<project-id>/reformatters/main`
 1. Setup a kubernetes cluster and configure kubectl to point to your cluster. eg `gcloud container clusters get-credentials <cluster-name> --region <region> --project <project>`
-1. Create a kubectl secret containing your Source Coop S3 credentials `kubectl create secret generic source-coop-storage-options-key --from-literal=storage_options.json='{"key": "...", "secret": "..."}'`.
+1. Create a kubectl secret containing your Source Coop S3 credentials `kubectl create secret generic source-coop-storage-options-key --from-literal=contents='{"key": "...", "secret": "..."}'`.
 
 
 ### Development commands

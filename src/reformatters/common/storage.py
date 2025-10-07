@@ -1,7 +1,4 @@
-import base64
 import functools
-import json
-import os
 from collections.abc import Sequence
 from enum import StrEnum
 from functools import cache
@@ -26,8 +23,6 @@ from reformatters.common.retry import retry
 log = get_logger(__name__)
 
 _LOCAL_ZARR_STORE_BASE_PATH = "data/output"
-_SECRET_MOUNT_PATH = "/secrets"  # noqa: S105 this not a real secret
-_STORAGE_OPTIONS_KEY = "storage_options.json"
 
 # This is a sentinel value to indicate that we should not try to load the storage options from a Kubernetes secret.
 # This is useful in the test and dev environments where we don't have a Kubernetes secret mounted.
@@ -48,34 +43,10 @@ class StorageConfig(FrozenBaseModel):
 
     def load_storage_options(self) -> dict[str, Any]:
         """Load the storage options from the Kubernetes secret."""
-        if not Config.is_prod or self.k8s_secret_name == _NO_SECRET_NAME:
+        if self.k8s_secret_name == _NO_SECRET_NAME:
             return {}
 
-        secret_file = Path(_SECRET_MOUNT_PATH) / f"{self.k8s_secret_name}.json"
-
-        # When we backfill, we need to write the template metadata to our cloud stoage
-        # location. To do this, we need the credentials to write to the base path, but
-        # because this happens locally, we don't have the secret mounted. In this case
-        # we will attempt to load the secrets from kubernetes locally. This assumes that
-        # we are connected to the kubernetes cluster locally. We have a guard on JOB_NAME
-        # to ensure that we don't try to do this when this is run in the cluster.
-        if not secret_file.exists() and os.getenv("JOB_NAME") is None:
-            return self._load_storage_options_locally()
-
-        with open(secret_file) as f:
-            options = json.load(f)
-            assert isinstance(options, dict)
-            return options
-
-    def _load_storage_options_locally(self) -> dict[str, Any]:
-        assert self.k8s_secret_name is not None
-        secret_data = kubernetes.load_k8s_secrets_locally(self.k8s_secret_name)
-        storage_options_json = base64.b64decode(
-            secret_data[_STORAGE_OPTIONS_KEY]
-        ).decode("utf-8")
-        options = json.loads(storage_options_json)
-        assert isinstance(options, dict)
-        return options
+        return kubernetes.load_secret(self.k8s_secret_name)
 
 
 class StoreFactory(FrozenBaseModel):
