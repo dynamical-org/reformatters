@@ -13,8 +13,8 @@ from kubernetes import client, config  # type: ignore[import-untyped]
 
 from reformatters.common.config import Config
 
-_SECRET_MOUNT_PATH = "/secrets"  # noqa: S105 this not a real secret
-_SECRET_CONTENTS_KEY = "contents"
+_SECRET_MOUNT_PATH = "/secrets"  # noqa: S105
+_SECRET_CONTENTS_KEY = "contents"  # noqa: S105
 
 
 class Job(pydantic.BaseModel):
@@ -267,10 +267,13 @@ def load_secret(secret_name: str) -> dict[str, str | int | float | bool | None]:
 
     if not secret_file.exists():
         if os.getenv("JOB_NAME") is not None:
+            # We're in a cluster, the secret should be mounted at the expected path
             raise FileNotFoundError(
                 f"Secret file {secret_file} not found in production job"
             )
-        return _load_secret_from_k8s_api(secret_name)
+        else:
+            # Local case, e.g. to support backfill-kubernetes writing the zarr metadata
+            return _load_secret_from_k8s_api(secret_name)
 
     with open(secret_file) as f:
         contents = json.load(f)
