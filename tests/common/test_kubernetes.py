@@ -102,7 +102,6 @@ def test_as_kubernetes_object_comprehensive() -> None:
                                 "value": "4",
                             },
                         ],
-                        "envFrom": [],
                         "image": "weather-app:v1.0",
                         "name": "worker",
                         "resources": {

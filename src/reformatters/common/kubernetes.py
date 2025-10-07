@@ -33,9 +33,6 @@ class Job(pydantic.BaseModel):
     pod_active_deadline: timedelta = timedelta(hours=6)
 
     secret_names: Sequence[str] = pydantic.Field(default_factory=list)
-    # This is to support legacy datasets that have not yet been ported to the DynamicalDataset pattern
-    # (GEFS forecast and GEFS analysis).
-    env_var_secret_names: Sequence[str] = pydantic.Field(default_factory=list)
 
     @property
     def job_name(self) -> str:
@@ -120,10 +117,6 @@ class Job(pydantic.BaseModel):
                                         "name": "WORKERS_TOTAL",
                                         "value": f"{self.workers_total}",
                                     },
-                                ],
-                                "envFrom": [
-                                    {"secretRef": {"name": env_var_secret_name}}
-                                    for env_var_secret_name in self.env_var_secret_names
                                 ],
                                 "image": f"{self.image}",
                                 "name": "worker",
