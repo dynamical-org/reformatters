@@ -255,10 +255,11 @@ class ValidationCronJob(CronJob):
 
 
 def load_secret(secret_name: str) -> dict[str, str | int | float | bool | None]:
-    """Load a secret from k8s, either from mounted file or directly from k8s API.
+    """
+    Load a secret from kubernetes, either from mounted file or directly from k8s API.
 
     Returns empty dict in non-prod environments.
-    In prod, loads from mounted secret file, or falls back to k8s API if running locally.
+    When env is prod, loads from mounted secret file, or falls back to k8s API if running locally.
     """
     if not Config.is_prod:
         return {}
