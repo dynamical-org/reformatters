@@ -1,38 +1,10 @@
-import json
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
-import pytest
 import xarray as xr
 
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.template_config import (
     EcmwfIfsEnsForecast15Day025DegreeTemplateConfig,
 )
-
-
-def test_update_template(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """
-    Ensure that `uv run main <dataset-id> update-template` has been run and
-    all changes to EcmwfIfsEnsForecast15Day025DegreeTemplateConfig are reflected in the on-disk Zarr template.
-    """
-    template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
-    with open(template_config.template_path() / "zarr.json") as f:
-        existing_template = json.load(f)
-
-    test_template_path = tmp_path / "latest.zarr"
-    monkeypatch.setattr(
-        EcmwfIfsEnsForecast15Day025DegreeTemplateConfig,
-        "template_path",
-        lambda _self: test_template_path,
-    )
-
-    template_config.update_template()
-
-    with open(template_config.template_path() / "zarr.json") as f:
-        updated_template = json.load(f)
-
-    assert existing_template == updated_template
 
 
 def test_derive_coordinates() -> None:

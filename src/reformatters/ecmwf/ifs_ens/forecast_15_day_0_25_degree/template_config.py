@@ -231,7 +231,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
                         min=self.append_dim_start.isoformat(),
-                        max="Present + 15 days",
+                        max="Present",
                     ),
                 ),
             ),
@@ -383,17 +383,18 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                 ),
             ),
             EcmwfIfsEnsDataVar(
-                name="precipitation_total",
+                name="precipitation_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="tp",
                     long_name="Total precipitation",
-                    units="m",
-                    step_type="accum",
-                    comment="Accumulated precipitation since forecast start time.",
+                    units="mm/s",
+                    step_type="avg",
+                    comment="Average precipitation rate since the previous forecast step.",
                 ),
                 internal_attrs=EcmwfIfsEnsInternalAttrs(
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    deaccumulate_to_rate=True,
                 ),
             ),
         ]
