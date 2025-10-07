@@ -57,7 +57,6 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
     append_dim: AppendDim = "init_time"
     # forecasts available from same s3 bucket since 2023-01-18, but only with 0.4deg resolution from dataset start through 2024-01-31.
     append_dim_start: Timestamp = pd.Timestamp("2024-02-01T00:00")
-    # starting with just 0z forecasts for now. 12z also available with same forecast length; 6 & 18z also available with 144hr max lead time.
     append_dim_frequency: Timedelta = pd.Timedelta("24h")
 
     @computed_field  # type: ignore[prop-decorator]
@@ -166,14 +165,14 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
             Coordinate(
                 name="ensemble_member",
                 encoding=Encoding(
-                    dtype="int32",
+                    dtype="int16",
                     fill_value=-1,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
                     chunks=len(dim_coords["ensemble_member"]),
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
-                    units="realization",  # TODO what does this mean lol I stole it from gefs
+                    units="realization",
                     statistics_approximate=StatisticsApproximate(
                         min=int(dim_coords["ensemble_member"].min()),
                         max=int(dim_coords["ensemble_member"].max()),
@@ -310,7 +309,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
         # 1-2mb chunks compressed
         # 4-8mb uncompressed
         # 4-8 million float32 values
-        # TODO check the math on these chunks & shards being reasonable. reference slack notes
+        # TODO(lauren): check the math on these chunks & shards being reasonable. reference slack notes
         var_chunks: dict[Dim, int] = {
             "init_time": 1,
             "lead_time": 85,
