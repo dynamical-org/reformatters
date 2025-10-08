@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import rasterio  # type: ignore[import-untyped]
-from rasterio.transform import from_bounds
+from rasterio.transform import from_bounds  # type: ignore[import-untyped]
 
 from reformatters.contrib.nasa.smap.level3_36km_v9.region_job import (
     NasaSmapLevel336KmV9RegionJob,
