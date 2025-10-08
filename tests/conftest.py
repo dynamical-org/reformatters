@@ -31,11 +31,7 @@ def pytest_xdist_auto_num_workers(config: pytest.Config) -> int | None:
     otherwise uses all available CPUs.
     """
     file_or_dir = config.option.file_or_dir
-    if (
-        file_or_dir
-        and len(file_or_dir) == 1
-        and file_or_dir[0].split("::")[0].endswith(".py")
-    ):
+    if len(file_or_dir) == 1 and file_or_dir[0].split("::")[0].endswith(".py"):
         return 0
     return None  # use default behavior (all CPUs)
 
