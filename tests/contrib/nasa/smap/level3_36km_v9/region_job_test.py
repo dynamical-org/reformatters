@@ -211,13 +211,15 @@ def test_read_data_am(tmp_path: Path) -> None:
     with patch(
         "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.rasterio.open"
     ) as mock_open:
-        # Create mock rasterio dataset
-        mock_dataset = Mock()
+        # Read the actual data from the test file
         with rasterio.open(am_path) as src:
-            data = src.read(1).astype(np.float32)
-        mock_dataset.read = Mock(return_value=data)
-        mock_open.return_value.__enter__ = Mock(return_value=mock_dataset)
-        mock_open.return_value.__exit__ = Mock(return_value=None)
+            expected_data = src.read(1).astype(np.float32)
+        
+        # Create mock rasterio dataset that returns the actual data
+        mock_dataset = Mock()
+        mock_dataset.read.return_value = expected_data
+        mock_open.return_value.__enter__.return_value = mock_dataset
+        mock_open.return_value.__exit__.return_value = None
 
         result = region_job.read_data(coord, am_var)
 
@@ -265,13 +267,15 @@ def test_read_data_pm(tmp_path: Path) -> None:
     with patch(
         "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.rasterio.open"
     ) as mock_open:
-        # Create mock rasterio dataset
-        mock_dataset = Mock()
+        # Read the actual data from the test file
         with rasterio.open(pm_path) as src:
-            data = src.read(1).astype(np.float32)
-        mock_dataset.read = Mock(return_value=data)
-        mock_open.return_value.__enter__ = Mock(return_value=mock_dataset)
-        mock_open.return_value.__exit__ = Mock(return_value=None)
+            expected_data = src.read(1).astype(np.float32)
+        
+        # Create mock rasterio dataset that returns the actual data
+        mock_dataset = Mock()
+        mock_dataset.read.return_value = expected_data
+        mock_open.return_value.__enter__.return_value = mock_dataset
+        mock_open.return_value.__exit__.return_value = None
 
         result = region_job.read_data(coord, pm_var)
 
