@@ -33,7 +33,8 @@ def _create_authenticated_session() -> requests.Session:
     # Configure retries for the session
     retry_strategy = Retry(
         total=5,
-        backoff_factor=1,
+        backoff_factor=1.0,
+        backoff_jitter=0.5,
         status_forcelist=[429, 500, 502, 503, 504],
     )
     adapter = HTTPAdapter(max_retries=retry_strategy)
