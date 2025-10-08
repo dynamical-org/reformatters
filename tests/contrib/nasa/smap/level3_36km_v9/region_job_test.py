@@ -168,8 +168,9 @@ def test_read_data_am(tmp_path: Path) -> None:
     mock_file = tmp_path / "test_smap.h5"
     _create_mock_smap_hdf5(mock_file)
 
-    coord = NasaSmapLevel336KmV9SourceFileCoord(time=pd.Timestamp("2015-04-01"))
-    coord.downloaded_path = mock_file
+    coord = NasaSmapLevel336KmV9SourceFileCoord(
+        time=pd.Timestamp("2015-04-01"), downloaded_path=mock_file
+    )
 
     # Get the AM data variable
     am_var = template_config.data_vars[0]
@@ -208,8 +209,9 @@ def test_read_data_pm(tmp_path: Path) -> None:
     mock_file = tmp_path / "test_smap.h5"
     _create_mock_smap_hdf5(mock_file)
 
-    coord = NasaSmapLevel336KmV9SourceFileCoord(time=pd.Timestamp("2015-04-01"))
-    coord.downloaded_path = mock_file
+    coord = NasaSmapLevel336KmV9SourceFileCoord(
+        time=pd.Timestamp("2015-04-01"), downloaded_path=mock_file
+    )
 
     # Get the PM data variable
     pm_var = template_config.data_vars[1]

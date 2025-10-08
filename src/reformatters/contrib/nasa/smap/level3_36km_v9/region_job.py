@@ -3,7 +3,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import numpy as np
-import rasterio
+import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 import zarr
 
@@ -100,7 +100,7 @@ class NasaSmapLevel336KmV9RegionJob(
         )
 
         with rasterio.open(subdataset_path) as src:
-            data = src.read(1).astype(np.float32)
+            data: ArrayFloat32 = src.read(1).astype(np.float32)
 
         # Replace fill values with NaN
         data[data == _SOURCE_FILL_VALUE] = np.nan
