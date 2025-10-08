@@ -218,12 +218,7 @@ def test_read_data_am(tmp_path: Path) -> None:
 
         # Create mock rasterio dataset that returns the actual data
         mock_dataset = Mock()
-
-        # Mock needs to handle the call with out_dtype parameter
-        def mock_read(band: int, out_dtype: type | None = None) -> ArrayFloat32:
-            return expected_data
-
-        mock_dataset.read = mock_read
+        mock_dataset.read.return_value = expected_data
         mock_open.return_value.__enter__.return_value = mock_dataset
         mock_open.return_value.__exit__.return_value = None
 
@@ -279,12 +274,7 @@ def test_read_data_pm(tmp_path: Path) -> None:
 
         # Create mock rasterio dataset that returns the actual data
         mock_dataset = Mock()
-
-        # Mock needs to handle the call with out_dtype parameter
-        def mock_read(band: int, out_dtype: type | None = None) -> ArrayFloat32:
-            return expected_data
-
-        mock_dataset.read = mock_read
+        mock_dataset.read.return_value = expected_data
         mock_open.return_value.__enter__.return_value = mock_dataset
         mock_open.return_value.__exit__.return_value = None
 
