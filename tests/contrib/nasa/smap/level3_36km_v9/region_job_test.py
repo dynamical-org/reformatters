@@ -1,7 +1,6 @@
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-import h5py
 import numpy as np
 import pandas as pd
 import pytest
