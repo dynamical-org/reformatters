@@ -1,4 +1,4 @@
-import functools
+import threading
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -10,15 +10,18 @@ from reformatters.common.retry import retry
 
 log = get_logger(__name__)
 
+_thread_local = threading.local()
 
-@functools.cache
+
 def get_authenticated_session() -> requests.Session:
     """
     Get an authenticated requests.Session for NASA Earthdata.
-
-    Cached per thread/process. Credentials are loaded from the nasa-earthdata secret.
+    
+    Cached per thread. Credentials are loaded from the nasa-earthdata secret.
     """
-    return retry(_create_authenticated_session)
+    if not hasattr(_thread_local, "session"):
+        _thread_local.session = retry(_create_authenticated_session)
+    return _thread_local.session
 
 
 def _create_authenticated_session() -> requests.Session:
