@@ -1,7 +1,10 @@
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import h5py
+import numpy as np
 import pandas as pd
+import pytest
 
 from reformatters.contrib.nasa.smap.level3_36km_v9.region_job import (
     NasaSmapLevel336KmV9RegionJob,
@@ -127,3 +130,124 @@ def test_download_file_retries_on_failure(tmp_path: Path) -> None:
         assert mock_session.get.call_count == 3
         assert result.exists()
         assert result.read_bytes() == b"success"
+
+
+def _create_mock_smap_hdf5(path: Path, y_size: int = 406, x_size: int = 964) -> None:
+    """Create a mock SMAP HDF5 file with realistic structure."""
+    with h5py.File(path, "w") as f:
+        # Create AM data group
+        am_group = f.create_group("Soil_Moisture_Retrieval_Data_AM")
+        am_data = np.random.rand(y_size, x_size).astype(np.float32) * 0.5
+        # Add some fill values
+        am_data[0:10, 0:10] = -9999.0
+        am_group.create_dataset("soil_moisture", data=am_data)
+
+        # Create PM data group
+        pm_group = f.create_group("Soil_Moisture_Retrieval_Data_PM")
+        pm_data = np.random.rand(y_size, x_size).astype(np.float32) * 0.5
+        # Add some fill values
+        pm_data[20:30, 20:30] = -9999.0
+        pm_group.create_dataset("soil_moisture_pm", data=pm_data)
+
+
+def test_read_data_am(tmp_path: Path) -> None:
+    """Test reading AM soil moisture data."""
+    template_config = NasaSmapLevel336KmV9TemplateConfig()
+    template_ds = template_config.get_template(pd.Timestamp("2015-04-01"))
+
+    region_job = NasaSmapLevel336KmV9RegionJob(
+        tmp_store=tmp_path,
+        template_ds=template_ds,
+        data_vars=template_config.data_vars[:1],
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    # Create mock HDF5 file
+    mock_file = tmp_path / "test_smap.h5"
+    _create_mock_smap_hdf5(mock_file)
+
+    coord = NasaSmapLevel336KmV9SourceFileCoord(time=pd.Timestamp("2015-04-01"))
+    coord.downloaded_path = mock_file
+
+    # Get the AM data variable
+    am_var = template_config.data_vars[0]
+    assert am_var.name == "soil_moisture_am"
+
+    result = region_job.read_data(coord, am_var)
+
+    # Check shape
+    assert result.shape == (406, 964)
+    assert result.dtype == np.float32
+
+    # Check that fill values were converted to NaN
+    assert np.isnan(result[0:10, 0:10]).all()
+
+    # Check that valid data is in expected range
+    valid_data = result[~np.isnan(result)]
+    assert valid_data.min() >= 0.0
+    assert valid_data.max() <= 0.5
+
+
+def test_read_data_pm(tmp_path: Path) -> None:
+    """Test reading PM soil moisture data."""
+    template_config = NasaSmapLevel336KmV9TemplateConfig()
+    template_ds = template_config.get_template(pd.Timestamp("2015-04-01"))
+
+    region_job = NasaSmapLevel336KmV9RegionJob(
+        tmp_store=tmp_path,
+        template_ds=template_ds,
+        data_vars=template_config.data_vars[:2],
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    # Create mock HDF5 file
+    mock_file = tmp_path / "test_smap.h5"
+    _create_mock_smap_hdf5(mock_file)
+
+    coord = NasaSmapLevel336KmV9SourceFileCoord(time=pd.Timestamp("2015-04-01"))
+    coord.downloaded_path = mock_file
+
+    # Get the PM data variable
+    pm_var = template_config.data_vars[1]
+    assert pm_var.name == "soil_moisture_pm"
+
+    result = region_job.read_data(coord, pm_var)
+
+    # Check shape
+    assert result.shape == (406, 964)
+    assert result.dtype == np.float32
+
+    # Check that fill values were converted to NaN
+    assert np.isnan(result[20:30, 20:30]).all()
+
+    # Check that valid data is in expected range
+    valid_data = result[~np.isnan(result)]
+    assert valid_data.min() >= 0.0
+    assert valid_data.max() <= 0.5
+
+
+def test_read_data_requires_downloaded_path(tmp_path: Path) -> None:
+    """Test that read_data raises if file hasn't been downloaded."""
+    template_config = NasaSmapLevel336KmV9TemplateConfig()
+    template_ds = template_config.get_template(pd.Timestamp("2015-04-01"))
+
+    region_job = NasaSmapLevel336KmV9RegionJob(
+        tmp_store=tmp_path,
+        template_ds=template_ds,
+        data_vars=template_config.data_vars[:1],
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    coord = NasaSmapLevel336KmV9SourceFileCoord(time=pd.Timestamp("2015-04-01"))
+    # Don't set downloaded_path
+
+    am_var = template_config.data_vars[0]
+
+    with pytest.raises(AssertionError, match="File must be downloaded first"):
+        region_job.read_data(coord, am_var)

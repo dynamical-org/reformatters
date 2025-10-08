@@ -2,6 +2,8 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from urllib.parse import urlparse
 
+import numpy as np
+import rasterio
 import xarray as xr
 import zarr
 
@@ -90,8 +92,18 @@ class NasaSmapLevel336KmV9RegionJob(
         data_var: NasaSmapDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
-        # Use rasterio to read coord.downloaded_path
-        raise NotImplementedError()
+        assert coord.downloaded_path is not None, "File must be downloaded first"
+
+        # HDF5 subdataset path for rasterio
+        subdataset_path = f"HDF5:{coord.downloaded_path}:{data_var.internal_attrs.h5_path}"
+
+        with rasterio.open(subdataset_path) as src:
+            data = src.read(1).astype(np.float32)
+
+        # Replace fill values with NaN
+        data[data == _SOURCE_FILL_VALUE] = np.nan
+
+        return data
 
     @classmethod
     def operational_update_jobs(
