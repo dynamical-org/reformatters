@@ -151,9 +151,7 @@ def test_download_file_retries_on_failure(tmp_path: Path) -> None:
 
     # Mock session that fails twice then succeeds
     mock_response_fail = Mock()
-    mock_response_fail.raise_for_status = Mock(
-        side_effect=Exception("Network error")
-    )
+    mock_response_fail.raise_for_status = Mock(side_effect=Exception("Network error"))
 
     mock_response_success = Mock()
     mock_response_success.raise_for_status = Mock()
