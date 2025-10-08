@@ -92,17 +92,15 @@ class NasaSmapLevel336KmV9RegionJob(
         data_var: NasaSmapDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
-        assert coord.downloaded_path is not None, "File must be downloaded first"
+        assert coord.downloaded_path is not None  # for type checker
 
-        # HDF5 subdataset path for rasterio
         subdataset_path = (
             f"HDF5:{coord.downloaded_path}:{data_var.internal_attrs.h5_path}"
         )
 
-        with rasterio.open(subdataset_path) as src:
-            data: ArrayFloat32 = src.read(1).astype(np.float32)
+        with rasterio.open(subdataset_path) as reader:
+            data: ArrayFloat32 = reader.read(1, out_dtype=np.float32)
 
-        # Replace fill values with NaN
         data[data == _SOURCE_FILL_VALUE] = np.nan
 
         return data
