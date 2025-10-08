@@ -208,7 +208,9 @@ def test_read_data_am(tmp_path: Path) -> None:
     assert am_var.name == "soil_moisture_am"
 
     # Patch rasterio.open to avoid HDF5 subdataset path issues
-    with patch("reformatters.contrib.nasa.smap.level3_36km_v9.region_job.rasterio.open") as mock_open:
+    with patch(
+        "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.rasterio.open"
+    ) as mock_open:
         # Create mock rasterio dataset
         mock_dataset = Mock()
         with rasterio.open(am_path) as src:
@@ -260,7 +262,9 @@ def test_read_data_pm(tmp_path: Path) -> None:
     assert pm_var.name == "soil_moisture_pm"
 
     # Patch rasterio.open to avoid HDF5 subdataset path issues
-    with patch("reformatters.contrib.nasa.smap.level3_36km_v9.region_job.rasterio.open") as mock_open:
+    with patch(
+        "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.rasterio.open"
+    ) as mock_open:
         # Create mock rasterio dataset
         mock_dataset = Mock()
         with rasterio.open(pm_path) as src:
