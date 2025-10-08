@@ -71,7 +71,7 @@ class CoordinateAttrs(FrozenBaseModel):
 # in pydantic natively. Convert to dicts which is a fine format to store them.
 def codecs_to_dicts(
     codecs: Sequence[numcodecs.abc.Codec],
-) -> Sequence[dict[str, Any]]:
+) -> Sequence[dict[str, Any]] | None:
     if codecs is None:
         return None
     return [codec.to_dict() if hasattr(codec, "to_dict") else codec for codec in codecs]

@@ -71,15 +71,15 @@ def test_check_data_is_current_success_with_nonzero_time(
 @pytest.mark.parametrize(
     "nan_count,expected_pass",
     [
-        (93, True),  # 93% NaN, should pass
-        (94, False),  # 94% NaN, should fail
-        (95, False),  # 95% NaN, should fail
+        (95, True),  # 95% NaN, should pass
+        (96, False),  # 96% NaN, should fail
+        (97, False),  # 97% NaN, should fail
     ],
 )
 def test_check_latest_ndvi_usable_nan_percentage_threshold(
     nan_count: int, expected_pass: bool
 ) -> None:
-    """Test validator at, below, and above the 94% NaN threshold."""
+    """Test validator at, below, and above the 96% NaN threshold."""
     times = pd.date_range("2024-01-01", periods=2, freq="1D")
     shape = (2, 10, 10)  # 100 values per time step
     ndvi_usable = np.ones(shape)

@@ -1,9 +1,18 @@
+import base64
+import json
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from reformatters.common.kubernetes import Job
+from reformatters.common.config import Config, Env
+from reformatters.common.kubernetes import (
+    Job,
+    _load_secret_from_kubernetes_api,
+    load_secret,
+)
 
 
 def test_as_kubernetes_object_comprehensive() -> None:
@@ -93,7 +102,6 @@ def test_as_kubernetes_object_comprehensive() -> None:
                                 "value": "4",
                             },
                         ],
-                        "envFrom": [],
                         "image": "weather-app:v1.0",
                         "name": "worker",
                         "resources": {
@@ -107,13 +115,13 @@ def test_as_kubernetes_object_comprehensive() -> None:
                             {
                                 "name": "aws-creds",
                                 "mountPath": "/secrets/aws-creds.json",
-                                "subPath": "storage_options.json",
+                                "subPath": "contents",
                                 "readOnly": True,
                             },
                             {
                                 "name": "db-creds",
                                 "mountPath": "/secrets/db-creds.json",
-                                "subPath": "storage_options.json",
+                                "subPath": "contents",
                                 "readOnly": True,
                             },
                         ],
@@ -234,3 +242,93 @@ def test_max_failed_indexes_calculation(
 
     k8s_obj = job.as_kubernetes_object()
     assert k8s_obj["spec"]["maxFailedIndexes"] == expected_max_failed_indexes
+
+
+def test_load_secret_returns_empty_dict_in_non_prod(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that load_secret returns empty dict when not in prod environment."""
+    monkeypatch.setattr(Config, "env", Env.dev)
+    result = load_secret("test-secret")
+    assert result == {}
+
+    monkeypatch.setattr(Config, "env", Env.test)
+    result = load_secret("test-secret")
+    assert result == {}
+
+
+def test_load_secret_from_mounted_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Test that load_secret loads from mounted file in prod when file exists."""
+    monkeypatch.setattr(Config, "env", Env.prod)
+    monkeypatch.setattr(
+        "reformatters.common.kubernetes._SECRET_MOUNT_PATH", str(tmp_path)
+    )
+
+    secret_data = {"key1": "value1", "key2": 42, "key3": True}
+    secret_file = tmp_path / "test-secret.json"
+    secret_file.write_text(json.dumps(secret_data))
+
+    result = load_secret("test-secret")
+    assert result == secret_data
+
+
+def test_load_secret_raises_when_file_missing_in_job(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Test that load_secret raises FileNotFoundError when file missing and JOB_NAME is set."""
+    monkeypatch.setattr(Config, "env", Env.prod)
+    monkeypatch.setattr(
+        "reformatters.common.kubernetes._SECRET_MOUNT_PATH", str(tmp_path)
+    )
+    monkeypatch.setenv("JOB_NAME", "test-job")
+
+    with pytest.raises(
+        FileNotFoundError, match=r"Secret file .* not found in production job"
+    ):
+        load_secret("missing-secret")
+
+
+def test_load_secret_from_kubernetes_api_when_local(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Test that load_secret falls back to kubernetes API when running locally (no JOB_NAME)."""
+    monkeypatch.setattr(Config, "env", Env.prod)
+    monkeypatch.setattr(
+        "reformatters.common.kubernetes._SECRET_MOUNT_PATH", str(tmp_path)
+    )
+    monkeypatch.delenv("JOB_NAME", raising=False)
+
+    secret_data = {"api_key": "secret123", "count": 99}
+
+    with patch(
+        "reformatters.common.kubernetes._load_secret_from_kubernetes_api"
+    ) as mock_load:
+        mock_load.return_value = secret_data
+        result = load_secret("test-secret")
+
+    assert result == secret_data
+    mock_load.assert_called_once_with("test-secret")
+
+
+def test_load_secret_from_kubernetes_api() -> None:
+    """Test _load_secret_from_kubernetes_api loads and decodes secret from kubernetes API."""
+    secret_data = {"username": "admin", "password": "secret", "port": 5432}
+    secret_json = json.dumps(secret_data)
+    encoded_secret = base64.b64encode(secret_json.encode("utf-8")).decode("utf-8")
+
+    mock_secret = Mock()
+    mock_secret.data = {"contents": encoded_secret}
+
+    mock_v1 = MagicMock()
+    mock_v1.read_namespaced_secret.return_value = mock_secret
+
+    with (
+        patch("reformatters.common.kubernetes.config.load_kube_config"),
+        patch("reformatters.common.kubernetes.client.CoreV1Api", return_value=mock_v1),
+    ):
+        result = _load_secret_from_kubernetes_api("db-credentials")
+
+    assert result == secret_data
+    mock_v1.read_namespaced_secret.assert_called_once_with("db-credentials", "default")
