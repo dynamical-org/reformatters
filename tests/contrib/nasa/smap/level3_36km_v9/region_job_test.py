@@ -295,7 +295,7 @@ def test_operational_update_jobs(tmp_path: Path) -> None:
 
     # Verify jobs have correct configuration
     for job in jobs:
-        assert job.tmp_store == tmp_store
+        assert job.tmp_store == tmp_path
         assert job.append_dim == template_config.append_dim
         assert job.reformat_job_name == "test-update"
         assert len(job.data_vars) > 0
