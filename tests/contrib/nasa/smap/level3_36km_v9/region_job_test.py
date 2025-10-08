@@ -4,8 +4,6 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pandas as pd
 import pytest
-import rasterio  # type: ignore[import-untyped]
-from rasterio.transform import from_bounds  # type: ignore[import-untyped]
 
 from reformatters.common.types import ArrayFloat32
 from reformatters.contrib.nasa.smap.level3_36km_v9.region_job import (
@@ -15,6 +13,22 @@ from reformatters.contrib.nasa.smap.level3_36km_v9.region_job import (
 from reformatters.contrib.nasa.smap.level3_36km_v9.template_config import (
     NasaSmapLevel336KmV9TemplateConfig,
 )
+
+
+@pytest.fixture
+def mock_smap_am_data() -> ArrayFloat32:
+    """Create mock AM soil moisture data with fill values."""
+    data = np.random.rand(406, 964).astype(np.float32) * 0.5
+    data[0:10, 0:10] = -9999.0
+    return data
+
+
+@pytest.fixture
+def mock_smap_pm_data() -> ArrayFloat32:
+    """Create mock PM soil moisture data with fill values."""
+    data = np.random.rand(406, 964).astype(np.float32) * 0.5
+    data[20:30, 20:30] = -9999.0
+    return data
 
 
 def test_source_file_coord_get_url() -> None:
@@ -134,54 +148,7 @@ def test_download_file_retries_on_failure(tmp_path: Path) -> None:
         assert result.read_bytes() == b"success"
 
 
-def _create_mock_smap_hdf5(path: Path, y_size: int = 406, x_size: int = 964) -> None:
-    """Create a mock SMAP HDF5 file with realistic structure using rasterio."""
-    # Create AM data
-    am_data = np.random.rand(y_size, x_size).astype(np.float32) * 0.5
-    am_data[0:10, 0:10] = -9999.0
-
-    # Create PM data
-    pm_data = np.random.rand(y_size, x_size).astype(np.float32) * 0.5
-    pm_data[20:30, 20:30] = -9999.0
-
-    # Use rasterio to write HDF5 with subdatasets
-    # We'll create a simple geotiff-like structure that rasterio can read
-    transform = from_bounds(-180, -90, 180, 90, x_size, y_size)
-
-    # Write AM subdataset
-    am_path = str(path).replace(".h5", "_am.tif")
-    with rasterio.open(
-        am_path,
-        "w",
-        driver="GTiff",
-        height=y_size,
-        width=x_size,
-        count=1,
-        dtype=np.float32,
-        transform=transform,
-    ) as dst:
-        dst.write(am_data, 1)
-
-    # Write PM subdataset
-    pm_path = str(path).replace(".h5", "_pm.tif")
-    with rasterio.open(
-        pm_path,
-        "w",
-        driver="GTiff",
-        height=y_size,
-        width=x_size,
-        count=1,
-        dtype=np.float32,
-        transform=transform,
-    ) as dst:
-        dst.write(pm_data, 1)
-
-    # For testing, we'll use the tif files directly
-    # Store paths in a way the test can access them
-    path.write_text(f"{am_path}\n{pm_path}")
-
-
-def test_read_data_am(tmp_path: Path) -> None:
+def test_read_data_am(tmp_path: Path, mock_smap_am_data: ArrayFloat32) -> None:
     """Test reading AM soil moisture data."""
     template_config = NasaSmapLevel336KmV9TemplateConfig()
     template_ds = template_config.get_template(pd.Timestamp("2015-04-01"))
@@ -195,30 +162,21 @@ def test_read_data_am(tmp_path: Path) -> None:
         reformat_job_name="test",
     )
 
-    # Create mock data file
-    mock_file = tmp_path / "test_smap.h5"
-    _create_mock_smap_hdf5(mock_file)
-    am_path = Path(mock_file.read_text().split("\n")[0])
-
     coord = NasaSmapLevel336KmV9SourceFileCoord(
-        time=pd.Timestamp("2015-04-01"), downloaded_path=am_path
+        time=pd.Timestamp("2015-04-01"), downloaded_path=tmp_path / "fake.h5"
     )
 
     # Get the AM data variable
     am_var = template_config.data_vars[0]
     assert am_var.name == "soil_moisture_am"
 
-    # Read the actual data from the test file
-    with rasterio.open(am_path) as src:
-        expected_data: ArrayFloat32 = src.read(1).astype(np.float32)
-
-    # Patch rasterio.open to avoid HDF5 subdataset path issues
+    # Patch rasterio.open to return mock data
     with patch(
         "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.rasterio.open"
     ) as mock_open:
-        # Create mock rasterio dataset that returns the actual data
+        # Create mock rasterio dataset that returns the mock data
         mock_dataset = Mock()
-        mock_dataset.read.return_value = expected_data
+        mock_dataset.read.return_value = mock_smap_am_data
         mock_open.return_value.__enter__.return_value = mock_dataset
         mock_open.return_value.__exit__.return_value = None
 
@@ -237,7 +195,7 @@ def test_read_data_am(tmp_path: Path) -> None:
     assert valid_data.max() <= 0.5
 
 
-def test_read_data_pm(tmp_path: Path) -> None:
+def test_read_data_pm(tmp_path: Path, mock_smap_pm_data: ArrayFloat32) -> None:
     """Test reading PM soil moisture data."""
     template_config = NasaSmapLevel336KmV9TemplateConfig()
     template_ds = template_config.get_template(pd.Timestamp("2015-04-01"))
@@ -251,30 +209,21 @@ def test_read_data_pm(tmp_path: Path) -> None:
         reformat_job_name="test",
     )
 
-    # Create mock data file
-    mock_file = tmp_path / "test_smap.h5"
-    _create_mock_smap_hdf5(mock_file)
-    pm_path = Path(mock_file.read_text().split("\n")[1])
-
     coord = NasaSmapLevel336KmV9SourceFileCoord(
-        time=pd.Timestamp("2015-04-01"), downloaded_path=pm_path
+        time=pd.Timestamp("2015-04-01"), downloaded_path=tmp_path / "fake.h5"
     )
 
     # Get the PM data variable
     pm_var = template_config.data_vars[1]
     assert pm_var.name == "soil_moisture_pm"
 
-    # Patch rasterio.open to avoid HDF5 subdataset path issues
+    # Patch rasterio.open to return mock data
     with patch(
         "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.rasterio.open"
     ) as mock_open:
-        # Read the actual data from the test file
-        with rasterio.open(pm_path) as src:
-            expected_data: ArrayFloat32 = src.read(1).astype(np.float32)
-
-        # Create mock rasterio dataset that returns the actual data
+        # Create mock rasterio dataset that returns the mock data
         mock_dataset = Mock()
-        mock_dataset.read.return_value = expected_data
+        mock_dataset.read.return_value = mock_smap_pm_data
         mock_open.return_value.__enter__.return_value = mock_dataset
         mock_open.return_value.__exit__.return_value = None
 
