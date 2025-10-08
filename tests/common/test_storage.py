@@ -149,10 +149,10 @@ def test_store_factory_returns_correct_store_types(
         ],
         dataset_id="test-dataset",
         template_config_version="v1.0",
-        stores_are_writable=True,
     )
 
-    assert isinstance(factory.primary_store(), zarr.storage.LocalStore)
+    # Set store as writable here just so we can create it and then open it.
+    assert isinstance(factory.primary_store(writable=True), zarr.storage.LocalStore)
 
     replicas = factory.replica_stores()
     assert len(replicas) == 2

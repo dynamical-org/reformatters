@@ -1,4 +1,3 @@
-import contextvars
 import json
 import subprocess
 from collections.abc import Iterable, Iterator, Sequence
@@ -32,7 +31,6 @@ from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.storage import (
     StorageConfig,
     StoreFactory,
-    allows_writes,
     get_local_tmp_store,
 )
 from reformatters.common.template_config import TemplateConfig
@@ -58,9 +56,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
 
     use_progress_tracker: bool = False
-    stores_are_writable_flag: contextvars.ContextVar[bool] = contextvars.ContextVar(
-        "stores_are_writable", default=False
-    )
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -70,7 +65,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             replica_storage_configs=self.replica_storage_configs,
             dataset_id=self.dataset_id,
             template_config_version=self.template_config.version,
-            stores_are_writable=self.stores_are_writable_flag.get(),
         )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
@@ -133,12 +127,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def dataset_id(self) -> str:
         return self.template_config.dataset_id
 
-    @allows_writes
     def update_template(self) -> None:
         """Generate and persist the dataset template using the template_config."""
         self.template_config.update_template()
 
-    @allows_writes
     def update(
         self,
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
@@ -163,8 +155,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
                 # New stores to ensure that, if any are Icechunk stores, we have
                 # an uncomitted Icechunk session for each job.
-                primary_store = self.store_factory.primary_store()
-                replica_stores = self.store_factory.replica_stores()
+                primary_store = self.store_factory.primary_store(writable=True)
+                replica_stores = self.store_factory.replica_stores(writable=True)
 
                 # This will expand the tmp store dimensions. We do this for each job
                 # because the tmp store will also be potentially trimmed when we
@@ -218,7 +210,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             f"Operational update complete. Wrote to primary store: {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()} replicas"
         )
 
-    @allows_writes
     def backfill_kubernetes(
         self,
         append_dim_end: datetime,
@@ -326,7 +317,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         log.info(f"Submitted kubernetes job {kubernetes_job.job_name}")
 
-    @allows_writes
     def backfill_local(
         self,
         append_dim_end: datetime,
@@ -356,7 +346,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
         log.info(f"Done writing to {self.store_factory.primary_store()}")
 
-    @allows_writes
     def process_backfill_region_jobs(
         self,
         append_dim_end: datetime,
@@ -395,8 +384,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         for region_job in region_jobs:
             # New stores to ensure that, if any are Icechunk stores, we have
             # an uncomitted Icechunk session for each job.
-            primary_store = self.store_factory.primary_store()
-            replica_stores = self.store_factory.replica_stores()
+            primary_store = self.store_factory.primary_store(writable=True)
+            replica_stores = self.store_factory.replica_stores(writable=True)
 
             template_utils.write_metadata(region_job.template_ds, region_job.tmp_store)
 

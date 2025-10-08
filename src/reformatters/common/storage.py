@@ -2,12 +2,11 @@ import base64
 import functools
 import json
 import os
-from collections.abc import Callable, Iterator, Sequence
-from contextlib import contextmanager
+from collections.abc import Sequence
 from enum import StrEnum
-from functools import cache, wraps
+from functools import cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, assert_never
+from typing import Any, Literal, assert_never
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -23,9 +22,6 @@ from reformatters.common.config import Config, Env
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.retry import retry
-
-if TYPE_CHECKING:
-    from reformatters.common.dynamical_dataset import DynamicalDataset
 
 log = get_logger(__name__)
 
@@ -87,7 +83,6 @@ class StoreFactory(FrozenBaseModel):
     replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
     dataset_id: str
     template_config_version: str
-    stores_are_writable: bool = False
 
     @field_validator("primary_storage_config")
     @classmethod
@@ -120,18 +115,16 @@ class StoreFactory(FrozenBaseModel):
             *[config.k8s_secret_name for config in self.replica_storage_configs],
         ]
 
-    def primary_store(self) -> zarr.abc.store.Store:
+    def primary_store(self, writable: bool = False) -> zarr.abc.store.Store:
         store_path = _get_store_path(
             self.dataset_id,
             self.version,
             self.primary_storage_config,
         )
 
-        return _get_store(
-            store_path, self.primary_storage_config, self.stores_are_writable
-        )
+        return _get_store(store_path, self.primary_storage_config, writable=writable)
 
-    def replica_stores(self) -> list[zarr.abc.store.Store]:
+    def replica_stores(self, writable: bool = False) -> list[zarr.abc.store.Store]:
         # Disable replica stores in dev environment
         if Config.is_dev:
             return []
@@ -139,7 +132,7 @@ class StoreFactory(FrozenBaseModel):
         stores = []
         for config in self.replica_storage_configs:
             store_path = _get_store_path(self.dataset_id, self.version, config)
-            store = _get_store(store_path, config, self.stores_are_writable)
+            store = _get_store(store_path, config, writable=writable)
             stores.append(store)
 
         return stores
@@ -203,32 +196,34 @@ def _get_store_path(
 
 
 def _get_store(
-    store_path: str, storage_config: StorageConfig, stores_are_writable: bool
+    store_path: str, storage_config: StorageConfig, writable: bool
 ) -> zarr.abc.store.Store:
     match storage_config.format:
         case DatasetFormat.ICECHUNK:
             assert store_path.endswith(".icechunk")
-            return _get_icechunk_store(store_path, storage_config, stores_are_writable)
+            return _get_icechunk_store(store_path, storage_config, writable)
         case DatasetFormat.ZARR3:
             assert store_path.endswith(".zarr")
-            return _get_zarr3_store(store_path, storage_config)
+            return _get_zarr3_store(store_path, storage_config, writable)
         case _ as unreachable:
             assert_never(unreachable)
 
 
 def _get_zarr3_store(
-    store_path: str, storage_config: StorageConfig
+    store_path: str, storage_config: StorageConfig, writable: bool
 ) -> zarr.abc.store.Store:
     if Config.is_prod:
         return zarr.storage.FsspecStore.from_url(
             store_path, storage_options=storage_config.load_storage_options()
-        )
+        ).with_read_only(not writable)
     else:
-        return zarr.storage.LocalStore(Path(store_path).absolute())
+        return zarr.storage.LocalStore(Path(store_path).absolute()).with_read_only(
+            not writable
+        )
 
 
 def _get_icechunk_store(
-    store_path: str, storage_config: StorageConfig, stores_are_writable: bool
+    store_path: str, storage_config: StorageConfig, writable: bool
 ) -> IcechunkStore:
     if Config.is_prod:
         parsed_path = urlparse(store_path)
@@ -254,7 +249,7 @@ def _get_icechunk_store(
     else:
         storage = icechunk.local_filesystem_storage(store_path)
 
-    if not stores_are_writable:
+    if not writable:
         log.info(f"Opening icechunk store {store_path} in readonly mode")
         repo = icechunk.Repository.open(storage)
         session = repo.readonly_session("main")
@@ -306,23 +301,3 @@ def commit_if_icechunk(
             functools.partial(_commit, primary_store),
             max_attempts=10,
         )
-
-
-@contextmanager
-def writable_stores(dataset: "DynamicalDataset[Any, Any]") -> Iterator[None]:
-    token = dataset.stores_are_writable_flag.set(True)
-    try:
-        yield
-    finally:
-        dataset.stores_are_writable_flag.reset(token)
-
-
-def allows_writes(f: Callable[..., Any]) -> Callable[..., Any]:
-    """Decorator to allow writes to dataset stores."""
-
-    @wraps(f)
-    def wrapper(self: "DynamicalDataset[Any, Any]", *args: Any, **kwargs: Any) -> Any:
-        with writable_stores(self):
-            return f(self, *args, **kwargs)
-
-    return wrapper

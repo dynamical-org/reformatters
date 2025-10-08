@@ -138,8 +138,8 @@ def test_region_job(template_ds: xr.Dataset, store_factory: StoreFactory) -> Non
         reformat_job_name="test-job",
     )
 
-    primary_store = store_factory.primary_store()
-    replica_stores = store_factory.replica_stores()
+    primary_store = store_factory.primary_store(writable=True)
+    replica_stores = store_factory.replica_stores(writable=True)
 
     template_utils.write_metadata(job.template_ds, tmp_store)
     job.process(primary_store, replica_stores)

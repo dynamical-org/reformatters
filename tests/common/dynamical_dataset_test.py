@@ -478,6 +478,10 @@ def test_backfill_kubernetes_overwrite_existing_flag(
             ),
         ],
     )
+    # Open stores as writable so that they are created
+    # (this is only necessary for icechunk stores)
+    dataset.store_factory.primary_store(writable=True)
+    dataset.store_factory.replica_stores(writable=True)
 
     monkeypatch.setattr(xr, "open_zarr", Mock())
 
