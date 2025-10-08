@@ -304,29 +304,21 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
     def data_vars(self) -> Sequence[EcmwfIfsEnsDataVar]:
         """Define metadata and encoding for each data variable."""
         # Data variable chunking and sharding
-        #
-        # Aim for one of these roughly equivalent quantities:
-        # 1-2mb chunks compressed
-        # 4-8mb uncompressed
-        # 4-8 million float32 values
-        # TODO(lauren): check the math on these chunks & shards being reasonable. reference slack notes
+        # Roughly 5.5MB uncompressed, ~1.1MB compressed
         var_chunks: dict[Dim, int] = {
             "init_time": 1,
-            "lead_time": 85,
+            "lead_time": 85,  # All lead times
             "ensemble_member": 50,  # All ensemble members
-            "latitude": 144,  # ~721/5 for reasonable chunk size
-            "longitude": 144,  # ~1440/10 for reasonable chunk size
+            "latitude": 18,  # ~40 chunks over 721 pixels
+            "longitude": 18,  # 80 chunks over 1440 pixels
         }
-        # Aim for one of these roughly equivalent quantities:
-        # 64-256MB shards compressed
-        # 256-1024MB uncompressed
-        # 256 million to 1 billion float32 values
+        # Roughly 705MB uncompressed, ~141MB compressed
         var_shards: dict[Dim, int] = {
-            "init_time": 1,
-            "lead_time": 85 * 2,
-            "ensemble_member": 50,
-            "latitude": 144 * 5,
-            "longitude": 144 * 5,
+            "init_time": var_chunks["init_time"],
+            "lead_time": var_chunks["lead_time"],
+            "ensemble_member": var_chunks["ensemble_member"],
+            "latitude": var_chunks["latitude"] * 8,
+            "longitude": var_chunks["longitude"] * 16,
         }
 
         encoding_float32_default = Encoding(

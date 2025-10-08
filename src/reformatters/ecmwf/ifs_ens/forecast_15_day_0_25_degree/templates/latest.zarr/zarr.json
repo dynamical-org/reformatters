@@ -21,7 +21,7 @@
         "shape": [
           50
         ],
-        "data_type": "int32",
+        "data_type": "int16",
         "chunk_grid": {
           "name": "regular",
           "configuration": {
@@ -387,7 +387,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "precipitation_total": {
+      "precipitation_surface": {
         "shape": [
           1,
           85,
@@ -401,10 +401,10 @@
           "configuration": {
             "chunk_shape": [
               1,
-              122,
+              85,
               50,
-              720,
-              720
+              144,
+              288
             ]
           }
         },
@@ -421,10 +421,10 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                61,
+                85,
                 50,
-                144,
-                144
+                18,
+                18
               ],
               "codecs": [
                 {
@@ -462,9 +462,9 @@
         "attributes": {
           "long_name": "Total precipitation",
           "short_name": "tp",
-          "units": "m",
-          "comment": "Accumulated precipitation since forecast start time.",
-          "step_type": "accum",
+          "units": "mm/s",
+          "comment": "Average precipitation rate since the previous forecast step.",
+          "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -542,10 +542,10 @@
           "configuration": {
             "chunk_shape": [
               1,
-              122,
+              85,
               50,
-              720,
-              720
+              144,
+              288
             ]
           }
         },
@@ -562,10 +562,10 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                61,
+                85,
                 50,
-                144,
-                144
+                18,
+                18
               ],
               "codecs": [
                 {
@@ -663,7 +663,7 @@
         "attributes": {
           "statistics_approximate": {
             "min": "2024-02-01T00:00:00",
-            "max": "Present + 15 days"
+            "max": "Present"
           },
           "units": "seconds since 1970-01-01",
           "calendar": "proleptic_gregorian"
@@ -690,10 +690,10 @@
           "configuration": {
             "chunk_shape": [
               1,
-              122,
+              85,
               50,
-              720,
-              720
+              144,
+              288
             ]
           }
         },
@@ -710,10 +710,10 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                61,
+                85,
                 50,
-                144,
-                144
+                18,
+                18
               ],
               "codecs": [
                 {
@@ -782,10 +782,10 @@
           "configuration": {
             "chunk_shape": [
               1,
-              122,
+              85,
               50,
-              720,
-              720
+              144,
+              288
             ]
           }
         },
@@ -802,10 +802,10 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                61,
+                85,
                 50,
-                144,
-                144
+                18,
+                18
               ],
               "codecs": [
                 {
