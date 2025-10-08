@@ -1,4 +1,4 @@
-from unittest.mock import Mock
+from pathlib import Path
 
 import pandas as pd
 
@@ -25,14 +25,14 @@ def test_source_file_coord_out_loc() -> None:
     assert coord.out_loc() == {"time": pd.Timestamp("2025-09-30")}
 
 
-def test_region_job_generate_source_file_coords() -> None:
+def test_region_job_generate_source_file_coords(tmp_path: Path) -> None:
     template_config = NasaSmapLevel336KmV9TemplateConfig()
     template_ds = template_config.get_template(pd.Timestamp("2000-01-23"))
 
     region_job = NasaSmapLevel336KmV9RegionJob(
-        tmp_store=Mock(),
+        tmp_store=tmp_path,
         template_ds=template_ds,
-        data_vars=[Mock(), Mock()],
+        data_vars=template_config.data_vars[:2],
         append_dim=template_config.append_dim,
         region=slice(0, 10),
         reformat_job_name="test",
@@ -41,7 +41,7 @@ def test_region_job_generate_source_file_coords() -> None:
     processing_region_ds, _output_region_ds = region_job._get_region_datasets()
 
     source_file_coords = region_job.generate_source_file_coords(
-        processing_region_ds, [Mock()]
+        processing_region_ds, template_config.data_vars[:1]
     )
 
     assert len(source_file_coords) == len(processing_region_ds["time"])
