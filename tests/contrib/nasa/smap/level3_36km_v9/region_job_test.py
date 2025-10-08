@@ -263,3 +263,39 @@ def test_read_data_requires_downloaded_path(tmp_path: Path) -> None:
 
     with pytest.raises(AssertionError, match="File must be downloaded first"):
         region_job.read_data(coord, am_var)
+
+
+def test_operational_update_jobs(tmp_path: Path) -> None:
+    """Test that operational_update_jobs creates correct jobs for updating dataset."""
+    template_config = NasaSmapLevel336KmV9TemplateConfig()
+    
+    # Create a mock existing dataset with data up to 2025-09-28
+    existing_end = pd.Timestamp("2025-09-28")
+    existing_ds = template_config.get_template(existing_end)
+    
+    # Mock the primary store to return our existing dataset
+    mock_store = Mock()
+    
+    with patch("xarray.open_zarr", return_value=existing_ds):
+        with patch("pandas.Timestamp.now", return_value=pd.Timestamp("2025-09-30")):
+            jobs, template_ds = NasaSmapLevel336KmV9RegionJob.operational_update_jobs(
+                primary_store=mock_store,
+                tmp_store=tmp_path,
+                get_template_fn=template_config.get_template,
+                append_dim=template_config.append_dim,
+                all_data_vars=template_config.data_vars,
+                reformat_job_name="test-update",
+            )
+    
+    # Should create jobs for the new time steps (2025-09-29 and 2025-09-30)
+    assert len(jobs) > 0
+    
+    # Template should extend to current time
+    assert template_ds["time"].max() >= pd.Timestamp("2025-09-30")
+    
+    # Verify jobs have correct configuration
+    for job in jobs:
+        assert job.tmp_store == tmp_store
+        assert job.append_dim == template_config.append_dim
+        assert job.reformat_job_name == "test-update"
+        assert len(job.data_vars) > 0
