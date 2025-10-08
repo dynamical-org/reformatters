@@ -59,7 +59,7 @@ class NasaSmapLevel336KmV9RegionJob(
 
     def download_file(self, coord: NasaSmapLevel336KmV9SourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
-        return http_download_to_disk(coord.get_url(), self.dataset_id)
+        raise NotImplementedError()
 
     def read_data(
         self,
@@ -67,7 +67,7 @@ class NasaSmapLevel336KmV9RegionJob(
         data_var: NasaSmapDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
-        # Use rasterio to read hf5
+        # Use rasterio to read coord.downloaded_path
         raise NotImplementedError()
 
     @classmethod
