@@ -16,7 +16,7 @@ _thread_local = threading.local()
 def get_authenticated_session() -> requests.Session:
     """
     Get an authenticated requests.Session for NASA Earthdata.
-    
+
     Cached per thread. Credentials are loaded from the nasa-earthdata secret.
     """
     if not hasattr(_thread_local, "session"):
