@@ -64,8 +64,8 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     # # @classmethod
     # def source_groups(
     #     cls,
-    #     data_vars: Sequence[EcmwfIfsEnsDataVar],
-    # ) -> Sequence[Sequence[EcmwfIfsEnsDataVar]]:
+    #     data_vars: Sequence[ExampleDataVar],
+    # ) -> Sequence[Sequence[ExampleDataVar]]:
     #     """
     #     Return groups of variables, where all variables in a group can be retrieived from the same source file.
     #     """
@@ -123,17 +123,16 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
         # with rasterio.open(coord.downloaded_file_path) as reader:
-        #     TODO: make a band index based on tag matching utility function
         #     matching_indexes = [
         #         i
         #         for i in range(reader.count)
-        #         if (tags := reader.tags(i))["GRIB_ELEMENT"]
+        #         if (tags := reader.tags(i + 1))["GRIB_ELEMENT"]
         #         == data_var.internal_attrs.grib_element
         #         and tags["GRIB_COMMENT"] == data_var.internal_attrs.grib_comment
         #     ]
         #     assert len(matching_indexes) == 1, f"Expected exactly 1 matching band, found {matching_indexes}. {data_var.internal_attrs.grib_element=}, {data_var.internal_attrs.grib_description=}, {coord.downloaded_file_path=}"
         #     rasterio_band_index = 1 + matching_indexes[0]  # rasterio is 1-indexed
-        #     return reader.read(rasterio_band_index, dtype=np.float32)
+        #     return reader.read(rasterio_band_index, out_dtype=np.float32)
         raise NotImplementedError(
             "Read and return data for the given variable and source file coordinate."
         )
