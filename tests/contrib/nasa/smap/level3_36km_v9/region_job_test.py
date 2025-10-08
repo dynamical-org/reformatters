@@ -7,6 +7,7 @@ import pytest
 import rasterio  # type: ignore[import-untyped]
 from rasterio.transform import from_bounds  # type: ignore[import-untyped]
 
+from reformatters.common.types import ArrayFloat32
 from reformatters.contrib.nasa.smap.level3_36km_v9.region_job import (
     NasaSmapLevel336KmV9RegionJob,
     NasaSmapLevel336KmV9SourceFileCoord,
@@ -219,7 +220,7 @@ def test_read_data_am(tmp_path: Path) -> None:
         mock_dataset = Mock()
 
         # Mock needs to handle the call with out_dtype parameter
-        def mock_read(band, out_dtype=None):
+        def mock_read(band: int, out_dtype: type | None = None) -> ArrayFloat32:
             return expected_data
 
         mock_dataset.read = mock_read
@@ -280,7 +281,7 @@ def test_read_data_pm(tmp_path: Path) -> None:
         mock_dataset = Mock()
 
         # Mock needs to handle the call with out_dtype parameter
-        def mock_read(band, out_dtype=None):
+        def mock_read(band: int, out_dtype: type | None = None) -> ArrayFloat32:
             return expected_data
 
         mock_dataset.read = mock_read
