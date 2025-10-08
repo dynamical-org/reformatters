@@ -33,6 +33,9 @@ class EcmwfIfsEnsInternalAttrs(BaseInternalAttrs):
     Not written to the dataset.
     """
 
+    window_reset_frequency: Timedelta | None = (
+        None  # for resetting deaccumulation windows
+    )
     # TODO(lauren): skipping this for now, will come back and add when developing processing for real
     # grib_band_index: int
     # grib_element_name: str
@@ -89,7 +92,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     pd.timedelta_range("150h", "361h", freq="6h")
                 )
             ),
-            "ensemble_member": np.arange(1, 51),
+            "ensemble_member": np.arange(
+                0, 51
+            ),  # single control member (0) + 50 perturbed members (1-50)
             "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
             "longitude": np.arange(-180, 180, 0.25),
         }
@@ -304,21 +309,21 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
     def data_vars(self) -> Sequence[EcmwfIfsEnsDataVar]:
         """Define metadata and encoding for each data variable."""
         # Data variable chunking and sharding
-        # Roughly 5.5MB uncompressed, ~1.1MB compressed
+        # Roughly ~17.5MB uncompressed, ~3.5MB compressed
         var_chunks: dict[Dim, int] = {
             "init_time": 1,
             "lead_time": 85,  # All lead times
-            "ensemble_member": 50,  # All ensemble members
-            "latitude": 18,  # ~40 chunks over 721 pixels
-            "longitude": 18,  # 80 chunks over 1440 pixels
+            "ensemble_member": 51,  # All ensemble members
+            "latitude": 32,  # 23 chunks over 721 pixels
+            "longitude": 32,  # 45 chunks over 1440 pixels
         }
-        # Roughly 705MB uncompressed, ~141MB compressed
+        # Roughly ~568MB uncompressed, ~113MB compressed
         var_shards: dict[Dim, int] = {
             "init_time": var_chunks["init_time"],
             "lead_time": var_chunks["lead_time"],
             "ensemble_member": var_chunks["ensemble_member"],
-            "latitude": var_chunks["latitude"] * 8,
-            "longitude": var_chunks["longitude"] * 16,
+            "latitude": var_chunks["latitude"] * 4,
+            "longitude": var_chunks["longitude"] * 8,
         }
 
         encoding_float32_default = Encoding(
@@ -330,6 +335,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
         )
 
         default_keep_mantissa_bits = 7
+        default_window_reset_frequency = pd.Timedelta("6h")
 
         return [
             EcmwfIfsEnsDataVar(
@@ -387,6 +393,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                 internal_attrs=EcmwfIfsEnsInternalAttrs(
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     deaccumulate_to_rate=True,
+                    window_reset_frequency=default_window_reset_frequency,
                 ),
             ),
         ]

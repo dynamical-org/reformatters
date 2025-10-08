@@ -67,6 +67,7 @@ def test_dimension_coordinates_shapes_and_values() -> None:
     )  # should not be included -- would be 3-hourly during the 6-hourly domain
     assert pd.Timedelta("150h") in lt  # first 6-hourly timestep
     assert pd.Timedelta("360h") == lt[-1]
+    assert len(lt) == 85  # should match chunk sizes in data_vars encoding
 
     # latitude: from +90 to -90, 0.25° steps
     lat = dim_coords["latitude"]
@@ -82,7 +83,7 @@ def test_dimension_coordinates_shapes_and_values() -> None:
     assert lon[-1] == 179.75
     assert len(lon) == 1440
 
-    # ensemble_member: contains 1-50 (1 control + 49 perturbed)
+    # ensemble_member: contains 0-50 (1 control + 50 perturbed)
     em = dim_coords["ensemble_member"]
     assert isinstance(em, np.ndarray)
-    assert all(em == np.arange(1, 51))
+    assert all(em == np.arange(0, 51))

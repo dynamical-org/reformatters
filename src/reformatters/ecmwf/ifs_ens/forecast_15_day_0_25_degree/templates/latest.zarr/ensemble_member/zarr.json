@@ -1,13 +1,13 @@
 {
   "shape": [
-    50
+    51
   ],
   "data_type": "int16",
   "chunk_grid": {
     "name": "regular",
     "configuration": {
       "chunk_shape": [
-        50
+        51
       ]
     }
   },
@@ -39,7 +39,7 @@
   "attributes": {
     "units": "realization",
     "statistics_approximate": {
-      "min": 1,
+      "min": 0,
       "max": 50
     }
   },
