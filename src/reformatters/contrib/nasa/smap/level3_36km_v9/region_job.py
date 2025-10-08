@@ -11,6 +11,7 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
 )
+from reformatters.common.retry import retry
 from reformatters.common.types import (
     AppendDim,
     ArrayFloat32,
@@ -25,8 +26,6 @@ from .template_config import NasaSmapDataVar
 log = get_logger(__name__)
 
 _DOWNLOAD_TIMEOUT_SECONDS = 300
-_DOWNLOAD_MAX_RETRIES = 10
-
 _SOURCE_FILL_VALUE = -9999.0
 
 
@@ -75,33 +74,19 @@ class NasaSmapLevel336KmV9RegionJob(
 
         local_path.parent.mkdir(parents=True, exist_ok=True)
 
-        session = get_authenticated_session()
+        def _download() -> Path:
+            session = get_authenticated_session()
+            log.info(f"Downloading {url}")
+            response = session.get(url, timeout=_DOWNLOAD_TIMEOUT_SECONDS, stream=True)
+            response.raise_for_status()
 
-        for attempt in range(1, _DOWNLOAD_MAX_RETRIES + 1):
-            try:
-                log.info(
-                    f"Downloading {url} (attempt {attempt}/{_DOWNLOAD_MAX_RETRIES})"
-                )
-                response = session.get(
-                    url, timeout=_DOWNLOAD_TIMEOUT_SECONDS, stream=True
-                )
-                response.raise_for_status()
+            with open(local_path, "wb") as f:
+                f.writelines(response.iter_content(chunk_size=8192))
 
-                with open(local_path, "wb") as f:
-                    f.writelines(response.iter_content(chunk_size=8192))
+            log.info(f"Successfully downloaded to {local_path}")
+            return local_path
 
-                log.info(f"Successfully downloaded to {local_path}")
-                return local_path
-
-            except Exception as e:
-                if attempt == _DOWNLOAD_MAX_RETRIES:
-                    log.error(
-                        f"Failed to download {url} after {_DOWNLOAD_MAX_RETRIES} attempts"
-                    )
-                    raise
-                log.warning(f"Download attempt {attempt} failed: {e}, retrying...")
-
-        raise RuntimeError(f"Failed to download {url}")
+        return retry(_download, max_attempts=10)
 
     def read_data(
         self,
