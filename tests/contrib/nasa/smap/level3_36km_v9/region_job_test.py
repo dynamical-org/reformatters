@@ -214,7 +214,7 @@ def test_read_data_am(tmp_path: Path) -> None:
         # Read the actual data from the test file
         with rasterio.open(am_path) as src:
             expected_data = src.read(1).astype(np.float32)
-        
+
         # Create mock rasterio dataset that returns the actual data
         mock_dataset = Mock()
         mock_dataset.read.return_value = expected_data
@@ -270,7 +270,7 @@ def test_read_data_pm(tmp_path: Path) -> None:
         # Read the actual data from the test file
         with rasterio.open(pm_path) as src:
             expected_data = src.read(1).astype(np.float32)
-        
+
         # Create mock rasterio dataset that returns the actual data
         mock_dataset = Mock()
         mock_dataset.read.return_value = expected_data
