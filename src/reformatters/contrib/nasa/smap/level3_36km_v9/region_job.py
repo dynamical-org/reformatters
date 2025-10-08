@@ -95,7 +95,9 @@ class NasaSmapLevel336KmV9RegionJob(
         assert coord.downloaded_path is not None, "File must be downloaded first"
 
         # HDF5 subdataset path for rasterio
-        subdataset_path = f"HDF5:{coord.downloaded_path}:{data_var.internal_attrs.h5_path}"
+        subdataset_path = (
+            f"HDF5:{coord.downloaded_path}:{data_var.internal_attrs.h5_path}"
+        )
 
         with rasterio.open(subdataset_path) as src:
             data = src.read(1).astype(np.float32)
