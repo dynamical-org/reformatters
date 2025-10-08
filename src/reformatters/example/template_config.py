@@ -257,9 +257,11 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         # # Data variable chunking and sharding
         # #
         # # Aim for one of these roughly equivalent quantities:
-        # # 1-2mb chunks compressed
-        # # 4-8mb uncompressed
-        # # 4-8 million float32 values
+        # # 1.5-4MB chunks compressed (assume compression to 20% of original size)
+        # # 8-20MB uncompressed
+        # # 2-5 million float32 values
+        #
+        # # XXMB uncompressed, XXMB compressed
         # var_chunks: dict[Dim, int] = {
         #     "init_time": 1,
         #     "lead_time": 105,
@@ -267,9 +269,10 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #     "longitude": 121,
         # }
         # # Aim for one of these roughly equivalent quantities:
-        # # 64-256MB shards compressed
-        # # 256-1024MB uncompressed
-        # # 256 million to 1 billion float32 values
+        # # 64-512MB shards compressed (assume compression to 20% of original size)
+        # # 320MB-2.5GB uncompressed
+        #
+        # # XXMB uncompressed, XXMB compressed
         # var_shards: dict[Dim, int] = {
         #     "init_time": 1,
         #     "lead_time": 105 * 2,
