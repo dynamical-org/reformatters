@@ -15,7 +15,7 @@ log = get_logger(__name__)
 def get_authenticated_session() -> requests.Session:
     """
     Get an authenticated requests.Session for NASA Earthdata.
-    
+
     Cached per thread/process. Credentials are loaded from the nasa-earthdata secret.
     """
     return retry(_create_authenticated_session)
@@ -26,10 +26,10 @@ def _create_authenticated_session() -> requests.Session:
     credentials = load_secret("nasa-earthdata")
     username = credentials["username"]
     password = credentials["password"]
-    
+
     session = requests.Session()
     session.auth = (username, password)
-    
+
     # Configure retries for the session
     retry_strategy = Retry(
         total=5,
@@ -39,7 +39,7 @@ def _create_authenticated_session() -> requests.Session:
     adapter = HTTPAdapter(max_retries=retry_strategy)
     session.mount("https://", adapter)
     session.mount("http://", adapter)
-    
+
     # Trigger authentication by making a request to URS
     # This will follow redirects and establish the authenticated session
     auth_url = "https://urs.earthdata.nasa.gov/oauth/authorize"
@@ -54,6 +54,6 @@ def _create_authenticated_session() -> requests.Session:
         timeout=30,
     )
     response.raise_for_status()
-    
+
     log.info("Successfully authenticated with NASA Earthdata")
     return session
