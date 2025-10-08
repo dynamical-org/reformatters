@@ -10,7 +10,12 @@ from reformatters.common.retry import retry
 
 log = get_logger(__name__)
 
-_thread_local = threading.local()
+
+class _ThreadLocalStorage(threading.local):
+    session: requests.Session
+
+
+_thread_local = _ThreadLocalStorage()
 
 
 def get_authenticated_session() -> requests.Session:
