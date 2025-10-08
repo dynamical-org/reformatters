@@ -68,34 +68,39 @@ class NasaSmapLevel336KmV9RegionJob(
             dataset_id="nasa-smap-level3-36km-v9",
             path=url,
         )
-        
+
         if local_path.exists():
             log.info(f"File already exists at {local_path}")
             return local_path
-        
+
         local_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         session = get_authenticated_session()
-        
+
         for attempt in range(1, _DOWNLOAD_MAX_RETRIES + 1):
             try:
-                log.info(f"Downloading {url} (attempt {attempt}/{_DOWNLOAD_MAX_RETRIES})")
-                response = session.get(url, timeout=_DOWNLOAD_TIMEOUT_SECONDS, stream=True)
+                log.info(
+                    f"Downloading {url} (attempt {attempt}/{_DOWNLOAD_MAX_RETRIES})"
+                )
+                response = session.get(
+                    url, timeout=_DOWNLOAD_TIMEOUT_SECONDS, stream=True
+                )
                 response.raise_for_status()
-                
+
                 with open(local_path, "wb") as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        f.write(chunk)
-                
+                    f.writelines(response.iter_content(chunk_size=8192))
+
                 log.info(f"Successfully downloaded to {local_path}")
                 return local_path
-                
+
             except Exception as e:
                 if attempt == _DOWNLOAD_MAX_RETRIES:
-                    log.error(f"Failed to download {url} after {_DOWNLOAD_MAX_RETRIES} attempts")
+                    log.error(
+                        f"Failed to download {url} after {_DOWNLOAD_MAX_RETRIES} attempts"
+                    )
                     raise
                 log.warning(f"Download attempt {attempt} failed: {e}, retrying...")
-                
+
         raise RuntimeError(f"Failed to download {url}")
 
     def read_data(
