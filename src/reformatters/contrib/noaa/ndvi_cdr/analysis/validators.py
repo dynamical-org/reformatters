@@ -41,8 +41,8 @@ def check_latest_ndvi_usable_nan_percentage(
     # 95% of the data is NaN
     # We have seen NaN percentages as low as ~93.5%, which means that ~6.5% of the data
     # can be expected to plausibly have a value. We have seen this percentage go over our original threshold of 94% in the past,
-    # so 95% is set so that we are alerted if roughly 25% of this subset of plausibly non-NaN data is NaN.
-    threshold = 0.95
+    # so 96% is set so that we are alerted if roughly 40% of this subset of plausibly non-NaN data is NaN.
+    threshold = 0.96
     ndvi_usable = ds.isel(time=-1).ndvi_usable
 
     if (percentage_nan := ndvi_usable.isnull().sum() / ndvi_usable.size) >= threshold:
