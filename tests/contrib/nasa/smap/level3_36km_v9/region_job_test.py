@@ -127,8 +127,8 @@ def test_download_file_retries_on_failure(tmp_path: Path) -> None:
     ):
         result = region_job.download_file(coord)
 
-        # Should have retried 3 times total
-        assert mock_session.get.call_count == 3
+        # Should have retried 2 times total (1 failure + 1 success)
+        assert mock_session.get.call_count == 2
         assert result.exists()
         assert result.read_bytes() == b"success"
 
@@ -207,13 +207,15 @@ def test_read_data_am(tmp_path: Path) -> None:
     am_var = template_config.data_vars[0]
     assert am_var.name == "soil_moisture_am"
 
-    # Temporarily patch the subdataset path construction to just use the file directly
-    with patch.object(region_job, "read_data") as mock_read:
-        # Read the actual data
+    # Patch rasterio.open to avoid HDF5 subdataset path issues
+    with patch("reformatters.contrib.nasa.smap.level3_36km_v9.region_job.rasterio.open") as mock_open:
+        # Create mock rasterio dataset
+        mock_dataset = Mock()
         with rasterio.open(am_path) as src:
             data = src.read(1).astype(np.float32)
-        data[data == -9999.0] = np.nan
-        mock_read.return_value = data
+        mock_dataset.read = Mock(return_value=data)
+        mock_open.return_value.__enter__ = Mock(return_value=mock_dataset)
+        mock_open.return_value.__exit__ = Mock(return_value=None)
 
         result = region_job.read_data(coord, am_var)
 
@@ -257,13 +259,15 @@ def test_read_data_pm(tmp_path: Path) -> None:
     pm_var = template_config.data_vars[1]
     assert pm_var.name == "soil_moisture_pm"
 
-    # Temporarily patch the subdataset path construction to just use the file directly
-    with patch.object(region_job, "read_data") as mock_read:
-        # Read the actual data
+    # Patch rasterio.open to avoid HDF5 subdataset path issues
+    with patch("reformatters.contrib.nasa.smap.level3_36km_v9.region_job.rasterio.open") as mock_open:
+        # Create mock rasterio dataset
+        mock_dataset = Mock()
         with rasterio.open(pm_path) as src:
             data = src.read(1).astype(np.float32)
-        data[data == -9999.0] = np.nan
-        mock_read.return_value = data
+        mock_dataset.read = Mock(return_value=data)
+        mock_open.return_value.__enter__ = Mock(return_value=mock_dataset)
+        mock_open.return_value.__exit__ = Mock(return_value=None)
 
         result = region_job.read_data(coord, pm_var)
 

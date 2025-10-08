@@ -92,7 +92,7 @@ class NasaSmapLevel336KmV9RegionJob(
         data_var: NasaSmapDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
-        assert coord.downloaded_path is not None  # for type checker
+        assert coord.downloaded_path is not None, "File must be downloaded first"
 
         subdataset_path = (
             f"HDF5:{coord.downloaded_path}:{data_var.internal_attrs.h5_path}"
