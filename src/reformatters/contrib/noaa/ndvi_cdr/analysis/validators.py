@@ -37,7 +37,12 @@ def check_latest_ndvi_usable_nan_percentage(
     # NaNed out. For `ndvi_usable`, we will generally read this this data using a rolling
     # 16 day max, so individual days with high nan percentages, due to e.g., cloud cover, will
     # be smoothed out.
-    threshold = 0.94  # 94% of the data is NaN
+    #
+    # 95% of the data is NaN
+    # We have seen NaN percentages as low as ~93.5%, which means that ~6.5% of the data
+    # can be expected to plausibly have a value. We have seen this percentage go over our original threshold of 94% in the past,
+    # so 95% is set so that we are alerted if roughly 25% of this subset of plausibly non-NaN data is NaN.
+    threshold = 0.95
     ndvi_usable = ds.isel(time=-1).ndvi_usable
 
     if (percentage_nan := ndvi_usable.isnull().sum() / ndvi_usable.size) >= threshold:
