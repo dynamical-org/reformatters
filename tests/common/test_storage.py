@@ -153,8 +153,8 @@ def test_store_factory_returns_correct_store_types(
 
     # Set store as writable here just so we can create it and then open it.
     assert isinstance(factory.primary_store(writable=True), zarr.storage.LocalStore)
+    replicas = factory.replica_stores(writable=True)
 
-    replicas = factory.replica_stores()
     assert len(replicas) == 2
     assert isinstance(replicas[0], icechunk.store.IcechunkStore)
     assert isinstance(replicas[1], zarr.storage.LocalStore)
