@@ -9,7 +9,6 @@ from typing import Annotated, Any, Generic, Literal, TypeVar
 
 import numpy as np
 import pandas as pd
-import pydantic
 import sentry_sdk
 import typer
 import xarray as xr
@@ -46,8 +45,6 @@ log = get_logger(__name__)
 
 class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     """Top level class managing a dataset configuration and processing."""
-
-    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
     template_config: TemplateConfig[DATA_VAR]
     region_job_class: type[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
