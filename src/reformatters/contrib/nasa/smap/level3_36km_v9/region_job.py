@@ -1,5 +1,6 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from urllib.parse import urlparse
 
 import xarray as xr
 import zarr
@@ -63,15 +64,10 @@ class NasaSmapLevel336KmV9RegionJob(
     def download_file(self, coord: NasaSmapLevel336KmV9SourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
         url = coord.get_url()
+        relative_path = urlparse(url).path
         local_path = get_local_path(
-            dataset_id="nasa-smap-level3-36km-v9",
-            path=url,
+            self.template_ds.attrs["dataset_id"], path=relative_path
         )
-
-        if local_path.exists():
-            log.info(f"File already exists at {local_path}")
-            return local_path
-
         local_path.parent.mkdir(parents=True, exist_ok=True)
 
         def _download() -> Path:

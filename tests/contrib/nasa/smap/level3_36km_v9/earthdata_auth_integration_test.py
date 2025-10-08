@@ -22,7 +22,7 @@ def test_earthdata_authentication_with_real_credentials(
     3. Run: uv run pytest tests/contrib/nasa/smap/level3_36km_v9/earthdata_auth_integration_test.py
     """
     # Monkeypatch to prod environment so load_secret() fetches real credentials
-    monkeypatch.setattr(Config, "env", Env.PROD)
+    monkeypatch.setattr(Config, "env", Env.prod)
 
     # Get authenticated session
     session = get_authenticated_session()
