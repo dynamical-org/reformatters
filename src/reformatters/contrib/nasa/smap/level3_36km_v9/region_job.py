@@ -99,7 +99,6 @@ class NasaSmapLevel336KmV9RegionJob(
         )
 
         with rasterio.open(subdataset_path) as reader:
-            breakpoint()
             data: ArrayFloat32 = reader.read(1, out_dtype=np.float32)
 
         data[data == _SOURCE_FILL_VALUE] = np.nan
