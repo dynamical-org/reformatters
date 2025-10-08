@@ -49,20 +49,5 @@ def _create_authenticated_session() -> requests.Session:
     session.mount("https://", adapter)
     session.mount("http://", adapter)
 
-    # Trigger authentication by making a request to URS
-    # This will follow redirects and establish the authenticated session
-    auth_url = "https://urs.earthdata.nasa.gov/oauth/authorize"
-    response = session.get(
-        auth_url,
-        params={
-            "client_id": "earthdata",
-            "response_type": "code",
-            "redirect_uri": "https://data.nsidc.earthdatacloud.nasa.gov/",
-        },
-        allow_redirects=True,
-        timeout=30,
-    )
-    response.raise_for_status()
-
-    log.info("Successfully authenticated with NASA Earthdata")
+    log.info("Created authenticated session for NASA Earthdata")
     return session
