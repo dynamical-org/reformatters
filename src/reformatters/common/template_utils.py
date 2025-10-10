@@ -27,10 +27,10 @@ def write_metadata(
     replica_stores: list[zarr.abc.store.Store]
 
     if isinstance(storage, StoreFactory):
-        store = storage.primary_store()
+        store = storage.primary_store(writable=True)
         assert mode is None, "mode should not be provided if StoreFactory is provided"
         mode = storage.mode()
-        replica_stores = storage.replica_stores()
+        replica_stores = storage.replica_stores(writable=True)
     else:
         assert isinstance(storage, zarr.abc.store.Store) or isinstance(storage, Path)
         store = storage

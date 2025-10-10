@@ -148,8 +148,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
                 # New stores to ensure that, if any are Icechunk stores, we have
                 # an uncomitted Icechunk session for each job.
-                primary_store = self.store_factory.primary_store()
-                replica_stores = self.store_factory.replica_stores()
+                primary_store = self.store_factory.primary_store(writable=True)
+                replica_stores = self.store_factory.replica_stores(writable=True)
 
                 # This will expand the tmp store dimensions. We do this for each job
                 # because the tmp store will also be potentially trimmed when we
@@ -377,8 +377,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         for region_job in region_jobs:
             # New stores to ensure that, if any are Icechunk stores, we have
             # an uncomitted Icechunk session for each job.
-            primary_store = self.store_factory.primary_store()
-            replica_stores = self.store_factory.replica_stores()
+            primary_store = self.store_factory.primary_store(writable=True)
+            replica_stores = self.store_factory.replica_stores(writable=True)
 
             template_utils.write_metadata(region_job.template_ds, region_job.tmp_store)
 

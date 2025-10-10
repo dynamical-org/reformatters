@@ -86,16 +86,16 @@ class StoreFactory(FrozenBaseModel):
             *[config.k8s_secret_name for config in self.replica_storage_configs],
         ]
 
-    def primary_store(self) -> zarr.abc.store.Store:
+    def primary_store(self, writable: bool = False) -> zarr.abc.store.Store:
         store_path = _get_store_path(
             self.dataset_id,
             self.version,
             self.primary_storage_config,
         )
 
-        return _get_store(store_path, self.primary_storage_config)
+        return _get_store(store_path, self.primary_storage_config, writable)
 
-    def replica_stores(self) -> list[zarr.abc.store.Store]:
+    def replica_stores(self, writable: bool = False) -> list[zarr.abc.store.Store]:
         # Disable replica stores in dev environment
         if Config.is_dev:
             return []
@@ -103,7 +103,7 @@ class StoreFactory(FrozenBaseModel):
         stores = []
         for config in self.replica_storage_configs:
             store_path = _get_store_path(self.dataset_id, self.version, config)
-            store = _get_store(store_path, config)
+            store = _get_store(store_path, config, writable)
             stores.append(store)
 
         return stores
@@ -166,31 +166,35 @@ def _get_store_path(
     return f"{base_path}/{dataset_id}/v{version}.{extension}"
 
 
-def _get_store(store_path: str, storage_config: StorageConfig) -> zarr.abc.store.Store:
+def _get_store(
+    store_path: str, storage_config: StorageConfig, writable: bool
+) -> zarr.abc.store.Store:
     match storage_config.format:
         case DatasetFormat.ICECHUNK:
             assert store_path.endswith(".icechunk")
-            return _get_icechunk_store(store_path, storage_config)
+            return _get_icechunk_store(store_path, storage_config, writable)
         case DatasetFormat.ZARR3:
             assert store_path.endswith(".zarr")
-            return _get_zarr3_store(store_path, storage_config)
+            return _get_zarr3_store(store_path, storage_config, writable)
         case _ as unreachable:
             assert_never(unreachable)
 
 
 def _get_zarr3_store(
-    store_path: str, storage_config: StorageConfig
+    store_path: str, storage_config: StorageConfig, writable: bool
 ) -> zarr.abc.store.Store:
     if Config.is_prod:
         return zarr.storage.FsspecStore.from_url(
             store_path, storage_options=storage_config.load_storage_options()
-        )
+        ).with_read_only(not writable)
     else:
-        return zarr.storage.LocalStore(Path(store_path).absolute())
+        return zarr.storage.LocalStore(Path(store_path).absolute()).with_read_only(
+            not writable
+        )
 
 
 def _get_icechunk_store(
-    store_path: str, storage_config: StorageConfig
+    store_path: str, storage_config: StorageConfig, writable: bool
 ) -> IcechunkStore:
     if Config.is_prod:
         parsed_path = urlparse(store_path)
@@ -216,9 +220,16 @@ def _get_icechunk_store(
     else:
         storage = icechunk.local_filesystem_storage(store_path)
 
-    repo = icechunk.Repository.open_or_create(storage)
-    session = repo.writable_session("main")
-    return session.store
+    if writable:
+        log.info(f"Opening icechunk store {store_path} in writable mode")
+        repo = icechunk.Repository.open_or_create(storage)
+        session = repo.writable_session("main")
+        return session.store
+    else:
+        log.info(f"Opening icechunk store {store_path} in readonly mode")
+        repo = icechunk.Repository.open(storage)
+        session = repo.readonly_session("main")
+        return session.store
 
 
 def commit_if_icechunk(
