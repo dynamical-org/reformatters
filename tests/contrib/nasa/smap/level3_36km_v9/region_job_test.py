@@ -253,19 +253,18 @@ def test_operational_update_jobs(tmp_path: Path) -> None:
     # Mock the primary store to return our existing dataset
     mock_store = Mock()
 
-    # combined these two patches to avoid nesting AI!
-    with patch("xarray.open_zarr", return_value=existing_ds):
-        with patch(
-            "pandas.Timestamp.now", return_value=pd.Timestamp("2025-09-30T00:01")
-        ):
-            jobs, template_ds = NasaSmapLevel336KmV9RegionJob.operational_update_jobs(
-                primary_store=mock_store,
-                tmp_store=tmp_path,
-                get_template_fn=template_config.get_template,
-                append_dim=template_config.append_dim,
-                all_data_vars=template_config.data_vars,
-                reformat_job_name="test-update",
-            )
+    with (
+        patch("xarray.open_zarr", return_value=existing_ds),
+        patch("pandas.Timestamp.now", return_value=pd.Timestamp("2025-09-30T00:01")),
+    ):
+        jobs, template_ds = NasaSmapLevel336KmV9RegionJob.operational_update_jobs(
+            primary_store=mock_store,
+            tmp_store=tmp_path,
+            get_template_fn=template_config.get_template,
+            append_dim=template_config.append_dim,
+            all_data_vars=template_config.data_vars,
+            reformat_job_name="test-update",
+        )
 
     # Should create jobs for the new time steps (2025-09-29 and 2025-09-30)
     assert len(jobs) == 1
