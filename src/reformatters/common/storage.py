@@ -93,7 +93,7 @@ class StoreFactory(FrozenBaseModel):
             self.primary_storage_config,
         )
 
-        return _get_store(store_path, self.primary_storage_config, writable=writable)
+        return _get_store(store_path, self.primary_storage_config, writable)
 
     def replica_stores(self, writable: bool = False) -> list[zarr.abc.store.Store]:
         # Disable replica stores in dev environment
@@ -103,7 +103,7 @@ class StoreFactory(FrozenBaseModel):
         stores = []
         for config in self.replica_storage_configs:
             store_path = _get_store_path(self.dataset_id, self.version, config)
-            store = _get_store(store_path, config, writable=writable)
+            store = _get_store(store_path, config, writable)
             stores.append(store)
 
         return stores
@@ -220,16 +220,16 @@ def _get_icechunk_store(
     else:
         storage = icechunk.local_filesystem_storage(store_path)
 
-    if not writable:
+    if writable:
+        log.info(f"Opening icechunk store {store_path} in writable mode")
+        repo = icechunk.Repository.open_or_create(storage)
+        session = repo.writable_session("main")
+        return session.store
+    else:
         log.info(f"Opening icechunk store {store_path} in readonly mode")
         repo = icechunk.Repository.open(storage)
         session = repo.readonly_session("main")
         return session.store
-
-    log.info(f"Opening icechunk store {store_path} in writable mode")
-    repo = icechunk.Repository.open_or_create(storage)
-    session = repo.writable_session("main")
-    return session.store
 
 
 def commit_if_icechunk(

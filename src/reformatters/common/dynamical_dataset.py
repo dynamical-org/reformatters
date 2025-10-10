@@ -27,11 +27,7 @@ from reformatters.common.kubernetes import (
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.region_job import RegionJob, SourceFileCoord
-from reformatters.common.storage import (
-    StorageConfig,
-    StoreFactory,
-    get_local_tmp_store,
-)
+from reformatters.common.storage import StorageConfig, StoreFactory, get_local_tmp_store
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike
 from reformatters.common.update_progress_tracker import UpdateProgressTracker
