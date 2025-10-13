@@ -36,7 +36,6 @@ def _create_authenticated_session() -> requests.Session:
     password = credentials["password"]
 
     session = requests.Session()
-    session.auth = (username, password)
 
     # Configure retries for the session
     retry_strategy = Retry(
@@ -48,6 +47,12 @@ def _create_authenticated_session() -> requests.Session:
     adapter = HTTPAdapter(max_retries=retry_strategy)
     session.mount("https://", adapter)
     session.mount("http://", adapter)
+
+    # find or create token:
+
+    token = ...
+
+    session.headers["Authorization"] = f"Bearer {token}"
 
     log.info("Created authenticated session for NASA Earthdata")
     return session
