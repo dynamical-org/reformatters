@@ -34,7 +34,8 @@ class NasaSmapLevel336KmV9Dataset(
             memory="7G",
             shared_memory="600M",
             ephemeral_storage="20G",
-            secret_names=self.store_factory.k8s_secret_names(),
+            # Earthdata credentials required to download source data
+            secret_names=[*self.store_factory.k8s_secret_names(), "nasa-earthdata"],
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validation",
