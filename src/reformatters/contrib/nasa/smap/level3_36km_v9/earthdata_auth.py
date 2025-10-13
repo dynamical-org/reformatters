@@ -53,10 +53,10 @@ def _create_authenticated_session() -> requests.Session:
     token_response = session.post(_TOKEN_URL, auth=(username, password), timeout=10)
     try:
         token_response.raise_for_status()
-    except Exception:
-        # Don't log, instead raise wrapped exception that incldues response text AI!
-        log.exception(f"Failed to get token from NASA Earthdata: {token_response.text}")
-        raise
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to get token from NASA Earthdata: {token_response.text}"
+        ) from e
 
     token_data = token_response.json()
     token = token_data["access_token"]
