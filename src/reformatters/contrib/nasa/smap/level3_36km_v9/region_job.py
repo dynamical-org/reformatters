@@ -29,7 +29,6 @@ from .template_config import NasaSmapDataVar
 
 log = get_logger(__name__)
 
-_DOWNLOAD_TIMEOUT_SECONDS = 300
 _SOURCE_FILL_VALUE = -9999.0
 
 
@@ -75,14 +74,12 @@ class NasaSmapLevel336KmV9RegionJob(
 
         def _download() -> Path:
             session = get_authenticated_session()
-            log.info(f"Downloading {url}")
-            response = session.get(url, timeout=_DOWNLOAD_TIMEOUT_SECONDS, stream=True)
+            response = session.get(url, timeout=10, stream=True, allow_redirects=True)
             response.raise_for_status()
 
             with open(local_path, "wb") as f:
                 f.writelines(response.iter_content(chunk_size=8192))
 
-            log.info(f"Successfully downloaded to {local_path}")
             return local_path
 
         return retry(_download, max_attempts=10)

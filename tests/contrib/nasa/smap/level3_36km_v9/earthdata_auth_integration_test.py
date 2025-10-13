@@ -28,7 +28,6 @@
 
 #     # Verify we got a session
 #     assert session is not None
-#     assert session.auth is not None
 
 #     # Test with a real SMAP file URL
 #     test_url = (
@@ -36,7 +35,7 @@
 #         "/SMAP/SPL3SMP/009/2015/04/SMAP_L3_SM_P_20150401_R19240_001.h5"
 #     )
 
-#     response = session.head(test_url, allow_redirects=True)
+#     response = session.get(test_url, allow_redirects=True, stream=True)
 
 #     # Should get 200 OK if authentication worked
 #     assert response.status_code == 200, (
