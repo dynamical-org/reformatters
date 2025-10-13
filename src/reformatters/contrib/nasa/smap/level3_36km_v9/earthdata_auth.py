@@ -55,7 +55,7 @@ def _create_authenticated_session() -> requests.Session:
         token_response.raise_for_status()
     except Exception as e:
         raise RuntimeError(
-            f"Failed to get token from NASA Earthdata: {token_response.text}"
+            f"Failed to get token from NASA Earthdata: {token_response.status_code}: {token_response.text}"
         ) from e
 
     token_data = token_response.json()
@@ -63,5 +63,4 @@ def _create_authenticated_session() -> requests.Session:
 
     session.headers["Authorization"] = f"Bearer {token}"
 
-    log.info("Created authenticated session for NASA Earthdata")
     return session
