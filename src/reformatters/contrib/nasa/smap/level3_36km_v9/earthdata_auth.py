@@ -17,6 +17,8 @@ class _ThreadLocalStorage(threading.local):
 
 _thread_local = _ThreadLocalStorage()
 
+_TOKEN_URL = "https://urs.earthdata.nasa.gov/api/users/find_or_create_token"  # noqa: S105
+
 
 def get_authenticated_session() -> requests.Session:
     """
@@ -48,12 +50,13 @@ def _create_authenticated_session() -> requests.Session:
     session.mount("https://", adapter)
     session.mount("http://", adapter)
 
-    # Find or create token using NASA Earthdata API
-    token_url = "https://urs.earthdata.nasa.gov/api/users/find_or_create_token"
-    auth = (username, password)
-
-    token_response = session.post(token_url, auth=auth, timeout=10)
-    token_response.raise_for_status()
+    token_response = session.post(_TOKEN_URL, auth=(username, password), timeout=10)
+    try:
+        token_response.raise_for_status()
+    except Exception:
+        # Don't log, instead raise wrapped exception that incldues response text AI!
+        log.exception(f"Failed to get token from NASA Earthdata: {token_response.text}")
+        raise
 
     token_data = token_response.json()
     token = token_data["access_token"]
