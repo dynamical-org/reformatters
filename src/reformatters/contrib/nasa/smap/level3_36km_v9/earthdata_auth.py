@@ -48,9 +48,15 @@ def _create_authenticated_session() -> requests.Session:
     session.mount("https://", adapter)
     session.mount("http://", adapter)
 
-    # find or create token:
-
-    token = ...
+    # Find or create token using NASA Earthdata API
+    token_url = "https://urs.earthdata.nasa.gov/api/users/find_or_create_token"
+    auth = (username, password)
+    
+    token_response = session.post(token_url, auth=auth, timeout=10)
+    token_response.raise_for_status()
+    
+    token_data = token_response.json()
+    token = token_data["access_token"]
 
     session.headers["Authorization"] = f"Bearer {token}"
 
