@@ -1,8 +1,9 @@
 from collections.abc import Sequence
+from datetime import timedelta
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 
 from .region_job import (
     NasaSmapLevel336KmV9RegionJob,
@@ -23,33 +24,30 @@ class NasaSmapLevel336KmV9Dataset(
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
-        # operational_update_cron_job = ReformatCronJob(
-        #     name=f"{self.dataset_id}-operational-update",
-        #     schedule=_OPERATIONAL_CRON_SCHEDULE,
-        #     pod_active_deadline=timedelta(minutes=30),
-        #     image=image_tag,
-        #     dataset_id=self.dataset_id,
-        #     cpu="14",
-        #     memory="30G",
-        #     shared_memory="12G",
-        #     ephemeral_storage="30G",
-        #     secret_names=self.store_factory.k8s_secret_names(),
-        # )
-        # validation_cron_job = ValidationCronJob(
-        #     name=f"{self.dataset_id}-validation",
-        #     schedule=_VALIDATION_CRON_SCHEDULE,
-        #     pod_active_deadline=timedelta(minutes=10),
-        #     image=image_tag,
-        #     dataset_id=self.dataset_id,
-        #     cpu="1.3",
-        #     memory="7G",
-        #     secret_names=self.store_factory.k8s_secret_names(),
-        # )
-
-        # return [operational_update_cron_job, validation_cron_job]
-        raise NotImplementedError(
-            f"Implement `operational_kubernetes_resources` on {self.__class__.__name__}"
+        operational_update_cron_job = ReformatCronJob(
+            name=f"{self.dataset_id}-operational-update",
+            schedule="0 6,18 * * *",
+            pod_active_deadline=timedelta(minutes=30),
+            image=image_tag,
+            dataset_id=self.dataset_id,
+            cpu="3",
+            memory="7G",
+            shared_memory="600M",
+            ephemeral_storage="20G",
+            secret_names=self.store_factory.k8s_secret_names(),
         )
+        validation_cron_job = ValidationCronJob(
+            name=f"{self.dataset_id}-validation",
+            schedule="30 6,18 * * *",
+            pod_active_deadline=timedelta(minutes=10),
+            image=image_tag,
+            dataset_id=self.dataset_id,
+            cpu="1.3",
+            memory="7G",
+            secret_names=self.store_factory.k8s_secret_names(),
+        )
+
+        return [operational_update_cron_job, validation_cron_job]
 
     def validators(self) -> Sequence[validation.DataValidator]:
         """Return a sequence of DataValidators to run on this dataset."""
