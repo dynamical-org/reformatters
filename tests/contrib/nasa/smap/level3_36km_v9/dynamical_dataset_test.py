@@ -64,7 +64,8 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.name == f"{dataset.dataset_id}-operational-update"
     assert validation_cron_job.name == f"{dataset.dataset_id}-validation"
     assert update_cron_job.secret_names == [
-        dataset.primary_storage_config.k8s_secret_name
+        dataset.primary_storage_config.k8s_secret_name,
+        "nasa-earthdata",
     ]
     assert validation_cron_job.secret_names == [
         dataset.primary_storage_config.k8s_secret_name
