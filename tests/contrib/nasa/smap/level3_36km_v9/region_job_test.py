@@ -148,6 +148,54 @@ def test_download_file_retries_on_failure(tmp_path: Path) -> None:
         assert result.read_bytes() == b"success"
 
 
+def test_download_file_fallback_to_002(tmp_path: Path) -> None:
+    """Test that download_file falls back to _002.h5 when _001.h5 returns 404."""
+    template_config = NasaSmapLevel336KmV9TemplateConfig()
+    template_ds = template_config.get_template(pd.Timestamp("2015-04-01"))
+
+    region_job = NasaSmapLevel336KmV9RegionJob(
+        tmp_store=tmp_path,
+        template_ds=template_ds,
+        data_vars=template_config.data_vars[:1],
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    coord = NasaSmapLevel336KmV9SourceFileCoord(time=pd.Timestamp("2015-04-01"))
+
+    # Mock 404 response for _001.h5
+    mock_response_404 = Mock()
+    mock_response_404.status_code = 404
+
+    # Mock success response for _002.h5
+    mock_response_success = Mock()
+    mock_response_success.status_code = 200
+    mock_response_success.raise_for_status = Mock()
+    mock_response_success.iter_content = Mock(return_value=[b"reprocessed", b"data"])
+
+    mock_session = Mock()
+    mock_session.get = Mock(side_effect=[mock_response_404, mock_response_success])
+
+    with patch(
+        "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.get_authenticated_session",
+        return_value=mock_session,
+    ):
+        result = region_job.download_file(coord)
+
+        # Should have called get twice: once for _001.h5, once for _002.h5
+        assert mock_session.get.call_count == 2
+
+        # Verify the URLs called
+        call_args_list = mock_session.get.call_args_list
+        assert "_001.h5" in call_args_list[0][0][0]
+        assert "_002.h5" in call_args_list[1][0][0]
+
+        # Verify file was written with reprocessed data
+        assert result.exists()
+        assert result.read_bytes() == b"reprocesseddata"
+
+
 def test_read_data_am(tmp_path: Path, mock_smap_am_data: ArrayFloat32) -> None:
     """Test reading AM soil moisture data."""
     template_config = NasaSmapLevel336KmV9TemplateConfig()
