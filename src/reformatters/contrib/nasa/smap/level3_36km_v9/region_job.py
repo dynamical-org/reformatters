@@ -75,6 +75,19 @@ class NasaSmapLevel336KmV9RegionJob(
         def _download() -> Path:
             session = get_authenticated_session()
             response = session.get(url, timeout=10, stream=True, allow_redirects=True)
+            if response.status_code == 404:
+                for i in [2, 3, 4, 5]:  # in practice, I've only seen `2`
+                    reprocessed_url = url.replace("_001.h5", f"_{i:03}.h5")
+                    log.warning(
+                        f"File not found at {url}, trying alternative {reprocessed_url}"
+                    )
+                    response = session.get(
+                        reprocessed_url, timeout=10, stream=True, allow_redirects=True
+                    )
+                    if response.status_code != 404:
+                        if response.status_code == 200:
+                            log.info(f"Found file at alternative URL {reprocessed_url}")
+                        break
             response.raise_for_status()
 
             with open(local_path, "wb") as f:
