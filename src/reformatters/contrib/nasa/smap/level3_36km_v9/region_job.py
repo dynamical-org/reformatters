@@ -85,8 +85,6 @@ class NasaSmapLevel336KmV9RegionJob(
                         reprocessed_url, timeout=10, stream=True, allow_redirects=True
                     )
                     if response.status_code != 404:
-                        if response.status_code == 200:
-                            log.info(f"Found file at alternative URL {reprocessed_url}")
                         break
             response.raise_for_status()
 
