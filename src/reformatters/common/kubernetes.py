@@ -23,14 +23,17 @@ class Job(pydantic.BaseModel):
     command: Annotated[Sequence[str], pydantic.Field(min_length=1)]
     image: Annotated[str, pydantic.Field(min_length=1)]
     dataset_id: Annotated[str, pydantic.Field(min_length=1)]
+
     cpu: Annotated[str, pydantic.Field(min_length=1)]
     memory: Annotated[str, pydantic.Field(min_length=1)]
     shared_memory: Annotated[str | None, pydantic.Field(min_length=1)] = None
     ephemeral_storage: Annotated[str, pydantic.Field(min_length=1)] = "10G"
+
     workers_total: Annotated[int, pydantic.Field(ge=1)]
     parallelism: Annotated[int, pydantic.Field(ge=1)]
-    ttl: timedelta = timedelta(days=1)
+
     pod_active_deadline: timedelta = timedelta(hours=6)
+    ttl: timedelta = timedelta(days=1)
 
     secret_names: Sequence[str] = pydantic.Field(default_factory=list)
 
