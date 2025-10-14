@@ -456,7 +456,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             for region in regions
             for data_var_group in data_var_groups
         ]
-
+        breakpoint()
         return get_worker_jobs(all_jobs, worker_index, workers_total)
 
     def process(

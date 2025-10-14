@@ -1,16 +1,24 @@
-# from unittest.mock import Mock
+from unittest.mock import Mock
 
-# import pandas as pd
+import pandas as pd
 
-# from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job import (
-#     EcmwfIfsEnsForecast15Day025DegreeRegionJob,
-#     EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord,
-# )
-# from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.template_config import EcmwfIfsEnsForecast15Day025DegreeTemplateConfig
+from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job import (
+    EcmwfIfsEnsForecast15Day025DegreeRegionJob,
+    EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord,
+)
+from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.template_config import (
+    EcmwfIfsEnsForecast15Day025DegreeTemplateConfig,
+)
 
-# def test_source_file_coord_get_url() -> None:
-#     coord = EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(time=pd.Timestamp("2000-01-01"))
-#     assert coord.get_url() == "https://example.com/data/2000-01-01.grib2"
+
+def test_source_file_coord_get_url() -> None:
+    coord = EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
+        init_time=pd.Timestamp("2025-01-01"), lead_time=pd.Timedelta("0h")
+    )
+    assert (
+        coord.get_url()
+        == "s3://ecmwf-forecasts/20250101/00z/ifs/0p25/enfo/20250101000000-0h-enfo-ef.grib2"
+    )
 
 
 # def test_region_job_generete_source_file_coords() -> None:

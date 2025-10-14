@@ -1,54 +1,73 @@
+import itertools
 from collections.abc import Callable, Mapping, Sequence
+from os import PathLike
 from pathlib import Path
 
 import xarray as xr
 import zarr
 
+from reformatters.common.binary_rounding import round_float32_inplace
+from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
+from reformatters.common.download import (
+    http_download_to_disk,
+)
+from reformatters.common.iterating import digest, group_by, item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
     RegionJob,
     SourceFileCoord,
 )
+from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     AppendDim,
     ArrayFloat32,
     DatetimeLike,
     Dim,
+    Timedelta,
+    Timestamp,
 )
 
 from .template_config import EcmwfIfsEnsDataVar
 
 log = get_logger(__name__)
 
+"""
+Region = single init_time (1 along append_dim axis), full zarr slice for that init_time. Can be one var. 
+   - strictly about coordinates, agnostic of data vars.
+   -> allows us to never insert, only append.
+   - full ensemble members, full lead times
+Region is defined in template_config 
+"""
+
 
 class EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(SourceFileCoord):
     """Coordinates of a single source file to process."""
 
-    def get_url(self) -> str:
-        raise NotImplementedError("Return the URL of the source file.")
+    init_time: Timestamp
+    lead_time: Timedelta
+    data_var_group: Sequence[EcmwfIfsEnsDataVar]
+    ensemble_members: Sequence[int]
 
-    def out_loc(
-        self,
-    ) -> Mapping[Dim, CoordinateValueOrRange]:
-        """
-        Returns a data array indexer which identifies the region in the output dataset
-        to write the data from the source file. The indexer is a dict from dimension
-        names to coordinate values or slices.
-        """
-        # If the names of the coordinate attributes of your SourceFileCoord subclass are also all
-        # dimension names in the output dataset (e.g. init_time and lead_time),
-        # delete this implementation and use the default implementation of this method.
-        #
-        # Examples where you would override this method:
-        # - An analysis dataset created from forecast data:
-        #   return {"time": self.init_time + self.lead_time}
-        return super().out_loc()
+    def _get_base_url(self) -> str:
+        init_time_str = self.init_time.strftime("%Y%m%d")
+        init_hour_str = self.init_time.strftime("%H")  # pads 0 to be "00", as desired
+        lead_time_hour_str = whole_hours(self.lead_time)
+        return f"s3://ecmwf-forecasts/{init_time_str}/{init_hour_str}z/ifs/0p25/enfo/{init_time_str}{init_hour_str}0000-{lead_time_hour_str}h-enfo-ef"
+
+    def get_grib_url(self) -> str:
+        return self._get_base_url() + ".grib2"
+
+    def get_index_url(self) -> str:
+        return self._get_base_url() + ".index"
 
 
 class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     RegionJob[EcmwfIfsEnsDataVar, EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]
 ):
+    s3_bucket_url: str = "s3://ecmwf-forecasts"
+    s3_region: str = "us-east-1"
+
     # Optionally, limit the number of variables downloaded together.
     # If set to a value less than len(data_vars), downloading, reading/recompressing,
     # and uploading steps will be pipelined within a region job.
@@ -57,22 +76,10 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     # Leave unset if you have to download a whole file to get one variable out
     # to avoid re-downloading the same file multiple times.
     #
-    # max_vars_per_download_group: ClassVar[int | None] = None
-
-    # Implement this method only if different variables must be retrieved from different urls
-    #
-    # # @classmethod
-    # def source_groups(
-    #     cls,
-    #     data_vars: Sequence[ExampleDataVar],
-    # ) -> Sequence[Sequence[ExampleDataVar]]:
-    #     """
-    #     Return groups of variables, where all variables in a group can be retrieived from the same source file.
-    #     """
-    #     grouped = defaultdict(list)
-    #     for data_var in data_vars:
-    #         grouped[data_var.internal_attrs.file_type].append(data_var)
-    #     return list(grouped.values())
+    max_vars_per_download_group: int = 1  # TODO: fine to not have be optional?
+    max_ensemble_members_per_download_group: int = (
+        1  # TODO: fine to have not be optional?
+    )
 
     # Implement this method only if specific post processing in this dataset
     # requires data from outside the region defined by self.region,
@@ -93,27 +100,65 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         data_var_group: Sequence[EcmwfIfsEnsDataVar],
     ) -> Sequence[EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]:
         """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
-        # return [
-        #     EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
-        #         init_time=init_time,
-        #         lead_time=lead_time,
-        #     )
-        #     for init_time, lead_time in itertools.product(
-        #         processing_region_ds["init_time"].values,
-        #         processing_region_ds["lead_time"].values,
-        #     )
-        # ]
-        raise NotImplementedError(
-            "Return a sequence of SourceFileCoord objects, one for each source file required to process the data covered by processing_region_ds."
-        )
+        return [
+            EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
+                init_time=init_time,
+                lead_time=lead_time,
+                data_var_group=data_var_group,
+                ensemble_member=ensemble_member,
+            )
+            for init_time, lead_time, ensemble_member in itertools.product(
+                processing_region_ds["init_time"].values,
+                processing_region_ds["lead_time"].values,
+                processing_region_ds["ensemble_member"].values,
+            )
+        ]
 
     def download_file(
         self, coord: EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord
     ) -> Path:
         """Download the file for the given coordinate and return the local path."""
-        # return http_download_to_disk(coord.get_url(), self.dataset_id)
-        raise NotImplementedError(
-            "Download the file for the given coordinate and return the local path."
+        # Download grib index file
+        idx_url = coord.get_index_url()
+        idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
+
+        """
+        max_vars_per_download_group = 1, max_download = 1
+        hrrr forecast: steal vars_suffix (as just suffix). need unique request 
+        SourceFileCoord: include ensemble member
+        own grib index parser -- pd readlines, pandas json lineparser. ask AI
+        byte range: offset + offset+length in index file
+
+        read_data: extremely similar to HRRR. 
+        don't need matching}eally, reader.read 1
+        """
+
+        def get_message_byte_ranges_from_index(
+            index_local_path: PathLike[str],
+            init_time: Timestamp,
+            lead_time: Timedelta,
+            data_vars: Sequence[EcmwfIfsEnsDataVar],
+            ensemble_members: Sequence[int],
+        ) -> [tuple[list[int], list[int]]]:
+            # TODO: read index file here
+            return []
+
+        # Download the grib messages for the data vars in the coord using byte ranges
+        starts, ends = get_message_byte_ranges_from_index(
+            idx_local_path,
+            coord.init_time,
+            coord.lead_time,
+            coord.data_vars,
+            coord.ensemble_members,
+        )
+        suffix = digest(
+            f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)
+        )
+        return http_download_to_disk(
+            coord.get_grib_url(),
+            self.dataset_id,
+            byte_ranges=(starts, ends),
+            local_path_suffix=f"-{suffix}",
         )
 
     def read_data(
