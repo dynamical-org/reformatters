@@ -1,10 +1,16 @@
 # from unittest.mock import Mock
 
+from unittest.mock import Mock
+
 import pandas as pd
 
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job import (
     # EcmwfIfsEnsForecast15Day025DegreeRegionJob,
+    EcmwfIfsEnsForecast15Day025DegreeRegionJob,
     EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord,
+)
+from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.template_config import (
+    EcmwfIfsEnsForecast15Day025DegreeTemplateConfig,
 )
 
 # from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.template_config import (
@@ -37,29 +43,25 @@ def test_source_file_coord_get_url() -> None:
     )
 
 
-# def test_region_job_generate_source_file_coords() -> None:
+def test_region_job_generate_source_file_coords() -> None:
+    template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
+    template_ds = template_config.get_template(pd.Timestamp("2024-02-03"))
 
-#     template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
-#     template_ds = template_config.get_template(pd.Timestamp("2000-01-23"))
+    region_job = EcmwfIfsEnsForecast15Day025DegreeRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_ds,
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+    processing_region_ds, _ = region_job._get_region_datasets()
+    source_file_coords = region_job.generate_source_file_coords(
+        processing_region_ds, template_config.data_vars
+    )
 
-#     region_job = EcmwfIfsEnsForecast15Day025DegreeRegionJob(
-#         tmp_store=Mock(),
-#         template_ds=template_ds,
-#         data_vars=[Mock(spec=EcmwfIfsEnsDataVar), Mock(spec=EcmwfIfsEnsDataVar)],
-#         append_dim=template_config.append_dim,
-#         region=slice(0, 10),
-#         reformat_job_name="test",
-#     )
-
-#     processing_region_ds, output_region_ds = region_job._get_region_datasets()
-
-#     source_file_coords = region_job.generate_source_file_coords(
-#         processing_region_ds, [Mock(spec=EcmwfIfsEnsDataVar)]
-#     )
-#     breakpoint()
-
-#     assert len(source_file_coords) == ...
-#     assert ...
+    # Since our region is just a single init time (slice(0, 1)), we should get 51 * 85 * 1 = 4335 source file coords
+    assert len(source_file_coords) == 51 * 85 * 1
 
 
 # def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -92,7 +92,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                 )
             ),
             # single control member (0) + 50 perturbed members (1-50)
-            "ensemble_member": np.arange(0, 51)[:1],
+            "ensemble_member": np.arange(0, 51),
             "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
             "longitude": np.arange(-180, 179.75, 0.25),
         }
