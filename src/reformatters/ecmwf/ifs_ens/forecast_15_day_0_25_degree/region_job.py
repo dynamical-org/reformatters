@@ -300,6 +300,9 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         xr.Dataset
             Updated template dataset reflecting the actual processing results.
         """
+
+        # TODO(lauren): expected vs. ingested forecast_length? -- swann/ndvi cdr?
+
         # The super() implementation looks like this:
         #
         # max_append_dim_processed = max(
