@@ -10,6 +10,7 @@ import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 import zarr
 
+from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import (
     http_download_to_disk,
 )
@@ -242,30 +243,33 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             )
             return result
 
-    # Implement this to apply transformations to the array (e.g. deaccumulation)
-    #
-    # def apply_data_transformations(
-    #     self, data_array: xr.DataArray, data_var: EcmwfIfsEnsDataVar
-    # ) -> None:
-    #     """
-    #     Apply in-place data transformations to the output data array for a given data variable.
+    def apply_data_transformations(
+        self, data_array: xr.DataArray, data_var: EcmwfIfsEnsDataVar
+    ) -> None:
+        """
+        Apply in-place data transformations to the output data array for a given data variable.
+        Deaccumulates precipitation to rates.
 
-    #     This method is called after reading all data for a variable into the shared-memory array,
-    #     and before writing shards to the output store. The default implementation applies binary
-    #     rounding to float32 arrays if `data_var.internal_attrs.keep_mantissa_bits` is set.
+        Parameters
+        ----------
+        data_array : xr.DataArray
+            The output data array to be transformed in-place.
+        data_var : EcmwfIfsEnsDataVar
+            The data variable metadata object, which may contain transformation parameters.
+        """
+        if data_var.internal_attrs.deaccumulate_to_rate:
+            reset_freq = data_var.internal_attrs.window_reset_frequency
+            assert reset_freq is not None
+            try:
+                deaccumulate_to_rates_inplace(
+                    data_array,
+                    dim="lead_time",
+                    reset_frequency=reset_freq,
+                )
+            except ValueError:
+                log.exception(f"Error deaccumulating {data_var.name}")
 
-    #     Subclasses may override this method to implement additional transformations such as
-    #     deaccumulation, interpolation or other custom logic. All transformations should be
-    #     performed in-place (don't copy `data_array`, it's large).
-
-    #     Parameters
-    #     ----------
-    #     data_array : xr.DataArray
-    #         The output data array to be transformed in-place.
-    #     data_var : EcmwfIfsEnsDataVar
-    #         The data variable metadata object, which may contain transformation parameters.
-    #     """
-    #     super().apply_data_transformations(data_array, data_var)
+        super().apply_data_transformations(data_array, data_var)
 
     def update_template_with_results(
         self,

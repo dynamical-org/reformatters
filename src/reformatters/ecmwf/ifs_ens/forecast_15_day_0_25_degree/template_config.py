@@ -92,7 +92,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                 )
             ),
             # single control member (0) + 50 perturbed members (1-50)
-            "ensemble_member": np.arange(0, 51),
+            "ensemble_member": np.arange(0, 51)[:1],
             "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
             "longitude": np.arange(-180, 179.75, 0.25),
         }
@@ -333,7 +333,6 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
         )
 
         default_keep_mantissa_bits = 7
-        default_window_reset_frequency = pd.Timedelta("6h")
 
         return [
             EcmwfIfsEnsDataVar(
@@ -410,7 +409,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     grib_index_param="tp",
                     deaccumulate_to_rate=True,
                     keep_mantissa_bits=default_keep_mantissa_bits,
-                    window_reset_frequency=default_window_reset_frequency,
+                    window_reset_frequency=pd.Timedelta(
+                        "360h"
+                    ),  # accumulates over the full dataset, never resetting
                 ),
             ),
         ]
