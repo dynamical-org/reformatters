@@ -6,16 +6,14 @@ from typing import ClassVar
 
 import numpy as np
 import pandas as pd
-import rasterio
+import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 import zarr
 
-from reformatters.common.binary_rounding import round_float32_inplace
-from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import (
     http_download_to_disk,
 )
-from reformatters.common.iterating import digest, group_by, item
+from reformatters.common.iterating import digest, item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
@@ -37,7 +35,7 @@ from .template_config import EcmwfIfsEnsDataVar
 log = get_logger(__name__)
 
 """
-Region = single init_time (1 along append_dim axis), full zarr slice for that init_time. Can be one var. 
+Region = single init_time (1 along append_dim axis), full zarr slice for that init_time. Can be one var.
    - strictly about coordinates, agnostic of data vars.
    -> allows us to never insert, only append.
    - full ensemble members, full lead times
@@ -63,10 +61,10 @@ class EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(SourceFileCoord):
 
     init_time: Timestamp
     lead_time: Timedelta
-    data_var_group: Sequence[
-        EcmwfIfsEnsDataVar
-    ]  # should contain one element, but leaving as sequence for flexibility
     ensemble_member: int
+
+    # should contain one element, but leaving as sequence for flexibility
+    data_var_group: Sequence[EcmwfIfsEnsDataVar]
 
     s3_bucket_url: ClassVar[str] = "ecmwf-forecasts"
     s3_region: ClassVar[str] = "eu-central-1"
@@ -85,6 +83,13 @@ class EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(SourceFileCoord):
     def get_index_url(self) -> str:
         return self._get_base_url() + ".index"
 
+    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+        return {
+            "init_time": self.init_time,
+            "lead_time": self.lead_time,
+            "ensemble_member": self.ensemble_member,
+        }
+
 
 class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     RegionJob[EcmwfIfsEnsDataVar, EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]
@@ -97,7 +102,8 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     # Leave unset if you have to download a whole file to get one variable out
     # to avoid re-downloading the same file multiple times.
     #
-    max_vars_per_download_group: int = 1  # TODO: fine to not have be optional?
+
+    max_vars_per_download_group: ClassVar[int] = 1
 
     # Implement this method only if specific post processing in this dataset
     # requires data from outside the region defined by self.region,
@@ -128,9 +134,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             for init_time, lead_time, ensemble_member in itertools.product(
                 processing_region_ds["init_time"].values,
                 processing_region_ds["lead_time"].values,
-                processing_region_ds[
-                    "ensemble_member"  # TODO: why is this not a valid int, fix at root
-                ].values,  # this is where we split out by ensemble member
+                processing_region_ds["ensemble_member"].values,
             )
         ]
 
@@ -144,12 +148,12 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
 
         """
         max_vars_per_download_group = 1, max_download = 1
-        hrrr forecast: steal vars_suffix (as just suffix). need unique request 
+        hrrr forecast: steal vars_suffix (as just suffix). need unique request
         SourceFileCoord: include ensemble member
         own grib index parser -- pd readlines, pandas json lineparser. ask AI
         byte range: offset + offset+length in index file
 
-        read_data: extremely similar to HRRR. 
+        read_data: extremely similar to HRRR.
         don't need matching really, reader.read 1
         """
 
@@ -170,7 +174,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                 "Parsed row as control member that didn't have type='cf'"
             )
 
-            return df.set_index(["number", "param"])
+            return df.set_index(["number", "param"]).sort_index()
 
         def get_message_byte_ranges_from_index(
             index_local_path: PathLike[str],
@@ -185,18 +189,12 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             byte_range_ends = []
             index_file_df = parse_index_file(index_local_path)
             for data_var in data_vars:
-                byte_range_start = index_file_df.loc[
-                    (ensemble_member, data_var.internal_attrs.grib_var_short_name)
-                ]["_offset"]
-                byte_range_end = (
-                    byte_range_start
-                    + index_file_df.loc[
-                        (ensemble_member, data_var.internal_attrs.grib_var_short_name)
-                    ]["_length"]
-                )
-                byte_range_starts.append(byte_range_start)
-                byte_range_ends.append(byte_range_end)
-
+                start, length = index_file_df.loc[
+                    (ensemble_member, data_var.internal_attrs.grib_var_short_name),
+                    ["_offset", "_length"],
+                ].values[0]
+                byte_range_starts.append(start)
+                byte_range_ends.append(start + length)
             return byte_range_starts, byte_range_ends
 
         # Download the grib messages for the data vars in the coord using byte ranges
@@ -223,7 +221,6 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         """Read and return an array of data for the given variable and source file coordinate."""
 
         with rasterio.open(coord.downloaded_path) as reader:
-            breakpoint()
             grib_description = data_var.internal_attrs.grib_description
             grib_element = data_var.internal_attrs.grib_element
             matching_bands = [
@@ -243,6 +240,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             result: ArrayFloat32 = reader.read(
                 rasterio_band_index, out_dtype=np.float32
             )
+            assert result.shape == (721, 1439)
             return result
         # with rasterio.open(coord.downloaded_file_path) as reader:
         #     matching_indexes = [

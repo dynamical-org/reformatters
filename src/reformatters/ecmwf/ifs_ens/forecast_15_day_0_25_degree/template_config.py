@@ -37,6 +37,8 @@ class EcmwfIfsEnsInternalAttrs(BaseInternalAttrs):
         None  # for resetting deaccumulation windows
     )
     grib_var_short_name: str
+    grib_description: str
+    grib_element: str
     # TODO(lauren/alex): add more things that we need for processing here
 
 
@@ -89,11 +91,10 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     pd.timedelta_range("150h", "361h", freq="6h")
                 )
             ),
-            "ensemble_member": np.arange(
-                0, 51
-            ),  # single control member (0) + 50 perturbed members (1-50)
+            # single control member (0) + 50 perturbed members (1-50)
+            "ensemble_member": np.arange(0, 51),
             "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
-            "longitude": np.arange(-180, 180, 0.25),
+            "longitude": np.arange(-180, 179.75, 0.25),
         }
 
     def derive_coordinates(
@@ -346,6 +347,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     standard_name="air_temperature",
                 ),
                 internal_attrs=EcmwfIfsEnsInternalAttrs(
+                    grib_element="TMP",
+                    grib_description="",  # TODO (alex/lauren): add grib description
+                    grib_var_short_name="2t",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -360,6 +364,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     standard_name="eastward_wind",
                 ),
                 internal_attrs=EcmwfIfsEnsInternalAttrs(
+                    grib_element="UGRD",
+                    grib_description='10[m] HTGL="Specified height level above ground"',
+                    grib_var_short_name="10u",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -374,6 +381,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     standard_name="northward_wind",
                 ),
                 internal_attrs=EcmwfIfsEnsInternalAttrs(
+                    grib_element="VGRD",
+                    grib_description="",  # TODO (alex/lauren): add grib description
+                    grib_var_short_name="10v",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -388,9 +398,12 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     comment="Average precipitation rate since the previous forecast step.",
                 ),
                 internal_attrs=EcmwfIfsEnsInternalAttrs(
+                    grib_element="APCP",
+                    grib_description="",  # TODO (alex/lauren): add grib description
+                    grib_var_short_name="tp",
                     keep_mantissa_bits=default_keep_mantissa_bits,
-                    deaccumulate_to_rate=True,
                     window_reset_frequency=default_window_reset_frequency,
+                    deaccumulate_to_rate=True,
                 ),
             ),
         ]

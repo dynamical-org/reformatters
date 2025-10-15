@@ -50,28 +50,30 @@ def open_grib_with_multiple_coordinates(file_path: str, data_type: str) -> xr.Da
         {"dataType": data_type, "typeOfLevel": "heightAboveGround", "level": 100},
     ]
 
-    for i, filter_keys in enumerate(coordinate_filters):
+    for i, filter_keys in enumerate(coordinate_filters):  # noqa: B007
         try:
             ds = xr.open_dataset(file_path, engine="cfgrib", filter_by_keys=filter_keys)
 
             # Rename coordinates to avoid conflicts when merging
-            if "step" in ds.coords and ds.coords["step"].values == 3.0:
+            if "step" in ds.coords and ds.coords["step"].values == 3.0:  # noqa: PLR2004
                 ds = ds.rename({"step": "step_3h"})
 
             if "heightAboveGround" in ds.coords:
                 height_val = ds.coords["heightAboveGround"].values
-                if height_val == 2.0:
+                if height_val == 2.0:  # noqa: PLR2004
                     ds = ds.rename({"heightAboveGround": "height_2m"})
-                elif height_val == 10.0:
+                elif height_val == 10.0:  # noqa: PLR2004
                     ds = ds.rename({"heightAboveGround": "height_10m"})
-                elif height_val == 100.0:
+                elif height_val == 100.0:  # noqa: PLR2004
                     ds = ds.rename({"heightAboveGround": "height_100m"})
 
             if ds.data_vars:  # Only add if it has variables
                 datasets.append(ds)
 
         except Exception as e:
-            continue  # Skip failed filters
+            # Skip failed filters
+            print(e)  # noqa: T201
+            continue
 
     if not datasets:
         raise ValueError("No datasets could be loaded")
@@ -93,8 +95,6 @@ with warnings.catch_warnings():
         "data/20250301000000-0h-enfo-ef.grib2", "pf"
     )
     vars_to_long_names = {dv: dsp[dv].attrs["long_name"] for dv in dsp.data_vars}
-    breakpoint()
-    print(vars_to_long_names)
 
 """
 {'ro': 'Runoff',
