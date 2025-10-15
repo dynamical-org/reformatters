@@ -36,11 +36,8 @@ class EcmwfIfsEnsInternalAttrs(BaseInternalAttrs):
     window_reset_frequency: Timedelta | None = (
         None  # for resetting deaccumulation windows
     )
-    # TODO(lauren): skipping this for now, will come back and add when developing processing for real
-    # grib_band_index: int
-    # grib_element_name: str
-    # grib_description: str
-    # grib_index_level: str
+    grib_var_short_name: str
+    # TODO(lauren/alex): add more things that we need for processing here
 
 
 class EcmwfIfsEnsDataVar(DataVar[EcmwfIfsEnsInternalAttrs]):

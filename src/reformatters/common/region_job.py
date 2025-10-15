@@ -141,7 +141,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         data_vars: Sequence[DATA_VAR],
     ) -> Sequence[Sequence[DATA_VAR]]:
         """
-        Return groups of variables, where all variables in a group can be retrieived from the same source file.
+        Return groups of variables, where all variables in a group can be retrieved from the same source file.
 
         This is a class method so it can be called by RegionJob factory methods.
         """
@@ -456,7 +456,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             for region in regions
             for data_var_group in data_var_groups
         ]
-        breakpoint()
         return get_worker_jobs(all_jobs, worker_index, workers_total)
 
     def process(

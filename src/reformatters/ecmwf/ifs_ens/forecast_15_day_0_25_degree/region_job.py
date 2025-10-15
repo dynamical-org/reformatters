@@ -2,7 +2,11 @@ import itertools
 from collections.abc import Callable, Mapping, Sequence
 from os import PathLike
 from pathlib import Path
+from typing import ClassVar
 
+import numpy as np
+import pandas as pd
+import rasterio
 import xarray as xr
 import zarr
 
@@ -37,25 +41,45 @@ Region = single init_time (1 along append_dim axis), full zarr slice for that in
    - strictly about coordinates, agnostic of data vars.
    -> allows us to never insert, only append.
    - full ensemble members, full lead times
-Region is defined in template_config 
+
+
+Tues afternoon:
+- implement byte ranges
+- region job tests?
+- read_data implementation
+- try run backfill-local??
 """
 
 
 class EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(SourceFileCoord):
-    """Coordinates of a single source file to process."""
+    """Coordinates of a single source file to process.
+
+    NOTE: All data vars & ensemble members actually live within the same ECMWF grib file,
+        but all in different sections, which we want to do windowed downloads/reads on.
+
+    Data_var_group is a sequence, but should in practice only have one element (see max_vars_per_download_group below).
+    Ensemble member is a single int instead of a sequence (expanded out in generate_source_file_coords).
+    """
 
     init_time: Timestamp
     lead_time: Timedelta
-    data_var_group: Sequence[EcmwfIfsEnsDataVar]
-    ensemble_members: Sequence[int]
+    data_var_group: Sequence[
+        EcmwfIfsEnsDataVar
+    ]  # should contain one element, but leaving as sequence for flexibility
+    ensemble_member: int
+
+    s3_bucket_url: ClassVar[str] = "ecmwf-forecasts"
+    s3_region: ClassVar[str] = "eu-central-1"
 
     def _get_base_url(self) -> str:
         init_time_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")  # pads 0 to be "00", as desired
         lead_time_hour_str = whole_hours(self.lead_time)
-        return f"s3://ecmwf-forecasts/{init_time_str}/{init_hour_str}z/ifs/0p25/enfo/{init_time_str}{init_hour_str}0000-{lead_time_hour_str}h-enfo-ef"
+        # Convert S3 URL to HTTPS URL using virtual-hosted style
+        return f"https://{self.s3_bucket_url}.s3.{self.s3_region}.amazonaws.com/{init_time_str}/{init_hour_str}z/0p25/enfo/{init_time_str}{init_hour_str}0000-{lead_time_hour_str}h-enfo-ef"
 
-    def get_grib_url(self) -> str:
+    def get_url(self) -> str:
+        # URL for the grib file
         return self._get_base_url() + ".grib2"
 
     def get_index_url(self) -> str:
@@ -65,9 +89,6 @@ class EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(SourceFileCoord):
 class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     RegionJob[EcmwfIfsEnsDataVar, EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]
 ):
-    s3_bucket_url: str = "s3://ecmwf-forecasts"
-    s3_region: str = "us-east-1"
-
     # Optionally, limit the number of variables downloaded together.
     # If set to a value less than len(data_vars), downloading, reading/recompressing,
     # and uploading steps will be pipelined within a region job.
@@ -77,9 +98,6 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     # to avoid re-downloading the same file multiple times.
     #
     max_vars_per_download_group: int = 1  # TODO: fine to not have be optional?
-    max_ensemble_members_per_download_group: int = (
-        1  # TODO: fine to have not be optional?
-    )
 
     # Implement this method only if specific post processing in this dataset
     # requires data from outside the region defined by self.region,
@@ -105,12 +123,14 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                 init_time=init_time,
                 lead_time=lead_time,
                 data_var_group=data_var_group,
-                ensemble_member=ensemble_member,
+                ensemble_member=int(ensemble_member),
             )
             for init_time, lead_time, ensemble_member in itertools.product(
                 processing_region_ds["init_time"].values,
                 processing_region_ds["lead_time"].values,
-                processing_region_ds["ensemble_member"].values,
+                processing_region_ds[
+                    "ensemble_member"  # TODO: why is this not a valid int, fix at root
+                ].values,  # this is where we split out by ensemble member
             )
         ]
 
@@ -130,34 +150,68 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         byte range: offset + offset+length in index file
 
         read_data: extremely similar to HRRR. 
-        don't need matching}eally, reader.read 1
+        don't need matching really, reader.read 1
         """
+
+        def parse_index_file(index_local_path: PathLike[str]) -> pd.DataFrame:
+            """
+            Returns a pandas df representing the index file.
+            MultiIndex of (number, param)
+            Columns include:
+              - used information: type (control/perturbed), param (variable short name), _offset (byte window start), _length (length of byte window)
+              - unused information: levtype (sfc/pl/sol/...), levelist, domain, date, time, step, expver, class, stream
+            """
+            df = pd.read_json(index_local_path, lines=True)
+
+            # Control members don't have "number" field, so fill with 0
+            df["number"] = df["number"].fillna(0).astype(int)
+            # Ensure that every row we filled with number=0 was indeed type "cf" (control forecast)
+            assert all(df[df["number"] == 0]["type"] == "cf"), (
+                "Parsed row as control member that didn't have type='cf'"
+            )
+
+            return df.set_index(["number", "param"])
 
         def get_message_byte_ranges_from_index(
             index_local_path: PathLike[str],
-            init_time: Timestamp,
-            lead_time: Timedelta,
             data_vars: Sequence[EcmwfIfsEnsDataVar],
-            ensemble_members: Sequence[int],
-        ) -> [tuple[list[int], list[int]]]:
-            # TODO: read index file here
-            return []
+            ensemble_member: int,
+        ) -> tuple[list[int], list[int]]:
+            """
+            Returns a list of byte range starts & a list of byte range ends,
+            with the elements of each list in order of data vars.
+            """
+            byte_range_starts = []
+            byte_range_ends = []
+            index_file_df = parse_index_file(index_local_path)
+            for data_var in data_vars:
+                byte_range_start = index_file_df.loc[
+                    (ensemble_member, data_var.internal_attrs.grib_var_short_name)
+                ]["_offset"]
+                byte_range_end = (
+                    byte_range_start
+                    + index_file_df.loc[
+                        (ensemble_member, data_var.internal_attrs.grib_var_short_name)
+                    ]["_length"]
+                )
+                byte_range_starts.append(byte_range_start)
+                byte_range_ends.append(byte_range_end)
+
+            return byte_range_starts, byte_range_ends
 
         # Download the grib messages for the data vars in the coord using byte ranges
-        starts, ends = get_message_byte_ranges_from_index(
+        byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(
             idx_local_path,
-            coord.init_time,
-            coord.lead_time,
-            coord.data_vars,
-            coord.ensemble_members,
+            coord.data_var_group,
+            coord.ensemble_member,
         )
         suffix = digest(
             f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)
         )
         return http_download_to_disk(
-            coord.get_grib_url(),
+            coord.get_url(),
             self.dataset_id,
-            byte_ranges=(starts, ends),
+            byte_ranges=(byte_range_starts, byte_range_ends),
             local_path_suffix=f"-{suffix}",
         )
 
@@ -167,6 +221,29 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         data_var: EcmwfIfsEnsDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
+
+        with rasterio.open(coord.downloaded_path) as reader:
+            breakpoint()
+            grib_description = data_var.internal_attrs.grib_description
+            grib_element = data_var.internal_attrs.grib_element
+            matching_bands = [
+                rasterio_band_i
+                for band_i in range(reader.count)
+                if reader.descriptions[band_i] == grib_description
+                and reader.tags(rasterio_band_i := band_i + 1)["GRIB_ELEMENT"]
+                == grib_element
+            ]
+
+            assert len(matching_bands) == 1, (
+                f"Expected exactly 1 matching band, found {len(matching_bands)}: {matching_bands}. "
+                f"{grib_element=}, {grib_description=}, {coord.downloaded_path=}"
+            )
+            rasterio_band_index = item(matching_bands)
+
+            result: ArrayFloat32 = reader.read(
+                rasterio_band_index, out_dtype=np.float32
+            )
+            return result
         # with rasterio.open(coord.downloaded_file_path) as reader:
         #     matching_indexes = [
         #         i
