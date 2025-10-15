@@ -108,8 +108,10 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     region_job.download_file(source_file_coord)
+
     url, dataset_id = download_to_disk_mock.call_args[0]
     kwargs = download_to_disk_mock.call_args[1]
+
     byte_ranges = kwargs["byte_ranges"]
     local_path_suffix = kwargs["local_path_suffix"]
 
