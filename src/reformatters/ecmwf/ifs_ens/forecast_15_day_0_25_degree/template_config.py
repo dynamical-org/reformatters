@@ -36,10 +36,10 @@ class EcmwfIfsEnsInternalAttrs(BaseInternalAttrs):
     window_reset_frequency: Timedelta | None = (
         None  # for resetting deaccumulation windows
     )
-    grib_var_short_name: str
+    grib_index_param: str
     grib_description: str
     grib_element: str
-    # TODO(lauren/alex): add more things that we need for processing here
+    grib_comment: str
 
 
 class EcmwfIfsEnsDataVar(DataVar[EcmwfIfsEnsInternalAttrs]):
@@ -347,9 +347,10 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     standard_name="air_temperature",
                 ),
                 internal_attrs=EcmwfIfsEnsInternalAttrs(
+                    grib_comment="Temperature [C]",
+                    grib_description='2[m] HTGL="Specified height level above ground"',
                     grib_element="TMP",
-                    grib_description="",  # TODO (alex/lauren): add grib description
-                    grib_var_short_name="2t",
+                    grib_index_param="2t",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -364,9 +365,10 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     standard_name="eastward_wind",
                 ),
                 internal_attrs=EcmwfIfsEnsInternalAttrs(
-                    grib_element="UGRD",
+                    grib_comment="u-component of wind [m/s]",
                     grib_description='10[m] HTGL="Specified height level above ground"',
-                    grib_var_short_name="10u",
+                    grib_element="UGRD",
+                    grib_index_param="10u",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -381,9 +383,10 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     standard_name="northward_wind",
                 ),
                 internal_attrs=EcmwfIfsEnsInternalAttrs(
+                    grib_comment="v-component of wind [m/s]",
+                    grib_description='10[m] HTGL="Specified height level above ground"',
                     grib_element="VGRD",
-                    grib_description="",  # TODO (alex/lauren): add grib description
-                    grib_var_short_name="10v",
+                    grib_index_param="10v",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -397,13 +400,17 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     step_type="avg",
                     comment="Average precipitation rate since the previous forecast step.",
                 ),
+                # The metadata for precipitation surface in the grib files is not correctly populated.
+                # We know that comment (prodType 0, cat 1, subcat 193) [-] is correct for precipitation surface,
+                # so we use that. We have included the other set of grib metadata fields here for completeness.
                 internal_attrs=EcmwfIfsEnsInternalAttrs(
-                    grib_element="APCP",
-                    grib_description="",  # TODO (alex/lauren): add grib description
-                    grib_var_short_name="tp",
+                    grib_comment="(prodType 0, cat 1, subcat 193) [-]",
+                    grib_description='0[-] SFC="Ground or water surface"',
+                    grib_element="unknown",
+                    grib_index_param="tp",
+                    deaccumulate_to_rate=True,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     window_reset_frequency=default_window_reset_frequency,
-                    deaccumulate_to_rate=True,
                 ),
             ),
         ]

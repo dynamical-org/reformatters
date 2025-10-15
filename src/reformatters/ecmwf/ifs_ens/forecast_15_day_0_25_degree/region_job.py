@@ -13,7 +13,7 @@ import zarr
 from reformatters.common.download import (
     http_download_to_disk,
 )
-from reformatters.common.iterating import digest, item
+from reformatters.common.iterating import digest
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
@@ -70,14 +70,22 @@ class EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(SourceFileCoord):
     s3_region: ClassVar[str] = "eu-central-1"
 
     def _get_base_url(self) -> str:
+        base_url = f"https://{self.s3_bucket_url}.s3.{self.s3_region}.amazonaws.com"
+
         init_time_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")  # pads 0 to be "00", as desired
         lead_time_hour_str = whole_hours(self.lead_time)
-        # Convert S3 URL to HTTPS URL using virtual-hosted style
-        return f"https://{self.s3_bucket_url}.s3.{self.s3_region}.amazonaws.com/{init_time_str}/{init_hour_str}z/0p25/enfo/{init_time_str}{init_hour_str}0000-{lead_time_hour_str}h-enfo-ef"
+
+        # On 2024-02-29 and onward, the /ifs/ directory is included in the URL path.
+        if self.init_time >= pd.Timestamp("2024-02-29T00:00"):
+            directory_path = f"{init_time_str}/{init_hour_str}z/ifs/0p25/enfo"
+        else:
+            directory_path = f"{init_time_str}/{init_hour_str}z/0p25/enfo"
+
+        filename = f"{init_time_str}{init_hour_str}0000-{lead_time_hour_str}h-enfo-ef"
+        return f"{base_url}/{directory_path}/{filename}"
 
     def get_url(self) -> str:
-        # URL for the grib file
         return self._get_base_url() + ".grib2"
 
     def get_index_url(self) -> str:
@@ -102,7 +110,6 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     # Leave unset if you have to download a whole file to get one variable out
     # to avoid re-downloading the same file multiple times.
     #
-
     max_vars_per_download_group: ClassVar[int] = 1
 
     # Implement this method only if specific post processing in this dataset
@@ -190,7 +197,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             index_file_df = parse_index_file(index_local_path)
             for data_var in data_vars:
                 start, length = index_file_df.loc[
-                    (ensemble_member, data_var.internal_attrs.grib_var_short_name),
+                    (ensemble_member, data_var.internal_attrs.grib_index_param),
                     ["_offset", "_length"],
                 ].values[0]
                 byte_range_starts.append(start)
@@ -221,41 +228,19 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         """Read and return an array of data for the given variable and source file coordinate."""
 
         with rasterio.open(coord.downloaded_path) as reader:
-            grib_description = data_var.internal_attrs.grib_description
-            grib_element = data_var.internal_attrs.grib_element
-            matching_bands = [
-                rasterio_band_i
-                for band_i in range(reader.count)
-                if reader.descriptions[band_i] == grib_description
-                and reader.tags(rasterio_band_i := band_i + 1)["GRIB_ELEMENT"]
-                == grib_element
-            ]
-
-            assert len(matching_bands) == 1, (
-                f"Expected exactly 1 matching band, found {len(matching_bands)}: {matching_bands}. "
-                f"{grib_element=}, {grib_description=}, {coord.downloaded_path=}"
+            assert reader.count == 1, "Expected only one band per downloaded file"
+            assert (
+                reader.tags(1)["GRIB_COMMENT"] == data_var.internal_attrs.grib_comment
             )
-            rasterio_band_index = item(matching_bands)
+            rasterio_band_index = 1
 
             result: ArrayFloat32 = reader.read(
                 rasterio_band_index, out_dtype=np.float32
             )
-            assert result.shape == (721, 1439)
+            assert result.shape == (721, 1439), (
+                f"Expected (721, 1439) shape, found {result.shape}"
+            )
             return result
-        # with rasterio.open(coord.downloaded_file_path) as reader:
-        #     matching_indexes = [
-        #         i
-        #         for i in range(reader.count)
-        #         if (tags := reader.tags(i + 1))["GRIB_ELEMENT"]
-        #         == data_var.internal_attrs.grib_element
-        #         and tags["GRIB_COMMENT"] == data_var.internal_attrs.grib_comment
-        #     ]
-        #     assert len(matching_indexes) == 1, f"Expected exactly 1 matching band, found {matching_indexes}. {data_var.internal_attrs.grib_element=}, {data_var.internal_attrs.grib_description=}, {coord.downloaded_file_path=}"
-        #     rasterio_band_index = 1 + matching_indexes[0]  # rasterio is 1-indexed
-        #     return reader.read(rasterio_band_index, out_dtype=np.float32)
-        raise NotImplementedError(
-            "Read and return data for the given variable and source file coordinate."
-        )
 
     # Implement this to apply transformations to the array (e.g. deaccumulation)
     #

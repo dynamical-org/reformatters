@@ -14,7 +14,18 @@ def test_source_file_coord_get_url() -> None:
     )
     assert (
         coord.get_url()
-        == "https://ecmwf-forecasts.s3.us-east-1.amazonaws.com/20250101/00z/0p25/enfo/20250101000000-0h-enfo-ef.grib2"
+        == "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20250101/00z/ifs/0p25/enfo/20250101000000-0h-enfo-ef.grib2"
+    )
+
+    coord = EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
+        init_time=pd.Timestamp("2024-02-28"),
+        lead_time=pd.Timedelta("0h"),
+        data_var_group=[],
+        ensemble_member=0,
+    )
+    assert (
+        coord.get_url()
+        == "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20240228/00z/0p25/enfo/20240228000000-0h-enfo-ef.grib2"
     )
 
 
