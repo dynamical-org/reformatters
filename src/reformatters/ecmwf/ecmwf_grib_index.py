@@ -61,4 +61,4 @@ def _parse_index_file(index_local_path: PathLike[str]) -> pd.DataFrame:
         "Parsed row as control member that didn't have type='cf'"
     )
 
-    return df.set_index(["number", "param"])
+    return df.set_index(["number", "param"]).sort_index()
