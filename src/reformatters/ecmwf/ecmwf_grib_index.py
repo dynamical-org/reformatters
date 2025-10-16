@@ -57,7 +57,7 @@ def _parse_index_file(index_local_path: PathLike[str]) -> pd.DataFrame:
     # Control members by default don't have "number" field. We fill with 0
     df["number"] = df["number"].fillna(0).astype(int)
     # Ensure that every row we filled with number=0 was indeed type "cf" (control forecast)
-    assert all(df[df["number"] == 0]["type"] == "cf"), (
+    assert (df[df["number"] == 0]["type"] == "cf").all(), (
         "Parsed row as control member that didn't have type='cf'"
     )
 
