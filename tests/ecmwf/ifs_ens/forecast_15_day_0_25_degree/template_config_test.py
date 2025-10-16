@@ -80,8 +80,8 @@ def test_dimension_coordinates_shapes_and_values() -> None:
     lon = dim_coords["longitude"]
     assert isinstance(lon, np.ndarray)
     assert lon[0] == -180.0
-    assert lon[-1] == 179.50
-    assert len(lon) == 1439
+    assert lon[-1] == 179.75
+    assert len(lon) == 1440
 
     # ensemble_member: contains 0-50 (1 control + 50 perturbed)
     em = dim_coords["ensemble_member"]

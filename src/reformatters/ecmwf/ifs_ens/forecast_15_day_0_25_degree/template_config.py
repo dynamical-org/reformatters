@@ -58,7 +58,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
     )
     append_dim: AppendDim = "init_time"
     # forecasts available from same s3 bucket since 2023-01-18, but only with 0.4deg resolution from dataset start through 2024-01-31.
-    append_dim_start: Timestamp = pd.Timestamp("2024-02-01T00:00")
+    # We also noticed that that gribs on 2024-02-01 and 2024-02-02 only have 1439 longitude values (max longitude is 179.5), so we
+    # begin this dataset on 2024-02-03 to avoid this issue.
+    append_dim_start: Timestamp = pd.Timestamp("2024-02-03T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("24h")
 
     @computed_field  # type: ignore[prop-decorator]
@@ -94,7 +96,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
             # single control member (0) + 50 perturbed members (1-50)
             "ensemble_member": np.arange(0, 51),
             "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
-            "longitude": np.arange(-180, 179.75, 0.25),
+            "longitude": np.arange(-180, 180, 0.25),
         }
 
     def derive_coordinates(

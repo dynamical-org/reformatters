@@ -7,7 +7,7 @@
     "attribution": "ECMWF IFS Ensemble Forecast data processed by dynamical.org from ECMWF Open Data.",
     "spatial_domain": "Global",
     "spatial_resolution": "0.25 degrees (~20km)",
-    "time_domain": "Forecasts initialized 2024-02-01 00:00:00 UTC to Present",
+    "time_domain": "Forecasts initialized 2024-02-03 00:00:00 UTC to Present",
     "time_resolution": "Forecasts initialized every 24 hours",
     "forecast_domain": "Forecast lead time 0-360 hours (0-15 days) ahead",
     "forecast_resolution": "Forecast step 0-144 hours: 3 hourly, 144-360 hours: 6 hourly"
@@ -215,7 +215,7 @@
         ],
         "attributes": {
           "statistics_approximate": {
-            "min": "2024-02-01T00:00:00",
+            "min": "2024-02-03T00:00:00",
             "max": "Present"
           },
           "units": "seconds since 1970-01-01",
@@ -336,14 +336,14 @@
       },
       "longitude": {
         "shape": [
-          1439
+          1440
         ],
         "data_type": "float64",
         "chunk_grid": {
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1439
+              1440
             ]
           }
         },
@@ -376,7 +376,7 @@
           "units": "degrees_east",
           "statistics_approximate": {
             "min": -180.0,
-            "max": 179.5
+            "max": 179.75
           },
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -393,7 +393,7 @@
           85,
           51,
           721,
-          1439
+          1440
         ],
         "data_type": "float32",
         "chunk_grid": {
@@ -534,7 +534,7 @@
           85,
           51,
           721,
-          1439
+          1440
         ],
         "data_type": "float32",
         "chunk_grid": {
@@ -662,7 +662,7 @@
         ],
         "attributes": {
           "statistics_approximate": {
-            "min": "2024-02-01T00:00:00",
+            "min": "2024-02-03T00:00:00",
             "max": "Present"
           },
           "units": "seconds since 1970-01-01",
@@ -682,7 +682,7 @@
           85,
           51,
           721,
-          1439
+          1440
         ],
         "data_type": "float32",
         "chunk_grid": {
@@ -774,7 +774,7 @@
           85,
           51,
           721,
-          1439
+          1440
         ],
         "data_type": "float32",
         "chunk_grid": {

@@ -1,13 +1,13 @@
 {
   "shape": [
-    1439
+    1440
   ],
   "data_type": "float64",
   "chunk_grid": {
     "name": "regular",
     "configuration": {
       "chunk_shape": [
-        1439
+        1440
       ]
     }
   },
@@ -40,7 +40,7 @@
     "units": "degrees_east",
     "statistics_approximate": {
       "min": -180.0,
-      "max": 179.5
+      "max": 179.75
     },
     "_FillValue": "AAAAAAAA+H8="
   },
