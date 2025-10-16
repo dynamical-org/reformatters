@@ -65,7 +65,7 @@ def test_backfill_local_and_operational_update(
     # Operational update - mock pd.Timestamp.now() to control the update end time
     monkeypatch.setattr(
         "pandas.Timestamp.now",
-        lambda: pd.Timestamp("2015-04-04"),
+        lambda tz=None: pd.Timestamp("2015-04-04"),
     )
 
     dataset.update("test-update")
