@@ -165,7 +165,7 @@ def test_check_analysis_current_data_custom_delay(
 
     # Should pass with 48 hour delay
     result = validation.check_analysis_current_data(
-        analysis_dataset, maximum_expected_delay=timedelta(hours=48)
+        analysis_dataset, max_expected_delay=timedelta(hours=48)
     )
     assert result.passed
 
