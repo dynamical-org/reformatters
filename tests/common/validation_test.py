@@ -191,7 +191,9 @@ def test_check_analysis_recent_nans_fails(
     # Add excessive NaNs to recent data
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
 
-    result = validation.check_analysis_recent_nans(analysis_dataset, max_nan_percentage=5)
+    result = validation.check_analysis_recent_nans(
+        analysis_dataset, max_nan_percentage=5
+    )
 
     assert not result.passed
     assert "Excessive NaN values found" in result.message
@@ -207,13 +209,17 @@ def test_check_analysis_recent_nans_custom_parameters(
 
     # Add 50% NaNs to recent data
     recent_slice = {"time": slice("2024-01-02", None)}
-    mask = np.random.rand(*analysis_dataset["temperature"].loc[recent_slice].shape) < 0.5
+    mask = (
+        np.random.rand(*analysis_dataset["temperature"].loc[recent_slice].shape) < 0.5
+    )
     analysis_dataset["temperature"].loc[recent_slice] = xr.where(
         mask, np.nan, analysis_dataset["temperature"].loc[recent_slice]
     )
 
     # Should fail with 5% threshold
-    result = validation.check_analysis_recent_nans(analysis_dataset, max_nan_percentage=5)
+    result = validation.check_analysis_recent_nans(
+        analysis_dataset, max_nan_percentage=5
+    )
     assert not result.passed
 
     # Should pass with 90% threshold
