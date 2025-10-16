@@ -195,7 +195,7 @@ def test_check_analysis_recent_nans_fails(
 
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
-        maximum_expected_delay=timedelta(hours=12),
+        max_expected_delay=timedelta(hours=12),
         max_nan_percentage=5,
     )
 
@@ -218,7 +218,7 @@ def test_check_analysis_recent_nans_custom_parameters(
     # Should fail with 5% threshold
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
-        maximum_expected_delay=timedelta(hours=12),
+        max_expected_delay=timedelta(hours=12),
         max_nan_percentage=5,
     )
     assert not result.passed
@@ -227,7 +227,7 @@ def test_check_analysis_recent_nans_custom_parameters(
     # Instead test with a lower threshold that should pass
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
-        maximum_expected_delay=timedelta(hours=12),
+        max_expected_delay=timedelta(hours=12),
         max_nan_percentage=100,
     )
     assert result.passed
