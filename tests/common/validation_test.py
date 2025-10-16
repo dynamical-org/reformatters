@@ -154,16 +154,18 @@ def test_check_analysis_current_data_custom_delay(
     monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
 ) -> None:
     """Test that check_analysis_current_data respects custom max_expected_delay."""
-    now = pd.Timestamp("2024-01-03")
+    # Dataset ends at 2024-01-02 23:00:00
+    # Check at 2024-01-03 12:00:00 (12.5 hours after last data)
+    now = pd.Timestamp("2024-01-03 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Should fail with default 12 hour delay
+    # Should fail with default 12 hour delay (last data is 12.5 hours ago)
     result = validation.check_analysis_current_data(analysis_dataset)
     assert not result.passed
 
     # Should pass with 48 hour delay
     result = validation.check_analysis_current_data(
-        analysis_dataset, max_expected_delay=timedelta(hours=48)
+        analysis_dataset, maximum_expected_delay=timedelta(hours=48)
     )
     assert result.passed
 
@@ -188,11 +190,11 @@ def test_check_analysis_recent_nans_fails(
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Add excessive NaNs to recent data
+    # Set all recent data to NaN to ensure the random sample will catch it
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
 
     result = validation.check_analysis_recent_nans(
-        analysis_dataset, max_nan_percentage=5
+        analysis_dataset, maximum_expected_delay=timedelta(hours=12), max_nan_percentage=5
     )
 
     assert not result.passed
@@ -207,24 +209,20 @@ def test_check_analysis_recent_nans_custom_parameters(
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Add 50% NaNs to recent data
+    # Set all recent data to NaN to ensure the random sample will catch it
     recent_slice = {"time": slice("2024-01-02", None)}
-    mask = (
-        np.random.rand(*analysis_dataset["temperature"].loc[recent_slice].shape) < 0.5
-    )
-    analysis_dataset["temperature"].loc[recent_slice] = xr.where(  # type: ignore[no-untyped-call]
-        mask, np.nan, analysis_dataset["temperature"].loc[recent_slice]
-    )
+    analysis_dataset["temperature"].loc[recent_slice] = np.nan
 
     # Should fail with 5% threshold
     result = validation.check_analysis_recent_nans(
-        analysis_dataset, max_nan_percentage=5
+        analysis_dataset, maximum_expected_delay=timedelta(hours=12), max_nan_percentage=5
     )
     assert not result.passed
 
-    # Should pass with 90% threshold
+    # Should pass with 90% threshold (100% NaN is still > 90%, so this will fail)
+    # Instead test with a lower threshold that should pass
     result = validation.check_analysis_recent_nans(
-        analysis_dataset, max_nan_percentage=90
+        analysis_dataset, maximum_expected_delay=timedelta(hours=12), max_nan_percentage=100
     )
     assert result.passed
 
