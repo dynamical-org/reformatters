@@ -2,6 +2,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import Mock
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -119,6 +120,54 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
         local_path_suffix == "-4f434771"
     )  # result of calling digest on the byte ranges
     assert byte_ranges == ([0], [665525])
+
+
+def test_region_job_read_data(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test grib data reading with mocked file operations."""
+    template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
+    template_ds = template_config.get_template(pd.Timestamp("2024-02-04"))
+
+    region_job = EcmwfIfsEnsForecast15Day025DegreeRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_ds,
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+    source_file_coord = EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
+        init_time=pd.Timestamp("2024-02-03"),
+        lead_time=pd.Timedelta("3h"),
+        data_var_group=[
+            var for var in template_config.data_vars if var.name == "temperature_2m"
+        ],
+        ensemble_member=0,
+        downloaded_path=Path("fake/path/to/downloaded/file.grib2"),
+    )
+
+    rasterio_reader = Mock()
+    rasterio_reader.__enter__ = Mock(return_value=rasterio_reader)
+    rasterio_reader.__exit__ = Mock(return_value=False)
+    rasterio_reader.count = 1
+    rasterio_reader.descriptions = ['2[m] HTGL="Specified height level above ground"']
+    rasterio_reader.tags = Mock(
+        return_value={"GRIB_ELEMENT": "TMP", "GRIB_COMMENT": "Temperature [C]"}
+    )
+    test_data = np.ones((721, 1440), dtype=np.float32)
+    rasterio_reader.read = Mock(return_value=test_data)
+    monkeypatch.setattr(
+        "reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job.rasterio.open",
+        Mock(return_value=rasterio_reader),
+    )
+
+    result = region_job.read_data(source_file_coord, template_config.data_vars[0])
+
+    # Verify the result
+    assert np.array_equal(result, test_data)
+    assert result.shape == (721, 1440)
+    assert result.dtype == np.float32
+
+    rasterio_reader.read.assert_called_once_with(1, out_dtype=np.float32)
 
 
 def test_operational_update_jobs(
