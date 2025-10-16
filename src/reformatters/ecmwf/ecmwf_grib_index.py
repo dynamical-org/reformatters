@@ -4,6 +4,7 @@ from os import PathLike
 import pandas as pd
 
 from reformatters.common.config_models import DataVar
+from reformatters.common.iterating import item
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.template_config import (
     EcmwfIfsEnsInternalAttrs,
 )
@@ -30,10 +31,7 @@ def get_message_byte_ranges_from_index(
             (ensemble_member, data_var.internal_attrs.grib_index_param),
             ["_offset", "_length"],
         ]
-        assert len(rows) == 1, (
-            "Expected exactly one row for each data var & ensemble member"
-        )
-        start, length = rows.values[0]
+        start, length = item(rows.values)
         byte_range_starts.append(int(start))
         byte_range_ends.append(int(start + length))
     return byte_range_starts, byte_range_ends
