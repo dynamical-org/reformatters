@@ -190,6 +190,9 @@ def test_check_analysis_recent_nans_fails(
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
+    # Mock random sampling to return coordinates that are within our dataset bounds
+    monkeypatch.setattr("numpy.random.uniform", lambda low, high: 0.0)
+
     # Set all recent data to NaN to ensure the random sample will catch it
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
 
@@ -211,6 +214,9 @@ def test_check_analysis_recent_nans_custom_parameters(
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
+    # Mock random sampling to return coordinates that are within our dataset bounds
+    monkeypatch.setattr("numpy.random.uniform", lambda low, high: 0.0)
+
     # Set all recent data to NaN to ensure the random sample will catch it
     recent_slice = {"time": slice("2024-01-02", None)}
     analysis_dataset["temperature"].loc[recent_slice] = np.nan
@@ -223,8 +229,7 @@ def test_check_analysis_recent_nans_custom_parameters(
     )
     assert not result.passed
 
-    # Should pass with 90% threshold (100% NaN is still > 90%, so this will fail)
-    # Instead test with a lower threshold that should pass
+    # Should pass with 100% threshold
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
         max_expected_delay=timedelta(hours=12),
