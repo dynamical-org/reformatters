@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock, Mock
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -19,6 +21,41 @@ def dataset() -> NasaSmapLevel336KmV9Dataset:
 def test_backfill_local_and_operational_update(
     monkeypatch: pytest.MonkeyPatch, dataset: NasaSmapLevel336KmV9Dataset
 ) -> None:
+    # Mock NASA Earthdata authentication
+    mock_session = Mock()
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.iter_content = lambda chunk_size: [b"fake_hdf5_data"]
+    mock_session.get.return_value = mock_response
+
+    monkeypatch.setattr(
+        "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.get_authenticated_session",
+        lambda: mock_session,
+    )
+
+    # Mock rasterio to return fake soil moisture data
+    # Create data that varies by date: 0.25, 0.30, 0.35 for the three days
+    def mock_rasterio_open(path: str) -> MagicMock:
+        mock_reader = MagicMock()
+        # Extract date from path to determine which values to return
+        if "20150401" in path:
+            value = 0.25
+        elif "20150402" in path:
+            value = 0.30
+        elif "20150403" in path:
+            value = 0.35
+        else:
+            value = 0.0
+
+        # Create array with shape (406, 964) matching y_size, x_size
+        data = np.full((406, 964), value, dtype=np.float32)
+        mock_reader.read.return_value = data
+        mock_reader.__enter__ = lambda self: self
+        mock_reader.__exit__ = lambda self, *args: None
+        return mock_reader
+
+    monkeypatch.setattr("rasterio.open", mock_rasterio_open)
+
     # Local backfill reformat
     dataset.backfill_local(append_dim_end=pd.Timestamp("2015-04-03"))
     ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
@@ -47,10 +84,10 @@ def test_backfill_local_and_operational_update(
     )
     subset_ds = updated_ds.sel(x=0, y=0, method="nearest")
     np.testing.assert_array_equal(
-        subset_ds["soil_moisture_am"].values, [190.0, 163.0, 135.0]
+        subset_ds["soil_moisture_am"].values, [0.25, 0.30, 0.35]
     )
     np.testing.assert_array_equal(
-        subset_ds["soil_moisture_pm"].values, [190.0, 163.0, 135.0]
+        subset_ds["soil_moisture_pm"].values, [0.25, 0.30, 0.35]
     )
 
 
