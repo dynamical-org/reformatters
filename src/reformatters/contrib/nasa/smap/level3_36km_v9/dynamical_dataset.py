@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from functools import partial
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -53,6 +54,13 @@ class NasaSmapLevel336KmV9Dataset(
     def validators(self) -> Sequence[validation.DataValidator]:
         """Return a sequence of DataValidators to run on this dataset."""
         return (
-            validation.check_analysis_current_data,
-            validation.check_analysis_recent_nans,
+            partial(
+                validation.check_analysis_current_data,
+                maximum_expected_delay=timedelta(hours=48),
+            ),
+            partial(
+                validation.check_analysis_recent_nans,
+                maximum_expected_delay=timedelta(hours=48),
+                max_nan_percentage=90,
+            ),
         )
