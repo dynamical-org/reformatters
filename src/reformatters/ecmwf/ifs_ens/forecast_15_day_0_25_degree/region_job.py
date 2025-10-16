@@ -245,7 +245,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         xr.Dataset
             The template_ds for the operational update.
         """
-        existing_ds = xr.open_zarr(primary_store, decode_timedelta=True, chunks=None)
+        existing_ds = xr.open_zarr(primary_store, chunks=None)
         # start after the last init time in the dataset (so we don't reprocess the last forecast)
         append_dim_start = existing_ds[append_dim].max() + pd.Timedelta("1s")
         append_dim_end = pd.Timestamp.now()

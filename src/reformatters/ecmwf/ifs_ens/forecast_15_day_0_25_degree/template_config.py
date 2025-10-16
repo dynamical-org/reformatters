@@ -36,10 +36,14 @@ class EcmwfIfsEnsInternalAttrs(BaseInternalAttrs):
     window_reset_frequency: Timedelta | None = (
         None  # for resetting deaccumulation windows
     )
+    # The short name of the param as it exists in the index file. Does not map to any names in the grib.
     grib_index_param: str
-    grib_description: str
-    grib_element: str
+    # Description of the param as it exists in the grib.
     grib_comment: str
+
+    # These two fields are additional informational metadata, not currently used in processing.
+    grib_element: str  # should be the short name of the param within the grib, but sometimes "unknown"
+    grib_description: str  # description of the level, not the variable
 
 
 class EcmwfIfsEnsDataVar(DataVar[EcmwfIfsEnsInternalAttrs]):
@@ -57,7 +61,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
         "longitude",
     )
     append_dim: AppendDim = "init_time"
-    # forecasts available from same s3 bucket since 2023-01-18, but only with 0.4deg resolution from dataset start through 2024-01-31.
+    # Forecasts are available from same s3 bucket since 2023-01-18, but only with 0.4deg resolution from dataset start through 2024-01-31.
     # We also noticed that that gribs on 2024-02-01 and 2024-02-02 only have 1439 longitude values (max longitude is 179.5), so we
     # begin this dataset on 2024-02-03 to avoid this issue.
     append_dim_start: Timestamp = pd.Timestamp("2024-02-03T00:00")
@@ -411,9 +415,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     grib_index_param="tp",
                     deaccumulate_to_rate=True,
                     keep_mantissa_bits=default_keep_mantissa_bits,
-                    window_reset_frequency=pd.Timedelta(
-                        "360h"
-                    ),  # accumulates over the full dataset, never resetting
+                    window_reset_frequency=pd.Timedelta.max,  # accumulate over the full dataset, never resetting
                 ),
             ),
         ]
