@@ -53,14 +53,15 @@ class NasaSmapLevel336KmV9Dataset(
 
     def validators(self) -> Sequence[validation.DataValidator]:
         """Return a sequence of DataValidators to run on this dataset."""
+        max_expected_delay = timedelta(hours=48)
         return (
             partial(
                 validation.check_analysis_current_data,
-                max_expected_delay=timedelta(hours=48),
+                max_expected_delay=max_expected_delay,
             ),
             partial(
                 validation.check_analysis_recent_nans,
-                max_expected_delay=timedelta(hours=48),
+                max_expected_delay=max_expected_delay,
                 max_nan_percentage=90,
             ),
         )
