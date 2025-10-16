@@ -9,7 +9,35 @@ from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.template_config impo
 )
 
 
-def parse_index_file(index_local_path: PathLike[str]) -> pd.DataFrame:
+def get_message_byte_ranges_from_index(
+    index_local_path: PathLike[str],
+    data_vars: Sequence[DataVar[EcmwfIfsEnsInternalAttrs]],
+    ensemble_member: int,
+) -> tuple[list[int], list[int]]:
+    """
+    Given an ECMWF grib index file, returns the byte ranges the given data var(s) & ensemble member can be found within.
+
+    Returns
+    -------
+    tuple[list[int], list[int]]
+        list of byte range starts & a list of byte range ends. Elements of each list in order of data vars.
+    """
+    byte_range_starts: list[int] = []
+    byte_range_ends: list[int] = []
+    index_file_df = _parse_index_file(index_local_path)
+    for data_var in data_vars:
+        rows = index_file_df.loc[
+            (ensemble_member, data_var.internal_attrs.grib_index_param),
+            ["_offset", "_length"],
+        ]
+        assert rows.ndim == 1, "Expected one row with two columns (_offset, _length)"
+        start, length = rows.values
+        byte_range_starts.append(int(start))
+        byte_range_ends.append(int(start + length))
+    return byte_range_starts, byte_range_ends
+
+
+def _parse_index_file(index_local_path: PathLike[str]) -> pd.DataFrame:
     """
     Parses an ECMWF index file into a pandas dataframe containing that information.
 
@@ -34,29 +62,3 @@ def parse_index_file(index_local_path: PathLike[str]) -> pd.DataFrame:
     )
 
     return df.set_index(["number", "param"]).sort_index()
-
-
-def get_message_byte_ranges_from_index(
-    index_local_path: PathLike[str],
-    data_vars: Sequence[DataVar[EcmwfIfsEnsInternalAttrs]],
-    ensemble_member: int,
-) -> tuple[list[int], list[int]]:
-    """
-    Given an ECMWF grib index file, returns the byte ranges the given data var(s) & ensemble member can be found within.
-
-    Returns
-    -------
-    tuple[list[int], list[int]]
-        list of byte range starts & a list of byte range ends. Elements of each list in order of data vars.
-    """
-    byte_range_starts = []
-    byte_range_ends = []
-    index_file_df = parse_index_file(index_local_path)
-    for data_var in data_vars:
-        start, length = index_file_df.loc[
-            (ensemble_member, data_var.internal_attrs.grib_index_param),
-            ["_offset", "_length"],
-        ].values[0]
-        byte_range_starts.append(start)
-        byte_range_ends.append(start + length + 1)  # +1 to make exclusive end
-    return byte_range_starts, byte_range_ends

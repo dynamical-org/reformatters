@@ -29,7 +29,7 @@ from reformatters.common.types import (
     Timedelta,
     Timestamp,
 )
-from reformatters.ecmwf.parse_data import get_message_byte_ranges_from_index
+from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
 
 from .template_config import EcmwfIfsEnsDataVar
 
@@ -96,6 +96,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     # so it's more efficient to do separate windowed downloads & reads for each
     # variable that we can parallelize.
     max_vars_per_download_group: ClassVar[int] = 1
+    download_parallelism: int = 1
 
     def generate_source_file_coords(
         self,
