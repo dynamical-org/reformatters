@@ -5,14 +5,14 @@ import pandas as pd
 
 from reformatters.common.config_models import DataVar
 from reformatters.common.iterating import item
-from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.template_config import (
-    EcmwfIfsEnsInternalAttrs,
+from reformatters.ecmwf.ecmwf_config_models import (
+    EcmwfInternalAttrs,
 )
 
 
 def get_message_byte_ranges_from_index(
     index_local_path: PathLike[str],
-    data_vars: Sequence[DataVar[EcmwfIfsEnsInternalAttrs]],
+    data_vars: Sequence[DataVar[EcmwfInternalAttrs]],
     ensemble_member: int,
 ) -> tuple[list[int], list[int]]:
     """

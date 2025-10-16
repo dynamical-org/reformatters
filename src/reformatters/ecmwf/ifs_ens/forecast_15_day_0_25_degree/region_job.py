@@ -29,9 +29,8 @@ from reformatters.common.types import (
     Timedelta,
     Timestamp,
 )
+from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
-
-from .template_config import EcmwfIfsEnsDataVar
 
 log = get_logger(__name__)
 
@@ -51,7 +50,7 @@ class EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(SourceFileCoord):
     ensemble_member: int
 
     # should contain one element, but leaving as sequence for flexibility
-    data_var_group: Sequence[EcmwfIfsEnsDataVar]
+    data_var_group: Sequence[EcmwfDataVar]
 
     s3_bucket_url: ClassVar[str] = "ecmwf-forecasts"
     s3_region: ClassVar[str] = "eu-central-1"
@@ -89,7 +88,7 @@ class EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(SourceFileCoord):
 
 
 class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
-    RegionJob[EcmwfIfsEnsDataVar, EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]
+    RegionJob[EcmwfDataVar, EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]
 ):
     # Limits the number of variables downloaded together.
     # All variables are scattered throughout the grib file without any organization,
@@ -100,7 +99,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
-        data_var_group: Sequence[EcmwfIfsEnsDataVar],
+        data_var_group: Sequence[EcmwfDataVar],
     ) -> Sequence[EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]:
         """Returns a sequence of coords, one for each source file required to process the data covered by processing_region_ds.
 
@@ -151,7 +150,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     def read_data(
         self,
         coord: EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord,
-        data_var: EcmwfIfsEnsDataVar,
+        data_var: EcmwfDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
 
@@ -173,7 +172,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             return result
 
     def apply_data_transformations(
-        self, data_array: xr.DataArray, data_var: EcmwfIfsEnsDataVar
+        self, data_array: xr.DataArray, data_var: EcmwfDataVar
     ) -> None:
         """
         Apply in-place data transformations to the output data array for a given data variable.
@@ -183,7 +182,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         ----------
         data_array : xr.DataArray
             The output data array to be transformed in-place.
-        data_var : EcmwfIfsEnsDataVar
+        data_var : EcmwfDataVar
             The data variable metadata object, which may contain transformation parameters.
         """
         if data_var.internal_attrs.deaccumulate_to_rate:
@@ -207,11 +206,11 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
-        all_data_vars: Sequence[EcmwfIfsEnsDataVar],
+        all_data_vars: Sequence[EcmwfDataVar],
         reformat_job_name: str,
     ) -> tuple[
         Sequence[
-            "RegionJob[EcmwfIfsEnsDataVar, EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]"
+            "RegionJob[EcmwfDataVar, EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]"
         ],
         xr.Dataset,
     ]:
@@ -232,7 +231,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             Function to get the template_ds for the operational update.
         append_dim : AppendDim
             The dimension along which data is appended (e.g., "time").
-        all_data_vars : Sequence[EcmwfIfsEnsDataVar]
+        all_data_vars : Sequence[EcmwfDataVar]
             Sequence of all data variable configs for this dataset.
         reformat_job_name : str
             The name of the reformatting job, used for progress tracking.
@@ -240,7 +239,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
 
         Returns
         -------
-        Sequence[RegionJob[EcmwfIfsEnsDataVar, EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]]
+        Sequence[RegionJob[EcmwfDataVar, EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]]
             RegionJob instances that need processing for operational updates.
         xr.Dataset
             The template_ds for the operational update.

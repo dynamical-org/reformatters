@@ -7,11 +7,9 @@ import xarray as xr
 from pydantic import computed_field
 
 from reformatters.common.config_models import (
-    BaseInternalAttrs,
     Coordinate,
     CoordinateAttrs,
     DatasetAttributes,
-    DataVar,
     DataVarAttrs,
     Encoding,
     StatisticsApproximate,
@@ -25,34 +23,10 @@ from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
+from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, EcmwfInternalAttrs
 
 
-class EcmwfIfsEnsInternalAttrs(BaseInternalAttrs):
-    """
-    Variable specific attributes used internally to drive processing.
-    Not written to the dataset.
-    """
-
-    window_reset_frequency: Timedelta | None = (
-        None  # for resetting deaccumulation windows
-    )
-    # The short name of the param as it exists in the index file. Does not map to any names in the grib.
-    grib_index_param: str
-    # Description of the param as it exists in the grib.
-    grib_comment: str
-
-    # These two fields are additional informational metadata, not currently used in processing.
-    grib_element: str  # should be the short name of the param within the grib, but sometimes "unknown"
-    grib_description: str  # description of the level, not the variable
-
-
-class EcmwfIfsEnsDataVar(DataVar[EcmwfIfsEnsInternalAttrs]):
-    pass
-
-
-class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
-    TemplateConfig[EcmwfIfsEnsDataVar]
-):
+class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVar]):
     dims: tuple[Dim, ...] = (
         "init_time",
         "lead_time",
@@ -310,7 +284,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def data_vars(self) -> Sequence[EcmwfIfsEnsDataVar]:
+    def data_vars(self) -> Sequence[EcmwfDataVar]:
         """Define metadata and encoding for each data variable."""
         # Data variable chunking and sharding
         # Roughly ~17.5MB uncompressed, ~3.5MB compressed
@@ -341,7 +315,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
         default_keep_mantissa_bits = 7
 
         return [
-            EcmwfIfsEnsDataVar(
+            EcmwfDataVar(
                 name="temperature_2m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -351,7 +325,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     step_type="instant",
                     standard_name="air_temperature",
                 ),
-                internal_attrs=EcmwfIfsEnsInternalAttrs(
+                internal_attrs=EcmwfInternalAttrs(
                     grib_comment="Temperature [C]",
                     grib_description='2[m] HTGL="Specified height level above ground"',
                     grib_element="TMP",
@@ -359,7 +333,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
-            EcmwfIfsEnsDataVar(
+            EcmwfDataVar(
                 name="wind_u_10m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -369,7 +343,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     step_type="instant",
                     standard_name="eastward_wind",
                 ),
-                internal_attrs=EcmwfIfsEnsInternalAttrs(
+                internal_attrs=EcmwfInternalAttrs(
                     grib_comment="u-component of wind [m/s]",
                     grib_description='10[m] HTGL="Specified height level above ground"',
                     grib_element="UGRD",
@@ -377,7 +351,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
-            EcmwfIfsEnsDataVar(
+            EcmwfDataVar(
                 name="wind_v_10m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -387,7 +361,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     step_type="instant",
                     standard_name="northward_wind",
                 ),
-                internal_attrs=EcmwfIfsEnsInternalAttrs(
+                internal_attrs=EcmwfInternalAttrs(
                     grib_comment="v-component of wind [m/s]",
                     grib_description='10[m] HTGL="Specified height level above ground"',
                     grib_element="VGRD",
@@ -395,7 +369,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
-            EcmwfIfsEnsDataVar(
+            EcmwfDataVar(
                 name="precipitation_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -408,7 +382,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                 # The metadata for precipitation surface in the grib files is not correctly populated.
                 # We know that comment (prodType 0, cat 1, subcat 193) [-] is correct for precipitation surface,
                 # so we use that. We have included the other set of grib metadata fields here for completeness.
-                internal_attrs=EcmwfIfsEnsInternalAttrs(
+                internal_attrs=EcmwfInternalAttrs(
                     grib_comment="(prodType 0, cat 1, subcat 193) [-]",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_element="unknown",

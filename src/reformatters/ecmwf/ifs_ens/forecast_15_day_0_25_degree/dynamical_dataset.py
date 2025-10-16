@@ -3,21 +3,19 @@ from collections.abc import Sequence
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob
+from reformatters.ecmwf.ecmwf_config_models import (
+    EcmwfDataVar,
+)
 
 from .region_job import (
     EcmwfIfsEnsForecast15Day025DegreeRegionJob,
     EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord,
 )
-from .template_config import (
-    EcmwfIfsEnsDataVar,
-    EcmwfIfsEnsForecast15Day025DegreeTemplateConfig,
-)
+from .template_config import EcmwfIfsEnsForecast15Day025DegreeTemplateConfig
 
 
 class EcmwfIfsEnsForecast15Day025DegreeDataset(
-    DynamicalDataset[
-        EcmwfIfsEnsDataVar, EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord
-    ]
+    DynamicalDataset[EcmwfDataVar, EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]
 ):
     template_config: EcmwfIfsEnsForecast15Day025DegreeTemplateConfig = (
         EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
