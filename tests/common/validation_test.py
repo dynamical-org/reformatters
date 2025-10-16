@@ -41,7 +41,7 @@ def forecast_dataset() -> xr.Dataset:
 def analysis_dataset() -> xr.Dataset:
     """Create a mock analysis dataset for testing."""
     times = pd.date_range("2024-01-01", periods=48, freq="1h")
-    lats = np.linspace(-90, 90, 10)
+    lats = np.linspace(90, -90, 10)  # Decreasing as per convention
     lons = np.linspace(-180, 180, 20)
 
     ds = xr.Dataset(
