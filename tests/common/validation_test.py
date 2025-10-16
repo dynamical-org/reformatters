@@ -190,40 +190,11 @@ def test_check_analysis_recent_nans_fails(
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Mock random sampling to return coordinates within dataset bounds
-    # Dataset has lat from 90 to -90 (decreasing), lon from -180 to 180
-    call_count = [0]
-
-    def mock_uniform(low: float, high: float) -> float:
-        call_count[0] += 1
-        if call_count[0] == 1:  # longitude
-            return 0.0  # Will create slice(0, 2)
-        else:  # latitude
-            return 10.0  # Will create slice(10, 8) which works with decreasing coords
-
-    monkeypatch.setattr("numpy.random.uniform", mock_uniform)
-
-    # Debug: print dataset info
-    print(f"\nDataset latitude coords: {analysis_dataset.latitude.values}")
-    print(f"Dataset longitude coords: {analysis_dataset.longitude.values}")
-    print(f"Dataset time coords: {analysis_dataset.time.values}")
+    # Mock random sampling to return first indices
+    monkeypatch.setattr("numpy.random.randint", lambda low, high: 0)
 
     # Set all recent data to NaN to ensure the random sample will catch it
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
-
-    # Debug: check what the slice selects
-    sample_ds = analysis_dataset.sel(
-        time=slice(now - timedelta(hours=12), None),
-        latitude=slice(10.0, 8.0),
-        longitude=slice(0.0, 2.0),
-    )
-    print(f"\nSample dataset shape: {sample_ds.dims}")
-    print(f"Sample latitude coords: {sample_ds.latitude.values}")
-    print(f"Sample longitude coords: {sample_ds.longitude.values}")
-    print(f"Sample time coords: {sample_ds.time.values}")
-    print(
-        f"Temperature NaN percentage: {sample_ds['temperature'].isnull().mean().compute() * 100:.1f}%"
-    )
 
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
@@ -243,17 +214,8 @@ def test_check_analysis_recent_nans_custom_parameters(
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Mock random sampling to return coordinates within dataset bounds
-    call_count = [0]
-
-    def mock_uniform(low: float, high: float) -> float:
-        call_count[0] += 1
-        if call_count[0] % 2 == 1:  # longitude (odd calls)
-            return 0.0  # Will create slice(0, 2)
-        else:  # latitude (even calls)
-            return 10.0  # Will create slice(10, 8) which works with decreasing coords
-
-    monkeypatch.setattr("numpy.random.uniform", mock_uniform)
+    # Mock random sampling to return first indices
+    monkeypatch.setattr("numpy.random.randint", lambda low, high: 0)
 
     # Set all recent data to NaN to ensure the random sample will catch it
     recent_slice = {"time": slice("2024-01-02", None)}

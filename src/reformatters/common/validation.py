@@ -146,11 +146,15 @@ def check_analysis_recent_nans(
 
     now = pd.Timestamp.now()
 
-    lon, lat = np.random.uniform(-180, 179), np.random.uniform(-90, 89)
-    sample_ds = ds.sel(
-        time=slice(now - max_expected_delay, None),
-        latitude=slice(lat, lat - 2),
-        longitude=slice(lon, lon + 2),
+    # Use positional indexing to sample a small spatial region
+    lat_size = ds.sizes["latitude"]
+    lon_size = ds.sizes["longitude"]
+    lat_idx = np.random.randint(0, max(1, lat_size - 2))
+    lon_idx = np.random.randint(0, max(1, lon_size - 2))
+    
+    sample_ds = ds.sel(time=slice(now - max_expected_delay, None)).isel(
+        latitude=slice(lat_idx, lat_idx + 2),
+        longitude=slice(lon_idx, lon_idx + 2),
     )
 
     problem_vars = []
