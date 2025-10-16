@@ -166,8 +166,9 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             result: ArrayFloat32 = reader.read(
                 rasterio_band_index, out_dtype=np.float32
             )
-            assert result.shape == (721, 1439), (
-                f"Expected (721, 1439) shape, found {result.shape}"
+            expected_shape = (721, 1440)
+            assert result.shape == expected_shape, (
+                f"Expected {expected_shape} shape, found {result.shape}"
             )
             return result
 
