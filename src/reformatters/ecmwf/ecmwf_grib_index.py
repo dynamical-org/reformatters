@@ -30,8 +30,7 @@ def get_message_byte_ranges_from_index(
             (ensemble_member, data_var.internal_attrs.grib_index_param),
             ["_offset", "_length"],
         ]
-        assert rows.ndim == 1, "Expected one row with two columns (_offset, _length)"
-        start, length = rows.values
+        start, length = rows.values[0]
         byte_range_starts.append(int(start))
         byte_range_ends.append(int(start + length))
     return byte_range_starts, byte_range_ends
