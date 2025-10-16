@@ -151,7 +151,7 @@ def check_analysis_recent_nans(
     lon_size = ds.sizes["longitude"]
     lat_idx = np.random.randint(0, max(1, lat_size - 2))
     lon_idx = np.random.randint(0, max(1, lon_size - 2))
-    
+
     sample_ds = ds.sel(time=slice(now - max_expected_delay, None)).isel(
         latitude=slice(lat_idx, lat_idx + 2),
         longitude=slice(lon_idx, lon_idx + 2),
