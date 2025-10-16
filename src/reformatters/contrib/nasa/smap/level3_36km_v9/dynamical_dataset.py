@@ -56,11 +56,11 @@ class NasaSmapLevel336KmV9Dataset(
         return (
             partial(
                 validation.check_analysis_current_data,
-                maximum_expected_delay=timedelta(hours=48),
+                max_expected_delay=timedelta(hours=48),
             ),
             partial(
                 validation.check_analysis_recent_nans,
-                maximum_expected_delay=timedelta(hours=48),
+                max_expected_delay=timedelta(hours=48),
                 max_nan_percentage=90,
             ),
         )
