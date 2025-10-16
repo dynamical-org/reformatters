@@ -271,66 +271,6 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
 
         super().apply_data_transformations(data_array, data_var)
 
-    def update_template_with_results(
-        self,
-        process_results: Mapping[
-            str, Sequence[EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]
-        ],
-    ) -> xr.Dataset:
-        """
-        Update template dataset based on processing results. This method is called
-        during operational updates.
-
-        Subclasses should implement this method to apply dataset-specific adjustments
-        based on the processing results. Examples include:
-        - Trimming dataset along append_dim to only include successfully processed data
-        - Loading existing coordinate values from the primary store and updating them based on results
-        - Updating metadata based on what was actually processed vs what was planned
-
-        The default implementation trims along append_dim to end at the most recent
-        successfully processed coordinate (timestamp).
-
-        Parameters
-        ----------
-        process_results : Mapping[str, Sequence[EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]]
-            Mapping from variable names to their source file coordinates with final processing status.
-
-        Returns
-        -------
-        xr.Dataset
-            Updated template dataset reflecting the actual processing results.
-        """
-
-        # TODO(lauren): expected vs. ingested forecast_length? -- swann/ndvi cdr?
-
-        # The super() implementation looks like this:
-        #
-        # max_append_dim_processed = max(
-        #     (
-        #         c.out_loc()[self.append_dim]  # type: ignore[type-var]
-        #         for c in chain.from_iterable(process_results.values())
-        #         if c.status == SourceFileStatus.Succeeded
-        #     ),
-        #     default=None,
-        # )
-        # if max_append_dim_processed is None:
-        #     # No data was processed, trim the template to stop before this job's region
-        #     # This is using isel's exclusive slice end behavior
-        #     return self.template_ds.isel(
-        #         {self.append_dim: slice(None, self.region.start)}
-        #     )
-        # else:
-        #     return self.template_ds.sel(
-        #         {self.append_dim: slice(None, max_append_dim_processed)}
-        #     )
-        #
-        # If you like the above behavior, skip implementing this method.
-        # If you need to customize the behavior, implement this method.
-
-        raise NotImplementedError(
-            "Subclasses implement update_template_with_results() with dataset-specific logic"
-        )
-
     @classmethod
     def operational_update_jobs(
         cls,
@@ -351,16 +291,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         from its current state to include the latest available data.
 
         Also return the template_ds, expanded along append_dim through the end of
-        the data to process. The dataset returned here may extend beyond the
-        available data at the source, in which case `update_template_with_results`
-        will trim the dataset to the actual data processed.
-
-        The exact logic is dataset-specific, but it generally follows this pattern:
-        1. Figure out the range of time to process: append_dim_start (inclusive) and append_dim_end (exclusive)
-            a. Read existing data from the primary store to determine what's already processed
-            b. Optionally identify recent incomplete/non-final data for reprocessing
-        2. Call get_template_fn(append_dim_end) to get the template_ds
-        3. Create RegionJob instances by calling cls.get_jobs(..., filter_start=append_dim_start)
+        the data to process.
 
         Parameters
         ----------
@@ -385,22 +316,21 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         xr.Dataset
             The template_ds for the operational update.
         """
-        # existing_ds = xr.open_zarr(primary_store)
-        # append_dim_start = existing_ds[append_dim].max()
-        # append_dim_end = pd.Timestamp.now()
-        # template_ds = get_template_fn(append_dim_end)
+        existing_ds = xr.open_zarr(
+            primary_store, decode_timedelta=True, chunks=None
+        )  # do I need the decode_timedelta/chunks=None? stole that from HRRR
+        # start after the last init time in the dataset (so we don't reprocess the last forecast)
+        append_dim_start = existing_ds[append_dim].max() + pd.Timedelta("1s")
+        append_dim_end = pd.Timestamp.now()
+        template_ds = get_template_fn(append_dim_end)
 
-        # jobs = cls.get_jobs(
-        #     kind="operational-update",
-        #     tmp_store=tmp_store,
-        #     template_ds=template_ds,
-        #     append_dim=append_dim,
-        #     all_data_vars=all_data_vars,
-        #     reformat_job_name=reformat_job_name,
-        #     filter_start=append_dim_start,
-        # )
-        # return jobs, template_ds
-
-        raise NotImplementedError(
-            "Subclasses implement operational_update_jobs() with dataset-specific logic"
+        jobs = cls.get_jobs(
+            kind="operational-update",
+            tmp_store=tmp_store,
+            template_ds=template_ds,
+            append_dim=append_dim,
+            all_data_vars=all_data_vars,
+            reformat_job_name=reformat_job_name,
+            filter_start=append_dim_start,
         )
+        return jobs, template_ds

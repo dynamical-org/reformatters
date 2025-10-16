@@ -1,24 +1,19 @@
-# from unittest.mock import Mock
-
 from io import StringIO
+from pathlib import Path
 from unittest.mock import Mock
 
 import pandas as pd
 import pytest
 
+from reformatters.common import template_utils
+from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job import (
-    # EcmwfIfsEnsForecast15Day025DegreeRegionJob,
     EcmwfIfsEnsForecast15Day025DegreeRegionJob,
     EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord,
 )
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.template_config import (
     EcmwfIfsEnsForecast15Day025DegreeTemplateConfig,
 )
-
-# from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.template_config import (
-#     EcmwfIfsEnsDataVar,
-#     EcmwfIfsEnsForecast15Day025DegreeTemplateConfig,
-# )
 
 
 def test_source_file_coord_get_url() -> None:
@@ -124,3 +119,47 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
         local_path_suffix == "-4f434771"
     )  # result of calling digest on the byte ranges
     assert byte_ranges == ([0], [665525])
+
+
+def test_operational_update_jobs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
+    store_factory = StoreFactory(
+        primary_storage_config=StorageConfig(
+            base_path="fake-prod-path",
+            format=DatasetFormat.ZARR3,
+        ),
+        dataset_id="test-dataset-ecmwf",
+        template_config_version="test-version",
+    )
+
+    # Set the append_dim_end for the update
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2024-03-02T15:48")),
+    )
+    # Set the append_dim_start for the update
+    # Use a template_ds as a lightweight way to create a mock dataset with a known max append dim coordinate
+    existing_ds = template_config.get_template(
+        pd.Timestamp("2024-03-01T00:01")  # 00z will be max existing init time
+    )
+    template_utils.write_metadata(existing_ds, store_factory)
+
+    jobs, template_ds = (
+        EcmwfIfsEnsForecast15Day025DegreeRegionJob.operational_update_jobs(
+            primary_store=store_factory.primary_store(),
+            tmp_store=tmp_path / "tmp_ds.zarr",
+            get_template_fn=template_config.get_template,
+            append_dim=template_config.append_dim,
+            all_data_vars=template_config.data_vars,
+            reformat_job_name="test_job",
+        )
+    )
+
+    assert template_ds.init_time.max() == pd.Timestamp("2024-03-02T00:00")
+    assert len(jobs) == 1  # just the 00z init time for March 2nd
+    for job in jobs:
+        assert isinstance(job, EcmwfIfsEnsForecast15Day025DegreeRegionJob)
+        assert job.data_vars == template_config.data_vars
