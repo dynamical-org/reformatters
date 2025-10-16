@@ -83,12 +83,12 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     example_grib_index = """
-{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "3", "levtype": "sfc", "param": "2t", "_offset": 0, "_length": 665525}
-{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "3", "levtype": "pl", "levelist": "850", "param": "2t", "_offset": 665525, "_length": 100000}
-{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "3", "levtype": "sfc", "param": "10u", "_offset": 765525, "_length": 888917}
-{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levtype": "sfc", "number": "1", "param": "2t", "_offset": 1554442, "_length": 664922}
-{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levtype": "pl", "levelist": "850", "number": "1", "param": "2t", "_offset": 2219364, "_length": 664716}
-{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levtype": "sfc", "number": "1", "param": "10u", "_offset": 2884080, "_length": 889546}
+{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "0", "levtype": "sfc", "param": "2t", "_offset": 0, "_length": 665525}
+{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "0", "levtype": "pl", "levelist": "850", "param": "2t", "_offset": 665525, "_length": 100000}
+{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "0", "levtype": "sfc", "param": "10u", "_offset": 765525, "_length": 888917}
+{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "0", "levtype": "sfc", "number": "1", "param": "2t", "_offset": 1554442, "_length": 664922}
+{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "0", "levtype": "pl", "levelist": "850", "number": "1", "param": "2t", "_offset": 2219364, "_length": 664716}
+{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "0", "levtype": "sfc", "number": "1", "param": "10u", "_offset": 2884080, "_length": 889546}
 """
     mock_index_df = pd.read_json(StringIO(example_grib_index), lines=True)
     monkeypatch.setattr(

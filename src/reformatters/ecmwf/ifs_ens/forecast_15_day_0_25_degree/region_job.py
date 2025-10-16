@@ -1,6 +1,5 @@
 import itertools
 from collections.abc import Callable, Mapping, Sequence
-from os import PathLike
 from pathlib import Path
 from typing import ClassVar
 
@@ -30,24 +29,11 @@ from reformatters.common.types import (
     Timedelta,
     Timestamp,
 )
+from reformatters.ecmwf.parse_data import get_message_byte_ranges_from_index
 
 from .template_config import EcmwfIfsEnsDataVar
 
 log = get_logger(__name__)
-
-"""
-Region = single init_time (1 along append_dim axis), full zarr slice for that init_time. Can be one var.
-   - strictly about coordinates, agnostic of data vars.
-   -> allows us to never insert, only append.
-   - full ensemble members, full lead times
-
-
-Tues afternoon:
-- implement byte ranges
-- region job tests?
-- read_data implementation
-- try run backfill-local??
-"""
 
 
 class EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(SourceFileCoord):
@@ -92,7 +78,9 @@ class EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(SourceFileCoord):
     def get_index_url(self) -> str:
         return self._get_base_url() + ".index"
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(
+        self,
+    ) -> Mapping[Dim, CoordinateValueOrRange]:
         return {
             "init_time": self.init_time,
             "lead_time": self.lead_time,
@@ -103,35 +91,25 @@ class EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(SourceFileCoord):
 class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     RegionJob[EcmwfIfsEnsDataVar, EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]
 ):
-    # Optionally, limit the number of variables downloaded together.
-    # If set to a value less than len(data_vars), downloading, reading/recompressing,
-    # and uploading steps will be pipelined within a region job.
-    # 5 is a reasonable default if it is possible to download less than all
-    # variables in a single file (e.g. you have a grib index).
-    # Leave unset if you have to download a whole file to get one variable out
-    # to avoid re-downloading the same file multiple times.
-    #
+    # Limits the number of variables downloaded together.
+    # All variables are scattered throughout the grib file without any organization,
+    # so it's more efficient to do separate windowed downloads & reads for each
+    # variable that we can parallelize.
     max_vars_per_download_group: ClassVar[int] = 1
-
-    # Implement this method only if specific post processing in this dataset
-    # requires data from outside the region defined by self.region,
-    # e.g. for deaccumulation or interpolation along append_dim in an analysis dataset.
-    #
-    # def get_processing_region(self) -> slice:
-    #     """
-    #     Return a slice of integer offsets into self.template_ds along self.append_dim that identifies
-    #     the region to process. In most cases this is exactly self.region, but if additional data outside
-    #     the region is required, for example for correct interpolation or deaccumulation, this method can
-    #     return a modified slice (e.g. `slice(self.region.start - 1, self.region.stop + 1)`).
-    #     """
-    #     return self.region
 
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[EcmwfIfsEnsDataVar],
     ) -> Sequence[EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]:
-        """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
+        """Returns a sequence of coords, one for each source file required to process the data covered by processing_region_ds.
+
+        NOTE: all ensemble members are included in the same source file, but we only
+            include one per SourceFileCoord because we want them to get processed separately.
+        This is because the ensemble members & variables are scattered throughout the file
+            rather than being clustered in one contiguous window, and we can get better
+            download/read performance by treating them separately and parallelizing.
+        """
         return [
             EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
                 init_time=init_time,
@@ -153,57 +131,6 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         # Download grib index file
         idx_url = coord.get_index_url()
         idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
-
-        """
-        max_vars_per_download_group = 1, max_download = 1
-        hrrr forecast: steal vars_suffix (as just suffix). need unique request
-        SourceFileCoord: include ensemble member
-        own grib index parser -- pd readlines, pandas json lineparser. ask AI
-        byte range: offset + offset+length in index file
-
-        read_data: extremely similar to HRRR.
-        don't need matching really, reader.read 1
-        """
-
-        def parse_index_file(index_local_path: PathLike[str]) -> pd.DataFrame:
-            """
-            Returns a pandas df representing the index file.
-            MultiIndex of (number, param)
-            Columns include:
-              - used information: type (control/perturbed), param (variable short name), _offset (byte window start), _length (length of byte window)
-              - unused information: levtype (sfc/pl/sol/...), levelist, domain, date, time, step, expver, class, stream
-            """
-            df = pd.read_json(index_local_path, lines=True)
-
-            # Control members don't have "number" field, so fill with 0
-            df["number"] = df["number"].fillna(0).astype(int)
-            # Ensure that every row we filled with number=0 was indeed type "cf" (control forecast)
-            assert all(df[df["number"] == 0]["type"] == "cf"), (
-                "Parsed row as control member that didn't have type='cf'"
-            )
-
-            return df.set_index(["number", "param"]).sort_index()
-
-        def get_message_byte_ranges_from_index(
-            index_local_path: PathLike[str],
-            data_vars: Sequence[EcmwfIfsEnsDataVar],
-            ensemble_member: int,
-        ) -> tuple[list[int], list[int]]:
-            """
-            Returns a list of byte range starts & a list of byte range ends,
-            with the elements of each list in order of data vars.
-            """
-            byte_range_starts = []
-            byte_range_ends = []
-            index_file_df = parse_index_file(index_local_path)
-            for data_var in data_vars:
-                start, length = index_file_df.loc[
-                    (ensemble_member, data_var.internal_attrs.grib_index_param),
-                    ["_offset", "_length"],
-                ].values[0]
-                byte_range_starts.append(start)
-                byte_range_ends.append(start + length)
-            return byte_range_starts, byte_range_ends
 
         # Download the grib messages for the data vars in the coord using byte ranges
         byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(
@@ -229,6 +156,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         """Read and return an array of data for the given variable and source file coordinate."""
 
         with rasterio.open(coord.downloaded_path) as reader:
+            # Expecting one band per downloaded file because we should only have one data var & one ensemble member
             assert reader.count == 1, "Expected only one band per downloaded file"
             assert (
                 reader.tags(1)["GRIB_COMMENT"] == data_var.internal_attrs.grib_comment
@@ -316,9 +244,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         xr.Dataset
             The template_ds for the operational update.
         """
-        existing_ds = xr.open_zarr(
-            primary_store, decode_timedelta=True, chunks=None
-        )  # do I need the decode_timedelta/chunks=None? stole that from HRRR
+        existing_ds = xr.open_zarr(primary_store, decode_timedelta=True, chunks=None)
         # start after the last init time in the dataset (so we don't reprocess the last forecast)
         append_dim_start = existing_ds[append_dim].max() + pd.Timedelta("1s")
         append_dim_end = pd.Timestamp.now()
