@@ -62,10 +62,9 @@ def test_backfill_local_and_operational_update(
     assert ds.time.min() == pd.Timestamp("2015-04-01")
     assert ds.time.max() == pd.Timestamp("2015-04-02")
 
-    # Operational update
+    # Operational update - mock pd.Timestamp.now() to control the update end time
     monkeypatch.setattr(
-        dataset.region_job_class,
-        "_update_append_dim_end",
+        "pandas.Timestamp.now",
         lambda: pd.Timestamp("2015-04-04"),
     )
 
