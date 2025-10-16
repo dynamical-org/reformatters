@@ -207,10 +207,10 @@ def test_check_analysis_recent_nans_fails(
     print(f"\nDataset latitude coords: {analysis_dataset.latitude.values}")
     print(f"Dataset longitude coords: {analysis_dataset.longitude.values}")
     print(f"Dataset time coords: {analysis_dataset.time.values}")
-    
+
     # Set all recent data to NaN to ensure the random sample will catch it
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
-    
+
     # Debug: check what the slice selects
     sample_ds = analysis_dataset.sel(
         time=slice(now - timedelta(hours=12), None),
@@ -221,7 +221,9 @@ def test_check_analysis_recent_nans_fails(
     print(f"Sample latitude coords: {sample_ds.latitude.values}")
     print(f"Sample longitude coords: {sample_ds.longitude.values}")
     print(f"Sample time coords: {sample_ds.time.values}")
-    print(f"Temperature NaN percentage: {sample_ds['temperature'].isnull().mean().compute() * 100:.1f}%")
+    print(
+        f"Temperature NaN percentage: {sample_ds['temperature'].isnull().mean().compute() * 100:.1f}%"
+    )
 
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
