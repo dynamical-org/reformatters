@@ -1,4 +1,4 @@
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -11,7 +11,6 @@ import zarr
 from reformatters.common.download import get_local_path
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
     RegionJob,
     SourceFileCoord,
 )
@@ -20,7 +19,6 @@ from reformatters.common.types import (
     AppendDim,
     ArrayFloat32,
     DatetimeLike,
-    Dim,
     Timestamp,
 )
 
@@ -42,11 +40,6 @@ class NasaSmapLevel336KmV9SourceFileCoord(SourceFileCoord):
         year_month = self.time.strftime("%Y/%m")
         filename = f"SMAP_L3_SM_P_{self.time.strftime('%Y%m%d')}_R19240_001.h5"
         return f"{base}/{year_month}/{filename}"
-
-    def out_loc(
-        self,
-    ) -> Mapping[Dim, CoordinateValueOrRange]:
-        return {"time": self.time}
 
 
 class NasaSmapLevel336KmV9RegionJob(
@@ -76,7 +69,9 @@ class NasaSmapLevel336KmV9RegionJob(
             session = get_authenticated_session()
             response = session.get(url, timeout=10, stream=True, allow_redirects=True)
             if response.status_code == 404:
-                for i in [2, 3, 4, 5]:  # in practice, I've only seen `2`
+                # URLs contain a per file reprocessed version suffix (e.g. _001.h5, _002.h5, etc.)
+                # In practice, we've only seen `2` but try a few more just in case.
+                for i in [2, 3, 4, 5]:
                     reprocessed_url = url.replace("_001.h5", f"_{i:03}.h5")
                     log.warning(
                         f"File not found at {url}, trying alternative {reprocessed_url}"

@@ -27,6 +27,8 @@ class NasaSmapLevel336KmV9Dataset(
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-operational-update",
+            # New data comes 1x per day, usually around 5:45 but sometimes later, more like 14:00
+            # Run twice to pick up the later data too (updates only take a couple minutes)
             schedule="0 6,18 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
@@ -53,6 +55,7 @@ class NasaSmapLevel336KmV9Dataset(
 
     def validators(self) -> Sequence[validation.DataValidator]:
         """Return a sequence of DataValidators to run on this dataset."""
+        # Usually < 24 hours, but this isn't super latency sensitive data
         max_expected_delay = timedelta(hours=48)
         return (
             partial(
@@ -62,6 +65,7 @@ class NasaSmapLevel336KmV9Dataset(
             partial(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
+                # Oceans and about half of land (due to swaths) are expected to be NaNs
                 max_nan_percentage=90,
             ),
         )

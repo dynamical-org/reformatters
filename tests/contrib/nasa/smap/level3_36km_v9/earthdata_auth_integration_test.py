@@ -15,10 +15,8 @@
 #     This test uses real credentials from the nasa-earthdata secret and makes
 #     actual network requests to verify authentication works end-to-end.
 
-#     To run this test:
-#     1. Ensure you have the nasa-earthdata secret configured in your cluster
-#     2. Remove the @pytest.mark.skip decorator
-#     3. Run: uv run pytest tests/contrib/nasa/smap/level3_36km_v9/earthdata_auth_integration_test.py
+#     To run this test ensure you have the nasa-earthdata secret configured in your cluster
+#     and your local environment is authorized with a kubectl context.
 #     """
 #     # Monkeypatch to prod environment so load_secret() fetches real credentials
 #     monkeypatch.setattr(Config, "env", Env.prod)
