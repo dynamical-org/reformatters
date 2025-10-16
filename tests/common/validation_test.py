@@ -212,7 +212,7 @@ def test_check_analysis_recent_nans_custom_parameters(
     mask = (
         np.random.rand(*analysis_dataset["temperature"].loc[recent_slice].shape) < 0.5
     )
-    analysis_dataset["temperature"].loc[recent_slice] = xr.where(
+    analysis_dataset["temperature"].loc[recent_slice] = xr.where(  # type: ignore[no-untyped-call]
         mask, np.nan, analysis_dataset["temperature"].loc[recent_slice]
     )
 
