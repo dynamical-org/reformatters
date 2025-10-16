@@ -194,7 +194,9 @@ def test_check_analysis_recent_nans_fails(
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
 
     result = validation.check_analysis_recent_nans(
-        analysis_dataset, maximum_expected_delay=timedelta(hours=12), max_nan_percentage=5
+        analysis_dataset,
+        maximum_expected_delay=timedelta(hours=12),
+        max_nan_percentage=5,
     )
 
     assert not result.passed
@@ -215,14 +217,18 @@ def test_check_analysis_recent_nans_custom_parameters(
 
     # Should fail with 5% threshold
     result = validation.check_analysis_recent_nans(
-        analysis_dataset, maximum_expected_delay=timedelta(hours=12), max_nan_percentage=5
+        analysis_dataset,
+        maximum_expected_delay=timedelta(hours=12),
+        max_nan_percentage=5,
     )
     assert not result.passed
 
     # Should pass with 90% threshold (100% NaN is still > 90%, so this will fail)
     # Instead test with a lower threshold that should pass
     result = validation.check_analysis_recent_nans(
-        analysis_dataset, maximum_expected_delay=timedelta(hours=12), max_nan_percentage=100
+        analysis_dataset,
+        maximum_expected_delay=timedelta(hours=12),
+        max_nan_percentage=100,
     )
     assert result.passed
 
