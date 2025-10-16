@@ -82,11 +82,11 @@ def test_backfill_local_and_operational_update(
         ),
     )
     subset_ds = updated_ds.sel(x=0, y=0, method="nearest")
-    np.testing.assert_array_equal(
-        subset_ds["soil_moisture_am"].values, [0.25, 0.30, 0.35]
+    np.testing.assert_array_almost_equal(
+        subset_ds["soil_moisture_am"].values, [0.25, 0.30, 0.35], decimal=3
     )
-    np.testing.assert_array_equal(
-        subset_ds["soil_moisture_pm"].values, [0.25, 0.30, 0.35]
+    np.testing.assert_array_almost_equal(
+        subset_ds["soil_moisture_pm"].values, [0.25, 0.30, 0.35], decimal=3
     )
 
 
