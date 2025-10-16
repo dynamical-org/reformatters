@@ -191,15 +191,15 @@ def test_check_analysis_recent_nans_fails(
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
     # Mock random sampling to return coordinates within dataset bounds
-    # First call returns lon=0, second call returns lat=0
+    # Dataset has lat from 90 to -90 (decreasing), lon from -180 to 180
     call_count = [0]
 
     def mock_uniform(low: float, high: float) -> float:
         call_count[0] += 1
         if call_count[0] == 1:  # longitude
-            return 0.0
+            return 0.0  # Will create slice(0, 2)
         else:  # latitude
-            return 2.0  # Use positive value so slice(2, 0) selects data
+            return 10.0  # Will create slice(10, 8) which works with decreasing coords
 
     monkeypatch.setattr("numpy.random.uniform", mock_uniform)
 
@@ -230,9 +230,9 @@ def test_check_analysis_recent_nans_custom_parameters(
     def mock_uniform(low: float, high: float) -> float:
         call_count[0] += 1
         if call_count[0] % 2 == 1:  # longitude (odd calls)
-            return 0.0
+            return 0.0  # Will create slice(0, 2)
         else:  # latitude (even calls)
-            return 2.0
+            return 10.0  # Will create slice(10, 8) which works with decreasing coords
 
     monkeypatch.setattr("numpy.random.uniform", mock_uniform)
 
