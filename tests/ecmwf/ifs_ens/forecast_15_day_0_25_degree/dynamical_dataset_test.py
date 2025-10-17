@@ -49,11 +49,11 @@ def test_backfill_local_and_operational_update(
     # existing_ds_append_dim_end is exclusive, so should have only processed the first forecast
     assert ds.init_time.values == [np.datetime64("2024-02-03T00:00:00")]
 
-    actual_values = ds.sel(
+    t2m_actual_values = ds.sel(
         init_time="2024-02-03T00:00:00", latitude=0, longitude=0
     ).temperature_2m
 
-    expected_values = np.array(
+    t2m_expected_values = np.array(
         [
             [27.0, 28.5],  # lead time 0h, ensemble members 0 and 1
             [27.25, 25.75],  # lead time 3h, ensemble members 0 and 1
@@ -62,7 +62,25 @@ def test_backfill_local_and_operational_update(
         dtype=np.float32,
     )
 
-    np.testing.assert_array_equal(actual_values, expected_values)
+    np.testing.assert_array_equal(t2m_actual_values, t2m_expected_values)
+
+    precip_surface_actual_values = ds.sel(
+        init_time="2024-02-03T00:00:00", latitude=0, longitude=0
+    ).precipitation_surface
+
+    precip_surface_expected_values = np.array(
+        [
+            [0.0, 0.0],  # lead time 0h, ensemble members 0 and 1
+            [1.764420e-10, 2.998859e-07],  # lead time 3h, ensemble members 0 and 1
+            [2.299203e-09, 1.764420e-10],  # lead time 6h, ensemble members 0 and 1
+        ],
+        dtype=np.float32,
+    )
+    np.testing.assert_allclose(
+        precip_surface_actual_values,
+        precip_surface_expected_values,
+        rtol=1e-6,
+    )
 
     # Operational update
     monkeypatch.setattr(
@@ -80,8 +98,8 @@ def test_backfill_local_and_operational_update(
             [np.datetime64("2024-02-03T00:00:00"), np.datetime64("2024-02-04T00:00:00")]
         ),
     )
-    actual_values = updated_ds.sel(latitude=0, longitude=0).temperature_2m
-    expected_values = np.array(
+    t2m_actual_values = updated_ds.sel(latitude=0, longitude=0).temperature_2m
+    t2m_expected_values = np.array(
         [
             [  # init time 2024-02-03T00:00:00
                 [27.0, 28.5],  # lead time 0h, ensemble members 0 and 1
@@ -96,7 +114,32 @@ def test_backfill_local_and_operational_update(
         ],
         dtype=np.float32,
     )
-    np.testing.assert_array_equal(actual_values, expected_values)
+    np.testing.assert_array_equal(t2m_actual_values, t2m_expected_values)
+
+    precip_surface_actual_values = updated_ds.sel(
+        latitude=0, longitude=0
+    ).precipitation_surface
+
+    precip_surface_expected_values = np.array(
+        [
+            [
+                [0.0000000e00, 0.0000000e00],
+                [1.7644197e-10, 2.9988587e-07],
+                [2.2992026e-09, 1.7644197e-10],
+            ],
+            [
+                [0.0000000e00, 0.0000000e00],
+                [1.0069925e-08, 1.3038516e-07],
+                [1.7644197e-10, 3.8417056e-08],
+            ],
+        ],
+        dtype=np.float32,
+    )
+    np.testing.assert_allclose(
+        precip_surface_actual_values,
+        precip_surface_expected_values,
+        rtol=1e-6,
+    )
 
 
 # def test_operational_kubernetes_resources(
