@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import numpy as np
 import pandas as pd
@@ -231,9 +231,8 @@ def test_read_data_am(
     mock_dataset = Mock()
     mock_dataset.read.return_value = mock_smap_am_data
 
-    mock_open = Mock()
+    mock_open = MagicMock()
     mock_open.return_value.__enter__.return_value = mock_dataset
-    mock_open.return_value.__exit__.return_value = None
 
     monkeypatch.setattr(
         "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.rasterio.open",
@@ -283,9 +282,8 @@ def test_read_data_pm(
     mock_dataset = Mock()
     mock_dataset.read.return_value = mock_smap_pm_data
 
-    mock_open = Mock()
+    mock_open = MagicMock()
     mock_open.return_value.__enter__.return_value = mock_dataset
-    mock_open.return_value.__exit__.return_value = None
 
     monkeypatch.setattr(
         "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.rasterio.open",
