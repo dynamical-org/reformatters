@@ -76,7 +76,7 @@ def test_dimension_coordinates_shapes_and_values() -> None:
     assert lat[-1] == -90.0
     assert len(lat) == 721
 
-    # longitude: from -180 to +179.50, 0.25° steps
+    # longitude: from -180 to +179.75, 0.25° steps
     lon = dim_coords["longitude"]
     assert isinstance(lon, np.ndarray)
     assert lon[0] == -180.0
