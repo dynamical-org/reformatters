@@ -17,6 +17,5 @@
 
 #     expected_crs = "Your dataset's proj4 or EPSG:XXXX string"
 #     calculated_spatial_ref_attrs = ds.rio.write_crs(expected_crs).spatial_ref.attrs
-#     assert set(original_attrs) - set(calculated_spatial_ref_attrs) == {"comment"}
 #     original_attrs.pop("comment")
 #     assert original_attrs == calculated_spatial_ref_attrs

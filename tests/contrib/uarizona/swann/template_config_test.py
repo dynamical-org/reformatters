@@ -17,6 +17,5 @@ def test_get_template_spatial_ref() -> None:
     # See https://nsidc.org/sites/default/files/documents/user-guide/nsidc-0719-v001-userguide.pdf
     # which indicates EPSG:4269 is the CRS for the source data.
     calculated_spatial_ref_attrs = ds.rio.write_crs("EPSG:4269").spatial_ref.attrs
-    assert set(original_attrs) - set(calculated_spatial_ref_attrs) == {"comment"}
     original_attrs.pop("comment")
     assert original_attrs == calculated_spatial_ref_attrs

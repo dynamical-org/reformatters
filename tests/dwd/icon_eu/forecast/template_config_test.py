@@ -36,6 +36,5 @@ def test_get_template_spatial_ref() -> None:
             ANGLEUNIT["degree",0.0174532925199433,
                 ID["EPSG",9122]]]]""")
     calculated_spatial_ref_attrs = ds.rio.write_crs(expected_crs).spatial_ref.attrs
-    assert set(original_attrs) - set(calculated_spatial_ref_attrs) == {"comment"}
     original_attrs.pop("comment")
     assert original_attrs == calculated_spatial_ref_attrs
