@@ -1,3 +1,5 @@
+from unittest.mock import Mock
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -21,49 +23,70 @@ def dataset() -> EcmwfIfsEnsForecast15Day025DegreeDataset:
 def test_backfill_local_and_operational_update(
     monkeypatch: pytest.MonkeyPatch, dataset: EcmwfIfsEnsForecast15Day025DegreeDataset
 ) -> None:
-    existing_ds_append_dim_end = (
-        dataset.template_config.append_dim_start + pd.Timedelta(days=1)
-    )
-    operational_update_append_dim_end = existing_ds_append_dim_end + pd.Timedelta(
-        days=1
+    orig_get_template = dataset.template_config.get_template
+
+    monkeypatch.setattr(
+        type(dataset.template_config),
+        "get_template",
+        lambda self, end_time: orig_get_template(end_time).sel(
+            lead_time=slice("0h", "6h"), ensemble_member=slice(0, 1)
+        ),
     )
 
-    # Local backfill reformat
-    dataset.backfill_local(append_dim_end=existing_ds_append_dim_end)
+    dataset.backfill_local(append_dim_end=pd.Timestamp("2024-02-04T00:00:00"))
+
     ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
     # existing_ds_append_dim_end is exclusive, so should have only processed the first forecast
-    assert ds.init_time.max() == dataset.template_config.append_dim_start
+    assert ds.init_time.values == [np.datetime64("2024-02-03T00:00:00")]
+
+    actual_values = ds.sel(
+        init_time="2024-02-03T00:00:00", latitude=0, longitude=0
+    ).temperature_2m
+
+    expected_values = np.array(
+        [
+            [27.0, 28.5],  # lead time 0h, ensemble members 0 and 1
+            [27.25, 25.75],  # lead time 3h, ensemble members 0 and 1
+            [27.25, 26.875],  # lead time 6h, ensemble members 0 and 1
+        ],
+        dtype=np.float32,
+    )
+
+    np.testing.assert_array_equal(actual_values, expected_values)
 
     # Operational update
     monkeypatch.setattr(
-        dataset.region_job_class,
-        "_update_append_dim_end",
-        lambda: operational_update_append_dim_end,
+        pd.Timestamp,
+        "now",
+        Mock(return_value=pd.Timestamp("2024-02-05T00:00:00")),
     )
-    # monkeypatch.setattr(
-    #     dataset.region_job_class,
-    #     "_update_append_dim_start",
-    #     lambda existing_ds: pd.Timestamp(existing_ds.init_time.max().item()),
-    # ) <- can we remove this one?
-
     dataset.update("test-update")
 
-    # Check resulting dataset
     updated_ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
-    breakpoint()
+
     np.testing.assert_array_equal(
         updated_ds.init_time,
-        pd.date_range(
-            existing_ds_append_dim_end,
-            operational_update_append_dim_end,
-            freq=dataset.template_config.append_dim_frequency,
+        np.array(
+            [np.datetime64("2024-02-03T00:00:00"), np.datetime64("2024-02-04T00:00:00")]
         ),
     )
-    subset_ds = updated_ds.sel(latitude=0, longitude=0, method="nearest")
-    breakpoint()
-    np.testing.assert_array_equal(
-        subset_ds["temperature_2m"].values, [190.0, 163.0, 135.0]
+    actual_values = updated_ds.sel(latitude=0, longitude=0).temperature_2m
+    expected_values = np.array(
+        [
+            [  # init time 2024-02-03T00:00:00
+                [27.0, 28.5],  # lead time 0h, ensemble members 0 and 1
+                [27.25, 25.75],  # lead time 3h, ensemble members 0 and 1
+                [27.25, 26.875],  # lead time 6h, ensemble members 0 and 1
+            ],
+            [  # init time 2024-02-04T00:00:00
+                [27.875, 28.375],  # lead time 0h, ensemble members 0 and 1
+                [27.75, 27.375],  # lead time 3h, ensemble members 0 and 1
+                [27.75, 27.625],  # lead time 6h, ensemble members 0 and 1
+            ],
+        ],
+        dtype=np.float32,
     )
+    np.testing.assert_array_equal(actual_values, expected_values)
 
 
 # def test_operational_kubernetes_resources(
