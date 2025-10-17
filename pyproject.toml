@@ -86,12 +86,8 @@ ignore = [
     "TD003",   # don't require issue link
     "PTH123",  # allow `open`
     "G004",    # allow f-string in logging
+    "PLR2004", # magic value used in comparison
 ]
-
-[tool.ruff.lint.per-file-ignores]
-    "tests/*" = [
-        "PLR2004", # magic value used in comparison - useful in tests
-    ]
 
 
 [tool.mypy]

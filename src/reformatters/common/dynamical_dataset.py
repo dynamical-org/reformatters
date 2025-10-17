@@ -297,9 +297,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     "shared_memory",
                     "ephemeral_storage",
                     "pod_active_deadline",
+                    "secret_names",
                 }
             ),
-            secret_names=self.store_factory.k8s_secret_names(),
         )
         subprocess.run(
             ["/usr/bin/kubectl", "apply", "-f", "-"],

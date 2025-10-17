@@ -19,7 +19,6 @@ def test_get_template_spatial_ref() -> None:
 
     expected_crs = "+proj=longlat +a=6371229 +b=6371229 +no_defs +type=crs"
     calculated_spatial_ref_attrs = ds.rio.write_crs(expected_crs).spatial_ref.attrs
-    assert set(original_attrs) - set(calculated_spatial_ref_attrs) == {"comment"}
     original_attrs.pop("comment")
     assert original_attrs == calculated_spatial_ref_attrs
 

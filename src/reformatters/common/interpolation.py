@@ -18,7 +18,7 @@ def linear_interpolate_1d_inplace(
     Mutates `data_array` in place.
     """
     assert data_array.dims.index(dim) == 0
-    assert data_array.ndim == 3  # noqa: PLR2004
+    assert data_array.ndim == 3
     assert where.ndim == 1
     assert where.shape[0] == data_array.shape[0]
     assert not np.any(where[1:] & where[:-1]), "Cannot interpolate consecutive values"

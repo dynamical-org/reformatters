@@ -17,6 +17,5 @@ def test_get_template_spatial_ref() -> None:
 
     expected_crs = "EPSG:4326"
     calculated_spatial_ref_attrs = ds.rio.write_crs(expected_crs).spatial_ref.attrs
-    assert set(original_attrs) - set(calculated_spatial_ref_attrs) == {"comment"}
     original_attrs.pop("comment")
     assert original_attrs == calculated_spatial_ref_attrs

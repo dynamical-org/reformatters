@@ -1,0 +1,54 @@
+{
+  "shape": [],
+  "data_type": "int64",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": []
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": 0,
+  "codecs": [
+    {
+      "name": "bytes",
+      "configuration": {
+        "endian": "little"
+      }
+    },
+    {
+      "name": "zstd",
+      "configuration": {
+        "level": 0,
+        "checksum": false
+      }
+    }
+  ],
+  "attributes": {
+    "comment": "This coordinate reference system describes the EASE-Grid 2.0 Global projection (EPSG:6933).",
+    "crs_wkt": "PROJCS[\"WGS 84 / NSIDC EASE-Grid 2.0 Global\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]],PROJECTION[\"Cylindrical_Equal_Area\"],PARAMETER[\"standard_parallel_1\",30],PARAMETER[\"central_meridian\",0],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH],AUTHORITY[\"EPSG\",\"6933\"]]",
+    "semi_major_axis": 6378137.0,
+    "semi_minor_axis": 6356752.314245179,
+    "inverse_flattening": 298.257223563,
+    "reference_ellipsoid_name": "WGS 84",
+    "longitude_of_prime_meridian": 0.0,
+    "prime_meridian_name": "Greenwich",
+    "geographic_crs_name": "WGS 84",
+    "horizontal_datum_name": "World Geodetic System 1984",
+    "grid_mapping_name": "lambert_cylindrical_equal_area",
+    "spatial_ref": "PROJCS[\"WGS 84 / NSIDC EASE-Grid 2.0 Global\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]],PROJECTION[\"Cylindrical_Equal_Area\"],PARAMETER[\"standard_parallel_1\",30],PARAMETER[\"central_meridian\",0],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH],AUTHORITY[\"EPSG\",\"6933\"]]",
+    "false_easting": 0.0,
+    "false_northing": 0.0,
+    "longitude_of_central_meridian": 0.0,
+    "projected_crs_name": "WGS 84 / NSIDC EASE-Grid 2.0 Global",
+    "standard_parallel": 30.0
+  },
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}
