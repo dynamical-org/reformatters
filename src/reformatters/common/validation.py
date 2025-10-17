@@ -3,7 +3,7 @@ import json
 from collections.abc import Sequence
 from datetime import timedelta
 from functools import partial
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
 
 import numpy as np
 import pandas as pd
@@ -137,25 +137,50 @@ def check_analysis_current_data(
     )
 
 
-def check_analysis_recent_nans(
+def check_analysis_recent_nans(  # noqa: PLR0912
     ds: xr.Dataset,
     max_expected_delay: timedelta = timedelta(hours=12),
     max_nan_percentage: float = 5,
+    spatial_sampling: Literal["random", "quarter"] = "random",
 ) -> ValidationResult:
     """Check for NaN values in the most recent day of data. Fails if more than max_nan_percentage of sampled data is NaN."""
 
     now = pd.Timestamp.now()
 
-    # Use positional indexing to sample a small spatial region
-    lat_size = ds.sizes["latitude"]
-    lon_size = ds.sizes["longitude"]
-    lat_idx = np.random.randint(0, max(1, lat_size - 2))
-    lon_idx = np.random.randint(0, max(1, lon_size - 2))
+    if "latitude" in ds.dims and "longitude" in ds.dims:
+        x_dim, y_dim = "longitude", "latitude"
+    elif "x" in ds.dims and "y" in ds.dims:
+        x_dim, y_dim = "x", "y"
+    else:
+        raise ValueError("Can't infer spatial dimensions from dataset")
 
-    sample_ds = ds.sel(time=slice(now - max_expected_delay, None)).isel(
-        latitude=slice(lat_idx, lat_idx + 2),
-        longitude=slice(lon_idx, lon_idx + 2),
-    )
+    x_size = ds.sizes[x_dim]
+    y_size = ds.sizes[y_dim]
+    if spatial_sampling == "random":
+        # Use positional indexing to sample a small spatial region
+        x_idx = np.random.randint(0, max(1, x_size - 2))
+        y_idx = np.random.randint(0, max(1, y_size - 2))
+
+        sample_ds = ds.sel(time=slice(now - max_expected_delay, None)).isel(
+            {x_dim: slice(x_idx, x_idx + 2), y_dim: slice(y_idx, y_idx + 2)}
+        )
+
+    elif spatial_sampling == "quarter":
+        if np.random.randint(0, 2) == 0:
+            x_slice = slice(0, x_size // 2)
+        else:
+            x_slice = slice(x_size // 2, x_size)
+
+        if np.random.randint(0, 2) == 0:
+            y_slice = slice(0, y_size // 2)
+        else:
+            y_slice = slice(y_size // 2, y_size)
+
+        sample_ds = ds.sel(time=slice(now - max_expected_delay, None)).isel(
+            {x_dim: x_slice, y_dim: y_slice}
+        )
+    else:
+        raise ValueError(f"Invalid spatial sampling mode: {spatial_sampling}")
 
     problem_vars = []
     for var_name, da in sample_ds.data_vars.items():
