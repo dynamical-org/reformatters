@@ -180,6 +180,7 @@ def check_analysis_recent_nans(  # noqa: PLR0912
             {x_dim: x_slice, y_dim: y_slice}
         )
     else:
+        # modern unreachable annotation AI!
         raise ValueError(f"Invalid spatial sampling mode: {spatial_sampling}")
 
     problem_vars = []
