@@ -364,5 +364,3 @@ def test_check_analysis_recent_nans_invalid_spatial_sampling(
             analysis_dataset,
             spatial_sampling="invalid",  # type: ignore[arg-type]
         )
-
-
