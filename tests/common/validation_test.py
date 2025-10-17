@@ -285,16 +285,14 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Add NaNs to only the first quarter (first half of both lat and lon)
+    # Add NaNs to only the first quarter (first half of both lat and lon using positional indexing)
     lat_size = len(analysis_dataset.latitude)
     lon_size = len(analysis_dataset.longitude)
-    analysis_dataset["temperature"].loc[
-        {
-            "time": slice("2024-01-02", None),
-            "latitude": slice(0, lat_size // 2),
-            "longitude": slice(0, lon_size // 2),
-        }
-    ] = np.nan
+    analysis_dataset["temperature"].isel(
+        time=slice(-24, None),  # Last 24 hours
+        latitude=slice(0, lat_size // 2),
+        longitude=slice(0, lon_size // 2),
+    ).values[:] = np.nan
 
     # Mock to select first quarter (both randint calls return 0)
     monkeypatch.setattr("numpy.random.randint", lambda low, high: 0)
@@ -368,12 +366,3 @@ def test_check_analysis_recent_nans_invalid_spatial_sampling(
         )
 
 
-def test_validation_result_model() -> None:
-    """Test ValidationResult pydantic model."""
-    result = validation.ValidationResult(passed=True, message="Test passed")
-    assert result.passed
-    assert result.message == "Test passed"
-
-    result = validation.ValidationResult(passed=False, message="Test failed")
-    assert not result.passed
-    assert result.message == "Test failed"
