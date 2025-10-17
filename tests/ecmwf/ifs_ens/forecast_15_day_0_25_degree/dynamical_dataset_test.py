@@ -143,21 +143,22 @@ def test_backfill_local_and_operational_update(
     )
 
 
-# def test_operational_kubernetes_resources(
-#     dataset: EcmwfIfsEnsForecast15Day025DegreeDataset,
-# ) -> None:
-#     cron_jobs = dataset.operational_kubernetes_resources("test-image-tag")
+@pytest.mark.skip(reason="Currently not implemented")
+def test_operational_kubernetes_resources(
+    dataset: EcmwfIfsEnsForecast15Day025DegreeDataset,
+) -> None:
+    cron_jobs = dataset.operational_kubernetes_resources("test-image-tag")
 
-#     assert len(cron_jobs) == 2
-#     update_cron_job, validation_cron_job = cron_jobs
-#     assert update_cron_job.name == f"{dataset.dataset_id}-operational-update"
-#     assert validation_cron_job.name == f"{dataset.dataset_id}-validation"
-#     assert update_cron_job.secret_names == [
-#         dataset.primary_storage_config.k8s_secret_name
-#     ]
-#     assert validation_cron_job.secret_names == [
-#         dataset.primary_storage_config.k8s_secret_name
-#     ]
+    assert len(cron_jobs) == 2
+    update_cron_job, validation_cron_job = cron_jobs
+    assert update_cron_job.name == f"{dataset.dataset_id}-operational-update"
+    assert validation_cron_job.name == f"{dataset.dataset_id}-validation"
+    assert update_cron_job.secret_names == [
+        dataset.primary_storage_config.k8s_secret_name
+    ]
+    assert validation_cron_job.secret_names == [
+        dataset.primary_storage_config.k8s_secret_name
+    ]
 
 
 def test_validators(dataset: EcmwfIfsEnsForecast15Day025DegreeDataset) -> None:
