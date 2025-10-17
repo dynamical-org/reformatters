@@ -6,6 +6,7 @@ import pytest
 import xarray as xr
 
 # from reformatters.common import validation
+from reformatters.common import validation
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast15Day025DegreeDataset,
 )
@@ -159,7 +160,7 @@ def test_backfill_local_and_operational_update(
 #     ]
 
 
-# def test_validators(dataset: EcmwfIfsEnsForecast15Day025DegreeDataset) -> None:
-#     validators = tuple(dataset.validators())
-#     assert len(validators) == 2
-#     assert all(isinstance(v, validation.DataValidator) for v in validators)
+def test_validators(dataset: EcmwfIfsEnsForecast15Day025DegreeDataset) -> None:
+    validators = tuple(dataset.validators())
+    assert len(validators) == 2
+    assert all(isinstance(v, validation.DataValidator) for v in validators)
