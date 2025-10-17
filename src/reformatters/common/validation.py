@@ -3,7 +3,7 @@ import json
 from collections.abc import Sequence
 from datetime import timedelta
 from functools import partial
-from typing import Literal, Protocol, runtime_checkable
+from typing import Literal, Protocol, assert_never, runtime_checkable
 
 import numpy as np
 import pandas as pd
@@ -180,8 +180,7 @@ def check_analysis_recent_nans(  # noqa: PLR0912
             {x_dim: x_slice, y_dim: y_slice}
         )
     else:
-        # modern unreachable annotation AI!
-        raise ValueError(f"Invalid spatial sampling mode: {spatial_sampling}")
+        assert_never(spatial_sampling)
 
     problem_vars = []
     for var_name, da in sample_ds.data_vars.items():
