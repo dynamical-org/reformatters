@@ -363,7 +363,8 @@ def test_check_analysis_recent_nans_invalid_spatial_sampling(
 
     with pytest.raises(ValueError, match="Invalid spatial sampling mode"):
         validation.check_analysis_recent_nans(
-            analysis_dataset, spatial_sampling="invalid"  # type: ignore[arg-type]
+            analysis_dataset,
+            spatial_sampling="invalid",  # type: ignore[arg-type]
         )
 
 
