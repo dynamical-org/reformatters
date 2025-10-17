@@ -110,7 +110,9 @@ def test_download_file_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert result.read_bytes() == b"testdata"
 
 
-def test_download_file_retries_on_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_download_file_retries_on_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test that download_file retries on failure."""
     template_config = NasaSmapLevel336KmV9TemplateConfig()
     template_ds = template_config.get_template(pd.Timestamp("2015-04-01"))
@@ -150,7 +152,9 @@ def test_download_file_retries_on_failure(tmp_path: Path, monkeypatch: pytest.Mo
     assert result.read_bytes() == b"success"
 
 
-def test_download_file_fallback_to_002(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_download_file_fallback_to_002(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test that download_file falls back to _002.h5 when _001.h5 returns 404."""
     template_config = NasaSmapLevel336KmV9TemplateConfig()
     template_ds = template_config.get_template(pd.Timestamp("2015-04-01"))
@@ -199,7 +203,9 @@ def test_download_file_fallback_to_002(tmp_path: Path, monkeypatch: pytest.Monke
     assert result.read_bytes() == b"reprocesseddata"
 
 
-def test_read_data_am(tmp_path: Path, mock_smap_am_data: ArrayFloat32, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_read_data_am(
+    tmp_path: Path, mock_smap_am_data: ArrayFloat32, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test reading AM soil moisture data."""
     template_config = NasaSmapLevel336KmV9TemplateConfig()
     template_ds = template_config.get_template(pd.Timestamp("2015-04-01"))
@@ -224,11 +230,11 @@ def test_read_data_am(tmp_path: Path, mock_smap_am_data: ArrayFloat32, monkeypat
     # Create mock rasterio dataset that returns the mock data
     mock_dataset = Mock()
     mock_dataset.read.return_value = mock_smap_am_data
-    
+
     mock_open = Mock()
     mock_open.return_value.__enter__.return_value = mock_dataset
     mock_open.return_value.__exit__.return_value = None
-    
+
     monkeypatch.setattr(
         "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.rasterio.open",
         mock_open,
@@ -249,7 +255,9 @@ def test_read_data_am(tmp_path: Path, mock_smap_am_data: ArrayFloat32, monkeypat
     assert valid_data.max() <= 0.5
 
 
-def test_read_data_pm(tmp_path: Path, mock_smap_pm_data: ArrayFloat32, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_read_data_pm(
+    tmp_path: Path, mock_smap_pm_data: ArrayFloat32, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test reading PM soil moisture data."""
     template_config = NasaSmapLevel336KmV9TemplateConfig()
     template_ds = template_config.get_template(pd.Timestamp("2015-04-01"))
@@ -274,11 +282,11 @@ def test_read_data_pm(tmp_path: Path, mock_smap_pm_data: ArrayFloat32, monkeypat
     # Create mock rasterio dataset that returns the mock data
     mock_dataset = Mock()
     mock_dataset.read.return_value = mock_smap_pm_data
-    
+
     mock_open = Mock()
     mock_open.return_value.__enter__.return_value = mock_dataset
     mock_open.return_value.__exit__.return_value = None
-    
+
     monkeypatch.setattr(
         "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.rasterio.open",
         mock_open,
@@ -299,7 +307,9 @@ def test_read_data_pm(tmp_path: Path, mock_smap_pm_data: ArrayFloat32, monkeypat
     assert valid_data.max() <= 0.5
 
 
-def test_operational_update_jobs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_operational_update_jobs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test that operational_update_jobs creates correct jobs for updating dataset."""
     template_config = NasaSmapLevel336KmV9TemplateConfig()
 
@@ -311,7 +321,9 @@ def test_operational_update_jobs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     mock_store = Mock()
 
     monkeypatch.setattr("xarray.open_zarr", lambda *args, **kwargs: existing_ds)
-    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: pd.Timestamp("2025-09-30T00:01"))
+    monkeypatch.setattr(
+        "pandas.Timestamp.now", lambda tz=None: pd.Timestamp("2025-09-30T00:01")
+    )
 
     jobs, template_ds = NasaSmapLevel336KmV9RegionJob.operational_update_jobs(
         primary_store=mock_store,
