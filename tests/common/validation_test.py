@@ -238,6 +238,135 @@ def test_check_analysis_recent_nans_custom_parameters(
     assert result.passed
 
 
+def test_check_analysis_recent_nans_quarter_sampling_passes(
+    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+) -> None:
+    """Test that check_analysis_recent_nans passes with quarter spatial sampling."""
+    now = pd.Timestamp("2024-01-02 12:00:00")
+    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
+
+    result = validation.check_analysis_recent_nans(
+        analysis_dataset, spatial_sampling="quarter"
+    )
+
+    assert result.passed
+    assert "acceptable NaN percentages" in result.message
+
+
+def test_check_analysis_recent_nans_quarter_sampling_fails(
+    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+) -> None:
+    """Test that check_analysis_recent_nans fails with quarter sampling when NaN percentage is too high."""
+    now = pd.Timestamp("2024-01-02 12:00:00")
+    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
+
+    # Mock random sampling to select specific quarter (first half of both dimensions)
+    monkeypatch.setattr("numpy.random.randint", lambda low, high: 0)
+
+    # Set all recent data to NaN to ensure the quarter sample will catch it
+    analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
+
+    result = validation.check_analysis_recent_nans(
+        analysis_dataset,
+        max_expected_delay=timedelta(hours=12),
+        max_nan_percentage=5,
+        spatial_sampling="quarter",
+    )
+
+    assert not result.passed
+    assert "Excessive NaN values found" in result.message
+    assert "temperature" in result.message
+
+
+def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
+    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+) -> None:
+    """Test that check_analysis_recent_nans samples different quarters based on random selection."""
+    now = pd.Timestamp("2024-01-02 12:00:00")
+    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
+
+    # Add NaNs to only the first quarter (first half of both lat and lon)
+    lat_size = len(analysis_dataset.latitude)
+    lon_size = len(analysis_dataset.longitude)
+    analysis_dataset["temperature"].loc[
+        {
+            "time": slice("2024-01-02", None),
+            "latitude": slice(0, lat_size // 2),
+            "longitude": slice(0, lon_size // 2),
+        }
+    ] = np.nan
+
+    # Mock to select first quarter (both randint calls return 0)
+    monkeypatch.setattr("numpy.random.randint", lambda low, high: 0)
+
+    result = validation.check_analysis_recent_nans(
+        analysis_dataset,
+        max_expected_delay=timedelta(hours=12),
+        max_nan_percentage=5,
+        spatial_sampling="quarter",
+    )
+
+    # Should fail because first quarter has NaNs
+    assert not result.passed
+
+    # Mock to select last quarter (both randint calls return 1)
+    monkeypatch.setattr("numpy.random.randint", lambda low, high: 1)
+
+    result = validation.check_analysis_recent_nans(
+        analysis_dataset,
+        max_expected_delay=timedelta(hours=12),
+        max_nan_percentage=5,
+        spatial_sampling="quarter",
+    )
+
+    # Should pass because last quarter doesn't have NaNs
+    assert result.passed
+
+
+def test_check_analysis_recent_nans_xy_dimensions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that check_analysis_recent_nans works with x/y dimensions instead of lat/lon."""
+    now = pd.Timestamp("2024-01-02 12:00:00")
+    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
+
+    times = pd.date_range("2024-01-01", periods=48, freq="1h")
+    x = np.arange(20)
+    y = np.arange(10)
+
+    ds = xr.Dataset(
+        {
+            "temperature": (
+                ["time", "y", "x"],
+                np.random.randn(len(times), len(y), len(x)),
+            ),
+        },
+        coords={
+            "time": times,
+            "y": y,
+            "x": x,
+        },
+    )
+
+    result = validation.check_analysis_recent_nans(ds, spatial_sampling="quarter")
+
+    assert result.passed
+    assert "acceptable NaN percentages" in result.message
+
+
+def test_check_analysis_recent_nans_invalid_spatial_sampling(
+    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+) -> None:
+    """Test that check_analysis_recent_nans raises error for invalid spatial_sampling mode."""
+    now = pd.Timestamp("2024-01-02 12:00:00")
+    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
+
+    with pytest.raises(ValueError, match="Invalid spatial sampling mode"):
+        validation.check_analysis_recent_nans(
+            analysis_dataset, spatial_sampling="invalid"  # type: ignore[arg-type]
+        )
+
+
 def test_validation_result_model() -> None:
     """Test ValidationResult pydantic model."""
     result = validation.ValidationResult(passed=True, message="Test passed")
