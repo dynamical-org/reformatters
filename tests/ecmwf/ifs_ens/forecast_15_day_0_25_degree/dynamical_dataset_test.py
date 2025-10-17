@@ -1,56 +1,69 @@
-# import numpy as np
-# import pandas as pd
-# import pytest
-# import xarray as xr
+import numpy as np
+import pandas as pd
+import pytest
+import xarray as xr
 
 # from reformatters.common import validation
-# from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset import EcmwfIfsEnsForecast15Day025DegreeDataset
-# from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset import (
+    EcmwfIfsEnsForecast15Day025DegreeDataset,
+)
+from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 
 
-# @pytest.fixture
-# def dataset() -> EcmwfIfsEnsForecast15Day025DegreeDataset:
-#     return EcmwfIfsEnsForecast15Day025DegreeDataset(primary_storage_config=NOOP_STORAGE_CONFIG)
+@pytest.fixture
+def dataset() -> EcmwfIfsEnsForecast15Day025DegreeDataset:
+    return EcmwfIfsEnsForecast15Day025DegreeDataset(
+        primary_storage_config=NOOP_STORAGE_CONFIG
+    )
 
 
-# @pytest.mark.slow
-# def test_backfill_local_and_operational_update(
-#     monkeypatch: pytest.MonkeyPatch, dataset: EcmwfIfsEnsForecast15Day025DegreeDataset
-# ) -> None:
-#     # Local backfill reformat
-#     dataset.backfill_local(append_dim_end=pd.Timestamp("2000-01-02"))
-#     ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
-#     assert ds.time.max() == pd.Timestamp("2000-01-01")
+@pytest.mark.slow
+def test_backfill_local_and_operational_update(
+    monkeypatch: pytest.MonkeyPatch, dataset: EcmwfIfsEnsForecast15Day025DegreeDataset
+) -> None:
+    existing_ds_append_dim_end = (
+        dataset.template_config.append_dim_start + pd.Timedelta(days=1)
+    )
+    operational_update_append_dim_end = existing_ds_append_dim_end + pd.Timedelta(
+        days=1
+    )
 
-#     # Operational update
-#     monkeypatch.setattr(
-#         dataset.region_job_class,
-#         "_update_append_dim_end",
-#         lambda: pd.Timestamp("2000-01-03"),
-#     )
-#     monkeypatch.setattr(
-#         dataset.region_job_class,
-#         "_update_append_dim_start",
-#         lambda existing_ds: pd.Timestamp(existing_ds.time.max().item()),
-#     )
+    # Local backfill reformat
+    dataset.backfill_local(append_dim_end=existing_ds_append_dim_end)
+    ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
+    # existing_ds_append_dim_end is exclusive, so should have only processed the first forecast
+    assert ds.init_time.max() == dataset.template_config.append_dim_start
 
-#     dataset.update("test-update")
+    # Operational update
+    monkeypatch.setattr(
+        dataset.region_job_class,
+        "_update_append_dim_end",
+        lambda: operational_update_append_dim_end,
+    )
+    # monkeypatch.setattr(
+    #     dataset.region_job_class,
+    #     "_update_append_dim_start",
+    #     lambda existing_ds: pd.Timestamp(existing_ds.init_time.max().item()),
+    # ) <- can we remove this one?
 
-#     # Check resulting dataset
-#     updated_ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
+    dataset.update("test-update")
 
-#     np.testing.assert_array_equal(
-#         updated_ds.time,
-#         pd.date_range(
-#             "2000-10-01",
-#             "2000-10-03",
-#             freq=dataset.template_config.append_dim_frequency,
-#         ),
-#     )
-#     subset_ds = updated_ds.sel(latitude=0, longitude=0, method="nearest")
-#     np.testing.assert_array_equal(
-#         subset_ds["your_variable"].values, [190.0, 163.0, 135.0]
-#     )
+    # Check resulting dataset
+    updated_ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
+    breakpoint()
+    np.testing.assert_array_equal(
+        updated_ds.init_time,
+        pd.date_range(
+            existing_ds_append_dim_end,
+            operational_update_append_dim_end,
+            freq=dataset.template_config.append_dim_frequency,
+        ),
+    )
+    subset_ds = updated_ds.sel(latitude=0, longitude=0, method="nearest")
+    breakpoint()
+    np.testing.assert_array_equal(
+        subset_ds["temperature_2m"].values, [190.0, 163.0, 135.0]
+    )
 
 
 # def test_operational_kubernetes_resources(
