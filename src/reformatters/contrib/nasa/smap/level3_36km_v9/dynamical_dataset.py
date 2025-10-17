@@ -67,5 +67,6 @@ class NasaSmapLevel336KmV9Dataset(
                 max_expected_delay=max_expected_delay,
                 # Oceans and about half of land (due to swaths) are expected to be NaNs
                 max_nan_percentage=90,
+                spatial_sampling="quarter",
             ),
         )
