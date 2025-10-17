@@ -7,11 +7,9 @@ import xarray as xr
 from pydantic import computed_field
 
 from reformatters.common.config_models import (
-    BaseInternalAttrs,
     Coordinate,
     CoordinateAttrs,
     DatasetAttributes,
-    DataVar,
     DataVarAttrs,
     Encoding,
     StatisticsApproximate,
@@ -25,31 +23,10 @@ from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
+from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, EcmwfInternalAttrs
 
 
-class EcmwfIfsEnsInternalAttrs(BaseInternalAttrs):
-    """
-    Variable specific attributes used internally to drive processing.
-    Not written to the dataset.
-    """
-
-    window_reset_frequency: Timedelta | None = (
-        None  # for resetting deaccumulation windows
-    )
-    # TODO(lauren): skipping this for now, will come back and add when developing processing for real
-    # grib_band_index: int
-    # grib_element_name: str
-    # grib_description: str
-    # grib_index_level: str
-
-
-class EcmwfIfsEnsDataVar(DataVar[EcmwfIfsEnsInternalAttrs]):
-    pass
-
-
-class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
-    TemplateConfig[EcmwfIfsEnsDataVar]
-):
+class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVar]):
     dims: tuple[Dim, ...] = (
         "init_time",
         "lead_time",
@@ -58,8 +35,10 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
         "longitude",
     )
     append_dim: AppendDim = "init_time"
-    # forecasts available from same s3 bucket since 2023-01-18, but only with 0.4deg resolution from dataset start through 2024-01-31.
-    append_dim_start: Timestamp = pd.Timestamp("2024-02-01T00:00")
+    # Forecasts are available from same s3 bucket since 2023-01-18, but only with 0.4deg resolution from dataset start through 2024-01-31.
+    # We also noticed that that gribs on 2024-02-01 and 2024-02-02 only have 1439 longitude values (max longitude is 179.5), so we
+    # begin this dataset on 2024-02-03 to avoid this issue.
+    append_dim_start: Timestamp = pd.Timestamp("2024-02-03T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("24h")
 
     @computed_field  # type: ignore[prop-decorator]
@@ -92,9 +71,8 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     pd.timedelta_range("150h", "361h", freq="6h")
                 )
             ),
-            "ensemble_member": np.arange(
-                0, 51
-            ),  # single control member (0) + 50 perturbed members (1-50)
+            # single control member (0) + 50 perturbed members (1-50)
+            "ensemble_member": np.arange(0, 51),
             "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
             "longitude": np.arange(-180, 180, 0.25),
         }
@@ -306,7 +284,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def data_vars(self) -> Sequence[EcmwfIfsEnsDataVar]:
+    def data_vars(self) -> Sequence[EcmwfDataVar]:
         """Define metadata and encoding for each data variable."""
         # Data variable chunking and sharding
         # Roughly ~17.5MB uncompressed, ~3.5MB compressed
@@ -335,10 +313,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
         )
 
         default_keep_mantissa_bits = 7
-        default_window_reset_frequency = pd.Timedelta("6h")
 
         return [
-            EcmwfIfsEnsDataVar(
+            EcmwfDataVar(
                 name="temperature_2m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -348,11 +325,15 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     step_type="instant",
                     standard_name="air_temperature",
                 ),
-                internal_attrs=EcmwfIfsEnsInternalAttrs(
+                internal_attrs=EcmwfInternalAttrs(
+                    grib_comment="Temperature [C]",
+                    grib_description='2[m] HTGL="Specified height level above ground"',
+                    grib_element="TMP",
+                    grib_index_param="2t",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
-            EcmwfIfsEnsDataVar(
+            EcmwfDataVar(
                 name="wind_u_10m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -362,11 +343,15 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     step_type="instant",
                     standard_name="eastward_wind",
                 ),
-                internal_attrs=EcmwfIfsEnsInternalAttrs(
+                internal_attrs=EcmwfInternalAttrs(
+                    grib_comment="u-component of wind [m/s]",
+                    grib_description='10[m] HTGL="Specified height level above ground"',
+                    grib_element="UGRD",
+                    grib_index_param="10u",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
-            EcmwfIfsEnsDataVar(
+            EcmwfDataVar(
                 name="wind_v_10m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -376,11 +361,15 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     step_type="instant",
                     standard_name="northward_wind",
                 ),
-                internal_attrs=EcmwfIfsEnsInternalAttrs(
+                internal_attrs=EcmwfInternalAttrs(
+                    grib_comment="v-component of wind [m/s]",
+                    grib_description='10[m] HTGL="Specified height level above ground"',
+                    grib_element="VGRD",
+                    grib_index_param="10v",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
-            EcmwfIfsEnsDataVar(
+            EcmwfDataVar(
                 name="precipitation_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -390,10 +379,17 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(
                     step_type="avg",
                     comment="Average precipitation rate since the previous forecast step.",
                 ),
-                internal_attrs=EcmwfIfsEnsInternalAttrs(
-                    keep_mantissa_bits=default_keep_mantissa_bits,
+                # The metadata for precipitation surface in the grib files is not correctly populated.
+                # We know that comment (prodType 0, cat 1, subcat 193) [-] is correct for precipitation surface,
+                # so we use that. We have included the other set of grib metadata fields here for completeness.
+                internal_attrs=EcmwfInternalAttrs(
+                    grib_comment="(prodType 0, cat 1, subcat 193) [-]",
+                    grib_description='0[-] SFC="Ground or water surface"',
+                    grib_element="unknown",
+                    grib_index_param="tp",
                     deaccumulate_to_rate=True,
-                    window_reset_frequency=default_window_reset_frequency,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    window_reset_frequency=pd.Timedelta.max,  # accumulate over the full dataset, never resetting
                 ),
             ),
         ]
