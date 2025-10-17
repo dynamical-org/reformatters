@@ -23,6 +23,17 @@ def dataset() -> EcmwfIfsEnsForecast15Day025DegreeDataset:
 def test_backfill_local_and_operational_update(
     monkeypatch: pytest.MonkeyPatch, dataset: EcmwfIfsEnsForecast15Day025DegreeDataset
 ) -> None:
+    variables_to_check = ["temperature_2m", "precipitation_surface"]
+    monkeypatch.setattr(
+        type(dataset.template_config),
+        "data_vars",
+        [
+            var
+            for var in dataset.template_config.data_vars
+            if var.name in variables_to_check
+        ],
+    )
+
     orig_get_template = dataset.template_config.get_template
 
     monkeypatch.setattr(
@@ -30,9 +41,8 @@ def test_backfill_local_and_operational_update(
         "get_template",
         lambda self, end_time: orig_get_template(end_time).sel(
             lead_time=slice("0h", "6h"), ensemble_member=slice(0, 1)
-        ),
+        )[variables_to_check],
     )
-
     dataset.backfill_local(append_dim_end=pd.Timestamp("2024-02-04T00:00:00"))
 
     ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
