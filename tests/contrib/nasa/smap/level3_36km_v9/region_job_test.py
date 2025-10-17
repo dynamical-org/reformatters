@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
@@ -69,7 +69,7 @@ def test_region_job_generate_source_file_coords(tmp_path: Path) -> None:
         assert coord.time == processing_region_ds["time"].values[i]
 
 
-def test_download_file_success(tmp_path: Path) -> None:
+def test_download_file_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test successful file download."""
     template_config = NasaSmapLevel336KmV9TemplateConfig()
     template_ds = template_config.get_template(pd.Timestamp("2015-04-01"))
@@ -93,23 +93,24 @@ def test_download_file_success(tmp_path: Path) -> None:
     mock_session = Mock()
     mock_session.get = Mock(return_value=mock_response)
 
-    with patch(
+    monkeypatch.setattr(
         "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.get_authenticated_session",
-        return_value=mock_session,
-    ):
-        result = region_job.download_file(coord)
+        lambda: mock_session,
+    )
 
-        # Verify the download happened
-        mock_session.get.assert_called_once()
-        call_args = mock_session.get.call_args
-        assert coord.get_url() in str(call_args)
+    result = region_job.download_file(coord)
 
-        # Verify file was written
-        assert result.exists()
-        assert result.read_bytes() == b"testdata"
+    # Verify the download happened
+    mock_session.get.assert_called_once()
+    call_args = mock_session.get.call_args
+    assert coord.get_url() in str(call_args)
+
+    # Verify file was written
+    assert result.exists()
+    assert result.read_bytes() == b"testdata"
 
 
-def test_download_file_retries_on_failure(tmp_path: Path) -> None:
+def test_download_file_retries_on_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that download_file retries on failure."""
     template_config = NasaSmapLevel336KmV9TemplateConfig()
     template_ds = template_config.get_template(pd.Timestamp("2015-04-01"))
@@ -136,19 +137,20 @@ def test_download_file_retries_on_failure(tmp_path: Path) -> None:
     mock_session = Mock()
     mock_session.get = Mock(side_effect=[mock_response_fail, mock_response_success])
 
-    with patch(
+    monkeypatch.setattr(
         "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.get_authenticated_session",
-        return_value=mock_session,
-    ):
-        result = region_job.download_file(coord)
+        lambda: mock_session,
+    )
 
-        # Should have retried 2 times total (1 failure + 1 success)
-        assert mock_session.get.call_count == 2
-        assert result.exists()
-        assert result.read_bytes() == b"success"
+    result = region_job.download_file(coord)
+
+    # Should have retried 2 times total (1 failure + 1 success)
+    assert mock_session.get.call_count == 2
+    assert result.exists()
+    assert result.read_bytes() == b"success"
 
 
-def test_download_file_fallback_to_002(tmp_path: Path) -> None:
+def test_download_file_fallback_to_002(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that download_file falls back to _002.h5 when _001.h5 returns 404."""
     template_config = NasaSmapLevel336KmV9TemplateConfig()
     template_ds = template_config.get_template(pd.Timestamp("2015-04-01"))
@@ -177,26 +179,27 @@ def test_download_file_fallback_to_002(tmp_path: Path) -> None:
     mock_session = Mock()
     mock_session.get = Mock(side_effect=[mock_response_404, mock_response_success])
 
-    with patch(
+    monkeypatch.setattr(
         "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.get_authenticated_session",
-        return_value=mock_session,
-    ):
-        result = region_job.download_file(coord)
+        lambda: mock_session,
+    )
 
-        # Should have called get twice: once for _001.h5, once for _002.h5
-        assert mock_session.get.call_count == 2
+    result = region_job.download_file(coord)
 
-        # Verify the URLs called
-        call_args_list = mock_session.get.call_args_list
-        assert "_001.h5" in call_args_list[0][0][0]
-        assert "_002.h5" in call_args_list[1][0][0]
+    # Should have called get twice: once for _001.h5, once for _002.h5
+    assert mock_session.get.call_count == 2
 
-        # Verify file was written with reprocessed data
-        assert result.exists()
-        assert result.read_bytes() == b"reprocesseddata"
+    # Verify the URLs called
+    call_args_list = mock_session.get.call_args_list
+    assert "_001.h5" in call_args_list[0][0][0]
+    assert "_002.h5" in call_args_list[1][0][0]
+
+    # Verify file was written with reprocessed data
+    assert result.exists()
+    assert result.read_bytes() == b"reprocesseddata"
 
 
-def test_read_data_am(tmp_path: Path, mock_smap_am_data: ArrayFloat32) -> None:
+def test_read_data_am(tmp_path: Path, mock_smap_am_data: ArrayFloat32, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test reading AM soil moisture data."""
     template_config = NasaSmapLevel336KmV9TemplateConfig()
     template_ds = template_config.get_template(pd.Timestamp("2015-04-01"))
@@ -218,17 +221,20 @@ def test_read_data_am(tmp_path: Path, mock_smap_am_data: ArrayFloat32) -> None:
     am_var = template_config.data_vars[0]
     assert am_var.name == "soil_moisture_am"
 
-    # Patch rasterio.open to return mock data
-    with patch(
-        "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.rasterio.open"
-    ) as mock_open:
-        # Create mock rasterio dataset that returns the mock data
-        mock_dataset = Mock()
-        mock_dataset.read.return_value = mock_smap_am_data
-        mock_open.return_value.__enter__.return_value = mock_dataset
-        mock_open.return_value.__exit__.return_value = None
+    # Create mock rasterio dataset that returns the mock data
+    mock_dataset = Mock()
+    mock_dataset.read.return_value = mock_smap_am_data
+    
+    mock_open = Mock()
+    mock_open.return_value.__enter__.return_value = mock_dataset
+    mock_open.return_value.__exit__.return_value = None
+    
+    monkeypatch.setattr(
+        "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.rasterio.open",
+        mock_open,
+    )
 
-        result = region_job.read_data(coord, am_var)
+    result = region_job.read_data(coord, am_var)
 
     # Check shape
     assert result.shape == (406, 964)
@@ -243,7 +249,7 @@ def test_read_data_am(tmp_path: Path, mock_smap_am_data: ArrayFloat32) -> None:
     assert valid_data.max() <= 0.5
 
 
-def test_read_data_pm(tmp_path: Path, mock_smap_pm_data: ArrayFloat32) -> None:
+def test_read_data_pm(tmp_path: Path, mock_smap_pm_data: ArrayFloat32, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test reading PM soil moisture data."""
     template_config = NasaSmapLevel336KmV9TemplateConfig()
     template_ds = template_config.get_template(pd.Timestamp("2015-04-01"))
@@ -265,17 +271,20 @@ def test_read_data_pm(tmp_path: Path, mock_smap_pm_data: ArrayFloat32) -> None:
     pm_var = template_config.data_vars[1]
     assert pm_var.name == "soil_moisture_pm"
 
-    # Patch rasterio.open to return mock data
-    with patch(
-        "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.rasterio.open"
-    ) as mock_open:
-        # Create mock rasterio dataset that returns the mock data
-        mock_dataset = Mock()
-        mock_dataset.read.return_value = mock_smap_pm_data
-        mock_open.return_value.__enter__.return_value = mock_dataset
-        mock_open.return_value.__exit__.return_value = None
+    # Create mock rasterio dataset that returns the mock data
+    mock_dataset = Mock()
+    mock_dataset.read.return_value = mock_smap_pm_data
+    
+    mock_open = Mock()
+    mock_open.return_value.__enter__.return_value = mock_dataset
+    mock_open.return_value.__exit__.return_value = None
+    
+    monkeypatch.setattr(
+        "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.rasterio.open",
+        mock_open,
+    )
 
-        result = region_job.read_data(coord, pm_var)
+    result = region_job.read_data(coord, pm_var)
 
     # Check shape
     assert result.shape == (406, 964)
@@ -290,7 +299,7 @@ def test_read_data_pm(tmp_path: Path, mock_smap_pm_data: ArrayFloat32) -> None:
     assert valid_data.max() <= 0.5
 
 
-def test_operational_update_jobs(tmp_path: Path) -> None:
+def test_operational_update_jobs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that operational_update_jobs creates correct jobs for updating dataset."""
     template_config = NasaSmapLevel336KmV9TemplateConfig()
 
@@ -301,18 +310,17 @@ def test_operational_update_jobs(tmp_path: Path) -> None:
     # Mock the primary store to return our existing dataset
     mock_store = Mock()
 
-    with (
-        patch("xarray.open_zarr", return_value=existing_ds),
-        patch("pandas.Timestamp.now", return_value=pd.Timestamp("2025-09-30T00:01")),
-    ):
-        jobs, template_ds = NasaSmapLevel336KmV9RegionJob.operational_update_jobs(
-            primary_store=mock_store,
-            tmp_store=tmp_path,
-            get_template_fn=template_config.get_template,
-            append_dim=template_config.append_dim,
-            all_data_vars=template_config.data_vars,
-            reformat_job_name="test-update",
-        )
+    monkeypatch.setattr("xarray.open_zarr", lambda *args, **kwargs: existing_ds)
+    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: pd.Timestamp("2025-09-30T00:01"))
+
+    jobs, template_ds = NasaSmapLevel336KmV9RegionJob.operational_update_jobs(
+        primary_store=mock_store,
+        tmp_store=tmp_path,
+        get_template_fn=template_config.get_template,
+        append_dim=template_config.append_dim,
+        all_data_vars=template_config.data_vars,
+        reformat_job_name="test-update",
+    )
 
     # Should create jobs for the new time steps (2025-09-29 and 2025-09-30)
     assert len(jobs) == 1
