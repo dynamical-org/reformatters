@@ -208,7 +208,9 @@ def test_operational_update_jobs(
     )
 
     assert template_ds.init_time.max() == pd.Timestamp("2024-03-02T00:00")
-    assert len(jobs) == 1  # just the 00z init time for March 2nd
+    assert (
+        len(jobs) == 2
+    )  # We reprocess the last forecast for March 1st and also process for March 2nd
     for job in jobs:
         assert isinstance(job, EcmwfIfsEnsForecast15Day025DegreeRegionJob)
         assert job.data_vars == template_config.data_vars
