@@ -359,7 +359,7 @@ def test_check_analysis_recent_nans_invalid_spatial_sampling(
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    with pytest.raises(ValueError, match="Invalid spatial sampling mode"):
+    with pytest.raises(AssertionError, match="Expected code to be unreachable"):
         validation.check_analysis_recent_nans(
             analysis_dataset,
             spatial_sampling="invalid",  # type: ignore[arg-type]
