@@ -155,11 +155,11 @@ def test_check_analysis_current_data_custom_delay(
 ) -> None:
     """Test that check_analysis_current_data respects custom max_expected_delay."""
     # Dataset ends at 2024-01-02 23:00:00
-    # Check at 2024-01-03 12:00:00 (12.5 hours after last data)
+    # Check at 2024-01-03 12:00:00 (13 hours after last data)
     now = pd.Timestamp("2024-01-03 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Should fail with default 12 hour delay (last data is 12.5 hours ago)
+    # Should fail with default 12 hour delay (last data is 13 hours ago)
     result = validation.check_analysis_current_data(analysis_dataset)
     assert not result.passed
 
