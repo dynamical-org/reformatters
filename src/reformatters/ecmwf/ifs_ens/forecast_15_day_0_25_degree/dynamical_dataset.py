@@ -59,6 +59,6 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
     def validators(self) -> Sequence[validation.DataValidator]:
         """Return a sequence of DataValidators to run on this dataset."""
         return (
-            validation.check_analysis_current_data,
-            validation.check_analysis_recent_nans,
+            validation.check_forecast_current_data,
+            validation.check_forecast_recent_nans,
         )
