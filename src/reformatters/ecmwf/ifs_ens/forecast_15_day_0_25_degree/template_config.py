@@ -441,6 +441,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_element="unknown",
                     grib_index_param="tp",
                     deaccumulate_to_rate=True,
+                    scaling_factor=1000,  # The raw data is in meters so we will need to scale to mm
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     window_reset_frequency=pd.Timedelta.max,  # accumulate over the full dataset, never resetting
                 ),
