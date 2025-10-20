@@ -27,6 +27,8 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
     grib_element: str
     grib_description: str
 
+    scaling_factor: float | None = None
+
 
 class EcmwfDataVar(DataVar[EcmwfInternalAttrs]):
     pass
