@@ -72,8 +72,8 @@ def test_backfill_local_and_operational_update(
     precip_surface_expected_values = np.array(
         [
             [0.0, 0.0],  # lead time 0h, ensemble members 0 and 1
-            [1.764420e-10, 2.998859e-07],  # lead time 3h, ensemble members 0 and 1
-            [2.299203e-09, 1.764420e-10],  # lead time 6h, ensemble members 0 and 1
+            [1.764420e-07, 2.998859e-04],  # lead time 3h, ensemble members 0 and 1
+            [2.299203e-06, 1.764420e-07],  # lead time 6h, ensemble members 0 and 1
         ],
         dtype=np.float32,
     )
@@ -125,13 +125,13 @@ def test_backfill_local_and_operational_update(
         [
             [
                 [0.0000000e00, 0.0000000e00],
-                [1.7644197e-10, 2.9988587e-07],
-                [2.2992026e-09, 1.7644197e-10],
+                [1.7644197e-07, 2.9988587e-04],
+                [2.2992026e-06, 1.7644197e-07],
             ],
             [
                 [0.0000000e00, 0.0000000e00],
-                [1.0069925e-08, 1.3038516e-07],
-                [1.7644197e-10, 3.8417056e-08],
+                [1.0069925e-05, 1.3038516e-04],
+                [1.7644197e-07, 3.8417056e-05],
             ],
         ],
         dtype=np.float32,
@@ -143,7 +143,9 @@ def test_backfill_local_and_operational_update(
     )
 
 
-@pytest.mark.skip(reason="Currently not implemented")
+@pytest.mark.skip(
+    reason="TODO(alex/lauren): before merge: remove this when NotImplementedError is removed from operational_kubernetes_resources"
+)
 def test_operational_kubernetes_resources(
     dataset: EcmwfIfsEnsForecast15Day025DegreeDataset,
 ) -> None:
