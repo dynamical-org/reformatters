@@ -99,7 +99,7 @@ def store_factory() -> StoreFactory:
 @pytest.fixture
 def template_ds() -> xr.Dataset:
     num_time = 48
-    return xr.Dataset(
+    ds = xr.Dataset(
         {
             f"var{i}": xr.Variable(
                 data=np.ones((num_time, 10, 15), dtype=np.float32),
@@ -108,6 +108,7 @@ def template_ds() -> xr.Dataset:
                     "dtype": "float32",
                     "chunks": (num_time // 4, 10, 15),
                     "shards": (num_time // 2, 10, 15),
+                    "fill_value": np.nan,
                 },
             )
             for i in range(4)
@@ -118,6 +119,10 @@ def template_ds() -> xr.Dataset:
             "longitude": np.linspace(0, 140, 15),
         },
     )
+    ds["time"].encoding["fill_value"] = -1
+    ds["latitude"].encoding["fill_value"] = np.nan
+    ds["longitude"].encoding["fill_value"] = np.nan
+    return ds
 
 
 @pytest.mark.filterwarnings(
