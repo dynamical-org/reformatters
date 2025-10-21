@@ -13,6 +13,7 @@ import zarr
 from reformatters.common.iterating import consume, shard_slice_indexers
 from reformatters.common.logging import get_logger
 from reformatters.common.types import AppendDim, ArrayFloat32
+from reformatters.common.zarr import assert_fill_values_set
 
 log = get_logger(__name__)
 
@@ -173,6 +174,9 @@ def write_shard_to_zarr(
     shard_indexer: tuple[slice, ...],
 ) -> None:
     """Write a shard of data held in shared memory to a zarr store."""
+
+    assert_fill_values_set(processing_region_da_template)
+
     with (
         warnings.catch_warnings(),
         closing(SharedMemory(name=shared_buffer_name)) as shared_memory,

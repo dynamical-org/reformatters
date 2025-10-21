@@ -167,3 +167,22 @@ def sync_to_store(store: zarr.abc.store.Store, key: str, data: bytes) -> None:
         ),
         max_attempts=6,
     )
+
+
+def assert_fill_values_set(xr_obj: xr.Dataset | xr.DataArray) -> None:
+    if isinstance(xr_obj, xr.DataArray):
+        assert "fill_value" in xr_obj.encoding, (
+            f"Fill value not set for DataArray {xr_obj.name}"
+        )
+
+    elif isinstance(xr_obj, xr.Dataset):
+        for coord_name, coord in xr_obj.coords.items():
+            assert "fill_value" in coord.encoding, (
+                f"Fill value not set for coordinate {coord_name}"
+            )
+        for var_name, var in xr_obj.data_vars.items():
+            assert "fill_value" in var.encoding, (
+                f"Fill value not set for variable {var_name}"
+            )
+    else:
+        raise ValueError(f"Expected xr.Dataset or xr.DataArray, got {type(xr_obj)}")

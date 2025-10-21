@@ -203,3 +203,13 @@ def test_update_template_integration_test(
         written_template = json.load(f)
 
     assert existing_template == written_template
+
+    # 3. Ensure that the value we get when reading from an area that has not been written
+    # to matches the fill value in template_config encodings
+    # Coords are written by write_metadata() so we do expect them to be filled and don't test that here
+    ds = xr.open_zarr(test_write_metadata_path, chunks=None)
+    for var in template_config.data_vars:
+        var_da = ds[var.name]
+        np.testing.assert_array_equal(
+            var_da.isel(dict.fromkeys(var_da.dims, 0)).values, var.encoding.fill_value
+        )
