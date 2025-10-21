@@ -17,7 +17,10 @@ import xarray as xr
 import zarr
 from pydantic import AfterValidator, Field, computed_field
 
-from reformatters.common.binary_rounding import round_float32_inplace
+from reformatters.common.binary_rounding import (
+    _round_float64_inplace,
+    round_float32_inplace,
+)
 from reformatters.common.config_models import DataVar
 from reformatters.common.iterating import dimension_slices, get_worker_jobs
 from reformatters.common.logging import get_logger
@@ -221,9 +224,19 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
         if isinstance(keep_mantissa_bits, int):
-            round_float32_inplace(
-                data_array.values, keep_mantissa_bits=keep_mantissa_bits
-            )
+            if data_array.dtype == np.float32:
+                round_float32_inplace(
+                    data_array.values, keep_mantissa_bits=keep_mantissa_bits
+                )
+            elif data_array.dtype == np.float64:
+                # AI hacking to keep the binary rounding functionality for float64, but without numba because it was causing segfaults
+                _round_float64_inplace(
+                    data_array.values, keep_mantissa_bits=keep_mantissa_bits
+                )
+            else:
+                raise ValueError(
+                    f"Unsupported dtype for binary rounding: {data_array.dtype}"
+                )
 
     def update_template_with_results(
         self, process_results: Mapping[str, Sequence[SOURCE_FILE_COORD]]

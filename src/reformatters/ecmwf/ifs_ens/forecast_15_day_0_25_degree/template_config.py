@@ -311,6 +311,13 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
             shards=tuple(var_shards[d] for d in self.dims),
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
+        encoding_float64 = Encoding(
+            dtype="float64",
+            fill_value=np.nan,
+            chunks=tuple(var_chunks[d] for d in self.dims),
+            shards=tuple(var_shards[d] for d in self.dims),
+            compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
+        )
 
         default_keep_mantissa_bits = 7
 
@@ -371,7 +378,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
             ),
             EcmwfDataVar(
                 name="precipitation_surface",
-                encoding=encoding_float32_default,
+                encoding=encoding_float64,
                 attrs=DataVarAttrs(
                     short_name="tp",
                     long_name="Total precipitation",

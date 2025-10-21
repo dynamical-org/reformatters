@@ -3,7 +3,7 @@ import pandas as pd
 import xarray as xr
 from numba import njit, prange  # type: ignore[import-untyped]
 
-from reformatters.common.types import Array1D, ArrayFloat32
+from reformatters.common.types import Array1D
 
 
 def deaccumulate_to_rates_inplace(
@@ -57,14 +57,22 @@ def deaccumulate_to_rates_inplace(
         np.prod(data_array.shape[time_dim_index + 1 :] or 1),
     )
 
-    _deaccumulate_to_rates_numba(values, seconds, reset_after, skip_step)
+    # Check the dtype and call the appropriate numba function
+    if values.dtype == np.float32:
+        _deaccumulate_to_rates_numba_float32(values, seconds, reset_after, skip_step)
+    elif values.dtype == np.float64:
+        _deaccumulate_to_rates_numba_float64(values, seconds, reset_after, skip_step)
+    else:
+        raise ValueError(
+            f"Unsupported dtype: {values.dtype}. Expected float32 or float64."
+        )
 
     return data_array
 
 
 @njit(parallel=True)  # type: ignore[misc]
-def _deaccumulate_to_rates_numba(
-    values: ArrayFloat32,
+def _deaccumulate_to_rates_numba_float32(
+    values: np.ndarray[tuple[int, ...], np.dtype[np.float32]],
     seconds: Array1D[np.int64],
     reset_after: Array1D[np.bool],
     skip_step: Array1D[np.bool],
@@ -72,6 +80,7 @@ def _deaccumulate_to_rates_numba(
 ) -> None:
     """
     Convert accumulated values to per-second rates, mutating `values` in place.
+    Float32 version.
 
     Accumulations should only go up. If they go down a tiny bit,
     most likely due to numerical precision issues, we clamp to 0.
@@ -81,7 +90,8 @@ def _deaccumulate_to_rates_numba(
     Parallel processing is done over the leading dimension of values.
 
     Args:
-        values: Array to modify in place. Must be 3D with accumulation dimension as the *middle* dimension
+        values: Array to modify in place. Must be 3D with accumulation dimension as the *middle* dimension.
+                Float32 dtype.
         seconds: 1D array of seconds since forecast start or a reference time
         reset_after: 1D array of booleans where True indicates the accumulation resets after the current step
         skip_step: 1D array of booleans where True indicates the step should be skipped
@@ -121,6 +131,87 @@ def _deaccumulate_to_rates_numba(
 
                 if reset_after[t]:
                     previous_accumulation = 0
+
+                # Accumulations should only go up
+                # If they go down a tiny bit, clamp to 0
+                # If they go down more, set to NaN and then raise
+                if sequence[t] < 0:
+                    if sequence[t] > invalid_below_threshold_rate:
+                        clamped_count += 1
+                        sequence[t] = 0
+                    else:
+                        negative_count += 1
+                        sequence[t] = np.nan
+
+    if negative_count > 0:
+        raise ValueError(f"Found {negative_count} values below threshold")
+    if clamped_count / values.size > 0.05:  # noqa: PLR2004
+        raise ValueError(f"Over 5% ({clamped_count} total) values were clamped to 0")
+
+
+# This is an AI hack to try deaccum on float64. Almost certainly wouldn't need to be a separate function,
+# but it was easier this way because numba was throwing type errors
+@njit(parallel=True)  # type: ignore[misc]
+def _deaccumulate_to_rates_numba_float64(
+    values: np.ndarray[tuple[int, ...], np.dtype[np.float64]],
+    seconds: Array1D[np.int64],
+    reset_after: Array1D[np.bool],
+    skip_step: Array1D[np.bool],
+    invalid_below_threshold_rate: float = -2e-5,
+) -> None:
+    """
+    Convert accumulated values to per-second rates, mutating `values` in place.
+    Float64 version for higher precision.
+
+    Accumulations should only go up. If they go down a tiny bit,
+    most likely due to numerical precision issues, we clamp to 0.
+    If they go down to a *rate* that is less than `invalid_below_threshold`,
+    this sets the value to NaN and raises an error.
+
+    Parallel processing is done over the leading dimension of values.
+
+    Args:
+        values: Array to modify in place. Must be 3D with accumulation dimension as the *middle* dimension.
+                Float64 dtype.
+        seconds: 1D array of seconds since forecast start or a reference time
+        reset_after: 1D array of booleans where True indicates the accumulation resets after the current step
+        skip_step: 1D array of booleans where True indicates the step should be skipped
+        invalid_below_threshold_rate: Threshold below which values are considered invalid
+    """
+    assert values.ndim == 3  # noqa: PLR2004
+    assert seconds.ndim == 1
+    assert reset_after.ndim == 1
+    assert skip_step.ndim == 1
+    assert values.shape[1] == seconds.size
+    assert values.shape[1] == reset_after.size
+    assert values.shape[1] == skip_step.size
+
+    n_lead_times = values.shape[1]
+
+    negative_count = 0
+    clamped_count = 0
+
+    for i in prange(values.shape[0]):
+        for j in range(values.shape[2]):
+            sequence = values[i, :, j]
+            previous_seconds = seconds[0]
+            previous_accumulation = 0.0
+
+            # Skip first step, no accumulation yet
+            for t in range(1, n_lead_times):
+                if skip_step[t]:
+                    continue
+
+                time_step = seconds[t] - previous_seconds
+                previous_seconds = seconds[t]
+
+                step_accumulation = sequence[t] - previous_accumulation
+                # store previous accumulation before we overwrite sequence[t] with rate
+                previous_accumulation = sequence[t]
+                sequence[t] = step_accumulation / time_step
+
+                if reset_after[t]:
+                    previous_accumulation = 0.0
 
                 # Accumulations should only go up
                 # If they go down a tiny bit, clamp to 0

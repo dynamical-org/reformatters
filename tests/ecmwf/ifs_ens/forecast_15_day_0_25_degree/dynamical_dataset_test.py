@@ -69,14 +69,65 @@ def test_backfill_local_and_operational_update(
         init_time="2024-02-03T00:00:00", latitude=0, longitude=0
     ).precipitation_surface
 
+    """
+    investigating: difference in values now. due to scaling factor before deaccum?
+
+    expected:
+    [
+        [0.0, 0.0],  # lead time 0h, ensemble members 0 and 1
+        [1.764420e-07, 2.998859e-04],  # lead time 3h, ensemble members 0 and 1
+        [2.299203e-06, 1.764420e-07],  # lead time 6h, ensemble members 0 and 1
+    ]
+    actual (without scaling): (exactly as expected)
+    [
+        [0.0000000e+00, 0.0000000e+00],
+        [1.7644197e-10, 2.9988587e-07],
+        [2.2992026e-09, 1.7644197e-10],
+    ]
+    --------------------------------
+    actual (with scaling, then deaccum):
+    [
+        [0.0000000e+00, 0.0000000e+00],
+        [1.7695129e-07, 2.9945374e-04],
+        [2.2947788e-06, 1.7695129e-07],
+    ]
+        Max relative difference among violations: 0.00288644
+    
+    actual (deaccum, then scaling):
+    [
+        [0.0000000e+00, 0.0000000e+00],
+        [1.7695129e-07, 2.9945374e-04],
+        [2.2947788e-06, 1.7695129e-07],
+    ]
+    --------------------------------
+    actual (with scaling second, scaling as float64 (see commented out change in ecwmf/region_job)):
+    [
+        [0.0000000e+00, 0.0000000e+00],
+        [1.7660635e-10, 2.9899456e-07],
+        [2.2958826e-09, 1.7660635e-10],
+    ]
+    actual (scaling first, no binary rounding, full float64 type from template):
+    [
+        [0.00000000e+00, 0.00000000e+00],
+        [1.76606355e-07, 2.98994559e-04],
+        [2.29588261e-06, 1.76606355e-07],
+    ]
+    actual (scaling first, binary rounding with AI hacking to skirt around segfaults in numba, full float64 type):
+    [
+        [0.00000000e+00, 0.00000000e+00],
+        [1.76019967e-07, 2.97546387e-04],
+        [2.29477882e-06, 1.76019967e-07],
+    ]
+    """
     precip_surface_expected_values = np.array(
         [
             [0.0, 0.0],  # lead time 0h, ensemble members 0 and 1
-            [1.764420e-10, 2.998859e-07],  # lead time 3h, ensemble members 0 and 1
-            [2.299203e-09, 1.764420e-10],  # lead time 6h, ensemble members 0 and 1
+            [1.764420e-07, 2.998859e-04],  # lead time 3h, ensemble members 0 and 1
+            [2.299203e-06, 1.764420e-07],  # lead time 6h, ensemble members 0 and 1
         ],
         dtype=np.float32,
     )
+    breakpoint()
     np.testing.assert_allclose(
         precip_surface_actual_values,
         precip_surface_expected_values,
@@ -125,13 +176,13 @@ def test_backfill_local_and_operational_update(
         [
             [
                 [0.0000000e00, 0.0000000e00],
-                [1.7644197e-10, 2.9988587e-07],
-                [2.2992026e-09, 1.7644197e-10],
+                [1.7644197e-07, 2.9988587e-04],
+                [2.2992026e-06, 1.7644197e-07],
             ],
             [
                 [0.0000000e00, 0.0000000e00],
-                [1.0069925e-08, 1.3038516e-07],
-                [1.7644197e-10, 3.8417056e-08],
+                [1.0069925e-05, 1.3038516e-04],
+                [1.7644197e-07, 3.8417056e-05],
             ],
         ],
         dtype=np.float32,
@@ -143,7 +194,9 @@ def test_backfill_local_and_operational_update(
     )
 
 
-@pytest.mark.skip(reason="Currently not implemented")
+@pytest.mark.skip(
+    reason="TODO (alex/lauren): unskip this before merging, when NotImplementedError is removed from EcmwfIfsEnsForecast15Day025DegreeDataset"
+)
 def test_operational_kubernetes_resources(
     dataset: EcmwfIfsEnsForecast15Day025DegreeDataset,
 ) -> None:

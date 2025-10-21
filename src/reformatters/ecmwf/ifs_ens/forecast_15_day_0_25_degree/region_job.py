@@ -201,6 +201,15 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             except ValueError:
                 log.exception(f"Error deaccumulating {data_var.name}")
 
+        # ATTEMPT: use float64 for scaling only?
+        # if data_var.internal_attrs.scaling_factor is not None:
+        #     # Use double precision for scaling to avoid precision loss with small numbers
+        #     # This is especially important for very small values that get scaled up
+        #     data_array.values = (
+        #         data_array.values.astype(np.float64)
+        #         * data_var.internal_attrs.scaling_factor
+        #     ).astype(np.float32)
+
         super().apply_data_transformations(data_array, data_var)
 
     @classmethod

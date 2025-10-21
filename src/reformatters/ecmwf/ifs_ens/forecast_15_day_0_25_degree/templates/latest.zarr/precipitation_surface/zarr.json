@@ -6,7 +6,7 @@
     721,
     1440
   ],
-  "data_type": "float32",
+  "data_type": "float64",
   "chunk_grid": {
     "name": "regular",
     "configuration": {

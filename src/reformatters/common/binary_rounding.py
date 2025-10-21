@@ -93,3 +93,56 @@ def _round_float32_inplace_numba(
             flat_bits[i] = (flat_bits[i] & ~mantissa_mask) | mantissa
 
     return bits  # Return modified input array
+
+
+def round_float64_inplace(
+    value: np.ndarray[tuple[int, ...], np.dtype[np.float64]], keep_mantissa_bits: int
+) -> np.ndarray[tuple[int, ...], np.dtype[np.float64]]:
+    """
+    ### AI hacking to keep the binary rounding functionality for float64, but without numba because it was causing segfaults!
+
+    Round float64 values to keep a specific number of mantissa bits.
+    This improves compression by creating more trailing zeros.
+
+    Modifies the input array in place. Does not make any large allocations.
+
+    keep_mantissa_bits must be between 0 (only keep the exponent)
+    and 52 (no rounding), lower values round more.
+    """
+    if value.dtype != np.float64:
+        raise ValueError("value must be a float64 ndarray")
+    if keep_mantissa_bits < 0:
+        raise ValueError("keep_mantissa_bits must be at least 0")
+    if keep_mantissa_bits > 52:  # float64 has 52 mantissa bits
+        raise ValueError(f"keep_mantissa_bits must be 52 or less")
+
+    if keep_mantissa_bits == 52:
+        return value
+
+    # Use a simple numpy-based approach instead of numba to avoid segfaults
+    bits = value.view(np.uint64)
+    drop_bits = 52 - keep_mantissa_bits
+    keep_mask = ~np.uint64((1 << drop_bits) - 1)
+    increment = np.uint64(1 << drop_bits)
+    half_bit_mask = np.uint64(1) << (drop_bits - 1)
+
+    # Extract sign, exponent, and mantissa
+    sign_mask = np.uint64(1) << 63
+    exponent_mask = np.uint64(((1 << 11) - 1) << 52)
+    mantissa_mask = np.uint64((1 << 52) - 1)
+
+    sign = bits & sign_mask
+    exponent = bits & exponent_mask
+    mantissa = bits & mantissa_mask
+
+    # Clear lower bits
+    mantissa &= keep_mask
+
+    # Round up if half bit is set
+    round_up = (mantissa & half_bit_mask) != 0
+    mantissa += round_up.astype(np.uint64) * increment
+
+    # Reconstruct the float
+    bits[:] = sign | exponent | mantissa
+
+    return value
