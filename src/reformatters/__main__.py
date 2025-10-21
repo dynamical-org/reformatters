@@ -1,14 +1,12 @@
+import contextlib
 import multiprocessing
 import os
 from collections.abc import Sequence
 from typing import Any
 
 # Spawn new processes since fork isn't safe with threads
-try:
+with contextlib.suppress(RuntimeError):
     multiprocessing.set_start_method("spawn", force=True)
-except RuntimeError:
-    # Already set, ignore
-    pass
 
 
 import sentry_sdk
