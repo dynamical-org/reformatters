@@ -33,7 +33,9 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
 
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-operational-update",
-            schedule="55 1,7,13,19 * * *",  # TODO (alex/lauren): Add correct schedule, this just copies HRRR
+            # ECMWF uploads the first file at 07:40 UTC and the last one by 07:46 UTC.
+            # (Ensemble stats get uploaded 15-20 mins later, but we don't process those.)
+            schedule="50 7,8 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -45,7 +47,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validation",
-            schedule="10 2,8,14,20 * * *",  # TODO (alex/lauren): Add correct schedule, this just copies HRRR
+            schedule="0 8,9 * * *",  # 10 minutes after update starts
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
