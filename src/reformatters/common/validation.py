@@ -252,7 +252,7 @@ def check_for_expected_shards(
     problem_vars = []
     var_missing_shard_indexes = {}
 
-    for var in ds.data_vars.keys():
+    for var in ds.data_vars:
         ordered_dims = ds[var].dims
 
         shard_counts_per_dim = [

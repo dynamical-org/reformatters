@@ -27,7 +27,7 @@ from reformatters.contrib.noaa.ndvi_cdr.analysis.template_config import (
 
 
 @pytest.mark.parametrize(
-    "qa_value,expected_mask_value",
+    ("qa_value", "expected_mask_value"),
     [
         (QA_FILL_VALUE, True),
         (0, False),
@@ -60,7 +60,7 @@ def test_avhrr_quality_flags(qa_value: int, expected_mask_value: bool) -> None:
 
 
 @pytest.mark.parametrize(
-    "qa_value,expected_mask_value",
+    ("qa_value", "expected_mask_value"),
     [
         (QA_FILL_VALUE, True),
         (VIIRS_LAND_WATER_BIT_4, True),

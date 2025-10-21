@@ -26,7 +26,7 @@ class UpdateProgressTracker:
         reformat_job_name: str,
         time_i_slice_start: int,
         store_factory: StoreFactory,
-    ):
+    ) -> None:
         self.reformat_job_name = reformat_job_name
         self.time_i_slice_start = time_i_slice_start
         self.queue: queue.Queue[str] = queue.Queue()

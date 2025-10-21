@@ -74,6 +74,22 @@ select = [
     "LOG",   # logging
     "G",     # logging format
     "TD",    # todos
+    "ICN",   # import conventions
+    "ISC",   # implicit string concatenation
+    "ANN",   # annotations
+    "BLE",   # blind catch exception
+    "PYI",   # pyimport
+    "PT",    # pytest 
+    "Q",     # quotes
+    "SLF",   # private member access
+    "SIM",   # simplify
+    "SLOT",  # slots
+    "TID",   # tidy imports
+    "ARG",   # arguments
+    "FLY",   # f-strings
+    "NPY",   # numpy
+    "PD",    # pandas
+    "PERF",  # performance
 ]
 ignore = [
     "S101",    # disallow asserts
@@ -87,8 +103,11 @@ ignore = [
     "PTH123",  # allow `open`
     "G004",    # allow f-string in logging
     "PLR2004", # magic value used in comparison
+    "SIM300",  # allow comparisons with constants in any order
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["SLF", "ARG001", "ARG005"]
 
 [tool.mypy]
 files = "."

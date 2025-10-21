@@ -69,7 +69,7 @@ def test_check_data_is_current_success_with_nonzero_time(
 
 
 @pytest.mark.parametrize(
-    "nan_count,expected_pass",
+    ("nan_count", "expected_pass"),
     [
         (95, True),  # 95% NaN, should pass
         (96, False),  # 96% NaN, should fail

@@ -39,10 +39,7 @@ def is_forecast_dataset(ds: xr.Dataset) -> bool:
 def scope_time_period(
     ds: xr.Dataset, start_date: str | None, end_date: str | None
 ) -> xr.Dataset:
-    if is_forecast_dataset(ds):
-        append_dim = "init_time"
-    else:
-        append_dim = "time"
+    append_dim = "init_time" if is_forecast_dataset(ds) else "time"
     if start_date:
         ds = ds.sel({append_dim: slice(start_date, end_date)})
     if end_date:

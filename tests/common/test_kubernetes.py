@@ -212,7 +212,7 @@ def test_as_kubernetes_object_with_custom_values() -> None:
 
 
 @pytest.mark.parametrize(
-    "workers_total,expected_max_failed_indexes",
+    ("workers_total", "expected_max_failed_indexes"),
     [
         # Small worker count: min(100, max(min(5, 3), 3 // 8)) = min(100, max(3, 0)) = 3
         (3, 3),

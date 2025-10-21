@@ -380,7 +380,7 @@ def test_generate_source_file_coords_uses_ncei_for_recent_year(
 
 
 @pytest.mark.parametrize(
-    "test_year,expected_source,expected_result",
+    ("test_year", "expected_source", "expected_result"),
     [
         (
             2026,
