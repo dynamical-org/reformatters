@@ -1,8 +1,13 @@
 from collections.abc import Sequence
+from datetime import timedelta  # noqa: F401
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob
+from reformatters.common.kubernetes import (  # noqa: F401
+    CronJob,
+    ReformatCronJob,
+    ValidationCronJob,
+)
 
 from .region_job import ExampleRegionJob, ExampleSourceFileCoord
 from .template_config import ExampleDataVar, ExampleTemplateConfig
@@ -14,9 +19,10 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
+        # suspend = True  # Defaults to False, remove when you're ready to run operational updates and validation
         # operational_update_cron_job = ReformatCronJob(
         #     name=f"{self.dataset_id}-operational-update",
-        #     schedule=_OPERATIONAL_CRON_SCHEDULE,
+        #     schedule="0 0 * * *",
         #     pod_active_deadline=timedelta(minutes=30),
         #     image=image_tag,
         #     dataset_id=self.dataset_id,
@@ -25,16 +31,18 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
         #     shared_memory="12G",
         #     ephemeral_storage="30G",
         #     secret_names=self.store_factory.k8s_secret_names(),
+        #     suspend=suspend,
         # )
         # validation_cron_job = ValidationCronJob(
         #     name=f"{self.dataset_id}-validation",
-        #     schedule=_VALIDATION_CRON_SCHEDULE,
+        #     schedule="30 0 * * *",
         #     pod_active_deadline=timedelta(minutes=10),
         #     image=image_tag,
         #     dataset_id=self.dataset_id,
         #     cpu="1.3",
         #     memory="7G",
         #     secret_names=self.store_factory.k8s_secret_names(),
+        #     suspend=suspend,
         # )
 
         # return [operational_update_cron_job, validation_cron_job]
