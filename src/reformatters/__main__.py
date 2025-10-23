@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from typing import Any
 
 # Spawn new processes since fork isn't safe with threads
-with contextlib.suppress(RuntimeError):  # ignore if already set
+with contextlib.suppress(RuntimeError):  # skip if already set
     multiprocessing.set_start_method("spawn", force=True)
 
 

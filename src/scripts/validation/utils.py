@@ -8,7 +8,6 @@ from zarr.storage import ObjectStore, StoreLike
 
 # Common constants
 OUTPUT_DIR = "data/output"
-_rng = np.random.default_rng()
 
 # Common typer options
 variables_option = typer.Option(
@@ -89,12 +88,13 @@ def get_spatial_dimensions(ds: xr.Dataset) -> tuple[str, str]:
 def get_random_spatial_indices(
     ds: xr.Dataset, lat_dim: str, lon_dim: str
 ) -> tuple[dict[str, int], dict[str, int]]:
+    rng = np.random.default_rng()
     lat_size = ds.sizes[lat_dim]
     lon_size = ds.sizes[lon_dim]
-    lat1_idx = int(_rng.integers(0, lat_size // 4))
-    lon1_idx = int(_rng.integers(0, lon_size // 4))
-    lat2_idx = int(_rng.integers(3 * lat_size // 4, lat_size))
-    lon2_idx = int(_rng.integers(3 * lon_size // 4, lon_size))
+    lat1_idx = int(rng.integers(0, lat_size // 4))
+    lon1_idx = int(rng.integers(0, lon_size // 4))
+    lat2_idx = int(rng.integers(3 * lat_size // 4, lat_size))
+    lon2_idx = int(rng.integers(3 * lon_size // 4, lon_size))
     point1_sel = {lat_dim: lat1_idx, lon_dim: lon1_idx}
     point2_sel = {lat_dim: lat2_idx, lon_dim: lon2_idx}
     return point1_sel, point2_sel
@@ -137,7 +137,8 @@ def select_variables_for_plotting(
 def select_random_ensemble_member(ds: xr.Dataset) -> tuple[xr.Dataset, int | None]:
     if "ensemble_member" not in ds.dims:
         return ds, None
-    ensemble_member = _rng.choice(ds.ensemble_member, 1)[0]
+    rng = np.random.default_rng()
+    ensemble_member = rng.choice(ds.ensemble_member, 1)[0]
     return (
         ds.sel(ensemble_member=ensemble_member),
         ensemble_member,
