@@ -169,9 +169,6 @@ def test_region_job(template_ds: xr.Dataset, store_factory: StoreFactory) -> Non
         np.testing.assert_array_equal(data_var.values, expected_values)
 
 
-@pytest.mark.filterwarnings(
-    "ignore:This process .* is multi-threaded, use of fork.* may lead to deadlocks in the child"
-)
 @pytest.mark.parametrize("var_fill_value", [np.nan, 0.0])
 def test_region_job_empty_chunk_writing(
     store_factory: StoreFactory,
