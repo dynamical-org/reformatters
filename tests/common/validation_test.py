@@ -311,7 +311,7 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
 
     # Mock RNG to always select bottom-right quarter (both integers calls return 1)
     class MockRngBottomRight:
-        def integers(self, low: int, high: int) -> int:
+        def integers(self, _low: int, _high: int) -> int:
             return 1
 
     monkeypatch.setattr(
@@ -331,7 +331,7 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
 
     # Mock RNG to select top-left quarter (both integers calls return 0)
     class MockRngTopLeft:
-        def integers(self, low: int, high: int) -> int:
+        def integers(self, _low: int, _high: int) -> int:
             return 0
 
     monkeypatch.setattr(
