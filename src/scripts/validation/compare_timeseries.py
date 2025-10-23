@@ -25,18 +25,16 @@ log = get_logger(__name__)
 zarr.config.set({"async.concurrency": 128})
 
 GEFS_ANALYSIS_URL = "https://data.dynamical.org/noaa/gefs/analysis/latest.zarr"
-_rng = np.random.default_rng()
 
 
 def select_time_period_for_comparison(
     validation_ds: xr.Dataset, reference_ds: xr.Dataset
 ) -> tuple[xr.Dataset, xr.Dataset, str, str, str]:
     """Selects appropriate time periods for validation and reference datasets."""
+    rng = np.random.default_rng()
     if is_forecast_dataset(validation_ds):
         log.info("Detected forecast dataset - selecting random init_time")
-        selected_init_time = pd.Timestamp(
-            _rng.choice(validation_ds.init_time, 1)[0]
-        )
+        selected_init_time = pd.Timestamp(rng.choice(validation_ds.init_time, 1)[0])
         validation_subset = validation_ds.sel(init_time=selected_init_time)
         log.info(f"Selected init_time: {selected_init_time}")
 

@@ -5,7 +5,6 @@ from datetime import timedelta
 from functools import partial
 from typing import Literal, Protocol, assert_never, runtime_checkable
 
-import numpy as np
 import pandas as pd
 import pydantic
 import xarray as xr

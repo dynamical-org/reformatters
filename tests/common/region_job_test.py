@@ -77,7 +77,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoords]):
     def read_data(
         self,
         coord: ExampleSourceFileCoords,
-        data_var: ExampleDataVar,
+        _data_var: ExampleDataVar,
     ) -> ArrayFloat32:
         if coord.time == pd.Timestamp("2025-01-01T06"):
             raise ValueError("Test error")  # simulate a read error

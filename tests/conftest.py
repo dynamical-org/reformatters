@@ -3,6 +3,9 @@ import os
 import sys
 from pathlib import Path
 
+import numpy as np
+import pytest
+
 # Spawn new processes since fork isn't safe with threads
 try:
     multiprocessing.set_start_method("spawn", force=True)
@@ -10,8 +13,6 @@ except RuntimeError:
     # Already set, ignore
     pass
 
-
-import pytest
 
 # Make tests able to import from other files in tests/
 sys.path.append(str(Path(__file__).parent.parent))
@@ -46,3 +47,8 @@ def set_local_zarr_store_base_path(
     ):
         return
     monkeypatch.setattr(storage, "_LOCAL_ZARR_STORE_BASE_PATH", tmp_path)
+
+
+@pytest.fixture
+def rng() -> np.random.Generator:
+    return np.random.default_rng(0)
