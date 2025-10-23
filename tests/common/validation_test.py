@@ -210,7 +210,7 @@ def test_check_analysis_recent_nans_fails(
     # Mock np.random.default_rng to return a seeded generator that gives predictable results
     monkeypatch.setattr(
         "reformatters.common.validation.np.random.default_rng",
-        lambda: np.random.default_rng(0),
+        lambda seed=None: np.random.default_rng(0),
     )
 
     # Set all recent data to NaN to ensure the random sample will catch it
@@ -238,7 +238,7 @@ def test_check_analysis_recent_nans_custom_parameters(
     # Mock np.random.default_rng to return a seeded generator
     monkeypatch.setattr(
         "reformatters.common.validation.np.random.default_rng",
-        lambda: np.random.default_rng(0),
+        lambda seed=None: np.random.default_rng(0),
     )
 
     # Set all recent data to NaN to ensure the random sample will catch it
@@ -288,7 +288,7 @@ def test_check_analysis_recent_nans_quarter_sampling_fails(
     # Mock np.random.default_rng to return a seeded generator
     monkeypatch.setattr(
         "reformatters.common.validation.np.random.default_rng",
-        lambda: np.random.default_rng(0),
+        lambda seed=None: np.random.default_rng(0),
     )
 
     # Set all recent data to NaN to ensure the quarter sample will catch it
@@ -325,7 +325,7 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
     # Mock to select first quarter - seed 0 returns 0 for integers(0, 2)
     monkeypatch.setattr(
         "reformatters.common.validation.np.random.default_rng",
-        lambda: np.random.default_rng(0),
+        lambda seed=None: np.random.default_rng(0),
     )
 
     result = validation.check_analysis_recent_nans(
@@ -341,7 +341,7 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
     # Mock to select last quarter - seed 1 returns 1 for integers(0, 2)
     monkeypatch.setattr(
         "reformatters.common.validation.np.random.default_rng",
-        lambda: np.random.default_rng(1),
+        lambda seed=None: np.random.default_rng(1),
     )
 
     result = validation.check_analysis_recent_nans(
