@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
-from pytest import MonkeyPatch
 
 from reformatters.contrib.uarizona.swann.analysis.validators import (
     check_data_is_current,
@@ -47,7 +47,7 @@ def test_check_latest_time_nans_failure() -> None:
     assert "found excessive NaN values" in result.message
 
 
-def test_check_data_is_current_success(monkeypatch: MonkeyPatch) -> None:
+def test_check_data_is_current_success(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test passes when data is current."""
     monkeypatch.setattr(pd.Timestamp, "now", lambda: pd.Timestamp("2024-01-05"))
 
@@ -65,7 +65,7 @@ def test_check_data_is_current_success(monkeypatch: MonkeyPatch) -> None:
 
 
 def test_check_data_is_current_success_when_current_hour_is_nonzero(
-    monkeypatch: MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test passes when data is current."""
     monkeypatch.setattr(
@@ -85,7 +85,7 @@ def test_check_data_is_current_success_when_current_hour_is_nonzero(
     assert "Data found for the last" in result.message
 
 
-def test_check_data_is_current_failure(monkeypatch: MonkeyPatch) -> None:
+def test_check_data_is_current_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test passes when data is current."""
     monkeypatch.setattr(pd.Timestamp, "now", lambda: pd.Timestamp("2024-01-09"))
 
