@@ -26,7 +26,7 @@ class UpdateProgressTracker:
         reformat_job_name: str,
         time_i_slice_start: int,
         store_factory: StoreFactory,
-    ):
+    ) -> None:
         self.reformat_job_name = reformat_job_name
         self.time_i_slice_start = time_i_slice_start
         self.queue: queue.Queue[str] = queue.Queue()
@@ -72,7 +72,7 @@ class UpdateProgressTracker:
     def close(self) -> None:
         try:
             retry(lambda: self.fs.rm(self._get_path()), max_attempts=1)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             log.warning(f"Could not delete progress file: {e}")
 
     def _get_path(self) -> str:
@@ -97,5 +97,5 @@ class UpdateProgressTracker:
                 )
 
                 self.queue.task_done()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 log.warning(f"Could not record progress for variable {e}")

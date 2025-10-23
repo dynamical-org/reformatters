@@ -5,7 +5,7 @@ import pydantic
 B = TypeVar("B", bound=pydantic.BaseModel)
 
 
-def replace(obj: B, **kwargs: Any) -> B:
+def replace(obj: B, **kwargs: Any) -> B:  # noqa: ANN401
     """Replace properties of pydantic model instances."""
     # From https://github.com/pydantic/pydantic/discussions/3352#discussioncomment-10531773
     # pydantic's model_copy(update=...) does not validate updates, this function does.

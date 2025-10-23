@@ -48,7 +48,8 @@ def check_random_time_within_last_year_nans(
     for a random time in the last year, as we pull a years worth of data for each operational
     update of the dataset.
     """
-    random_time_index = np.random.choice(365) + 1
+    rng = np.random.default_rng()
+    random_time_index = rng.integers(0, 365) + 1
     sample_ds = ds.isel(time=-random_time_index)
     return _check_nans_in_ds("check_random_time_within_last_year_nans", sample_ds)
 

@@ -12,7 +12,7 @@ from reformatters.common.storage import (
 
 
 @pytest.mark.parametrize(
-    "env,dataset_format,expected_base,expected_extension",
+    ("env", "dataset_format", "expected_base", "expected_extension"),
     [
         (Env.prod, DatasetFormat.ZARR3, "s3://prod-bucket/data", ".zarr"),
         (Env.prod, DatasetFormat.ICECHUNK, "s3://prod-bucket/data", ".icechunk"),
@@ -43,7 +43,7 @@ def test_get_store_path(
 
 
 @pytest.mark.parametrize(
-    "env,expected_version",
+    ("env", "expected_version"),
     [
         (Env.dev, "dev"),
         (Env.prod, "v1.5"),
@@ -100,7 +100,7 @@ def test_store_factory_k8s_secret_names() -> None:
 
 
 @pytest.mark.parametrize(
-    "env,expected_mode",
+    ("env", "expected_mode"),
     [
         (Env.dev, "w"),
         (Env.prod, "w-"),

@@ -48,7 +48,7 @@ def create_data_array_and_template(
     processing_region_ds: xr.Dataset,
     data_var_name: str,
     shared_buffer: SharedMemory,
-    fill_value: float | int | bool,
+    fill_value: float | bool,
 ) -> tuple[xr.DataArray, xr.DataArray]:
     """
     Prepare an xarray.DataArray backed by shared memory for writing,

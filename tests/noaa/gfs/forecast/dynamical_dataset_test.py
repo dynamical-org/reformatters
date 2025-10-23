@@ -6,7 +6,6 @@ import pandas as pd
 import pytest
 import xarray as xr
 import zarr
-from pytest import MonkeyPatch
 
 from reformatters.common import validation
 from reformatters.common.storage import DatasetFormat, StorageConfig
@@ -16,7 +15,7 @@ from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 
 @pytest.mark.slow
 def test_backfill_local_and_operational_update(
-    monkeypatch: MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     dataset = NoaaGfsForecastDataset(
         primary_storage_config=NOOP_STORAGE_CONFIG,

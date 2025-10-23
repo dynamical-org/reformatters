@@ -32,7 +32,7 @@ def write_metadata(
         mode = storage.mode()
         replica_stores = storage.replica_stores(writable=True)
     else:
-        assert isinstance(storage, zarr.abc.store.Store) or isinstance(storage, Path)
+        assert isinstance(storage, (zarr.abc.store.Store, Path))
         store = storage
         replica_stores = []
         # respect mode if provided by legacy implementations

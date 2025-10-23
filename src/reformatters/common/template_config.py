@@ -51,7 +51,7 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         raise NotImplementedError("Implement `dimension_coordinates` in your subclass")
 
     def derive_coordinates(
-        self, ds: xr.Dataset
+        self, _ds: xr.Dataset
     ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
         """
         Compute non-dimension coordinates.

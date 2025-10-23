@@ -102,7 +102,7 @@ def test_append_dim_coordinates_left_inclusive_right_exclusive(
 
 
 @pytest.mark.parametrize(
-    "start_year, expected_years",
+    ("start_year", "expected_years"),
     [
         (2000, max(2025 - 2000 + 15, 10)),
         (2024, max(2025 - 2024 + 15, 10)),

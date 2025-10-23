@@ -11,7 +11,7 @@ pytestmark = pytest.mark.slow
 
 
 @pytest.mark.parametrize(
-    "time,expected_water_year,expected_url",
+    ("time", "expected_water_year", "expected_url"),
     [
         (
             pd.Timestamp("2023-09-30"),  # End of water year

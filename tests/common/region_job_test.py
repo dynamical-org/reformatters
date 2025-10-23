@@ -62,7 +62,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoords]):
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
-        data_var_group: Sequence[ExampleDataVar],
+        _data_var_group: Sequence[ExampleDataVar],
     ) -> Sequence[ExampleSourceFileCoords]:
         return [
             ExampleSourceFileCoords(time=t)
@@ -77,7 +77,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoords]):
     def read_data(
         self,
         coord: ExampleSourceFileCoords,
-        data_var: ExampleDataVar,
+        _data_var: ExampleDataVar,
     ) -> ArrayFloat32:
         if coord.time == pd.Timestamp("2025-01-01T06"):
             raise ValueError("Test error")  # simulate a read error
@@ -120,9 +120,6 @@ def template_ds() -> xr.Dataset:
     )
 
 
-@pytest.mark.filterwarnings(
-    "ignore:This process .* is multi-threaded, use of fork.* may lead to deadlocks in the child"
-)
 def test_region_job(template_ds: xr.Dataset, store_factory: StoreFactory) -> None:
     tmp_store = get_local_tmp_store()
 
@@ -132,7 +129,7 @@ def test_region_job(template_ds: xr.Dataset, store_factory: StoreFactory) -> Non
     job = ExampleRegionJob(
         tmp_store=tmp_store,
         template_ds=template_ds,
-        data_vars=[ExampleDataVar(name=name) for name in template_ds.data_vars.keys()],
+        data_vars=[ExampleDataVar(name=str(name)) for name in template_ds.data_vars],
         append_dim="time",
         region=slice(0, 18),
         reformat_job_name="test-job",
@@ -162,7 +159,7 @@ def test_update_template_with_results(template_ds: xr.Dataset) -> None:
     job = ExampleRegionJob(
         tmp_store=tmp_store,
         template_ds=template_ds,
-        data_vars=[ExampleDataVar(name=name) for name in template_ds.data_vars.keys()],
+        data_vars=[ExampleDataVar(name=str(name)) for name in template_ds.data_vars],
         append_dim="time",
         region=slice(0, 18),
         reformat_job_name="test-job",
@@ -202,7 +199,7 @@ def test_source_file_coord_append_dim_coord() -> None:
 
 
 def test_get_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
-    data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
+    data_vars = [ExampleDataVar(name=str(name)) for name in template_ds.data_vars]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
@@ -238,7 +235,7 @@ def test_get_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
 
 
 def test_get_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
-    data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
+    data_vars = [ExampleDataVar(name=str(name)) for name in template_ds.data_vars]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
@@ -279,7 +276,7 @@ def test_get_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
 
 
 def test_get_jobs_grouping_filters_and_worker_index(template_ds: xr.Dataset) -> None:
-    data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
+    data_vars = [ExampleDataVar(name=str(name)) for name in template_ds.data_vars]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
@@ -312,7 +309,7 @@ def test_get_jobs_grouping_filters_and_worker_index(template_ds: xr.Dataset) -> 
 
 
 def test_get_jobs_grouping_filter_contains(template_ds: xr.Dataset) -> None:
-    data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
+    data_vars = [ExampleDataVar(name=str(name)) for name in template_ds.data_vars]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
@@ -341,7 +338,7 @@ def test_get_jobs_grouping_filter_contains(template_ds: xr.Dataset) -> None:
 def test_get_jobs_grouping_filter_contains_second_shard(
     template_ds: xr.Dataset,
 ) -> None:
-    data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
+    data_vars = [ExampleDataVar(name=str(name)) for name in template_ds.data_vars]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
@@ -368,7 +365,7 @@ def test_get_jobs_grouping_filter_contains_second_shard(
 
 
 def test_get_jobs_grouping_filter_contains_all_shards(template_ds: xr.Dataset) -> None:
-    data_vars = [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()]
+    data_vars = [ExampleDataVar(name=str(name)) for name in template_ds.data_vars]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
         kind="backfill",
