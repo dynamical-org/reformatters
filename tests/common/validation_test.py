@@ -208,7 +208,11 @@ def test_check_analysis_recent_nans_fails(
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
     # Mock random sampling to return first indices
-    monkeypatch.setattr("numpy.random.randint", lambda low, high: 0)
+    mock_rng = np.random.default_rng(42)
+    monkeypatch.setattr(
+        "reformatters.common.validation.np.random.default_rng", lambda: mock_rng
+    )
+    monkeypatch.setattr(mock_rng, "integers", lambda low, high: 0)
 
     # Set all recent data to NaN to ensure the random sample will catch it
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
@@ -233,7 +237,11 @@ def test_check_analysis_recent_nans_custom_parameters(
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
     # Mock random sampling to return first indices
-    monkeypatch.setattr("numpy.random.randint", lambda low, high: 0)
+    mock_rng = np.random.default_rng(42)
+    monkeypatch.setattr(
+        "reformatters.common.validation.np.random.default_rng", lambda: mock_rng
+    )
+    monkeypatch.setattr(mock_rng, "integers", lambda low, high: 0)
 
     # Set all recent data to NaN to ensure the random sample will catch it
     recent_slice = {"time": slice("2024-01-02", None)}
@@ -280,7 +288,11 @@ def test_check_analysis_recent_nans_quarter_sampling_fails(
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
     # Mock random sampling to select specific quarter (first half of both dimensions)
-    monkeypatch.setattr("numpy.random.randint", lambda low, high: 0)
+    mock_rng = np.random.default_rng(42)
+    monkeypatch.setattr(
+        "reformatters.common.validation.np.random.default_rng", lambda: mock_rng
+    )
+    monkeypatch.setattr(mock_rng, "integers", lambda low, high: 0)
 
     # Set all recent data to NaN to ensure the quarter sample will catch it
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
@@ -313,8 +325,12 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
         longitude=slice(0, lon_size // 2),
     ).values[:] = np.nan
 
-    # Mock to select first quarter (both randint calls return 0)
-    monkeypatch.setattr("numpy.random.randint", lambda low, high: 0)
+    # Mock to select first quarter (both integers calls return 0)
+    mock_rng = np.random.default_rng(42)
+    monkeypatch.setattr(
+        "reformatters.common.validation.np.random.default_rng", lambda: mock_rng
+    )
+    monkeypatch.setattr(mock_rng, "integers", lambda low, high: 0)
 
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
@@ -326,8 +342,8 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
     # Should fail because first quarter has NaNs
     assert not result.passed
 
-    # Mock to select last quarter (both randint calls return 1)
-    monkeypatch.setattr("numpy.random.randint", lambda low, high: 1)
+    # Mock to select last quarter (both integers calls return 1)
+    monkeypatch.setattr(mock_rng, "integers", lambda low, high: 1)
 
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
