@@ -44,6 +44,7 @@ class NoaaNdviCdrInternalAttrs(BaseInternalAttrs):
     scale_factor: float | None = None
     add_offset: float | None = None
     valid_range: tuple[float, float] | None = None
+    read_data_fill_value: float | None = None
 
 
 class NoaaNdviCdrDataVar(DataVar[NoaaNdviCdrInternalAttrs]):
@@ -243,6 +244,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                     scale_factor=0.0001,
                     add_offset=0.0,
                     valid_range=(-1000, 10000),
+                    read_data_fill_value=np.nan,
                 ),
             ),
             NoaaNdviCdrDataVar(
@@ -262,6 +264,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                     scale_factor=0.0001,
                     add_offset=0.0,
                     valid_range=(-1000, 10000),
+                    read_data_fill_value=np.nan,
                 ),
             ),
             NoaaNdviCdrDataVar(
