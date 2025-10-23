@@ -256,7 +256,7 @@ def check_for_expected_shards(
     problem_vars = []
     var_missing_shard_indexes = {}
 
-    for var in map(str, ds.data_vars):  # tell the type checker that var is a str
+    for var in map(str, ds.data_vars):  # our keys are strs, xr types as Hashable
         ordered_dims = ds[var].dims
 
         shard_counts_per_dim = [
