@@ -203,4 +203,4 @@ def write_shard_to_zarr(
             message="In a future version of xarray decode_timedelta will default to False rather than None.",
             category=FutureWarning,
         )
-        data_array[shard_indexer].to_zarr(store, region="auto")  # type: ignore[call-overload]
+        data_array[shard_indexer].to_zarr(store, region="auto", write_empty_chunks=True)  # type: ignore[call-overload]
