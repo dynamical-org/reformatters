@@ -298,10 +298,10 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
     # Add NaNs to all quarters to ensure we can test the sampling
     lat_size = len(analysis_dataset.latitude)
     lon_size = len(analysis_dataset.longitude)
-    
+
     # Set all recent data to NaN first
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
-    
+
     # Then set one quarter back to valid data (bottom-right quarter)
     analysis_dataset["temperature"].isel(
         time=slice(-24, None),  # Last 24 hours
