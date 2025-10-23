@@ -190,7 +190,7 @@ def test_region_job_empty_chunk_writing(
         tmp_store,
         template_ds,
         "time",
-        [ExampleDataVar(name=name) for name in template_ds.data_vars.keys()],
+        [ExampleDataVar(name=str(name)) for name in template_ds.data_vars],
         reformat_job_name="test-job",
     )
 
