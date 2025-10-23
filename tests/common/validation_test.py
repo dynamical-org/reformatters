@@ -207,12 +207,6 @@ def test_check_analysis_recent_nans_fails(
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Mock np.random.default_rng to return a seeded generator that gives predictable results
-    monkeypatch.setattr(
-        "reformatters.common.validation.np.random.default_rng",
-        lambda seed=None: np.random.default_rng(0),
-    )
-
     # Set all recent data to NaN to ensure the random sample will catch it
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
 
@@ -234,12 +228,6 @@ def test_check_analysis_recent_nans_custom_parameters(
     """Test that check_analysis_recent_nans respects custom parameters."""
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
-
-    # Mock np.random.default_rng to return a seeded generator
-    monkeypatch.setattr(
-        "reformatters.common.validation.np.random.default_rng",
-        lambda seed=None: np.random.default_rng(0),
-    )
 
     # Set all recent data to NaN to ensure the random sample will catch it
     recent_slice = {"time": slice("2024-01-02", None)}
@@ -285,12 +273,6 @@ def test_check_analysis_recent_nans_quarter_sampling_fails(
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Mock np.random.default_rng to return a seeded generator
-    monkeypatch.setattr(
-        "reformatters.common.validation.np.random.default_rng",
-        lambda seed=None: np.random.default_rng(0),
-    )
-
     # Set all recent data to NaN to ensure the quarter sample will catch it
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
 
@@ -323,9 +305,10 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
     ).values[:] = np.nan
 
     # Mock to select first quarter - seed 0 returns 0 for integers(0, 2)
+    original_default_rng = np.random.default_rng
     monkeypatch.setattr(
         "reformatters.common.validation.np.random.default_rng",
-        lambda seed=None: np.random.default_rng(0),
+        lambda seed=None: original_default_rng(0),
     )
 
     result = validation.check_analysis_recent_nans(
@@ -341,7 +324,7 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
     # Mock to select last quarter - seed 1 returns 1 for integers(0, 2)
     monkeypatch.setattr(
         "reformatters.common.validation.np.random.default_rng",
-        lambda seed=None: np.random.default_rng(1),
+        lambda seed=None: original_default_rng(1),
     )
 
     result = validation.check_analysis_recent_nans(
