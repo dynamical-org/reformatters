@@ -27,6 +27,7 @@ from reformatters.common.zarr import (
 
 class UarizonaSwannInternalAttrs(BaseInternalAttrs):
     netcdf_var_name: str
+    read_data_fill_value: float | None
 
 
 class UarizonaSwannDataVar(DataVar[UarizonaSwannInternalAttrs]):
@@ -197,7 +198,7 @@ class UarizonaSwannAnalysisTemplateConfig(TemplateConfig[UarizonaSwannDataVar]):
 
         encoding_float32_default = Encoding(
             dtype="float32",
-            fill_value=np.nan,
+            fill_value=0,
             chunks=tuple(var_chunks[d] for d in self.dims),
             shards=tuple(var_shards[d] for d in self.dims),
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
@@ -219,6 +220,7 @@ class UarizonaSwannAnalysisTemplateConfig(TemplateConfig[UarizonaSwannDataVar]):
                 internal_attrs=UarizonaSwannInternalAttrs(
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     netcdf_var_name="SWE",
+                    read_data_fill_value=np.nan,
                 ),
             ),
             UarizonaSwannDataVar(
@@ -234,6 +236,7 @@ class UarizonaSwannAnalysisTemplateConfig(TemplateConfig[UarizonaSwannDataVar]):
                 internal_attrs=UarizonaSwannInternalAttrs(
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     netcdf_var_name="DEPTH",
+                    read_data_fill_value=np.nan,
                 ),
             ),
         ]
