@@ -7,11 +7,9 @@ import xarray as xr
 
 from reformatters.common import validation
 
-_rng = np.random.default_rng(42)
-
 
 @pytest.fixture
-def forecast_dataset() -> xr.Dataset:
+def forecast_dataset(rng: np.random.Generator) -> xr.Dataset:
     """Create a mock forecast dataset for testing."""
     init_times = pd.date_range("2024-01-01", periods=5, freq="6h")
     lead_times = pd.timedelta_range(start="0h", end="240h", freq="6h")
@@ -22,11 +20,15 @@ def forecast_dataset() -> xr.Dataset:
         {
             "temperature": (
                 ["init_time", "lead_time", "latitude", "longitude"],
-                _rng.standard_normal((len(init_times), len(lead_times), len(lats), len(lons))),
+                rng.standard_normal(
+                    (len(init_times), len(lead_times), len(lats), len(lons))
+                ),
             ),
             "precipitation": (
                 ["init_time", "lead_time", "latitude", "longitude"],
-                _rng.standard_normal((len(init_times), len(lead_times), len(lats), len(lons))),
+                rng.standard_normal(
+                    (len(init_times), len(lead_times), len(lats), len(lons))
+                ),
             ),
         },
         coords={
@@ -40,7 +42,7 @@ def forecast_dataset() -> xr.Dataset:
 
 
 @pytest.fixture
-def analysis_dataset() -> xr.Dataset:
+def analysis_dataset(rng: np.random.Generator) -> xr.Dataset:
     """Create a mock analysis dataset for testing."""
     times = pd.date_range("2024-01-01", periods=48, freq="1h")
     lats = np.linspace(90, -90, 10)  # Decreasing as per convention
@@ -50,11 +52,15 @@ def analysis_dataset() -> xr.Dataset:
         {
             "temperature": (
                 ["time", "latitude", "longitude"],
-                _rng.standard_normal((len(times), len(lats), len(lons)),),
+                rng.standard_normal(
+                    (len(times), len(lats), len(lons)),
+                ),
             ),
             "humidity": (
                 ["time", "latitude", "longitude"],
-                _rng.standard_normal((len(times), len(lats), len(lons)),),
+                rng.standard_normal(
+                    (len(times), len(lats), len(lons)),
+                ),
             ),
         },
         coords={
@@ -67,7 +73,8 @@ def analysis_dataset() -> xr.Dataset:
 
 
 def test_check_forecast_current_data_passes(
-    monkeypatch: pytest.MonkeyPatch, forecast_dataset: xr.Dataset
+    monkeypatch: pytest.MonkeyPatch,
+    forecast_dataset: xr.Dataset,
 ) -> None:
     """Test that check_forecast_current_data passes when recent data exists."""
     now = pd.Timestamp("2024-01-01 18:00:00")
@@ -80,7 +87,8 @@ def test_check_forecast_current_data_passes(
 
 
 def test_check_forecast_current_data_fails(
-    monkeypatch: pytest.MonkeyPatch, forecast_dataset: xr.Dataset
+    monkeypatch: pytest.MonkeyPatch,
+    forecast_dataset: xr.Dataset,
 ) -> None:
     """Test that check_forecast_current_data fails when no recent data exists."""
     now = pd.Timestamp("2024-01-10")
@@ -93,7 +101,8 @@ def test_check_forecast_current_data_fails(
 
 
 def test_check_forecast_recent_nans_passes(
-    monkeypatch: pytest.MonkeyPatch, forecast_dataset: xr.Dataset
+    monkeypatch: pytest.MonkeyPatch,
+    forecast_dataset: xr.Dataset,
 ) -> None:
     """Test that check_forecast_recent_nans passes when NaN percentage is acceptable."""
     now = pd.Timestamp("2024-01-01 18:00:00")
@@ -106,7 +115,8 @@ def test_check_forecast_recent_nans_passes(
 
 
 def test_check_forecast_recent_nans_fails(
-    monkeypatch: pytest.MonkeyPatch, forecast_dataset: xr.Dataset
+    monkeypatch: pytest.MonkeyPatch,
+    forecast_dataset: xr.Dataset,
 ) -> None:
     """Test that check_forecast_recent_nans fails when NaN percentage is too high."""
     now = pd.Timestamp("2024-01-01 18:00:00")
@@ -127,7 +137,8 @@ def test_check_forecast_recent_nans_fails(
 
 
 def test_check_analysis_current_data_passes(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+    monkeypatch: pytest.MonkeyPatch,
+    analysis_dataset: xr.Dataset,
 ) -> None:
     """Test that check_analysis_current_data passes when recent data exists."""
     now = pd.Timestamp("2024-01-02 12:00:00")
@@ -140,7 +151,8 @@ def test_check_analysis_current_data_passes(
 
 
 def test_check_analysis_current_data_fails(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+    monkeypatch: pytest.MonkeyPatch,
+    analysis_dataset: xr.Dataset,
 ) -> None:
     """Test that check_analysis_current_data fails when no recent data exists."""
     now = pd.Timestamp("2024-01-10")
@@ -153,7 +165,8 @@ def test_check_analysis_current_data_fails(
 
 
 def test_check_analysis_current_data_custom_delay(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+    monkeypatch: pytest.MonkeyPatch,
+    analysis_dataset: xr.Dataset,
 ) -> None:
     """Test that check_analysis_current_data respects custom max_expected_delay."""
     # Dataset ends at 2024-01-02 23:00:00
@@ -173,7 +186,8 @@ def test_check_analysis_current_data_custom_delay(
 
 
 def test_check_analysis_recent_nans_passes(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+    monkeypatch: pytest.MonkeyPatch,
+    analysis_dataset: xr.Dataset,
 ) -> None:
     """Test that check_analysis_recent_nans passes when NaN percentage is acceptable."""
     now = pd.Timestamp("2024-01-02 12:00:00")
@@ -186,7 +200,8 @@ def test_check_analysis_recent_nans_passes(
 
 
 def test_check_analysis_recent_nans_fails(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+    monkeypatch: pytest.MonkeyPatch,
+    analysis_dataset: xr.Dataset,
 ) -> None:
     """Test that check_analysis_recent_nans fails when NaN percentage is too high."""
     now = pd.Timestamp("2024-01-02 12:00:00")
@@ -210,7 +225,8 @@ def test_check_analysis_recent_nans_fails(
 
 
 def test_check_analysis_recent_nans_custom_parameters(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+    monkeypatch: pytest.MonkeyPatch,
+    analysis_dataset: xr.Dataset,
 ) -> None:
     """Test that check_analysis_recent_nans respects custom parameters."""
     now = pd.Timestamp("2024-01-02 12:00:00")
@@ -241,7 +257,8 @@ def test_check_analysis_recent_nans_custom_parameters(
 
 
 def test_check_analysis_recent_nans_quarter_sampling_passes(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+    monkeypatch: pytest.MonkeyPatch,
+    analysis_dataset: xr.Dataset,
 ) -> None:
     """Test that check_analysis_recent_nans passes with quarter spatial sampling."""
     now = pd.Timestamp("2024-01-02 12:00:00")
@@ -325,6 +342,7 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
 
 def test_check_analysis_recent_nans_xy_dimensions(
     monkeypatch: pytest.MonkeyPatch,
+    rng: np.random.Generator,
 ) -> None:
     """Test that check_analysis_recent_nans works with x/y dimensions instead of lat/lon."""
     now = pd.Timestamp("2024-01-02 12:00:00")
@@ -338,7 +356,9 @@ def test_check_analysis_recent_nans_xy_dimensions(
         {
             "temperature": (
                 ["time", "y", "x"],
-                _rng.standard_normal((len(times), len(y), len(x)),),
+                rng.standard_normal(
+                    (len(times), len(y), len(x)),
+                ),
             ),
         },
         coords={
