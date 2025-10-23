@@ -90,12 +90,11 @@ def check_forecast_recent_nans(
     """Check for NaN values in the most recent day of data. Fails if more than max_nan_percentage of sampled data is NaN."""
 
     now = pd.Timestamp.now()
-    rng = np.random.default_rng()
 
     # We want to show that the latest init time has valid data going out up to 10 days (we may not have forecasts
     # past that, depending on the ensemble member and init time). To avoid needing to load a rediculous amount of data
     # we'll choose a random lead_time within that range.
-    lead_time_day = rng.integers(0, 10)  # [0, 10) since we add 1 below
+    lead_time_day = _rng.integers(0, 10)  # [0, 10) since we add 1 below
     sample_ds = ds.sel(
         init_time=slice(now - timedelta(days=1), None),
         lead_time=slice(
@@ -148,7 +147,6 @@ def check_analysis_recent_nans(  # noqa: PLR0912
     """Check for NaN values in the most recent day of data. Fails if more than max_nan_percentage of sampled data is NaN."""
 
     now = pd.Timestamp.now()
-    rng = np.random.default_rng()
 
     if "latitude" in ds.dims and "longitude" in ds.dims:
         x_dim, y_dim = "longitude", "latitude"
@@ -161,20 +159,20 @@ def check_analysis_recent_nans(  # noqa: PLR0912
     y_size = ds.sizes[y_dim]
     if spatial_sampling == "random":
         # Use positional indexing to sample a small spatial region
-        x_idx = rng.integers(0, max(1, x_size - 2))
-        y_idx = rng.integers(0, max(1, y_size - 2))
+        x_idx = _rng.integers(0, max(1, x_size - 2))
+        y_idx = _rng.integers(0, max(1, y_size - 2))
 
         sample_ds = ds.sel(time=slice(now - max_expected_delay, None)).isel(
             {x_dim: slice(x_idx, x_idx + 2), y_dim: slice(y_idx, y_idx + 2)}
         )
 
     elif spatial_sampling == "quarter":
-        if rng.integers(0, 2) == 0:
+        if _rng.integers(0, 2) == 0:
             x_slice = slice(0, x_size // 2)
         else:
             x_slice = slice(x_size // 2, x_size)
 
-        if rng.integers(0, 2) == 0:
+        if _rng.integers(0, 2) == 0:
             y_slice = slice(0, y_size // 2)
         else:
             y_slice = slice(y_size // 2, y_size)
@@ -207,7 +205,6 @@ def compare_replica_and_primary(
     append_dim: str, replica_ds: xr.Dataset, primary_ds: xr.Dataset
 ) -> ValidationResult:
     """Compare the data in the replica and primary stores."""
-    rng = np.random.default_rng()
     problem_coords = []
     for coord in primary_ds.coords:
         try:
@@ -220,7 +217,7 @@ def compare_replica_and_primary(
         return ValidationResult(passed=False, message=message)
 
     num_variables_to_check = min(5, len(primary_ds.data_vars))
-    variables_to_check = rng.choice(
+    variables_to_check = _rng.choice(
         list(primary_ds.data_vars.keys()), num_variables_to_check, replace=False
     )
 

@@ -207,12 +207,12 @@ def test_check_analysis_recent_nans_fails(
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Mock random sampling to return first indices
-    mock_rng = np.random.default_rng(42)
-    monkeypatch.setattr(
-        "reformatters.common.validation.np.random.default_rng", lambda: mock_rng
-    )
-    monkeypatch.setattr(mock_rng, "integers", lambda low, high: 0)
+    # Mock the module-level _rng to return first indices
+    class MockRng:
+        def integers(self, low: int, high: int) -> int:
+            return 0
+
+    monkeypatch.setattr("reformatters.common.validation._rng", MockRng())
 
     # Set all recent data to NaN to ensure the random sample will catch it
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
@@ -236,12 +236,12 @@ def test_check_analysis_recent_nans_custom_parameters(
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Mock random sampling to return first indices
-    mock_rng = np.random.default_rng(42)
-    monkeypatch.setattr(
-        "reformatters.common.validation.np.random.default_rng", lambda: mock_rng
-    )
-    monkeypatch.setattr(mock_rng, "integers", lambda low, high: 0)
+    # Mock the module-level _rng to return first indices
+    class MockRng:
+        def integers(self, low: int, high: int) -> int:
+            return 0
+
+    monkeypatch.setattr("reformatters.common.validation._rng", MockRng())
 
     # Set all recent data to NaN to ensure the random sample will catch it
     recent_slice = {"time": slice("2024-01-02", None)}
@@ -287,12 +287,12 @@ def test_check_analysis_recent_nans_quarter_sampling_fails(
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Mock random sampling to select specific quarter (first half of both dimensions)
-    mock_rng = np.random.default_rng(42)
-    monkeypatch.setattr(
-        "reformatters.common.validation.np.random.default_rng", lambda: mock_rng
-    )
-    monkeypatch.setattr(mock_rng, "integers", lambda low, high: 0)
+    # Mock the module-level _rng to select specific quarter (first half of both dimensions)
+    class MockRng:
+        def integers(self, low: int, high: int) -> int:
+            return 0
+
+    monkeypatch.setattr("reformatters.common.validation._rng", MockRng())
 
     # Set all recent data to NaN to ensure the quarter sample will catch it
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
@@ -326,11 +326,11 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
     ).values[:] = np.nan
 
     # Mock to select first quarter (both integers calls return 0)
-    mock_rng = np.random.default_rng(42)
-    monkeypatch.setattr(
-        "reformatters.common.validation.np.random.default_rng", lambda: mock_rng
-    )
-    monkeypatch.setattr(mock_rng, "integers", lambda low, high: 0)
+    class MockRngFirst:
+        def integers(self, low: int, high: int) -> int:
+            return 0
+
+    monkeypatch.setattr("reformatters.common.validation._rng", MockRngFirst())
 
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
@@ -343,7 +343,11 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
     assert not result.passed
 
     # Mock to select last quarter (both integers calls return 1)
-    monkeypatch.setattr(mock_rng, "integers", lambda low, high: 1)
+    class MockRngLast:
+        def integers(self, low: int, high: int) -> int:
+            return 1
+
+    monkeypatch.setattr("reformatters.common.validation._rng", MockRngLast())
 
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
