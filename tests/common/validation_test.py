@@ -295,20 +295,28 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Add NaNs to only the first quarter (first half of both lat and lon using positional indexing)
+    # Add NaNs to all quarters to ensure we can test the sampling
     lat_size = len(analysis_dataset.latitude)
     lon_size = len(analysis_dataset.longitude)
+    
+    # Set all recent data to NaN first
+    analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
+    
+    # Then set one quarter back to valid data (bottom-right quarter)
     analysis_dataset["temperature"].isel(
         time=slice(-24, None),  # Last 24 hours
-        latitude=slice(0, lat_size // 2),
-        longitude=slice(0, lon_size // 2),
-    ).values[:] = np.nan
+        latitude=slice(lat_size // 2, lat_size),
+        longitude=slice(lon_size // 2, lon_size),
+    ).values[:] = 1.0
 
-    # Mock to select first quarter - seed 0 returns 0 for integers(0, 2)
-    original_default_rng = np.random.default_rng
+    # Mock RNG to always select bottom-right quarter (both integers calls return 1)
+    class MockRngBottomRight:
+        def integers(self, low: int, high: int) -> int:
+            return 1
+
     monkeypatch.setattr(
         "reformatters.common.validation.np.random.default_rng",
-        lambda seed=None: original_default_rng(0),
+        lambda seed=None: MockRngBottomRight(),
     )
 
     result = validation.check_analysis_recent_nans(
@@ -318,24 +326,28 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
         spatial_sampling="quarter",
     )
 
-    # Should fail because first quarter has NaNs
-    assert not result.passed
-
-    # Mock to select last quarter - seed 1 returns 1 for integers(0, 2)
-    monkeypatch.setattr(
-        "reformatters.common.validation.np.random.default_rng",
-        lambda seed=None: original_default_rng(1),
-    )
-
-    result = validation.check_analysis_recent_nans(
-        analysis_dataset,
-        max_expected_delay=timedelta(hours=12),
-        max_nan_percentage=5,
-        spatial_sampling="quarter",
-    )
-
-    # Should pass because last quarter doesn't have NaNs
+    # Should pass because bottom-right quarter has valid data
     assert result.passed
+
+    # Mock RNG to select top-left quarter (both integers calls return 0)
+    class MockRngTopLeft:
+        def integers(self, low: int, high: int) -> int:
+            return 0
+
+    monkeypatch.setattr(
+        "reformatters.common.validation.np.random.default_rng",
+        lambda seed=None: MockRngTopLeft(),
+    )
+
+    result = validation.check_analysis_recent_nans(
+        analysis_dataset,
+        max_expected_delay=timedelta(hours=12),
+        max_nan_percentage=5,
+        spatial_sampling="quarter",
+    )
+
+    # Should fail because top-left quarter has NaNs
+    assert not result.passed
 
 
 def test_check_analysis_recent_nans_xy_dimensions(
