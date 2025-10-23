@@ -79,7 +79,7 @@ select = [
     "ANN",   # annotations
     "BLE",   # blind catch exception
     "PYI",   # pyimport
-    "PT",    # pytest 
+    "PT",    # pytest
     "Q",     # quotes
     "SLF",   # private member access
     "SIM",   # simplify
@@ -88,18 +88,17 @@ select = [
     "ARG",   # arguments
     "FLY",   # f-strings
     "NPY",   # numpy
-    "PD",    # pandas
     "PERF",  # performance
 ]
 ignore = [
     "S101",    # disallow asserts
-    "E501",    # line too long
+    "E501",    # line too long (ruff format will handle)
     "W293",    # black line contains whitespace
     "UP046",   # non-pep695-generic-class - mypy doesn't support this yet
     "UP047",   # non-pep695-generic-function - mypy doesn't support this yet
     "PLC0414", # import aliases to same name - we use to specifically re-export
     "PLR0913", # too many arguments
-    "TD003",   # don't require issue link
+    "TD003",   # don't require issue link in todos
     "PTH123",  # allow `open`
     "G004",    # allow f-string in logging
     "PLR2004", # magic value used in comparison
@@ -107,7 +106,11 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["SLF", "ARG001", "ARG005"]
+"tests/**/*.py" = [
+    "SLF",      # private member access
+    "ARG001",   # unused function arg
+    "ARG005",   # unused lambda arg
+]
 
 [tool.mypy]
 files = "."
