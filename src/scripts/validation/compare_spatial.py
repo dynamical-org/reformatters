@@ -40,13 +40,15 @@ def align_to_valid_time(
     selected_init_time: pd.Timestamp
     selected_lead_time: str
 
+    rng = np.random.default_rng()
+
     if init_time is None:
-        selected_init_time = pd.Timestamp(np.random.choice(ds.init_time, 1)[0])
+        selected_init_time = pd.Timestamp(rng.choice(ds.init_time, 1)[0])
     else:
         selected_init_time = pd.Timestamp(init_time)
 
     if lead_time is None:
-        selected_lead_time = np.random.choice(ds.lead_time, 1)[0]
+        selected_lead_time = rng.choice(ds.lead_time, 1)[0]
     else:
         selected_lead_time = lead_time
 

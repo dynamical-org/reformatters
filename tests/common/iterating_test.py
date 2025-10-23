@@ -85,7 +85,7 @@ def test_chunk_slices_negative_chunk_size() -> None:
 
 
 def test_chunk_slices_zero_chunk_size() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="range\\(\\) arg 3 must not be zero"):
         chunk_slices(5, 0)
 
 

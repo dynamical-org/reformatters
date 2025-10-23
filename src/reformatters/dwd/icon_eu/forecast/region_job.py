@@ -304,8 +304,10 @@ def decompress_bz2_file(compressed_file_path: Path) -> Path:
             f"compressed_file_path must end in .bz2. Instead, {compressed_file_path=}"
         )
     decompressed_file_path = compressed_file_path.with_suffix("")
-    with bz2.open(compressed_file_path, "rb") as src_file_object:
-        with open(decompressed_file_path, "wb") as dst_file_object:
-            # Use shutil.copyfileobj for efficient memory usage
-            shutil.copyfileobj(src_file_object, dst_file_object)
+    with (
+        bz2.open(compressed_file_path, "rb") as src_file_object,
+        open(decompressed_file_path, "wb") as dst_file_object,
+    ):
+        # Use shutil.copyfileobj for efficient memory usage
+        shutil.copyfileobj(src_file_object, dst_file_object)
     return decompressed_file_path

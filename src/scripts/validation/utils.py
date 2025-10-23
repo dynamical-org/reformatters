@@ -39,10 +39,7 @@ def is_forecast_dataset(ds: xr.Dataset) -> bool:
 def scope_time_period(
     ds: xr.Dataset, start_date: str | None, end_date: str | None
 ) -> xr.Dataset:
-    if is_forecast_dataset(ds):
-        append_dim = "init_time"
-    else:
-        append_dim = "time"
+    append_dim = "init_time" if is_forecast_dataset(ds) else "time"
     if start_date:
         ds = ds.sel({append_dim: slice(start_date, end_date)})
     if end_date:
@@ -91,12 +88,13 @@ def get_spatial_dimensions(ds: xr.Dataset) -> tuple[str, str]:
 def get_random_spatial_indices(
     ds: xr.Dataset, lat_dim: str, lon_dim: str
 ) -> tuple[dict[str, int], dict[str, int]]:
+    rng = np.random.default_rng()
     lat_size = ds.sizes[lat_dim]
     lon_size = ds.sizes[lon_dim]
-    lat1_idx = np.random.randint(0, lat_size // 4)
-    lon1_idx = np.random.randint(0, lon_size // 4)
-    lat2_idx = np.random.randint(3 * lat_size // 4, lat_size)
-    lon2_idx = np.random.randint(3 * lon_size // 4, lon_size)
+    lat1_idx = int(rng.integers(0, lat_size // 4))
+    lon1_idx = int(rng.integers(0, lon_size // 4))
+    lat2_idx = int(rng.integers(3 * lat_size // 4, lat_size))
+    lon2_idx = int(rng.integers(3 * lon_size // 4, lon_size))
     point1_sel = {lat_dim: lat1_idx, lon_dim: lon1_idx}
     point2_sel = {lat_dim: lat2_idx, lon_dim: lon2_idx}
     return point1_sel, point2_sel
@@ -139,7 +137,8 @@ def select_variables_for_plotting(
 def select_random_ensemble_member(ds: xr.Dataset) -> tuple[xr.Dataset, int | None]:
     if "ensemble_member" not in ds.dims:
         return ds, None
-    ensemble_member = np.random.choice(ds.ensemble_member, 1)[0]
+    rng = np.random.default_rng()
+    ensemble_member = rng.choice(ds.ensemble_member, 1)[0]
     return (
         ds.sel(ensemble_member=ensemble_member),
         ensemble_member,

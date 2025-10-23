@@ -137,7 +137,7 @@ class StoreFactory(FrozenBaseModel):
             try:
                 xr.open_zarr(store, decode_timedelta=True)
             except Exception:
-                log.error(f"Store {store} does not exist")
+                log.exception(f"Store {store} does not exist")
                 return False
         return True
 

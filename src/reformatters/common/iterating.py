@@ -42,7 +42,8 @@ def get_worker_jobs[T](
     jobs: Iterable[T], worker_index: int, workers_total: int
 ) -> Sequence[T]:
     """Returns the subset of `jobs` that worker_index should process if there are workers_total workers."""
-    assert worker_index >= 0 and workers_total >= 1
+    assert worker_index >= 0
+    assert workers_total >= 1
     assert worker_index < workers_total
     return tuple(islice(jobs, worker_index, None, workers_total))
 

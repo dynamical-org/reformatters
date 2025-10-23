@@ -9,7 +9,7 @@ from reformatters.common import validation
 
 
 @pytest.fixture
-def forecast_dataset() -> xr.Dataset:
+def forecast_dataset(rng: np.random.Generator) -> xr.Dataset:
     """Create a mock forecast dataset for testing."""
     init_times = pd.date_range("2024-01-01", periods=5, freq="6h")
     lead_times = pd.timedelta_range(start="0h", end="240h", freq="6h")
@@ -20,11 +20,15 @@ def forecast_dataset() -> xr.Dataset:
         {
             "temperature": (
                 ["init_time", "lead_time", "latitude", "longitude"],
-                np.random.randn(len(init_times), len(lead_times), len(lats), len(lons)),
+                rng.standard_normal(
+                    (len(init_times), len(lead_times), len(lats), len(lons))
+                ),
             ),
             "precipitation": (
                 ["init_time", "lead_time", "latitude", "longitude"],
-                np.random.randn(len(init_times), len(lead_times), len(lats), len(lons)),
+                rng.standard_normal(
+                    (len(init_times), len(lead_times), len(lats), len(lons))
+                ),
             ),
         },
         coords={
@@ -38,7 +42,7 @@ def forecast_dataset() -> xr.Dataset:
 
 
 @pytest.fixture
-def analysis_dataset() -> xr.Dataset:
+def analysis_dataset(rng: np.random.Generator) -> xr.Dataset:
     """Create a mock analysis dataset for testing."""
     times = pd.date_range("2024-01-01", periods=48, freq="1h")
     lats = np.linspace(90, -90, 10)  # Decreasing as per convention
@@ -48,18 +52,14 @@ def analysis_dataset() -> xr.Dataset:
         {
             "temperature": (
                 ["time", "latitude", "longitude"],
-                np.random.randn(len(times), len(lats), len(lons)),
+                rng.standard_normal((len(times), len(lats), len(lons))),
             ),
             "humidity": (
                 ["time", "latitude", "longitude"],
-                np.random.randn(len(times), len(lats), len(lons)),
+                rng.standard_normal((len(times), len(lats), len(lons))),
             ),
         },
-        coords={
-            "time": times,
-            "latitude": lats,
-            "longitude": lons,
-        },
+        coords={"time": times, "latitude": lats, "longitude": lons},
     )
     return ds
 
@@ -190,16 +190,11 @@ def test_check_analysis_recent_nans_fails(
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Mock random sampling to return first indices
-    monkeypatch.setattr("numpy.random.randint", lambda low, high: 0)
-
     # Set all recent data to NaN to ensure the random sample will catch it
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
 
     result = validation.check_analysis_recent_nans(
-        analysis_dataset,
-        max_expected_delay=timedelta(hours=12),
-        max_nan_percentage=5,
+        analysis_dataset, max_expected_delay=timedelta(hours=12), max_nan_percentage=5
     )
 
     assert not result.passed
@@ -214,26 +209,19 @@ def test_check_analysis_recent_nans_custom_parameters(
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Mock random sampling to return first indices
-    monkeypatch.setattr("numpy.random.randint", lambda low, high: 0)
-
     # Set all recent data to NaN to ensure the random sample will catch it
     recent_slice = {"time": slice("2024-01-02", None)}
     analysis_dataset["temperature"].loc[recent_slice] = np.nan
 
     # Should fail with 5% threshold
     result = validation.check_analysis_recent_nans(
-        analysis_dataset,
-        max_expected_delay=timedelta(hours=12),
-        max_nan_percentage=5,
+        analysis_dataset, max_expected_delay=timedelta(hours=12), max_nan_percentage=5
     )
     assert not result.passed
 
     # Should pass with 100% threshold
     result = validation.check_analysis_recent_nans(
-        analysis_dataset,
-        max_expected_delay=timedelta(hours=12),
-        max_nan_percentage=100,
+        analysis_dataset, max_expected_delay=timedelta(hours=12), max_nan_percentage=100
     )
     assert result.passed
 
@@ -260,9 +248,6 @@ def test_check_analysis_recent_nans_quarter_sampling_fails(
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Mock random sampling to select specific quarter (first half of both dimensions)
-    monkeypatch.setattr("numpy.random.randint", lambda low, high: 0)
-
     # Set all recent data to NaN to ensure the quarter sample will catch it
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
 
@@ -285,17 +270,29 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Add NaNs to only the first quarter (first half of both lat and lon using positional indexing)
+    # Add NaNs to all quarters to ensure we can test the sampling
     lat_size = len(analysis_dataset.latitude)
     lon_size = len(analysis_dataset.longitude)
+
+    # Set all recent data to NaN first
+    analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
+
+    # Then set one quarter back to valid data (bottom-right quarter)
     analysis_dataset["temperature"].isel(
         time=slice(-24, None),  # Last 24 hours
-        latitude=slice(0, lat_size // 2),
-        longitude=slice(0, lon_size // 2),
-    ).values[:] = np.nan
+        latitude=slice(lat_size // 2, lat_size),
+        longitude=slice(lon_size // 2, lon_size),
+    ).values[:] = 1.0
 
-    # Mock to select first quarter (both randint calls return 0)
-    monkeypatch.setattr("numpy.random.randint", lambda low, high: 0)
+    # Mock RNG to always select bottom-right quarter (both integers calls return 1)
+    class MockRngBottomRight:
+        def integers(self, _low: int, _high: int) -> int:
+            return 1
+
+    monkeypatch.setattr(
+        "reformatters.common.validation.np.random.default_rng",
+        lambda seed=None: MockRngBottomRight(),
+    )
 
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
@@ -304,25 +301,32 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
         spatial_sampling="quarter",
     )
 
-    # Should fail because first quarter has NaNs
-    assert not result.passed
-
-    # Mock to select last quarter (both randint calls return 1)
-    monkeypatch.setattr("numpy.random.randint", lambda low, high: 1)
-
-    result = validation.check_analysis_recent_nans(
-        analysis_dataset,
-        max_expected_delay=timedelta(hours=12),
-        max_nan_percentage=5,
-        spatial_sampling="quarter",
-    )
-
-    # Should pass because last quarter doesn't have NaNs
+    # Should pass because bottom-right quarter has valid data
     assert result.passed
+
+    # Mock RNG to select top-left quarter (both integers calls return 0)
+    class MockRngTopLeft:
+        def integers(self, _low: int, _high: int) -> int:
+            return 0
+
+    monkeypatch.setattr(
+        "reformatters.common.validation.np.random.default_rng",
+        lambda seed=None: MockRngTopLeft(),
+    )
+
+    result = validation.check_analysis_recent_nans(
+        analysis_dataset,
+        max_expected_delay=timedelta(hours=12),
+        max_nan_percentage=5,
+        spatial_sampling="quarter",
+    )
+
+    # Should fail because top-left quarter has NaNs
+    assert not result.passed
 
 
 def test_check_analysis_recent_nans_xy_dimensions(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, rng: np.random.Generator
 ) -> None:
     """Test that check_analysis_recent_nans works with x/y dimensions instead of lat/lon."""
     now = pd.Timestamp("2024-01-02 12:00:00")
@@ -336,14 +340,10 @@ def test_check_analysis_recent_nans_xy_dimensions(
         {
             "temperature": (
                 ["time", "y", "x"],
-                np.random.randn(len(times), len(y), len(x)),
-            ),
+                rng.standard_normal((len(times), len(y), len(x))),
+            )
         },
-        coords={
-            "time": times,
-            "y": y,
-            "x": x,
-        },
+        coords={"time": times, "y": y, "x": x},
     )
 
     result = validation.check_analysis_recent_nans(ds, spatial_sampling="quarter")

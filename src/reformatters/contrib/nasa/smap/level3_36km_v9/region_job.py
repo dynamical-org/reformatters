@@ -48,7 +48,7 @@ class NasaSmapLevel336KmV9RegionJob(
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
-        data_var_group: Sequence[NasaSmapDataVar],
+        _data_var_group: Sequence[NasaSmapDataVar],
     ) -> Sequence[NasaSmapLevel336KmV9SourceFileCoord]:
         """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
         return [

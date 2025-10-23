@@ -264,11 +264,15 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         if filter_end is not None:
             command.append(f"--filter-end={filter_end.isoformat()}")
         if filter_contains is not None:
-            for timestamp in filter_contains:
-                command.append(f"--filter-contains={timestamp.isoformat()}")
+            command.extend(
+                f"--filter-contains={timestamp.isoformat()}"
+                for timestamp in filter_contains
+            )
         if filter_variable_names is not None:
-            for variable_name in filter_variable_names:
-                command.append(f"--filter-variable-names={variable_name}")
+            command.extend(
+                f"--filter-variable-names={variable_name}"
+                for variable_name in filter_variable_names
+            )
 
         # In an attempt to keep the subclassing API simpler, we are keeping
         # all resource needs defined right in `operational_kubernetes_resources`.

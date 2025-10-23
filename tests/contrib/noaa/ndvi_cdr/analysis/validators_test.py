@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-from pytest import MonkeyPatch
 
 from reformatters.contrib.noaa.ndvi_cdr.analysis.validators import (
     check_data_is_current,
@@ -10,7 +9,7 @@ from reformatters.contrib.noaa.ndvi_cdr.analysis.validators import (
 )
 
 
-def test_check_data_is_current_success(monkeypatch: MonkeyPatch) -> None:
+def test_check_data_is_current_success(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test passes when data is current within the allowed delay window."""
     monkeypatch.setattr(pd.Timestamp, "now", lambda: pd.Timestamp("2024-01-05"))
 
@@ -28,7 +27,7 @@ def test_check_data_is_current_success(monkeypatch: MonkeyPatch) -> None:
     assert "Data found for the allowed delay window" in result.message
 
 
-def test_check_data_is_current_failure(monkeypatch: MonkeyPatch) -> None:
+def test_check_data_is_current_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test fails when no data is found within the allowed delay window."""
     monkeypatch.setattr(pd.Timestamp, "now", lambda: pd.Timestamp("2024-02-05"))
 
@@ -47,7 +46,7 @@ def test_check_data_is_current_failure(monkeypatch: MonkeyPatch) -> None:
 
 
 def test_check_data_is_current_success_with_nonzero_time(
-    monkeypatch: MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test passes when data is current even when current time has non-zero hour."""
     monkeypatch.setattr(
@@ -69,7 +68,7 @@ def test_check_data_is_current_success_with_nonzero_time(
 
 
 @pytest.mark.parametrize(
-    "nan_count,expected_pass",
+    ("nan_count", "expected_pass"),
     [
         (95, True),  # 95% NaN, should pass
         (96, False),  # 96% NaN, should fail

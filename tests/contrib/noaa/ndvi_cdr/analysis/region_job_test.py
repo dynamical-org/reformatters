@@ -322,7 +322,7 @@ def test_generate_source_file_coords_uses_ncei_for_recent_year(
     monkeypatch.setattr("pandas.Timestamp.now", lambda: pd.Timestamp("2026-01-15"))
     monkeypatch.setattr("obstore.list", Mock())
 
-    def mock_requests_get(url: str, **kwargs: Any) -> Mock:
+    def mock_requests_get(url: str, **kwargs: Any) -> Mock:  # noqa: ANN401
         mock_response = Mock()
         mock_response.raise_for_status = Mock()
         if "2025" in url:
@@ -380,7 +380,7 @@ def test_generate_source_file_coords_uses_ncei_for_recent_year(
 
 
 @pytest.mark.parametrize(
-    "test_year,expected_source,expected_result",
+    ("test_year", "expected_source", "expected_result"),
     [
         (
             2026,

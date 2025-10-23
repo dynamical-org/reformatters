@@ -77,7 +77,7 @@ def copy_data_var(
         for file in tmp_store.glob(f"{relative_dir}**/*"):
             if file.is_file():
                 file.unlink()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         log.warning(f"Failed to delete chunk after upload: {e}")
 
 
