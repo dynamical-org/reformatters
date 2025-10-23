@@ -12,7 +12,7 @@ def retry[T](func: Callable[[], T], max_attempts: int = 6) -> T:
     for attempt in range(max_attempts):
         try:
             return func()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             last_exception = e
             if attempt < max_attempts - 1:  # sleep unless we're out of attempts
                 time.sleep(attempt * _rng.uniform(0.8, 1.2) + 0.1)

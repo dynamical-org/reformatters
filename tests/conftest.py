@@ -1,3 +1,4 @@
+import contextlib
 import multiprocessing
 import os
 import sys
@@ -7,11 +8,8 @@ import numpy as np
 import pytest
 
 # Spawn new processes since fork isn't safe with threads
-try:
+with contextlib.suppress(RuntimeError):  # skip if already set
     multiprocessing.set_start_method("spawn", force=True)
-except RuntimeError:
-    # Already set, ignore
-    pass
 
 
 # Make tests able to import from other files in tests/

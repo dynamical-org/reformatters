@@ -107,9 +107,9 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
-    "SLF",      # private member access
-    "ARG001",   # unused function arg
-    "ARG005",   # unused lambda arg
+    "SLF",     # private member access
+    "ARG001",  # unused function arg
+    "ARG005",  # unused lambda arg
 ]
 
 [tool.mypy]

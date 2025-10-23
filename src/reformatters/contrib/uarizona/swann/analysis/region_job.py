@@ -46,7 +46,7 @@ class UarizonaSwannAnalysisSourceFileCoord(SourceFileCoord):
 
     time: Timestamp
 
-    def get_url(self, status: str = "stable") -> str:
+    def get_url(self) -> str:
         water_year = self.get_water_year()
         year_month_day = self.time.strftime("%Y%m%d")
 
@@ -116,7 +116,7 @@ class UarizonaSwannAnalysisRegionJob(
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
-        data_var_group: Sequence[UarizonaSwannDataVar],
+        _data_var_group: Sequence[UarizonaSwannDataVar],
     ) -> Sequence[UarizonaSwannAnalysisSourceFileCoord]:
         times = processing_region_ds["time"].values
         return [UarizonaSwannAnalysisSourceFileCoord(time=t) for t in times]

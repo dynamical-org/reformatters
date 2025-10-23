@@ -91,10 +91,10 @@ def get_random_spatial_indices(
 ) -> tuple[dict[str, int], dict[str, int]]:
     lat_size = ds.sizes[lat_dim]
     lon_size = ds.sizes[lon_dim]
-    lat1_idx = _rng.integers(0, lat_size // 4)
-    lon1_idx = _rng.integers(0, lon_size // 4)
-    lat2_idx = _rng.integers(3 * lat_size // 4, lat_size)
-    lon2_idx = _rng.integers(3 * lon_size // 4, lon_size)
+    lat1_idx = int(_rng.integers(0, lat_size // 4))
+    lon1_idx = int(_rng.integers(0, lon_size // 4))
+    lat2_idx = int(_rng.integers(3 * lat_size // 4, lat_size))
+    lon2_idx = int(_rng.integers(3 * lon_size // 4, lon_size))
     point1_sel = {lat_dim: lat1_idx, lon_dim: lon1_idx}
     point2_sel = {lat_dim: lat2_idx, lon_dim: lon2_idx}
     return point1_sel, point2_sel

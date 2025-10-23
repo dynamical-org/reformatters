@@ -57,12 +57,11 @@ class GefsForecast35DayRegionJob(
             gefs_file_type = data_var.internal_attrs.gefs_file_type
             grouper[(gefs_file_type, has_hour_0_values(data_var))].append(data_var)
 
-        groups = []
-        for idx_data_vars in grouper.values():
-            # Sort by index position for better coalescing of byte range requests to the grib
-            groups.append(
-                sorted(idx_data_vars, key=lambda dv: dv.internal_attrs.index_position)
-            )
+        # Sort by index position for better coalescing of byte range requests to the grib
+        groups = [
+            sorted(idx_data_vars, key=lambda dv: dv.internal_attrs.index_position)
+            for idx_data_vars in grouper.values()
+        ]
 
         # Sort groups for consistent ordering
         return sorted(groups, key=lambda g: str(g[0].internal_attrs.gefs_file_type))
@@ -77,19 +76,17 @@ class GefsForecast35DayRegionJob(
         if not var_has_hour_0_values:
             processing_region_ds = processing_region_ds.sel(lead_time=slice("1h", None))
 
-        coords = []
-        for init_time in processing_region_ds["init_time"].values:
-            for lead_time in processing_region_ds["lead_time"].values:
-                for ensemble_member in processing_region_ds["ensemble_member"].values:
-                    coords.append(
-                        GefsForecast35DaySourceFileCoord(
-                            init_time=pd.Timestamp(init_time),
-                            lead_time=pd.Timedelta(lead_time),
-                            data_vars=data_var_group,
-                            ensemble_member=int(ensemble_member),
-                        )
-                    )
-        return coords
+        return [
+            GefsForecast35DaySourceFileCoord(
+                init_time=pd.Timestamp(init_time),
+                lead_time=pd.Timedelta(lead_time),
+                data_vars=data_var_group,
+                ensemble_member=int(ensemble_member),
+            )
+            for init_time in processing_region_ds["init_time"].values
+            for lead_time in processing_region_ds["lead_time"].values
+            for ensemble_member in processing_region_ds["ensemble_member"].values
+        ]
 
     def download_file(self, coord: GefsForecast35DaySourceFileCoord) -> Path:
         """Download the source file for the given coordinate."""

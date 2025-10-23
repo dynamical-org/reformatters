@@ -234,7 +234,6 @@ def test_deaccumulate_1d_3_and_6_hour_small_accumulation_decreases() -> None:
 
     lead_times = pd.to_timedelta([step["lt"] for step in values], unit="h")
     data = np.array([step["in"] for step in values], dtype=np.float32)
-    expected = np.array([step["out"] for step in values], dtype=np.float32)
 
     data_array = xr.DataArray(
         data,
@@ -243,14 +242,12 @@ def test_deaccumulate_1d_3_and_6_hour_small_accumulation_decreases() -> None:
         attrs={"units": "mm/s"},
     )
 
-    with pytest.raises(ValueError) as e:
-        result = deaccumulate_to_rates_inplace(
+    with pytest.raises(
+        ValueError, match="Over 5% \\(1 total\\) values were clamped to 0"
+    ):
+        deaccumulate_to_rates_inplace(
             data_array, dim="lead_time", reset_frequency=reset_frequency
         )
-
-        np.testing.assert_equal(result.values, expected)
-
-    assert e.value.args[0] == "Over 5% (1 total) values were clamped to 0"
 
 
 def test_deaccumulate_1d_3_and_6_hour_large_accumulation_decreases() -> None:
@@ -264,7 +261,6 @@ def test_deaccumulate_1d_3_and_6_hour_large_accumulation_decreases() -> None:
 
     lead_times = pd.to_timedelta([step["lt"] for step in values], unit="h")
     data = np.array([step["in"] for step in values], dtype=np.float32)
-    expected = np.array([step["out"] for step in values], dtype=np.float32)
 
     data_array = xr.DataArray(
         data,
@@ -273,14 +269,10 @@ def test_deaccumulate_1d_3_and_6_hour_large_accumulation_decreases() -> None:
         attrs={"units": "mm/s"},
     )
 
-    with pytest.raises(ValueError) as e:
-        result = deaccumulate_to_rates_inplace(
+    with pytest.raises(ValueError, match="Found 1 values below threshold"):
+        deaccumulate_to_rates_inplace(
             data_array, dim="lead_time", reset_frequency=reset_frequency
         )
-
-        np.testing.assert_equal(result.values, expected)
-
-    assert e.value.args[0] == "Found 1 values below threshold"
 
 
 def test_deaccumulate_1d_time_dim_3_and_6_hour_normal_cases() -> None:

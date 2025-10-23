@@ -85,7 +85,7 @@ class NoaaNdviCdrAnalysisRegionJob(
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
-        data_var_group: Sequence[NoaaNdviCdrDataVar],
+        _data_var_group: Sequence[NoaaNdviCdrDataVar],
     ) -> Sequence[NoaaNdviCdrAnalysisSourceFileCoord]:
         """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds.
 
@@ -120,19 +120,15 @@ class NoaaNdviCdrAnalysisRegionJob(
                         url = f"{self.s3_bucket_url}/data/{year}/{filename}"
 
                     urls_by_time[file_time] = url
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     log.warning(f"Skipping file {filepath} due to error: {e}")
                     continue  # skip files that don't match the expected pattern
 
-        coords = []
-        for t in times:
-            if (timestamp := pd.Timestamp(t)) in urls_by_time:
-                coords.append(
-                    NoaaNdviCdrAnalysisSourceFileCoord(
-                        time=t, url=urls_by_time[timestamp]
-                    )
-                )
-        return coords
+        return [
+            NoaaNdviCdrAnalysisSourceFileCoord(time=t, url=urls_by_time[timestamp])
+            for t in times
+            if (timestamp := pd.Timestamp(t)) in urls_by_time
+        ]
 
     def download_file(self, coord: NoaaNdviCdrAnalysisSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""

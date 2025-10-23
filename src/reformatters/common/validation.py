@@ -5,6 +5,7 @@ from datetime import timedelta
 from functools import partial
 from typing import Literal, Protocol, assert_never, runtime_checkable
 
+import numpy as np
 import pandas as pd
 import pydantic
 import xarray as xr
@@ -15,9 +16,6 @@ from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
 
 log = get_logger(__name__)
-
-# Module-level import for numpy to allow test mocking
-import numpy as np
 
 
 class ValidationResult(pydantic.BaseModel):

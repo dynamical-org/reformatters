@@ -65,7 +65,7 @@ def select_time_period_for_comparison(
         else:
             latest_start = time_end - ten_days
             time_range_seconds = (latest_start - time_start).total_seconds()
-            random_offset = _rng.integers(0, int(time_range_seconds) + 1)
+            random_offset = rng.integers(0, int(time_range_seconds) + 1)
             selected_start = time_start + pd.Timedelta(seconds=random_offset)
             selected_end = selected_start + ten_days
             log.info(f"Selected time period: {selected_start} to {selected_end}")
@@ -116,10 +116,11 @@ def plot_single_variable_at_point(
 
     # Plot reference data if variable exists
     if var in reference_subset.data_vars:
-        assert (
-            "latitude" in reference_subset.dims and "longitude" in reference_subset.dims
-        ), (
-            "Reference datasets with no latitude and longitude dimensions are not currently supported"
+        assert "latitude" in reference_subset.dims, (
+            "Reference datasets must have latitude dimension"
+        )
+        assert "longitude" in reference_subset.dims, (
+            "Reference datasets must have longitude dimension"
         )
 
         ref_point_data = reference_subset[var].sel(
