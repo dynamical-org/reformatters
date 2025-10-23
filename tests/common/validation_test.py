@@ -7,6 +7,8 @@ import xarray as xr
 
 from reformatters.common import validation
 
+_rng = np.random.default_rng(42)
+
 
 @pytest.fixture
 def forecast_dataset() -> xr.Dataset:
@@ -20,11 +22,11 @@ def forecast_dataset() -> xr.Dataset:
         {
             "temperature": (
                 ["init_time", "lead_time", "latitude", "longitude"],
-                np.random.randn(len(init_times), len(lead_times), len(lats), len(lons)),
+                _rng.standard_normal((len(init_times), len(lead_times), len(lats), len(lons))),
             ),
             "precipitation": (
                 ["init_time", "lead_time", "latitude", "longitude"],
-                np.random.randn(len(init_times), len(lead_times), len(lats), len(lons)),
+                _rng.standard_normal((len(init_times), len(lead_times), len(lats), len(lons))),
             ),
         },
         coords={
@@ -48,11 +50,11 @@ def analysis_dataset() -> xr.Dataset:
         {
             "temperature": (
                 ["time", "latitude", "longitude"],
-                np.random.randn(len(times), len(lats), len(lons)),
+                _rng.standard_normal((len(times), len(lats), len(lons)),),
             ),
             "humidity": (
                 ["time", "latitude", "longitude"],
-                np.random.randn(len(times), len(lats), len(lons)),
+                _rng.standard_normal((len(times), len(lats), len(lons)),),
             ),
         },
         coords={
@@ -336,7 +338,7 @@ def test_check_analysis_recent_nans_xy_dimensions(
         {
             "temperature": (
                 ["time", "y", "x"],
-                np.random.randn(len(times), len(y), len(x)),
+                _rng.standard_normal((len(times), len(y), len(x)),),
             ),
         },
         coords={

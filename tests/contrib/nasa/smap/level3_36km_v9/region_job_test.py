@@ -6,6 +6,8 @@ import pandas as pd
 import pytest
 
 from reformatters.common.types import ArrayFloat32
+
+_rng = np.random.default_rng(42)
 from reformatters.contrib.nasa.smap.level3_36km_v9.region_job import (
     NasaSmapLevel336KmV9RegionJob,
     NasaSmapLevel336KmV9SourceFileCoord,
@@ -18,7 +20,7 @@ from reformatters.contrib.nasa.smap.level3_36km_v9.template_config import (
 @pytest.fixture
 def mock_smap_am_data() -> ArrayFloat32:
     """Create mock AM soil moisture data with fill values."""
-    data = np.random.rand(406, 964).astype(np.float32) * 0.5
+    data = _rng.random((406, 964)).astype(np.float32) * 0.5
     data[0:10, 0:10] = -9999.0
     return data
 
@@ -26,7 +28,7 @@ def mock_smap_am_data() -> ArrayFloat32:
 @pytest.fixture
 def mock_smap_pm_data() -> ArrayFloat32:
     """Create mock PM soil moisture data with fill values."""
-    data = np.random.rand(406, 964).astype(np.float32) * 0.5
+    data = _rng.random((406, 964)).astype(np.float32) * 0.5
     data[20:30, 20:30] = -9999.0
     return data
 

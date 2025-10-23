@@ -25,6 +25,7 @@ log = get_logger(__name__)
 zarr.config.set({"async.concurrency": 128})
 
 GEFS_ANALYSIS_URL = "https://data.dynamical.org/noaa/gefs/analysis/latest.zarr"
+_rng = np.random.default_rng()
 
 
 def select_time_period_for_comparison(
@@ -34,7 +35,7 @@ def select_time_period_for_comparison(
     if is_forecast_dataset(validation_ds):
         log.info("Detected forecast dataset - selecting random init_time")
         selected_init_time = pd.Timestamp(
-            np.random.choice(validation_ds.init_time, 1)[0]
+            _rng.choice(validation_ds.init_time, 1)[0]
         )
         validation_subset = validation_ds.sel(init_time=selected_init_time)
         log.info(f"Selected init_time: {selected_init_time}")
@@ -66,7 +67,7 @@ def select_time_period_for_comparison(
         else:
             latest_start = time_end - ten_days
             time_range_seconds = (latest_start - time_start).total_seconds()
-            random_offset = np.random.randint(0, int(time_range_seconds) + 1)
+            random_offset = _rng.integers(0, int(time_range_seconds) + 1)
             selected_start = time_start + pd.Timedelta(seconds=random_offset)
             selected_end = selected_start + ten_days
             log.info(f"Selected time period: {selected_start} to {selected_end}")

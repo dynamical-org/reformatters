@@ -4,6 +4,8 @@ import xarray as xr
 
 from reformatters.common import validation
 
+_rng = np.random.default_rng()
+
 # For regions outside of CONUS, the values in this dataset are expected
 # to be NaNs. We sampled various times across the dataset and determined
 # the expected number of NaNs to be ~46.425% of the data.
@@ -48,7 +50,7 @@ def check_random_time_within_last_year_nans(
     for a random time in the last year, as we pull a years worth of data for each operational
     update of the dataset.
     """
-    random_time_index = np.random.choice(365) + 1
+    random_time_index = _rng.integers(0, 365) + 1
     sample_ds = ds.isel(time=-random_time_index)
     return _check_nans_in_ds("check_random_time_within_last_year_nans", sample_ds)
 
