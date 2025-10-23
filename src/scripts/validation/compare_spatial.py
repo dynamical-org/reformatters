@@ -22,6 +22,7 @@ log = get_logger(__name__)
 zarr.config.set({"async.concurrency": 128})
 
 GEFS_ANALYSIS_URL = "https://data.dynamical.org/noaa/gefs/analysis/latest.zarr"
+_rng = np.random.default_rng()
 
 
 def align_reference_spatially(ds: xr.Dataset, reference_ds: xr.Dataset) -> xr.Dataset:
