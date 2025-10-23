@@ -89,6 +89,7 @@ select = [
     "FLY",   # f-strings
     "NPY",   # numpy
     "PERF",  # performance
+    "COM818",# trailing comma in bare tuple
 ]
 ignore = [
     "S101",    # disallow asserts
