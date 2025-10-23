@@ -28,7 +28,7 @@ def deaccumulate_to_rates_inplace(
     )
 
     # Support timedelta or datetime dimension values, converting either to seconds
-    times = data_array[dim].to_numpy()
+    times = data_array[dim].values
     if np.issubdtype(times.dtype, np.datetime64):
         start_time = np.datetime64(pd.Timestamp(times[0]).floor(reset_frequency))  # type: ignore[arg-type]
         timedeltas = times - start_time
@@ -51,7 +51,7 @@ def deaccumulate_to_rates_inplace(
 
     # make array 3D with shape (flattend_leading_dims, lead_time, flattend_trailing_dims)
     time_dim_index = data_array.dims.index(dim)
-    values = data_array.to_numpy().reshape(
+    values = data_array.values.reshape(
         np.prod(data_array.shape[:time_dim_index] or 1),
         data_array.shape[time_dim_index],
         np.prod(data_array.shape[time_dim_index + 1 :] or 1),

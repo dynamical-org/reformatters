@@ -425,8 +425,9 @@ def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> N
 
     # Error case: should record "in_progress" then "error"
     mock_capture.reset_mock()
-    with pytest.raises(ValueError), dataset._monitor(ReformatCronJob, "job-name"):
-        raise ValueError("failure")
+    with pytest.raises(ValueError):
+        with dataset._monitor(ReformatCronJob, "job-name"):
+            raise ValueError("failure")
     statuses = [c.kwargs["status"] for c in mock_capture.call_args_list]
     assert statuses == ["in_progress", "error"]
 
