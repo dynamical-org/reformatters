@@ -143,9 +143,6 @@ def test_backfill_local_and_operational_update(
     )
 
 
-@pytest.mark.skip(
-    reason="TODO(alex/lauren): before merge: remove this when NotImplementedError is removed from operational_kubernetes_resources"
-)
 def test_operational_kubernetes_resources(
     dataset: EcmwfIfsEnsForecast15Day025DegreeDataset,
 ) -> None:
