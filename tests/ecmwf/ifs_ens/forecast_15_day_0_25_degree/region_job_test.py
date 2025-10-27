@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from reformatters.common import template_utils
+from reformatters.common.iterating import item
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job import (
     EcmwfIfsEnsForecast15Day025DegreeRegionJob,
@@ -43,7 +44,7 @@ def test_source_file_coord_get_url() -> None:
 
 def test_region_job_generate_source_file_coords() -> None:
     template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
-    template_ds = template_config.get_template(pd.Timestamp("2024-02-03"))
+    template_ds = template_config.get_template(pd.Timestamp("2024-04-01"))
 
     region_job = EcmwfIfsEnsForecast15Day025DegreeRegionJob.model_construct(
         tmp_store=Mock(),
@@ -125,7 +126,7 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_region_job_read_data(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test grib data reading with mocked file operations."""
     template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
-    template_ds = template_config.get_template(pd.Timestamp("2024-02-04"))
+    template_ds = template_config.get_template(pd.Timestamp("2024-04-02"))
 
     region_job = EcmwfIfsEnsForecast15Day025DegreeRegionJob.model_construct(
         tmp_store=Mock(),
@@ -135,12 +136,13 @@ def test_region_job_read_data(monkeypatch: pytest.MonkeyPatch) -> None:
         region=slice(0, 1),
         reformat_job_name="test",
     )
+    t2m_var = item(
+        var for var in template_config.data_vars if var.name == "temperature_2m"
+    )
     source_file_coord = EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
-        init_time=pd.Timestamp("2024-02-03"),
+        init_time=pd.Timestamp("2024-04-01"),
         lead_time=pd.Timedelta("3h"),
-        data_var_group=[
-            var for var in template_config.data_vars if var.name == "temperature_2m"
-        ],
+        data_var_group=[t2m_var],
         ensemble_member=0,
         downloaded_path=Path("fake/path/to/downloaded/file.grib2"),
     )
@@ -160,7 +162,7 @@ def test_region_job_read_data(monkeypatch: pytest.MonkeyPatch) -> None:
         Mock(return_value=rasterio_reader),
     )
 
-    result = region_job.read_data(source_file_coord, template_config.data_vars[0])
+    result = region_job.read_data(source_file_coord, t2m_var)
 
     # Verify the result
     assert np.array_equal(result, test_data)
@@ -187,12 +189,12 @@ def test_operational_update_jobs(
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
-        classmethod(lambda *args, **kwargs: pd.Timestamp("2024-03-02T15:48")),
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2024-05-02T15:48")),
     )
     # Set the append_dim_start for the update
     # Use a template_ds as a lightweight way to create a mock dataset with a known max append dim coordinate
     existing_ds = template_config.get_template(
-        pd.Timestamp("2024-03-01T00:01")  # 00z will be max existing init time
+        pd.Timestamp("2024-05-01T00:01")  # 00z will be max existing init time
     )
     template_utils.write_metadata(existing_ds, store_factory)
 
@@ -207,7 +209,7 @@ def test_operational_update_jobs(
         )
     )
 
-    assert template_ds.init_time.max() == pd.Timestamp("2024-03-02T00:00")
+    assert template_ds.init_time.max() == pd.Timestamp("2024-05-02T00:00")
     assert (
         len(jobs) == 2
     )  # We reprocess the last forecast for March 1st and also process for March 2nd

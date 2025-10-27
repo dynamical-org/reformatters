@@ -1,7 +1,7 @@
 import pandas as pd
 
 from reformatters.common.config_models import BaseInternalAttrs, DataVar
-from reformatters.common.types import Timedelta
+from reformatters.common.types import Timedelta, Timestamp
 
 
 class EcmwfInternalAttrs(BaseInternalAttrs):
@@ -26,6 +26,11 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
     # additional informational metadata, not currently used in processing:
     grib_element: str
     grib_description: str
+
+    # ECMWF will sometimes add variables to a dataset after the dataset start date.
+    # This internal attribute can be used to handle whether or not we should try
+    # to process a variable for a given date.
+    date_available: Timestamp | None = None
 
 
 class EcmwfDataVar(DataVar[EcmwfInternalAttrs]):

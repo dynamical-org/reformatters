@@ -35,10 +35,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
         "longitude",
     )
     append_dim: AppendDim = "init_time"
-    # Forecasts are available from same s3 bucket since 2023-01-18, but only with 0.4deg resolution from dataset start through 2024-01-31.
-    # We also noticed that that gribs on 2024-02-01 and 2024-02-02 only have 1439 longitude values (max longitude is 179.5), so we
-    # begin this dataset on 2024-02-03 to avoid this issue.
-    append_dim_start: Timestamp = pd.Timestamp("2024-02-03T00:00")
+    # While this dataset has a longer history, April 2024 is when we have enough 0.25 degree resolution data to start processing, with
+    # the correct number of longitude values (1440), and the majority of the variables we are interested in are available.
+    append_dim_start: Timestamp = pd.Timestamp("2024-04-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("24h")
 
     @computed_field  # type: ignore[prop-decorator]
@@ -447,30 +446,13 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 ),
             ),
             EcmwfDataVar(
-                name="precipitable_water_atmosphere",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="pwat",
-                    long_name="Precipitable water",
-                    units="kg/(m^2)",
-                    step_type="instant",
-                ),
-                internal_attrs=EcmwfInternalAttrs(
-                    grib_comment="Total column water [kg/m^2]",
-                    grib_description='0[-] SFC="Ground or water surface"',
-                    grib_element="TCWAT",
-                    grib_index_param="tcw",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                ),
-            ),
-            EcmwfDataVar(
                 name="categorical_precipitation_type_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="ptype",
                     long_name="Categorical precipitation type at surface",
                     units="[0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13-191=Reserved; 192-254=Reserved for local use; 255=Missing",
-                    step_type="avg",
+                    step_type="instant",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
                     grib_comment="Precipitation type []",
@@ -478,6 +460,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_element="PTYPE",
                     grib_index_param="ptype",
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    date_available=pd.Timestamp("2024-11-13T00:00"),
                 ),
             ),
             EcmwfDataVar(
@@ -487,7 +470,6 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     short_name="sdlwrf",
                     long_name="Surface downward long-wave radiation flux",
                     units="W/(m^2)",
-                    comment="Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
                     step_type="avg",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
@@ -496,6 +478,8 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_element="DLWRF",
                     grib_index_param="strd",
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    deaccumulate_to_rate=True,
+                    window_reset_frequency=pd.Timedelta.max,
                 ),
             ),
             EcmwfDataVar(
@@ -505,7 +489,6 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     short_name="sdswrf",
                     long_name="Surface downward short-wave radiation flux",
                     units="W/(m^2)",
-                    comment="Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
                     step_type="avg",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
@@ -514,6 +497,8 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_element="DSWRF",
                     grib_index_param="ssrd",
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    deaccumulate_to_rate=True,
+                    window_reset_frequency=pd.Timedelta.max,
                 ),
             ),
             EcmwfDataVar(

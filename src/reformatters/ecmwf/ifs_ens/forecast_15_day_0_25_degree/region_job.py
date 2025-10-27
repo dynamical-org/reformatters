@@ -1,4 +1,5 @@
 import itertools
+from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import ClassVar
@@ -31,6 +32,7 @@ from reformatters.common.types import (
 )
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
+from reformatters.ecmwf.ecmwf_utils import all_variables_available
 
 log = get_logger(__name__)
 
@@ -109,19 +111,36 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             rather than being clustered in one contiguous window, and we can get better
             download/read performance by treating them separately and parallelizing.
         """
-        return [
-            EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
+        coords = []
+        for init_time, lead_time, ensemble_member in itertools.product(
+            processing_region_ds["init_time"].values,
+            processing_region_ds["lead_time"].values,
+            processing_region_ds["ensemble_member"].values,
+        ):
+            if not all_variables_available(data_var_group, init_time):
+                continue
+
+            coord = EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
                 init_time=init_time,
                 lead_time=lead_time,
                 data_var_group=data_var_group,
                 ensemble_member=int(ensemble_member),
             )
-            for init_time, lead_time, ensemble_member in itertools.product(
-                processing_region_ds["init_time"].values,
-                processing_region_ds["lead_time"].values,
-                processing_region_ds["ensemble_member"].values,
+            coords.append(coord)
+        return coords
+
+    @classmethod
+    def source_groups(
+        cls,
+        data_vars: Sequence[EcmwfDataVar],
+    ) -> Sequence[Sequence[EcmwfDataVar]]:
+        """Return groups of variables, where all variables in a group can be retrieved from the same source file."""
+        vars_by_date_available = defaultdict(list)
+        for data_var in data_vars:
+            vars_by_date_available[data_var.internal_attrs.date_available].append(
+                data_var
             )
-        ]
+        return list(vars_by_date_available.values())
 
     def download_file(
         self, coord: EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord
@@ -157,10 +176,17 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         with rasterio.open(coord.downloaded_path) as reader:
             # Expecting one band per downloaded file because we should only have one data var & one ensemble member
             assert reader.count == 1, "Expected only one band per downloaded file"
-            assert (
-                reader.tags(1)["GRIB_COMMENT"] == data_var.internal_attrs.grib_comment
-            )
             rasterio_band_index = 1
+
+            grib_comment = reader.tags(rasterio_band_index)["GRIB_COMMENT"]
+            grib_description = reader.descriptions[rasterio_band_index - 1]
+
+            assert grib_comment == data_var.internal_attrs.grib_comment, (
+                f"{grib_comment=} != {data_var.internal_attrs.grib_comment=}"
+            )
+            assert grib_description == data_var.internal_attrs.grib_description, (
+                f"{grib_description=} != {data_var.internal_attrs.grib_description}"
+            )
 
             result: ArrayFloat32 = reader.read(
                 rasterio_band_index, out_dtype=np.float32

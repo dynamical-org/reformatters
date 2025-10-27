@@ -5,6 +5,9 @@ from numba import njit, prange  # type: ignore[import-untyped]
 
 from reformatters.common.types import Array1D, ArrayFloat32
 
+# OK to add units to this list if you believe they are reasonable output units to deaccumulate to
+VALID_OUTPUT_UNITS_FOR_DEACCUMULATION = ["mm/s", "m/s", "W/(m^2)"]
+
 
 def deaccumulate_to_rates_inplace(
     data_array: xr.DataArray,
@@ -23,7 +26,7 @@ def deaccumulate_to_rates_inplace(
         skip_step: Array of booleans indicating whether to skip the step. Values in skipped
             steps are left unchanged and the deaccumulation acts as if they are not present.
     """
-    assert data_array.attrs["units"].endswith("/s"), (
+    assert data_array.attrs["units"] in VALID_OUTPUT_UNITS_FOR_DEACCUMULATION, (
         "Output units must be a per-second rate"
     )
 
