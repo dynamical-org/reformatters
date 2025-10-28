@@ -32,6 +32,8 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
     # to process a variable for a given date.
     date_available: Timestamp | None = None
 
+    deaccumulation_invalid_below_threshold_rate: float | None = None
+
 
 class EcmwfDataVar(DataVar[EcmwfInternalAttrs]):
     pass

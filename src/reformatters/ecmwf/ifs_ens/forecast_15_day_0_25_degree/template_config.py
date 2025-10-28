@@ -480,6 +480,10 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     deaccumulate_to_rate=True,
                     window_reset_frequency=pd.Timedelta.max,
+                    # Downward short and long wave radiation flux surface values need to be deaccumulated,
+                    # but their raw values are much larger than precip, so we need to use a different threshold
+                    # checking overly-negative values.
+                    deaccumulation_invalid_below_threshold_rate=-8e3,
                 ),
             ),
             EcmwfDataVar(
@@ -499,6 +503,10 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     deaccumulate_to_rate=True,
                     window_reset_frequency=pd.Timedelta.max,
+                    # Downward short and long wave radiation flux surface values need to be deaccumulated,
+                    # but their raw values are much larger than precip, so we need to use a different threshold
+                    # checking overly-negative values.
+                    deaccumulation_invalid_below_threshold_rate=-8e3,
                 ),
             ),
             EcmwfDataVar(

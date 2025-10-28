@@ -9,12 +9,16 @@ from reformatters.common.types import Array1D, ArrayFloat32
 VALID_OUTPUT_UNITS_FOR_DEACCUMULATION = ["mm/s", "m/s", "W/(m^2)"]
 
 
+DEFAULT_INVALID_BELOW_THRESHOLD_RATE = -2e-5
+
+
 def deaccumulate_to_rates_inplace(
     data_array: xr.DataArray,
     *,
     dim: str,
     reset_frequency: pd.Timedelta,
     skip_step: Array1D[np.bool] | None = None,
+    invalid_below_threshold_rate: float | None = None,
 ) -> xr.DataArray:
     """
     Convert accumulated values to per-second rates in place.
@@ -60,7 +64,12 @@ def deaccumulate_to_rates_inplace(
         np.prod(data_array.shape[time_dim_index + 1 :] or 1),
     )
 
-    _deaccumulate_to_rates_numba(values, seconds, reset_after, skip_step)
+    if invalid_below_threshold_rate is None:
+        invalid_below_threshold_rate = DEFAULT_INVALID_BELOW_THRESHOLD_RATE
+
+    _deaccumulate_to_rates_numba(
+        values, seconds, reset_after, skip_step, invalid_below_threshold_rate
+    )
 
     return data_array
 
