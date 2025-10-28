@@ -106,7 +106,10 @@ def _deaccumulate_to_rates_numba(
             previous_seconds = seconds[0]
             previous_accumulation = 0
 
-            # Skip first step, no accumulation yet
+            # Without any previous values to deaccumulate from we write nan into the first step
+            sequence[0] = np.nan
+
+            # Begin deaccumulating from the second step
             for t in range(1, n_lead_times):
                 if skip_step[t]:
                     continue
