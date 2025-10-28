@@ -13,6 +13,7 @@ import zarr
 from reformatters.common.config_models import Coordinate, DataVar
 from reformatters.common.logging import get_logger
 from reformatters.common.storage import StoreFactory, commit_if_icechunk
+from reformatters.common.zarr import assert_fill_values_set
 
 log = get_logger(__name__)
 
@@ -25,6 +26,8 @@ def write_metadata(
 ) -> None:
     store: zarr.abc.store.Store | Path
     replica_stores: list[zarr.abc.store.Store]
+
+    assert_fill_values_set(template_ds)
 
     if isinstance(storage, StoreFactory):
         store = storage.primary_store(writable=True)

@@ -44,6 +44,7 @@ class NoaaNdviCdrInternalAttrs(BaseInternalAttrs):
     scale_factor: float | None = None
     add_offset: float | None = None
     valid_range: tuple[float, float] | None = None
+    read_data_fill_value: float | None = None
 
 
 class NoaaNdviCdrDataVar(DataVar[NoaaNdviCdrInternalAttrs]):
@@ -209,7 +210,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
 
         encoding_float32_default = Encoding(
             dtype="float32",
-            fill_value=np.nan,
+            fill_value=0,
             chunks=tuple(var_chunks[d] for d in self.dims),
             shards=tuple(var_shards[d] for d in self.dims),
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
@@ -243,6 +244,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                     scale_factor=0.0001,
                     add_offset=0.0,
                     valid_range=(-1000, 10000),
+                    read_data_fill_value=np.nan,
                 ),
             ),
             NoaaNdviCdrDataVar(
@@ -262,6 +264,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                     scale_factor=0.0001,
                     add_offset=0.0,
                     valid_range=(-1000, 10000),
+                    read_data_fill_value=np.nan,
                 ),
             ),
             NoaaNdviCdrDataVar(

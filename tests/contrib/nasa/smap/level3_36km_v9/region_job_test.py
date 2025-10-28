@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, Mock
 import numpy as np
 import pandas as pd
 import pytest
+import xarray as xr
+import zarr
 
 from reformatters.common.types import ArrayFloat32
 from reformatters.contrib.nasa.smap.level3_36km_v9.region_job import (
@@ -318,7 +320,23 @@ def test_operational_update_jobs(
     # Mock the primary store to return our existing dataset
     mock_store = Mock()
 
-    monkeypatch.setattr("xarray.open_zarr", lambda *args, **kwargs: existing_ds)
+    original_open_zarr = xr.open_zarr
+
+    def open_zarr(
+        store: zarr.abc.store.Store,
+        decode_timedelta: bool = True,
+    ) -> xr.Dataset:
+        if store == mock_store:
+            return existing_ds
+        else:
+            dataset = original_open_zarr(
+                template_config.template_path(),
+                decode_timedelta=decode_timedelta,
+            )
+            assert isinstance(dataset, xr.Dataset)
+            return dataset
+
+    monkeypatch.setattr(xr, "open_zarr", open_zarr)
     monkeypatch.setattr(
         "pandas.Timestamp.now", lambda tz=None: pd.Timestamp("2025-09-30T00:01")
     )

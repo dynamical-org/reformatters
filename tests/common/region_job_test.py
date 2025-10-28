@@ -3,12 +3,13 @@ from itertools import batched, pairwise
 from pathlib import Path
 from typing import ClassVar
 
+import dask
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
 
-from reformatters.common import template_utils
+from reformatters.common import template_utils, validation
 from reformatters.common.config_models import (
     BaseInternalAttrs,
     DataVar,
@@ -98,16 +99,26 @@ def store_factory() -> StoreFactory:
 
 @pytest.fixture
 def template_ds() -> xr.Dataset:
+    return _create_template_ds()
+
+
+def _create_template_ds(var_fill_value: float = np.nan) -> xr.Dataset:
     num_time = 48
-    return xr.Dataset(
+    ds = xr.Dataset(
         {
             f"var{i}": xr.Variable(
-                data=np.ones((num_time, 10, 15), dtype=np.float32),
+                data=dask.array.full(  # type: ignore[no-untyped-call]
+                    (num_time, 10, 15),
+                    var_fill_value,
+                    dtype=np.float32,
+                    chunks=(num_time // 4, 10, 15),
+                ),
                 dims=["time", "latitude", "longitude"],
                 encoding={
                     "dtype": "float32",
                     "chunks": (num_time // 4, 10, 15),
                     "shards": (num_time // 2, 10, 15),
+                    "fill_value": var_fill_value,
                 },
             )
             for i in range(4)
@@ -117,7 +128,12 @@ def template_ds() -> xr.Dataset:
             "latitude": np.linspace(0, 90, 10),
             "longitude": np.linspace(0, 140, 15),
         },
+        attrs={"dataset_id": "test-dataset-A"},
     )
+    ds["time"].encoding["fill_value"] = -1
+    ds["latitude"].encoding["fill_value"] = np.nan
+    ds["longitude"].encoding["fill_value"] = np.nan
+    return ds
 
 
 def test_region_job(template_ds: xr.Dataset, store_factory: StoreFactory) -> None:
@@ -151,6 +167,75 @@ def test_region_job(template_ds: xr.Dataset, store_factory: StoreFactory) -> Non
     expected_values[6, :, :] = np.nan
     for data_var in region_ds.data_vars.values():
         np.testing.assert_array_equal(data_var.values, expected_values)
+
+
+@pytest.mark.parametrize("var_fill_value", [np.nan, 0.0])
+def test_region_job_empty_chunk_writing(
+    store_factory: StoreFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    var_fill_value: float,
+) -> None:
+    template_ds = _create_template_ds(var_fill_value)
+
+    tmp_store = get_local_tmp_store()
+
+    # Write zarr metadata for this RegionJob to write into
+    template_utils.write_metadata(template_ds, store_factory)
+
+    jobs = ExampleRegionJob.get_jobs(
+        "backfill",
+        tmp_store,
+        template_ds,
+        "time",
+        [ExampleDataVar(name=str(name)) for name in template_ds.data_vars],
+        reformat_job_name="test-job",
+    )
+
+    def read_data(
+        self: ExampleRegionJob,
+        coord: ExampleSourceFileCoords,
+        data_var: ExampleDataVar,
+    ) -> ArrayFloat32:
+        # Write only data filled with var_fill_value to the second shard.
+        # If write_empty_chunks was False, this would lead us to not write
+        # a shard to disk. Our current behavior is to write empty chunks,
+        # so we should expect the 1.0.0 shards to be present and they should
+        # be read as filled with var_fill_value.
+        if coord.time >= pd.Timestamp("2025-01-02T00"):
+            return np.full((10, 15), var_fill_value, dtype=np.float32)
+        else:
+            return np.full((10, 15), 1.0, dtype=np.float32)
+
+    monkeypatch.setattr(ExampleRegionJob, "read_data", read_data)
+
+    primary_store = store_factory.primary_store(writable=True)
+    replica_stores = store_factory.replica_stores(writable=True)
+
+    for job in jobs:
+        template_utils.write_metadata(job.template_ds, tmp_store)
+        job.process(primary_store, replica_stores)
+
+    ds = xr.open_zarr(store_factory.primary_store())
+
+    result = validation.check_for_expected_shards(primary_store, ds)
+    assert result.passed, result.message
+
+    # ExampleRegionJob.download_file raises FileNotFoundError for 2025-01-01T00:00
+    # so we don't write to this region in the shared array. Therefore we expect the
+    # values in this region to be NaN (the initialized value for float shared arrays)
+    first_hour = (
+        ds.sel(time=slice("2025-01-01T00:00", "2025-01-01T00:00")).to_array().to_numpy()
+    )
+    assert np.isnan(first_hour).all()
+
+    middle_hours = (
+        ds.sel(time=slice("2025-01-01T01:00", "2025-01-01T23:00")).to_array().to_numpy()
+    )
+    np.testing.assert_array_equal(middle_hours, np.full_like(middle_hours, 1.0))
+
+    # read_data returns var_fill_value for times >= 2025-01-02
+    second_day = ds.sel(time=slice("2025-01-02", None)).to_array().to_numpy()
+    np.testing.assert_array_equal(second_day, np.full_like(second_day, var_fill_value))
 
 
 def test_update_template_with_results(template_ds: xr.Dataset) -> None:

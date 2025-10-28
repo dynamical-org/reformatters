@@ -165,7 +165,6 @@ class NoaaNdviCdrAnalysisRegionJob(
     ) -> ArrayFloat32 | ArrayInt16:
         """Read data from NetCDF file."""
         out_dtype = data_var.encoding.dtype
-        encoding_fill_value = data_var.encoding.fill_value
 
         var_name = data_var.internal_attrs.netcdf_var_name
         netcdf_fill_value = data_var.internal_attrs.fill_value
@@ -183,7 +182,19 @@ class NoaaNdviCdrAnalysisRegionJob(
 
             # Set invalid values to NaN before scaling (for float data)
             if var_name != QA_NETCDF_VAR_NAME:
-                result[result == netcdf_fill_value] = encoding_fill_value
+                # We are using a different fill value here than the data var encoding fill value
+                # This is because encoding fill value was previously NaN, and so when we matched
+                # matched our no data value, we set values to NaN. We have now changed the
+                # encoding fill value to 0. This is to accomdate the fact that due to an Xarray bug,
+                # the encoding fill value was not round tripped (it was persisted as 0 despite the
+                # definition in our encoding). We have updated the encoding fill value to 0 to match
+                # what was written at the time of our backfill. That change ensures that empty chunks
+                # continue to be interpreted as 0. But consequently, we need to ensure that when we
+                # are setting the no data value when reading the netcdf data, we continue to use NaN.
+                if data_var.internal_attrs.read_data_fill_value is not None:
+                    result[result == netcdf_fill_value] = (
+                        data_var.internal_attrs.read_data_fill_value
+                    )
 
                 assert scale_factor is not None
                 assert add_offset is not None

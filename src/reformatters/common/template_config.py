@@ -119,6 +119,18 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         for coordinate in ds.coords.values():
             coordinate.load()
 
+        # Work around what appears to be a bug where fill_value is not set in encodings read from existing zarr template
+        for coord in self.coords:
+            assert "fill_value" not in ds[coord.name].encoding, (
+                "Fill value round tripped. That's good but not the previous behavior and if you see this AND the fill_value is correct, you can remove the workaround."
+            )
+            ds[coord.name].encoding["fill_value"] = coord.encoding.fill_value
+        for var in self.data_vars:
+            assert "fill_value" not in ds[var.name].encoding, (
+                "Fill value round tripped. That's good but not the previous behavior and if you see this AND the fill_value is correct, you can remove the workaround."
+            )
+            ds[var.name].encoding["fill_value"] = var.encoding.fill_value
+
         return ds
 
     def update_template(self) -> None:

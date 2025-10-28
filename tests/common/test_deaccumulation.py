@@ -418,3 +418,61 @@ def test_deaccumulate_1d_skip_every_other_step() -> None:
     )
 
     np.testing.assert_equal(result.values, expected)
+
+
+def test_deaccumulate_reset_frequency_equals_max_lead_time() -> None:
+    """Test case where reset frequency equals the maximum lead time."""
+    reset_frequency = pd.Timedelta(hours=6)
+    sec = float(SECONDS_PER_HOUR)
+
+    values = [
+        {"lt": 0, "in": np.nan, "out": np.nan},  # no deaccum on first step
+        {"lt": 3, "in": 3 * sec * 3, "out": 3.0},  # 3h accumulation
+        {"lt": 6, "in": 6 * sec * 6, "out": 9.0},  # 6h accumulation, resets after this step
+    ]  # fmt: off
+
+    lead_times = pd.to_timedelta([step["lt"] for step in values], unit="h")
+    data = np.array([step["in"] for step in values], dtype=np.float32)
+    expected = np.array([step["out"] for step in values], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        data,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "mm/s"},
+    )
+
+    result = deaccumulate_to_rates_inplace(
+        data_array, dim="lead_time", reset_frequency=reset_frequency
+    )
+
+    np.testing.assert_equal(result.values, expected)
+
+
+def test_deaccumulate_first_step_non_nan_becomes_nan() -> None:
+    """Test case where first step has non-nan value but must become nan (nothing to deaccumulate from)."""
+    reset_frequency = pd.Timedelta(hours=6)
+    sec = float(SECONDS_PER_HOUR)
+
+    values = [
+        {"lt": 0, "in": 5.0, "out": np.nan},  # non-nan input becomes nan output (no previous value to deaccumulate from)
+        {"lt": 3, "in": 8 * sec * 3, "out": 8.0},  # standard 3h case
+        {"lt": 6, "in": 8 * sec * 3, "out": 0.0},  # no new accumulation between 3h and 6h steps
+    ]  # fmt: off
+
+    lead_times = pd.to_timedelta([step["lt"] for step in values], unit="h")
+    data = np.array([step["in"] for step in values], dtype=np.float32)
+    expected = np.array([step["out"] for step in values], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        data,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "mm/s"},
+    )
+
+    result = deaccumulate_to_rates_inplace(
+        data_array, dim="lead_time", reset_frequency=reset_frequency
+    )
+
+    np.testing.assert_equal(result.values, expected)
