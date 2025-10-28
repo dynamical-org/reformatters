@@ -98,6 +98,19 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     # variable that we can parallelize.
     max_vars_per_download_group: ClassVar[int] = 1
 
+    @classmethod
+    def source_groups(
+        cls,
+        data_vars: Sequence[EcmwfDataVar],
+    ) -> Sequence[Sequence[EcmwfDataVar]]:
+        """Return groups of variables, where all variables in a group can be retrieved from the same source file."""
+        vars_by_date_available = defaultdict(list)
+        for data_var in data_vars:
+            vars_by_date_available[data_var.internal_attrs.date_available].append(
+                data_var
+            )
+        return list(vars_by_date_available.values())
+
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
@@ -128,19 +141,6 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             )
             coords.append(coord)
         return coords
-
-    @classmethod
-    def source_groups(
-        cls,
-        data_vars: Sequence[EcmwfDataVar],
-    ) -> Sequence[Sequence[EcmwfDataVar]]:
-        """Return groups of variables, where all variables in a group can be retrieved from the same source file."""
-        vars_by_date_available = defaultdict(list)
-        for data_var in data_vars:
-            vars_by_date_available[data_var.internal_attrs.date_available].append(
-                data_var
-            )
-        return list(vars_by_date_available.values())
 
     def download_file(
         self, coord: EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord

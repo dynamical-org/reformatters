@@ -42,25 +42,54 @@ def test_source_file_coord_get_url() -> None:
     )
 
 
+def test_region_job_source_groups() -> None:
+    template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
+    groups = EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_groups(
+        template_config.data_vars
+    )
+    assert len(groups) == 2
+    assert len(groups[0]) == 10
+
+    # categorical_precipitation_type_surface is grouped separately
+    # since it is the only one with a date_available value
+    assert item(groups[1]).name == "categorical_precipitation_type_surface"
+
+
 def test_region_job_generate_source_file_coords() -> None:
     template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
-    template_ds = template_config.get_template(pd.Timestamp("2024-04-01"))
+    template_ds = template_config.get_template(pd.Timestamp("2024-11-15"))
 
     region_job = EcmwfIfsEnsForecast15Day025DegreeRegionJob.model_construct(
         tmp_store=Mock(),
-        template_ds=template_ds,
+        template_ds=template_ds.isel(
+            init_time=slice(-3, None)
+        ),  # Slice so dataset represents the last 3 init times (Nov 12, 13, 14)
         data_vars=template_config.data_vars,
         append_dim=template_config.append_dim,
-        region=slice(0, 1),
+        region=slice(0, 3),
         reformat_job_name="test",
     )
     processing_region_ds, _ = region_job._get_region_datasets()
-    source_file_coords = region_job.generate_source_file_coords(
-        processing_region_ds, template_config.data_vars
+    groups = EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_groups(
+        template_config.data_vars
     )
+    # We are grouping by date_available, so we should get 2 groups
+    # One for categorical_precipitation_type_surface (which is the only one with a date_available val)
+    # and one for the rest
+    group_0_source_file_coords = region_job.generate_source_file_coords(
+        processing_region_ds, groups[0]
+    )
+    # Since our region is three init times (slice(0, 3)), we should get 51 * 85 * 3 = 13005 source file coords
+    assert len(group_0_source_file_coords) == 51 * 85 * 3
 
-    # Since our region is just a single init time (slice(0, 1)), we should get 51 * 85 * 1 = 4335 source file coords
-    assert len(source_file_coords) == 51 * 85 * 1
+    group_1_source_file_coords = region_job.generate_source_file_coords(
+        processing_region_ds, groups[1]
+    )
+    assert len(group_1_source_file_coords[0].data_var_group) == 1
+    assert (
+        item(group_1_source_file_coords[0].data_var_group).name
+        == "categorical_precipitation_type_surface"
+    )
 
 
 def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
