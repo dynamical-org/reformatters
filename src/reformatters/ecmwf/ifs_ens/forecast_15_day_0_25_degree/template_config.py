@@ -455,7 +455,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     step_type="instant",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
-                    grib_comment="Precipitation type []",
+                    grib_comment="Precipitation type [0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13-191=Reserved; 192-254=Reserved for local use; 255=Missing]",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_element="PTYPE",
                     grib_index_param="ptype",
