@@ -5,6 +5,14 @@ from numba import njit, prange  # type: ignore[import-untyped]
 
 from reformatters.common.types import Array1D, ArrayFloat32
 
+# OK to add units to this list if you believe they are reasonable output units to deaccumulate to.
+# We typically expect these to be per-second rates.
+VALID_OUTPUT_UNITS_FOR_DEACCUMULATION = ["mm/s", "m/s", "W/(m^2)"]
+
+
+PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD = -2e-5
+RADIATION_INVALID_BELOW_THRESHOLD = -8e3
+
 
 def deaccumulate_to_rates_inplace(
     data_array: xr.DataArray,
@@ -12,6 +20,7 @@ def deaccumulate_to_rates_inplace(
     dim: str,
     reset_frequency: pd.Timedelta,
     skip_step: Array1D[np.bool] | None = None,
+    invalid_below_threshold_rate: float = PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
 ) -> xr.DataArray:
     """
     Convert accumulated values to per-second rates in place.
@@ -23,7 +32,7 @@ def deaccumulate_to_rates_inplace(
         skip_step: Array of booleans indicating whether to skip the step. Values in skipped
             steps are left unchanged and the deaccumulation acts as if they are not present.
     """
-    assert data_array.attrs["units"].endswith("/s"), (
+    assert data_array.attrs["units"] in VALID_OUTPUT_UNITS_FOR_DEACCUMULATION, (
         "Output units must be a per-second rate"
     )
 
@@ -57,7 +66,9 @@ def deaccumulate_to_rates_inplace(
         np.prod(data_array.shape[time_dim_index + 1 :] or 1),
     )
 
-    _deaccumulate_to_rates_numba(values, seconds, reset_after, skip_step)
+    _deaccumulate_to_rates_numba(
+        values, seconds, reset_after, skip_step, invalid_below_threshold_rate
+    )
 
     return data_array
 
@@ -68,7 +79,7 @@ def _deaccumulate_to_rates_numba(
     seconds: Array1D[np.int64],
     reset_after: Array1D[np.bool],
     skip_step: Array1D[np.bool],
-    invalid_below_threshold_rate: float = -2e-5,
+    invalid_below_threshold_rate: float,
 ) -> None:
     """
     Convert accumulated values to per-second rates, mutating `values` in place.

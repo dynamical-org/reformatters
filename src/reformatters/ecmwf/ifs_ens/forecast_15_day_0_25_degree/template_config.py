@@ -14,6 +14,10 @@ from reformatters.common.config_models import (
     Encoding,
     StatisticsApproximate,
 )
+from reformatters.common.deaccumulation import (
+    PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
+    RADIATION_INVALID_BELOW_THRESHOLD,
+)
 from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
     TemplateConfig,
@@ -35,10 +39,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
         "longitude",
     )
     append_dim: AppendDim = "init_time"
-    # Forecasts are available from same s3 bucket since 2023-01-18, but only with 0.4deg resolution from dataset start through 2024-01-31.
-    # We also noticed that that gribs on 2024-02-01 and 2024-02-02 only have 1439 longitude values (max longitude is 179.5), so we
-    # begin this dataset on 2024-02-03 to avoid this issue.
-    append_dim_start: Timestamp = pd.Timestamp("2024-02-03T00:00")
+    # While this dataset has a longer history, April 2024 is when we have enough 0.25 degree resolution data to start processing, with
+    # the correct number of longitude values (1440), and the majority of the variables we are interested in are available.
+    append_dim_start: Timestamp = pd.Timestamp("2024-04-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("24h")
 
     @computed_field  # type: ignore[prop-decorator]
@@ -316,6 +319,24 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
 
         return [
             EcmwfDataVar(
+                name="pressure_surface",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="sp",
+                    long_name="Surface pressure",
+                    units="Pa",
+                    step_type="instant",
+                    standard_name="surface_air_pressure",
+                ),
+                internal_attrs=EcmwfInternalAttrs(
+                    grib_comment="Pressure [Pa]",
+                    grib_description='0[-] SFC="Ground or water surface"',
+                    grib_element="PRES",
+                    grib_index_param="sp",
+                    keep_mantissa_bits=11,
+                ),
+            ),
+            EcmwfDataVar(
                 name="temperature_2m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -348,7 +369,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_description='10[m] HTGL="Specified height level above ground"',
                     grib_element="UGRD",
                     grib_index_param="10u",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    keep_mantissa_bits=6,
                 ),
             ),
             EcmwfDataVar(
@@ -366,7 +387,43 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_description='10[m] HTGL="Specified height level above ground"',
                     grib_element="VGRD",
                     grib_index_param="10v",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    keep_mantissa_bits=6,
+                ),
+            ),
+            EcmwfDataVar(
+                name="wind_u_100m",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="u100",
+                    long_name="100 metre U wind component",
+                    standard_name="eastward_wind",
+                    units="m/s",
+                    step_type="instant",
+                ),
+                internal_attrs=EcmwfInternalAttrs(
+                    grib_comment="u-component of wind [m/s]",
+                    grib_description='100[m] HTGL="Specified height level above ground"',
+                    grib_element="UGRD",
+                    grib_index_param="100u",
+                    keep_mantissa_bits=6,
+                ),
+            ),
+            EcmwfDataVar(
+                name="wind_v_100m",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="v100",
+                    long_name="100 metre V wind component",
+                    units="m/s",
+                    step_type="instant",
+                    standard_name="northward_wind",
+                ),
+                internal_attrs=EcmwfInternalAttrs(
+                    grib_comment="v-component of wind [m/s]",
+                    grib_description='100[m] HTGL="Specified height level above ground"',
+                    grib_element="VGRD",
+                    grib_index_param="100v",
+                    keep_mantissa_bits=6,
                 ),
             ),
             EcmwfDataVar(
@@ -388,8 +445,86 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_element="unknown",
                     grib_index_param="tp",
                     deaccumulate_to_rate=True,
+                    scale_factor=1000,  # The raw data is in meters so we will need to scale to mm
                     keep_mantissa_bits=default_keep_mantissa_bits,
-                    window_reset_frequency=pd.Timedelta.max,  # accumulate over the full dataset, never resetting
+                    window_reset_frequency=pd.Timedelta.max,  # accumulate over the full lead time dimension, never resetting
+                    deaccumulation_invalid_below_threshold_rate=PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
+                ),
+            ),
+            EcmwfDataVar(
+                name="categorical_precipitation_type_surface",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="ptype",
+                    long_name="Categorical precipitation type at surface",
+                    units="[0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13-191=Reserved; 192-254=Reserved for local use; 255=Missing",
+                    step_type="instant",
+                ),
+                internal_attrs=EcmwfInternalAttrs(
+                    grib_comment="Precipitation type [0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13-191=Reserved; 192-254=Reserved for local use; 255=Missing]",
+                    grib_description='0[-] SFC="Ground or water surface"',
+                    grib_element="PTYPE",
+                    grib_index_param="ptype",
+                    keep_mantissa_bits="no-rounding",
+                    date_available=pd.Timestamp("2024-11-13T00:00"),
+                ),
+            ),
+            EcmwfDataVar(
+                name="downward_long_wave_radiation_flux_surface",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="sdlwrf",
+                    long_name="Surface downward long-wave radiation flux",
+                    units="W/(m^2)",
+                    step_type="avg",
+                ),
+                internal_attrs=EcmwfInternalAttrs(
+                    grib_comment="Downward long-wave radiation flux [W/(m^2)]",
+                    grib_description='0[-] SFC="Ground or water surface"',
+                    grib_element="DLWRF",
+                    grib_index_param="strd",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    deaccumulate_to_rate=True,
+                    window_reset_frequency=pd.Timedelta.max,
+                    deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+                ),
+            ),
+            EcmwfDataVar(
+                name="downward_short_wave_radiation_flux_surface",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="sdswrf",
+                    long_name="Surface downward short-wave radiation flux",
+                    units="W/(m^2)",
+                    step_type="avg",
+                ),
+                internal_attrs=EcmwfInternalAttrs(
+                    grib_comment="Downward short-wave radiation flux [W/(m^2)]",
+                    grib_description='0[-] SFC="Ground or water surface"',
+                    grib_element="DSWRF",
+                    grib_index_param="ssrd",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    deaccumulate_to_rate=True,
+                    window_reset_frequency=pd.Timedelta.max,
+                    deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+                ),
+            ),
+            EcmwfDataVar(
+                name="pressure_reduced_to_mean_sea_level",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="prmsl",
+                    long_name="Pressure reduced to MSL",
+                    units="Pa",
+                    step_type="instant",
+                    standard_name="air_pressure_at_mean_sea_level",
+                ),
+                internal_attrs=EcmwfInternalAttrs(
+                    grib_comment="Pressure [Pa]",
+                    grib_description='0[-] MSL="Mean sea level"',
+                    grib_element="PRES",
+                    grib_index_param="msl",
+                    keep_mantissa_bits=11,
                 ),
             ),
         ]

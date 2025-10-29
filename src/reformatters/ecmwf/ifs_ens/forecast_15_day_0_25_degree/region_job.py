@@ -1,4 +1,5 @@
 import itertools
+from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import ClassVar
@@ -31,6 +32,7 @@ from reformatters.common.types import (
 )
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
+from reformatters.ecmwf.ecmwf_utils import all_variables_available
 
 log = get_logger(__name__)
 
@@ -96,6 +98,19 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     # variable that we can parallelize.
     max_vars_per_download_group: ClassVar[int] = 1
 
+    @classmethod
+    def source_groups(
+        cls,
+        data_vars: Sequence[EcmwfDataVar],
+    ) -> Sequence[Sequence[EcmwfDataVar]]:
+        """Return groups of variables, where all variables in a group can be retrieved from the same source file."""
+        vars_by_date_available = defaultdict(list)
+        for data_var in data_vars:
+            vars_by_date_available[data_var.internal_attrs.date_available].append(
+                data_var
+            )
+        return list(vars_by_date_available.values())
+
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
@@ -109,19 +124,29 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             rather than being clustered in one contiguous window, and we can get better
             download/read performance by treating them separately and parallelizing.
         """
-        return [
-            EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
+        coords = []
+        for init_time, lead_time, ensemble_member in itertools.product(
+            processing_region_ds["init_time"].values,
+            processing_region_ds["lead_time"].values,
+            processing_region_ds["ensemble_member"].values,
+        ):
+            if not all_variables_available(data_var_group, init_time):
+                dates_available = {
+                    v.internal_attrs.date_available for v in data_var_group
+                }
+                assert len(dates_available) == 1, (
+                    f"Expected all variables in the group to have the same date_available, found {dates_available}"
+                )
+                continue
+
+            coord = EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
                 init_time=init_time,
                 lead_time=lead_time,
                 data_var_group=data_var_group,
                 ensemble_member=int(ensemble_member),
             )
-            for init_time, lead_time, ensemble_member in itertools.product(
-                processing_region_ds["init_time"].values,
-                processing_region_ds["lead_time"].values,
-                processing_region_ds["ensemble_member"].values,
-            )
-        ]
+            coords.append(coord)
+        return coords
 
     def download_file(
         self, coord: EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord
@@ -157,10 +182,17 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         with rasterio.open(coord.downloaded_path) as reader:
             # Expecting one band per downloaded file because we should only have one data var & one ensemble member
             assert reader.count == 1, "Expected only one band per downloaded file"
-            assert (
-                reader.tags(1)["GRIB_COMMENT"] == data_var.internal_attrs.grib_comment
-            )
             rasterio_band_index = 1
+
+            grib_comment = reader.tags(rasterio_band_index)["GRIB_COMMENT"]
+            grib_description = reader.descriptions[rasterio_band_index - 1]
+
+            assert grib_comment == data_var.internal_attrs.grib_comment, (
+                f"{grib_comment=} != {data_var.internal_attrs.grib_comment=}"
+            )
+            assert grib_description == data_var.internal_attrs.grib_description, (
+                f"{grib_description=} != {data_var.internal_attrs.grib_description}"
+            )
 
             result: ArrayFloat32 = reader.read(
                 rasterio_band_index, out_dtype=np.float32
@@ -185,14 +217,23 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         data_var : EcmwfDataVar
             The data variable metadata object, which may contain transformation parameters.
         """
+        if data_var.internal_attrs.scale_factor is not None:
+            data_array *= data_var.internal_attrs.scale_factor
+
         if data_var.internal_attrs.deaccumulate_to_rate:
             reset_freq = data_var.internal_attrs.window_reset_frequency
+            deaccumulation_invalid_below_threshold_rate = (
+                data_var.internal_attrs.deaccumulation_invalid_below_threshold_rate
+            )
+            assert deaccumulation_invalid_below_threshold_rate is not None
             assert reset_freq is not None
+
             try:
                 deaccumulate_to_rates_inplace(
                     data_array,
                     dim="lead_time",
                     reset_frequency=reset_freq,
+                    invalid_below_threshold_rate=deaccumulation_invalid_below_threshold_rate,
                 )
             except ValueError:
                 log.exception(f"Error deaccumulating {data_var.name}")

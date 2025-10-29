@@ -6,6 +6,7 @@ import pytest
 import xarray as xr
 
 from reformatters.common.deaccumulation import (
+    PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
     deaccumulate_to_rates_inplace,
 )
 
@@ -476,3 +477,79 @@ def test_deaccumulate_first_step_non_nan_becomes_nan() -> None:
     )
 
     np.testing.assert_equal(result.values, expected)
+
+
+@pytest.mark.parametrize(
+    ("threshold", "should_raise"),
+    [
+        (-1.0, False),  # permissive threshold allows clamping
+        (
+            PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
+            True,
+        ),
+    ],
+)
+def test_custom_deaccumulate_invalid_threshold_rate(
+    threshold: float, should_raise: bool
+) -> None:
+    """Test that invalid_below_threshold_rate controls clamping vs raising."""
+    reset_frequency = pd.Timedelta(hours=6)
+    sec = float(SECONDS_PER_HOUR)
+
+    lt_6_in_val = 1.7
+
+    # With the more permissive threshold, the value should be clamped to 0
+    # With the default threshold, the value should be set to NaN (and we expect to raise an error)
+    lt_6_out_val = np.nan if should_raise else 0.0
+
+    values = [
+        {"lt": 0, "in": np.nan, "out": np.nan},
+        {"lt": 3, "in": 2 * sec * 3, "out": 2.0},
+        {"lt": 6, "in": lt_6_in_val * sec * 3, "out": lt_6_out_val},
+        {"lt": 9, "in": 2 * sec * 3, "out": 2.0},
+        {"lt": 12, "in": 4 * sec * 3, "out": 2.0},
+        {"lt": 15, "in": 2 * sec * 3, "out": 2.0},
+        {"lt": 18, "in": 4 * sec * 3, "out": 2.0},
+        {"lt": 21, "in": 2 * sec * 3, "out": 2.0},
+        {"lt": 24, "in": 4 * sec * 3, "out": 2.0},
+        {"lt": 27, "in": 2 * sec * 3, "out": 2.0},
+        {"lt": 30, "in": 4 * sec * 3, "out": 2.0},
+        {"lt": 33, "in": 2 * sec * 3, "out": 2.0},
+        {"lt": 36, "in": 4 * sec * 3, "out": 2.0},
+        {"lt": 39, "in": 2 * sec * 3, "out": 2.0},
+        {"lt": 42, "in": 4 * sec * 3, "out": 2.0},
+        {"lt": 45, "in": 2 * sec * 3, "out": 2.0},
+        {"lt": 48, "in": 4 * sec * 3, "out": 2.0},
+        {"lt": 51, "in": 2 * sec * 3, "out": 2.0},
+        {"lt": 54, "in": 4 * sec * 3, "out": 2.0},
+        {"lt": 57, "in": 2 * sec * 3, "out": 2.0},
+        {"lt": 60, "in": 4 * sec * 3, "out": 2.0},
+    ]  # fmt: off
+
+    lead_times = pd.to_timedelta([step["lt"] for step in values], unit="h")
+    data = np.array([step["in"] for step in values], dtype=np.float32)
+    expected = np.array([step["out"] for step in values], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        data,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "mm/s"},
+    )
+
+    if should_raise:
+        with pytest.raises(ValueError, match="Found 1 values below threshold"):
+            deaccumulate_to_rates_inplace(
+                data_array,
+                dim="lead_time",
+                reset_frequency=reset_frequency,
+                invalid_below_threshold_rate=threshold,
+            )
+    else:
+        result = deaccumulate_to_rates_inplace(
+            data_array,
+            dim="lead_time",
+            reset_frequency=reset_frequency,
+            invalid_below_threshold_rate=threshold,
+        )
+        np.testing.assert_equal(result.values, expected)
