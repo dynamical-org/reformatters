@@ -329,7 +329,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_element="PRES",
                     grib_index_param="sp",
-                    keep_mantissa_bits=10,
+                    keep_mantissa_bits=11,
                 ),
             ),
             EcmwfDataVar(
@@ -525,7 +525,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_description='0[-] MSL="Mean sea level"',
                     grib_element="PRES",
                     grib_index_param="msl",
-                    keep_mantissa_bits=10,
+                    keep_mantissa_bits=11,
                 ),
             ),
         ]
