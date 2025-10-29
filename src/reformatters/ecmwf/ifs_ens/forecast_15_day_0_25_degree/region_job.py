@@ -222,6 +222,10 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
 
         if data_var.internal_attrs.deaccumulate_to_rate:
             reset_freq = data_var.internal_attrs.window_reset_frequency
+            deaccumulation_invalid_below_threshold_rate = (
+                data_var.internal_attrs.deaccumulation_invalid_below_threshold_rate
+            )
+            assert deaccumulation_invalid_below_threshold_rate is not None
             assert reset_freq is not None
 
             try:
@@ -229,7 +233,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                     data_array,
                     dim="lead_time",
                     reset_frequency=reset_freq,
-                    invalid_below_threshold_rate=data_var.internal_attrs.deaccumulation_invalid_below_threshold_rate,
+                    invalid_below_threshold_rate=deaccumulation_invalid_below_threshold_rate,
                 )
             except ValueError:
                 log.exception(f"Error deaccumulating {data_var.name}")

@@ -10,7 +10,8 @@ from reformatters.common.types import Array1D, ArrayFloat32
 VALID_OUTPUT_UNITS_FOR_DEACCUMULATION = ["mm/s", "m/s", "W/(m^2)"]
 
 
-DEFAULT_INVALID_BELOW_THRESHOLD_RATE = -2e-5
+PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD = -2e-5
+RADIATION_INVALID_BELOW_THRESHOLD = -8e3
 
 
 def deaccumulate_to_rates_inplace(
@@ -19,7 +20,7 @@ def deaccumulate_to_rates_inplace(
     dim: str,
     reset_frequency: pd.Timedelta,
     skip_step: Array1D[np.bool] | None = None,
-    invalid_below_threshold_rate: float | None = None,
+    invalid_below_threshold_rate: float = PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
 ) -> xr.DataArray:
     """
     Convert accumulated values to per-second rates in place.
@@ -65,9 +66,6 @@ def deaccumulate_to_rates_inplace(
         np.prod(data_array.shape[time_dim_index + 1 :] or 1),
     )
 
-    if invalid_below_threshold_rate is None:
-        invalid_below_threshold_rate = DEFAULT_INVALID_BELOW_THRESHOLD_RATE
-
     _deaccumulate_to_rates_numba(
         values, seconds, reset_after, skip_step, invalid_below_threshold_rate
     )
@@ -81,7 +79,7 @@ def _deaccumulate_to_rates_numba(
     seconds: Array1D[np.int64],
     reset_after: Array1D[np.bool],
     skip_step: Array1D[np.bool],
-    invalid_below_threshold_rate: float = -2e-5,
+    invalid_below_threshold_rate: float,
 ) -> None:
     """
     Convert accumulated values to per-second rates, mutating `values` in place.

@@ -14,6 +14,10 @@ from reformatters.common.config_models import (
     Encoding,
     StatisticsApproximate,
 )
+from reformatters.common.deaccumulation import (
+    PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
+    RADIATION_INVALID_BELOW_THRESHOLD,
+)
 from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
     TemplateConfig,
@@ -443,7 +447,8 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     deaccumulate_to_rate=True,
                     scale_factor=1000,  # The raw data is in meters so we will need to scale to mm
                     keep_mantissa_bits=default_keep_mantissa_bits,
-                    window_reset_frequency=pd.Timedelta.max,  # accumulate over the full dataset, never resetting
+                    window_reset_frequency=pd.Timedelta.max,  # accumulate over the full lead time dimension, never resetting
+                    deaccumulation_invalid_below_threshold_rate=PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
                 ),
             ),
             EcmwfDataVar(
@@ -481,10 +486,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     deaccumulate_to_rate=True,
                     window_reset_frequency=pd.Timedelta.max,
-                    # Downward short and long wave radiation flux surface values need to be deaccumulated,
-                    # but their raw values are much larger than precip, so we need to use a different threshold
-                    # checking overly-negative values.
-                    deaccumulation_invalid_below_threshold_rate=-8e3,
+                    deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
                 ),
             ),
             EcmwfDataVar(
@@ -504,10 +506,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     deaccumulate_to_rate=True,
                     window_reset_frequency=pd.Timedelta.max,
-                    # Downward short and long wave radiation flux surface values need to be deaccumulated,
-                    # but their raw values are much larger than precip, so we need to use a different threshold
-                    # checking overly-negative values.
-                    deaccumulation_invalid_below_threshold_rate=-8e3,
+                    deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
                 ),
             ),
             EcmwfDataVar(
