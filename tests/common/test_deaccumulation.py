@@ -6,6 +6,7 @@ import pytest
 import xarray as xr
 
 from reformatters.common.deaccumulation import (
+    PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
     deaccumulate_to_rates_inplace,
 )
 
@@ -482,11 +483,14 @@ def test_deaccumulate_first_step_non_nan_becomes_nan() -> None:
     ("threshold", "should_raise"),
     [
         (-1.0, False),  # permissive threshold allows clamping
-        (None, True),  # default threshold raises error
+        (
+            PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
+            True,
+        ),
     ],
 )
 def test_custom_deaccumulate_invalid_threshold_rate(
-    threshold: float | None, should_raise: bool
+    threshold: float, should_raise: bool
 ) -> None:
     """Test that invalid_below_threshold_rate controls clamping vs raising."""
     reset_frequency = pd.Timedelta(hours=6)
