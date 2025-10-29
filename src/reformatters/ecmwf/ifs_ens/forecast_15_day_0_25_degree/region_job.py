@@ -217,8 +217,8 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         data_var : EcmwfDataVar
             The data variable metadata object, which may contain transformation parameters.
         """
-        if data_var.internal_attrs.scaling_factor is not None:
-            data_array *= data_var.internal_attrs.scaling_factor
+        if data_var.internal_attrs.scale_factor is not None:
+            data_array *= data_var.internal_attrs.scale_factor
 
         if data_var.internal_attrs.deaccumulate_to_rate:
             reset_freq = data_var.internal_attrs.window_reset_frequency

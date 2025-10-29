@@ -329,7 +329,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_element="PRES",
                     grib_index_param="sp",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    keep_mantissa_bits=10,
                 ),
             ),
             EcmwfDataVar(
@@ -365,7 +365,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_description='10[m] HTGL="Specified height level above ground"',
                     grib_element="UGRD",
                     grib_index_param="10u",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    keep_mantissa_bits=6,
                 ),
             ),
             EcmwfDataVar(
@@ -383,7 +383,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_description='10[m] HTGL="Specified height level above ground"',
                     grib_element="VGRD",
                     grib_index_param="10v",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    keep_mantissa_bits=6,
                 ),
             ),
             EcmwfDataVar(
@@ -401,7 +401,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_description='100[m] HTGL="Specified height level above ground"',
                     grib_element="UGRD",
                     grib_index_param="100u",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    keep_mantissa_bits=6,
                 ),
             ),
             EcmwfDataVar(
@@ -419,7 +419,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_description='100[m] HTGL="Specified height level above ground"',
                     grib_element="VGRD",
                     grib_index_param="100v",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    keep_mantissa_bits=6,
                 ),
             ),
             EcmwfDataVar(
@@ -441,7 +441,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_element="unknown",
                     grib_index_param="tp",
                     deaccumulate_to_rate=True,
-                    scaling_factor=1000,  # The raw data is in meters so we will need to scale to mm
+                    scale_factor=1000,  # The raw data is in meters so we will need to scale to mm
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     window_reset_frequency=pd.Timedelta.max,  # accumulate over the full dataset, never resetting
                 ),
@@ -525,7 +525,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_description='0[-] MSL="Mean sea level"',
                     grib_element="PRES",
                     grib_index_param="msl",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    keep_mantissa_bits=10,
                 ),
             ),
         ]

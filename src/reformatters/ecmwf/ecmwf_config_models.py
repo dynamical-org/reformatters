@@ -26,7 +26,7 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
     grib_element: str
     grib_description: str
 
-    scaling_factor: float | None = None
+    scale_factor: float | None = None
 
     # ECMWF will sometimes add variables to a dataset after the dataset start date.
     # This internal attribute can be used to handle whether or not we should try
