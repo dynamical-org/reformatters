@@ -460,7 +460,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_element="PTYPE",
                     grib_index_param="ptype",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    keep_mantissa_bits="no-rounding",
                     date_available=pd.Timestamp("2024-11-13T00:00"),
                 ),
             ),
