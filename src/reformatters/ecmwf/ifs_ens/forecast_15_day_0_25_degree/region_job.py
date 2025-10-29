@@ -131,6 +131,12 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             processing_region_ds["ensemble_member"].values,
         ):
             if not all_variables_available(data_var_group, init_time):
+                dates_available = {
+                    v.internal_attrs.date_available for v in data_var_group
+                }
+                assert len(dates_available) == 1, (
+                    f"Expected all variables in the group to have the same date_available, found {dates_available}"
+                )
                 continue
 
             coord = EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
