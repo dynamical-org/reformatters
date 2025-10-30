@@ -303,8 +303,8 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
             "init_time": var_chunks["init_time"],
             "lead_time": var_chunks["lead_time"],
             "ensemble_member": var_chunks["ensemble_member"],
-            "latitude": var_chunks["latitude"] * 4,
-            "longitude": var_chunks["longitude"] * 8,
+            "latitude": var_chunks["latitude"] * 10,
+            "longitude": var_chunks["longitude"] * 10,
         }
 
         encoding_float32_default = Encoding(
