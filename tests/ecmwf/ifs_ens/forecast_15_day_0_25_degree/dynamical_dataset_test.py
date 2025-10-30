@@ -44,50 +44,58 @@ def test_backfill_local_and_operational_update(
             lead_time=slice("0h", "6h"), ensemble_member=slice(0, 1)
         )[variables_to_check],
     )
-    dataset.backfill_local(append_dim_end=pd.Timestamp("2024-02-04T00:00:00"))
+    dataset.backfill_local(append_dim_end=pd.Timestamp("2024-04-02T00:00:00"))
 
     ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
     # existing_ds_append_dim_end is exclusive, so should have only processed the first forecast
-    assert ds.init_time.values == [np.datetime64("2024-02-03T00:00:00")]
+    np.testing.assert_array_equal(
+        ds.init_time.values, [np.datetime64("2024-04-01T00:00:00")]
+    )
 
     t2m_actual_values = ds.sel(
-        init_time="2024-02-03T00:00:00", latitude=0, longitude=0
+        init_time="2024-04-01T00:00:00", latitude=0, longitude=0
     ).temperature_2m
 
     t2m_expected_values = np.array(
         [
-            [27.0, 28.5],  # lead time 0h, ensemble members 0 and 1
-            [27.25, 25.75],  # lead time 3h, ensemble members 0 and 1
-            [27.25, 26.875],  # lead time 6h, ensemble members 0 and 1
+            [29.5, 29.125],  # lead time 0h, ensemble members 0 and 1
+            [28.125, 28.125],  # lead time 3h, ensemble members 0 and 1
+            [28.375, 27.75],  # lead time 6h, ensemble members 0 and 1
         ],
         dtype=np.float32,
     )
 
-    np.testing.assert_array_equal(t2m_actual_values, t2m_expected_values)
+    np.testing.assert_allclose(t2m_actual_values, t2m_expected_values)
 
     precip_surface_actual_values = ds.sel(
-        init_time="2024-02-03T00:00:00", latitude=0, longitude=0
+        init_time="2024-04-01T00:00:00", latitude=0, longitude=0
     ).precipitation_surface
 
     precip_surface_expected_values = np.array(
         [
-            [0.0, 0.0],  # lead time 0h, ensemble members 0 and 1
-            [1.764420e-07, 2.998859e-04],  # lead time 3h, ensemble members 0 and 1
-            [2.299203e-06, 1.764420e-07],  # lead time 6h, ensemble members 0 and 1
+            [np.nan, np.nan],  # lead time 0h, ensemble members 0 and 1
+            [
+                1.198053e-05,
+                1.236796e-06,
+            ],  # lead time 3h, ensemble members 0 and 1
+            [
+                1.415610e-06,
+                1.537800e-05,
+            ],  # lead time 6h, ensemble members 0 and 1
         ],
         dtype=np.float32,
     )
     np.testing.assert_allclose(
         precip_surface_actual_values,
         precip_surface_expected_values,
-        rtol=1e-6,
+        atol=1e-6,
     )
 
     # Operational update
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
-        Mock(return_value=pd.Timestamp("2024-02-05T00:00:00")),
+        Mock(return_value=pd.Timestamp("2024-04-03T00:00:00")),
     )
     dataset.update("test-update")
 
@@ -96,21 +104,21 @@ def test_backfill_local_and_operational_update(
     np.testing.assert_array_equal(
         updated_ds.init_time,
         np.array(
-            [np.datetime64("2024-02-03T00:00:00"), np.datetime64("2024-02-04T00:00:00")]
+            [np.datetime64("2024-04-01T00:00:00"), np.datetime64("2024-04-02T00:00:00")]
         ),
     )
     t2m_actual_values = updated_ds.sel(latitude=0, longitude=0).temperature_2m
     t2m_expected_values = np.array(
-        [
-            [  # init time 2024-02-03T00:00:00
-                [27.0, 28.5],  # lead time 0h, ensemble members 0 and 1
-                [27.25, 25.75],  # lead time 3h, ensemble members 0 and 1
-                [27.25, 26.875],  # lead time 6h, ensemble members 0 and 1
+        [  # init time 2024-04-01T00:00:00
+            [
+                [29.5, 29.125],  # lead time 0h, ensemble members 0 and 1
+                [28.125, 28.125],  # lead time 3h, ensemble members 0 and 1
+                [28.375, 27.75],  # lead time 6h, ensemble members 0 and 1
             ],
-            [  # init time 2024-02-04T00:00:00
-                [27.875, 28.375],  # lead time 0h, ensemble members 0 and 1
-                [27.75, 27.375],  # lead time 3h, ensemble members 0 and 1
-                [27.75, 27.625],  # lead time 6h, ensemble members 0 and 1
+            [  # init time 2024-04-02T00:00:00
+                [29.75, 29.125],  # lead time 0h, ensemble members 0 and 1
+                [28.5, 27.0],  # lead time 3h, ensemble members 0 and 1
+                [27.0, 27.25],  # lead time 6h, ensemble members 0 and 1
             ],
         ],
         dtype=np.float32,
@@ -124,14 +132,14 @@ def test_backfill_local_and_operational_update(
     precip_surface_expected_values = np.array(
         [
             [
-                [0.0000000e00, 0.0000000e00],
-                [1.7644197e-07, 2.9988587e-04],
-                [2.2992026e-06, 1.7644197e-07],
+                [np.nan, np.nan],
+                [1.1980534e-05, 1.2367964e-06],
+                [1.4156103e-06, 1.5377998e-05],
             ],
             [
-                [0.0000000e00, 0.0000000e00],
-                [1.0069925e-05, 1.3038516e-04],
-                [1.7644197e-07, 3.8417056e-05],
+                [np.nan, np.nan],
+                [8.7261200e-05, 3.0517578e-04],
+                [7.3623657e-04, 2.2029877e-04],
             ],
         ],
         dtype=np.float32,
