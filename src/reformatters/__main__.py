@@ -54,6 +54,14 @@ class NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
     format: DatasetFormat = DatasetFormat.ICECHUNK
 
 
+class EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
+    """ECMWF IFS Ens in Icechunk on AWS Open Data."""
+
+    base_path: str = "s3://dynamical-ecmwf-ifs-ens"
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
 class SourceCoopZarrDatasetStorageConfig(StorageConfig):
     """Configuration for the storage of a SourceCoop dataset."""
 
@@ -92,7 +100,8 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     ),
     # ECMWF
     EcmwfIfsEnsForecast15Day025DegreeDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig()
+        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
+        replica_storage_configs=[EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig()],
     ),
     # DWD
     DwdIconEuForecastDataset(

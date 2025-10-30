@@ -298,13 +298,13 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
             "latitude": 32,  # 23 chunks over 721 pixels
             "longitude": 32,  # 45 chunks over 1440 pixels
         }
-        # Roughly ~568MB uncompressed, ~113MB compressed
+        # Roughly ~1775MB uncompressed, ~355MB compressed
         var_shards: dict[Dim, int] = {
             "init_time": var_chunks["init_time"],
             "lead_time": var_chunks["lead_time"],
             "ensemble_member": var_chunks["ensemble_member"],
-            "latitude": var_chunks["latitude"] * 4,
-            "longitude": var_chunks["longitude"] * 8,
+            "latitude": var_chunks["latitude"] * 10,
+            "longitude": var_chunks["longitude"] * 10,
         }
 
         encoding_float32_default = Encoding(

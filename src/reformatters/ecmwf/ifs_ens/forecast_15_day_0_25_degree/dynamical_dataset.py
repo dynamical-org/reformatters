@@ -1,8 +1,9 @@
 from collections.abc import Sequence
+from datetime import timedelta
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.ecmwf.ecmwf_config_models import (
     EcmwfDataVar,
 )
@@ -26,40 +27,39 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
-        # operational_update_cron_job = ReformatCronJob(
-        #     name=f"{self.dataset_id}-operational-update",
-        #     schedule=_OPERATIONAL_CRON_SCHEDULE,
-        #     pod_active_deadline=timedelta(minutes=30),
-        #     image=image_tag,
-        #     dataset_id=self.dataset_id,
-        #     cpu="14",
-        #     memory="30G",
-        #     shared_memory="12G",
-        #     ephemeral_storage="30G",
-        #     secret_names=self.store_factory.k8s_secret_names(),
-        # )
-        # validation_cron_job = ValidationCronJob(
-        #     name=f"{self.dataset_id}-validation",
-        #     schedule=_VALIDATION_CRON_SCHEDULE,
-        #     pod_active_deadline=timedelta(minutes=10),
-        #     image=image_tag,
-        #     dataset_id=self.dataset_id,
-        #     cpu="1.3",
-        #     memory="7G",
-        #     secret_names=self.store_factory.k8s_secret_names(),
-        # )
 
-        # return [operational_update_cron_job, validation_cron_job]
-        raise NotImplementedError(
-            f"Implement `operational_kubernetes_resources` on {self.__class__.__name__}"
+        operational_update_cron_job = ReformatCronJob(
+            name=f"{self.dataset_id}-operational-update",
+            # ECMWF uploads the first file at 07:40 UTC and the last one by ~07:45 UTC.
+            # (Ensemble stats get uploaded 15-20 mins later, but we don't process those.)
+            schedule="50 7 * * *",
+            suspend=True,
+            pod_active_deadline=timedelta(minutes=45),
+            image=image_tag,
+            dataset_id=self.dataset_id,
+            cpu="7",
+            memory="35G",
+            shared_memory="19G",
+            ephemeral_storage="30G",
+            secret_names=self.store_factory.k8s_secret_names(),
         )
+        validation_cron_job = ValidationCronJob(
+            name=f"{self.dataset_id}-validation",
+            schedule="40 8 * * *",  # 50 minutes after update starts
+            suspend=True,
+            pod_active_deadline=timedelta(minutes=10),
+            image=image_tag,
+            dataset_id=self.dataset_id,
+            cpu="1.3",
+            memory="7G",
+            secret_names=self.store_factory.k8s_secret_names(),
+        )
+
+        return [operational_update_cron_job, validation_cron_job]
 
     def validators(self) -> Sequence[validation.DataValidator]:
         """Return a sequence of DataValidators to run on this dataset."""
-        # return (
-        #     validation.check_analysis_current_data,
-        #     validation.check_analysis_recent_nans,
-        # )
-        raise NotImplementedError(
-            f"Implement `validators` on {self.__class__.__name__}"
+        return (
+            validation.check_forecast_current_data,
+            validation.check_forecast_recent_nans,
         )
