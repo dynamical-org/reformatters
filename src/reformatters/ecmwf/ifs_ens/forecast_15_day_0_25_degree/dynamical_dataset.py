@@ -30,7 +30,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
 
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-operational-update",
-            # ECMWF uploads the first file at 07:40 UTC and the last one by 07:46 UTC.
+            # ECMWF uploads the first file at 07:40 UTC and the last one by ~07:45 UTC.
             # (Ensemble stats get uploaded 15-20 mins later, but we don't process those.)
             schedule="50 7 * * *",
             suspend=True,
