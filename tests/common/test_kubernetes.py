@@ -178,6 +178,7 @@ def test_kubernetes_job_name() -> None:
 
     k8s_obj: dict[str, Any] = job.as_kubernetes_object()
     assert job.job_name == k8s_obj["metadata"]["name"]
+    assert job.job_name == job.job_name  # quick explicit check that result is cached
 
 
 def test_as_kubernetes_object_with_custom_values() -> None:
