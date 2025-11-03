@@ -5,6 +5,7 @@ import random
 import string
 from collections.abc import Sequence
 from datetime import timedelta
+from functools import cached_property
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -37,7 +38,7 @@ class Job(pydantic.BaseModel):
 
     secret_names: Sequence[str] = pydantic.Field(default_factory=list)
 
-    @property
+    @cached_property
     def job_name(self) -> str:
         # Job names should be a valid DNS name, 63 characters or less
         name = f"{self.dataset_id[:21]}-{'-'.join(self.command)}"
