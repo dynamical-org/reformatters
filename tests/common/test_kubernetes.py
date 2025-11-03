@@ -163,6 +163,23 @@ def test_as_kubernetes_object_comprehensive() -> None:
     assert k8s_obj["spec"] == expected_spec
 
 
+def test_kubernetes_job_name() -> None:
+    """Test ensure that the job name is consistent across invocations"""
+    job = Job(
+        command=["backfill-kubernetes", "2025-01-01T00:00:00", "1", "1"],
+        image="weather-app:v1.0",
+        dataset_id="weather_data",
+        cpu="500m",
+        memory="1Gi",
+        workers_total=4,
+        parallelism=2,
+        secret_names=["aws-creds", "db-creds"],
+    )
+
+    k8s_obj: dict[str, Any] = job.as_kubernetes_object()
+    assert job.job_name == k8s_obj["metadata"]["name"]
+
+
 def test_as_kubernetes_object_with_custom_values() -> None:
     """Test as_kubernetes_object with custom resource values."""
     job = Job(
