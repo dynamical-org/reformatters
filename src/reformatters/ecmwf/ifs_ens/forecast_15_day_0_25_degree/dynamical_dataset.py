@@ -35,7 +35,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
             schedule="50 7 * * *",
             suspend=True,
             # Temporarily increase deadline while doing catchup run
-            pod_active_deadline=timedelta(hours=3),
+            pod_active_deadline=timedelta(hours=12),
             # pod_active_deadline=timedelta(minutes=45),
             image=image_tag,
             dataset_id=self.dataset_id,
