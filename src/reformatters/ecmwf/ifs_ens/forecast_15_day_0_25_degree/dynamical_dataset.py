@@ -37,7 +37,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
             pod_active_deadline=timedelta(minutes=45),
             image=image_tag,
             dataset_id=self.dataset_id,
-            cpu="7",
+            cpu="3",
             memory="35G",
             shared_memory="19G",
             ephemeral_storage="30G",
@@ -50,7 +50,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
-            cpu="1.3",
+            cpu="0.5",
             memory="7G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
