@@ -360,7 +360,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 attrs=DataVarAttrs(
                     short_name="u10",
                     long_name="10 metre U wind component",
-                    units="m s**-1",
+                    units="m/s",
                     step_type="instant",
                     standard_name="eastward_wind",
                 ),
@@ -378,7 +378,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 attrs=DataVarAttrs(
                     short_name="v10",
                     long_name="10 metre V wind component",
-                    units="m s**-1",
+                    units="m/s",
                     step_type="instant",
                     standard_name="northward_wind",
                 ),
@@ -457,7 +457,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 attrs=DataVarAttrs(
                     short_name="ptype",
                     long_name="Categorical precipitation type at surface",
-                    units="[0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13-191=Reserved; 192-254=Reserved for local use; 255=Missing",
+                    units="0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13-191=Reserved; 192-254=Reserved for local use; 255=Missing",
                     step_type="instant",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
