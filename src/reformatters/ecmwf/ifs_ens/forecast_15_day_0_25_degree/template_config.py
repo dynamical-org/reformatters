@@ -342,7 +342,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 attrs=DataVarAttrs(
                     short_name="t2m",
                     long_name="2 metre temperature",
-                    units="K",
+                    units="C",
                     step_type="instant",
                     standard_name="air_temperature",
                 ),
