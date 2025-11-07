@@ -33,10 +33,8 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
             # ECMWF uploads the first file at 07:40 UTC and the last one by ~07:45 UTC.
             # (Ensemble stats get uploaded 15-20 mins later, but we don't process those.)
             schedule="50 7 * * *",
-            suspend=True,
-            # Temporarily increase deadline while doing catchup run
-            pod_active_deadline=timedelta(hours=12),
-            # pod_active_deadline=timedelta(minutes=45),
+            suspend=False,
+            pod_active_deadline=timedelta(hours=2.5),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3",
@@ -47,13 +45,13 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validation",
-            schedule="40 8 * * *",  # 50 minutes after update starts
-            suspend=True,
+            schedule="50 10 * * *",  # 3 Hours after update starts (update may take ~2 hours)
+            suspend=False,
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="0.5",
-            memory="7G",
+            memory="30G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
 
