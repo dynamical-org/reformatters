@@ -47,7 +47,8 @@ def validate_dataset(
     """
     log.info(f"Validating zarr {store}")
 
-    ds = xr.open_zarr(store)
+    # Open dataset
+    ds = xr.open_zarr(store, chunks=None)
 
     # Run all validators
     failed_validations = []

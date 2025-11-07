@@ -51,7 +51,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="0.5",
-            memory="7G",
+            memory="30G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
 
