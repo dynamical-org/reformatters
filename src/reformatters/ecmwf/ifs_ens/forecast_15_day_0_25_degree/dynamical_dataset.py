@@ -45,7 +45,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validation",
-            schedule="40 8 * * *",  # 50 minutes after update starts
+            schedule="50 10 * * *",  # 3 Hours after update starts (update may take ~2 hours)
             suspend=False,
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
