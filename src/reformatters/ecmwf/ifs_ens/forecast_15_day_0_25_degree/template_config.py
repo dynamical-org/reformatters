@@ -50,9 +50,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
         return DatasetAttributes(
             dataset_id="ecmwf-ifs-ens-forecast-15-day-0-25-degree",
             dataset_version="0.1.0",
-            name="ECMWF IFS Ensemble (ENS) Forecast, 15 day, 0.25 degree",
-            description="Ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS); 15 day forecasts, 0.25 degree resolution.",
-            attribution="ECMWF IFS Ensemble Forecast data processed by dynamical.org from ECMWF Open Data.",
+            name="ECMWF IFS ENS Forecast, 15 day, 0.25 degree",
+            description="Ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS).",
+            attribution="ECMWF IFS ENS Forecast data processed by dynamical.org from ECMWF Open Data.",
             spatial_domain="Global",
             spatial_resolution="0.25 degrees (~20km)",
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
