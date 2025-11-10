@@ -225,26 +225,28 @@ def compare_replica_and_primary(
     )
 
     last_chunk = iterating.dimension_slices(primary_ds, append_dim, "chunks")[-1]
-    replica_ds_last_chunk = replica_ds[variables_to_check].isel(
-        {append_dim: last_chunk}
-    )
-    primary_ds_last_chunk = primary_ds[variables_to_check].isel(
-        {append_dim: last_chunk}
-    )
+    problem_vars = []
+    for var in variables_to_check:
+        replica_ds_last_chunk = replica_ds[var].isel({append_dim: last_chunk})
+        primary_ds_last_chunk = primary_ds[var].isel({append_dim: last_chunk})
 
-    try:
-        xr.testing.assert_equal(replica_ds_last_chunk, primary_ds_last_chunk)
-    except AssertionError as e:
-        log.exception(e)
+        try:
+            log.info(f"Comparing {var} in replica and primary stores")
+            xr.testing.assert_equal(replica_ds_last_chunk, primary_ds_last_chunk)
+        except AssertionError as e:
+            log.exception(e)
+            problem_vars.append(var)
+
+    if problem_vars:
         return ValidationResult(
             passed=False,
-            message=f"Data in replica and primary stores are different for chunks: {last_chunk}",
+            message=f"Data in replica and primary stores are different for at least the following vars: {problem_vars}",
         )
-
-    return ValidationResult(
-        passed=True,
-        message="Data in tested subset of replica and primary stores is the same",
-    )
+    else:
+        return ValidationResult(
+            passed=True,
+            message="Data in tested subset of replica and primary stores is the same",
+        )
 
 
 def check_for_expected_shards(
