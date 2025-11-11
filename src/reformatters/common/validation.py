@@ -235,7 +235,7 @@ def compare_replica_and_primary(
             xr.testing.assert_equal(replica_ds_last_chunk, primary_ds_last_chunk)
         except AssertionError as e:
             log.exception(e)
-            problem_vars.append(var)
+            problem_vars.append(str(var))
 
     if problem_vars:
         return ValidationResult(
