@@ -364,3 +364,104 @@ def test_check_analysis_recent_nans_invalid_spatial_sampling(
             analysis_dataset,
             spatial_sampling="invalid",  # type: ignore[arg-type]
         )
+
+
+def test_compare_replica_and_primary_coords_divergence(
+    rng: np.random.Generator,
+) -> None:
+    """Test that compare_replica_and_primary detects coordinate divergence."""
+    times = pd.date_range("2024-01-01", periods=24, freq="1h")
+    x = np.arange(20)
+    y = np.arange(10)
+    chunk_size = 8
+
+    primary_ds = xr.Dataset(
+        {
+            "temperature": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+            "humidity": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+        },
+        coords={"time": times, "y": y, "x": x},
+    )
+    for var in primary_ds.data_vars.values():
+        var.encoding["chunks"] = (chunk_size, len(y), len(x))
+
+    replica_ds = primary_ds.copy(deep=True).isel(time=slice(None, -1))
+    result = validation.compare_replica_and_primary("time", replica_ds, primary_ds)
+
+    assert not result.passed
+    assert "different for coords: ['time']" in result.message
+
+
+def test_compare_replica_and_primary_vars_divergence(
+    rng: np.random.Generator,
+) -> None:
+    """Test that compare_replica_and_primary detects variable data divergence."""
+    times = pd.date_range("2024-01-01", periods=24, freq="1h")
+    x = np.arange(20)
+    y = np.arange(10)
+    chunk_size = 8
+
+    primary_ds = xr.Dataset(
+        {
+            "temperature": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+            "humidity": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+        },
+        coords={"time": times, "y": y, "x": x},
+    )
+    for var in primary_ds.data_vars.values():
+        var.encoding["chunks"] = (chunk_size, len(y), len(x))
+
+    replica_ds = primary_ds.copy(deep=True)
+    replica_ds["temperature"].values[-chunk_size:, 0, 0] = 999.0
+
+    result = validation.compare_replica_and_primary("time", replica_ds, primary_ds)
+
+    assert not result.passed
+    assert (
+        "different for at least the following vars: ['temperature']" in result.message
+    )
+
+
+def test_compare_replica_and_primary_passes(
+    rng: np.random.Generator,
+) -> None:
+    """Test that compare_replica_and_primary passes when replica and primary are identical."""
+    times = pd.date_range("2024-01-01", periods=24, freq="1h")
+    x = np.arange(20)
+    y = np.arange(10)
+    chunk_size = 8
+
+    primary_ds = xr.Dataset(
+        {
+            "temperature": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+            "humidity": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+        },
+        coords={"time": times, "y": y, "x": x},
+    )
+    for var in primary_ds.data_vars.values():
+        var.encoding["chunks"] = (chunk_size, len(y), len(x))
+
+    replica_ds = primary_ds.copy(deep=True)
+
+    result = validation.compare_replica_and_primary("time", replica_ds, primary_ds)
+
+    assert result.passed
+    assert "replica and primary stores is the same" in result.message
