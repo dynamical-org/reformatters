@@ -40,6 +40,38 @@ def test_y_x_coordinates(template_config: NoaaHrrrTemplateConfig) -> None:
     assert np.isclose(y_coords.max() + (3000 / 2), 1588193.847)
 
 
+def test_latitude_longitude_coordinates(
+    template_config: NoaaHrrrTemplateConfig,
+) -> None:
+    """Test that _latitude_longitude_coordinates returns expected values."""
+    y_coords, x_coords = template_config._y_x_coordinates()
+    lats, lons = template_config._latitude_longitude_coordinates(x_coords, y_coords)
+
+    # Check shapes
+    assert lats.shape == (1059, 1799)
+    assert lons.shape == (1059, 1799)
+
+    # Check latitude values
+    assert lats.min() == 21.138123
+    assert np.isclose(lats.mean(), 37.152527)
+    assert lats.max() == 52.615654
+
+    # Check longitude values
+    assert lons.min() == -134.09547
+    assert np.isclose(lons.mean(), -97.50583)
+    assert lons.max() == -60.917194
+
+    # Check latitude differences (decreases north to south)
+    lat_diff_y = np.diff(lats, axis=0)
+    assert np.isclose(lat_diff_y.min(), -0.02698135)
+    assert np.isclose(lat_diff_y.max(), -0.0245285)
+
+    # Check longitude differences (increases west to east)
+    lon_diff_x = np.diff(lons, axis=1)
+    assert np.isclose(lon_diff_x.min(), 0.02666473)
+    assert np.isclose(lon_diff_x.max(), 0.04299164)
+
+
 def test_spatial_info_matches_file(template_config: NoaaHrrrTemplateConfig) -> None:
     """Test that hard coded spatial information matches the real values derived from a source file."""
     shape, bounds, resolution, crs = template_config._spatial_info()
