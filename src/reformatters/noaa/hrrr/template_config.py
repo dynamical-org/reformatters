@@ -114,7 +114,7 @@ class NoaaHrrrTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     units=None,
                     statistics_approximate=None,
                     # Derived from opening a sample HRRR file, see
-                    # tests/noaa/hrrr/forecast_48_hour/template_config_test.py::test_spatial_info_matches_file
+                    # tests/noaa/hrrr/template_config_test.py::test_spatial_info_matches_file
                     GeoTransform="-2699020.142521929 3000.0 0.0 1588193.847443335 0.0 -3000.0",
                     crs_wkt='PROJCS["unnamed",GEOGCS["Coordinate System imported from GRIB file",DATUM["unnamed",SPHEROID["Sphere",6371229,0]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]]],PROJECTION["Lambert_Conformal_Conic_2SP"],PARAMETER["latitude_of_origin",38.5],PARAMETER["central_meridian",-97.5],PARAMETER["standard_parallel_1",38.5],PARAMETER["standard_parallel_2",38.5],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["Metre",1],AXIS["Easting",EAST],AXIS["Northing",NORTH]]',
                     false_easting=0.0,
@@ -521,7 +521,7 @@ class NoaaHrrrTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
         """
         Returns (shape, bounds, resolution, crs proj4 string).
         Useful for deriving x, y and latitude, longitude coordinates.
-        See tests/noaa/hrrr/forecast_48_hour/template_config_test.py::test_spatial_info_matches_file
+        See tests/noaa/hrrr/template_config_test.py::test_spatial_info_matches_file
         """
         return (
             (1059, 1799),
