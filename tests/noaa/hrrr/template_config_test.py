@@ -29,13 +29,11 @@ def template_config(monkeypatch: pytest.MonkeyPatch) -> NoaaHrrrTemplateConfig:
         time_domain="Test",
         time_resolution="1h",
     )
-    
+
     monkeypatch.setattr(
-        NoaaHrrrTemplateConfig,
-        "dataset_attributes",
-        property(lambda self: mock_attrs)
+        NoaaHrrrTemplateConfig, "dataset_attributes", property(lambda self: mock_attrs)
     )
-    
+
     config = NoaaHrrrTemplateConfig(
         dims=("time", "y", "x"),
         append_dim="time",
