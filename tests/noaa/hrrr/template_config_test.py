@@ -94,6 +94,7 @@ def test_latitude_longitude_coordinates(
 def test_spatial_info_matches_file(template_config: NoaaHrrrTemplateConfig) -> None:
     """Test that hard coded spatial information matches the real values derived from a source file."""
     shape, bounds, resolution, crs = template_config._spatial_info()
+
     dummy_encoding = Encoding(
         dtype="float32",
         fill_value=0.0,
@@ -137,11 +138,6 @@ def test_spatial_info_matches_file(template_config: NoaaHrrrTemplateConfig) -> N
     )
     template_attrs = spatial_ref_coord.attrs.model_dump(exclude_none=True)
 
-    # The template has to round trip through JSON so tuples become lists
-    assert ds.spatial_ref.attrs["standard_parallel"] == (38.5, 38.5)
-    ds.spatial_ref.attrs["standard_parallel"] = list(
-        ds.spatial_ref.attrs["standard_parallel"]
-    )
     # Allow for a tiny floating point difference in the GeoTransform y offset last digit between arm64 and amd64
     if (
         ds.spatial_ref.attrs["GeoTransform"]
