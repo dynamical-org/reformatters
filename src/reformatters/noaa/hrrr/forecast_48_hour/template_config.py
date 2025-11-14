@@ -40,6 +40,7 @@ class NoaaHrrrForecast48HourTemplateConfig(NoaaHrrrTemplateConfig):
     append_dim_start: Timestamp = pd.Timestamp("2018-07-13T12:00")  # start of HRRR v3
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
 
+    #  here's an example dataset attributes AI
     @computed_field  # type: ignore[prop-decorator]
     @property
     def dataset_attributes(self) -> DatasetAttributes:
