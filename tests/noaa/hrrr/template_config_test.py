@@ -133,10 +133,10 @@ def test_spatial_info_matches_file(template_config: NoaaHrrrTemplateConfig) -> N
     assert resolution == ds.rio.resolution()
     assert crs == ds.rio.crs.to_proj4()
 
-    # Below, we can't call get_template because it will try to read the template from disk, which we don't have. Instead, call template_config.coords and check the attributes on the coord with name spatial_ref AI!
-
     # Test that the attributes stored in the template match the file
-    template_ds = template_config.get_template(pd.Timestamp("2025-01-01"))
+    spatial_ref_coord = next(c for c in template_config.coords if c.name == "spatial_ref")
+    template_attrs = spatial_ref_coord.attrs.model_dump(exclude_none=True)
+    
     # The template has to round trip through JSON so tuples become lists
     assert ds.spatial_ref.attrs["standard_parallel"] == (38.5, 38.5)
     ds.spatial_ref.attrs["standard_parallel"] = list(
@@ -150,4 +150,4 @@ def test_spatial_info_matches_file(template_config: NoaaHrrrTemplateConfig) -> N
         ds.spatial_ref.attrs["GeoTransform"] = (
             "-2699020.142521929 3000.0 0.0 1588193.847443335 0.0 -3000.0"
         )
-    assert ds.spatial_ref.attrs == template_ds.spatial_ref.attrs
+    assert ds.spatial_ref.attrs == template_attrs
