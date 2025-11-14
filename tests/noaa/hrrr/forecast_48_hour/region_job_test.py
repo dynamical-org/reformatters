@@ -43,7 +43,6 @@ def test_region_job_generate_source_file_coords(
     template_config: NoaaHrrrForecast48HourTemplateConfig,
 ) -> None:
     """Test source file coordinate generation."""
-    template_config = NoaaHrrrForecast48HourTemplateConfig()
     template_ds = template_config.get_template(pd.Timestamp("2025-01-01"))
 
     # Create a small subset for testing
