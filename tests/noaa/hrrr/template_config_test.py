@@ -134,9 +134,11 @@ def test_spatial_info_matches_file(template_config: NoaaHrrrTemplateConfig) -> N
     assert crs == ds.rio.crs.to_proj4()
 
     # Test that the attributes stored in the template match the file
-    spatial_ref_coord = next(c for c in template_config.coords if c.name == "spatial_ref")
+    spatial_ref_coord = next(
+        c for c in template_config.coords if c.name == "spatial_ref"
+    )
     template_attrs = spatial_ref_coord.attrs.model_dump(exclude_none=True)
-    
+
     # The template has to round trip through JSON so tuples become lists
     assert ds.spatial_ref.attrs["standard_parallel"] == (38.5, 38.5)
     ds.spatial_ref.attrs["standard_parallel"] = list(
