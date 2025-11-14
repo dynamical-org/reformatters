@@ -12,16 +12,19 @@ from reformatters.noaa.hrrr.region_job import (
     NoaaHrrrRegionJob,
     NoaaHrrrSourceFileCoord,
 )
+from reformatters.noaa.hrrr.template_config import NoaaHrrrTemplateConfig
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
 
 @pytest.fixture
-def template_config() -> NoaaHrrrForecast48HourTemplateConfig:
+def template_config() -> NoaaHrrrTemplateConfig:
+    # Use the Forecast 48 Hour template because we need
+    # a concrete implementation to get data_vars
     return NoaaHrrrForecast48HourTemplateConfig()
 
 
 def test_source_file_coord_get_url(
-    template_config: NoaaHrrrForecast48HourTemplateConfig,
+    template_config: NoaaHrrrTemplateConfig,
 ) -> None:
     """Test URL generation for HRRR source file coordinates."""
     coord = NoaaHrrrSourceFileCoord(
@@ -36,7 +39,7 @@ def test_source_file_coord_get_url(
 
 
 def test_source_file_coord_get_url_different_lead_time(
-    template_config: NoaaHrrrForecast48HourTemplateConfig,
+    template_config: NoaaHrrrTemplateConfig,
 ) -> None:
     """Test URL generation for different lead times."""
     coord = NoaaHrrrSourceFileCoord(
@@ -51,7 +54,7 @@ def test_source_file_coord_get_url_different_lead_time(
 
 
 def test_source_file_coord_get_idx_url(
-    template_config: NoaaHrrrForecast48HourTemplateConfig,
+    template_config: NoaaHrrrTemplateConfig,
 ) -> None:
     """Test index URL generation."""
     coord = NoaaHrrrSourceFileCoord(
@@ -66,7 +69,7 @@ def test_source_file_coord_get_idx_url(
 
 
 def test_source_file_coord_invalid_lead_time(
-    template_config: NoaaHrrrForecast48HourTemplateConfig,
+    template_config: NoaaHrrrTemplateConfig,
 ) -> None:
     """Test that invalid lead times raise appropriate errors."""
     coord = NoaaHrrrSourceFileCoord(
@@ -82,7 +85,7 @@ def test_source_file_coord_invalid_lead_time(
 
 
 def test_region_job_source_groups(
-    template_config: NoaaHrrrForecast48HourTemplateConfig,
+    template_config: NoaaHrrrTemplateConfig,
 ) -> None:
     """Test that data variables are grouped by file type."""
     # Test source grouping with available sfc variables
@@ -96,7 +99,7 @@ def test_region_job_source_groups(
 
 
 def test_region_job_source_groups_multiple_file_types(
-    template_config: NoaaHrrrForecast48HourTemplateConfig,
+    template_config: NoaaHrrrTemplateConfig,
 ) -> None:
     """Test source grouping with variables from different file types."""
     data_vars = template_config.data_vars
@@ -123,7 +126,7 @@ def test_region_job_source_groups_multiple_file_types(
 
 
 def test_region_job_download_file(
-    template_config: NoaaHrrrForecast48HourTemplateConfig,
+    template_config: NoaaHrrrTemplateConfig,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test HRRR file download with mocked network calls."""
@@ -183,7 +186,7 @@ def test_region_job_download_file(
 
 
 def test_region_job_read_data(
-    template_config: NoaaHrrrForecast48HourTemplateConfig,
+    template_config: NoaaHrrrTemplateConfig,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test HRRR data reading with mocked file operations."""
