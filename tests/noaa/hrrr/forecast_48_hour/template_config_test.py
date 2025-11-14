@@ -25,7 +25,6 @@ def test_spatial_coordinates_from_template() -> None:
     assert ds.x.dims == ("x",)
     assert ds.y.dims == ("y",)
 
-    # These checks below read from ds AI
     # Check values in x and y coordinates
     assert len(ds.x) == 1799
     assert (ds.x.diff(dim="x") == 3000.0).all()
