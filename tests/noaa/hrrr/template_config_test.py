@@ -133,6 +133,8 @@ def test_spatial_info_matches_file(template_config: NoaaHrrrTemplateConfig) -> N
     assert resolution == ds.rio.resolution()
     assert crs == ds.rio.crs.to_proj4()
 
+    # Below, we can't call get_template because it will try to read the template from disk, which we don't have. Instead, call template_config.coords and check the attributes on the coord with name spatial_ref AI!
+
     # Test that the attributes stored in the template match the file
     template_ds = template_config.get_template(pd.Timestamp("2025-01-01"))
     # The template has to round trip through JSON so tuples become lists
