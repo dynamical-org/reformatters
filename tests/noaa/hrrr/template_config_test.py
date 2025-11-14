@@ -23,7 +23,21 @@ def template_config() -> NoaaHrrrTemplateConfig:
     )
 
 
-# Write a test for _y_x_coordinates() here that uses the same checks i noted in the forecast_48_hour/template_config_test.py::test_spatial_coordinates_from_template AI!
+def test_y_x_coordinates(template_config: NoaaHrrrTemplateConfig) -> None:
+    """Test that _y_x_coordinates returns expected values."""
+    y_coords, x_coords = template_config._y_x_coordinates()
+
+    # Check x coordinates
+    assert len(x_coords) == 1799
+    assert np.allclose(np.diff(x_coords), 3000.0)
+    assert np.isclose(x_coords.min() - (3000 / 2), -2699020.143)
+    assert np.isclose(x_coords.max() + (3000 / 2), 2697979.857)
+
+    # Check y coordinates
+    assert len(y_coords) == 1059
+    assert np.allclose(np.diff(y_coords), -3000.0)
+    assert np.isclose(y_coords.min() - (3000 / 2), -1588806.153)
+    assert np.isclose(y_coords.max() + (3000 / 2), 1588193.847)
 
 
 def test_spatial_info_matches_file(template_config: NoaaHrrrTemplateConfig) -> None:
