@@ -38,3 +38,5 @@ Common utilities and conventions seek to reduce the amount of unique code requir
 * Try to follow ruff format
 * Don't write error handing code unless I ask for it, nor smooth over exceptions/errors unless they are expected as part of control flow. In general, write code that will raise an exception early if something isn't expected. Enforce important expectations with asserts.
 * Test each module with pytest
+* Use a logger named `log`, use `print` only for temporary debugging
+* Catch specific Exception subclasses unless there's a clear reason to catch a more general exception
