@@ -18,12 +18,6 @@ from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_inde
 def template_config(monkeypatch: pytest.MonkeyPatch) -> NoaaHrrrTemplateConfig:
     from reformatters.common.config_models import DatasetAttributes
 
-    config = NoaaHrrrTemplateConfig(
-        dims=("time", "y", "x"),
-        append_dim="time",
-        append_dim_start=pd.Timestamp("2018-07-13T12:00"),
-        append_dim_frequency=pd.Timedelta("1h"),
-    )
     mock_attrs = DatasetAttributes(
         dataset_id="noaa-hrrr-template",
         dataset_version="0.1.0",
@@ -35,7 +29,19 @@ def template_config(monkeypatch: pytest.MonkeyPatch) -> NoaaHrrrTemplateConfig:
         time_domain="Test",
         time_resolution="1h",
     )
-    monkeypatch.setattr(config, "dataset_attributes", mock_attrs)
+    
+    monkeypatch.setattr(
+        NoaaHrrrTemplateConfig,
+        "dataset_attributes",
+        property(lambda self: mock_attrs)
+    )
+    
+    config = NoaaHrrrTemplateConfig(
+        dims=("time", "y", "x"),
+        append_dim="time",
+        append_dim_start=pd.Timestamp("2018-07-13T12:00"),
+        append_dim_frequency=pd.Timedelta("1h"),
+    )
     return config
 
 
