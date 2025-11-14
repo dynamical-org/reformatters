@@ -12,6 +12,7 @@ from reformatters.noaa.hrrr.region_job import (
     NoaaHrrrRegionJob,
     NoaaHrrrSourceFileCoord,
 )
+from reformatters.noaa.noaa_utils import has_hour_0_values
 
 
 @pytest.fixture
@@ -84,8 +85,6 @@ def test_region_job_source_groups(
     template_config: NoaaHrrrForecast48HourTemplateConfig,
 ) -> None:
     """Test that data variables are grouped by file type."""
-    from reformatters.noaa.noaa_utils import has_hour_0_values
-
     # Test source grouping with available sfc variables
     groups = NoaaHrrrRegionJob.source_groups(template_config.data_vars)
 
