@@ -102,9 +102,7 @@ def template_ds() -> xr.Dataset:
     return _create_template_ds()
 
 
-def _create_template_ds(
-    num_vars: int = 4, var_fill_value: float = np.nan
-) -> xr.Dataset:
+def _create_template_ds(var_fill_value: float = np.nan) -> xr.Dataset:
     num_time = 48
     ds = xr.Dataset(
         {
@@ -123,7 +121,7 @@ def _create_template_ds(
                     "fill_value": var_fill_value,
                 },
             )
-            for i in range(num_vars)
+            for i in range(4)
         },
         coords={
             "time": pd.date_range("2025-01-01", freq="h", periods=num_time),
@@ -171,14 +169,13 @@ def test_region_job(template_ds: xr.Dataset, store_factory: StoreFactory) -> Non
         np.testing.assert_array_equal(data_var.values, expected_values)
 
 
-@pytest.mark.slow
 @pytest.mark.parametrize("var_fill_value", [np.nan, 0.0])
 def test_region_job_empty_chunk_writing(
     store_factory: StoreFactory,
     monkeypatch: pytest.MonkeyPatch,
     var_fill_value: float,
 ) -> None:
-    template_ds = _create_template_ds(num_vars=1, var_fill_value=var_fill_value)
+    template_ds = _create_template_ds(var_fill_value)
 
     tmp_store = get_local_tmp_store()
 
