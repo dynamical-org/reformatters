@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from reformatters.common.config_models import Encoding
+from reformatters.common.config_models import DatasetAttributes, Encoding
 from reformatters.common.download import http_download_to_disk
 from reformatters.noaa.hrrr.forecast_48_hour.region_job import (
     NoaaHrrrSourceFileCoord,
@@ -16,8 +16,6 @@ from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_inde
 
 @pytest.fixture
 def template_config(monkeypatch: pytest.MonkeyPatch) -> NoaaHrrrTemplateConfig:
-    from reformatters.common.config_models import DatasetAttributes
-
     mock_attrs = DatasetAttributes(
         dataset_id="noaa-hrrr-template",
         dataset_version="0.1.0",
