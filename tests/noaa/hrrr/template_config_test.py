@@ -15,15 +15,14 @@ from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_inde
 
 
 @pytest.fixture
-def template_config() -> NoaaHrrrTemplateConfig:
+def template_config(monkeypatch: pytest.MonkeyPatch) -> NoaaHrrrTemplateConfig:
     config = NoaaHrrrTemplateConfig(
         dims=("time", "y", "x"),
         append_dim="time",
         append_dim_start=pd.Timestamp("2018-07-13T12:00"),
         append_dim_frequency=pd.Timedelta("1h"),
     )
-    # this wont work because frozen, we just need the property to return a mock value. fix AI!
-    config.dataset_id = "noaa-hrrr-template"
+    monkeypatch.setattr(config, "dataset_id", "noaa-hrrr-template")
     return config
 
 
