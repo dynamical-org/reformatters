@@ -214,7 +214,7 @@ def test_region_job_read_data(
     rasterio_reader.count = 1
     rasterio_reader.descriptions = ['0[-] EATM="Entire Atmosphere"']
     rasterio_reader.tags = Mock(return_value={"GRIB_ELEMENT": "REFC"})
-    test_data = np.ones((1799, 1059), dtype=np.float32) * 42.0
+    test_data = np.ones((1059, 1799), dtype=np.float32) * 42.0
     rasterio_reader.read = Mock(return_value=test_data)
     monkeypatch.setattr(
         "reformatters.noaa.hrrr.region_job.rasterio.open",
@@ -225,7 +225,7 @@ def test_region_job_read_data(
 
     # Verify the result
     assert np.array_equal(result, test_data)
-    assert result.shape == (1799, 1059)  # HRRR CONUS grid dimensions
+    assert result.shape == (1059, 1799)  # HRRR CONUS grid dimensions (y, x)
     assert result.dtype == np.float32
 
     rasterio_reader.read.assert_called_once_with(1, out_dtype=np.float32)
