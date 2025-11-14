@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.common.config_models import Encoding
 from reformatters.common.download import http_download_to_disk
 from reformatters.noaa.hrrr.forecast_48_hour.region_job import (
     NoaaHrrrSourceFileCoord,
@@ -15,25 +16,25 @@ from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_inde
 
 @pytest.fixture
 def template_config() -> NoaaHrrrTemplateConfig:
-    return NoaaHrrrTemplateConfig(
+    config = NoaaHrrrTemplateConfig(
         dims=("time", "y", "x"),
         append_dim="time",
         append_dim_start=pd.Timestamp("2018-07-13T12:00"),
         append_dim_frequency=pd.Timedelta("1h"),
     )
+    # this wont work because frozen, we just need the property to return a mock value. fix AI!
+    config.dataset_id = "noaa-hrrr-template"
+    return config
 
 
 def test_y_x_coordinates(template_config: NoaaHrrrTemplateConfig) -> None:
-    """Test that _y_x_coordinates returns expected values."""
     y_coords, x_coords = template_config._y_x_coordinates()
 
-    # Check x coordinates
     assert len(x_coords) == 1799
     assert np.allclose(np.diff(x_coords), 3000.0)
     assert np.isclose(x_coords.min() - (3000 / 2), -2699020.143)
     assert np.isclose(x_coords.max() + (3000 / 2), 2697979.857)
 
-    # Check y coordinates
     assert len(y_coords) == 1059
     assert np.allclose(np.diff(y_coords), -3000.0)
     assert np.isclose(y_coords.min() - (3000 / 2), -1588806.153)
@@ -43,17 +44,17 @@ def test_y_x_coordinates(template_config: NoaaHrrrTemplateConfig) -> None:
 def test_latitude_longitude_coordinates(
     template_config: NoaaHrrrTemplateConfig,
 ) -> None:
-    """Test that _latitude_longitude_coordinates returns expected values."""
     y_coords, x_coords = template_config._y_x_coordinates()
     lats, lons = template_config._latitude_longitude_coordinates(x_coords, y_coords)
 
-    # Check shapes
     assert lats.shape == (1059, 1799)
     assert lons.shape == (1059, 1799)
 
     # Check latitude values
     assert lats.min() == 21.138123
     assert np.isclose(lats.mean(), 37.152527)
+    # Note the maximum latitude is in the center north of CONUS, so this
+    # max is larger than either of the upper corners latitudes.
     assert lats.max() == 52.615654
 
     # Check longitude values
@@ -61,12 +62,16 @@ def test_latitude_longitude_coordinates(
     assert np.isclose(lons.mean(), -97.50583)
     assert lons.max() == -60.917194
 
-    # Check latitude differences (decreases north to south)
+    # Check latitude differences
+    # 1. decreasing
+    # 2. the min and max diff should be similar because its roughly evenly spaced
     lat_diff_y = np.diff(lats, axis=0)
     assert np.isclose(lat_diff_y.min(), -0.02698135)
     assert np.isclose(lat_diff_y.max(), -0.0245285)
 
-    # Check longitude differences (increases west to east)
+    # Check longitude differences
+    # 1. increasing
+    # 2. the min and max diff should be similar because its roughly evenly spaced
     lon_diff_x = np.diff(lons, axis=1)
     assert np.isclose(lon_diff_x.min(), 0.02666473)
     assert np.isclose(lon_diff_x.max(), 0.04299164)
@@ -75,13 +80,21 @@ def test_latitude_longitude_coordinates(
 def test_spatial_info_matches_file(template_config: NoaaHrrrTemplateConfig) -> None:
     """Test that hard coded spatial information matches the real values derived from a source file."""
     shape, bounds, resolution, crs = template_config._spatial_info()
+    dummy_encoding = Encoding(
+        dtype="float32",
+        fill_value=0.0,
+        chunks=(2000, 2000),
+        shards=None,
+        compressors=[],
+    )
 
     coord = NoaaHrrrSourceFileCoord(
         init_time=pd.Timestamp("2023-10-01T00:00"),
         lead_time=pd.Timedelta("0h"),
         domain="conus",
         file_type="sfc",
-        data_vars=[template_config.data_vars[0]],  # Any one variable will do
+        # Any single variable will do
+        data_vars=template_config.get_data_vars(dummy_encoding)[:1],
     )
     idx_local_path = http_download_to_disk(
         coord.get_idx_url(), template_config.dataset_id
