@@ -107,6 +107,9 @@ def check_forecast_recent_nans(
 
     problem_vars = []
     for var_name, sample_da in sample_ds.data_vars.items():
+        # Create a deep copy to avoid sharing memory with the original dataset
+        # We observed that this helps avoid memory leaks as we iterate and check
+        # nulls across variables.
         da = sample_da.copy(deep=True)
         nan_percentage = da.isnull().mean().compute() * 100
         if nan_percentage > max_nan_percentage:
@@ -249,6 +252,7 @@ def compare_replica_and_primary(
             if dim_name != append_dim
         }
 
+        # We create deep copies here to avoid sharing memory with the original dataset
         replica_ds_last_chunk = (
             replica_ds[var]
             .isel({append_dim: last_chunk, **non_append_dim_slices})
