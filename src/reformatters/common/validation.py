@@ -47,18 +47,20 @@ def validate_dataset(
     """
     log.info(f"Validating zarr {store}")
 
-    # Open dataset
-    ds = xr.open_zarr(store, chunks=None)
-
     # Run all validators
     failed_validations = []
     for validator in validators:
+        ds = xr.open_zarr(store, chunks=None)
+
         result = validator(ds)
         if not result.passed:
             log.error(f"Failed validation: {result.message}")
             failed_validations.append(result.message)
         else:
             log.info(f"Passed validation: {result.message}")
+
+        ds.close()
+        del ds
 
     if failed_validations:
         raise ValueError(
@@ -108,6 +110,8 @@ def check_forecast_recent_nans(
         nan_percentage = da.isnull().mean().compute() * 100
         if nan_percentage > max_nan_percentage:
             problem_vars.append((var_name, nan_percentage))
+        da.close()
+        del da
 
     if problem_vars:
         message = "Excessive NaN values found:\n"
@@ -226,9 +230,30 @@ def compare_replica_and_primary(
 
     last_chunk = iterating.dimension_slices(primary_ds, append_dim, "chunks")[-1]
     problem_vars = []
+
+    window_size = 100
+
+    rng = np.random.default_rng()
+
     for var in variables_to_check:
-        replica_ds_last_chunk = replica_ds[var].isel({append_dim: last_chunk})
-        primary_ds_last_chunk = primary_ds[var].isel({append_dim: last_chunk})
+        # Create random slices of `window_size` along non-append dimensions
+        non_append_dim_slices = {
+            dim_name: slice(
+                *(
+                    start := int(rng.integers(0, max(1, dim_size - window_size - 1))),
+                    start + window_size,
+                )
+            )
+            for dim_name, dim_size in replica_ds.dims.items()
+            if dim_name != append_dim
+        }
+
+        replica_ds_last_chunk = replica_ds[var].isel(
+            {append_dim: last_chunk, **non_append_dim_slices}
+        )
+        primary_ds_last_chunk = primary_ds[var].isel(
+            {append_dim: last_chunk, **non_append_dim_slices}
+        )
 
         try:
             log.info(f"Comparing {var} in replica and primary stores")
@@ -236,6 +261,11 @@ def compare_replica_and_primary(
         except AssertionError as e:
             log.exception(e)
             problem_vars.append(str(var))
+
+        replica_ds_last_chunk.close()
+        primary_ds_last_chunk.close()
+        del replica_ds_last_chunk
+        del primary_ds_last_chunk
 
     if problem_vars:
         return ValidationResult(
