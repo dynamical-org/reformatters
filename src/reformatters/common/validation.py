@@ -106,7 +106,8 @@ def check_forecast_recent_nans(
     )
 
     problem_vars = []
-    for var_name, da in sample_ds.data_vars.items():
+    for var_name, sample_da in sample_ds.data_vars.items():
+        da = sample_da.copy(deep=True)
         nan_percentage = da.isnull().mean().compute() * 100
         if nan_percentage > max_nan_percentage:
             problem_vars.append((var_name, nan_percentage))
@@ -248,11 +249,15 @@ def compare_replica_and_primary(
             if dim_name != append_dim
         }
 
-        replica_ds_last_chunk = replica_ds[var].isel(
-            {append_dim: last_chunk, **non_append_dim_slices}
+        replica_ds_last_chunk = (
+            replica_ds[var]
+            .isel({append_dim: last_chunk, **non_append_dim_slices})
+            .copy(deep=True)
         )
-        primary_ds_last_chunk = primary_ds[var].isel(
-            {append_dim: last_chunk, **non_append_dim_slices}
+        primary_ds_last_chunk = (
+            primary_ds[var]
+            .isel({append_dim: last_chunk, **non_append_dim_slices})
+            .copy(deep=True)
         )
 
         try:
