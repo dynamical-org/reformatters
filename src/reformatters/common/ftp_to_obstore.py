@@ -61,6 +61,7 @@ async def copy_files_from_ftp_to_obstore(
 
     # Initialise other queues:
     failed_ftp_files: Queue[_FtpFile] = Queue()
+    failed_obstore_files: Queue[_ObstoreFile] = Queue()
 
     # Set maxsize of Queue to apply back-pressure to the FTP workers.
     obstore_queue: Queue[_ObstoreFile] = Queue(maxsize=n_obstore_workers * 2)
@@ -79,16 +80,21 @@ async def copy_files_from_ftp_to_obstore(
             )
 
         for worker_id in range(n_obstore_workers):
-            tg.create_task(_obstore_worker(worker_id, dst_store, obstore_queue))
+            tg.create_task(
+                _obstore_worker(
+                    worker_id, dst_store, obstore_queue, failed_obstore_files
+                )
+            )
 
         log.info("await _ftp_queue.join()")
         await ftp_queue.join()
         log.info("joined _ftp_queue!")
         obstore_queue.shutdown()
 
-    if failed_ftp_files.empty():
-        log.info("Good news: No failed FTP files!")
+    if failed_ftp_files.empty() and failed_obstore_files.empty():
+        log.info("Good news: No failed files!")
     else:
+        # Process failed FTP files
         while True:
             try:
                 ftp_file: _FtpFile = failed_ftp_files.get_nowait()
@@ -97,6 +103,20 @@ async def copy_files_from_ftp_to_obstore(
             else:
                 log.error("Failed FTP file: %s", ftp_file)
                 failed_ftp_files.task_done()
+
+        # Process failed Obstore files
+        while True:
+            try:
+                obstore_file: _ObstoreFile = failed_obstore_files.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            else:
+                log.error(
+                    "Failed Obstore file: %s. Obstore errors: %s",
+                    obstore_file.ftp_file,
+                    obstore_file.obstore_errors,
+                )
+                failed_obstore_files.task_done()
 
 
 async def _ftp_worker(
@@ -213,6 +233,8 @@ async def _obstore_worker(
     worker_id: int,
     store: ObjectStore,
     obstore_queue: asyncio.Queue[_ObstoreFile],
+    failed_obstore_files: asyncio.Queue[_ObstoreFile],
+    max_retries: int = 5,
 ) -> None:
     """Obstores are designed to work concurrently, so we can share one
     `obstore` between tasks."""
@@ -226,16 +248,38 @@ async def _obstore_worker(
             break
 
         dst_path = obstore_file.ftp_file.dst_obstore_path
-        await store.put_async(dst_path, obstore_file.data)
-        obstore_queue.task_done()
-        log.info(
-            "%s Done writing to %s after %d retries.",
-            worker_id_str,
-            dst_path,
-            obstore_file.n_retries,
-        )
-
-        # TODO(Jack): Handle retries
+        try:
+            await store.put_async(dst_path, obstore_file.data)
+        except Exception as e:  # noqa: BLE001
+            # Catching a broad Exception here is intentional, as obstore can raise various
+            # exceptions (network, permission, etc.), and we want to retry on any failure
+            # to write to the object store.
+            obstore_file.obstore_errors.append(e)
+            if obstore_file.n_retries < max_retries:
+                obstore_file.n_retries += 1
+                log.warning(
+                    "%s WARNING: Putting obstore_file back on queue to retry later. Error: %s",
+                    worker_id_str,
+                    e,
+                )
+                await obstore_queue.put(obstore_file)
+            else:
+                log.error(
+                    "%s ERROR: Giving up on obstore_file after %d retries. Error: %s",
+                    worker_id_str,
+                    max_retries,
+                    e,
+                )
+                await failed_obstore_files.put(obstore_file)
+        else:
+            log.info(
+                "%s Finished writing to %s after %d retries.",
+                worker_id_str,
+                dst_path,
+                obstore_file.n_retries,
+            )
+        finally:
+            obstore_queue.task_done()
 
 
 def _log_ftp_exception(
