@@ -9,10 +9,10 @@ throughput. Maximising throughput for a single virtual machine should minimise c
 Instead of manually programming two threadpools, the code uses an `asyncio.TaskGroup` containing
 a set of `ftp_worker`s and a set of `obstore_worker`s.
 
-The code uses two MPMC queues. The first queue passes `FtpTask`s to the `ftp_worker`s. The second
+The code uses two MPMC queues. The first queue passes `_FtpTask`s to the `ftp_worker`s. The second
 queue passes the data payload to the `obstore_worker`s.
 
-Each `ftp_worker` keeps an `aioftp.Client` alive until there are no more `FtpTask`s.
+Each `ftp_worker` keeps an `aioftp.Client` alive until there are no more `_FtpTask`s.
 """
 
 import asyncio
@@ -29,29 +29,22 @@ from reformatters.common.logging import get_logger
 log = get_logger(__name__)
 
 
-@dataclass
-class FtpFile:
-    src_ftp_path: PurePosixPath
-    dst_obstore_path: str
-    n_retries: int = field(default=0, init=False)
-    ftp_errors: list[Exception] = field(default_factory=list, init=False)
-
-
 async def copy_files_from_ftp_to_obstore(
     ftp_host: str,
-    files: Iterable[FtpFile],
+    src_ftp_paths: Iterable[PurePosixPath],
+    dst_obstore_paths: Iterable[str],
     dst_store: ObjectStore,
     n_ftp_workers: int = 8,
     n_obstore_workers: int = 8,
 ) -> None:
     """Copy files from an FTP server to obstore."""
-    # Copy FtpFile objects to the ftp_queue:
-    ftp_queue: Queue[FtpFile] = Queue()
-    for ftp_file in files:
-        ftp_queue.put_nowait(ftp_file)
+    # Copy _FtpTask objects to the ftp_queue:
+    ftp_queue: Queue[_FtpTask] = Queue()
+    for src, dst in zip(src_ftp_paths, dst_obstore_paths, strict=True):
+        ftp_queue.put_nowait(_FtpTask(src, dst))
 
     # Initialise other queues:
-    failed_ftp_tasks: Queue[FtpFile] = Queue()
+    failed_ftp_tasks: Queue[_FtpTask] = Queue()
 
     # Set maxsize of Queue to apply back-pressure to the FTP workers.
     obstore_queue: Queue[_ObstoreFile] = Queue(maxsize=n_obstore_workers * 2)
@@ -82,12 +75,20 @@ async def copy_files_from_ftp_to_obstore(
     else:
         while True:
             try:
-                ftp_task: FtpFile = failed_ftp_tasks.get_nowait()
+                ftp_task: _FtpTask = failed_ftp_tasks.get_nowait()
             except asyncio.QueueEmpty:
                 break
             else:
                 log.error("Failed FTP task: %s", ftp_task)
                 failed_ftp_tasks.task_done()
+
+
+@dataclass
+class _FtpTask:
+    src_ftp_path: PurePosixPath
+    dst_obstore_path: str
+    n_retries: int = field(default=0, init=False)
+    ftp_errors: list[Exception] = field(default_factory=list, init=False)
 
 
 @dataclass
@@ -100,9 +101,9 @@ class _ObstoreFile:
 async def _ftp_worker(
     worker_id: int,
     ftp_host: str,
-    ftp_queue: asyncio.Queue[FtpFile],
+    ftp_queue: asyncio.Queue[_FtpTask],
     obstore_queue: asyncio.Queue[_ObstoreFile],
-    failed_ftp_tasks: asyncio.Queue[FtpFile],
+    failed_ftp_tasks: asyncio.Queue[_FtpTask],
     max_retries: int = 5,
 ) -> None:
     """A worker that keeps a single FTP connection alive and processes queue
@@ -160,15 +161,15 @@ async def _ftp_worker(
 async def _process_ftp_queue(
     worker_id_str: str,
     ftp_client: aioftp.Client,
-    ftp_queue: asyncio.Queue[FtpFile],
+    ftp_queue: asyncio.Queue[_FtpTask],
     obstore_queue: asyncio.Queue[_ObstoreFile],
-    failed_ftp_tasks: asyncio.Queue[FtpFile],
+    failed_ftp_tasks: asyncio.Queue[_FtpTask],
     max_retries: int,
 ) -> None:
     """Process the FTP queue using an active FTP client."""
     while True:  # Loop through items in ftp_queue.
         try:
-            ftp_task: FtpFile = ftp_queue.get_nowait()
+            ftp_task: _FtpTask = ftp_queue.get_nowait()
         except asyncio.QueueEmpty:
             log.info("%s ftp_queue is empty. Finishing.", worker_id_str)
             return
@@ -236,7 +237,7 @@ async def _obstore_worker(
 
 
 def _log_ftp_exception(
-    ftp_task: FtpFile, e: aioftp.StatusCodeError, ftp_worker_id_str: str
+    ftp_task: _FtpTask, e: aioftp.StatusCodeError, ftp_worker_id_str: str
 ) -> None:
     error_str = f"{ftp_worker_id_str} "
     # Check if the file is missing from the FTP server:
