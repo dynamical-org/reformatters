@@ -52,6 +52,7 @@ async def copy_files_from_ftp_to_obstore(
     dst_store: ObjectStore,
     n_ftp_workers: int = 8,
     n_obstore_workers: int = 8,
+    ftp_port: int = 21,
 ) -> None:
     """Copy files from an FTP server to obstore."""
     # Copy _FtpFile objects to the ftp_queue:
@@ -73,6 +74,7 @@ async def copy_files_from_ftp_to_obstore(
                 _ftp_worker(
                     worker_id=worker_id,
                     ftp_host=ftp_host,
+                    ftp_port=ftp_port,
                     ftp_queue=ftp_queue,
                     obstore_queue=obstore_queue,
                     failed_ftp_files=failed_ftp_files,
@@ -122,6 +124,7 @@ async def copy_files_from_ftp_to_obstore(
 async def _ftp_worker(
     worker_id: int,
     ftp_host: str,
+    ftp_port: int,
     ftp_queue: asyncio.Queue[_FtpFile],
     obstore_queue: asyncio.Queue[_ObstoreFile],
     failed_ftp_files: asyncio.Queue[_FtpFile],
@@ -140,7 +143,7 @@ async def _ftp_worker(
     # This outer loop exists to retry if the FTP *connection* fails.
     for retry_attempt in range(max_retries):
         try:
-            async with aioftp.Client.context(ftp_host) as ftp_client:
+            async with aioftp.Client.context(ftp_host, port=ftp_port) as ftp_client:
                 log.info("%s Connection established and logged in.", worker_id_str)
                 await _process_ftp_queue(
                     worker_id_str,
