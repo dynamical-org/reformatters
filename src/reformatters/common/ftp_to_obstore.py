@@ -103,48 +103,108 @@ async def _ftp_worker(
     ftp_queue: asyncio.Queue[FtpFile],
     obstore_queue: asyncio.Queue[_ObstoreFile],
     failed_ftp_tasks: asyncio.Queue[FtpFile],
-    max_retries: int = 3,
+    max_retries: int = 5,
 ) -> None:
     """A worker that keeps a single FTP connection alive and processes queue
-    items."""
+    items.
+
+    Reconnects on failure.
+    """
     worker_id_str: str = f"ftp_worker {worker_id}:"
     log.info("%s Starting up...", worker_id_str)
+    if max_retries < 1:
+        raise ValueError(f"max_retries must be > 0, not {max_retries}!")
 
-    # Establish the persistent client connection
-    async with aioftp.Client.context(ftp_host) as ftp_client:
-        log.info("%s Connection established and logged in.", worker_id_str)
-
-        # Start continuous processing loop
-        while True:
-            try:
-                ftp_task: FtpFile = ftp_queue.get_nowait()
-            except asyncio.QueueEmpty:
-                log.info("%s ftp_queue is empty. Finishing.", worker_id_str)
+    # This outer loop exists to retry if the FTP *connection* fails.
+    for retry_attempt in range(max_retries):
+        try:
+            async with aioftp.Client.context(ftp_host) as ftp_client:
+                log.info("%s Connection established and logged in.", worker_id_str)
+                await _process_ftp_queue(
+                    worker_id_str,
+                    ftp_client,
+                    ftp_queue,
+                    obstore_queue,
+                    failed_ftp_tasks,
+                    max_retries,
+                )
+        except (TimeoutError, OSError, aioftp.StatusCodeError) as e:
+            is_last_attempt = retry_attempt == max_retries - 1
+            log.warning(
+                "%s FTP Connection error after %d connection retries: %s",
+                worker_id_str,
+                retry_attempt,
+                e,
+            )
+            if ftp_queue.empty():
+                log.info(
+                    "%s Connection failed but ftp_queue is empty. Finishing.",
+                    worker_id_str,
+                )
                 break
-
-            log.info("%s Attempting to download ftp_task=%s", worker_id_str, ftp_task)
-
-            try:
-                async with ftp_client.download_stream(ftp_task.src_ftp_path) as stream:
-                    data = await stream.read()
-            except aioftp.StatusCodeError as e:
-                ftp_task.ftp_errors.append(e)
-                _log_ftp_exception(ftp_task, e, worker_id_str)
-                if ftp_task.n_retries < max_retries:
-                    ftp_task.n_retries += 1
-                    log.warning(
-                        "%s WARNING: Putting ftp_task back on queue to retry later.",
-                        worker_id_str,
-                    )
-                    await ftp_queue.put(ftp_task)
-                else:
-                    log.error("%s ERROR: Giving up on ftp_task", worker_id_str)
-                    await failed_ftp_tasks.put(ftp_task)
+            elif is_last_attempt:
+                msg = (
+                    f"{worker_id_str} FTP connection failed after {max_retries} attempts to"
+                    f" re-connect. FTP worker {worker_id} is giving up. There are files still on"
+                    " the `ftp_queue`. Some files may not be copied!"
+                )
+                log.error(msg)
+                raise Exception(msg) from e
             else:
-                log.info("%s Finished downloading ftp_task=%s", worker_id_str, ftp_task)
-                await obstore_queue.put(_ObstoreFile(data, ftp_task.dst_obstore_path))
-            finally:
-                ftp_queue.task_done()
+                log.warning("%s Reconnecting in 5s...", worker_id_str)
+                await asyncio.sleep(5)
+        else:
+            break  # All done!
+
+
+async def _process_ftp_queue(
+    worker_id_str: str,
+    ftp_client: aioftp.Client,
+    ftp_queue: asyncio.Queue[FtpFile],
+    obstore_queue: asyncio.Queue[_ObstoreFile],
+    failed_ftp_tasks: asyncio.Queue[FtpFile],
+    max_retries: int,
+) -> None:
+    """Process the FTP queue using an active FTP client."""
+    while True:  # Loop through items in ftp_queue.
+        try:
+            ftp_task: FtpFile = ftp_queue.get_nowait()
+        except asyncio.QueueEmpty:
+            log.info("%s ftp_queue is empty. Finishing.", worker_id_str)
+            return
+
+        log.info("%s Attempting to download ftp_task=%s", worker_id_str, ftp_task)
+
+        try:
+            async with ftp_client.download_stream(ftp_task.src_ftp_path) as stream:
+                data = await stream.read()
+        except (TimeoutError, OSError):
+            log.warning(
+                "%s Connection lost processing ftp_task=%s. Re-queueing.",
+                worker_id_str,
+                ftp_task,
+            )
+            await ftp_queue.put(ftp_task)
+            ftp_queue.task_done()
+            raise  # Re-raise to trigger reconnection in _ftp_worker
+        except aioftp.StatusCodeError as e:
+            ftp_task.ftp_errors.append(e)
+            _log_ftp_exception(ftp_task, e, worker_id_str)
+            if ftp_task.n_retries < max_retries:
+                ftp_task.n_retries += 1
+                log.warning(
+                    "%s WARNING: Putting ftp_task back on queue to retry later.",
+                    worker_id_str,
+                )
+                await ftp_queue.put(ftp_task)
+            else:
+                log.error("%s ERROR: Giving up on ftp_task", worker_id_str)
+                await failed_ftp_tasks.put(ftp_task)
+            ftp_queue.task_done()
+        else:
+            log.info("%s Finished downloading ftp_task=%s", worker_id_str, ftp_task)
+            await obstore_queue.put(_ObstoreFile(data, ftp_task.dst_obstore_path))
+            ftp_queue.task_done()
 
 
 async def _obstore_worker(
