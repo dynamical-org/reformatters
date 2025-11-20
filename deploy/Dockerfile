@@ -17,7 +17,7 @@ apt-get install -qyy \
     build-essential \
     ca-certificates \
     python3-setuptools \
-    python3.12-dev \
+    python3.13-dev \
     build-essential \
     gcc \
     gdal-bin \
@@ -34,7 +34,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 ENV UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never \
-    UV_PYTHON=python3.12 \
+    UV_PYTHON=python3.13 \
     UV_PROJECT_ENVIRONMENT=/app 
 
 
@@ -101,8 +101,8 @@ RUN <<EOT
 apt-get update -qy
 apt-get install -qyy \
     -o APT::Install-Suggests=false \
-    python3.12 \
-    libpython3.12 \
+    python3.13 \
+    libpython3.13 \
     libgdal-dev \
 
 apt-get clean
