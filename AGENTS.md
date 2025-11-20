@@ -33,7 +33,7 @@ Common utilities and conventions seek to reduce the amount of unique code requir
 * Write code that explains itself rather than needs comments
 * Add only extremely minimal code comments and no docstrings unless I ask for them, but don't remove existing comments
   * Add comments only when doing things out of the ordinary, to highlight gotchas, or if less clear code is required due to an optimization
-* Use Python 3.12+ features
+* Use Python 3.13+ features
 * Follow mypy strict mode. If you need to add an ignore, ignore a specific check like `# type: ignore[specific]`. Always annotate types on all function arguments and return types.
 * Try to follow ruff format
 * Don't write error handing code unless I ask for it, nor smooth over exceptions/errors unless they are expected as part of control flow. In general, write code that will raise an exception early if something isn't expected. Enforce important expectations with asserts.
