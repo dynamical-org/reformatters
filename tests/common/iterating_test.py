@@ -47,7 +47,7 @@ def test_item_zero() -> None:
 def test_consume() -> None:
     yielded_values = []
 
-    def gen() -> Generator[int, None, None]:
+    def gen() -> Generator[int]:
         for i in range(10):
             yielded_values.append(i)
             yield i
@@ -59,7 +59,7 @@ def test_consume() -> None:
 def test_consume_n() -> None:
     yielded_values = []
 
-    def gen() -> Generator[int, None, None]:
+    def gen() -> Generator[int]:
         for i in range(10):
             yielded_values.append(i)
             yield i

@@ -19,7 +19,7 @@ log = get_logger(__name__)
 
 
 @contextmanager
-def make_shared_buffer(ds: xr.Dataset) -> Generator[SharedMemory, None, None]:
+def make_shared_buffer(ds: xr.Dataset) -> Generator[SharedMemory]:
     """
     Context manager to create and manage a shared memory buffer sized to fit the largest variable in the dataset.
 

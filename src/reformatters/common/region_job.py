@@ -595,7 +595,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         return [
             tuple(split_group)
             for group in data_var_groups
-            for split_group in batched(group, batch_size)
+            for split_group in batched(group, batch_size, strict=False)
         ]
 
     def _download_processing_group(

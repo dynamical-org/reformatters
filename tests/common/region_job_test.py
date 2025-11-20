@@ -58,7 +58,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoords]):
         cls,
         data_vars: Sequence[ExampleDataVar],
     ) -> Sequence[Sequence[ExampleDataVar]]:
-        return list(batched(data_vars, 3))
+        return list(batched(data_vars, 3, strict=False))
 
     def generate_source_file_coords(
         self,
