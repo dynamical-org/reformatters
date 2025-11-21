@@ -52,8 +52,20 @@ async def copy_files_from_ftp_to_obstore(
     n_obstore_workers: int = 8,
     ftp_port: int = 21,
 ) -> None:
-    """Copy files from an FTP server to obstore."""
-    # Copy _FtpFile objects to the ftp_queue:
+    """Copy files from an FTP server to obstore.
+
+    Args:
+        ftp_host: The FTP host URL, e.g. "opendata.dwd.de"
+        src_ftp_paths: A list of the FTP files to download from the FTP server.
+            Must be the same length as `dst_obstore_paths`.
+        dst_obstore_paths: A list of obstore locations to save.
+            Must be the same length as `src_ftp_paths`.
+        dst_store: The destination `ObjectStore`.
+        n_ftp_workers: The number of concurrent FTP workers.
+        n_obstore_workers: The number of concurrent `obstore` workers.
+        ftp_port: The port for FTP connections.
+    """
+    # Put _FtpFile objects on the ftp_queue:
     ftp_queue: Queue[_FtpFile] = Queue()
     for src, dst in zip(src_ftp_paths, dst_obstore_paths, strict=True):
         ftp_queue.put_nowait(_FtpFile(src, dst))
@@ -101,6 +113,16 @@ async def _ftp_worker(
     items.
 
     Reconnects on failure.
+
+    Args:
+        worker_id: The unique ID of this FTP worker.
+        ftp_host: The FTP host URL, e.g. "opendata.dwd.de"
+        ftp_port: The port for FTP connections.
+        ftp_queue: The MPMC queue of files to download. Shared across FTP workers.
+            This is the input to the FTP workers.
+        obstore_queue: The MPMC queue of bytes that have been downloaded, and their destination
+            paths on object storage. This is the output of the FTP workers.
+        max_retries: The maximum number of times to try downloading each FTP file before giving up.
     """
     worker_id_str: str = f"ftp_worker {worker_id}:"
     log.info("%s Starting up...", worker_id_str)
@@ -160,7 +182,17 @@ async def _process_ftp_queue(
     obstore_queue: asyncio.Queue[_ObstoreFile],
     max_retries: int,
 ) -> None:
-    """Process the FTP queue using an active FTP client."""
+    """Process the FTP queue using an active FTP client.
+
+    Args:
+        worker_id_str: The unique ID of this FTP worker.
+        ftp_client: The open FTP connection.
+        ftp_queue: The MPMC queue of files to download. Shared across FTP workers.
+            This is the input to the FTP workers.
+        obstore_queue: The MPMC queue of bytes that have been downloaded, and their destination
+            paths on object storage. This is the output of the FTP workers.
+        max_retries: The maximum number of times to try downloading each FTP file before giving up.
+    """
     while True:  # Loop through items in ftp_queue.
         try:
             ftp_file: _FtpFile = ftp_queue.get_nowait()
@@ -207,7 +239,15 @@ async def _obstore_worker(
     max_retries: int = 5,
 ) -> None:
     """Obstores are designed to work concurrently, so we can share one
-    `obstore` between tasks."""
+    `obstore` between tasks.
+
+    Args:
+        worker_id: The unique ID of this obstore worker.
+        store: The `ObjectStore` to save files to.
+        obstore_queue: The MPMC queue of bytes that have been downloaded, and their destination
+            paths on object storage. This is the input to the obstore workers.
+        max_retries: The maximum number of times to try saving each file before giving up.
+    """
     worker_id_str: str = f"obstore_worker {worker_id}:"
     log.info("%s Obstore worker starting up.", worker_id_str)
     while True:
