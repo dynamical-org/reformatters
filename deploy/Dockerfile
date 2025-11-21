@@ -8,9 +8,13 @@ FROM ubuntu:noble AS build
 SHELL ["sh", "-exc"]
 
 ### Start Build Prep.
-# The gdal & build-essential/gcc packages are needed to compile numcodecs on ARM64.
+# - Deadsnakes PPA to get newer python versions
+# - gdal & build-essential/gcc packages are needed to compile numcodecs on ARM64.
 RUN <<EOT
-apt-get update -qy
+apt-get update -qy && \
+apt-get install -y software-properties-common && \
+add-apt-repository ppa:deadsnakes/ppa && \
+apt-get update -qy && \
 apt-get install -qyy \
     -o APT::Install-Recommends=false \
     -o APT::Install-Suggests=false \
@@ -75,7 +79,6 @@ RUN --mount=type=cache,target=/root/.cache \
         --no-deps \
         /src
 
-
 ##########################################################################
 
 FROM ubuntu:noble
@@ -93,6 +96,18 @@ EOT
 ENTRYPOINT ["python", "src/reformatters/__main__.py"]
 # See <https://hynek.me/articles/docker-signals/>.
 STOPSIGNAL SIGINT
+
+# Install ca-certificates before copying over deadsnakes PPA sources, otherwise the
+# apt update from the deadsnakes PPA can't verify HTTPS.
+RUN <<EOT
+apt-get update -qy && \
+apt-get install -qyy \
+    -o APT::Install-Suggests=false \
+    ca-certificates
+EOT
+
+# Copy the deadsnakes PPA sources file including embedded GPG key
+COPY --from=build /etc/apt/sources.list.d/deadsnakes-ubuntu-ppa-noble.sources /etc/apt/sources.list.d/
 
 # Note how the runtime dependencies differ from build-time ones.
 # Notably, there is no uv either!
