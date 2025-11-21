@@ -34,7 +34,6 @@ class _FtpFile:
     src_ftp_path: PurePosixPath
     dst_obstore_path: str
     n_retries: int = field(default=0, init=False)
-    ftp_errors: list[Exception] = field(default_factory=list, init=False)
 
 
 @dataclass
@@ -42,7 +41,6 @@ class _ObstoreFile:
     ftp_file: _FtpFile
     data: bytes
     n_retries: int = field(default=0, init=False)
-    obstore_errors: list[Exception] = field(default_factory=list, init=False)
 
 
 async def copy_files_from_ftp_to_obstore(
@@ -60,10 +58,6 @@ async def copy_files_from_ftp_to_obstore(
     for src, dst in zip(src_ftp_paths, dst_obstore_paths, strict=True):
         ftp_queue.put_nowait(_FtpFile(src, dst))
 
-    # Initialise other queues:
-    failed_ftp_files: Queue[_FtpFile] = Queue()
-    failed_obstore_files: Queue[_ObstoreFile] = Queue()
-
     # Set maxsize of Queue to apply back-pressure to the FTP workers.
     obstore_queue: Queue[_ObstoreFile] = Queue(maxsize=n_obstore_workers * 2)
 
@@ -77,14 +71,15 @@ async def copy_files_from_ftp_to_obstore(
                     ftp_port=ftp_port,
                     ftp_queue=ftp_queue,
                     obstore_queue=obstore_queue,
-                    failed_ftp_files=failed_ftp_files,
                 )
             )
 
         for worker_id in range(n_obstore_workers):
             tg.create_task(
                 _obstore_worker(
-                    worker_id, dst_store, obstore_queue, failed_obstore_files
+                    worker_id,
+                    dst_store,
+                    obstore_queue,
                 )
             )
 
@@ -93,33 +88,6 @@ async def copy_files_from_ftp_to_obstore(
         log.info("joined _ftp_queue!")
         obstore_queue.shutdown()
 
-    if failed_ftp_files.empty() and failed_obstore_files.empty():
-        log.info("Good news: No failed files!")
-    else:
-        # Process failed FTP files
-        while True:
-            try:
-                ftp_file: _FtpFile = failed_ftp_files.get_nowait()
-            except asyncio.QueueEmpty:
-                break
-            else:
-                log.error("Failed FTP file: %s", ftp_file)
-                failed_ftp_files.task_done()
-
-        # Process failed Obstore files
-        while True:
-            try:
-                obstore_file: _ObstoreFile = failed_obstore_files.get_nowait()
-            except asyncio.QueueEmpty:
-                break
-            else:
-                log.error(
-                    "Failed Obstore file: %s. Obstore errors: %s",
-                    obstore_file.ftp_file,
-                    obstore_file.obstore_errors,
-                )
-                failed_obstore_files.task_done()
-
 
 async def _ftp_worker(
     worker_id: int,
@@ -127,7 +95,6 @@ async def _ftp_worker(
     ftp_port: int,
     ftp_queue: asyncio.Queue[_FtpFile],
     obstore_queue: asyncio.Queue[_ObstoreFile],
-    failed_ftp_files: asyncio.Queue[_FtpFile],
     max_retries: int = 5,
 ) -> None:
     """A worker that keeps a single FTP connection alive and processes queue
@@ -150,7 +117,6 @@ async def _ftp_worker(
                     ftp_client,
                     ftp_queue,
                     obstore_queue,
-                    failed_ftp_files,
                     max_retries,
                 )
         except (TimeoutError, OSError, aioftp.StatusCodeError) as e:
@@ -187,7 +153,6 @@ async def _process_ftp_queue(
     ftp_client: aioftp.Client,
     ftp_queue: asyncio.Queue[_FtpFile],
     obstore_queue: asyncio.Queue[_ObstoreFile],
-    failed_ftp_files: asyncio.Queue[_FtpFile],
     max_retries: int,
 ) -> None:
     """Process the FTP queue using an active FTP client."""
@@ -213,7 +178,6 @@ async def _process_ftp_queue(
             ftp_queue.task_done()
             raise  # Re-raise to trigger reconnection in _ftp_worker
         except aioftp.StatusCodeError as e:
-            ftp_file.ftp_errors.append(e)
             _log_ftp_exception(ftp_file, e, worker_id_str)
             if ftp_file.n_retries < max_retries:
                 ftp_file.n_retries += 1
@@ -224,7 +188,6 @@ async def _process_ftp_queue(
                 await ftp_queue.put(ftp_file)
             else:
                 log.error("%s ERROR: Giving up on ftp_file", worker_id_str)
-                await failed_ftp_files.put(ftp_file)
             ftp_queue.task_done()
         else:
             log.info("%s Finished downloading ftp_file=%s", worker_id_str, ftp_file)
@@ -236,7 +199,6 @@ async def _obstore_worker(
     worker_id: int,
     store: ObjectStore,
     obstore_queue: asyncio.Queue[_ObstoreFile],
-    failed_obstore_files: asyncio.Queue[_ObstoreFile],
     max_retries: int = 5,
 ) -> None:
     """Obstores are designed to work concurrently, so we can share one
@@ -257,7 +219,6 @@ async def _obstore_worker(
             # Catching a broad Exception here is intentional, as obstore can raise various
             # exceptions (network, permission, etc.), and we want to retry on any failure
             # to write to the object store.
-            obstore_file.obstore_errors.append(e)
             if obstore_file.n_retries < max_retries:
                 obstore_file.n_retries += 1
                 log.warning(
@@ -273,7 +234,6 @@ async def _obstore_worker(
                     max_retries,
                     e,
                 )
-                await failed_obstore_files.put(obstore_file)
         else:
             log.info(
                 "%s Finished writing to %s after %d retries.",
