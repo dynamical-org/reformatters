@@ -83,9 +83,9 @@ async def copy_files_from_ftp_to_obstore(
                 )
             )
 
-        log.info("await _ftp_queue.join()")
+        log.debug("await _ftp_queue.join()")
         await ftp_queue.join()
-        log.info("joined _ftp_queue!")
+        log.debug("joined _ftp_queue!")
         obstore_queue.shutdown()
 
 
@@ -111,7 +111,12 @@ async def _ftp_worker(
     for retry_attempt in range(max_retries):
         try:
             async with aioftp.Client.context(ftp_host, port=ftp_port) as ftp_client:
-                log.info("%s Connection established and logged in.", worker_id_str)
+                log.info(
+                    "%s Connection established and logged in to %s port %d.",
+                    worker_id_str,
+                    ftp_host,
+                    ftp_port,
+                )
                 await _process_ftp_queue(
                     worker_id_str,
                     ftp_client,
@@ -128,7 +133,7 @@ async def _ftp_worker(
                 e,
             )
             if ftp_queue.empty():
-                log.info(
+                log.warning(
                     "%s Connection failed but ftp_queue is empty. Finishing.",
                     worker_id_str,
                 )
@@ -204,12 +209,12 @@ async def _obstore_worker(
     """Obstores are designed to work concurrently, so we can share one
     `obstore` between tasks."""
     worker_id_str: str = f"obstore_worker {worker_id}:"
+    log.debug("%s Obstore worker starting up.", worker_id_str)
     while True:
-        log.info("%s Getting obstore task", worker_id_str)
         try:
             obstore_file: _ObstoreFile = await obstore_queue.get()
         except asyncio.QueueShutDown:
-            log.info("%s obstore_queue has shut down!", worker_id_str)
+            log.info("%s obstore_queue has shut down. Worker exiting.", worker_id_str)
             break
 
         dst_path = obstore_file.ftp_file.dst_obstore_path
@@ -219,20 +224,24 @@ async def _obstore_worker(
             # Catching a broad Exception here is intentional, as obstore can raise various
             # exceptions (network, permission, etc.), and we want to retry on any failure
             # to write to the object store.
+            log.warning(
+                "%s Exception thrown whilst sending file to obstore: %s, %s",
+                worker_id_str,
+                obstore_file,
+                e,
+            )
             if obstore_file.n_retries < max_retries:
                 obstore_file.n_retries += 1
                 log.warning(
-                    "%s WARNING: Putting obstore_file back on queue to retry later. Error: %s",
+                    "%s Putting obstore_file back on queue to retry later.",
                     worker_id_str,
-                    e,
                 )
                 await obstore_queue.put(obstore_file)
             else:
                 log.error(
-                    "%s ERROR: Giving up on obstore_file after %d retries. Error: %s",
+                    "%s Giving up on obstore_file after %d retries.",
                     worker_id_str,
                     max_retries,
-                    e,
                 )
         else:
             log.info(
