@@ -134,7 +134,7 @@ async def _ftp_worker(
             )
             if ftp_queue.empty():
                 log.warning(
-                    "%s Connection failed but ftp_queue is empty. Finishing.",
+                    "%s Connection failed but ftp_queue is empty. FTP worker finished.",
                     worker_id_str,
                 )
                 break
@@ -165,10 +165,10 @@ async def _process_ftp_queue(
         try:
             ftp_file: _FtpFile = ftp_queue.get_nowait()
         except asyncio.QueueEmpty:
-            log.info("%s ftp_queue is empty. Finishing.", worker_id_str)
+            log.info("%s ftp_queue is empty. FTP worker finished.", worker_id_str)
             return
 
-        log.info("%s Attempting to download ftp_file=%s", worker_id_str, ftp_file)
+        log.debug("%s Attempting to download %s", worker_id_str, ftp_file.src_ftp_path)
 
         try:
             async with ftp_client.download_stream(ftp_file.src_ftp_path) as stream:
@@ -195,7 +195,7 @@ async def _process_ftp_queue(
                 log.error("%s ERROR: Giving up on ftp_file", worker_id_str)
             ftp_queue.task_done()
         else:
-            log.info("%s Finished downloading ftp_file=%s", worker_id_str, ftp_file)
+            log.info("%s Finished downloading %s", worker_id_str, ftp_file.src_ftp_path)
             await obstore_queue.put(_ObstoreFile(ftp_file=ftp_file, data=data))
             ftp_queue.task_done()
 
@@ -209,7 +209,7 @@ async def _obstore_worker(
     """Obstores are designed to work concurrently, so we can share one
     `obstore` between tasks."""
     worker_id_str: str = f"obstore_worker {worker_id}:"
-    log.debug("%s Obstore worker starting up.", worker_id_str)
+    log.info("%s Obstore worker starting up.", worker_id_str)
     while True:
         try:
             obstore_file: _ObstoreFile = await obstore_queue.get()
