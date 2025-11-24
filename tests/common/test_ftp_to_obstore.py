@@ -3,9 +3,11 @@ import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path, PurePosixPath
+from unittest.mock import patch
 
 import aioftp
 import obstore
+import pytest
 
 from reformatters.common.ftp_to_obstore import copy_files_from_ftp_to_obstore
 
@@ -42,7 +44,7 @@ async def ftp_server_context() -> AsyncIterator[tuple[str, int, Path]]:
             await server.close()
 
 
-async def _run_ftp_test() -> None:
+async def _ftp_to_obstore() -> None:
     async with ftp_server_context() as (host, port, _):
         src_paths = [PurePosixPath("test_file.txt")]
         dst_paths = ["test_file.txt"]
@@ -65,4 +67,32 @@ async def _run_ftp_test() -> None:
 
 
 def test_ftp_to_obstore() -> None:
-    asyncio.run(_run_ftp_test())
+    asyncio.run(_ftp_to_obstore())
+
+
+async def _ftp_connection_failure() -> None:
+    src_paths = [PurePosixPath("test_file.txt")]
+    dst_paths = ["test_file.txt"]
+    dst_store = obstore.store.MemoryStore()
+
+    with (
+        patch("reformatters.common.ftp_to_obstore.asyncio.sleep", return_value=None),
+        pytest.raises(ExceptionGroup) as exc_info,
+    ):
+        await copy_files_from_ftp_to_obstore(
+            ftp_host="127.0.0.1",
+            src_ftp_paths=src_paths,
+            dst_obstore_paths=dst_paths,
+            dst_store=dst_store,
+            ftp_port=21212,
+            n_ftp_workers=1,
+            n_obstore_workers=1,
+        )
+
+    assert any(
+        "FTP connection failed after" in str(e) for e in exc_info.value.exceptions
+    )
+
+
+def test_ftp_connection_failure() -> None:
+    asyncio.run(_ftp_connection_failure())
