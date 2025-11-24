@@ -3,7 +3,7 @@ import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path, PurePosixPath
-from typing import Final
+from typing import TYPE_CHECKING, Any, Final
 from unittest.mock import patch
 
 import aioftp
@@ -11,6 +11,9 @@ import obstore
 import pytest
 
 from reformatters.common.ftp_to_obstore import copy_files_from_ftp_to_obstore
+
+if TYPE_CHECKING:
+    from obstore import PutResult
 
 TEST_FILE_NAME: Final = "test_file.txt"
 TEST_FILE_CONTENT: Final = "Hello, World!"
@@ -100,3 +103,36 @@ async def _ftp_connection_failure() -> None:
 
 def test_ftp_connection_failure() -> None:
     asyncio.run(_ftp_connection_failure())
+
+
+async def _obstore_write_failure() -> None:
+    src_paths = [PurePosixPath(TEST_FILE_NAME)]
+    dst_paths = [TEST_FILE_NAME]
+
+    class FailingMemoryStore(obstore.store.MemoryStore):
+        async def put_async(  # type: ignore[override]
+            self,
+            *_args: tuple[Any, ...],
+            **_kwargs: dict[str, Any],
+        ) -> "PutResult":
+            raise ValueError("Simulated obstore write failure")
+
+    dst_store = FailingMemoryStore()
+
+    async with ftp_server_context() as (host, port, _):
+        await copy_files_from_ftp_to_obstore(
+            ftp_host=host,
+            src_ftp_paths=src_paths,
+            dst_obstore_paths=dst_paths,
+            dst_store=dst_store,
+            ftp_port=port,
+            n_ftp_workers=1,
+            n_obstore_workers=1,
+        )
+
+    with pytest.raises(FileNotFoundError):
+        await dst_store.get_async(TEST_FILE_NAME)
+
+
+def test_obstore_write_failure() -> None:
+    asyncio.run(_obstore_write_failure())
