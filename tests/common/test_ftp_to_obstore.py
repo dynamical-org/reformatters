@@ -78,6 +78,7 @@ def test_ftp_to_obstore() -> None:
 
 
 async def _ftp_connection_failure() -> None:
+    """Check that an Exception is thrown if the FTP server doesn't exist."""
     src_paths = [PurePosixPath(TEST_FILE_NAME)]
     dst_paths = [TEST_FILE_NAME]
     dst_store = obstore.store.MemoryStore()

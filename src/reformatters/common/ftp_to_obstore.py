@@ -63,7 +63,24 @@ async def copy_files_from_ftp_to_obstore(
         dst_store: The destination `ObjectStore`.
         n_ftp_workers: The number of concurrent FTP workers.
         n_obstore_workers: The number of concurrent `obstore` workers.
-        ftp_port: The port for FTP connections.
+        ftp_port: The port for the FTP connection.
+
+
+    Error handling:
+        If the FTP connection is lost then the code tries `max_retries` times to reconnect.
+        If the connection fails `max_retries` times then the code raises an exception
+        (see the Raises section below). A warning is logged on every connection failure.
+
+        If an individual file fails to be downloaded from the FTP server, then the code tries `max_retries`
+        times per file, and logs a warning on each failure. If the file still cannot be downloaded
+        after `max_retries` times then the code logs an error but does not raise an exception (so as not to
+        interrupt downloading the remaining files in `src_ftp_paths`). The code takes the same
+        approach for _saving_ files to the `dst_obstore_path`: The code tries `max_retries` per
+        file, and logs a warning on each failure, but does not raise an Exception.
+
+    Raises:
+        A `TimeoutError`, `OSError`, or `StatusCodeError` if the FTP connection fails after
+        `max_retries` attempts.
     """
     # Put _FtpFile objects on the ftp_queue:
     ftp_queue: Queue[_FtpFile] = Queue()
@@ -112,7 +129,8 @@ async def _ftp_worker(
     """A worker that keeps a single FTP connection alive and processes queue
     items.
 
-    Reconnects on failure.
+    Tries `max_retries` times to reconnect if the FTP connection is lost. If the connection
+    fails `max_retries` times then raises an exception (see the Raises section below).
 
     Args:
         worker_id: The unique ID of this FTP worker.
@@ -124,6 +142,10 @@ async def _ftp_worker(
             paths on object storage. This is the output of the FTP workers.
         max_retries: The maximum number of times to try downloading each FTP file before giving up.
             max_retries must be >= 1.
+
+    Raises:
+        A `TimeoutError`, `OSError`, or `StatusCodeError` if the FTP connection fails after
+        `max_retries` attempts.
     """
     worker_id_str: str = f"ftp_worker {worker_id}:"
     log.info("%s Starting up...", worker_id_str)
