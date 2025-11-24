@@ -51,6 +51,7 @@ async def copy_files_from_ftp_to_obstore(
     n_ftp_workers: int = 8,
     n_obstore_workers: int = 8,
     ftp_port: int = 21,
+    max_retries: int = 5,
 ) -> None:
     """Copy files from an FTP server to obstore.
 
@@ -64,6 +65,8 @@ async def copy_files_from_ftp_to_obstore(
         n_ftp_workers: The number of concurrent FTP workers.
         n_obstore_workers: The number of concurrent `obstore` workers.
         ftp_port: The port for the FTP connection.
+        max_retries: The maximum number of times to retry before giving up.
+            See the "Error handling" section below for more details.
 
 
     Error handling:
@@ -100,15 +103,17 @@ async def copy_files_from_ftp_to_obstore(
                     ftp_port=ftp_port,
                     ftp_queue=ftp_queue,
                     obstore_queue=obstore_queue,
+                    max_retries=max_retries,
                 )
             )
 
         for worker_id in range(n_obstore_workers):
             tg.create_task(
                 _obstore_worker(
-                    worker_id,
-                    dst_store,
-                    obstore_queue,
+                    worker_id=worker_id,
+                    store=dst_store,
+                    obstore_queue=obstore_queue,
+                    max_retries=max_retries,
                 )
             )
 
