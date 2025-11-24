@@ -136,3 +136,34 @@ async def _obstore_write_failure() -> None:
 
 def test_obstore_write_failure() -> None:
     asyncio.run(_obstore_write_failure())
+
+
+async def _ftp_file_not_found(caplog: pytest.LogCaptureFixture) -> None:
+    """Test for attempting to load a file from FTP that doesn't exist."""
+    src_paths = [PurePosixPath("non_existent_file.txt")]
+    dst_paths = ["non_existent_file.txt"]
+    dst_store = obstore.store.MemoryStore()
+
+    async with ftp_server_context() as (host, port, _):
+        await copy_files_from_ftp_to_obstore(
+            ftp_host=host,
+            src_ftp_paths=src_paths,
+            dst_obstore_paths=dst_paths,
+            dst_store=dst_store,
+            ftp_port=port,
+            n_ftp_workers=1,
+            n_obstore_workers=1,
+        )
+
+    with pytest.raises(FileNotFoundError):
+        await dst_store.get_async("non_existent_file.txt")
+
+    assert any(
+        "File not available on FTP server: non_existent_file.txt" in record.message
+        for record in caplog.records
+        if record.levelname in {"ERROR", "WARNING"}
+    )
+
+
+def test_ftp_file_not_found(caplog: pytest.LogCaptureFixture) -> None:
+    asyncio.run(_ftp_file_not_found(caplog))
