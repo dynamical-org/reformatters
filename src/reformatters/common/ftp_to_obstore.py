@@ -123,11 +123,11 @@ async def _ftp_worker(
         obstore_queue: The MPMC queue of bytes that have been downloaded, and their destination
             paths on object storage. This is the output of the FTP workers.
         max_retries: The maximum number of times to try downloading each FTP file before giving up.
+            max_retries must be >= 1.
     """
     worker_id_str: str = f"ftp_worker {worker_id}:"
     log.info("%s Starting up...", worker_id_str)
-    if max_retries < 1:
-        raise ValueError(f"max_retries must be > 0, not {max_retries}!")
+    _sanity_check_value_of_max_retries(max_retries)
 
     # This outer loop exists to retry if the FTP *connection* fails.
     for retry_attempt in range(max_retries):
@@ -192,7 +192,10 @@ async def _process_ftp_queue(
         obstore_queue: The MPMC queue of bytes that have been downloaded, and their destination
             paths on object storage. This is the output of the FTP workers.
         max_retries: The maximum number of times to try downloading each FTP file before giving up.
+            max_retries must be >= 1.
     """
+    _sanity_check_value_of_max_retries(max_retries)
+
     while True:  # Loop through items in ftp_queue.
         try:
             ftp_file: _FtpFile = ftp_queue.get_nowait()
@@ -247,9 +250,12 @@ async def _obstore_worker(
         obstore_queue: The MPMC queue of bytes that have been downloaded, and their destination
             paths on object storage. This is the input to the obstore workers.
         max_retries: The maximum number of times to try saving each file before giving up.
+            max_retries must be >= 1.
     """
     worker_id_str: str = f"obstore_worker {worker_id}:"
     log.info("%s Obstore worker starting up.", worker_id_str)
+    _sanity_check_value_of_max_retries(max_retries)
+
     while True:
         try:
             obstore_file: _ObstoreFile = await obstore_queue.get()
@@ -313,3 +319,8 @@ def _log_ftp_exception(
         ftp_file,
         e,
     )
+
+
+def _sanity_check_value_of_max_retries(max_retries: int) -> None:
+    if max_retries < 1:
+        raise ValueError(f"max_retries must be > 0, not {max_retries}!")
