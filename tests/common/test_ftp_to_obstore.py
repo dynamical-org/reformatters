@@ -3,6 +3,7 @@ import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path, PurePosixPath
+from typing import Final
 from unittest.mock import patch
 
 import aioftp
@@ -10,6 +11,9 @@ import obstore
 import pytest
 
 from reformatters.common.ftp_to_obstore import copy_files_from_ftp_to_obstore
+
+TEST_FILE_NAME: Final = "test_file.txt"
+TEST_FILE_CONTENT: Final = "Hello, World!"
 
 
 @asynccontextmanager
@@ -23,7 +27,7 @@ async def ftp_server_context() -> AsyncIterator[tuple[str, int, Path]]:
     with tempfile.TemporaryDirectory() as tmp_dir:
         root = Path(tmp_dir)
         # Create a dummy file
-        (root / "test_file.txt").write_text("Hello, World!")
+        (root / TEST_FILE_NAME).write_text(TEST_FILE_CONTENT)
 
         # Configure users
         read_only_permissions = aioftp.Permission(
@@ -45,11 +49,11 @@ async def ftp_server_context() -> AsyncIterator[tuple[str, int, Path]]:
 
 
 async def _ftp_to_obstore() -> None:
-    async with ftp_server_context() as (host, port, _):
-        src_paths = [PurePosixPath("test_file.txt")]
-        dst_paths = ["test_file.txt"]
-        dst_store = obstore.store.MemoryStore()
+    src_paths = [PurePosixPath(TEST_FILE_NAME)]
+    dst_paths = [TEST_FILE_NAME]
+    dst_store = obstore.store.MemoryStore()
 
+    async with ftp_server_context() as (host, port, _):
         await copy_files_from_ftp_to_obstore(
             ftp_host=host,
             src_ftp_paths=src_paths,
@@ -61,9 +65,9 @@ async def _ftp_to_obstore() -> None:
         )
 
         # Verify the file was copied
-        response = await dst_store.get_async("test_file.txt")
+        response = await dst_store.get_async(TEST_FILE_NAME)
         data = response.bytes()
-        assert data == b"Hello, World!"
+        assert data == TEST_FILE_CONTENT.encode("utf-8")
 
 
 def test_ftp_to_obstore() -> None:
@@ -71,8 +75,8 @@ def test_ftp_to_obstore() -> None:
 
 
 async def _ftp_connection_failure() -> None:
-    src_paths = [PurePosixPath("test_file.txt")]
-    dst_paths = ["test_file.txt"]
+    src_paths = [PurePosixPath(TEST_FILE_NAME)]
+    dst_paths = [TEST_FILE_NAME]
     dst_store = obstore.store.MemoryStore()
 
     with (
