@@ -240,7 +240,7 @@ async def _process_ftp_queue(
                 data = await stream.read()
         except (TimeoutError, OSError):
             log.warning(
-                "%s Connection lost processing ftp_file=%s. Re-queueing.",
+                "%s FTP connection lost whilst processing ftp_file=%s. Re-queueing.",
                 worker_id_str,
                 ftp_file,
             )
