@@ -18,11 +18,12 @@ Each `ftp_worker` keeps an `aioftp.Client` alive until there are no more `_FtpFi
 import asyncio
 from asyncio import Queue
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import field
 from pathlib import PurePosixPath
 
 import aioftp
 from obstore.store import ObjectStore
+from pydantic.dataclasses import dataclass
 
 from reformatters.common.logging import get_logger
 
