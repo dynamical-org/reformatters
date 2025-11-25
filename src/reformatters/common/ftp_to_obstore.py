@@ -95,10 +95,9 @@ async def copy_files_from_ftp_to_obstore(
     obstore_queue: Queue[_ObstoreFile] = Queue(maxsize=n_obstore_workers * 2)
 
     # --- Start the Pipeline ---
-    ftp_workers = []
     async with asyncio.TaskGroup() as task_group:
         for worker_id in range(n_ftp_workers):
-            task = task_group.create_task(
+            task_group.create_task(
                 _ftp_worker(
                     worker_id=worker_id,
                     ftp_host=ftp_host,
@@ -108,7 +107,6 @@ async def copy_files_from_ftp_to_obstore(
                     max_retries=max_retries,
                 )
             )
-            ftp_workers.append(task)
 
         for worker_id in range(n_obstore_workers):
             task_group.create_task(
@@ -119,13 +117,6 @@ async def copy_files_from_ftp_to_obstore(
                     max_retries=max_retries,
                 )
             )
-
-        # Wait for all FTP workers to finish.
-        # This is necessary because an FTP worker might fail to download a file,
-        # and then re-queue that file. If we just called `ftp_queue.join()`
-        # then we might race with the re-queueing.
-        for worker in ftp_workers:
-            await worker
 
         log.debug("await _ftp_queue.join()")
         await ftp_queue.join()
@@ -257,6 +248,7 @@ async def _process_ftp_queue(
                 worker_id_str,
                 ftp_file,
             )
+            await asyncio.sleep(1)
             await ftp_queue.put(ftp_file)
             raise  # Re-raise to trigger reconnection in _ftp_worker.
             # Note that the `finally` block is called before the exception propagates upwards.
@@ -268,6 +260,7 @@ async def _process_ftp_queue(
                     "%s WARNING: Putting ftp_file back on queue to retry later.",
                     worker_id_str,
                 )
+                await asyncio.sleep(1)
                 await ftp_queue.put(ftp_file)
             else:
                 log.exception(
@@ -331,7 +324,7 @@ async def _obstore_worker(
                     "%s Putting obstore_file back on queue to retry later.",
                     worker_id_str,
                 )
-                await asyncio.sleep(5)
+                await asyncio.sleep(1)
                 await obstore_queue.put(obstore_file)
             else:
                 log.exception(
