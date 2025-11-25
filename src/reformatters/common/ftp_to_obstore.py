@@ -53,6 +53,7 @@ async def copy_files_from_ftp_to_obstore(
     n_obstore_workers: int = 8,
     ftp_port: int = 21,
     max_retries: int = 5,
+    sleep_between_retries: float = 1,
 ) -> None:
     """Copy files from an FTP server to obstore.
 
@@ -68,6 +69,8 @@ async def copy_files_from_ftp_to_obstore(
         ftp_port: The port for the FTP connection.
         max_retries: The maximum number of times to retry before giving up.
             See the "Error handling" section below for more details.
+        sleep_between_retries: Number of seconds to sleep before retrying to reconnect
+            the FTP connection, or between retrying FTP file downloads or obstore uploads.
 
 
     Error handling:
@@ -105,6 +108,7 @@ async def copy_files_from_ftp_to_obstore(
                     ftp_queue=ftp_queue,
                     obstore_queue=obstore_queue,
                     max_retries=max_retries,
+                    sleep_between_retries=sleep_between_retries,
                 )
             )
 
@@ -115,6 +119,7 @@ async def copy_files_from_ftp_to_obstore(
                     store=dst_store,
                     obstore_queue=obstore_queue,
                     max_retries=max_retries,
+                    sleep_between_retries=sleep_between_retries,
                 )
             )
 
@@ -135,6 +140,7 @@ async def _ftp_worker(
     ftp_queue: asyncio.Queue[_FtpFile],
     obstore_queue: asyncio.Queue[_ObstoreFile],
     max_retries: int = 5,
+    sleep_between_retries: float = 1,
 ) -> None:
     """A worker that keeps a single FTP connection alive and processes queue
     items.
@@ -152,6 +158,8 @@ async def _ftp_worker(
             paths on object storage. This is the output of the FTP workers.
         max_retries: The maximum number of times to try downloading each FTP file before giving up.
             max_retries must be >= 1.
+        sleep_between_retries: Number of seconds to sleep before retrying to reconnect
+            the FTP connection, or between retrying FTP file downloads or obstore uploads.
 
     Raises:
         A `TimeoutError`, `OSError`, or `StatusCodeError` if the FTP connection fails after
@@ -173,11 +181,12 @@ async def _ftp_worker(
                     ftp_port,
                 )
                 await _process_ftp_queue(
-                    worker_id_str,
-                    ftp_client,
-                    ftp_queue,
-                    obstore_queue,
-                    max_retries,
+                    worker_id_str=worker_id_str,
+                    ftp_client=ftp_client,
+                    ftp_queue=ftp_queue,
+                    obstore_queue=obstore_queue,
+                    max_retries=max_retries,
+                    sleep_between_retries=sleep_between_retries,
                 )
         except (TimeoutError, OSError, aioftp.StatusCodeError) as e:
             is_last_attempt = retry_attempt == max_retries - 1
@@ -203,7 +212,7 @@ async def _ftp_worker(
                 raise Exception(msg) from e
             else:
                 log.warning("%s Reconnecting in 5s...", worker_id_str)
-                await asyncio.sleep(5)
+                await asyncio.sleep(sleep_between_retries)
         else:
             break  # All done!
 
@@ -214,6 +223,7 @@ async def _process_ftp_queue(
     ftp_queue: asyncio.Queue[_FtpFile],
     obstore_queue: asyncio.Queue[_ObstoreFile],
     max_retries: int,
+    sleep_between_retries: float = 1,
 ) -> None:
     """Process the FTP queue using an active FTP client.
 
@@ -226,6 +236,8 @@ async def _process_ftp_queue(
             paths on object storage. This is the output of the FTP workers.
         max_retries: The maximum number of times to try downloading each FTP file before giving up.
             max_retries must be >= 1.
+        sleep_between_retries: Number of seconds to sleep before retrying to reconnect
+            the FTP connection, or between retrying FTP file downloads or obstore uploads.
     """
     if max_retries < 1:
         raise ValueError(f"max_retries must be > 0, not {max_retries}!")
@@ -248,7 +260,7 @@ async def _process_ftp_queue(
                 worker_id_str,
                 ftp_file,
             )
-            await asyncio.sleep(1)
+            await asyncio.sleep(sleep_between_retries)
             await ftp_queue.put(ftp_file)
             raise  # Re-raise to trigger reconnection in _ftp_worker.
             # Note that the `finally` block is called before the exception propagates upwards.
@@ -260,7 +272,7 @@ async def _process_ftp_queue(
                     "%s WARNING: Putting ftp_file back on queue to retry later.",
                     worker_id_str,
                 )
-                await asyncio.sleep(1)
+                await asyncio.sleep(sleep_between_retries)
                 await ftp_queue.put(ftp_file)
             else:
                 log.exception(
@@ -281,6 +293,7 @@ async def _obstore_worker(
     store: ObjectStore,
     obstore_queue: asyncio.Queue[_ObstoreFile],
     max_retries: int = 5,
+    sleep_between_retries: float = 1,
 ) -> None:
     """Obstores are designed to work concurrently, so we can share one
     `obstore` between tasks.
@@ -292,6 +305,8 @@ async def _obstore_worker(
             paths on object storage. This is the input to the obstore workers.
         max_retries: The maximum number of times to try saving each file before giving up.
             max_retries must be >= 1.
+        sleep_between_retries: Number of seconds to sleep before retrying to reconnect
+            the FTP connection, or between retrying FTP file downloads or obstore uploads.
     """
     worker_id_str: str = f"obstore_worker {worker_id}:"
     log.info("%s Obstore worker starting up.", worker_id_str)
@@ -324,7 +339,7 @@ async def _obstore_worker(
                     "%s Putting obstore_file back on queue to retry later.",
                     worker_id_str,
                 )
-                await asyncio.sleep(1)
+                await asyncio.sleep(sleep_between_retries)
                 await obstore_queue.put(obstore_file)
             else:
                 log.exception(
