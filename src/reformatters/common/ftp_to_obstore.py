@@ -95,9 +95,10 @@ async def copy_files_from_ftp_to_obstore(
     obstore_queue: Queue[_ObstoreFile] = Queue(maxsize=n_obstore_workers * 2)
 
     # --- Start the Pipeline ---
+    ftp_workers = []
     async with asyncio.TaskGroup() as task_group:
         for worker_id in range(n_ftp_workers):
-            task_group.create_task(
+            task = task_group.create_task(
                 _ftp_worker(
                     worker_id=worker_id,
                     ftp_host=ftp_host,
@@ -107,6 +108,7 @@ async def copy_files_from_ftp_to_obstore(
                     max_retries=max_retries,
                 )
             )
+            ftp_workers.append(task)
 
         for worker_id in range(n_obstore_workers):
             task_group.create_task(
@@ -118,9 +120,20 @@ async def copy_files_from_ftp_to_obstore(
                 )
             )
 
+        # Wait for all FTP workers to finish.
+        # This is necessary because an FTP worker might fail to download a file,
+        # and then re-queue that file. If we just called `ftp_queue.join()`
+        # then we might race with the re-queueing.
+        for worker in ftp_workers:
+            await worker
+
         log.debug("await _ftp_queue.join()")
         await ftp_queue.join()
         log.debug("joined _ftp_queue!")
+
+        # Wait for obstore_queue to be empty before shutting it down.
+        # This allows obstore workers to retry (re-queue) failed uploads.
+        await obstore_queue.join()
         obstore_queue.shutdown()
 
 
