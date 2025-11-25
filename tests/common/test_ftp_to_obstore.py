@@ -13,8 +13,10 @@ from reformatters.common.ftp_to_obstore import copy_files_from_ftp_to_obstore
 if TYPE_CHECKING:
     from obstore import PutResult
 
-TEST_FILE_NAME: Final = "test_file.txt"
-TEST_FILE_CONTENT: Final = "Hello, World!"
+TEST_FILE_1_NAME: Final = "test_file_1.txt"
+TEST_FILE_1_CONTENT: Final = "Hello, World!"
+TEST_FILE_2_NAME: Final = "test_file_2.json"
+TEST_FILE_2_CONTENT: Final = '{"key": "value"}'
 SLEEP_BETWEEN_RETRIES: Final = 0.001  # seconds
 
 
@@ -28,8 +30,9 @@ async def ftp_server_context() -> AsyncIterator[tuple[str, int, Path]]:
     """
     with tempfile.TemporaryDirectory() as tmp_dir:
         root = Path(tmp_dir)
-        # Create a dummy file
-        (root / TEST_FILE_NAME).write_text(TEST_FILE_CONTENT)
+        # Create dummy files
+        (root / TEST_FILE_1_NAME).write_text(TEST_FILE_1_CONTENT)
+        (root / TEST_FILE_2_NAME).write_text(TEST_FILE_2_CONTENT)
 
         # Configure users
         read_only_permissions = aioftp.Permission(
@@ -52,12 +55,22 @@ async def ftp_server_context() -> AsyncIterator[tuple[str, int, Path]]:
 
 @pytest.fixture
 def src_paths() -> list[PurePosixPath]:
-    return [PurePosixPath(TEST_FILE_NAME)]
+    return [PurePosixPath(TEST_FILE_1_NAME)]
 
 
 @pytest.fixture
 def dst_paths() -> list[str]:
-    return [TEST_FILE_NAME]
+    return [TEST_FILE_1_NAME]
+
+
+@pytest.fixture
+def multiple_src_paths() -> list[PurePosixPath]:
+    return [PurePosixPath(TEST_FILE_1_NAME), PurePosixPath(TEST_FILE_2_NAME)]
+
+
+@pytest.fixture
+def multiple_dst_paths() -> list[str]:
+    return [TEST_FILE_1_NAME, TEST_FILE_2_NAME]
 
 
 @pytest.fixture
@@ -82,9 +95,35 @@ async def test_ftp_to_obstore(
         )
 
         # Verify the file was copied
-        response = await dst_store.get_async(TEST_FILE_NAME)
+        response = await dst_store.get_async(TEST_FILE_1_NAME)
         data = response.bytes()
-        assert data == TEST_FILE_CONTENT.encode("utf-8")
+        assert data == TEST_FILE_1_CONTENT.encode("utf-8")
+
+
+async def test_ftp_to_obstore_multiple_files(
+    multiple_src_paths: list[PurePosixPath],
+    multiple_dst_paths: list[str],
+    dst_store: obstore.store.MemoryStore,
+) -> None:
+    async with ftp_server_context() as (host, port, _):
+        await copy_files_from_ftp_to_obstore(
+            ftp_host=host,
+            src_ftp_paths=multiple_src_paths,
+            dst_obstore_paths=multiple_dst_paths,
+            dst_store=dst_store,
+            ftp_port=port,
+            n_ftp_workers=2,
+            n_obstore_workers=2,
+        )
+
+        # Verify both files were copied
+        response1 = await dst_store.get_async(TEST_FILE_1_NAME)
+        data1 = response1.bytes()
+        assert data1 == TEST_FILE_1_CONTENT.encode("utf-8")
+
+        response2 = await dst_store.get_async(TEST_FILE_2_NAME)
+        data2 = response2.bytes()
+        assert data2 == TEST_FILE_2_CONTENT.encode("utf-8")
 
 
 async def test_ftp_connection_failure(
@@ -137,7 +176,7 @@ async def test_obstore_write_failure(
         )
 
     with pytest.raises(FileNotFoundError):
-        await dst_store.get_async(TEST_FILE_NAME)
+        await dst_store.get_async(TEST_FILE_1_NAME)
 
 
 async def test_ftp_file_not_found(
