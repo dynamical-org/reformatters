@@ -318,6 +318,7 @@ async def _obstore_worker(
                     "%s Putting obstore_file back on queue to retry later.",
                     worker_id_str,
                 )
+                await asyncio.sleep(5)
                 await obstore_queue.put(obstore_file)
             else:
                 log.exception(
