@@ -245,8 +245,8 @@ async def _process_ftp_queue(
                 ftp_file,
             )
             await ftp_queue.put(ftp_file)
-            ftp_queue.task_done()
-            raise  # Re-raise to trigger reconnection in _ftp_worker
+            raise  # Re-raise to trigger reconnection in _ftp_worker.
+            # Note that the `finally` block is called before the exception propagates upwards.
         except aioftp.StatusCodeError as e:
             _log_ftp_exception(ftp_file, e, worker_id_str)
             if ftp_file.n_retries < max_retries:
@@ -258,10 +258,10 @@ async def _process_ftp_queue(
                 await ftp_queue.put(ftp_file)
             else:
                 log.error("%s ERROR: Giving up on ftp_file", worker_id_str)
-            ftp_queue.task_done()
         else:
             log.info("%s Finished downloading %s", worker_id_str, ftp_file.src_ftp_path)
             await obstore_queue.put(_ObstoreFile(ftp_file=ftp_file, data=data))
+        finally:
             ftp_queue.task_done()
 
 
