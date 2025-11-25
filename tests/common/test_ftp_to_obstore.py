@@ -19,6 +19,13 @@ TEST_FILE_NAME: Final = "test_file.txt"
 TEST_FILE_CONTENT: Final = "Hello, World!"
 
 
+_original_sleep = asyncio.sleep
+
+
+async def _fast_sleep(*args: object, **kwargs: object) -> None:
+    await _original_sleep(0.001)
+
+
 @asynccontextmanager
 async def ftp_server_context() -> AsyncIterator[tuple[str, int, Path]]:
     """Starts an aioftp server and yields (host, port, root_dir).
@@ -84,7 +91,9 @@ async def _ftp_connection_failure() -> None:
     dst_store = obstore.store.MemoryStore()
 
     with (
-        patch("reformatters.common.ftp_to_obstore.asyncio.sleep", return_value=None),
+        patch(
+            "reformatters.common.ftp_to_obstore.asyncio.sleep", side_effect=_fast_sleep
+        ),
         pytest.raises(ExceptionGroup) as exc_info,
     ):
         await copy_files_from_ftp_to_obstore(
@@ -121,15 +130,18 @@ async def _obstore_write_failure() -> None:
     dst_store = FailingMemoryStore()
 
     async with ftp_server_context() as (host, port, _):
-        await copy_files_from_ftp_to_obstore(
-            ftp_host=host,
-            src_ftp_paths=src_paths,
-            dst_obstore_paths=dst_paths,
-            dst_store=dst_store,
-            ftp_port=port,
-            n_ftp_workers=1,
-            n_obstore_workers=1,
-        )
+        with patch(
+            "reformatters.common.ftp_to_obstore.asyncio.sleep", side_effect=_fast_sleep
+        ):
+            await copy_files_from_ftp_to_obstore(
+                ftp_host=host,
+                src_ftp_paths=src_paths,
+                dst_obstore_paths=dst_paths,
+                dst_store=dst_store,
+                ftp_port=port,
+                n_ftp_workers=1,
+                n_obstore_workers=1,
+            )
 
     with pytest.raises(FileNotFoundError):
         await dst_store.get_async(TEST_FILE_NAME)
@@ -146,15 +158,18 @@ async def _ftp_file_not_found(caplog: pytest.LogCaptureFixture) -> None:
     dst_store = obstore.store.MemoryStore()
 
     async with ftp_server_context() as (host, port, _):
-        await copy_files_from_ftp_to_obstore(
-            ftp_host=host,
-            src_ftp_paths=src_paths,
-            dst_obstore_paths=dst_paths,
-            dst_store=dst_store,
-            ftp_port=port,
-            n_ftp_workers=1,
-            n_obstore_workers=1,
-        )
+        with patch(
+            "reformatters.common.ftp_to_obstore.asyncio.sleep", side_effect=_fast_sleep
+        ):
+            await copy_files_from_ftp_to_obstore(
+                ftp_host=host,
+                src_ftp_paths=src_paths,
+                dst_obstore_paths=dst_paths,
+                dst_store=dst_store,
+                ftp_port=port,
+                n_ftp_workers=1,
+                n_obstore_workers=1,
+            )
 
     with pytest.raises(FileNotFoundError):
         await dst_store.get_async("non_existent_file.txt")
