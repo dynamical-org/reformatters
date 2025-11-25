@@ -50,11 +50,26 @@ async def ftp_server_context() -> AsyncIterator[tuple[str, int, Path]]:
             await server.close()
 
 
-async def test_ftp_to_obstore() -> None:
-    src_paths = [PurePosixPath(TEST_FILE_NAME)]
-    dst_paths = [TEST_FILE_NAME]
-    dst_store = obstore.store.MemoryStore()
+@pytest.fixture
+def src_paths() -> list[PurePosixPath]:
+    return [PurePosixPath(TEST_FILE_NAME)]
 
+
+@pytest.fixture
+def dst_paths() -> list[str]:
+    return [TEST_FILE_NAME]
+
+
+@pytest.fixture
+def dst_store() -> obstore.store.MemoryStore:
+    return obstore.store.MemoryStore()
+
+
+async def test_ftp_to_obstore(
+    src_paths: list[PurePosixPath],
+    dst_paths: list[str],
+    dst_store: obstore.store.MemoryStore,
+) -> None:
     async with ftp_server_context() as (host, port, _):
         await copy_files_from_ftp_to_obstore(
             ftp_host=host,
@@ -72,12 +87,12 @@ async def test_ftp_to_obstore() -> None:
         assert data == TEST_FILE_CONTENT.encode("utf-8")
 
 
-async def test_ftp_connection_failure() -> None:
+async def test_ftp_connection_failure(
+    src_paths: list[PurePosixPath],
+    dst_paths: list[str],
+    dst_store: obstore.store.MemoryStore,
+) -> None:
     """Check that an Exception is thrown if the FTP server doesn't exist."""
-    src_paths = [PurePosixPath(TEST_FILE_NAME)]
-    dst_paths = [TEST_FILE_NAME]
-    dst_store = obstore.store.MemoryStore()
-
     with pytest.raises(ExceptionGroup) as exc_info:
         await copy_files_from_ftp_to_obstore(
             ftp_host="127.0.0.1",
@@ -95,10 +110,10 @@ async def test_ftp_connection_failure() -> None:
     )
 
 
-async def test_obstore_write_failure() -> None:
-    src_paths = [PurePosixPath(TEST_FILE_NAME)]
-    dst_paths = [TEST_FILE_NAME]
-
+async def test_obstore_write_failure(
+    src_paths: list[PurePosixPath],
+    dst_paths: list[str],
+) -> None:
     class FailingMemoryStore(obstore.store.MemoryStore):
         async def put_async(  # type: ignore[override]
             self,
@@ -125,11 +140,13 @@ async def test_obstore_write_failure() -> None:
         await dst_store.get_async(TEST_FILE_NAME)
 
 
-async def test_ftp_file_not_found(caplog: pytest.LogCaptureFixture) -> None:
+async def test_ftp_file_not_found(
+    caplog: pytest.LogCaptureFixture,
+    dst_store: obstore.store.MemoryStore,
+) -> None:
     """Test for attempting to load a file from FTP that doesn't exist."""
     src_paths = [PurePosixPath("non_existent_file.txt")]
     dst_paths = ["non_existent_file.txt"]
-    dst_store = obstore.store.MemoryStore()
 
     async with ftp_server_context() as (host, port, _):
         await copy_files_from_ftp_to_obstore(
