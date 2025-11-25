@@ -258,9 +258,10 @@ async def _process_ftp_queue(
                 await ftp_queue.put(ftp_file)
             else:
                 log.exception(
-                    "%s ERROR: Giving up downloading ftp_file %s",
+                    "%s ERROR: Giving up downloading ftp_file %s. Exception: %s",
                     worker_id_str,
                     ftp_file,
+                    e,
                 )
         else:
             log.info("%s Finished downloading %s", worker_id_str, ftp_file.src_ftp_path)
@@ -320,10 +321,11 @@ async def _obstore_worker(
                 await obstore_queue.put(obstore_file)
             else:
                 log.exception(
-                    "%s Giving up writing %s after %d retries.",
+                    "%s Giving up writing %s after %d retries. Exception: %s",
                     worker_id_str,
                     dst_path,
                     max_retries,
+                    e,
                 )
         else:
             log.info(
