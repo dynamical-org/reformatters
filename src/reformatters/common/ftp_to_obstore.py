@@ -95,9 +95,9 @@ async def copy_files_from_ftp_to_obstore(
     obstore_queue: Queue[_ObstoreFile] = Queue(maxsize=n_obstore_workers * 2)
 
     # --- Start the Pipeline ---
-    async with asyncio.TaskGroup() as tg:
+    async with asyncio.TaskGroup() as task_group:
         for worker_id in range(n_ftp_workers):
-            tg.create_task(
+            task_group.create_task(
                 _ftp_worker(
                     worker_id=worker_id,
                     ftp_host=ftp_host,
@@ -109,7 +109,7 @@ async def copy_files_from_ftp_to_obstore(
             )
 
         for worker_id in range(n_obstore_workers):
-            tg.create_task(
+            task_group.create_task(
                 _obstore_worker(
                     worker_id=worker_id,
                     store=dst_store,
