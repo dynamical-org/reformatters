@@ -257,7 +257,11 @@ async def _process_ftp_queue(
                 )
                 await ftp_queue.put(ftp_file)
             else:
-                log.error("%s ERROR: Giving up on ftp_file", worker_id_str)
+                log.exception(
+                    "%s ERROR: Giving up downloading ftp_file %s",
+                    worker_id_str,
+                    ftp_file,
+                )
         else:
             log.info("%s Finished downloading %s", worker_id_str, ftp_file.src_ftp_path)
             await obstore_queue.put(_ObstoreFile(ftp_file=ftp_file, data=data))
@@ -297,7 +301,7 @@ async def _obstore_worker(
         dst_path = obstore_file.ftp_file.dst_obstore_path
         try:
             await store.put_async(dst_path, obstore_file.data)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             # Catching a broad Exception here is intentional, as obstore can raise various
             # exceptions (network, permission, etc.), and we want to retry on any failure
             # to write to the object store.
@@ -315,9 +319,10 @@ async def _obstore_worker(
                 )
                 await obstore_queue.put(obstore_file)
             else:
-                log.error(
-                    "%s Giving up on obstore_file after %d retries.",
+                log.exception(
+                    "%s Giving up writing %s after %d retries.",
                     worker_id_str,
+                    dst_path,
                     max_retries,
                 )
         else:
