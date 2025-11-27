@@ -22,7 +22,7 @@ from reformatters.common.zarr import (
 from reformatters.noaa.hrrr.hrrr_config_models import (
     NoaaHrrrDataVar,
 )
-from reformatters.noaa.hrrr.template_config import NoaaHrrrTemplateConfig
+from reformatters.noaa.hrrr.template_config import NoaaHrrrCommonTemplateConfig
 
 #  All Standard Cycles go to forecast hour 18
 #  Init cycles going to forecast hour 48 are 00, 06, 12, 18
@@ -33,7 +33,7 @@ EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR = pd.Series(
 )
 
 
-class NoaaHrrrForecast48HourTemplateConfig(NoaaHrrrTemplateConfig):
+class NoaaHrrrForecast48HourTemplateConfig(NoaaHrrrCommonTemplateConfig):
     # HRRR uses a projected coordinate system with x/y dimensions
     dims: tuple[Dim, ...] = ("init_time", "lead_time", "y", "x")
     append_dim: AppendDim = "init_time"
@@ -102,10 +102,10 @@ class NoaaHrrrForecast48HourTemplateConfig(NoaaHrrrTemplateConfig):
         dim_coords = self.dimension_coordinates()
         append_dim_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
 
-        spatial_coords = super().coords
+        hrrr_common_coords = super().coords
 
         return [
-            *spatial_coords,
+            *hrrr_common_coords,
             Coordinate(
                 name="init_time",
                 encoding=Encoding(

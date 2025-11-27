@@ -7,13 +7,13 @@ from reformatters.common.config_models import DatasetAttributes, Encoding
 from reformatters.common.download import http_download_to_disk
 from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
 from reformatters.noaa.hrrr.template_config import (
-    NoaaHrrrTemplateConfig,
+    NoaaHrrrCommonTemplateConfig,
 )
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 
 
 @pytest.fixture
-def template_config(monkeypatch: pytest.MonkeyPatch) -> NoaaHrrrTemplateConfig:
+def template_config(monkeypatch: pytest.MonkeyPatch) -> NoaaHrrrCommonTemplateConfig:
     mock_attrs = DatasetAttributes(
         dataset_id="noaa-hrrr-template",
         dataset_version="0.1.0",
@@ -27,10 +27,12 @@ def template_config(monkeypatch: pytest.MonkeyPatch) -> NoaaHrrrTemplateConfig:
     )
 
     monkeypatch.setattr(
-        NoaaHrrrTemplateConfig, "dataset_attributes", property(lambda self: mock_attrs)
+        NoaaHrrrCommonTemplateConfig,
+        "dataset_attributes",
+        property(lambda self: mock_attrs),
     )
 
-    config = NoaaHrrrTemplateConfig(
+    config = NoaaHrrrCommonTemplateConfig(
         dims=("time", "y", "x"),
         append_dim="time",
         append_dim_start=pd.Timestamp("2018-07-13T12:00"),
@@ -39,7 +41,7 @@ def template_config(monkeypatch: pytest.MonkeyPatch) -> NoaaHrrrTemplateConfig:
     return config
 
 
-def test_y_x_coordinates(template_config: NoaaHrrrTemplateConfig) -> None:
+def test_y_x_coordinates(template_config: NoaaHrrrCommonTemplateConfig) -> None:
     y_coords, x_coords = template_config._y_x_coordinates()
 
     assert len(x_coords) == 1799
@@ -54,7 +56,7 @@ def test_y_x_coordinates(template_config: NoaaHrrrTemplateConfig) -> None:
 
 
 def test_latitude_longitude_coordinates(
-    template_config: NoaaHrrrTemplateConfig,
+    template_config: NoaaHrrrCommonTemplateConfig,
 ) -> None:
     y_coords, x_coords = template_config._y_x_coordinates()
     lats, lons = template_config._latitude_longitude_coordinates(x_coords, y_coords)
@@ -89,7 +91,9 @@ def test_latitude_longitude_coordinates(
     assert np.isclose(lon_diff_x.max(), 0.04299164)
 
 
-def test_spatial_info_matches_file(template_config: NoaaHrrrTemplateConfig) -> None:
+def test_spatial_info_matches_file(
+    template_config: NoaaHrrrCommonTemplateConfig,
+) -> None:
     """Test that hard coded spatial information matches the real values derived from a source file."""
     shape, bounds, resolution, crs = template_config._spatial_info()
 
