@@ -96,26 +96,29 @@ def check_forecast_recent_nans(
     max_nan_percent: float = 0.5,  # half of 1%
 ) -> validation.ValidationResult:
     """Check the fraction of null values in the latest init_time."""
-    # Sample the latest init_time
-    sample_ds = ds.isel(init_time=-1)
-
     problems = []
-    for var_name in list(sample_ds.data_vars):
-        da = sample_ds[var_name].copy(deep=True)
+    var_names = list(ds.data_vars.keys())
+    
+    for var_name in var_names:
+        log.info("checking %s nan percentage", var_name)
+        
+        # Load just this variable for the latest init_time
+        # Use .load() to force immediate loading and avoid lazy evaluation chains
+        da = ds[var_name].isel(init_time=-1).load()
+        
         # skip lead_time=0 for accumulations
         if da.attrs["step_type"] != "instant":
-            da = da.isel(lead_time=slice(1, None))  # noqa: PLW2901
+            da = da.isel(lead_time=slice(1, None))
 
-        log.info("checking %s nan percentage", var_name)
-        # Compute NaN percentage efficiently by chaining operations
-        # This avoids creating intermediate arrays that hold references to the data
+        # Compute NaN percentage
         nan_percentage = float(da.isnull().mean().item()) * 100
-        log.info("done checking %s nan percentage", var_name)
+        log.info("done checking %s nan percentage: %.2f%%", var_name, nan_percentage)
 
         # HRRR over CONUS should have very few NaN values
         if nan_percentage > max_nan_percent:
             problems.append(f"{var_name}: {nan_percentage:.1f}% NaN values")
 
+        # Explicitly delete and collect
         del da
         gc.collect()
 
