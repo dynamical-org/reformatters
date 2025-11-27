@@ -1,4 +1,5 @@
 import gc
+from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
 import xarray as xr
@@ -91,29 +92,43 @@ def check_forecast_completeness(ds: xr.Dataset) -> validation.ValidationResult:
     )
 
 
+def _check_var_nan_percentage(
+    ds: xr.Dataset, var_name: str, max_nan_percent: float
+) -> str | None:
+    """Check NaN percentage for a single variable. Returns error message if excessive NaNs found."""
+    log.info("Loading %s to check nan percentage...", var_name)
+    da = ds[var_name].isel(init_time=-1).load()
+
+    # skip lead_time=0 for accumulations
+    if da.attrs["step_type"] != "instant":
+        da = da.isel(lead_time=slice(1, None))
+
+    nan_percentage = float(da.isnull().mean().item()) * 100
+
+    del da
+
+    if nan_percentage > max_nan_percent:
+        return f"{var_name}: {nan_percentage:.1f}% NaN values"
+    return None
+
+
 def check_forecast_recent_nans(
     ds: xr.Dataset,
     max_nan_percent: float = 0.5,  # half of 1%
 ) -> validation.ValidationResult:
     """Check the fraction of null values in the latest init_time."""
-    problems = []
     var_names = list(ds.data_vars.keys())
 
-    for var_name in var_names:
-        log.info("Loading %s to check nan percentage...", var_name)
-        da = ds[var_name].isel(init_time=-1).load()
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = executor.map(
+            lambda var_name: _check_var_nan_percentage(ds, var_name, max_nan_percent),
+            var_names,
+        )
 
-        # skip lead_time=0 for accumulations
-        if da.attrs["step_type"] != "instant":
-            da = da.isel(lead_time=slice(1, None))
+    problems = [r for r in results if r is not None]
 
-        nan_percentage = float(da.isnull().mean().item()) * 100
-
-        if nan_percentage > max_nan_percent:
-            problems.append(f"{var_name}: {nan_percentage:.1f}% NaN values")
-
-        del da
-        gc.collect()
+    # Collect garbage after all threads complete
+    gc.collect()
 
     if problems:
         return validation.ValidationResult(
