@@ -248,7 +248,7 @@ def compare_replica_and_primary(
                     start + window_size,
                 )
             )
-            for dim_name, dim_size in replica_ds.dims.items()
+            for dim_name, dim_size in replica_ds.sizes.items()
             if dim_name != append_dim
         }
 
