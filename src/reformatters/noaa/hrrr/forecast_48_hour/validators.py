@@ -86,16 +86,11 @@ def check_forecast_completeness(ds: xr.Dataset) -> validation.ValidationResult:
     )
 
 
-def check_spatial_coverage(
+def check_forecast_recent_nans(
     ds: xr.Dataset,
     max_nan_percent: float = 0.5,  # half of 1%
 ) -> validation.ValidationResult:
-    """
-    Check that the data covers the expected HRRR CONUS domain.
-
-    HRRR should have minimal NaN values over CONUS, as it's designed
-    for the continental United States.
-    """
+    """Check the fraction of null values in the latest init_time."""
     # Sample the latest init_time
     sample_ds = ds.isel(init_time=-1)
 
@@ -118,5 +113,5 @@ def check_spatial_coverage(
         )
 
     return validation.ValidationResult(
-        passed=True, message="Perfecnt NaN values are within acceptable limit"
+        passed=True, message="Percent NaN values are within acceptable limit"
     )

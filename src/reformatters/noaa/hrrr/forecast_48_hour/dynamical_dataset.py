@@ -16,7 +16,7 @@ from .template_config import NoaaHrrrForecast48HourTemplateConfig
 from .validators import (
     check_data_is_current,
     check_forecast_completeness,
-    check_spatial_coverage,
+    check_forecast_recent_nans,
 )
 
 
@@ -68,5 +68,5 @@ class NoaaHrrrForecast48HourDataset(
         return (
             check_data_is_current,
             check_forecast_completeness,
-            check_spatial_coverage,
+            check_forecast_recent_nans,
         )
