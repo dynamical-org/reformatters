@@ -1,7 +1,12 @@
+import gc
+
 import pandas as pd
 import xarray as xr
 
 from reformatters.common import validation
+from reformatters.common.logging import get_logger
+
+log = get_logger(__name__)
 
 
 def check_data_is_current(ds: xr.Dataset) -> validation.ValidationResult:
@@ -95,18 +100,24 @@ def check_forecast_recent_nans(
     sample_ds = ds.isel(init_time=-1)
 
     problems = []
-    for var_name, da in sample_ds.data_vars.items():
+    for var_name in list(sample_ds.data_vars):
+        da = sample_ds[var_name].copy(deep=True)
         # skip lead_time=0 for accumulations
         if da.attrs["step_type"] != "instant":
             da = da.isel(lead_time=slice(1, None))  # noqa: PLW2901
 
+        log.info("checking %s nan percentage", var_name)
         # Compute NaN percentage efficiently by chaining operations
         # This avoids creating intermediate arrays that hold references to the data
         nan_percentage = float(da.isnull().mean().item()) * 100
+        log.info("done checking %s nan percentage", var_name)
 
         # HRRR over CONUS should have very few NaN values
         if nan_percentage > max_nan_percent:
             problems.append(f"{var_name}: {nan_percentage:.1f}% NaN values")
+
+        del da
+        gc.collect()
 
     if problems:
         return validation.ValidationResult(
