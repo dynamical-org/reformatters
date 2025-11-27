@@ -119,7 +119,7 @@ def check_forecast_recent_nans(
     """Check the fraction of null values in the latest init_time."""
     var_names = list(ds.data_vars.keys())
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=8) as executor:
         results = executor.map(
             lambda var_name: _check_var_nan_percentage(ds, var_name, max_nan_percent),
             var_names,
