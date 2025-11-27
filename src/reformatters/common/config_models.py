@@ -3,24 +3,26 @@ from typing import Annotated, Any, Generic, Literal, TypeVar
 
 import numcodecs  # type: ignore[import-untyped]
 import pydantic
-from pydantic import Field
 
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.types import TimedeltaUnits, TimestampUnits
 
+type AttributeStr = Annotated[str, pydantic.Field(pattern=r"^[A-Z0-9].*[^.]$")]
+type Sentence = Annotated[str, pydantic.Field(pattern=r"^[A-Z].*\.$")]
+
 
 class DatasetAttributes(FrozenBaseModel):
-    dataset_id: str = Field(pattern=r"^[a-zA-Z0-9-]+$")
-    dataset_version: str
-    name: str
-    description: str
-    attribution: str
-    spatial_domain: str
-    spatial_resolution: str
-    time_domain: str
-    time_resolution: str
-    forecast_domain: str | None = None
-    forecast_resolution: str | None = None
+    dataset_id: Annotated[str, pydantic.Field(pattern=r"^[a-zA-Z0-9-]+$")]
+    dataset_version: Annotated[str, pydantic.Field(min_length=1)]
+    name: AttributeStr
+    description: Sentence
+    attribution: Sentence
+    spatial_domain: AttributeStr
+    spatial_resolution: AttributeStr
+    time_domain: AttributeStr
+    time_resolution: AttributeStr
+    forecast_domain: AttributeStr | None = None
+    forecast_resolution: AttributeStr | None = None
 
 
 class StatisticsApproximate(FrozenBaseModel):

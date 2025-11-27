@@ -52,7 +52,7 @@ class NoaaHrrrForecast48HourTemplateConfig(NoaaHrrrCommonTemplateConfig):
             spatial_domain="Continental United States",
             spatial_resolution="3km",
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
-            time_resolution="Forecasts initialized every 6 hours.",
+            time_resolution="Forecasts initialized every 6 hours",
             forecast_domain="Forecast lead time 0-48 hours ahead",
             forecast_resolution="Hourly",
         )
