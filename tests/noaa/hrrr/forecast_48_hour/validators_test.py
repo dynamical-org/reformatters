@@ -7,7 +7,7 @@ from reformatters.noaa.hrrr.forecast_48_hour import validators
 
 
 @pytest.fixture
-def hrrr_forecast_dataset() -> xr.Dataset:
+def hrrr_forecast_dataset(rng: np.random.Generator) -> xr.Dataset:
     """Create a minimal HRRR forecast dataset for testing."""
     init_times = pd.date_range("2024-01-01", periods=4, freq="6h")
     lead_times = pd.timedelta_range("0h", "48h", freq="1h")
@@ -18,15 +18,15 @@ def hrrr_forecast_dataset() -> xr.Dataset:
         {
             "temperature_2m": (
                 ["init_time", "lead_time", "y", "x"],
-                np.random.randn(
-                    len(init_times), len(lead_times), len(y), len(x)
+                rng.standard_normal(
+                    (len(init_times), len(lead_times), len(y), len(x))
                 ).astype(np.float32),
                 {"step_type": "instant"},
             ),
             "precipitation_surface": (
                 ["init_time", "lead_time", "y", "x"],
-                np.random.randn(
-                    len(init_times), len(lead_times), len(y), len(x)
+                rng.standard_normal(
+                    (len(init_times), len(lead_times), len(y), len(x))
                 ).astype(np.float32),
                 {"step_type": "accum"},
             ),
