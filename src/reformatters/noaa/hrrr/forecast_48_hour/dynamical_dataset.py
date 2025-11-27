@@ -9,11 +9,9 @@ from reformatters.common.kubernetes import (
     ValidationCronJob,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
+from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
 
-from .region_job import (
-    NoaaHrrrForecast48HourRegionJob,
-    NoaaHrrrSourceFileCoord,
-)
+from .region_job import NoaaHrrrForecast48HourRegionJob
 from .template_config import NoaaHrrrForecast48HourTemplateConfig
 from .validators import (
     check_data_is_current,

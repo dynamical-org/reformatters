@@ -3,12 +3,10 @@ import pandas as pd
 import xarray as xr
 
 from reformatters.common.download import http_download_to_disk
-from reformatters.noaa.hrrr.forecast_48_hour.region_job import (
-    NoaaHrrrSourceFileCoord,
-)
 from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
     NoaaHrrrForecast48HourTemplateConfig,
 )
+from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 
 
