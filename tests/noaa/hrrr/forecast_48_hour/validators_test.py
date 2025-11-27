@@ -18,16 +18,16 @@ def hrrr_forecast_dataset() -> xr.Dataset:
         {
             "temperature_2m": (
                 ["init_time", "lead_time", "y", "x"],
-                np.random.randn(len(init_times), len(lead_times), len(y), len(x)).astype(
-                    np.float32
-                ),
+                np.random.randn(
+                    len(init_times), len(lead_times), len(y), len(x)
+                ).astype(np.float32),
                 {"step_type": "instant"},
             ),
             "precipitation_surface": (
                 ["init_time", "lead_time", "y", "x"],
-                np.random.randn(len(init_times), len(lead_times), len(y), len(x)).astype(
-                    np.float32
-                ),
+                np.random.randn(
+                    len(init_times), len(lead_times), len(y), len(x)
+                ).astype(np.float32),
                 {"step_type": "accum"},
             ),
         },
