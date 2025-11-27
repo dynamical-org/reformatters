@@ -99,7 +99,19 @@ def check_forecast_recent_nans(
         # skip lead_time=0 for accumulations
         if da.attrs["step_type"] != "instant":
             da = da.isel(lead_time=slice(1, None))  # noqa: PLW2901
-        nan_percentage = da.isnull().mean().compute().item() * 100
+        import logging
+
+        log = logging.getLogger(__name__)
+
+        log.info("calling .isnull() for %s", var_name)
+        isnull = da.isnull()
+        log.info("calling .mean() for %s", var_name)
+        mean_val = isnull.mean()
+        log.info("calling .compute() for %s", var_name)
+        computed = mean_val.compute()
+        log.info("calling .item() for %s", var_name)
+        item_val = computed.item()
+        nan_percentage = item_val * 100
 
         # HRRR over CONUS should have very few NaN values
         if nan_percentage > max_nan_percent:
