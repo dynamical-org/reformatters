@@ -47,7 +47,7 @@ class UarizonaSwannAnalysisTemplateConfig(TemplateConfig[UarizonaSwannDataVar]):
             dataset_id="u-arizona-swann-analysis",
             dataset_version="0.1.0",
             name="University of Arizona SWANN Snow",
-            description="Daily 4 km Gridded SWE and Snow Depth from Assimilated In-Situ and Modeled Data over the Conterminous US, Version 1",
+            description="Daily 4 km Gridded SWE and Snow Depth from Assimilated In-Situ and Modeled Data over the Conterminous US, Version 1.",
             attribution=(
                 "Broxton, P., X. Zeng, and N. Dawson. 2019. "
                 "Daily 4 km Gridded SWE and Snow Depth from Assimilated In-Situ and Modeled Data over the Conterminous US, Version 1. "
