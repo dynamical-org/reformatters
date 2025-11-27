@@ -98,14 +98,14 @@ def check_forecast_recent_nans(
     """Check the fraction of null values in the latest init_time."""
     problems = []
     var_names = list(ds.data_vars.keys())
-    
+
     for var_name in var_names:
         log.info("checking %s nan percentage", var_name)
-        
+
         # Load just this variable for the latest init_time
         # Use .load() to force immediate loading and avoid lazy evaluation chains
         da = ds[var_name].isel(init_time=-1).load()
-        
+
         # skip lead_time=0 for accumulations
         if da.attrs["step_type"] != "instant":
             da = da.isel(lead_time=slice(1, None))
