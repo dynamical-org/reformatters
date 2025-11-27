@@ -93,11 +93,10 @@ def check_forecast_completeness(ds: xr.Dataset) -> validation.ValidationResult:
 
 
 def _check_var_nan_percentage(
-    ds: xr.Dataset, var_name: str, max_nan_percent: float
+    ds: xr.Dataset, var_name: str, max_nan_percent: float, isel: dict[str, int | slice]
 ) -> str | None:
     """Check NaN percentage for a single variable. Returns error message if excessive NaNs found."""
-    log.info("Loading %s to check nan percentage...", var_name)
-    da = ds[var_name].isel(init_time=-1).load()
+    da = ds[var_name].isel(isel).load()
 
     # skip lead_time=0 for accumulations
     if da.attrs["step_type"] != "instant":
@@ -119,15 +118,17 @@ def check_forecast_recent_nans(
     """Check the fraction of null values in the latest init_time."""
     var_names = list(ds.data_vars.keys())
 
+    log.info("Loading all values in most recent init time to check nan percentage...")
     with ThreadPoolExecutor(max_workers=8) as executor:
         results = executor.map(
-            lambda var_name: _check_var_nan_percentage(ds, var_name, max_nan_percent),
+            lambda var_name: _check_var_nan_percentage(
+                ds, var_name, max_nan_percent, isel={"init_time": -1}
+            ),
             var_names,
         )
 
     problems = [r for r in results if r is not None]
 
-    # Collect garbage after all threads complete
     gc.collect()
 
     if problems:
