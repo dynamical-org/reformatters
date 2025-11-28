@@ -23,21 +23,21 @@ from pathlib import PurePosixPath
 
 import aioftp
 from obstore.store import ObjectStore
-from pydantic.dataclasses import dataclass as pydatic_dataclass
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from reformatters.common.logging import get_logger
 
 log = get_logger(__name__)
 
 
-@pydatic_dataclass
+@pydantic_dataclass
 class _FtpFile:
     src_ftp_path: PurePosixPath
     dst_obstore_path: str
     n_retries: int = field(default=0, init=False)
 
 
-@pydatic_dataclass
+@pydantic_dataclass
 class _ObstoreFile:
     ftp_file: _FtpFile
     data: bytes
