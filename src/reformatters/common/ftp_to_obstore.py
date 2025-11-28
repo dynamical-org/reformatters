@@ -23,22 +23,20 @@ from pathlib import PurePosixPath
 
 import aioftp
 from obstore.store import ObjectStore
-from pydantic.dataclasses import dataclass as pydantic_dataclass
+from pydantic import BaseModel
 
 from reformatters.common.logging import get_logger
 
 log = get_logger(__name__)
 
 
-@pydantic_dataclass
-class _FtpFile:
+class _FtpFile(BaseModel):
     src_ftp_path: PurePosixPath
     dst_obstore_path: str
     n_retries: int = field(default=0, init=False)
 
 
-@pydantic_dataclass
-class _ObstoreFile:
+class _ObstoreFile(BaseModel):
     ftp_file: _FtpFile
     data: bytes
     n_retries: int = field(default=0, init=False)
@@ -92,7 +90,7 @@ async def copy_files_from_ftp_to_obstore(
     # Put _FtpFile objects on the ftp_queue:
     ftp_queue: Queue[_FtpFile] = Queue()
     for src, dst in zip(src_ftp_paths, dst_obstore_paths, strict=True):
-        ftp_queue.put_nowait(_FtpFile(src, dst))
+        ftp_queue.put_nowait(_FtpFile(src_ftp_path=src, dst_obstore_path=dst))
 
     # Set maxsize of Queue to apply back-pressure to the FTP workers.
     obstore_queue: Queue[_ObstoreFile] = Queue(maxsize=n_obstore_workers * 2)
