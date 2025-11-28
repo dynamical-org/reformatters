@@ -18,28 +18,31 @@ Each `ftp_worker` keeps an `aioftp.Client` alive until there are no more `_FtpFi
 import asyncio
 from asyncio import Queue
 from collections.abc import Iterable
-from dataclasses import field
 from pathlib import PurePosixPath
 
 import aioftp
+import pydantic
 from obstore.store import ObjectStore
-from pydantic import BaseModel
 
 from reformatters.common.logging import get_logger
 
 log = get_logger(__name__)
 
 
-class _FtpFile(BaseModel):
+class _StrictBaseModel(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(strict=True, revalidate_instances="always")
+
+
+class _FtpFile(_StrictBaseModel):
     src_ftp_path: PurePosixPath
     dst_obstore_path: str
-    n_retries: int = field(default=0, init=False)
+    n_retries: int = pydantic.Field(default=0, init=False)
 
 
-class _ObstoreFile(BaseModel):
+class _ObstoreFile(_StrictBaseModel):
     ftp_file: _FtpFile
     data: bytes
-    n_retries: int = field(default=0, init=False)
+    n_retries: int = pydantic.Field(default=0, init=False)
 
 
 async def copy_files_from_ftp_to_obstore(
