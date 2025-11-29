@@ -21,7 +21,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
         # suspend = True  # Defaults to False, remove when you're ready to run operational updates and validation
         # operational_update_cron_job = ReformatCronJob(
-        #     name=f"{self.dataset_id}-operational-update",
+        #     name=f"{self.dataset_id}-update",
         #     schedule="0 0 * * *",
         #     pod_active_deadline=timedelta(minutes=30),
         #     image=image_tag,
@@ -34,7 +34,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
         #     suspend=suspend,
         # )
         # validation_cron_job = ValidationCronJob(
-        #     name=f"{self.dataset_id}-validation",
+        #     name=f"{self.dataset_id}-validate",
         #     schedule="30 0 * * *",
         #     pod_active_deadline=timedelta(minutes=10),
         #     image=image_tag,

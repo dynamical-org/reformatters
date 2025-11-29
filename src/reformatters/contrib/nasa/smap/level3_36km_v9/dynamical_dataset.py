@@ -26,7 +26,7 @@ class NasaSmapLevel336KmV9Dataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.dataset_id}-operational-update",
+            name=f"{self.dataset_id}-update",
             # New data comes 1x per day, usually around 5:45 but sometimes later, more like 14:00
             # Run twice to pick up the later data too (updates only take a couple minutes)
             schedule="0 6,18 * * *",
@@ -41,7 +41,7 @@ class NasaSmapLevel336KmV9Dataset(
             secret_names=[*self.store_factory.k8s_secret_names(), "nasa-earthdata"],
         )
         validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validation",
+            name=f"{self.dataset_id}-validate",
             schedule="30 6,18 * * *",
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,

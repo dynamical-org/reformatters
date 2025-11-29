@@ -44,7 +44,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
             secret_names=self.store_factory.k8s_secret_names(),
         )
         validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validation",
+            name=f"{self.dataset_id}-validate",
             schedule="50 10 * * *",  # 3 Hours after update starts (update may take ~2 hours)
             suspend=False,
             pod_active_deadline=timedelta(minutes=10),

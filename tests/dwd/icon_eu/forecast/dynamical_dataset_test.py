@@ -60,8 +60,8 @@
 
 #     assert len(cron_jobs) == 2
 #     update_cron_job, validation_cron_job = cron_jobs
-#     assert update_cron_job.name == f"{dataset.dataset_id}-operational-update"
-#     assert validation_cron_job.name == f"{dataset.dataset_id}-validation"
+#     assert update_cron_job.name == f"{dataset.dataset_id}-update"
+#     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
 #     assert update_cron_job.secret_names == [
 #         dataset.primary_storage_config.k8s_secret_name
 #     ]

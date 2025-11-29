@@ -26,7 +26,7 @@ class ExampleDataset1:
 
     def operational_kubernetes_resources(self, image_tag: str) -> Iterable[Job]:
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.dataset_id}-operational-update",
+            name=f"{self.dataset_id}-update",
             schedule="0 0 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
@@ -37,7 +37,7 @@ class ExampleDataset1:
             ephemeral_storage="30G",
         )
         validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validation",
+            name=f"{self.dataset_id}-validate",
             schedule="0 0 * * *",
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
@@ -53,7 +53,7 @@ class ExampleDataset2(ExampleDataset1):
     dataset_id: str = "example-dataset-2"
 
 
-def test_deploy_operational_updates(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_run = Mock()
     monkeypatch.setattr(subprocess, "run", mock_run)
 
@@ -69,7 +69,7 @@ def test_deploy_operational_updates(monkeypatch: pytest.MonkeyPatch) -> None:
         DYNAMICAL_DATASETS
     )  # type: ignore[assignment]
 
-    deploy.deploy_operational_updates(test_datasets, docker_image="test-image-tag")
+    deploy.deploy_operational_resources(test_datasets, docker_image="test-image-tag")
 
     assert mock_run.call_count == 1
     args, kwargs = mock_run.call_args
@@ -81,10 +81,7 @@ def test_deploy_operational_updates(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # Dataset 1
     assert resources["items"][0]["kind"] == "CronJob"
-    assert (
-        resources["items"][0]["metadata"]["name"]
-        == "example-dataset-1-operational-update"
-    )
+    assert resources["items"][0]["metadata"]["name"] == "example-dataset-1-update"
     container_spec = resources["items"][0]["spec"]["jobTemplate"]["spec"]["template"][
         "spec"
     ]["containers"][0]
@@ -93,7 +90,4 @@ def test_deploy_operational_updates(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # Dataset 2
     assert resources["items"][2]["kind"] == "CronJob"
-    assert (
-        resources["items"][2]["metadata"]["name"]
-        == "example-dataset-2-operational-update"
-    )
+    assert resources["items"][2]["metadata"]["name"] == "example-dataset-2-update"

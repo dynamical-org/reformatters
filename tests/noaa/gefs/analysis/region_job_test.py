@@ -552,7 +552,7 @@ def test_operational_update_jobs(
                 get_template_fn=mock_get_template_fn,
                 append_dim="time",
                 all_data_vars=example_data_vars,
-                reformat_job_name="test-operational-update",
+                reformat_job_name="test-update",
             )
 
             # Verify results
@@ -567,7 +567,7 @@ def test_operational_update_jobs(
             assert call_args.kwargs["tmp_store"] == tmp_store_path
             assert call_args.kwargs["append_dim"] == "time"
             assert call_args.kwargs["all_data_vars"] == example_data_vars
-            assert call_args.kwargs["reformat_job_name"] == "test-operational-update"
+            assert call_args.kwargs["reformat_job_name"] == "test-update"
             assert call_args.kwargs["filter_start"] == existing_time.max()
 
             # Verify existing dataset was opened correctly

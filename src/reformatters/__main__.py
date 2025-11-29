@@ -14,7 +14,7 @@ import typer
 from sentry_sdk.integrations.typer import TyperIntegration
 from sentry_sdk.types import Hint, Log
 
-from reformatters.common import deploy
+from reformatters.common import deploy as deploy_module
 from reformatters.common.config import Config
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.storage import DatasetFormat, StorageConfig
@@ -156,10 +156,10 @@ for dataset in DYNAMICAL_DATASETS:
 
 
 @app.command()
-def deploy_operational_updates(
+def deploy(
     docker_image: str | None = None,
 ) -> None:
-    deploy.deploy_operational_updates(DYNAMICAL_DATASETS, docker_image)
+    deploy_module.deploy_operational_resources(DYNAMICAL_DATASETS, docker_image)
 
 
 if __name__ == "__main__":

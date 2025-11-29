@@ -68,7 +68,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         Implementions should look similar this:
         ```
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.dataset_id}-operational-update",
+            name=f"{self.dataset_id}-update",
             schedule=_OPERATIONAL_CRON_SCHEDULE,
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
@@ -80,7 +80,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             secret_names=self.store_factory.k8s_secret_names(),
         )
         validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validation",
+            name=f"{self.dataset_id}-validate",
             schedule=_VALIDATION_CRON_SCHEDULE,
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,

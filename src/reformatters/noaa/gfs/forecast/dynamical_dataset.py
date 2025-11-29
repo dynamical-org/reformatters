@@ -19,7 +19,7 @@ class NoaaGfsForecastDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.dataset_id}-operational-update",
+            name=f"{self.dataset_id}-update",
             schedule="30 5,11,17,23 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
@@ -31,7 +31,7 @@ class NoaaGfsForecastDataset(
             secret_names=self.store_factory.k8s_secret_names(),
         )
         validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validation",
+            name=f"{self.dataset_id}-validate",
             schedule="0 6,12,18,0 * * *",
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,

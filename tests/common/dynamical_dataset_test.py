@@ -98,7 +98,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
     def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
         return [
             ReformatCronJob(
-                name=f"{self.dataset_id}-operational-update",
+                name=f"{self.dataset_id}-update",
                 schedule="0 0 * * *",
                 pod_active_deadline=timedelta(minutes=30),
                 image=image_tag,
@@ -110,7 +110,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
                 secret_names=self.store_factory.k8s_secret_names(),
             ),
             ValidationCronJob(
-                name=f"{self.dataset_id}-validation",
+                name=f"{self.dataset_id}-validate",
                 schedule="0 0 * * *",
                 pod_active_deadline=timedelta(minutes=30),
                 image=image_tag,
