@@ -38,7 +38,7 @@ class NoaaHrrrForecast48HourDataset(
         # Update every 6 hours at 1h50m after the init time (when all forecast steps are available)
         # First file typically becomes available at 51 mins and last file (hour 48) at 1h51m
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.dataset_id}-operational-update",
+            name=f"{self.dataset_id}-update",
             schedule="55 1,7,13,19 * * *",
             pod_active_deadline=timedelta(minutes=15),  # usually takes 3 mins
             image=image_tag,
@@ -52,7 +52,7 @@ class NoaaHrrrForecast48HourDataset(
 
         # Validation job - run 15 mins after operational update
         validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validation",
+            name=f"{self.dataset_id}-validate",
             schedule="10 2,8,14,20 * * *",
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,

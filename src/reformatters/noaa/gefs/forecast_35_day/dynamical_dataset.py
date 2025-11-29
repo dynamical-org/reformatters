@@ -23,7 +23,7 @@ class GefsForecast35DayDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.dataset_id}-operational-update",
+            name=f"{self.dataset_id}-update",
             schedule="0 7 * * *",  # At 7:00 UTC every day.
             pod_active_deadline=timedelta(hours=3.5),
             image=image_tag,
@@ -35,7 +35,7 @@ class GefsForecast35DayDataset(
             secret_names=self.store_factory.k8s_secret_names(),
         )
         validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validation",
+            name=f"{self.dataset_id}-validate",
             schedule="30 11 * * *",  # At 11:30 UTC every day.
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,

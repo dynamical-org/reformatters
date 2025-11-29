@@ -164,10 +164,10 @@ def test_operational_kubernetes_resources(
     assert len(cron_jobs) == 2
     update_cron_job, validation_cron_job = cron_jobs
 
-    assert update_cron_job.name == f"{dataset.dataset_id}-operational-update"
+    assert update_cron_job.name == f"{dataset.dataset_id}-update"
     assert len(update_cron_job.secret_names) > 0
 
-    assert validation_cron_job.name == f"{dataset.dataset_id}-validation"
+    assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
     assert len(validation_cron_job.secret_names) > 0
 
 
