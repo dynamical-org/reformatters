@@ -1,5 +1,6 @@
 import gc
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 
 import pandas as pd
 import xarray as xr
@@ -121,8 +122,11 @@ def check_forecast_recent_nans(
     log.info("Loading all values in most recent init time to check nan percentage...")
     with ThreadPoolExecutor(max_workers=8) as executor:
         results = executor.map(
-            lambda var_name: _check_var_nan_percentage(
-                ds, var_name, max_nan_percent, isel={"init_time": -1}
+            partial(
+                _check_var_nan_percentage,
+                ds,
+                max_nan_percent=max_nan_percent,
+                isel={"init_time": -1},
             ),
             var_names,
         )
