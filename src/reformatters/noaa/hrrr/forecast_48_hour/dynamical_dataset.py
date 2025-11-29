@@ -58,7 +58,7 @@ class NoaaHrrrForecast48HourDataset(
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="0.7",
-            memory="5G",
+            memory="3.5G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
 
