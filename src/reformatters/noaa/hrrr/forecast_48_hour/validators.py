@@ -1,7 +1,14 @@
+import gc
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
+
 import pandas as pd
 import xarray as xr
 
 from reformatters.common import validation
+from reformatters.common.logging import get_logger
+
+log = get_logger(__name__)
 
 
 def check_data_is_current(ds: xr.Dataset) -> validation.ValidationResult:
@@ -86,29 +93,47 @@ def check_forecast_completeness(ds: xr.Dataset) -> validation.ValidationResult:
     )
 
 
-def check_spatial_coverage(
+def _check_var_nan_percentage(
+    ds: xr.Dataset, var_name: str, max_nan_percent: float, isel: dict[str, int | slice]
+) -> str | None:
+    """Check NaN percentage for a single variable. Returns error message if excessive NaNs found."""
+    da = ds[var_name].isel(isel).load()
+
+    # skip lead_time=0 for accumulations
+    if da.attrs["step_type"] != "instant":
+        da = da.isel(lead_time=slice(1, None))
+
+    nan_percentage = float(da.isnull().mean().item()) * 100
+
+    del da
+
+    if nan_percentage > max_nan_percent:
+        return f"{var_name}: {nan_percentage:.1f}% NaN values"
+    return None
+
+
+def check_forecast_recent_nans(
     ds: xr.Dataset,
     max_nan_percent: float = 0.5,  # half of 1%
 ) -> validation.ValidationResult:
-    """
-    Check that the data covers the expected HRRR CONUS domain.
+    """Check the fraction of null values in the latest init_time."""
+    var_names = list(ds.data_vars.keys())
 
-    HRRR should have minimal NaN values over CONUS, as it's designed
-    for the continental United States.
-    """
-    # Sample the latest init_time
-    sample_ds = ds.isel(init_time=-1)
+    log.info("Loading all values in most recent init time to check nan percentage...")
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = executor.map(
+            partial(
+                _check_var_nan_percentage,
+                ds,
+                max_nan_percent=max_nan_percent,
+                isel={"init_time": -1},
+            ),
+            var_names,
+        )
 
-    problems = []
-    for var_name, da in sample_ds.data_vars.items():
-        # skip lead_time=0 for accumulations
-        if da.attrs["step_type"] != "instant":
-            da = da.isel(lead_time=slice(1, None))  # noqa: PLW2901
-        nan_percentage = da.isnull().mean().compute().item() * 100
+    problems = [r for r in results if r is not None]
 
-        # HRRR over CONUS should have very few NaN values
-        if nan_percentage > max_nan_percent:
-            problems.append(f"{var_name}: {nan_percentage:.1f}% NaN values")
+    gc.collect()
 
     if problems:
         return validation.ValidationResult(
@@ -118,5 +143,5 @@ def check_spatial_coverage(
         )
 
     return validation.ValidationResult(
-        passed=True, message="Perfecnt NaN values are within acceptable limit"
+        passed=True, message="Percent NaN values are within acceptable limit"
     )
