@@ -48,7 +48,7 @@ def test_region_job_source_groups() -> None:
         template_config.data_vars
     )
     assert len(groups) == 2
-    assert len(groups[0]) == 10
+    assert len(groups[0]) == 11
 
     # categorical_precipitation_type_surface is grouped separately
     # since it is the only one with a date_available value

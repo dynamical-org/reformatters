@@ -527,4 +527,22 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     keep_mantissa_bits=11,
                 ),
             ),
+            EcmwfDataVar(
+                name="dew_point_temperature_2m",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="2d",
+                    long_name="2 metre dewpoint temperature",
+                    units="C",
+                    step_type="instant",
+                    standard_name="dew_point_temperature",
+                ),
+                internal_attrs=EcmwfInternalAttrs(
+                    grib_comment="Dew point temperature [C]",
+                    grib_description='2[m] HTGL="Specified height level above ground"',
+                    grib_element="DPT",
+                    grib_index_param="2d",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
         ]
