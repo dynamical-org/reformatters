@@ -32,17 +32,9 @@ def check_latest_ndvi_usable_nan_percentage(
     Check that the latest NDVI data has a low nan percentage.
     """
     # We spot checked several times and noticed a consistent ndvi_usable nan percentage
-    # of ~93%. For reference, the raw NDVI data we saw had nan percentages ~75%. We expect
-    # a large NaN percentage for both variables since oceans and other bodies of water are
-    # NaNed out. For `ndvi_usable`, we will generally read this this data using a rolling
-    # 16 day max, so individual days with high nan percentages, due to e.g., cloud cover, will
-    # be smoothed out.
-    #
-    # 95% of the data is NaN
-    # We have seen NaN percentages as low as ~93.5%, which means that ~6.5% of the data
-    # can be expected to plausibly have a value. We have seen this percentage go over our original threshold of 94% in the past,
-    # so 96% is set so that we are alerted if roughly 40% of this subset of plausibly non-NaN data is NaN.
-    threshold = 0.96
+    # of ~93%. A large NaN percentage for both variables is expected because oceans and
+    # other bodies of water are always NaN. In practice we've seen at least one day > 96% NaN.
+    threshold = 0.97
     ndvi_usable = ds.isel(time=-1).ndvi_usable
 
     if (percentage_nan := ndvi_usable.isnull().sum() / ndvi_usable.size) >= threshold:

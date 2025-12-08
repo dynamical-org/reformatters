@@ -70,9 +70,8 @@ def test_check_data_is_current_success_with_nonzero_time(
 @pytest.mark.parametrize(
     ("nan_count", "expected_pass"),
     [
-        (95, True),  # 95% NaN, should pass
-        (96, False),  # 96% NaN, should fail
-        (97, False),  # 97% NaN, should fail
+        (96, True),  # 96% NaN, should pass
+        (98, False),  # 98% NaN, should fail
     ],
 )
 def test_check_latest_ndvi_usable_nan_percentage_threshold(
