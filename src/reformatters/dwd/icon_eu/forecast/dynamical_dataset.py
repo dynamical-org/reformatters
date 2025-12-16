@@ -1,8 +1,12 @@
 from collections.abc import Sequence
+from datetime import timedelta
+from typing import Literal
+
+import typer
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob
+from reformatters.common.kubernetes import ArchiveGribFilesCronJob, CronJob
 
 from .region_job import DwdIconEuForecastRegionJob, DwdIconEuForecastSourceFileCoord
 from .template_config import DwdIconEuDataVar, DwdIconEuForecastTemplateConfig
@@ -14,35 +18,18 @@ class DwdIconEuForecastDataset(
     template_config: DwdIconEuForecastTemplateConfig = DwdIconEuForecastTemplateConfig()
     region_job_class: type[DwdIconEuForecastRegionJob] = DwdIconEuForecastRegionJob
 
-    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
-        # operational_update_cron_job = ReformatCronJob(
-        #     name=f"{self.dataset_id}-update",
-        #     schedule=_OPERATIONAL_CRON_SCHEDULE,
-        #     pod_active_deadline=timedelta(minutes=30),
-        #     image=image_tag,
-        #     dataset_id=self.dataset_id,
-        #     cpu="14",
-        #     memory="30G",
-        #     shared_memory="12G",
-        #     ephemeral_storage="30G",
-        #     secret_names=self.store_factory.k8s_secret_names(),
-        # )
-        # validation_cron_job = ValidationCronJob(
-        #     name=f"{self.dataset_id}-validate",
-        #     schedule=_VALIDATION_CRON_SCHEDULE,
-        #     pod_active_deadline=timedelta(minutes=10),
-        #     image=image_tag,
-        #     dataset_id=self.dataset_id,
-        #     cpu="1.3",
-        #     memory="7G",
-        #     secret_names=self.store_factory.k8s_secret_names(),
-        # )
+    def archive_grib_files(
+        self, nwp_run_to_archive: Literal["all", "00z", "06z", "12z", "18z"] = "all"
+    ) -> None:
+        pass
 
-        # return [operational_update_cron_job, validation_cron_job]
-        raise NotImplementedError(
-            f"Implement `operational_kubernetes_resources` on {self.__class__.__name__}"
-        )
+    def get_cli(
+        self,
+    ) -> typer.Typer:
+        """Create a CLI app with dataset commands."""
+        app = super().get_cli()
+        app.command()(self.archive_grib_files)
+        return app
 
     def validators(self) -> Sequence[validation.DataValidator]:
         """Return a sequence of DataValidators to run on this dataset."""
@@ -50,6 +37,30 @@ class DwdIconEuForecastDataset(
         #     validation.check_analysis_current_data,
         #     validation.check_analysis_recent_nans,
         # )
-        raise NotImplementedError(
-            f"Implement `validators` on {self.__class__.__name__}"
+        return ()  # TODO(Jack): Return appropriate `validation.check_*`
+
+    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
+        """Return the kubernetes cron job definitions to operationally update
+        and validate this dataset."""
+        suspend = True  # Defaults to False, remove when you're ready to run operational updates and validation
+        ftp_to_obstore_cron_job = ArchiveGribFilesCronJob(
+            name=f"{self.dataset_id}-archive-grib-files",
+            # The files for each NWP init are ready 4 hours after the NWP init time. For example,
+            # the 00Z NWP init is ready at 4am. So let's run 4 times per day, starting at 4am.
+            schedule="0 4,10,16,22 * * *",
+            pod_active_deadline=timedelta(
+                minutes=120
+            ),  # TODO(Jack): Check how long it *actually* takes!
+            image=image_tag,
+            dataset_id=self.dataset_id,
+            cpu="14",
+            memory="30G",
+            shared_memory="12G",
+            ephemeral_storage="30G",
+            secret_names=self.store_factory.k8s_secret_names(),
+            suspend=suspend,
         )
+
+        # TODO(Jack): Implement ValidationCronJob, ReformatCronJob, and return these
+
+        return [ftp_to_obstore_cron_job]

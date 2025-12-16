@@ -251,12 +251,19 @@ class ValidationCronJob(CronJob):
     parallelism: int = 1
 
 
-def load_secret(secret_name: str) -> dict[str, Any]:
-    """
-    Load a secret from kubernetes, either from mounted file or directly from kubernetes API.
+class ArchiveGribFilesCronJob(CronJob):
+    command: Sequence[str] = ["archive-grib-files"]
+    workers_total: int = 1
+    parallelism: int = 1
 
-    Returns empty dict in non-prod environments.
-    When env is prod, loads from mounted secret file, or falls back to kubernetes API if running locally.
+
+def load_secret(secret_name: str) -> dict[str, Any]:
+    """Load a secret from kubernetes, either from mounted file or directly from
+    kubernetes API.
+
+    Returns empty dict in non-prod environments. When env is prod, loads
+    from mounted secret file, or falls back to kubernetes API if running
+    locally.
     """
     if not Config.is_prod:
         return {}
