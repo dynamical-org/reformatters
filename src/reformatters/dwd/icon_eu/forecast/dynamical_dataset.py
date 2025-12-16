@@ -1,13 +1,18 @@
+import asyncio
 from collections.abc import Sequence
 from datetime import timedelta
+from pathlib import PurePosixPath
 from typing import Literal
 
 import typer
+from obstore.store import LocalStore
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
+from reformatters.common.ftp_to_obstore import copy_files_from_ftp_to_obstore
 from reformatters.common.kubernetes import ArchiveGribFilesCronJob, CronJob
 
+from .archive_grib_files import DwdFtpTransferCalculator
 from .region_job import DwdIconEuForecastRegionJob, DwdIconEuForecastSourceFileCoord
 from .template_config import DwdIconEuDataVar, DwdIconEuForecastTemplateConfig
 
@@ -19,13 +24,33 @@ class DwdIconEuForecastDataset(
     region_job_class: type[DwdIconEuForecastRegionJob] = DwdIconEuForecastRegionJob
 
     def archive_grib_files(
-        self, nwp_run_to_archive: Literal["all", "00z", "06z", "12z", "18z"] = "all"
+        self, nwp_init_hour: Literal["all", "0", "6", "12", "18"] = "all"
     ) -> None:
-        pass
+        calc = DwdFtpTransferCalculator()
+        if nwp_init_hour == "all":
+            transfer_jobs = asyncio.run(calc.calc_new_files_for_all_nwp_init_hours())
+        else:
+            init_hour = int(nwp_init_hour)
+            transfer_jobs = asyncio.run(
+                calc.calc_new_files_for_single_nwp_init_hour(init_hour)
+            )
 
-    def get_cli(
-        self,
-    ) -> typer.Typer:
+        src_ftp_paths: list[PurePosixPath] = []
+        dst_obstore_paths: list[str] = []
+        for transfer_job in transfer_jobs:
+            src_ftp_paths.append(transfer_job.src_ftp_path)
+            dst_obstore_paths.append(str(transfer_job.dst_obstore_path))
+
+        asyncio.run(
+            copy_files_from_ftp_to_obstore(
+                ftp_host="opendata.dwd.de",
+                src_ftp_paths=src_ftp_paths,
+                dst_obstore_paths=dst_obstore_paths,
+                dst_store=LocalStore(),
+            )
+        )
+
+    def get_cli(self) -> typer.Typer:
         """Create a CLI app with dataset commands."""
         app = super().get_cli()
         app.command()(self.archive_grib_files)

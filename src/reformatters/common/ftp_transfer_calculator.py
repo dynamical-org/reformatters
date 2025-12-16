@@ -2,50 +2,64 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import PurePosixPath
+from typing import NamedTuple
 
 from aioftp.client import UnixListInfo
 from obstore.store import ObjectStore
 from pydantic import BaseModel
 
+from reformatters.common.logging import get_logger
+
+log = get_logger(__name__)
+
 
 class TransferJob(BaseModel):
     src_ftp_path: PurePosixPath
     src_ftp_file_size_bytes: int
-
-    # The destination path in the object store.
-    # Starts at the datetime part, e.g., '2025-12-12T00Z/alb_rad/...'.
     dst_obstore_path: PurePosixPath
-
-    # The NWP initialization datetime, extracted from `src_ftp_path`.
     nwp_init_datetime: datetime
 
 
-class PathAndSize(BaseModel):
+class PathAndSize(NamedTuple):
+    # We have to use NamedTuple because we want to use this in a `set`.
     path: str
     file_size_bytes: int
 
 
-type PathAndInfo = tuple[PurePosixPath, UnixListInfo]
+type FtpPathAndInfo = tuple[PurePosixPath, UnixListInfo]
 
 
 class FtpTransferCalculator(ABC):
-    async def transfer_new_files_for_all_nwp_inits(self) -> None:
-        ftp_paths_for_nwp_inits: Sequence[
-            PurePosixPath
-        ] = await self._list_ftp_base_paths_for_all_required_nwp_inits()
-
-        for ftp_path in ftp_paths_for_nwp_inits:
-            ftp_listing_for_nwp_init = await self._list_ftp_files_for_single_nwp_init(
-                ftp_path
+    async def calc_new_files_for_all_nwp_init_hours(self) -> list[TransferJob]:
+        transfer_jobs: list[TransferJob] = []
+        for init_hour in self.nwp_init_hours:
+            transfer_jobs_for_init = await self.calc_new_files_for_single_nwp_init_hour(
+                init_hour
             )
-            await self.transfer_new_files_for_single_nwp_init(ftp_listing_for_nwp_init)
+            transfer_jobs.extend(transfer_jobs_for_init)
+        return transfer_jobs
 
-    async def transfer_new_files_for_single_nwp_init(
-        self, ftp_listing_for_nwp_init: Sequence[PathAndInfo]
-    ) -> None:
+    async def calc_new_files_for_single_nwp_init_hour(
+        self, init_hour: int
+    ) -> list[TransferJob]:
+        if init_hour not in self.nwp_init_hours:
+            raise ValueError(
+                f"init_hour must be one of {self.nwp_init_hours}, not {init_hour}."
+            )
+        ftp_path = self.convert_nwp_init_hour_to_ftp_path(init_hour)
+        log.info("Listing files in %s ...", ftp_path)
+        ftp_listing_for_nwp_init = await self.list_ftp_files_for_single_nwp_init_path(
+            ftp_path
+        )
+        log.info("Found %d files in %s", len(ftp_listing_for_nwp_init), ftp_path)
+        return await self.calc_new_files_from_ftp_listing(ftp_listing_for_nwp_init)
+
+    async def calc_new_files_from_ftp_listing(
+        self, ftp_listing: Sequence[FtpPathAndInfo]
+    ) -> list[TransferJob]:
         # Collect list of TransferJobs from FTP server's listing:
         ftp_transfer_jobs: list[TransferJob] = []
-        for ftp_path, ftp_info in ftp_listing_for_nwp_init:
+        for ftp_path, ftp_info in ftp_listing:
             if not self._skip_ftp_item(ftp_path, ftp_info):
                 self._sanity_check_ftp_path(ftp_path)
                 transfer_job = self._convert_ftp_path_to_transfer_job(
@@ -53,14 +67,18 @@ class FtpTransferCalculator(ABC):
                 )
                 ftp_transfer_jobs.append(transfer_job)
 
-        # Find the earliest NWP init datetime.
-        # We'll use this as the `offset` when listing objects on object storage.
+        # Find the earliest NWP init datetime to use as the `offset` when listing objects on object storage.
         min_nwp_init_datetime = min(
             [transfer_job.nwp_init_datetime for transfer_job in ftp_transfer_jobs]
         )
 
         obstore_listing_set = self._list_obstore_files_for_single_nwp_init(
             min_nwp_init_datetime
+        )
+        log.info(
+            "Found %d files on obstore for NWP init time %s",
+            len(obstore_listing_set),
+            min_nwp_init_datetime,
         )
 
         jobs_still_to_download: list[TransferJob] = []
@@ -73,7 +91,13 @@ class FtpTransferCalculator(ABC):
             if obstore_path_and_size not in obstore_listing_set:
                 jobs_still_to_download.append(transfer_job)
 
-        # TODO(Jack): Send `jobs_still_to_download` to FTP download client
+        log.info(
+            "Planning to download %d files out of %d",
+            len(jobs_still_to_download),
+            len(ftp_listing),
+        )
+
+        return jobs_still_to_download
 
     def _list_obstore_files_for_single_nwp_init(
         self, nwp_init: datetime
@@ -95,36 +119,39 @@ class FtpTransferCalculator(ABC):
     def _convert_ftp_path_to_transfer_job(
         self, ftp_path: PurePosixPath, ftp_info: UnixListInfo
     ) -> TransferJob:
-        """Converts the FTP path to a `TransferJob`.
-
-        This function is designed to work with the style of DWD FTP ICON-EU path in use in 2025, such as:
-        /weather/nwp/icon-eu/grib/00/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2025112600_004_ALB_RAD.grib2.bz2
-        """
-        nwp_init_datetime: datetime = self._extract_init_datetime_from_ftp_path(
-            ftp_path
-        )
-        nwp_init_datetime_obstore_str = nwp_init_datetime.strftime(
-            self._format_string_for_nwp_init_datetime_in_obstore_path
-        )
-
-        # Create dst_obstore_path:
-        nwp_variable_name = self._extract_nwp_variable_name_from_ftp_path(ftp_path)
-        dst_obstore_path = (
-            PurePosixPath(nwp_init_datetime_obstore_str)
-            / nwp_variable_name
-            / ftp_path.name
-        )
-
-        file_size_bytes = int(ftp_info["size"])
-
+        nwp_init_datetime = self._extract_init_datetime_from_ftp_path(ftp_path)
+        dst_obstore_path = self._calc_obstore_path(ftp_path, nwp_init_datetime)
+        src_ftp_file_size_bytes = int(ftp_info["size"])
         return TransferJob(
             src_ftp_path=ftp_path,
-            src_ftp_file_size_bytes=file_size_bytes,
+            src_ftp_file_size_bytes=src_ftp_file_size_bytes,
             dst_obstore_path=dst_obstore_path,
             nwp_init_datetime=nwp_init_datetime,
         )
 
     ################# Methods that can (optionally) be overridden ######################
+    def _calc_obstore_path(
+        self,
+        ftp_path: PurePosixPath,
+        nwp_init_datetime: datetime,
+    ) -> PurePosixPath:
+        # Create dst_obstore_path:
+        nwp_init_datetime_obstore_str = nwp_init_datetime.strftime(
+            self._format_string_for_nwp_init_datetime_in_obstore_path
+        )
+        nwp_variable_name = self._extract_nwp_variable_name_from_ftp_path(ftp_path)
+        dst_obstore_path: PurePosixPath = (
+            self._obstore_root_path
+            / nwp_init_datetime_obstore_str
+            / nwp_variable_name
+            / ftp_path.name
+        )
+        return dst_obstore_path
+
+    @property
+    def nwp_init_hours(self) -> Sequence[int]:
+        """Return a sequence of NWP init hours like [0, 6, 12, 18]."""
+        return (0, 6, 12, 18)
 
     @staticmethod
     def _skip_ftp_item(ftp_path: PurePosixPath, ftp_info: UnixListInfo) -> bool:
@@ -153,17 +180,15 @@ class FtpTransferCalculator(ABC):
 
     @staticmethod
     @abstractmethod
-    async def _list_ftp_files_for_single_nwp_init(
+    async def list_ftp_files_for_single_nwp_init_path(
         ftp_path: PurePosixPath,
-    ) -> Sequence[PathAndInfo]:
+    ) -> Sequence[FtpPathAndInfo]:
         """List all files available on the FTP server for a single NWP init
         identified by the `ftp_path`."""
 
     @staticmethod
     @abstractmethod
-    async def _list_ftp_base_paths_for_all_required_nwp_inits() -> Sequence[
-        PurePosixPath
-    ]:
+    def convert_nwp_init_hour_to_ftp_path(init_hour: int) -> PurePosixPath:
         pass
 
     @staticmethod
