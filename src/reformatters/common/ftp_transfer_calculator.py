@@ -142,7 +142,7 @@ class FtpTransferCalculator(ABC):
             self._format_string_for_nwp_init_datetime_in_obstore_path
         )
 
-        obstore_listing = self._object_store.list(
+        obstore_listing = self.object_store.list(
             prefix=str(self._obstore_root_path),
             offset=str(self._obstore_root_path / nwp_init_datetime_str),
         ).collect()
@@ -216,7 +216,7 @@ class FtpTransferCalculator(ABC):
 
     @property
     @abstractmethod
-    def _object_store(self) -> ObjectStore:
+    def object_store(self) -> ObjectStore:
         pass
 
     @abstractmethod

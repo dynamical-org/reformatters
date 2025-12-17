@@ -25,13 +25,14 @@ class DwdFtpTransferCalculator(FtpTransferCalculator):
 
     @property
     def _obstore_root_path(self) -> PurePosixPath:
+        """*Without* the leading slash."""
         # TODO(Jack): Change this after testing!
         return PurePosixPath(
             "home/jack/data/ICON-EU/grib/download_and_compress_and_concat_script/icon-eu/regular-lat-lon/"
         )
 
     @property
-    def _object_store(self) -> ObjectStore:
+    def object_store(self) -> ObjectStore:
         return LocalStore()  # TODO(Jack): Change this! LocalStore is only for testing!
 
     @staticmethod

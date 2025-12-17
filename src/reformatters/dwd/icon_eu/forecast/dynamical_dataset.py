@@ -5,7 +5,6 @@ from pathlib import PurePosixPath
 from typing import Literal
 
 import typer
-from obstore.store import LocalStore
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -37,25 +36,27 @@ class DwdIconEuForecastDataset(
         """
         calc = DwdFtpTransferCalculator(filename_filter=filename_filter)
         if nwp_init_hour == "all":
-            transfer_jobs = asyncio.run(calc.calc_new_files_for_all_nwp_init_hours())
+            files_to_download = asyncio.run(
+                calc.calc_new_files_for_all_nwp_init_hours()
+            )
         else:
             init_hour = int(nwp_init_hour)
-            transfer_jobs = asyncio.run(
+            files_to_download = asyncio.run(
                 calc.calc_new_files_for_single_nwp_init_hour(init_hour)
             )
 
         src_ftp_paths: list[PurePosixPath] = []
         dst_obstore_paths: list[str] = []
-        for transfer_job in transfer_jobs:
+        for transfer_job in files_to_download:
             src_ftp_paths.append(transfer_job.src_ftp_path)
             dst_obstore_paths.append(str(transfer_job.dst_obstore_path))
 
         asyncio.run(
             copy_files_from_ftp_to_obstore(
-                ftp_host="opendata.dwd.de",
+                ftp_host=calc.ftp_host,
                 src_ftp_paths=src_ftp_paths,
                 dst_obstore_paths=dst_obstore_paths,
-                dst_store=LocalStore(),
+                dst_store=calc.object_store,
             )
         )
 
