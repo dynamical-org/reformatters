@@ -57,11 +57,14 @@ class FtpTransferCalculator(ABC):
                 f"init_hour must be one of {self.nwp_init_hours}, not {init_hour}."
             )
         ftp_path = self.convert_nwp_init_hour_to_ftp_path(init_hour)
-        log.info("Listing files in %s ...", ftp_path)
+        ftp_host_and_path = f"ftp://{self.ftp_host}{ftp_path}"
+        log.info("Listing files in %s ...", ftp_host_and_path)
         ftp_listing_for_nwp_init = await self.list_ftp_files_for_single_nwp_init_path(
             ftp_path
         )
-        log.info("Found %d files in %s", len(ftp_listing_for_nwp_init), ftp_path)
+        log.info(
+            "Found %d files in %s", len(ftp_listing_for_nwp_init), ftp_host_and_path
+        )
         return await self.calc_new_files_from_ftp_listing(ftp_listing_for_nwp_init)
 
     async def calc_new_files_from_ftp_listing(
@@ -203,6 +206,11 @@ class FtpTransferCalculator(ABC):
 
     @property
     @abstractmethod
+    def ftp_host(self) -> str:
+        """The FTP host, without "ftp://" prefix."""
+
+    @property
+    @abstractmethod
     def _obstore_root_path(self) -> PurePosixPath:
         """No slash at the start of the path!"""
 
@@ -211,13 +219,17 @@ class FtpTransferCalculator(ABC):
     def _object_store(self) -> ObjectStore:
         pass
 
-    @staticmethod
     @abstractmethod
     async def list_ftp_files_for_single_nwp_init_path(
+        self,
         ftp_path: PurePosixPath,
     ) -> Sequence[FtpPathAndInfo]:
         """List all files available on the FTP server for a single NWP init
-        identified by the `ftp_path`."""
+        identified by the `ftp_path`.
+
+        `ftp_path` must include the leading slash, and must not
+        include the FTP host URL. For example, `ftp_path` could be /weather/nwp/icon-eu/grib/00
+        """
 
     @staticmethod
     @abstractmethod

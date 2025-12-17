@@ -20,6 +20,10 @@ class DwdFtpTransferCalculator(FtpTransferCalculator):
     """
 
     @property
+    def ftp_host(self) -> str:
+        return "opendata.dwd.de"
+
+    @property
     def _obstore_root_path(self) -> PurePosixPath:
         # TODO(Jack): Change this after testing!
         return PurePosixPath(
@@ -34,8 +38,8 @@ class DwdFtpTransferCalculator(FtpTransferCalculator):
     def convert_nwp_init_hour_to_ftp_path(init_hour: int) -> PurePosixPath:
         return PurePosixPath(f"/weather/nwp/icon-eu/grib/{init_hour:02d}")
 
-    @staticmethod
     async def list_ftp_files_for_single_nwp_init_path(
+        self,
         ftp_path: PurePosixPath,
     ) -> list[FtpPathAndInfo]:
         """List all files on the FTP server for a single NWP init path.
@@ -44,7 +48,7 @@ class DwdFtpTransferCalculator(FtpTransferCalculator):
 
         This takes about 30 seconds for a single NWP init.
         """
-        async with aioftp.Client.context("opendata.dwd.de") as ftp_client:
+        async with aioftp.Client.context(self.ftp_host) as ftp_client:
             ftp_listing = await ftp_client.list(ftp_path, recursive=True)
         return ftp_listing  # type: ignore[return-value]
 
