@@ -1,3 +1,4 @@
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from datetime import datetime
@@ -21,7 +22,7 @@ class TransferJob(BaseModel):
 
 
 class PathAndSize(NamedTuple):
-    # We have to use NamedTuple because we want to use this in a `set`.
+    # We have to use NamedTuple because we want to use PathAndSize objects in a `set`.
     path: str
     file_size_bytes: int
 
@@ -30,6 +31,15 @@ type FtpPathAndInfo = tuple[PurePosixPath, UnixListInfo]
 
 
 class FtpTransferCalculator(ABC):
+    def __init__(self, filename_filter: str = "") -> None:
+        """
+        Args:
+            filename_filter: An optional regex pattern to filter filenames by.
+                For example, to only download single-level files, for forecast steps 0 to 5
+                then use a regex pattern like "single-level_.*_00[0-5]_".
+        """
+        self.filename_filter = filename_filter
+
     async def calc_new_files_for_all_nwp_init_hours(self) -> list[TransferJob]:
         transfer_jobs: list[TransferJob] = []
         for init_hour in self.nwp_init_hours:
@@ -67,6 +77,9 @@ class FtpTransferCalculator(ABC):
                 )
                 ftp_transfer_jobs.append(transfer_job)
 
+        if self.filename_filter:
+            ftp_transfer_jobs = self.filter_filenames_by_regex(ftp_transfer_jobs)
+
         # Find the earliest NWP init datetime to use as the `offset` when listing objects on object storage.
         min_nwp_init_datetime = min(
             [transfer_job.nwp_init_datetime for transfer_job in ftp_transfer_jobs]
@@ -98,6 +111,25 @@ class FtpTransferCalculator(ABC):
         )
 
         return jobs_still_to_download
+
+    def filter_filenames_by_regex(
+        self, ftp_transfer_jobs: list[TransferJob]
+    ) -> list[TransferJob]:
+        log.info(
+            "Filtering %d FTP filenames using regex pattern %s...",
+            len(ftp_transfer_jobs),
+            self.filename_filter,
+        )
+        pattern = re.compile(self.filename_filter)
+        filtered_ftp_transfer_jobs = [
+            job for job in ftp_transfer_jobs if pattern.search(str(job.src_ftp_path))
+        ]
+        log.info(
+            "%d FTP filenames remaining after filtering with regex pattern %s.",
+            len(filtered_ftp_transfer_jobs),
+            self.filename_filter,
+        )
+        return filtered_ftp_transfer_jobs
 
     def _list_obstore_files_for_single_nwp_init(
         self, nwp_init: datetime

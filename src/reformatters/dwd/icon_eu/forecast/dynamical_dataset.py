@@ -24,9 +24,18 @@ class DwdIconEuForecastDataset(
     region_job_class: type[DwdIconEuForecastRegionJob] = DwdIconEuForecastRegionJob
 
     def archive_grib_files(
-        self, nwp_init_hour: Literal["all", "0", "6", "12", "18"] = "all"
+        self,
+        nwp_init_hour: Literal["all", "0", "6", "12", "18"] = "all",
+        filename_filter: str = "",
     ) -> None:
-        calc = DwdFtpTransferCalculator()
+        """
+        Args:
+            nwp_init_hour: The NWP initialisation hour to archive.
+            filename_filter: An optional regex pattern to filter filenames by.
+                For example, to only download single-level files, for forecast steps 0 to 5
+                then use a regex pattern like "single-level_.*_00[0-5]_".
+        """
+        calc = DwdFtpTransferCalculator(filename_filter=filename_filter)
         if nwp_init_hour == "all":
             transfer_jobs = asyncio.run(calc.calc_new_files_for_all_nwp_init_hours())
         else:
