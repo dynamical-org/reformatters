@@ -23,7 +23,7 @@ class DwdFtpTransferCalculator(FtpTransferCalculator):
     def _obstore_root_path(self) -> PurePosixPath:
         # TODO(Jack): Change this after testing!
         return PurePosixPath(
-            "/home/jack/data/ICON-EU/grib/download_and_compress_and_concat_script/icon-eu/regular-lat-lon/"
+            "home/jack/data/ICON-EU/grib/download_and_compress_and_concat_script/icon-eu/regular-lat-lon/"
         )
 
     @property

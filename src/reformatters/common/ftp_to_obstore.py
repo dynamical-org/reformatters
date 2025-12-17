@@ -95,6 +95,10 @@ async def copy_files_from_ftp_to_obstore(
     for src, dst in zip(src_ftp_paths, dst_obstore_paths, strict=True):
         ftp_queue.put_nowait(_FtpFile(src_ftp_path=src, dst_obstore_path=dst))
 
+    if ftp_queue.empty():
+        log.info("No files to transfer: src_ftp_paths and dst_obstore_paths are empty.")
+        return
+
     # Set maxsize of Queue to apply back-pressure to the FTP workers.
     obstore_queue: Queue[_ObstoreFile] = Queue(maxsize=n_obstore_workers * 2)
 

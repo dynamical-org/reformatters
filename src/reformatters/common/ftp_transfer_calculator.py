@@ -23,7 +23,7 @@ class TransferJob(BaseModel):
 
 class PathAndSize(NamedTuple):
     # We have to use NamedTuple because we want to use PathAndSize objects in a `set`.
-    path: str
+    path: str  # No slash at the start of this string!
     file_size_bytes: int
 
 
@@ -68,46 +68,47 @@ class FtpTransferCalculator(ABC):
         self, ftp_listing: Sequence[FtpPathAndInfo]
     ) -> list[TransferJob]:
         # Collect list of TransferJobs from FTP server's listing:
-        ftp_transfer_jobs: list[TransferJob] = []
+        filtered_ftp_listing: list[TransferJob] = []
         for ftp_path, ftp_info in ftp_listing:
             if not self._skip_ftp_item(ftp_path, ftp_info):
                 self._sanity_check_ftp_path(ftp_path)
                 transfer_job = self._convert_ftp_path_to_transfer_job(
                     ftp_path, ftp_info
                 )
-                ftp_transfer_jobs.append(transfer_job)
+                filtered_ftp_listing.append(transfer_job)
 
         if self.filename_filter:
-            ftp_transfer_jobs = self.filter_filenames_by_regex(ftp_transfer_jobs)
+            filtered_ftp_listing = self.filter_filenames_by_regex(filtered_ftp_listing)
 
         # Find the earliest NWP init datetime to use as the `offset` when listing objects on object storage.
         min_nwp_init_datetime = min(
-            [transfer_job.nwp_init_datetime for transfer_job in ftp_transfer_jobs]
+            [transfer_job.nwp_init_datetime for transfer_job in filtered_ftp_listing]
         )
 
-        obstore_listing_set = self._list_obstore_files_for_single_nwp_init(
-            min_nwp_init_datetime
+        set_of_objects_already_downloaded: set[PathAndSize] = (
+            self._list_obstore_files_for_single_nwp_init(min_nwp_init_datetime)
         )
         log.info(
-            "Found %d files on obstore for NWP init time %s",
-            len(obstore_listing_set),
+            "Found %d files on obstore for NWP init time %s.",
+            len(set_of_objects_already_downloaded),
             min_nwp_init_datetime,
         )
 
+        # Only download FTP files that aren't already on object storage:
         jobs_still_to_download: list[TransferJob] = []
-
-        for transfer_job in ftp_transfer_jobs:
-            obstore_path = str(self._obstore_root_path / transfer_job.dst_obstore_path)
-            obstore_path_and_size = PathAndSize(
-                path=obstore_path, file_size_bytes=transfer_job.src_ftp_file_size_bytes
+        for transfer_job in filtered_ftp_listing:
+            candidate_to_transfer = PathAndSize(
+                path=str(transfer_job.dst_obstore_path),
+                file_size_bytes=transfer_job.src_ftp_file_size_bytes,
             )
-            if obstore_path_and_size not in obstore_listing_set:
+            if candidate_to_transfer not in set_of_objects_already_downloaded:
                 jobs_still_to_download.append(transfer_job)
 
         log.info(
-            "Planning to download %d files out of %d",
+            "%d of the %d files found on the FTP server (after filtering filenames) have already been downloaded to object storage. Now planning to download %d files.",
+            len(filtered_ftp_listing) - len(jobs_still_to_download),
+            len(filtered_ftp_listing),
             len(jobs_still_to_download),
-            len(ftp_listing),
         )
 
         return jobs_still_to_download
@@ -203,7 +204,7 @@ class FtpTransferCalculator(ABC):
     @property
     @abstractmethod
     def _obstore_root_path(self) -> PurePosixPath:
-        pass
+        """No slash at the start of the path!"""
 
     @property
     @abstractmethod
