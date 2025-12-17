@@ -31,6 +31,29 @@ type FtpPathAndInfo = tuple[PurePosixPath, UnixListInfo]
 
 
 class FtpTransferCalculator(ABC):
+    """Calculate which files to download from FTP to object storage.
+
+    The aim is to be as general as possible, and to be robust to NWP providers slightly changing
+    their naming conventions, or adding new files.
+
+    The implementation works like this:
+
+    1. Loop through each NWP initialisation hour, one by one (e.g. 00, 06, 12, 18).
+    2. For each NWP initialisation hour:
+    3. List all the files available on the FTP server.
+    4. Filter this list using:
+        - the logic in `_skip_ftp_item`.
+        - the `filename_filter` regex optionally provided by the user.
+    5. Find the earliest NWP init datetime from the filtered list of FTP files.
+    6. List all files on object storage, starting at the earliest NWP init time from the FTP files.
+        (Object storage listing is in lexicographic order. And the NWP init time is included in the
+        object key, e.g. .../icon-eu/regular-lat-lon/2025-12-17T00Z/.... So we avoid listing the
+        entire archive by starting the listing at a given offset based on the NWP init datetime.)
+    7. Put this list into a `set[PathAndSize]`. We include the filesize so the code will
+        automatically re-download incomplete downloads.
+    8. Return the set difference: filtered_files_on_ftp - files_on_object_storage.
+    """
+
     def __init__(self, filename_filter: str = "") -> None:
         """
         Args:
