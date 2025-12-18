@@ -86,14 +86,16 @@ class FtpTransferCalculator(ABC):
             ftp_path
         )
         log.info(
-            "Found %d files in %s", len(ftp_listing_for_nwp_init), ftp_host_and_path
+            "Found %d items (prior to filtering) in %s",
+            len(ftp_listing_for_nwp_init),
+            ftp_host_and_path,
         )
         return await self.calc_new_files_from_ftp_listing(ftp_listing_for_nwp_init)
 
     async def calc_new_files_from_ftp_listing(
         self, ftp_listing: Sequence[FtpPathAndInfo]
     ) -> list[TransferJob]:
-        # Collect list of TransferJobs from FTP server's listing:
+        # Filter ftp_listing using skip_ftp_item and convert to TransferJobs.
         filtered_ftp_listing: list[TransferJob] = []
         for ftp_path, ftp_info in ftp_listing:
             if not self._skip_ftp_item(ftp_path, ftp_info):
@@ -102,6 +104,11 @@ class FtpTransferCalculator(ABC):
                     ftp_path, ftp_info
                 )
                 filtered_ftp_listing.append(transfer_job)
+        log.info(
+            "Skipping %d FTP items after filtering with _skip_ftp_item. Now planning to download %d FTP files.",
+            len(ftp_listing) - len(filtered_ftp_listing),
+            len(filtered_ftp_listing),
+        )
 
         if self.filename_filter:
             filtered_ftp_listing = self.filter_filenames_by_regex(filtered_ftp_listing)
@@ -131,9 +138,9 @@ class FtpTransferCalculator(ABC):
                 jobs_still_to_download.append(transfer_job)
 
         log.info(
-            "%d of the %d files found on the FTP server (after filtering filenames) have already been downloaded to object storage. Now planning to download %d files.",
-            len(filtered_ftp_listing) - len(jobs_still_to_download),
+            "After filtering, we were planning to download %d files. Of those files, %d files already exist on object storage. We are now planning to download %d files.",
             len(filtered_ftp_listing),
+            len(filtered_ftp_listing) - len(jobs_still_to_download),
             len(jobs_still_to_download),
         )
 
@@ -143,8 +150,7 @@ class FtpTransferCalculator(ABC):
         self, ftp_transfer_jobs: list[TransferJob]
     ) -> list[TransferJob]:
         log.info(
-            "Filtering %d FTP filenames using regex pattern %s...",
-            len(ftp_transfer_jobs),
+            "Filtering FTP filenames using user-supplied regex pattern %s...",
             self.filename_filter,
         )
         pattern = re.compile(self.filename_filter)
@@ -152,9 +158,10 @@ class FtpTransferCalculator(ABC):
             job for job in ftp_transfer_jobs if pattern.search(str(job.src_ftp_path))
         ]
         log.info(
-            "%d FTP filenames remaining after filtering with regex pattern %s.",
-            len(filtered_ftp_transfer_jobs),
+            "Skipping %d FTP items after filtering with user-supplied regex pattern %s. Now planning to download %d FTP files.",
+            len(ftp_transfer_jobs) - len(filtered_ftp_transfer_jobs),
             self.filename_filter,
+            len(filtered_ftp_transfer_jobs),
         )
         return filtered_ftp_transfer_jobs
 
