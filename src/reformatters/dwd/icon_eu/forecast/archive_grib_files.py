@@ -30,9 +30,7 @@ class DwdFtpTransferCalculator(FtpTransferCalculator):
     @property
     def _obstore_root_path(self) -> PurePosixPath:
         """*Without* the leading slash."""
-        return PurePosixPath(
-            "us-west-2.opendata.source.coop/dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/"
-        )
+        return PurePosixPath("dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/")
 
     @property
     def object_store(self) -> ObjectStore:
