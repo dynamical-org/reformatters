@@ -1,11 +1,15 @@
 import re
 from datetime import datetime
 from pathlib import PurePosixPath
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 import aioftp
-from obstore.store import LocalStore, ObjectStore
+from obstore.store import ObjectStore, S3Store
 
+if TYPE_CHECKING:
+    from obstore.store import S3Credential
+
+from reformatters.common import kubernetes
 from reformatters.common.ftp_transfer_calculator import (
     FtpPathAndInfo,
     FtpTransferCalculator,
@@ -26,14 +30,28 @@ class DwdFtpTransferCalculator(FtpTransferCalculator):
     @property
     def _obstore_root_path(self) -> PurePosixPath:
         """*Without* the leading slash."""
-        # TODO(Jack): Change this after testing!
         return PurePosixPath(
-            "home/jack/data/ICON-EU/grib/download_and_compress_and_concat_script/icon-eu/regular-lat-lon/"
+            "us-west-2.opendata.source.coop/dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/"
         )
 
     @property
     def object_store(self) -> ObjectStore:
-        return LocalStore()  # TODO(Jack): Change this! LocalStore is only for testing!
+        secret = kubernetes.load_secret("source-coop-storage-options-key")
+
+        def get_credentials() -> "S3Credential":
+            return {
+                "access_key_id": secret["key"],
+                "secret_access_key": secret["secret"],
+                "expires_at": None,
+            }
+
+        # When running in prod, secret will {'key': 'xxx', 'secret': 'xxxx'}.
+        # When not running in prod, secret will be empty.
+        return S3Store(
+            bucket="us-west-2.opendata.source.coop",
+            region="us-west-2",
+            credential_provider=get_credentials if secret else None,
+        )
 
     @staticmethod
     def convert_nwp_init_hour_to_ftp_path(init_hour: int) -> PurePosixPath:
