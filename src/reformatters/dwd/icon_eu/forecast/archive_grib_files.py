@@ -4,12 +4,10 @@ from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Final
 
 import aioftp
-from obstore.store import ObjectStore, S3Store
 
 if TYPE_CHECKING:
     pass
 
-from reformatters.common import kubernetes
 from reformatters.common.ftp_transfer_calculator import (
     FtpPathAndInfo,
     FtpTransferCalculator,
@@ -23,33 +21,10 @@ class DwdFtpTransferCalculator(FtpTransferCalculator):
     /weather/nwp/icon-eu/grib/00/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2025112600_004_ALB_RAD.grib2.bz2
     """
 
+    # TODO(Jack): ftp_host should be passed into the constructor.
     @property
     def ftp_host(self) -> str:
         return "opendata.dwd.de"
-
-    @property
-    def _obstore_root_path(self) -> PurePosixPath:
-        """*Without* the leading slash."""
-        return PurePosixPath("dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/")
-
-    @property
-    def object_store(self) -> ObjectStore:
-        secret = kubernetes.load_secret("source-coop-storage-options-key")
-        bucket = "us-west-2.opendata.source.coop"
-        region = "us-west-2"
-
-        # When running in prod, `secret` will be {'key': 'xxx', 'secret': 'xxxx'}.
-        # When not running in prod, `secret` will be empty. `S3Store()` won't
-        # accept `None` for `access_key_id` or `secret_access_key`.
-        if secret:
-            return S3Store(
-                bucket=bucket,
-                region=region,
-                access_key_id=secret["key"],
-                secret_access_key=secret["secret"],
-            )
-        else:
-            return S3Store(bucket=bucket, region=region)
 
     @staticmethod
     def convert_nwp_init_hour_to_ftp_path(init_hour: int) -> PurePosixPath:

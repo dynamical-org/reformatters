@@ -5,8 +5,9 @@ from pathlib import PurePosixPath
 from typing import Literal
 
 import typer
+from obstore.store import LocalStore, ObjectStore, S3Store
 
-from reformatters.common import validation
+from reformatters.common import kubernetes, validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.ftp_to_obstore import copy_files_from_ftp_to_obstore
 from reformatters.common.kubernetes import ArchiveGribFilesCronJob, CronJob
@@ -29,6 +30,7 @@ class DwdIconEuForecastDataset(
         self,
         nwp_init_hour: Literal["all", "0", "6", "12", "18"] = "all",
         filename_filter: str = "",
+        local_dst_root_path: str | None = None,
     ) -> None:
         """
         Args:
@@ -36,8 +38,26 @@ class DwdIconEuForecastDataset(
             filename_filter: An optional regex pattern to filter filenames by.
                 For example, to only download single-level files, for forecast steps 0 to 5
                 then use a regex pattern like "single-level_.*_00[0-5]_".
+            local_dst_root_path: If set, then the GRIB files will be saved to this
+                local path. Must not start with a leading slash.
         """
-        calc = DwdFtpTransferCalculator(filename_filter=filename_filter)
+        if local_dst_root_path:
+            if local_dst_root_path[0] == "/":
+                raise ValueError("local_dst_root_path must not start with a slash!")
+            dst_root_path = PurePosixPath(local_dst_root_path)
+            store: ObjectStore = LocalStore()
+        else:
+            dst_root_path = PurePosixPath(
+                "dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/"
+            )
+            store = get_source_coop_s3_store()
+
+        calc = DwdFtpTransferCalculator(
+            dst_obstore=store,
+            dst_root_path=dst_root_path,
+            filename_filter=filename_filter,
+        )
+
         if nwp_init_hour == "all":
             files_to_download = asyncio.run(
                 calc.calc_new_files_for_all_nwp_init_hours()
@@ -59,7 +79,7 @@ class DwdIconEuForecastDataset(
                 ftp_host=calc.ftp_host,
                 src_ftp_paths=src_ftp_paths,
                 dst_obstore_paths=dst_obstore_paths,
-                dst_store=calc.object_store,
+                dst_store=calc.dst_obstore,
             )
         )
 
@@ -108,3 +128,22 @@ class DwdIconEuForecastDataset(
         # TODO(Jack): Implement ValidationCronJob, ReformatCronJob, and return these
 
         return [ftp_to_obstore_cron_job]
+
+
+def get_source_coop_s3_store() -> S3Store:
+    secret = kubernetes.load_secret("source-coop-storage-options-key")
+    bucket = "us-west-2.opendata.source.coop"
+    region = "us-west-2"
+
+    # When running in prod, `secret` will be {'key': 'xxx', 'secret': 'xxxx'}.
+    # When not running in prod, `secret` will be empty. `S3Store()` won't
+    # accept `None` for `access_key_id` or `secret_access_key`.
+    if secret:
+        return S3Store(
+            bucket=bucket,
+            region=region,
+            access_key_id=secret["key"],
+            secret_access_key=secret["secret"],
+        )
+    else:
+        return S3Store(bucket=bucket, region=region)

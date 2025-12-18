@@ -54,13 +54,25 @@ class FtpTransferCalculator(ABC):
     8. Return the set difference: filtered_files_on_ftp - files_on_object_storage.
     """
 
-    def __init__(self, filename_filter: str = "") -> None:
+    def __init__(
+        self,
+        dst_obstore: ObjectStore,
+        dst_root_path: PurePosixPath,
+        filename_filter: str = "",
+    ) -> None:
         """
         Args:
+            dst_obstore: The ObjectStore to save files to.
+            dst_root_path: The base path on the `dst_obstore` to save files to.
+                Must *not* include a leading slash!
             filename_filter: An optional regex pattern to filter filenames by.
                 For example, to only download single-level files, for forecast steps 0 to 5
                 then use a regex pattern like "single-level_.*_00[0-5]_".
         """
+        if str(dst_root_path).startswith("/"):
+            raise ValueError("local_dst_root_path must not start with a slash!")
+        self.dst_obstore = dst_obstore
+        self.dst_root_path = dst_root_path
         self.filename_filter = filename_filter
 
     async def calc_new_files_for_all_nwp_init_hours(self) -> list[TransferJob]:
@@ -170,9 +182,9 @@ class FtpTransferCalculator(ABC):
             self._format_string_for_nwp_init_datetime_in_obstore_path
         )
 
-        obstore_listing = self.object_store.list(
-            prefix=str(self._obstore_root_path),
-            offset=str(self._obstore_root_path / nwp_init_datetime_str),
+        obstore_listing = self.dst_obstore.list(
+            prefix=str(self.dst_root_path),
+            offset=str(self.dst_root_path / nwp_init_datetime_str),
         ).collect()
 
         return {
@@ -205,7 +217,7 @@ class FtpTransferCalculator(ABC):
         )
         nwp_variable_name = self._extract_nwp_variable_name_from_ftp_path(ftp_path)
         dst_obstore_path: PurePosixPath = (
-            self._obstore_root_path
+            self.dst_root_path
             / nwp_init_datetime_obstore_str
             / nwp_variable_name
             / ftp_path.name
@@ -236,16 +248,6 @@ class FtpTransferCalculator(ABC):
     @abstractmethod
     def ftp_host(self) -> str:
         """The FTP host, without "ftp://" prefix."""
-
-    @property
-    @abstractmethod
-    def _obstore_root_path(self) -> PurePosixPath:
-        """No slash at the start of the path!"""
-
-    @property
-    @abstractmethod
-    def object_store(self) -> ObjectStore:
-        pass
 
     @abstractmethod
     async def list_ftp_files_for_single_nwp_init_path(
