@@ -35,15 +35,21 @@ class DwdFtpTransferCalculator(FtpTransferCalculator):
     @property
     def object_store(self) -> ObjectStore:
         secret = kubernetes.load_secret("source-coop-storage-options-key")
+        bucket = "us-west-2.opendata.source.coop"
+        region = "us-west-2"
 
-        # When running in prod, secret will {'key': 'xxx', 'secret': 'xxxx'}.
-        # When not running in prod, secret will be empty.
-        return S3Store(
-            bucket="us-west-2.opendata.source.coop",
-            region="us-west-2",
-            access_key_id=secret.get("key"),
-            secret_access_key=secret.get("secret"),
-        )
+        # When running in prod, `secret` will be {'key': 'xxx', 'secret': 'xxxx'}.
+        # When not running in prod, `secret` will be empty. `S3Store()` won't
+        # accept `None` for `access_key_id` or `secret_access_key`.
+        if secret:
+            return S3Store(
+                bucket=bucket,
+                region=region,
+                access_key_id=secret["key"],
+                secret_access_key=secret["secret"],
+            )
+        else:
+            return S3Store(bucket=bucket, region=region)
 
     @staticmethod
     def convert_nwp_init_hour_to_ftp_path(init_hour: int) -> PurePosixPath:
