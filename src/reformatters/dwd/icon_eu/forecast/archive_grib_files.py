@@ -7,7 +7,7 @@ import aioftp
 from obstore.store import ObjectStore, S3Store
 
 if TYPE_CHECKING:
-    from obstore.store import S3Credential
+    pass
 
 from reformatters.common import kubernetes
 from reformatters.common.ftp_transfer_calculator import (
@@ -38,19 +38,13 @@ class DwdFtpTransferCalculator(FtpTransferCalculator):
     def object_store(self) -> ObjectStore:
         secret = kubernetes.load_secret("source-coop-storage-options-key")
 
-        def get_credentials() -> "S3Credential":
-            return {
-                "access_key_id": secret["key"],
-                "secret_access_key": secret["secret"],
-                "expires_at": None,
-            }
-
         # When running in prod, secret will {'key': 'xxx', 'secret': 'xxxx'}.
         # When not running in prod, secret will be empty.
         return S3Store(
             bucket="us-west-2.opendata.source.coop",
             region="us-west-2",
-            credential_provider=get_credentials if secret else None,
+            access_key_id=secret.get("key"),
+            secret_access_key=secret.get("secret"),
         )
 
     @staticmethod
