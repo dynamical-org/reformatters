@@ -10,10 +10,13 @@ from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.ftp_to_obstore import copy_files_from_ftp_to_obstore
 from reformatters.common.kubernetes import ArchiveGribFilesCronJob, CronJob
+from reformatters.common.logging import get_logger
 
 from .archive_grib_files import DwdFtpTransferCalculator
 from .region_job import DwdIconEuForecastRegionJob, DwdIconEuForecastSourceFileCoord
 from .template_config import DwdIconEuDataVar, DwdIconEuForecastTemplateConfig
+
+log = get_logger(__name__)
 
 
 class DwdIconEuForecastDataset(
@@ -58,6 +61,12 @@ class DwdIconEuForecastDataset(
                 dst_obstore_paths=dst_obstore_paths,
                 dst_store=calc.object_store,
             )
+        )
+
+        log.info(
+            "Finished downloading %d files from ftp://%s",
+            len(files_to_download),
+            calc.ftp_host,
         )
 
     def get_cli(self) -> typer.Typer:

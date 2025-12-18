@@ -81,12 +81,12 @@ class FtpTransferCalculator(ABC):
             )
         ftp_path = self.convert_nwp_init_hour_to_ftp_path(init_hour)
         ftp_host_and_path = f"ftp://{self.ftp_host}{ftp_path}"
-        log.info("Listing files in %s ...", ftp_host_and_path)
+        log.info("Recursively listing files below FTP path: %s ...", ftp_host_and_path)
         ftp_listing_for_nwp_init = await self.list_ftp_files_for_single_nwp_init_path(
             ftp_path
         )
         log.info(
-            "Found %d items (prior to filtering) in %s",
+            "Found %d items (prior to filtering) below FTP path: %s",
             len(ftp_listing_for_nwp_init),
             ftp_host_and_path,
         )
@@ -105,9 +105,10 @@ class FtpTransferCalculator(ABC):
                 )
                 filtered_ftp_listing.append(transfer_job)
         log.info(
-            "Skipping %d FTP items after filtering with _skip_ftp_item. Now planning to download %d FTP files.",
-            len(ftp_listing) - len(filtered_ftp_listing),
+            "Filtering with _skip_ftp_item reduced the number of files we plan to download from %d down to %d (a reduction of %d files).",
+            len(ftp_listing),
             len(filtered_ftp_listing),
+            len(ftp_listing) - len(filtered_ftp_listing),
         )
 
         if self.filename_filter:
@@ -122,7 +123,7 @@ class FtpTransferCalculator(ABC):
             self._list_obstore_files_for_single_nwp_init(min_nwp_init_datetime)
         )
         log.info(
-            "Found %d files on obstore for NWP init time %s.",
+            "Found a total of %d files on object store for NWP init time %s UTC and for subsequent init times.",
             len(set_of_objects_already_downloaded),
             min_nwp_init_datetime,
         )
@@ -149,19 +150,16 @@ class FtpTransferCalculator(ABC):
     def filter_filenames_by_regex(
         self, ftp_transfer_jobs: list[TransferJob]
     ) -> list[TransferJob]:
-        log.info(
-            "Filtering FTP filenames using user-supplied regex pattern %s...",
-            self.filename_filter,
-        )
         pattern = re.compile(self.filename_filter)
         filtered_ftp_transfer_jobs = [
             job for job in ftp_transfer_jobs if pattern.search(str(job.src_ftp_path))
         ]
         log.info(
-            "Skipping %d FTP items after filtering with user-supplied regex pattern %s. Now planning to download %d FTP files.",
-            len(ftp_transfer_jobs) - len(filtered_ftp_transfer_jobs),
+            "Filtering with user-supplied regex '%s' reduced the number of files we plan to download from %d down to %d (a reduction of %d files).",
             self.filename_filter,
+            len(ftp_transfer_jobs),
             len(filtered_ftp_transfer_jobs),
+            len(ftp_transfer_jobs) - len(filtered_ftp_transfer_jobs),
         )
         return filtered_ftp_transfer_jobs
 
