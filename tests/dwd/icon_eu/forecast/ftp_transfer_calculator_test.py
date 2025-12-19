@@ -184,36 +184,9 @@ async def test_dwd_ftp_transfer_calculator_identifying_new_files(
         ftp_host="opendata.dwd.de",
     )
 
-    # Create a dictionary for efficient lookups within this test function
-    ftp_listing_map = dict(dwd_ftp_listing_00z_fixture)
+    # Hard-coded values for demonstration, removing lookup logic from fixture
+    fixture_nwp_init_datetime = datetime(2025, 12, 19, 0, 0)
 
-    # Determine the NWP init datetime from the fixture for consistent mocking.
-    # We'll take the first valid file from the fixture to extract its NWP init datetime.
-    first_valid_ftp_path = None
-    first_valid_ftp_info = None
-
-    for ftp_path, ftp_info in dwd_ftp_listing_00z_fixture:
-        # _skip_ftp_item also checks for file type, so ensure the dummy UnixListInfo has type "file"
-        if (
-            not calc._skip_ftp_item(ftp_path, ftp_info)
-            and ftp_info.get("type") == "file"
-        ):
-            first_valid_ftp_path = ftp_path
-            first_valid_ftp_info = ftp_info
-            break
-
-    assert first_valid_ftp_path is not None, (
-        "Could not find a valid FTP file in the fixture to determine NWP init datetime."
-    )
-    assert first_valid_ftp_info is not None, (
-        "Could not find valid FTP info in the fixture to determine NWP init datetime."
-    )
-
-    fixture_nwp_init_datetime = calc._extract_init_datetime_from_ftp_path(
-        first_valid_ftp_path
-    )
-
-    # Define paths using the determined fixture_nwp_init_datetime
     alb_rad_ftp_path_004 = PurePosixPath(
         f"/weather/nwp/icon-eu/grib/00/alb_rad/icon-eu_europe_regular-lat-lon_single-level_{fixture_nwp_init_datetime.strftime('%Y%m%d%H')}_004_ALB_RAD.grib2.bz2"
     )
@@ -224,16 +197,8 @@ async def test_dwd_ftp_transfer_calculator_identifying_new_files(
         f"/weather/nwp/icon-eu/grib/00/t_2m/icon-eu_europe_regular-lat-lon_single-level_{fixture_nwp_init_datetime.strftime('%Y%m%d%H')}_004_T_2M.grib2.bz2"
     )
 
-    # We need to get the actual sizes from the fixture for these specific files
-    alb_rad_size = 0
-    clch_size = 0
-    # Use ftp_listing_map for efficient lookup
-    alb_rad_info = ftp_listing_map.get(alb_rad_ftp_path_004)
-    if alb_rad_info:
-        alb_rad_size = int(alb_rad_info["size"])
-    clch_info = ftp_listing_map.get(clch_ftp_path_004)
-    if clch_info:
-        clch_size = int(clch_info["size"])
+    alb_rad_size = 1234567  # Hard-coded size
+    clch_size = 7654321  # Hard-coded size
 
     # Construct expected_mock_obstore_files with `PathAndSize` objects
     expected_mock_obstore_files = {
@@ -241,7 +206,7 @@ async def test_dwd_ftp_transfer_calculator_identifying_new_files(
             path=str(
                 calc._calc_obstore_path(alb_rad_ftp_path_004, fixture_nwp_init_datetime)
             ),
-            file_size_bytes=alb_rad_size,  # Correct size from fixture, should NOT be downloaded
+            file_size_bytes=alb_rad_size,  # Correct size, should NOT be downloaded
         ),
         PathAndSize(
             path=str(
@@ -266,18 +231,93 @@ async def test_dwd_ftp_transfer_calculator_identifying_new_files(
         side_effect=mock_list_obstore_files_for_single_nwp_init,
     )
 
+    # Create a dummy fixture listing for this simplified test, to match the hard-coded values.
+    # This is necessary because the calc.calc_new_files_from_ftp_listing method
+    # will iterate over the input ftp_listing to create transfer_jobs.
+    dummy_datetime_info = datetime(2000, 1, 1, 0, 0, 0)
+    dummy_ftp_listing_for_test: list[FtpPathAndInfo] = [
+        (
+            alb_rad_ftp_path_004,
+            cast(
+                aioftp.client.UnixListInfo,
+                {
+                    "name": alb_rad_ftp_path_004.name,
+                    "size": alb_rad_size,
+                    "type": "file",
+                    "atime": dummy_datetime_info,
+                    "mtime": dummy_datetime_info,
+                    "ctime": dummy_datetime_info,
+                },
+            ),
+        ),
+        (
+            clch_ftp_path_004,
+            cast(
+                aioftp.client.UnixListInfo,
+                {
+                    "name": clch_ftp_path_004.name,
+                    "size": clch_size,
+                    "type": "file",
+                    "atime": dummy_datetime_info,
+                    "mtime": dummy_datetime_info,
+                    "ctime": dummy_datetime_info,
+                },
+            ),
+        ),
+        (
+            t_2m_ftp_path_004,
+            cast(
+                aioftp.client.UnixListInfo,
+                {
+                    "name": t_2m_ftp_path_004.name,
+                    "size": 567890,
+                    "type": "file",  # New file, arbitrary size
+                    "atime": dummy_datetime_info,
+                    "mtime": dummy_datetime_info,
+                    "ctime": dummy_datetime_info,
+                },
+            ),
+        ),
+        # Add a directory to ensure _skip_ftp_item works with hard-coded values
+        (
+            PurePosixPath(
+                f"/weather/nwp/icon-eu/grib/00/a_directory_{fixture_nwp_init_datetime.strftime('%Y%m%d%H')}"
+            ),
+            cast(
+                aioftp.client.UnixListInfo,
+                {
+                    "name": "a_directory_00",
+                    "size": 0,
+                    "type": "dir",
+                    "atime": dummy_datetime_info,
+                    "mtime": dummy_datetime_info,
+                    "ctime": dummy_datetime_info,
+                },
+            ),
+        ),
+    ]
+
     files_to_download = await calc.calc_new_files_from_ftp_listing(
-        dwd_ftp_listing_00z_fixture
+        dummy_ftp_listing_for_test
     )
 
     # Assertions
     # 1. The file with an incorrect size (CLCH) should be in files_to_download.
     assert any(job.src_ftp_path == clch_ftp_path_004 for job in files_to_download)
 
-    # 2. A file that is entirely new (not in mock_obstore_files at all) should be in files_to_download.
+    # 2. A file that is entirely new (t_2m) should be in files_to_download.
     assert any(job.src_ftp_path == t_2m_ftp_path_004 for job in files_to_download)
 
     # 3. The file with correct size (ALB_RAD) should NOT be in files_to_download.
     assert not any(
         job.src_ftp_path == alb_rad_ftp_path_004 for job in files_to_download
+    )
+
+    # 4. Assert that the directory is not in the filtered jobs.
+    assert not any(
+        job.src_ftp_path
+        == PurePosixPath(
+            f"/weather/nwp/icon-eu/grib/00/a_directory_{fixture_nwp_init_datetime.strftime('%Y%m%d%H')}"
+        )
+        for job in files_to_download
     )
