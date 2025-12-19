@@ -128,7 +128,10 @@ async def test_dwd_ftp_path_to_transfer_job_conversion(
     test_ftp_path = PurePosixPath(
         "/weather/nwp/icon-eu/grib/00/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2025112600_004_ALB_RAD.grib2.bz2"
     )
-    test_ftp_info = _get_unix_list_info(name=test_ftp_path.name, size=1234567)
+    test_ftp_file_size = 1234567
+    test_ftp_info = _get_unix_list_info(
+        name=test_ftp_path.name, size=test_ftp_file_size
+    )
 
     # Instantiate with a dummy object store, it's not used in this specific method call
     calc = DwdFtpTransferCalculator(
@@ -140,7 +143,7 @@ async def test_dwd_ftp_path_to_transfer_job_conversion(
     transfer_job = calc._convert_ftp_path_to_transfer_job(test_ftp_path, test_ftp_info)
 
     assert transfer_job.src_ftp_path == test_ftp_path
-    assert transfer_job.src_ftp_file_size_bytes == 1234567
+    assert transfer_job.src_ftp_file_size_bytes == test_ftp_file_size
     assert transfer_job.nwp_init_datetime == datetime(2025, 11, 26, 0, 0)
     expected_dst_obstore_path = PurePosixPath(
         "dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/2025-11-26T00Z/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2025112600_004_ALB_RAD.grib2.bz2"
