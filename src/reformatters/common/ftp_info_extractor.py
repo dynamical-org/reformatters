@@ -1,3 +1,4 @@
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from datetime import datetime
@@ -20,8 +21,59 @@ class FtpInfoExtractor(ABC):
     files.
     """
 
-    def __init__(self, ftp_host: str) -> None:
+    def __init__(self, ftp_host: str, filename_filter: str = "") -> None:
         self.ftp_host = ftp_host
+        self.filename_filter = filename_filter
+
+    async def list_and_filter_for_init_hour(
+        self,
+        init_hour: int,
+    ) -> Sequence[FtpPathAndInfo]:
+        ftp_path = self.convert_nwp_init_hour_to_ftp_path(init_hour)
+        ftp_host_and_path = f"ftp://{self.ftp_host}{ftp_path}"
+        log.info("Recursively listing files below FTP path: %s ...", ftp_host_and_path)
+        ftp_listing = await self.list(ftp_path)
+        log.info(
+            "Found %d items (prior to filtering) below FTP path: %s",
+            len(ftp_listing),
+            ftp_host_and_path,
+        )
+        # Filter listing using skip_ftp_item and convert to TransferJobs.
+        filtered_ftp_listing = []
+        for ftp_path, ftp_info in ftp_listing:
+            if not self.skip_ftp_item(ftp_path, ftp_info):
+                self.sanity_check_ftp_path(ftp_path)
+                filtered_ftp_listing.append((ftp_path, ftp_info))
+        log.info(
+            "Filtering with skip_ftp_item reduced the number of files we plan to download from %d down to %d (a reduction of %d files).",
+            len(ftp_listing),
+            len(filtered_ftp_listing),
+            len(ftp_listing) - len(filtered_ftp_listing),
+        )
+
+        if self.filename_filter:
+            filtered_ftp_listing = self.filter_filenames_by_regex(filtered_ftp_listing)
+
+        return filtered_ftp_listing
+
+    def filter_filenames_by_regex(
+        self,
+        ftp_listing: list[FtpPathAndInfo],
+    ) -> list[FtpPathAndInfo]:
+        pattern = re.compile(self.filename_filter)
+        filtered_ftp_listing = [
+            (ftp_path, ftp_info)
+            for ftp_path, ftp_info in ftp_listing
+            if pattern.search(str(ftp_path))
+        ]
+        log.info(
+            "Filtering with user-supplied regex '%s' reduced the number of files we plan to download from %d down to %d (a reduction of %d files).",
+            self.filename_filter,
+            len(ftp_listing),
+            len(filtered_ftp_listing),
+            len(ftp_listing) - len(filtered_ftp_listing),
+        )
+        return filtered_ftp_listing
 
     @abstractmethod
     async def list(

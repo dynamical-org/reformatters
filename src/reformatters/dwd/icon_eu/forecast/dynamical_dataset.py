@@ -15,7 +15,7 @@ from reformatters.common.kubernetes import ArchiveGribFilesCronJob, CronJob
 from reformatters.common.logging import get_logger
 from reformatters.common.object_storage_info_manager import ObjectStorageInfoManager
 
-from .archive_grib_files import DwdFtpInfoExtractor
+from .ftp_info_extractor import DwdFtpInfoExtractor
 from .region_job import DwdIconEuForecastRegionJob, DwdIconEuForecastSourceFileCoord
 from .template_config import DwdIconEuDataVar, DwdIconEuForecastTemplateConfig
 
@@ -51,14 +51,15 @@ class DwdIconEuForecastDataset(
             )
             store = get_source_coop_s3_store()
 
-        ftp_info_extractor = DwdFtpInfoExtractor(ftp_host="opendata.dwd.de")
+        ftp_info_extractor = DwdFtpInfoExtractor(
+            ftp_host="opendata.dwd.de", filename_filter=filename_filter
+        )
         obstore_info_manager = ObjectStorageInfoManager(
             dst_obstore=store, dst_root_path=dst_root_path
         )
         coordinator = FtpTransferCoordinator(
             ftp_info_extractor=ftp_info_extractor,
             obstore_info_manager=obstore_info_manager,
-            filename_filter=filename_filter,
         )
 
         if nwp_init_hour == "all":

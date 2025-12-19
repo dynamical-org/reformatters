@@ -15,7 +15,7 @@ from reformatters.common.ftp_to_obstore_types import (
 )
 from reformatters.common.ftp_transfer_coordinator import FtpTransferCoordinator
 from reformatters.common.object_storage_info_manager import ObjectStorageInfoManager
-from reformatters.dwd.icon_eu.forecast.archive_grib_files import DwdFtpInfoExtractor
+from reformatters.dwd.icon_eu.forecast.ftp_info_extractor import DwdFtpInfoExtractor
 
 type FtpItemType = Literal["dir", "file", "link"]
 
@@ -69,7 +69,6 @@ async def test_dwd_ftp_transfer_calculator_filtering(
     calc_no_filter = FtpTransferCoordinator(
         ftp_info_extractor=ftp_info_extractor,
         obstore_info_manager=object_storage_info_manager,
-        filename_filter="",
     )
 
     mocker.patch.object(
@@ -153,7 +152,7 @@ async def test_dwd_ftp_path_to_transfer_job_conversion(
         obstore_info_manager=object_storage_info_manager,
     )
 
-    transfer_job = calc._convert_ftp_path_to_transfer_job(test_ftp_path, test_ftp_info)
+    transfer_job = calc.convert_ftp_path_to_transfer_job(test_ftp_path, test_ftp_info)
 
     assert transfer_job.src_ftp_path == test_ftp_path
     assert transfer_job.src_ftp_file_size_bytes == test_ftp_file_size

@@ -4,6 +4,9 @@ from pathlib import PurePosixPath
 from obstore.store import ObjectStore
 
 from reformatters.common.ftp_to_obstore_types import PathAndSize
+from reformatters.common.logging import get_logger
+
+log = get_logger(__name__)
 
 
 class ObjectStorageInfoManager:
@@ -16,9 +19,7 @@ class ObjectStorageInfoManager:
         else:
             self.dst_root_path = dst_root_path
 
-    def list_obstore_files_for_single_nwp_init(
-        self, nwp_init: datetime
-    ) -> set[PathAndSize]:
+    def list_files_starting_at_nwp_init(self, nwp_init: datetime) -> set[PathAndSize]:
         nwp_init_datetime_str = nwp_init.strftime(
             self.format_string_for_nwp_init_datetime_in_obstore_path
         )
@@ -27,6 +28,12 @@ class ObjectStorageInfoManager:
             prefix=str(self.dst_root_path),
             offset=str(self.dst_root_path / nwp_init_datetime_str),
         ).collect()
+
+        log.info(
+            "Found a total of %d files on object store for NWP init time %s UTC and for subsequent init times.",
+            len(obstore_listing),
+            nwp_init,
+        )
 
         return {
             PathAndSize(path=item["path"], file_size_bytes=item["size"])
