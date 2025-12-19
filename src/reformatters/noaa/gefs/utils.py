@@ -4,7 +4,6 @@ import pandas as pd
 
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import digest
-from reformatters.common.retry import retry
 from reformatters.noaa.gefs.gefs_config_models import GefsSourceFileCoord
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 
@@ -37,25 +36,17 @@ def gefs_download_file(
 ) -> Path:
     """Download file from GEFS source with retry and fallback to alternative source."""
     try:
-
-        def download_fn() -> Path:
-            return _download_file_from_gefs_source(
-                dataset_id, coord, coord.get_index_url(), coord.get_url()
-            )
-
-        return retry(download_fn)
+        return _download_file_from_gefs_source(
+            dataset_id, coord, coord.get_index_url(), coord.get_url()
+        )
     except FileNotFoundError:
         # if init time is within the last 4 days, try to download from the fallback source
         if coord.init_time >= pd.Timestamp.now() - pd.Timedelta(days=4):
-
-            def fallback_fn() -> Path:
-                return _download_file_from_gefs_source(
-                    dataset_id,
-                    coord,
-                    coord.get_index_url(fallback=True),
-                    coord.get_fallback_url(),
-                )
-
-            return retry(fallback_fn, max_attempts=2)
+            return _download_file_from_gefs_source(
+                dataset_id,
+                coord,
+                coord.get_index_url(fallback=True),
+                coord.get_fallback_url(),
+            )
         else:
             raise

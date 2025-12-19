@@ -11,7 +11,6 @@ import xarray as xr
 
 from reformatters.common.config_models import DataVarAttrs, Encoding
 from reformatters.common.pydantic import replace
-from reformatters.common.retry import retry
 from reformatters.common.storage import (
     DatasetFormat,
     StorageConfig,
@@ -394,12 +393,6 @@ def test_download_file_fallback(
         mock_download,
     )
 
-    original_retry = retry
-    monkeypatch.setattr(
-        "reformatters.noaa.gefs.utils.retry",
-        lambda func, max_attempts=1: original_retry(func, max_attempts=max_attempts),
-    )
-
     mock_grib_message_byte_ranges_from_index = Mock(
         return_value=([123456, 234567], [234566, 345678])
     )
@@ -449,12 +442,6 @@ def test_download_file_no_fallback_for_old_data(
         data_vars=data_vars,
     )
 
-    original_retry = retry
-    monkeypatch.setattr(
-        "reformatters.noaa.gefs.utils.retry",
-        lambda func, max_attempts=1: original_retry(func, max_attempts=max_attempts),
-    )
-
     def mock_download_side_effect(url: str, dataset_id: str, **kwargs: object) -> Mock:
         raise FileNotFoundError(f"Not found: {url}")
 
@@ -469,7 +456,6 @@ def test_download_file_no_fallback_for_old_data(
         job.download_file(coord)
 
     # Should have only tried primary source
-    # The retry logic will try the primary source multiple times before giving up
     for call in mock_download.call_args_list:
         url = call[0][0]
         # All calls should be to primary source (AWS S3), not fallback (NOMADS)
