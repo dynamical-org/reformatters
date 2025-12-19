@@ -5,9 +5,9 @@ from pathlib import PurePosixPath
 from typing import Literal, cast
 from unittest.mock import MagicMock
 
-import aioftp.client
 import obstore.store
 import pytest
+from aioftp.client import UnixListInfo
 
 from reformatters.common.ftp_transfer_calculator import (
     FtpPathAndInfo,
@@ -17,10 +17,12 @@ from reformatters.dwd.icon_eu.forecast.archive_grib_files import (
     DwdFtpTransferCalculator,
 )
 
+type FtpItemType = Literal["dir", "file", "link"]
+
 
 @pytest.fixture
-def dwd_ftp_listing_00z_fixture() -> Sequence[FtpPathAndInfo]:
-    # Load the captured FTP listing from the CSV fixture
+def dwd_ftp_listing_00z_fixture(row_limit: int = 1000) -> Sequence[FtpPathAndInfo]:
+    """Load the captured FTP listing from the CSV fixture."""
     converted_listing: list[FtpPathAndInfo] = []
     with open(
         "tests/dwd/icon_eu/forecast/fixtures/ftp_listing_00z.csv", newline=""
@@ -28,29 +30,19 @@ def dwd_ftp_listing_00z_fixture() -> Sequence[FtpPathAndInfo]:
         csv_reader = csv.reader(csvfile)
         _ = next(csv_reader)  # Skip header row
 
-        for row in csv_reader:
+        for i, row in enumerate(csv_reader):
             if len(row) == 3:
                 path_str, size_str, item_type = row
                 ftp_path = PurePosixPath(path_str)
                 file_size_bytes = int(size_str)
+                item_type = cast(FtpItemType, item_type)
 
-                # Create UnixListInfo with dummy datetimes,
-                # because none of our code uses these datetimes.
-                dummy_datetime = datetime(2000, 1, 1, 0, 0, 0)
-                converted_info: aioftp.client.UnixListInfo = cast(
-                    aioftp.client.UnixListInfo,
-                    {
-                        "name": ftp_path.name,
-                        "size": file_size_bytes,
-                        "type": cast(
-                            Literal["dir", "file", "link"], item_type
-                        ),  # Use actual type
-                        "atime": dummy_datetime,
-                        "mtime": dummy_datetime,
-                        "ctime": dummy_datetime,
-                    },
+                converted_info = _get_unix_list_info(
+                    name=ftp_path.name, size=file_size_bytes, item_type=item_type
                 )
                 converted_listing.append((ftp_path, converted_info))
+            if i > row_limit:
+                break
     return converted_listing
 
 
@@ -136,19 +128,7 @@ async def test_dwd_ftp_path_to_transfer_job_conversion(
     test_ftp_path = PurePosixPath(
         "/weather/nwp/icon-eu/grib/00/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2025112600_004_ALB_RAD.grib2.bz2"
     )
-    # Create a dummy UnixListInfo for the test case with type "file"
-    dummy_datetime = datetime(2000, 1, 1, 0, 0, 0)
-    test_ftp_info = cast(
-        aioftp.client.UnixListInfo,
-        {
-            "name": test_ftp_path.name,
-            "size": 1234567,
-            "type": "file",
-            "atime": dummy_datetime,
-            "mtime": dummy_datetime,
-            "ctime": dummy_datetime,
-        },
-    )
+    test_ftp_info = _get_unix_list_info(name=test_ftp_path.name, size=1234567)
 
     # Instantiate with a dummy object store, it's not used in this specific method call
     calc = DwdFtpTransferCalculator(
@@ -184,36 +164,33 @@ async def test_dwd_ftp_transfer_calculator_identifying_new_files(
         ftp_host="opendata.dwd.de",
     )
 
-    # Hard-coded values for demonstration, removing lookup logic from fixture
+    # Hard-coded values for testing:
     fixture_nwp_init_datetime = datetime(2025, 12, 19, 0, 0)
 
-    alb_rad_ftp_path_004 = PurePosixPath(
-        f"/weather/nwp/icon-eu/grib/00/alb_rad/icon-eu_europe_regular-lat-lon_single-level_{fixture_nwp_init_datetime.strftime('%Y%m%d%H')}_004_ALB_RAD.grib2.bz2"
-    )
-    clch_ftp_path_004 = PurePosixPath(
-        f"/weather/nwp/icon-eu/grib/00/clch/icon-eu_europe_regular-lat-lon_single-level_{fixture_nwp_init_datetime.strftime('%Y%m%d%H')}_004_CLCH.grib2.bz2"
-    )
-    t_2m_ftp_path_004 = PurePosixPath(
-        f"/weather/nwp/icon-eu/grib/00/t_2m/icon-eu_europe_regular-lat-lon_single-level_{fixture_nwp_init_datetime.strftime('%Y%m%d%H')}_004_T_2M.grib2.bz2"
-    )
+    def get_ftp_path(param: str) -> PurePosixPath:
+        nwp_init_datetime_str = fixture_nwp_init_datetime.strftime("%Y%m%d%H")
+        return PurePosixPath(
+            f"/weather/nwp/icon-eu/grib/00/{param}/icon-eu_europe_regular-lat-lon_single-level_{nwp_init_datetime_str}_004_{param.upper()}.grib2.bz2"
+        )
+
+    alb_rad_ftp_path_004 = get_ftp_path("alb_rad")
+    clch_ftp_path_004 = get_ftp_path("clch")
+    t_2m_ftp_path_004 = get_ftp_path("t_2m")
 
     alb_rad_size = 1234567  # Hard-coded size
     clch_size = 7654321  # Hard-coded size
 
-    # Construct expected_mock_obstore_files with `PathAndSize` objects
+    def get_path_and_size(path: PurePosixPath, size: int) -> PathAndSize:
+        return PathAndSize(
+            path=str(calc._calc_obstore_path(path, fixture_nwp_init_datetime)),
+            file_size_bytes=size,
+        )
+
     expected_mock_obstore_files = {
-        PathAndSize(
-            path=str(
-                calc._calc_obstore_path(alb_rad_ftp_path_004, fixture_nwp_init_datetime)
-            ),
-            file_size_bytes=alb_rad_size,  # Correct size, should NOT be downloaded
-        ),
-        PathAndSize(
-            path=str(
-                calc._calc_obstore_path(clch_ftp_path_004, fixture_nwp_init_datetime)
-            ),
-            file_size_bytes=clch_size
-            + 1,  # Incorrect size, should be downloaded (re-download)
+        get_path_and_size(path=alb_rad_ftp_path_004, size=alb_rad_size),
+        get_path_and_size(
+            path=clch_ftp_path_004,
+            size=clch_size + 1,  # Incorrect size. Should not be downloaded
         ),
     }
 
@@ -234,66 +211,27 @@ async def test_dwd_ftp_transfer_calculator_identifying_new_files(
     # Create a dummy fixture listing for this simplified test, to match the hard-coded values.
     # This is necessary because the calc.calc_new_files_from_ftp_listing method
     # will iterate over the input ftp_listing to create transfer_jobs.
-    dummy_datetime_info = datetime(2000, 1, 1, 0, 0, 0)
+    dummy_directory_path = PurePosixPath(
+        f"/weather/nwp/icon-eu/grib/00/a_directory_{fixture_nwp_init_datetime.strftime('%Y%m%d%H')}"
+    )
+
     dummy_ftp_listing_for_test: list[FtpPathAndInfo] = [
         (
             alb_rad_ftp_path_004,
-            cast(
-                aioftp.client.UnixListInfo,
-                {
-                    "name": alb_rad_ftp_path_004.name,
-                    "size": alb_rad_size,
-                    "type": "file",
-                    "atime": dummy_datetime_info,
-                    "mtime": dummy_datetime_info,
-                    "ctime": dummy_datetime_info,
-                },
-            ),
+            _get_unix_list_info(name=alb_rad_ftp_path_004.name, size=alb_rad_size),
         ),
         (
             clch_ftp_path_004,
-            cast(
-                aioftp.client.UnixListInfo,
-                {
-                    "name": clch_ftp_path_004.name,
-                    "size": clch_size,
-                    "type": "file",
-                    "atime": dummy_datetime_info,
-                    "mtime": dummy_datetime_info,
-                    "ctime": dummy_datetime_info,
-                },
-            ),
+            _get_unix_list_info(name=clch_ftp_path_004.name, size=clch_size),
         ),
         (
             t_2m_ftp_path_004,
-            cast(
-                aioftp.client.UnixListInfo,
-                {
-                    "name": t_2m_ftp_path_004.name,
-                    "size": 567890,
-                    "type": "file",  # New file, arbitrary size
-                    "atime": dummy_datetime_info,
-                    "mtime": dummy_datetime_info,
-                    "ctime": dummy_datetime_info,
-                },
-            ),
+            _get_unix_list_info(name=t_2m_ftp_path_004.name, size=567890),
         ),
         # Add a directory to ensure _skip_ftp_item works with hard-coded values
         (
-            PurePosixPath(
-                f"/weather/nwp/icon-eu/grib/00/a_directory_{fixture_nwp_init_datetime.strftime('%Y%m%d%H')}"
-            ),
-            cast(
-                aioftp.client.UnixListInfo,
-                {
-                    "name": "a_directory_00",
-                    "size": 0,
-                    "type": "dir",
-                    "atime": dummy_datetime_info,
-                    "mtime": dummy_datetime_info,
-                    "ctime": dummy_datetime_info,
-                },
-            ),
+            dummy_directory_path,
+            _get_unix_list_info(name="a_directory_00", size=0, item_type="dir"),
         ),
     ]
 
@@ -315,9 +253,24 @@ async def test_dwd_ftp_transfer_calculator_identifying_new_files(
 
     # 4. Assert that the directory is not in the filtered jobs.
     assert not any(
-        job.src_ftp_path
-        == PurePosixPath(
-            f"/weather/nwp/icon-eu/grib/00/a_directory_{fixture_nwp_init_datetime.strftime('%Y%m%d%H')}"
-        )
-        for job in files_to_download
+        job.src_ftp_path == dummy_directory_path for job in files_to_download
+    )
+
+
+def _get_unix_list_info(
+    name: str, size: int, item_type: FtpItemType = "file"
+) -> UnixListInfo:
+    # Create UnixListInfo with dummy datetimes,
+    # because none of our code uses these datetimes.
+    dummy_datetime_info = datetime(2000, 1, 1, 0, 0, 0)
+    return cast(
+        UnixListInfo,
+        {
+            "name": name,
+            "size": size,
+            "type": item_type,
+            "atime": dummy_datetime_info,
+            "mtime": dummy_datetime_info,
+            "ctime": dummy_datetime_info,
+        },
     )
