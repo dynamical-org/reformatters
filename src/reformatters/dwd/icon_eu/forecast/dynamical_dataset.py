@@ -38,12 +38,9 @@ class DwdIconEuForecastDataset(
             filename_filter: An optional regex pattern to filter filenames by.
                 For example, to only download single-level files, for forecast steps 0 to 5
                 then use a regex pattern like "single-level_.*_00[0-5]_".
-            local_dst_root_path: If set, then the GRIB files will be saved to this
-                local path. Must not start with a leading slash.
+            local_dst_root_path: If set, then the GRIB files will be saved to this local path.
         """
         if local_dst_root_path:
-            if local_dst_root_path[0] == "/":
-                raise ValueError("local_dst_root_path must not start with a slash!")
             dst_root_path = PurePosixPath(local_dst_root_path)
             store: ObjectStore = LocalStore()
         else:
