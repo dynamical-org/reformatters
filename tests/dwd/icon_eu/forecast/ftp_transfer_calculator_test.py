@@ -2,12 +2,12 @@ import csv
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import PurePosixPath
-from typing import cast
+from typing import Literal, cast
 from unittest.mock import MagicMock
 
+import aioftp.client
+import obstore.store
 import pytest
-from aioftp.client import UnixListInfo
-from obstore.store import ObjectStore
 
 from reformatters.common.ftp_transfer_calculator import (
     FtpPathAndInfo,
@@ -29,21 +29,22 @@ def dwd_ftp_listing_00z_fixture() -> Sequence[FtpPathAndInfo]:
         _ = next(csv_reader)  # Skip header row
 
         for row in csv_reader:
-            if len(row) == 2:
-                path_str, size_str = row
+            if len(row) == 3:
+                path_str, size_str, item_type = row
                 ftp_path = PurePosixPath(path_str)
                 file_size_bytes = int(size_str)
 
-                # Create a dummy UnixListInfo as we only have path and size from CSV
-                # The actual content of atime/mtime/ctime is not critical for these tests
-                # as long as they are valid datetime objects.
+                # Create UnixListInfo with dummy datetimes,
+                # because none of our code uses these datetimes.
                 dummy_datetime = datetime(2000, 1, 1, 0, 0, 0)
-                converted_info: UnixListInfo = cast(
-                    UnixListInfo,
+                converted_info: aioftp.client.UnixListInfo = cast(
+                    aioftp.client.UnixListInfo,
                     {
-                        "name": ftp_path.name,  # Use filename as name
+                        "name": ftp_path.name,
                         "size": file_size_bytes,
-                        "type": "file",  # Assume all entries in CSV are files
+                        "type": cast(
+                            Literal["dir", "file", "link"], item_type
+                        ),  # Use actual type
                         "atime": dummy_datetime,
                         "mtime": dummy_datetime,
                         "ctime": dummy_datetime,
@@ -55,22 +56,19 @@ def dwd_ftp_listing_00z_fixture() -> Sequence[FtpPathAndInfo]:
 
 @pytest.fixture
 def mock_object_store() -> MagicMock:
-    return MagicMock(spec=ObjectStore)
+    return MagicMock(spec=obstore.store.ObjectStore)
 
 
 @pytest.mark.asyncio
 async def test_dwd_ftp_transfer_calculator_filtering(
     mock_object_store: MagicMock,
     dwd_ftp_listing_00z_fixture: Sequence[FtpPathAndInfo],
-    mocker: MagicMock,  # Added mocker fixture
+    mocker: MagicMock,
 ) -> None:
-    # 1. Test Filtering (_skip_ftp_item and filename_filter):
-    # Objective: Verify that the _skip_ftp_item method correctly excludes directories,
-    # "pressure-level" files, and files not ending in ".grib2.bz2".
-    # Also, confirm that the filename_filter regex accurately filters files based on
-    # a user-provided pattern.
+    """Objective: Verify that the _skip_ftp_item method correctly excludes directories etc.
+    Also, confirm that the filename_filter regex accurately filters files based on
+    a user-provided pattern."""
 
-    # Scenario 1: No filename filter, check _skip_ftp_item
     calc_no_filter = DwdFtpTransferCalculator(
         dst_obstore=mock_object_store,
         dst_root_path=PurePosixPath("test_root"),
@@ -78,22 +76,27 @@ async def test_dwd_ftp_transfer_calculator_filtering(
         filename_filter="",
     )
 
-    # Mock _list_obstore_files_for_single_nwp_init to return an empty set
-    # so we focus on FTP filtering.
     mocker.patch.object(
-        calc_no_filter, "_list_obstore_files_for_single_nwp_init", return_value=set()
+        calc_no_filter,
+        "_list_obstore_files_for_single_nwp_init",
+        return_value=set(),
     )
+
+    # Create a dictionary for efficient lookups within this test function
+    ftp_listing_map = dict(dwd_ftp_listing_00z_fixture)
 
     filtered_jobs_no_filter = await calc_no_filter.calc_new_files_from_ftp_listing(
         dwd_ftp_listing_00z_fixture
     )
 
-    # Assertions for _skip_ftp_item:
-    # - No directories should be present (our CSV only contains files)
-    # - No 'pressure-level' files should be present
-    # - All files should end with 'grib2.bz2'
     for job in filtered_jobs_no_filter:
-        assert job.src_ftp_path.name
+        # Look up original_ftp_info directly from the dictionary for O(1) lookup
+        original_ftp_info = ftp_listing_map.get(job.src_ftp_path)
+
+        assert original_ftp_info is not None
+        assert original_ftp_info.get("type") == "file", (
+            f"Directory found in filtered jobs: {job.src_ftp_path}"
+        )
         assert "pressure-level" not in job.src_ftp_path.name
         assert job.src_ftp_path.name.endswith("grib2.bz2")
 
@@ -107,7 +110,9 @@ async def test_dwd_ftp_transfer_calculator_filtering(
         filename_filter=filename_regex,
     )
     mocker.patch.object(
-        calc_with_filter, "_list_obstore_files_for_single_nwp_init", return_value=set()
+        calc_with_filter,
+        "_list_obstore_files_for_single_nwp_init",
+        return_value=set(),
     )
 
     filtered_jobs_with_filter = await calc_with_filter.calc_new_files_from_ftp_listing(
@@ -124,20 +129,19 @@ async def test_dwd_ftp_transfer_calculator_filtering(
 async def test_dwd_ftp_path_to_transfer_job_conversion(
     mock_object_store: MagicMock,
 ) -> None:
-    # 2. Test FTP Path to Transfer Job Conversion
-    # Objective: Ensure that a given FTP path and its associated UnixListInfo are correctly
-    # transformed into a TransferJob object, with accurate extraction of nwp_init_datetime
-    # and correct construction of dst_obstore_path.
+    """Objective: Ensure that a given FTP path and its associated UnixListInfo are correctly
+    transformed into a TransferJob object, with accurate extraction of nwp_init_datetime
+    and correct construction of dst_obstore_path."""
 
     test_ftp_path = PurePosixPath(
         "/weather/nwp/icon-eu/grib/00/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2025112600_004_ALB_RAD.grib2.bz2"
     )
-    # Create a dummy UnixListInfo for the test case
+    # Create a dummy UnixListInfo for the test case with type "file"
     dummy_datetime = datetime(2000, 1, 1, 0, 0, 0)
     test_ftp_info = cast(
-        UnixListInfo,
+        aioftp.client.UnixListInfo,
         {
-            "name": "icon-eu_europe_regular-lat-lon_single-level_2025112600_004_ALB_RAD.grib2.bz2",
+            "name": test_ftp_path.name,
             "size": 1234567,
             "type": "file",
             "atime": dummy_datetime,
@@ -168,12 +172,11 @@ async def test_dwd_ftp_path_to_transfer_job_conversion(
 async def test_dwd_ftp_transfer_calculator_identifying_new_files(
     mock_object_store: MagicMock,
     dwd_ftp_listing_00z_fixture: Sequence[FtpPathAndInfo],
-    mocker: MagicMock,  # Added mocker fixture
+    mocker: MagicMock,
 ) -> None:
-    # 3. Test Identifying New Files (calc_new_files_from_ftp_listing):
-    # Objective: Validate that the calc_new_files_from_ftp_listing method accurately
-    # identifies files that need to be transferred by comparing the FTP listing with a
-    # simulated object store listing (considering both presence and file size for re-downloads).
+    """Objective: Validate that the calc_new_files_from_ftp_listing method accurately
+    identifies files that need to be transferred by comparing the FTP listing with a
+    simulated object store listing (considering both presence and file size for re-downloads)."""
 
     calc = DwdFtpTransferCalculator(
         dst_obstore=mock_object_store,
@@ -181,10 +184,14 @@ async def test_dwd_ftp_transfer_calculator_identifying_new_files(
         ftp_host="opendata.dwd.de",
     )
 
+    # Create a dictionary for efficient lookups within this test function
+    ftp_listing_map = dict(dwd_ftp_listing_00z_fixture)
+
     # Determine the NWP init datetime from the fixture for consistent mocking.
     # We'll take the first valid file from the fixture to extract its NWP init datetime.
     first_valid_ftp_path = None
     first_valid_ftp_info = None
+
     for ftp_path, ftp_info in dwd_ftp_listing_00z_fixture:
         # _skip_ftp_item also checks for file type, so ensure the dummy UnixListInfo has type "file"
         if (
@@ -220,11 +227,13 @@ async def test_dwd_ftp_transfer_calculator_identifying_new_files(
     # We need to get the actual sizes from the fixture for these specific files
     alb_rad_size = 0
     clch_size = 0
-    for ftp_path, ftp_info in dwd_ftp_listing_00z_fixture:
-        if ftp_path == alb_rad_ftp_path_004:
-            alb_rad_size = int(ftp_info["size"])
-        elif ftp_path == clch_ftp_path_004:
-            clch_size = int(ftp_info["size"])
+    # Use ftp_listing_map for efficient lookup
+    alb_rad_info = ftp_listing_map.get(alb_rad_ftp_path_004)
+    if alb_rad_info:
+        alb_rad_size = int(alb_rad_info["size"])
+    clch_info = ftp_listing_map.get(clch_ftp_path_004)
+    if clch_info:
+        clch_size = int(clch_info["size"])
 
     # Construct expected_mock_obstore_files with `PathAndSize` objects
     expected_mock_obstore_files = {
