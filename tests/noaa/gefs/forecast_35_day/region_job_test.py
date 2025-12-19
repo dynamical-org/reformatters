@@ -2,6 +2,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
+from urllib.parse import urlparse
 
 import numpy as np
 import pandas as pd
@@ -472,7 +473,7 @@ def test_download_file_no_fallback_for_old_data(
     for call in mock_download.call_args_list:
         url = call[0][0]
         # All calls should be to primary source (AWS S3), not fallback (NOMADS)
-        assert "noaa-gefs-pds.s3.amazonaws.com" in url
+        assert urlparse(url).netloc == "noaa-gefs-pds.s3.amazonaws.com"
 
 
 @patch("reformatters.noaa.gefs.forecast_35_day.region_job.read_data")
