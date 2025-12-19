@@ -52,6 +52,7 @@ class DwdIconEuForecastDataset(
         calc = DwdFtpTransferCalculator(
             dst_obstore=store,
             dst_root_path=dst_root_path,
+            ftp_host="opendata.dwd.de",
             filename_filter=filename_filter,
         )
 
@@ -76,7 +77,7 @@ class DwdIconEuForecastDataset(
                 ftp_host=calc.ftp_host,
                 src_ftp_paths=src_ftp_paths,
                 dst_obstore_paths=dst_obstore_paths,
-                dst_store=calc.dst_obstore,
+                dst_store=store,
             )
         )
 

@@ -21,11 +21,6 @@ class DwdFtpTransferCalculator(FtpTransferCalculator):
     /weather/nwp/icon-eu/grib/00/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2025112600_004_ALB_RAD.grib2.bz2
     """
 
-    # TODO(Jack): ftp_host should be passed into the constructor.
-    @property
-    def ftp_host(self) -> str:
-        return "opendata.dwd.de"
-
     @staticmethod
     def convert_nwp_init_hour_to_ftp_path(init_hour: int) -> PurePosixPath:
         return PurePosixPath(f"/weather/nwp/icon-eu/grib/{init_hour:02d}")

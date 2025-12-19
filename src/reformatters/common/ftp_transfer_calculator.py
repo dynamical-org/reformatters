@@ -54,23 +54,26 @@ class FtpTransferCalculator(ABC):
     8. Return the set difference: filtered_files_on_ftp - files_on_object_storage.
 
     Attributes:
+        dst_obstore (ObjectStore): See __init__ docstring.
         dst_root_path (PurePosixPath): The base path on the `dst_obstore` to save files to.
             Must not include a leading slash! (Because the paths returned by `ObjectStore.list`
             do not start with a leading slash.)
-        dst_obstore (ObjectStore):
-        filename_filter (str): Optional regex pattern to filter filenames by.
+        ftp_host (str): See __init__ docstring.
+        filename_filter (str): See __init__ docstring.
     """
 
     def __init__(
         self,
         dst_obstore: ObjectStore,
         dst_root_path: PurePosixPath,
+        ftp_host: str,
         filename_filter: str = "",
     ) -> None:
         """
         Args:
             dst_obstore: The ObjectStore to save files to.
             dst_root_path: The base path on the `dst_obstore` to save files to.
+            ftp_host: The FTP host, without 'ftp://'. e.g. 'opendata.dwd.de'
             filename_filter: An optional regex pattern to filter filenames by.
                 For example, to only download single-level files, for forecast steps 0 to 5
                 then use a regex pattern like "single-level_.*_00[0-5]_".
@@ -83,6 +86,7 @@ class FtpTransferCalculator(ABC):
         else:
             self.dst_root_path = dst_root_path
 
+        self.ftp_host = ftp_host
         self.filename_filter = filename_filter
 
     async def calc_new_files_for_all_nwp_init_hours(self) -> list[TransferJob]:
@@ -253,11 +257,6 @@ class FtpTransferCalculator(ABC):
         return "%Y-%m-%dT%HZ"
 
     ################ Methods that must be overridden ###################################
-
-    @property
-    @abstractmethod
-    def ftp_host(self) -> str:
-        """The FTP host, without "ftp://" prefix."""
 
     @abstractmethod
     async def list_ftp_files_for_single_nwp_init_path(
