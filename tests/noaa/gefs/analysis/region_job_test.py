@@ -11,6 +11,7 @@ import xarray as xr
 from reformatters.common.config_models import DataVarAttrs, Encoding
 from reformatters.common.pydantic import replace
 from reformatters.common.region_job import SourceFileStatus
+from reformatters.common.retry import retry
 from reformatters.common.storage import (
     DatasetFormat,
     StorageConfig,
@@ -366,7 +367,7 @@ def test_download_file(
 
     mock_download.side_effect = mock_download_side_effect
     monkeypatch.setattr(
-        "reformatters.noaa.gefs.analysis.region_job.http_download_to_disk",
+        "reformatters.noaa.gefs.utils.http_download_to_disk",
         mock_download,
     )
 
@@ -375,7 +376,7 @@ def test_download_file(
         return_value=([123456, 234567], [234566, 345678])
     )
     monkeypatch.setattr(
-        "reformatters.noaa.gefs.analysis.region_job.grib_message_byte_ranges_from_index",
+        "reformatters.noaa.gefs.utils.grib_message_byte_ranges_from_index",
         mock_grib_message_byte_ranges_from_index,
     )
 
@@ -599,3 +600,139 @@ def test_update_template_with_results(
     }
     updated_template = job.update_template_with_results(process_results)
     assert updated_template.time.max() == pd.Timestamp("2000-01-03T18:00")
+
+
+def test_download_file_fallback(
+    template_ds: xr.Dataset,
+    example_data_vars: list[GEFSDataVar],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test download_file falls back to alternative source when primary fails for recent data."""
+    tmp_store = get_local_tmp_store()
+    data_vars = example_data_vars[:1]
+
+    job = GefsAnalysisRegionJob(
+        tmp_store=tmp_store,
+        template_ds=template_ds,
+        data_vars=data_vars,
+        append_dim="time",
+        region=slice(0, 1),
+        reformat_job_name="test-job",
+    )
+
+    # Use a recent init_time (within 4 days) to trigger fallback behavior
+    recent_init_time = pd.Timestamp.now() - pd.Timedelta(days=1)
+    coord = GefsAnalysisSourceFileCoord(
+        init_time=recent_init_time,
+        lead_time=pd.Timedelta("6h"),
+        data_vars=data_vars,
+    )
+
+    mock_index_path = Mock()
+    mock_index_path.read_text.return_value = "ignored"
+    mock_data_path = Mock()
+
+    primary_index_url = coord.get_index_url()
+    fallback_url = coord.get_fallback_url()
+    fallback_index_url = coord.get_index_url(fallback=True)
+
+    call_count = 0
+
+    def mock_download_side_effect(url: str, dataset_id: str, **kwargs: object) -> Mock:
+        nonlocal call_count
+        call_count += 1
+        # Primary source fails with FileNotFoundError
+        if url == primary_index_url:
+            raise FileNotFoundError(f"Primary index not found: {url}")
+        # Fallback source succeeds
+        if url == fallback_index_url:
+            return mock_index_path
+        if url == fallback_url:
+            return mock_data_path
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    mock_download = Mock(side_effect=mock_download_side_effect)
+    monkeypatch.setattr(
+        "reformatters.noaa.gefs.utils.http_download_to_disk",
+        mock_download,
+    )
+
+    original_retry = retry
+    monkeypatch.setattr(
+        "reformatters.noaa.gefs.utils.retry",
+        lambda func, max_attempts=1: original_retry(func, max_attempts=max_attempts),
+    )
+
+    mock_grib_message_byte_ranges_from_index = Mock(
+        return_value=([123456, 234567], [234566, 345678])
+    )
+    monkeypatch.setattr(
+        "reformatters.noaa.gefs.utils.grib_message_byte_ranges_from_index",
+        mock_grib_message_byte_ranges_from_index,
+    )
+
+    result = job.download_file(coord)
+
+    assert result == mock_data_path
+
+    # Should have called: primary index (failed) + fallback index + fallback data
+    assert call_count == 3
+
+    # Verify fallback URLs were used
+    calls = mock_download.call_args_list
+    assert calls[0][0][0] == primary_index_url  # First tried primary
+    assert calls[1][0][0] == fallback_index_url  # Then fallback index
+    assert calls[2][0][0] == fallback_url  # Then fallback data
+
+
+def test_download_file_no_fallback_for_old_data(
+    template_ds: xr.Dataset,
+    example_data_vars: list[GEFSDataVar],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test download_file does not fallback for old data (>4 days)."""
+    tmp_store = get_local_tmp_store()
+    data_vars = example_data_vars[:1]
+
+    job = GefsAnalysisRegionJob(
+        tmp_store=tmp_store,
+        template_ds=template_ds,
+        data_vars=data_vars,
+        append_dim="time",
+        region=slice(0, 1),
+        reformat_job_name="test-job",
+    )
+
+    # Use an old init_time (>4 days ago) - should NOT trigger fallback
+    old_init_time = pd.Timestamp("2000-01-01T00:00")
+    coord = GefsAnalysisSourceFileCoord(
+        init_time=old_init_time,
+        lead_time=pd.Timedelta("6h"),
+        data_vars=data_vars,
+    )
+
+    original_retry = retry
+    monkeypatch.setattr(
+        "reformatters.noaa.gefs.utils.retry",
+        lambda func, max_attempts=1: original_retry(func, max_attempts=max_attempts),
+    )
+
+    def mock_download_side_effect(url: str, dataset_id: str, **kwargs: object) -> Mock:
+        raise FileNotFoundError(f"Not found: {url}")
+
+    mock_download = Mock(side_effect=mock_download_side_effect)
+    monkeypatch.setattr(
+        "reformatters.noaa.gefs.utils.http_download_to_disk",
+        mock_download,
+    )
+
+    # Should raise FileNotFoundError without attempting fallback
+    with pytest.raises(FileNotFoundError):
+        job.download_file(coord)
+
+    # Should have only tried primary source
+    # The retry logic will try the primary source multiple times before giving up
+    for call in mock_download.call_args_list:
+        url = call[0][0]
+        # All calls should be to primary source (AWS S3), not fallback (NOMADS)
+        assert "noaa-gefs-retrospective.s3.amazonaws.com" in url
