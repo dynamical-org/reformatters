@@ -9,13 +9,13 @@ import obstore.store
 import pytest
 from aioftp.client import UnixListInfo
 
-from reformatters.common.ftp_transfer_calculator import (
+from reformatters.common.ftp_to_obstore_types import (
     FtpPathAndInfo,
     PathAndSize,
 )
-from reformatters.dwd.icon_eu.forecast.archive_grib_files import (
-    DwdFtpTransferCalculator,
-)
+from reformatters.common.ftp_transfer_coordinator import FtpTransferCoordinator
+from reformatters.common.object_storage_info_manager import ObjectStorageInfoManager
+from reformatters.dwd.icon_eu.forecast.archive_grib_files import DwdFtpInfoExtractor
 
 type FtpItemType = Literal["dir", "file", "link"]
 
@@ -57,25 +57,31 @@ async def test_dwd_ftp_transfer_calculator_filtering(
     dwd_ftp_listing_00z_fixture: Sequence[FtpPathAndInfo],
     mocker: MagicMock,
 ) -> None:
-    """Objective: Verify that the _skip_ftp_item method correctly excludes directories etc.
+    """Objective: Verify that the skip_ftp_item method correctly excludes directories etc.
     Also, confirm that the filename_filter regex accurately filters files based on
     a user-provided pattern."""
 
-    calc_no_filter = DwdFtpTransferCalculator(
+    ftp_info_extractor = DwdFtpInfoExtractor(ftp_host="opendata.dwd.de")
+    object_storage_info_manager = ObjectStorageInfoManager(
         dst_obstore=mock_object_store,
         dst_root_path=PurePosixPath("test_root"),
-        ftp_host="opendata.dwd.de",
+    )
+    calc_no_filter = FtpTransferCoordinator(
+        ftp_info_extractor=ftp_info_extractor,
+        obstore_info_manager=object_storage_info_manager,
         filename_filter="",
     )
 
     mocker.patch.object(
-        calc_no_filter,
-        "_list_obstore_files_for_single_nwp_init",
+        object_storage_info_manager,
+        "list_obstore_files_for_single_nwp_init",
         return_value=set(),
     )
 
     # Create a dictionary for efficient lookups within this test function
-    ftp_listing_map = dict(dwd_ftp_listing_00z_fixture)
+    ftp_listing_map = {
+        path.as_posix(): info for path, info in dwd_ftp_listing_00z_fixture
+    }
 
     filtered_jobs_no_filter = await calc_no_filter.calc_new_files_from_ftp_listing(
         dwd_ftp_listing_00z_fixture
@@ -83,7 +89,7 @@ async def test_dwd_ftp_transfer_calculator_filtering(
 
     for job in filtered_jobs_no_filter:
         # Look up original_ftp_info directly from the dictionary for O(1) lookup
-        original_ftp_info = ftp_listing_map.get(job.src_ftp_path)
+        original_ftp_info = ftp_listing_map.get(job.src_ftp_path.as_posix())
 
         assert original_ftp_info is not None
         assert original_ftp_info.get("type") == "file", (
@@ -95,15 +101,19 @@ async def test_dwd_ftp_transfer_calculator_filtering(
     # Scenario 2: With filename filter
     # Filter for 'single-level' and forecast step '000'
     filename_regex = "single-level_.*_000_"
-    calc_with_filter = DwdFtpTransferCalculator(
+    ftp_info_extractor_filter = DwdFtpInfoExtractor(ftp_host="opendata.dwd.de")
+    object_storage_info_manager_filter = ObjectStorageInfoManager(
         dst_obstore=mock_object_store,
         dst_root_path=PurePosixPath("test_root"),
-        ftp_host="opendata.dwd.de",
+    )
+    calc_with_filter = FtpTransferCoordinator(
+        ftp_info_extractor=ftp_info_extractor_filter,
+        obstore_info_manager=object_storage_info_manager_filter,
         filename_filter=filename_regex,
     )
     mocker.patch.object(
-        calc_with_filter,
-        "_list_obstore_files_for_single_nwp_init",
+        object_storage_info_manager_filter,
+        "list_obstore_files_for_single_nwp_init",
         return_value=set(),
     )
 
@@ -133,11 +143,14 @@ async def test_dwd_ftp_path_to_transfer_job_conversion(
         name=test_ftp_path.name, size=test_ftp_file_size
     )
 
-    # Instantiate with a dummy object store, it's not used in this specific method call
-    calc = DwdFtpTransferCalculator(
+    ftp_info_extractor = DwdFtpInfoExtractor(ftp_host="opendata.dwd.de")
+    object_storage_info_manager = ObjectStorageInfoManager(
         dst_obstore=mock_object_store,
         dst_root_path=PurePosixPath("dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/"),
-        ftp_host="opendata.dwd.de",
+    )
+    calc = FtpTransferCoordinator(
+        ftp_info_extractor=ftp_info_extractor,
+        obstore_info_manager=object_storage_info_manager,
     )
 
     transfer_job = calc._convert_ftp_path_to_transfer_job(test_ftp_path, test_ftp_info)
@@ -161,10 +174,14 @@ async def test_dwd_ftp_transfer_calculator_identifying_new_files(
     identifies files that need to be transferred by comparing the FTP listing with a
     simulated object store listing (considering both presence and file size for re-downloads)."""
 
-    calc = DwdFtpTransferCalculator(
+    ftp_info_extractor = DwdFtpInfoExtractor(ftp_host="opendata.dwd.de")
+    object_storage_info_manager = ObjectStorageInfoManager(
         dst_obstore=mock_object_store,
         dst_root_path=PurePosixPath("dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/"),
-        ftp_host="opendata.dwd.de",
+    )
+    calc = FtpTransferCoordinator(
+        ftp_info_extractor=ftp_info_extractor,
+        obstore_info_manager=object_storage_info_manager,
     )
 
     # Hard-coded values for testing:
@@ -183,17 +200,26 @@ async def test_dwd_ftp_transfer_calculator_identifying_new_files(
     alb_rad_size = 1234567  # Hard-coded size
     clch_size = 7654321  # Hard-coded size
 
-    def get_path_and_size(path: PurePosixPath, size: int) -> PathAndSize:
+    def get_path_and_size(
+        path: PurePosixPath, size: int, nwp_variable_name: str
+    ) -> PathAndSize:
         return PathAndSize(
-            path=str(calc._calc_obstore_path(path, fixture_nwp_init_datetime)),
+            path=str(
+                object_storage_info_manager.calc_obstore_path(
+                    path, fixture_nwp_init_datetime, nwp_variable_name
+                )
+            ),
             file_size_bytes=size,
         )
 
     expected_mock_obstore_files = {
-        get_path_and_size(path=alb_rad_ftp_path_004, size=alb_rad_size),
+        get_path_and_size(
+            path=alb_rad_ftp_path_004, size=alb_rad_size, nwp_variable_name="alb_rad"
+        ),
         get_path_and_size(
             path=clch_ftp_path_004,
             size=clch_size + 1,  # Incorrect size. Should not be downloaded
+            nwp_variable_name="clch",
         ),
     }
 
@@ -206,8 +232,8 @@ async def test_dwd_ftp_transfer_calculator_identifying_new_files(
         return set()
 
     mocker.patch.object(
-        calc,
-        "_list_obstore_files_for_single_nwp_init",
+        object_storage_info_manager,
+        "list_obstore_files_for_single_nwp_init",
         side_effect=mock_list_obstore_files_for_single_nwp_init,
     )
 
@@ -231,7 +257,7 @@ async def test_dwd_ftp_transfer_calculator_identifying_new_files(
             t_2m_ftp_path_004,
             _get_unix_list_info(name=t_2m_ftp_path_004.name, size=567890),
         ),
-        # Add a directory to ensure _skip_ftp_item works with hard-coded values
+        # Add a directory to ensure skip_ftp_item works with hard-coded values
         (
             dummy_directory_path,
             _get_unix_list_info(name="a_directory_00", size=0, item_type="dir"),

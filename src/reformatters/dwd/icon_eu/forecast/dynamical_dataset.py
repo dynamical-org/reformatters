@@ -10,10 +10,12 @@ from obstore.store import LocalStore, ObjectStore, S3Store
 from reformatters.common import kubernetes, validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.ftp_to_obstore import copy_files_from_ftp_to_obstore
+from reformatters.common.ftp_transfer_coordinator import FtpTransferCoordinator
 from reformatters.common.kubernetes import ArchiveGribFilesCronJob, CronJob
 from reformatters.common.logging import get_logger
+from reformatters.common.object_storage_info_manager import ObjectStorageInfoManager
 
-from .archive_grib_files import DwdFtpTransferCalculator
+from .archive_grib_files import DwdFtpInfoExtractor
 from .region_job import DwdIconEuForecastRegionJob, DwdIconEuForecastSourceFileCoord
 from .template_config import DwdIconEuDataVar, DwdIconEuForecastTemplateConfig
 
@@ -49,21 +51,24 @@ class DwdIconEuForecastDataset(
             )
             store = get_source_coop_s3_store()
 
-        calc = DwdFtpTransferCalculator(
-            dst_obstore=store,
-            dst_root_path=dst_root_path,
-            ftp_host="opendata.dwd.de",
+        ftp_info_extractor = DwdFtpInfoExtractor(ftp_host="opendata.dwd.de")
+        obstore_info_manager = ObjectStorageInfoManager(
+            dst_obstore=store, dst_root_path=dst_root_path
+        )
+        coordinator = FtpTransferCoordinator(
+            ftp_info_extractor=ftp_info_extractor,
+            obstore_info_manager=obstore_info_manager,
             filename_filter=filename_filter,
         )
 
         if nwp_init_hour == "all":
             files_to_download = asyncio.run(
-                calc.calc_new_files_for_all_nwp_init_hours()
+                coordinator.calc_new_files_for_multiple_nwp_init_hours()
             )
         else:
             init_hour = int(nwp_init_hour)
             files_to_download = asyncio.run(
-                calc.calc_new_files_for_single_nwp_init_hour(init_hour)
+                coordinator.calc_new_files_for_single_nwp_init_hour(init_hour)
             )
 
         src_ftp_paths: list[PurePosixPath] = []
@@ -74,7 +79,7 @@ class DwdIconEuForecastDataset(
 
         asyncio.run(
             copy_files_from_ftp_to_obstore(
-                ftp_host=calc.ftp_host,
+                ftp_host=ftp_info_extractor.ftp_host,
                 src_ftp_paths=src_ftp_paths,
                 dst_obstore_paths=dst_obstore_paths,
                 dst_store=store,
@@ -84,7 +89,7 @@ class DwdIconEuForecastDataset(
         log.info(
             "Finished downloading %d files from ftp://%s",
             len(files_to_download),
-            calc.ftp_host,
+            ftp_info_extractor.ftp_host,
         )
 
     def get_cli(self) -> typer.Typer:

@@ -1,20 +1,15 @@
 import re
 from datetime import datetime
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Final
+from typing import Final
 
 import aioftp
 
-if TYPE_CHECKING:
-    pass
-
-from reformatters.common.ftp_transfer_calculator import (
-    FtpPathAndInfo,
-    FtpTransferCalculator,
-)
+from reformatters.common.ftp_info_extractor import FtpInfoExtractor
+from reformatters.common.ftp_to_obstore_types import FtpPathAndInfo
 
 
-class DwdFtpTransferCalculator(FtpTransferCalculator):
+class DwdFtpInfoExtractor(FtpInfoExtractor):
     """This class is designed to work with the style of DWD FTP ICON-EU path in
     use in 2025, such as:
 
@@ -25,7 +20,7 @@ class DwdFtpTransferCalculator(FtpTransferCalculator):
     def convert_nwp_init_hour_to_ftp_path(init_hour: int) -> PurePosixPath:
         return PurePosixPath(f"/weather/nwp/icon-eu/grib/{init_hour:02d}")
 
-    async def list_ftp_files_for_single_nwp_init_path(
+    async def list(
         self,
         ftp_path: PurePosixPath,
     ) -> list[FtpPathAndInfo]:
@@ -40,7 +35,7 @@ class DwdFtpTransferCalculator(FtpTransferCalculator):
         return ftp_listing  # type: ignore[return-value]
 
     @staticmethod
-    def _sanity_check_ftp_path(ftp_path: PurePosixPath) -> None:
+    def sanity_check_ftp_path(ftp_path: PurePosixPath) -> None:
         expected_number_of_parts: Final[int] = 8
         if len(ftp_path.parts) != expected_number_of_parts:
             raise ValueError(
@@ -52,7 +47,7 @@ class DwdFtpTransferCalculator(FtpTransferCalculator):
             )
 
     @staticmethod
-    def _extract_init_datetime_from_ftp_path(ftp_path: PurePosixPath) -> datetime:
+    def extract_init_datetime_from_ftp_path(ftp_path: PurePosixPath) -> datetime:
         # Extract the NWP init datetime string from the filename. For example, from this filename:
         #     "...lat-lon_single-level_2025112600_004_ALB_RAD.grib2.bz2"
         # Extract this:                ^^^^^^^^^^
@@ -64,5 +59,5 @@ class DwdFtpTransferCalculator(FtpTransferCalculator):
         return datetime.strptime(nwp_init_date_str, "%Y%m%d%H")
 
     @staticmethod
-    def _extract_nwp_variable_name_from_ftp_path(ftp_path: PurePosixPath) -> str:
+    def extract_nwp_variable_name_from_ftp_path(ftp_path: PurePosixPath) -> str:
         return ftp_path.parts[6]
