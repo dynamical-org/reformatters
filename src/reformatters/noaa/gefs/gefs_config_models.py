@@ -1,5 +1,6 @@
 from collections.abc import Mapping, Sequence
 from typing import Any, Final, Literal, assert_never
+from urllib.parse import urlparse
 
 import numpy as np
 import pandas as pd
@@ -94,6 +95,9 @@ class GefsSourceFileCoord(SourceFileCoord):
     lead_time: Timedelta
     data_vars: Sequence[GEFSDataVar]
 
+    primary_base_url: str = "noaa-gefs-pds.s3.amazonaws.com"
+    fallback_base_url: str = "nomads.ncep.noaa.gov/pub/data/nccf/com/gens/prod"
+
     @property
     def gefs_file_type(self) -> Literal["a", "b", "s", "reforecast"]:  # noqa: PLR0912 PLR0911
         # See `GEFSFileType` for details on the different types of files.
@@ -176,14 +180,14 @@ class GefsSourceFileCoord(SourceFileCoord):
         if self.init_time >= GEFS_CURRENT_ARCHIVE_START:
             resolution_str = FILE_RESOLUTIONS[true_gefs_file_type]
             url = (
-                "https://noaa-gefs-pds.s3.amazonaws.com/"
+                f"https://{self.primary_base_url}/"
                 f"gefs.{init_date_str}/{init_hour_str}/atmos/pgrb2{true_gefs_file_type}{resolution_str.strip('0')}/"
                 f"ge{ensemble_or_statistic_str}.t{init_hour_str}z.pgrb2{true_gefs_file_type}.{resolution_str}.f{lead_time_hours:03.0f}"
             )
             return url
         elif self.init_time >= GEFS_REFORECAST_END:
             url = (
-                "https://noaa-gefs-pds.s3.amazonaws.com/"
+                f"https://{self.primary_base_url}/"
                 f"gefs.{init_date_str}/{init_hour_str}/pgrb2{true_gefs_file_type}/"
                 f"ge{ensemble_or_statistic_str}.t{init_hour_str}z.pgrb2{true_gefs_file_type}f{lead_time_hours:02.0f}"
             )
@@ -207,6 +211,18 @@ class GefsSourceFileCoord(SourceFileCoord):
             )
 
             return url
+
+    def get_fallback_url(self) -> str:
+        url = self.get_url()
+        url_parsed = urlparse(url)
+        url_parsed = url_parsed._replace(netloc=self.fallback_base_url)
+        return url_parsed.geturl()
+
+    def get_index_url(self, fallback: bool = False) -> str:
+        if fallback:
+            return self.get_fallback_url() + ".idx"
+        else:
+            return self.get_url() + ".idx"
 
 
 class GefsEnsembleSourceFileCoord(GefsSourceFileCoord):

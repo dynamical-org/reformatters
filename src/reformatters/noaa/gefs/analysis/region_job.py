@@ -8,11 +8,8 @@ import zarr
 
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
-from reformatters.common.download import (
-    http_download_to_disk,
-)
 from reformatters.common.interpolation import linear_interpolate_1d_inplace
-from reformatters.common.iterating import digest, item
+from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
@@ -36,7 +33,7 @@ from reformatters.noaa.gefs.gefs_config_models import (
     is_v12_index,
 )
 from reformatters.noaa.gefs.read_data import read_data
-from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
+from reformatters.noaa.gefs.utils import gefs_download_file
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
 log = get_logger(__name__)
@@ -146,20 +143,7 @@ class GefsAnalysisRegionJob(RegionJob[GEFSDataVar, GefsAnalysisSourceFileCoord])
     def download_file(self, coord: GefsAnalysisSourceFileCoord) -> Path:
         """Download the source file for the given coordinate."""
         # Download grib index file
-        idx_url = f"{coord.get_url()}.idx"
-        idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
-
-        # Download the grib messages for the data vars in the coord using byte ranges
-        starts, ends = grib_message_byte_ranges_from_index(
-            idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
-        )
-        vars_suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=True))
-        return http_download_to_disk(
-            coord.get_url(),
-            self.dataset_id,
-            byte_ranges=(starts, ends),
-            local_path_suffix=f"-{vars_suffix}",
-        )
+        return gefs_download_file(self.dataset_id, coord)
 
     def read_data(
         self, coord: GefsAnalysisSourceFileCoord, data_var: GEFSDataVar
