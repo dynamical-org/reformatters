@@ -13,9 +13,9 @@ from reformatters.common.ftp_to_obstore import copy_files_from_ftp_to_obstore
 from reformatters.common.ftp_transfer_coordinator import FtpTransferCoordinator
 from reformatters.common.kubernetes import ArchiveGribFilesCronJob, CronJob
 from reformatters.common.logging import get_logger
-from reformatters.common.object_storage_info_manager import ObjectStorageInfoManager
+from reformatters.common.obstore_manager import ObstoreManager
 
-from .ftp_info_extractor import DwdFtpInfoExtractor
+from .ftp_manager import DwdFtpManager
 from .region_job import DwdIconEuForecastRegionJob, DwdIconEuForecastSourceFileCoord
 from .template_config import DwdIconEuDataVar, DwdIconEuForecastTemplateConfig
 
@@ -51,15 +51,13 @@ class DwdIconEuForecastDataset(
             )
             store = get_source_coop_s3_store()
 
-        ftp_info_extractor = DwdFtpInfoExtractor(
+        ftp_manager = DwdFtpManager(
             ftp_host="opendata.dwd.de", filename_filter=filename_filter
         )
-        obstore_info_manager = ObjectStorageInfoManager(
-            dst_obstore=store, dst_root_path=dst_root_path
-        )
+        obstore_manager = ObstoreManager(dst_obstore=store, dst_root_path=dst_root_path)
         coordinator = FtpTransferCoordinator(
-            ftp_info_extractor=ftp_info_extractor,
-            obstore_info_manager=obstore_info_manager,
+            ftp_manager=ftp_manager,
+            obstore_manager=obstore_manager,
         )
 
         if nwp_init_hour == "all":
@@ -80,7 +78,7 @@ class DwdIconEuForecastDataset(
 
         asyncio.run(
             copy_files_from_ftp_to_obstore(
-                ftp_host=ftp_info_extractor.ftp_host,
+                ftp_host=ftp_manager.ftp_host,
                 src_ftp_paths=src_ftp_paths,
                 dst_obstore_paths=dst_obstore_paths,
                 dst_store=store,
@@ -90,7 +88,7 @@ class DwdIconEuForecastDataset(
         log.info(
             "Finished downloading %d files from ftp://%s",
             len(files_to_download),
-            ftp_info_extractor.ftp_host,
+            ftp_manager.ftp_host,
         )
 
     def get_cli(self) -> typer.Typer:

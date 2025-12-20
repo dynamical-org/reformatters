@@ -11,8 +11,8 @@ from reformatters.common.ftp_transfer_coordinator import (
     FtpTransferCoordinator,
     set_difference,
 )
-from reformatters.common.object_storage_info_manager import ObjectStorageInfoManager
-from reformatters.dwd.icon_eu.forecast.ftp_info_extractor import DwdFtpInfoExtractor
+from reformatters.common.obstore_manager import ObstoreManager
+from reformatters.dwd.icon_eu.forecast.ftp_manager import DwdFtpManager
 
 FTP_PATH = PurePosixPath(
     "/weather/nwp/icon-eu/grib/00/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2025112600_004_ALB_RAD.grib2.bz2"
@@ -22,15 +22,15 @@ FTP_INFO = cast(Any, {"type": "file", "size": 123})
 
 @pytest.fixture
 def coordinator() -> FtpTransferCoordinator:
-    ext = DwdFtpInfoExtractor(ftp_host="host")
-    mgr = ObjectStorageInfoManager(
+    ext = DwdFtpManager(ftp_host="host")
+    mgr = ObstoreManager(
         dst_obstore=obstore.store.MemoryStore(), dst_root_path=PurePosixPath("root")
     )
-    return FtpTransferCoordinator(ftp_info_extractor=ext, obstore_info_manager=mgr)
+    return FtpTransferCoordinator(ftp_manager=ext, obstore_manager=mgr)
 
 
 def test_skip_ftp_item() -> None:
-    ext = DwdFtpInfoExtractor(ftp_host="host")
+    ext = DwdFtpManager(ftp_host="host")
     assert ext.skip_ftp_item(
         ftp_path=PurePosixPath("dir"), ftp_info=cast(Any, {"type": "dir"})
     )
@@ -47,20 +47,20 @@ def test_skip_ftp_item() -> None:
 
 
 def test_extract_init_datetime() -> None:
-    assert DwdFtpInfoExtractor.extract_init_datetime_from_ftp_path(
+    assert DwdFtpManager.extract_init_datetime_from_ftp_path(
         ftp_path=FTP_PATH
     ) == datetime(2025, 11, 26, 0)
 
 
 def test_extract_variable_name() -> None:
     assert (
-        DwdFtpInfoExtractor.extract_nwp_variable_name_from_ftp_path(ftp_path=FTP_PATH)
+        DwdFtpManager.extract_nwp_variable_name_from_ftp_path(ftp_path=FTP_PATH)
         == "alb_rad"
     )
 
 
 def test_calc_obstore_path() -> None:
-    mgr = ObjectStorageInfoManager(
+    mgr = ObstoreManager(
         dst_obstore=obstore.store.MemoryStore(), dst_root_path=PurePosixPath("root")
     )
     expected = PurePosixPath(
@@ -110,7 +110,7 @@ def test_set_difference() -> None:
 
 
 def test_filter_filenames_by_regex() -> None:
-    ext = DwdFtpInfoExtractor(ftp_host="host", filename_filter=".*_000_.*")
+    ext = DwdFtpManager(ftp_host="host", filename_filter=".*_000_.*")
     listing = cast(
         Any, [(PurePosixPath("a_000_b"), {}), (PurePosixPath("a_001_b"), {})]
     )
@@ -122,12 +122,12 @@ async def test_calc_new_files_for_single_nwp_init_hour(
     coordinator: FtpTransferCoordinator, mocker: MockerFixture
 ) -> None:
     mocker.patch.object(
-        coordinator.ftp_info_extractor,
+        coordinator.ftp_manager,
         "list_and_filter_for_init_hour",
         return_value=[(FTP_PATH, FTP_INFO)],
     )
     mocker.patch.object(
-        coordinator.obstore_info_manager,
+        coordinator.obstore_manager,
         "list_files_starting_at_nwp_init",
         return_value=set(),
     )

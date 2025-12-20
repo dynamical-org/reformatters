@@ -11,8 +11,8 @@ from reformatters.common.ftp_to_obstore_types import (
 from reformatters.common.logging import get_logger
 
 if TYPE_CHECKING:
-    from reformatters.common.ftp_info_extractor import FtpInfoExtractor
-    from reformatters.common.object_storage_info_manager import ObjectStorageInfoManager
+    from reformatters.common.ftp_manager import FtpManager
+    from reformatters.common.obstore_manager import ObstoreManager
 
 log = get_logger(__name__)
 
@@ -21,18 +21,18 @@ class FtpTransferCoordinator:
     """Coordinate FTP and object storage interactions to calculate transfer
     jobs.
 
-    This class uses injected FtpInfoExtractor and
-    ObjectStorageInfoManager instances to perform its operations, making
+    This class uses injected FtpManager and
+    ObstoreManager instances to perform its operations, making
     it easier to test and extend.
     """
 
     def __init__(
         self,
-        ftp_info_extractor: "FtpInfoExtractor",
-        obstore_info_manager: "ObjectStorageInfoManager",
+        ftp_manager: "FtpManager",
+        obstore_manager: "ObstoreManager",
     ) -> None:
-        self.ftp_info_extractor = ftp_info_extractor
-        self.obstore_info_manager = obstore_info_manager
+        self.ftp_manager = ftp_manager
+        self.obstore_manager = obstore_manager
 
     async def calc_new_files_for_multiple_nwp_init_hours(
         self,
@@ -49,10 +49,8 @@ class FtpTransferCoordinator:
     async def calc_new_files_for_single_nwp_init_hour(
         self, init_hour: int
     ) -> list[TransferJob]:
-        filtered_ftp_listing = (
-            await self.ftp_info_extractor.list_and_filter_for_init_hour(
-                init_hour=init_hour
-            )
+        filtered_ftp_listing = await self.ftp_manager.list_and_filter_for_init_hour(
+            init_hour=init_hour
         )
         ftp_transfer_jobs = [
             self.convert_ftp_path_to_transfer_job(ftp_path, ftp_info)
@@ -65,9 +63,7 @@ class FtpTransferCoordinator:
         )
 
         objects_already_downloaded = (
-            self.obstore_info_manager.list_files_starting_at_nwp_init(
-                min_nwp_init_datetime
-            )
+            self.obstore_manager.list_files_starting_at_nwp_init(min_nwp_init_datetime)
         )
 
         jobs_still_to_download = set_difference(
@@ -86,13 +82,13 @@ class FtpTransferCoordinator:
     def convert_ftp_path_to_transfer_job(
         self, ftp_path: PurePosixPath, ftp_info: UnixListInfo
     ) -> TransferJob:
-        nwp_init_datetime = self.ftp_info_extractor.extract_init_datetime_from_ftp_path(
+        nwp_init_datetime = self.ftp_manager.extract_init_datetime_from_ftp_path(
             ftp_path
         )
-        nwp_variable_name = (
-            self.ftp_info_extractor.extract_nwp_variable_name_from_ftp_path(ftp_path)
+        nwp_variable_name = self.ftp_manager.extract_nwp_variable_name_from_ftp_path(
+            ftp_path
         )
-        dst_obstore_path = self.obstore_info_manager.calc_obstore_path(
+        dst_obstore_path = self.obstore_manager.calc_obstore_path(
             ftp_path, nwp_init_datetime, nwp_variable_name
         )
         src_ftp_file_size_bytes = int(ftp_info["size"])
