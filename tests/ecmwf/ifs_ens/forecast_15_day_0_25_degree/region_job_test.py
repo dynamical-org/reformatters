@@ -48,7 +48,7 @@ def test_region_job_source_groups() -> None:
         template_config.data_vars
     )
     assert len(groups) == 2
-    assert len(groups[0]) == 11
+    assert len(groups[0]) == 12
 
     # categorical_precipitation_type_surface is grouped separately
     # since it is the only one with a date_available value
@@ -114,6 +114,7 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     example_grib_index = """
+{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levelist": "500", "levtype": "pl", "number": "2", "param": "gh", "_offset": 674936844, "_length": 393429}
 {"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "3", "levtype": "sfc", "param": "2t", "_offset": 0, "_length": 665525}
 {"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "3", "levtype": "sfc", "param": "10u", "_offset": 3773626, "_length": 665525}
 {"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "3", "levtype": "sfc", "param": "10u", "_offset": 665525, "_length": 888917}

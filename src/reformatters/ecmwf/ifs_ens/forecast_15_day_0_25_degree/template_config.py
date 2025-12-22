@@ -545,4 +545,24 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
+            EcmwfDataVar(
+                name="geopotential_height_500hpa",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="gh",
+                    long_name="Geopotential height",
+                    units="gpm",
+                    step_type="instant",
+                    standard_name="geopotential_height",
+                ),
+                internal_attrs=EcmwfInternalAttrs(
+                    grib_comment="Geopotential height [gpm]",
+                    grib_description='50000[Pa] ISBL="Isobaric surface"',
+                    grib_element="HGT",
+                    grib_index_param="gh",
+                    grib_index_level_type="pl",
+                    grib_index_level_value=500,
+                    keep_mantissa_bits=11,
+                ),
+            ),
         ]
