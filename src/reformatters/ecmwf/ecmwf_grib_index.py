@@ -1,10 +1,10 @@
 from collections.abc import Sequence
 from os import PathLike
 
+import numpy as np
 import pandas as pd
 
 from reformatters.common.config_models import DataVar
-from reformatters.common.iterating import item
 from reformatters.ecmwf.ecmwf_config_models import (
     EcmwfInternalAttrs,
 )
@@ -27,11 +27,27 @@ def get_message_byte_ranges_from_index(
     byte_range_ends: list[int] = []
     index_file_df = _parse_index_file(index_local_path)
     for data_var in data_vars:
-        rows = index_file_df.loc[
-            (ensemble_member, data_var.internal_attrs.grib_index_param),
+        level_selector = (
+            slice(None)
+            if np.isnan(level_value := data_var.internal_attrs.grib_index_level_value)
+            else level_value
+        )
+        row: pd.Series | pd.DataFrame = index_file_df.loc[
+            (
+                ensemble_member,
+                data_var.internal_attrs.grib_index_param,
+                data_var.internal_attrs.grib_index_level_type,
+                level_selector,
+            ),
             ["_offset", "_length"],
         ]
-        start, length = item(rows.values)
+        if isinstance(row, pd.DataFrame):
+            if len(row) == 1:
+                row = row.iloc[0]
+            else:
+                raise AssertionError(f"Expected exactly one match, but found: {row}")
+        assert isinstance(row, pd.Series)
+        start, length = row.values
         byte_range_starts.append(int(start))
         byte_range_ends.append(int(start + length))
     return byte_range_starts, byte_range_ends
@@ -60,5 +76,4 @@ def _parse_index_file(index_local_path: PathLike[str]) -> pd.DataFrame:
     assert (df[df["number"] == 0]["type"] == "cf").all(), (
         "Parsed row as control member that didn't have type='cf'"
     )
-
-    return df.set_index(["number", "param"]).sort_index()
+    return df.set_index(["number", "param", "levtype", "levelist"]).sort_index()

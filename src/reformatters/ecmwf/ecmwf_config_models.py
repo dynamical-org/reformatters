@@ -1,3 +1,5 @@
+from typing import Literal
+
 import pandas as pd
 
 from reformatters.common.config_models import BaseInternalAttrs, DataVar
@@ -21,6 +23,9 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
 
     grib_index_param: str
     grib_comment: str
+
+    grib_index_level_type: Literal["sfc", "pl"] = "sfc"  # surface or pressure level
+    grib_index_level_value: float = float("nan")
 
     # additional informational metadata, not currently used in processing:
     grib_element: str
