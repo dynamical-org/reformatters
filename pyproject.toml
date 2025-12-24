@@ -46,6 +46,7 @@ dev = [
     "pytest-asyncio~=1.3",
     "pytest-sugar~=1.0",
     "pytest-xdist~=3.8",
+    "pytest-mock~=3.14", # Added for mocker fixture
     # NOTE: keep this in sync with .pre-commit-config.yaml
     "ruff==0.13.1",
     "types-requests~=2.32",
