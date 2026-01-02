@@ -281,14 +281,11 @@ class NoaaNdviCdrAnalysisRegionJob(
         ncei_url = f"{self.root_nc_url}/{year}/"
 
         response = requests.get(ncei_url, timeout=15)
-        try:
-            response.raise_for_status()
-        except requests.HTTPError:
-            if response.status_code == 404:
-                now = pd.Timestamp.now()
-                if now.year == year and now.month == 1:
-                    return []
-            raise
+        if response.status_code == 404:
+            now = pd.Timestamp.now()
+            if now.year == year and now.month == 1:
+                return []
+        response.raise_for_status()
 
         content = response.text
         filenames = re.findall(r"href=\"(VIIRS-Land.+nc)\"", content)
