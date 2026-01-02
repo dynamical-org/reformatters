@@ -433,8 +433,27 @@ def test_list_source_files_routing_by_year(
         mock_ncei.assert_not_called()
 
 
+@pytest.fixture
+def mock_404_response(monkeypatch: pytest.MonkeyPatch) -> Mock:
+    """Fixture to mock requests.get returning a 404 response."""
+    mock_response = Mock()
+    mock_response.status_code = 404
+
+    def raise_http_error() -> None:
+        raise requests.HTTPError(response=mock_response)
+
+    mock_response.raise_for_status = raise_http_error
+
+    def mock_requests_get(url: str, **kwargs: Any) -> Mock:  # noqa: ANN401
+        return mock_response
+
+    monkeypatch.setattr("requests.get", mock_requests_get)
+    return mock_response
+
+
 def test_list_ncei_source_files_404_in_january_current_year(
     monkeypatch: pytest.MonkeyPatch,
+    mock_404_response: Mock,
 ) -> None:
     """Test that _list_ncei_source_files returns empty list for 404 in January of current year."""
     # Mock current date to January 2026
@@ -452,20 +471,6 @@ def test_list_ncei_source_files_404_in_january_current_year(
         reformat_job_name="test",
     )
 
-    # Mock requests.get to return a 404 response
-    mock_response = Mock()
-    mock_response.status_code = 404
-
-    def raise_http_error() -> None:
-        raise requests.HTTPError(response=mock_response)
-
-    mock_response.raise_for_status = raise_http_error
-
-    def mock_requests_get(url: str, **kwargs: Any) -> Mock:  # noqa: ANN401
-        return mock_response
-
-    monkeypatch.setattr("requests.get", mock_requests_get)
-
     # Test current year in January: should return empty list
     result = region_job._list_ncei_source_files(2026)
     assert result == []
@@ -473,6 +478,7 @@ def test_list_ncei_source_files_404_in_january_current_year(
 
 def test_list_ncei_source_files_404_raises_for_other_cases(
     monkeypatch: pytest.MonkeyPatch,
+    mock_404_response: Mock,
 ) -> None:
     """Test that _list_ncei_source_files raises HTTPError for 404 in non-January or previous year."""
     template_config = NoaaNdviCdrAnalysisTemplateConfig()
@@ -485,20 +491,6 @@ def test_list_ncei_source_files_404_raises_for_other_cases(
         region=Mock(spec=slice),
         reformat_job_name="test",
     )
-
-    # Mock requests.get to return a 404 response
-    mock_response = Mock()
-    mock_response.status_code = 404
-
-    def raise_http_error() -> None:
-        raise requests.HTTPError(response=mock_response)
-
-    mock_response.raise_for_status = raise_http_error
-
-    def mock_requests_get(url: str, **kwargs: Any) -> Mock:  # noqa: ANN401
-        return mock_response
-
-    monkeypatch.setattr("requests.get", mock_requests_get)
 
     # Test 1: 404 in February (not January) of current year should raise
     mock_now = Mock(return_value=pd.Timestamp("2026-02-15"))
