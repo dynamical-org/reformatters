@@ -16,6 +16,8 @@ from reformatters.common.logging import get_logger
 
 log = get_logger(__name__)
 
+MANUAL_K8S_GITHUB_ENVIRONMENT = "prod"
+
 
 def get_all_cronjob_names() -> list[str]:
     """Extract all CronJob names from DYNAMICAL_DATASETS."""
@@ -60,6 +62,7 @@ def generate_create_job_workflow(cronjob_names: list[str]) -> dict[str, Any]:
             "create-job": {
                 "name": "Create Job",
                 "runs-on": "ubuntu-24.04",
+                "environment": MANUAL_K8S_GITHUB_ENVIRONMENT,
                 "steps": [
                     {
                         "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
@@ -134,6 +137,7 @@ def generate_get_jobs_workflow() -> dict[str, Any]:
             "get-jobs": {
                 "name": "Get Jobs",
                 "runs-on": "ubuntu-24.04",
+                "environment": MANUAL_K8S_GITHUB_ENVIRONMENT,
                 "steps": [
                     {
                         "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
@@ -176,6 +180,7 @@ def generate_get_pods_workflow() -> dict[str, Any]:
             "get-pods": {
                 "name": "Get Pods",
                 "runs-on": "ubuntu-24.04",
+                "environment": MANUAL_K8S_GITHUB_ENVIRONMENT,
                 "steps": [
                     {
                         "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
