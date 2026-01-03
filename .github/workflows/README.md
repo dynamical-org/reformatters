@@ -2,7 +2,7 @@
 
 ## Manual Kubernetes Operations Workflows
 
-These workflows allow team members to manually trigger Kubernetes operations from GitHub (including mobile).
+These workflows allow team members to manually trigger specific Kubernetes operations from GitHub.
 
 ### Available Workflows
 
@@ -32,7 +32,7 @@ List all pods with their status, sorted by creation time.
 
 ### Access Control
 
-Anyone with **write access** to this repository can trigger these workflows. This aligns with the `write-access-reformatters` team permissions.
+Anyone with write access to this repository can trigger these workflows.
 
 ### How the Dropdown Auto-Updates
 
@@ -50,30 +50,13 @@ The cronjob dropdown in `manual-create-job-from-cronjob.yml` is automatically ge
      - `src/reformatters/*/dynamical_dataset.py`
      - `src/scripts/generate_manual_workflows.py`
 
-3. **Result:** When you add a new dataset, the workflow file updates automatically in the same commit!
-
 ### Manual Regeneration
 
 If needed, you can manually regenerate the workflow files:
 
 ```bash
-uv run python src/scripts/generate_manual_workflows.py
+uv run src/scripts/generate_manual_workflows.py
 ```
-
-### Mobile Usage
-
-All workflows are accessible from the GitHub mobile app:
-1. Open repository in GitHub app
-2. Go to "Actions" tab
-3. Select workflow
-4. Tap "Run workflow" button
-
-### Technical Details
-
-- **Namespace:** All operations target the `default` namespace
-- **Authentication:** Uses OIDC with AWS IAM roles (same as deployment workflow)
-- **Kubernetes Access:** Workflows authenticate to EKS cluster using AWS credentials
-- **Concurrency:** Jobs are grouped by actor and run ID to prevent conflicts
 
 ## Security
 
