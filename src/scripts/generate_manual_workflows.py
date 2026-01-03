@@ -118,46 +118,6 @@ echo "Or view in GitHub Actions: https://github.com/${{ github.repository }}/act
     }
 
 
-def generate_list_cronjobs_workflow() -> dict:
-    """Generate the workflow for listing all cronjobs."""
-    return {
-        "name": "Manual: List CronJobs",
-        "on": {"workflow_dispatch": {}},
-        "permissions": {"id-token": "write", "contents": "read"},
-        "jobs": {
-            "list-cronjobs": {
-                "name": "List CronJobs",
-                "runs-on": "ubuntu-24.04",
-                "steps": [
-                    {
-                        "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
-                        "with": {"sparse-checkout": "."},
-                    },
-                    {
-                        "name": "Configure AWS Credentials",
-                        "uses": "aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502",
-                        "with": {
-                            "role-to-assume": "${{ secrets.AWS_ROLE_TO_ASSUME }}",
-                            "aws-region": "${{ secrets.AWS_REGION }}",
-                        },
-                    },
-                    {
-                        "name": "Install kubectl",
-                        "uses": "azure/setup-kubectl@901a10e89ea615cf61f57ac05cecdf23e7de06d8",
-                        "with": {"version": "latest"},
-                    },
-                    {
-                        "name": "Update kubeconfig",
-                        "run": "aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}",
-                    },
-                    {
-                        "name": "List cronjobs",
-                        "run": "kubectl get cronjobs -o wide",
-                    },
-                ],
-            }
-        },
-    }
 
 
 def generate_get_jobs_workflow() -> dict:
@@ -287,7 +247,6 @@ def main() -> None:
     # Generate workflow files
     workflows = [
         (generate_create_job_workflow(cronjob_names), "manual-create-job-from-cronjob.yml"),
-        (generate_list_cronjobs_workflow(), "manual-list-cronjobs.yml"),
         (generate_get_jobs_workflow(), "manual-get-jobs.yml"),
         (generate_get_pods_workflow(), "manual-get-pods.yml"),
     ]

@@ -20,17 +20,12 @@ Manually trigger a one-off job from an existing cronjob.
   3. Select cronjob from dropdown
   4. Click "Run workflow" button
 
-#### 2. List CronJobs
-**File:** `manual-list-cronjobs.yml`
-
-View all cronjobs in the cluster.
-
-#### 3. Get Jobs
+#### 2. Get Jobs
 **File:** `manual-get-jobs.yml`
 
 List all jobs with their status, sorted by creation time.
 
-#### 4. Get Pods
+#### 3. Get Pods
 **File:** `manual-get-pods.yml`
 
 List all pods with their status, sorted by creation time.
