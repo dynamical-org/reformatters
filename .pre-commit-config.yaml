@@ -18,3 +18,10 @@ repos:
         # use require_serial so that script
         # is only called once per commit
         require_serial: true
+      - id: generate-manual-workflows
+        name: generate manual workflows
+        entry: "uv run python src/scripts/generate_manual_workflows.py"
+        language: system
+        files: ^(src/reformatters/__main__\.py|src/reformatters/.*/dynamical_dataset\.py|src/scripts/generate_manual_workflows\.py)$
+        pass_filenames: false
+        require_serial: true
