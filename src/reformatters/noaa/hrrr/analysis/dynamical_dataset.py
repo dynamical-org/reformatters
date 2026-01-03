@@ -13,10 +13,6 @@ from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
 
 from .region_job import NoaaHrrrAnalysisRegionJob
 from .template_config import NoaaHrrrAnalysisTemplateConfig
-from .validators import (
-    check_analysis_recent_nans,
-    check_data_is_current,
-)
 
 
 class NoaaHrrrAnalysisDataset(
@@ -57,6 +53,6 @@ class NoaaHrrrAnalysisDataset(
 
     def validators(self) -> Sequence[validation.DataValidator]:
         return (
-            check_data_is_current,
-            check_analysis_recent_nans,
+            validation.check_analysis_current_data,
+            validation.check_analysis_recent_nans,
         )
