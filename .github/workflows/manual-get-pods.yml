@@ -27,4 +27,4 @@ jobs:
     - name: Update kubeconfig
       run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
     - name: Get pods
-      run: kubectl get pods -o wide --sort-by=.metadata.creationTimestamp
+      run: kubectl get pods --sort-by=.metadata.creationTimestamp

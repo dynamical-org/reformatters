@@ -154,7 +154,7 @@ def generate_get_jobs_workflow() -> dict:
                     },
                     {
                         "name": "Get jobs",
-                        "run": "kubectl get jobs -o wide --sort-by=.metadata.creationTimestamp",
+                        "run": "kubectl get jobs --sort-by=.metadata.creationTimestamp",
                     },
                 ],
             }
@@ -196,7 +196,7 @@ def generate_get_pods_workflow() -> dict:
                     },
                     {
                         "name": "Get pods",
-                        "run": "kubectl get pods -o wide --sort-by=.metadata.creationTimestamp",
+                        "run": "kubectl get pods --sort-by=.metadata.creationTimestamp",
                     },
                 ],
             }
