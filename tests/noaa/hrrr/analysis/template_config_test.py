@@ -111,17 +111,18 @@ def test_coordinate_configs() -> None:
 
     coord_names = [coord.name for coord in coords]
 
-    required_coords = [
+    required_coords = {
         "time",
         "x",
         "y",
         "latitude",
         "longitude",
         "spatial_ref",
-    ]
+    }
 
-    for coord_name in required_coords:
-        assert coord_name in coord_names, f"Missing coordinate: {coord_name}"
+    assert set(coord_names) == required_coords, (
+        f"Coordinate mismatch. Expected: {required_coords}, Got: {set(coord_names)}"
+    )
 
 
 def test_derive_coordinates_integration() -> None:
