@@ -42,8 +42,8 @@ class NoaaHrrrAnalysisTemplateConfig(NoaaHrrrCommonTemplateConfig):
             attribution="NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
             spatial_domain="Continental United States",
             spatial_resolution="3km",
-            time_domain=f"Analysis times {self.append_dim_start} UTC to Present",
-            time_resolution="Hourly",
+            time_domain=f"{self.append_dim_start} UTC to Present",
+            time_resolution=f"{self.append_dim_frequency.total_seconds() / (60 * 60)} hour",
             forecast_domain="Analysis (0 or 1 hour forecast)",
             forecast_resolution="Hourly",
         )

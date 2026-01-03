@@ -22,10 +22,7 @@ log = get_logger(__name__)
 
 class NoaaHrrrAnalysisSourceFileCoord(NoaaHrrrSourceFileCoord):
     def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
-        time = self.init_time + self.lead_time
-        return {
-            "time": time,
-        }
+        return {"time": self.init_time + self.lead_time}
 
 
 class NoaaHrrrAnalysisRegionJob(NoaaHrrrRegionJob):
