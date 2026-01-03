@@ -14,6 +14,7 @@ from reformatters.common.config_models import (
     StatisticsApproximate,
 )
 from reformatters.common.template_config import SPATIAL_REF_COORDS
+from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
@@ -43,9 +44,7 @@ class NoaaHrrrAnalysisTemplateConfig(NoaaHrrrCommonTemplateConfig):
             spatial_domain="Continental United States",
             spatial_resolution="3km",
             time_domain=f"{self.append_dim_start} UTC to Present",
-            time_resolution=f"{self.append_dim_frequency.total_seconds() / (60 * 60)} hour",
-            forecast_domain="Analysis (0 or 1 hour forecast)",
-            forecast_resolution="Hourly",
+            time_resolution=f"{whole_hours(self.append_dim_frequency)} hour",
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
@@ -103,6 +102,7 @@ class NoaaHrrrAnalysisTemplateConfig(NoaaHrrrCommonTemplateConfig):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def data_vars(self) -> Sequence[NoaaHrrrDataVar]:
+        # TODO(aldenks): update chunk and shard sizes
         var_chunks: dict[Dim, int] = {
             "time": 24,
             "x": 300,

@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
@@ -58,6 +59,15 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
             [v for v in filter_variable_names if v != "precipitation_surface"]
         ]
     )
+
+    # Check precipitation values - first value should be nan, rest should not be null
+    precip_data = backfill_ds["precipitation_surface"]
+    assert np.isnan(precip_data.isel(time=0, x=1, y=-2).values)
+    # Check that subsequent time steps have non-null values in at least some locations
+    assert_no_nulls(
+        precip_data.isel(time=slice(1, None)).isel(x=slice(-10, 0), y=slice(0, 10))
+    )
+
     point_ds = backfill_ds.sel(time=time_start).isel(x=1, y=-2)
 
     assert point_ds["temperature_2m"] == 22.875

@@ -25,6 +25,7 @@ class NoaaHrrrAnalysisDataset(
 
     def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
         """Define Kubernetes cron jobs for operational updates and validation."""
+        # TODO(aldenks): update schedule, set resource requests
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="55 * * * *",
@@ -36,6 +37,7 @@ class NoaaHrrrAnalysisDataset(
             shared_memory="400M",
             ephemeral_storage="20G",
             secret_names=self.store_factory.k8s_secret_names(),
+            suspend=True,
         )
 
         validation_cron_job = ValidationCronJob(
@@ -47,6 +49,7 @@ class NoaaHrrrAnalysisDataset(
             cpu="0.7",
             memory="3.5G",
             secret_names=self.store_factory.k8s_secret_names(),
+            suspend=True,
         )
 
         return [operational_update_cron_job, validation_cron_job]
