@@ -93,7 +93,7 @@ set -euo pipefail
 
 CRONJOB_NAME="${{ github.event.inputs.cronjob_name }}"
 USERNAME="${{ github.actor }}"
-RANDOM_CHARS=$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 2)
+RANDOM_CHARS=$(openssl rand -hex 1)
 
 # Generate job name with length limits
 if [ ${#CRONJOB_NAME} -gt 50 ]; then
