@@ -60,6 +60,7 @@ def generate_create_job_workflow(cronjob_names: list[str]) -> dict[str, Any]:
             "create-job": {
                 "name": "Create Job",
                 "runs-on": "ubuntu-24.04",
+                "environment": "prod",
                 "steps": [
                     {
                         "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
@@ -134,6 +135,7 @@ def generate_get_jobs_workflow() -> dict[str, Any]:
             "get-jobs": {
                 "name": "Get Jobs",
                 "runs-on": "ubuntu-24.04",
+                "environment": "prod",
                 "steps": [
                     {
                         "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
@@ -176,6 +178,7 @@ def generate_get_pods_workflow() -> dict[str, Any]:
             "get-pods": {
                 "name": "Get Pods",
                 "runs-on": "ubuntu-24.04",
+                "environment": "prod",
                 "steps": [
                     {
                         "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
