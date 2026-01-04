@@ -16,6 +16,22 @@ from reformatters.common.logging import get_logger
 
 log = get_logger(__name__)
 
+
+class LiteralString(str):
+    """String that should be represented as a literal block scalar in YAML."""
+
+    __slots__ = ()
+
+
+def literal_string_representer(dumper: yaml.Dumper, data: str) -> yaml.ScalarNode:
+    """Represent LiteralString as a literal block scalar (|) in YAML."""
+    if "\n" in data:
+        return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
+    return dumper.represent_scalar("tag:yaml.org,2002:str", data)
+
+
+yaml.add_representer(LiteralString, literal_string_representer)
+
 MANUAL_K8S_GITHUB_ENVIRONMENT = "prod"
 
 
@@ -87,8 +103,8 @@ def generate_create_job_workflow(cronjob_names: list[str]) -> dict[str, Any]:
                     },
                     {
                         "name": "Generate job name and create job",
-                        "run": """
-#!/bin/bash
+                        "run": LiteralString(
+                            r"""#!/bin/bash
 set -euo pipefail
 
 CRONJOB_NAME="${{ github.event.inputs.cronjob_name }}"
@@ -119,7 +135,16 @@ echo "Check job status with:"
 echo "  gh workflow run manual-get-jobs.yml"
 echo ""
 echo "Or view in GitHub Actions: https://github.com/${{ github.repository }}/actions"
-""".strip(),
+
+# Write to job summary
+{
+  echo "## Job Created Successfully ✅"
+  echo "**CronJob:** \`${CRONJOB_NAME}\`"
+  echo "**Job Name:** \`${JOB_NAME}\`"
+  echo "Check job status with the [Get Jobs workflow](https://github.com/${{ github.repository }}/actions/workflows/manual-get-jobs.yml)"
+} >> $GITHUB_STEP_SUMMARY
+"""
+                        ),
                     },
                 ],
             }
@@ -162,7 +187,24 @@ def generate_get_jobs_workflow() -> dict[str, Any]:
                     },
                     {
                         "name": "Get jobs",
-                        "run": "kubectl get jobs --sort-by=.metadata.creationTimestamp",
+                        "run": LiteralString(
+                            """#!/bin/bash
+set -euo pipefail
+
+# Get jobs and save output
+OUTPUT=$(kubectl get jobs --sort-by=.metadata.creationTimestamp)
+
+# Print to logs
+echo "$OUTPUT"
+
+# Write to job summary
+echo "## Kubernetes Jobs" >> $GITHUB_STEP_SUMMARY
+echo "" >> $GITHUB_STEP_SUMMARY
+echo '```' >> $GITHUB_STEP_SUMMARY
+echo "$OUTPUT" >> $GITHUB_STEP_SUMMARY
+echo '```' >> $GITHUB_STEP_SUMMARY
+"""
+                        ),
                     },
                 ],
             }
@@ -205,7 +247,24 @@ def generate_get_pods_workflow() -> dict[str, Any]:
                     },
                     {
                         "name": "Get pods",
-                        "run": "kubectl get pods --sort-by=.metadata.creationTimestamp",
+                        "run": LiteralString(
+                            """#!/bin/bash
+set -euo pipefail
+
+# Get pods and save output
+OUTPUT=$(kubectl get pods --sort-by=.metadata.creationTimestamp)
+
+# Print to logs
+echo "$OUTPUT"
+
+# Write to job summary
+echo "## Kubernetes Pods" >> $GITHUB_STEP_SUMMARY
+echo "" >> $GITHUB_STEP_SUMMARY
+echo '```' >> $GITHUB_STEP_SUMMARY
+echo "$OUTPUT" >> $GITHUB_STEP_SUMMARY
+echo '```' >> $GITHUB_STEP_SUMMARY
+"""
+                        ),
                     },
                 ],
             }

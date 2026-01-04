@@ -28,4 +28,19 @@ jobs:
     - name: Update kubeconfig
       run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
     - name: Get pods
-      run: kubectl get pods --sort-by=.metadata.creationTimestamp
+      run: |
+        #!/bin/bash
+        set -euo pipefail
+
+        # Get pods and save output
+        OUTPUT=$(kubectl get pods --sort-by=.metadata.creationTimestamp)
+
+        # Print to logs
+        echo "$OUTPUT"
+
+        # Write to job summary
+        echo "## Kubernetes Pods" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "$OUTPUT" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
