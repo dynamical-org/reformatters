@@ -102,7 +102,7 @@ def generate_create_job_workflow(cronjob_names: list[str]) -> dict[str, Any]:
                         "run": "aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}",
                     },
                     {
-                        "name": "Generate job name and create job",
+                        "name": "Submit job (SEE LOGS)",
                         "run": LiteralString(
                             r"""#!/bin/bash
 set -euo pipefail
@@ -129,19 +129,34 @@ JOB_NAME="${CRONJOB_TRUNCATED}-${USERNAME_TRUNCATED}-${RANDOM_CHARS}"
 echo "Creating job: ${JOB_NAME} from cronjob: ${CRONJOB_NAME}"
 kubectl create job --from=cronjob/${CRONJOB_NAME} ${JOB_NAME}
 
-echo "✅ Job created successfully!"
 echo ""
-echo "Check job status with:"
-echo "  gh workflow run manual-get-jobs.yml"
+echo "## Job Created Successfully"
 echo ""
-echo "Or view in GitHub Actions: https://github.com/${{ github.repository }}/actions"
+echo "CronJob: ${CRONJOB_NAME}"
+echo ""
+echo "Job Name: ${JOB_NAME}"
+echo ""
+echo "### Monitoring"
+echo ""
+echo "- Sentry cron status: https://dynamical.sentry.io/issues/alerts/rules/crons/reformatters/${CRONJOB_NAME}/details/"
+echo "- Sentry job logs: https://dynamical.sentry.io/explore/logs/?logsQuery=job_name%3A${JOB_NAME}"
+echo "- Manual Get Jobs: https://github.com/${{ github.repository }}/actions/workflows/manual-get-jobs.yml"
+echo "- Manual Get Pods: https://github.com/${{ github.repository }}/actions/workflows/manual-get-pods.yml"
 
 # Write to job summary
 {
-  echo "## Job Created Successfully ✅"
+  echo "## Job Created Successfully"
+  echo ""
   echo "**CronJob:** \`${CRONJOB_NAME}\`"
+  echo ""
   echo "**Job Name:** \`${JOB_NAME}\`"
-  echo "Check job status with the [Get Jobs workflow](https://github.com/${{ github.repository }}/actions/workflows/manual-get-jobs.yml)"
+  echo ""
+  echo "### Monitoring"
+  echo ""
+  echo "- [Sentry cron status](https://dynamical.sentry.io/issues/alerts/rules/crons/reformatters/${CRONJOB_NAME}/details/)"
+  echo "- [Sentry job logs](https://dynamical.sentry.io/explore/logs/?logsQuery=job_name%3A${JOB_NAME})"
+  echo "- [Manual Get Jobs](https://github.com/${{ github.repository }}/actions/workflows/manual-get-jobs.yml)"
+  echo "- [Manual Get Pods](https://github.com/${{ github.repository }}/actions/workflows/manual-get-pods.yml)"
 } >> $GITHUB_STEP_SUMMARY
 """
                         ),
@@ -186,16 +201,23 @@ def generate_get_jobs_workflow() -> dict[str, Any]:
                         "run": "aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}",
                     },
                     {
-                        "name": "Get jobs",
+                        "name": "Get jobs (SEE LOGS)",
                         "run": LiteralString(
                             """#!/bin/bash
 set -euo pipefail
 
-# Get jobs and save output
-OUTPUT=$(kubectl get jobs --sort-by=.metadata.creationTimestamp)
+# Get jobs and save output (capture both stdout and stderr for "No resources found" message)
+OUTPUT=$(kubectl get jobs --sort-by=.metadata.creationTimestamp 2>&1)
 
-# Print to logs
+# Print to logs (plaintext version of summary)
+echo "## Kubernetes Jobs"
+echo ""
 echo "$OUTPUT"
+echo ""
+echo "### Monitoring"
+echo ""
+echo "- Sentry crons overview: https://dynamical.sentry.io/insights/crons/"
+echo "- Sentry logs: https://dynamical.sentry.io/explore/logs/"
 
 # Write to job summary
 echo "## Kubernetes Jobs" >> $GITHUB_STEP_SUMMARY
@@ -203,6 +225,11 @@ echo "" >> $GITHUB_STEP_SUMMARY
 echo '```' >> $GITHUB_STEP_SUMMARY
 echo "$OUTPUT" >> $GITHUB_STEP_SUMMARY
 echo '```' >> $GITHUB_STEP_SUMMARY
+echo "" >> $GITHUB_STEP_SUMMARY
+echo "### Monitoring" >> $GITHUB_STEP_SUMMARY
+echo "" >> $GITHUB_STEP_SUMMARY
+echo "- [Sentry crons overview](https://dynamical.sentry.io/insights/crons/)" >> $GITHUB_STEP_SUMMARY
+echo "- [Sentry logs](https://dynamical.sentry.io/explore/logs/)" >> $GITHUB_STEP_SUMMARY
 """
                         ),
                     },
@@ -246,16 +273,23 @@ def generate_get_pods_workflow() -> dict[str, Any]:
                         "run": "aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}",
                     },
                     {
-                        "name": "Get pods",
+                        "name": "Get pods (SEE LOGS)",
                         "run": LiteralString(
                             """#!/bin/bash
 set -euo pipefail
 
-# Get pods and save output
-OUTPUT=$(kubectl get pods --sort-by=.metadata.creationTimestamp)
+# Get pods and save output (capture both stdout and stderr for "No resources found" message)
+OUTPUT=$(kubectl get pods --sort-by=.metadata.creationTimestamp 2>&1)
 
-# Print to logs
+# Print to logs (plaintext version of summary)
+echo "## Kubernetes Pods"
+echo ""
 echo "$OUTPUT"
+echo ""
+echo "### Monitoring"
+echo ""
+echo "- Sentry crons overview: https://dynamical.sentry.io/insights/crons/"
+echo "- Sentry logs: https://dynamical.sentry.io/explore/logs/"
 
 # Write to job summary
 echo "## Kubernetes Pods" >> $GITHUB_STEP_SUMMARY
@@ -263,6 +297,11 @@ echo "" >> $GITHUB_STEP_SUMMARY
 echo '```' >> $GITHUB_STEP_SUMMARY
 echo "$OUTPUT" >> $GITHUB_STEP_SUMMARY
 echo '```' >> $GITHUB_STEP_SUMMARY
+echo "" >> $GITHUB_STEP_SUMMARY
+echo "### Monitoring" >> $GITHUB_STEP_SUMMARY
+echo "" >> $GITHUB_STEP_SUMMARY
+echo "- [Sentry crons overview](https://dynamical.sentry.io/insights/crons/)" >> $GITHUB_STEP_SUMMARY
+echo "- [Sentry logs](https://dynamical.sentry.io/explore/logs/)" >> $GITHUB_STEP_SUMMARY
 """
                         ),
                     },
