@@ -141,7 +141,6 @@ echo "Or view in GitHub Actions: https://github.com/${{ github.repository }}/act
   echo "## Job Created Successfully ✅"
   echo "**CronJob:** \`${CRONJOB_NAME}\`"
   echo "**Job Name:** \`${JOB_NAME}\`"
-  echo "### Next Steps"
   echo "Check job status with the [Get Jobs workflow](https://github.com/${{ github.repository }}/actions/workflows/manual-get-jobs.yml)"
 } >> $GITHUB_STEP_SUMMARY
 """
