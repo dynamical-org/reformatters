@@ -136,11 +136,25 @@ echo "  gh workflow run manual-get-jobs.yml"
 echo ""
 echo "Or view in GitHub Actions: https://github.com/${{ github.repository }}/actions"
 
+# URL encode the names for Sentry links
+CRONJOB_NAME_ENCODED=$(echo -n "${CRONJOB_NAME}" | jq -sRr @uri)
+JOB_NAME_ENCODED=$(echo -n "${JOB_NAME}" | jq -sRr @uri)
+
 # Write to job summary
 {
   echo "## Job Created Successfully ✅"
+  echo ""
   echo "**CronJob:** \`${CRONJOB_NAME}\`"
+  echo ""
   echo "**Job Name:** \`${JOB_NAME}\`"
+  echo ""
+  echo "### Monitoring Links"
+  echo ""
+  echo "- [Sentry cron status](https://dynamical.sentry.io/issues/alerts/rules/crons/reformatters/${CRONJOB_NAME}/details/)"
+  echo "- [Sentry job logs](https://dynamical.sentry.io/explore/logs/?logsQuery=job_name%3A${JOB_NAME_ENCODED})"
+  echo ""
+  echo "### Check Status"
+  echo ""
   echo "Check job status with the [Get Jobs workflow](https://github.com/${{ github.repository }}/actions/workflows/manual-get-jobs.yml)"
 } >> $GITHUB_STEP_SUMMARY
 """
@@ -191,8 +205,8 @@ def generate_get_jobs_workflow() -> dict[str, Any]:
                             """#!/bin/bash
 set -euo pipefail
 
-# Get jobs and save output
-OUTPUT=$(kubectl get jobs --sort-by=.metadata.creationTimestamp)
+# Get jobs and save output (capture both stdout and stderr for "No resources found" message)
+OUTPUT=$(kubectl get jobs --sort-by=.metadata.creationTimestamp 2>&1)
 
 # Print to logs
 echo "$OUTPUT"
@@ -203,6 +217,11 @@ echo "" >> $GITHUB_STEP_SUMMARY
 echo '```' >> $GITHUB_STEP_SUMMARY
 echo "$OUTPUT" >> $GITHUB_STEP_SUMMARY
 echo '```' >> $GITHUB_STEP_SUMMARY
+echo "" >> $GITHUB_STEP_SUMMARY
+echo "### Monitoring Links" >> $GITHUB_STEP_SUMMARY
+echo "" >> $GITHUB_STEP_SUMMARY
+echo "- [Sentry crons overview](https://dynamical.sentry.io/insights/crons/)" >> $GITHUB_STEP_SUMMARY
+echo "- [Sentry logs](https://dynamical.sentry.io/explore/logs/)" >> $GITHUB_STEP_SUMMARY
 """
                         ),
                     },
@@ -251,8 +270,8 @@ def generate_get_pods_workflow() -> dict[str, Any]:
                             """#!/bin/bash
 set -euo pipefail
 
-# Get pods and save output
-OUTPUT=$(kubectl get pods --sort-by=.metadata.creationTimestamp)
+# Get pods and save output (capture both stdout and stderr for "No resources found" message)
+OUTPUT=$(kubectl get pods --sort-by=.metadata.creationTimestamp 2>&1)
 
 # Print to logs
 echo "$OUTPUT"
@@ -263,6 +282,11 @@ echo "" >> $GITHUB_STEP_SUMMARY
 echo '```' >> $GITHUB_STEP_SUMMARY
 echo "$OUTPUT" >> $GITHUB_STEP_SUMMARY
 echo '```' >> $GITHUB_STEP_SUMMARY
+echo "" >> $GITHUB_STEP_SUMMARY
+echo "### Monitoring Links" >> $GITHUB_STEP_SUMMARY
+echo "" >> $GITHUB_STEP_SUMMARY
+echo "- [Sentry crons overview](https://dynamical.sentry.io/insights/crons/)" >> $GITHUB_STEP_SUMMARY
+echo "- [Sentry logs](https://dynamical.sentry.io/explore/logs/)" >> $GITHUB_STEP_SUMMARY
 """
                         ),
                     },

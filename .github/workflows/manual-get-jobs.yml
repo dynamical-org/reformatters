@@ -32,8 +32,8 @@ jobs:
         #!/bin/bash
         set -euo pipefail
 
-        # Get jobs and save output
-        OUTPUT=$(kubectl get jobs --sort-by=.metadata.creationTimestamp)
+        # Get jobs and save output (capture both stdout and stderr for "No resources found" message)
+        OUTPUT=$(kubectl get jobs --sort-by=.metadata.creationTimestamp 2>&1)
 
         # Print to logs
         echo "$OUTPUT"
@@ -44,3 +44,8 @@ jobs:
         echo '```' >> $GITHUB_STEP_SUMMARY
         echo "$OUTPUT" >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Monitoring Links" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- [Sentry crons overview](https://dynamical.sentry.io/insights/crons/)" >> $GITHUB_STEP_SUMMARY
+        echo "- [Sentry logs](https://dynamical.sentry.io/explore/logs/)" >> $GITHUB_STEP_SUMMARY
