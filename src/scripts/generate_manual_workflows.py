@@ -102,7 +102,7 @@ def generate_create_job_workflow(cronjob_names: list[str]) -> dict[str, Any]:
                         "run": "aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}",
                     },
                     {
-                        "name": "Generate job name and create job (SEE LOGS)",
+                        "name": "Submit job (SEE LOGS)",
                         "run": LiteralString(
                             r"""#!/bin/bash
 set -euo pipefail
