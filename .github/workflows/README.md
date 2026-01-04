@@ -14,7 +14,6 @@ Manually trigger a one-off job from an existing cronjob.
 - **Input:** Dropdown list of all available cronjobs (auto-updated via pre-commit)
 - **Job naming:** Auto-generates job names in format: `{cronjobname}-{username}-{random}`
   - Automatically truncates to meet Kubernetes 63-character limit
-- **Output:** Job summary displays created job details with link to check status
 - **Usage:** 
   1. Go to Actions tab → "Manual: Create Job from CronJob"
   2. Click "Run workflow"
@@ -26,25 +25,10 @@ Manually trigger a one-off job from an existing cronjob.
 
 List all jobs with their status, sorted by creation time.
 
-- **Output:** Job summary displays formatted table of all jobs at the top of the workflow run page
-- **Logs:** Full kubectl output is also available in step logs
-
 #### 3. Get Pods
 **File:** `manual-get-pods.yml`
 
 List all pods with their status, sorted by creation time.
-
-- **Output:** Job summary displays formatted table of all pods at the top of the workflow run page
-- **Logs:** Full kubectl output is also available in step logs
-
-### Job Summaries
-
-All manual workflows now write useful output to **Job Summaries**, which appear prominently at the top of each workflow run page (above the step logs). This makes it much easier to find the important information without digging through logs.
-
-- `Get Jobs` and `Get Pods` display the kubectl output in a formatted code block
-- `Create Job from CronJob` displays the created job details with next steps
-
-To see a job summary, look for the summary section at the top of the workflow run page after clicking into a workflow run.
 
 ### Access Control
 
