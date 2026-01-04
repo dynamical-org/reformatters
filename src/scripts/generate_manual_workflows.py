@@ -87,7 +87,7 @@ def generate_create_job_workflow(cronjob_names: list[str]) -> dict[str, Any]:
                     },
                     {
                         "name": "Generate job name and create job",
-                        "run": """
+                        "run": r"""
 #!/bin/bash
 set -euo pipefail
 
@@ -119,6 +119,19 @@ echo "Check job status with:"
 echo "  gh workflow run manual-get-jobs.yml"
 echo ""
 echo "Or view in GitHub Actions: https://github.com/${{ github.repository }}/actions"
+
+# Write to job summary
+{
+  echo "## Job Created Successfully ✅"
+  echo ""
+  echo "**CronJob:** \`${CRONJOB_NAME}\`"
+  echo ""
+  echo "**Job Name:** \`${JOB_NAME}\`"
+  echo ""
+  echo "### Next Steps"
+  echo ""
+  echo "Check job status with the [Get Jobs workflow](https://github.com/${{ github.repository }}/actions/workflows/manual-get-jobs.yml)"
+} >> $GITHUB_STEP_SUMMARY
 """.strip(),
                     },
                 ],
@@ -162,7 +175,23 @@ def generate_get_jobs_workflow() -> dict[str, Any]:
                     },
                     {
                         "name": "Get jobs",
-                        "run": "kubectl get jobs --sort-by=.metadata.creationTimestamp",
+                        "run": """
+#!/bin/bash
+set -euo pipefail
+
+# Get jobs and save output
+OUTPUT=$(kubectl get jobs --sort-by=.metadata.creationTimestamp)
+
+# Print to logs
+echo "$OUTPUT"
+
+# Write to job summary
+echo "## Kubernetes Jobs" >> $GITHUB_STEP_SUMMARY
+echo "" >> $GITHUB_STEP_SUMMARY
+echo '```' >> $GITHUB_STEP_SUMMARY
+echo "$OUTPUT" >> $GITHUB_STEP_SUMMARY
+echo '```' >> $GITHUB_STEP_SUMMARY
+""".strip(),
                     },
                 ],
             }
@@ -205,7 +234,23 @@ def generate_get_pods_workflow() -> dict[str, Any]:
                     },
                     {
                         "name": "Get pods",
-                        "run": "kubectl get pods --sort-by=.metadata.creationTimestamp",
+                        "run": """
+#!/bin/bash
+set -euo pipefail
+
+# Get pods and save output
+OUTPUT=$(kubectl get pods --sort-by=.metadata.creationTimestamp)
+
+# Print to logs
+echo "$OUTPUT"
+
+# Write to job summary
+echo "## Kubernetes Pods" >> $GITHUB_STEP_SUMMARY
+echo "" >> $GITHUB_STEP_SUMMARY
+echo '```' >> $GITHUB_STEP_SUMMARY
+echo "$OUTPUT" >> $GITHUB_STEP_SUMMARY
+echo '```' >> $GITHUB_STEP_SUMMARY
+""".strip(),
                     },
                 ],
             }
