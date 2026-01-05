@@ -15,7 +15,9 @@ How to add a new data variable to an existing dataset.
 uv run main <DATASET_ID> update-template
 ```
 
-1c. Open and merge a PR containing the template change.
+1c. Edit the `test_backfill_local_and_operational_update` test in the dataset's dynamical_dataset_test.py to add the new variable. Run the test and add a quick print or plot to confirm data is successfully being processed for the new variable. Abandon these test changes after confirming to keep our integration tests from getting slow.
+
+1d. Open and merge a PR containing the template changes (`template_config.py` and zarr metadata in `templates/latest.zarr/`)
 
 ## 2. Write data for the new variable
 
@@ -27,7 +29,7 @@ To run it immediately, use the GitHub Action [Manual: Create Job from CronJob](h
 
 #### 2b. Backfill history for the variable
 
-> Prereq: You can build and push Docker images (see `README.md` > Deploying to the cloud > Setup).
+> Prerequisite: You can build and push Docker images (see `README.md` > Deploying to the cloud > Setup).
 > - `DOCKER_REPOSITORY` is set in your shell.
 > - Your local Docker is authenticated to that repo.
 
@@ -40,7 +42,7 @@ DYNAMICAL_ENV=prod uv run main <DATASET_ID> backfill-kubernetes \
   --filter-variable-names <VARIABLE_NAME>
 ```
 
-- `APPEND_DIM_END` = the current approximate UTC timestamp. The operational update in 2a will have filled the latest data in already so the exact value just needs to be somewhere around the present.
+- `APPEND_DIM_END` = the current approximate UTC timestamp. The operational update in 2a will have already filled the latest data, so the exact value just needs to be somewhere around the present time.
 - `JOBS_PER_POD` = 1 or 2 in most cases. Set to 3-4 if the jobs run very fast to amortize container startup time.
 - `MAX_PARALLELISM` = 100 if the data source can support highly parallel reads, else lower.
 - `--overwrite-existing` writes into the existing store rather than attempting (and failing) to create a new one.
@@ -53,13 +55,13 @@ Run the plotting tools and inspect the generated images in `data/output/`.
 Common issues to look out for:
 - Unexpected missing data (nulls/holes where you expect coverage).
 - Units vs values mismatch (e.g. mm/h vs mm/s).
-- Over-quantization (step changes in spatial or time series plots due to a too low keep_mantisa_bits value)
+- Over-quantization (step changes in spatial or time series plots due to a too low `keep_mantissa_bits` value)
 - Time misalignment (e.g. diurnal cycle peaks shifted vs a reference dataset).
 
 Notes
-- `DATASET_URL` is the complete, direct url to the specific dataset (`bucket-prefix/dataset-id/version`), e.g. `s3://us-west-2.opendata.source.coop/dynamical/ecmwf-ifs-ens-forecast-15-day-0-25-degree/v0.1.0.zarr`. The bucket prefix can be found in __main__.py and the dataset id and version in the TemplateConfig.
+- `DATASET_URL` is the complete, direct URL to the dataset (`bucket-prefix/dataset-id/version`), e.g. `s3://us-west-2.opendata.source.coop/dynamical/ecmwf-ifs-ens-forecast-15-day-0-25-degree/v0.1.0.zarr`. The bucket prefix can be found in `__main__.py` and the dataset id and version in the `TemplateConfig.dataset_attributes`.
 - The spatial and timeseries plots will plot the data against a reference dataset (GEFS analysis by default) to highlight unexpected differences.
-- You can add additional `--variable` if side by side plots help add context (e.g. plot solar radiation along side cloud cover).
+- You can add additional `--variable` flags if side by side plots help add context (e.g. show solar radiation alongside cloud cover).
 
 #### Null reporting
 
