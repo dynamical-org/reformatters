@@ -23,7 +23,8 @@ sys.path.append(str(Path(__file__).parent.parent))
 # Config.env is set to test.
 os.environ["DYNAMICAL_ENV"] = "test"
 
-from reformatters.common import storage
+
+from reformatters.common import storage  # noqa: E402
 
 
 def pytest_xdist_auto_num_workers(config: pytest.Config) -> int | None:

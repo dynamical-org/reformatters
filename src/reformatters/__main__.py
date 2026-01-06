@@ -1,4 +1,5 @@
 import contextlib
+import faulthandler
 import multiprocessing
 import os
 from collections.abc import Sequence
@@ -7,7 +8,6 @@ from typing import Any
 # Spawn new processes since fork isn't safe with threads
 with contextlib.suppress(RuntimeError):  # skip if already set
     multiprocessing.set_start_method("spawn", force=True)
-
 
 import sentry_sdk
 import typer
@@ -39,6 +39,8 @@ from reformatters.noaa.hrrr.analysis.dynamical_dataset import (
 from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
     NoaaHrrrForecast48HourDataset,
 )
+
+faulthandler.enable()
 
 
 class NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
