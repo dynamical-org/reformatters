@@ -40,17 +40,17 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     ]
 
     dataset.backfill_local(
-        append_dim_end=pd.Timestamp("2018-07-13T14:00"),
+        append_dim_end=pd.Timestamp("2018-07-14T02:00"),
         filter_variable_names=filter_variable_names,
     )
 
     backfill_ds = xr.open_zarr(
         dataset.store_factory.primary_store(), chunks=None, decode_timedelta=True
     )
-    time_start = pd.Timestamp("2018-07-13T12:00")
+    time_start = pd.Timestamp("2018-07-14T00:00")
     assert_array_equal(
         backfill_ds["time"],
-        pd.date_range(time_start, "2018-07-13T13:00", freq="1h"),
+        pd.date_range(time_start, "2018-07-14T01:00", freq="1h"),
     )
     space_subset_ds = backfill_ds.isel(x=slice(-10, 0), y=slice(0, 10))
 
@@ -70,18 +70,18 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
 
     point_ds = backfill_ds.sel(time=time_start).isel(x=1, y=-2)
 
-    assert point_ds["temperature_2m"] == 22.875
-    assert point_ds["downward_short_wave_radiation_flux_surface"] == 8.1875
+    assert point_ds["temperature_2m"] == 20.6875
+    assert point_ds["downward_short_wave_radiation_flux_surface"] == 0.0
     # First time step should have NaN for precipitation (no previous data to average)
     assert np.isnan(point_ds["precipitation_surface"].values)
 
     # Check a later time step for actual precipitation value
-    point_ds_t1 = backfill_ds.sel(time="2018-07-13T13:00").isel(x=1, y=-2)
+    point_ds_t1 = backfill_ds.sel(time="2018-07-14T01:00").isel(x=1, y=-2)
     # This should have a precipitation value (averaged from 1h forecast)
-    assert point_ds_t1["precipitation_surface"] == 4.720688e-05
+    assert point_ds_t1["precipitation_surface"] == 0.0
 
     dataset = make_dataset()
-    append_dim_end = pd.Timestamp("2018-07-13T15:00")
+    append_dim_end = pd.Timestamp("2018-07-14T03:00")
     monkeypatch.setattr(
         dataset.region_job_class,
         "_update_append_dim_end",
@@ -110,7 +110,7 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     )
     assert_array_equal(
         expected_times,
-        pd.DatetimeIndex(["2018-07-13T12:00", "2018-07-13T13:00", "2018-07-13T14:00"]),
+        pd.DatetimeIndex(["2018-07-14T00:00", "2018-07-14T01:00", "2018-07-14T02:00"]),
     )
     assert_array_equal(updated_ds["time"], expected_times)
 
@@ -122,17 +122,17 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     )
 
     point_ds = updated_ds.sel(x=400_000, y=760_000, method="nearest").sel(
-        time=slice("2018-07-13T12:00", "2018-07-13T13:00")
+        time=slice("2018-07-14T00:00", "2018-07-14T01:00")
     )
-    assert_array_equal(point_ds["temperature_2m"].values, [21.0, 21.375])
+    assert_array_equal(point_ds["temperature_2m"].values, [21.875, 22.0])
     assert_array_equal(
         point_ds["downward_short_wave_radiation_flux_surface"].values,
-        [1.296875, 36.75],
+        [0.0, 0.0],
     )
     # Check precipitation values - first should be NaN, second should have a value
     np.testing.assert_allclose(
         point_ds["precipitation_surface"].values,
-        [np.nan, 0.00018024445],
+        [np.nan, 0.0],
     )
 
 

@@ -60,7 +60,7 @@ def test_region_job_generate_source_file_coords(
     template_config: NoaaHrrrAnalysisTemplateConfig,
 ) -> None:
     """Test source file coordinate generation."""
-    template_ds = template_config.get_template(pd.Timestamp("2018-07-13T14:00"))
+    template_ds = template_config.get_template(pd.Timestamp("2018-07-14T03:00"))
 
     test_ds = template_ds.isel(time=slice(0, 3))
 
@@ -95,7 +95,7 @@ def test_region_job_generate_source_file_coords_hour_0(
     template_config: NoaaHrrrAnalysisTemplateConfig,
 ) -> None:
     """Test that hour 0 variables use lead_time=0."""
-    template_ds = template_config.get_template(pd.Timestamp("2018-07-13T14:00"))
+    template_ds = template_config.get_template(pd.Timestamp("2018-07-14T02:00"))
 
     test_ds = template_ds.isel(time=slice(0, 2))
 
@@ -129,7 +129,7 @@ def test_region_job_generate_source_file_coords_hour_1(
     template_config: NoaaHrrrAnalysisTemplateConfig,
 ) -> None:
     """Test that non-hour 0 variables use lead_time=1."""
-    template_ds = template_config.get_template(pd.Timestamp("2018-07-13T14:00"))
+    template_ds = template_config.get_template(pd.Timestamp("2018-07-14T02:00"))
 
     test_ds = template_ds.isel(time=slice(0, 2))
 
@@ -175,9 +175,9 @@ def test_operational_update_jobs(
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
-        classmethod(lambda *args, **kwargs: pd.Timestamp("2018-07-13T18:34")),
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2018-07-14T06:34")),
     )
-    existing_ds = template_config.get_template(pd.Timestamp("2018-07-13T17:01"))
+    existing_ds = template_config.get_template(pd.Timestamp("2018-07-14T05:01"))
     template_utils.write_metadata(existing_ds, store_factory)
 
     jobs, template_ds = NoaaHrrrAnalysisRegionJob.operational_update_jobs(
@@ -189,7 +189,7 @@ def test_operational_update_jobs(
         reformat_job_name="test_job",
     )
 
-    assert template_ds.time.max() == pd.Timestamp("2018-07-13T18:00")
+    assert template_ds.time.max() == pd.Timestamp("2018-07-14T06:00")
 
     assert len(jobs) == 1
     for job in jobs:

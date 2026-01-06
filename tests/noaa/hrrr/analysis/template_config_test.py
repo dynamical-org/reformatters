@@ -56,7 +56,7 @@ def test_template_config_attrs() -> None:
     assert config.dims == ("time", "y", "x")
     assert config.append_dim == "time"
 
-    assert config.append_dim_start == pd.Timestamp("2018-07-13T12:00")
+    assert config.append_dim_start == pd.Timestamp("2018-07-14T00:00")
     assert config.append_dim_frequency == pd.Timedelta("1h")
 
     data_vars = config.data_vars
@@ -79,7 +79,7 @@ def test_dimension_coordinates() -> None:
 
     assert (
         dim_coords["time"]
-        == pd.date_range("2018-07-13T12:00", "2018-07-13T12:00", freq="1h")
+        == pd.date_range("2018-07-14T00:00", "2018-07-14T00:00", freq="1h")
     ).all()
 
     assert len(dim_coords["x"]) == 1799
@@ -132,7 +132,7 @@ def test_derive_coordinates_integration() -> None:
 
     assert (
         template_ds.coords["time"]
-        == pd.date_range("2018-07-13T12:00", "2018-07-14T11:00", freq="1h")
+        == pd.date_range("2018-07-14T00:00", "2018-07-14T11:00", freq="1h")
     ).all()
 
 
