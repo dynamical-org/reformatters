@@ -131,7 +131,7 @@ reformatters = ["py.typed"]
 [tool.pytest.ini_options]
 pythonpath = "src/reformatters"
 testpaths = ["tests/"]
-addopts = "-n auto --dist loadfile -v --tb=short"  # see pytest_xdist_auto_num_workers in conftest.py
+addopts = "-n auto --dist loadfile"  # see pytest_xdist_auto_num_workers in conftest.py
 asyncio_mode = "auto"
 markers = [
     "slow: slow running tests.",
