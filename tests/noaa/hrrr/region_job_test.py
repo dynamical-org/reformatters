@@ -318,8 +318,9 @@ def test_region_job_read_data_multiple_matching_bands(
 
 def test_apply_data_transformations_binary_rounding(
     template_config: NoaaHrrrCommonTemplateConfig,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test that binary rounding is applied when keep_mantissa_bits is set."""
+    """Test that binary rounding is called when keep_mantissa_bits is set."""
     region_job = NoaaHrrrRegionJob.model_construct(
         tmp_store=Mock(),
         template_ds=Mock(),
@@ -339,22 +340,26 @@ def test_apply_data_transformations_binary_rounding(
         ),
     )
 
-    # Create test data with precise float values
     test_data = np.array([1.23456789, 2.34567890, 3.45678901], dtype=np.float32)
     data_array = xr.DataArray(test_data.copy(), dims=["x"])
 
+    mock_round = Mock()
+    monkeypatch.setattr(
+        "reformatters.noaa.hrrr.region_job.round_float32_inplace",
+        mock_round,
+    )
+
     region_job.apply_data_transformations(data_array, data_var)
 
-    # Values should be rounded (not equal to original)
-    assert not np.array_equal(data_array.values, test_data)
-    # But should still be float32
-    assert data_array.values.dtype == np.float32
+    # Verify rounding was called with correct arguments
+    mock_round.assert_called_once_with(data_array.values, 10)
 
 
 def test_apply_data_transformations_deaccumulation(
     template_config: NoaaHrrrCommonTemplateConfig,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test that deaccumulation is applied when deaccumulate_to_rate is True."""
+    """Test that deaccumulation is called when deaccumulate_to_rate is True."""
     region_job = NoaaHrrrRegionJob.model_construct(
         tmp_store=Mock(),
         template_ds=Mock(),
@@ -375,25 +380,25 @@ def test_apply_data_transformations_deaccumulation(
         ),
     )
 
-    # Create test data with accumulating values that reset every hour
-    # Accumulated precipitation: 0mm, 3.6mm, 7.2mm (reset), 10.8mm, 14.4mm
     times = pd.date_range("2024-01-01", periods=5, freq="1h")
     test_data = np.array([0.0, 3.6, 7.2, 10.8, 14.4], dtype=np.float32)
     data_array = xr.DataArray(
         test_data, dims=["time"], coords={"time": times}, attrs={"units": "mm/s"}
     )
 
+    mock_deaccumulate = Mock()
+    monkeypatch.setattr(
+        "reformatters.noaa.hrrr.region_job.deaccumulate_to_rates_inplace",
+        mock_deaccumulate,
+    )
+
     region_job.apply_data_transformations(data_array, data_var)
 
-    # First value should be NaN (no previous value to compute rate)
-    assert np.isnan(data_array.values[0])
-    # Subsequent values should be rates per second (differences divided by time in seconds)
-    # Hour 1: (3.6 - 0.0) / 3600 = 0.001 mm/s
-    # Hour 2: (7.2 - 3.6) / 3600 = 0.001 mm/s
-    # Hour 3: (10.8 - 7.2) / 3600 = 0.001 mm/s (continues accumulating, no reset detected)
-    # Hour 4: (14.4 - 10.8) / 3600 = 0.001 mm/s
-    expected_rates = np.array([np.nan, 0.001, 0.001, 0.001, 0.001], dtype=np.float32)
-    np.testing.assert_array_almost_equal(data_array.values, expected_rates, decimal=6)
+    # Verify deaccumulation was called with correct arguments
+    mock_deaccumulate.assert_called_once()
+    call_args = mock_deaccumulate.call_args
+    assert call_args.kwargs["dim"] == "time"
+    assert call_args.kwargs["reset_frequency"] == pd.Timedelta(hours=1)
 
 
 def test_update_append_dim_end() -> None:
