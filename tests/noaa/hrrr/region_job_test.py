@@ -386,9 +386,11 @@ def test_apply_data_transformations_deaccumulation(
 
     # First value should be NaN (no previous value to compute rate)
     assert np.isnan(data_array.values[0])
-    # Subsequent values should be rates (differences divided by time)
-    # Since we have hourly data and 1-hour accumulations, rates should be the differences
-    expected_rates = np.array([np.nan, 1.0, 1.0, 1.0, 1.0], dtype=np.float32)
+    # Subsequent values should be rates per second (differences divided by time in seconds)
+    # Since we have hourly data and 1-hour accumulations, rates are differences / 3600 seconds
+    expected_rates = np.array(
+        [np.nan, 1.0 / 3600, 2.0 / 3600, 3.0 / 3600, 4.0 / 3600], dtype=np.float32
+    )
     np.testing.assert_array_almost_equal(data_array.values, expected_rates)
 
 
