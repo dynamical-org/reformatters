@@ -371,7 +371,7 @@ def test_apply_data_transformations_deaccumulation(
             template_config.data_vars[0].internal_attrs,
             deaccumulate_to_rate=True,
             window_reset_frequency=pd.Timedelta(hours=1),
-            keep_mantissa_bits=None,
+            keep_mantissa_bits="no-rounding",
         ),
     )
 
