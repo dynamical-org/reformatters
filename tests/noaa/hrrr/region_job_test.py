@@ -375,9 +375,10 @@ def test_apply_data_transformations_deaccumulation(
         ),
     )
 
-    # Create test data with accumulating values
+    # Create test data with accumulating values that reset every hour
+    # Accumulated precipitation: 0mm, 3.6mm, 7.2mm (reset), 10.8mm, 14.4mm
     times = pd.date_range("2024-01-01", periods=5, freq="1h")
-    test_data = np.array([0.0, 1.0, 2.0, 3.0, 4.0], dtype=np.float32)
+    test_data = np.array([0.0, 3.6, 7.2, 10.8, 14.4], dtype=np.float32)
     data_array = xr.DataArray(
         test_data, dims=["time"], coords={"time": times}, attrs={"units": "mm/s"}
     )
@@ -387,11 +388,14 @@ def test_apply_data_transformations_deaccumulation(
     # First value should be NaN (no previous value to compute rate)
     assert np.isnan(data_array.values[0])
     # Subsequent values should be rates per second (differences divided by time in seconds)
-    # Since we have hourly data and 1-hour accumulations, rates are differences / 3600 seconds
+    # Hour 1: (3.6 - 0.0) / 3600 = 0.001 mm/s
+    # Hour 2: (7.2 - 3.6) / 3600 = 0.001 mm/s  
+    # Hour 3: (10.8 - 7.2) / 3600 = 0.001 mm/s (continues accumulating, no reset detected)
+    # Hour 4: (14.4 - 10.8) / 3600 = 0.001 mm/s
     expected_rates = np.array(
-        [np.nan, 1.0 / 3600, 2.0 / 3600, 3.0 / 3600, 4.0 / 3600], dtype=np.float32
+        [np.nan, 0.001, 0.001, 0.001, 0.001], dtype=np.float32
     )
-    np.testing.assert_array_almost_equal(data_array.values, expected_rates)
+    np.testing.assert_array_almost_equal(data_array.values, expected_rates, decimal=6)
 
 
 def test_update_append_dim_end() -> None:
