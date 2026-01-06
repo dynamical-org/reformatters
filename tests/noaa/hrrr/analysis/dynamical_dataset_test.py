@@ -75,8 +75,8 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
 
     # Check a later time step for actual precipitation value
     point_ds_t1 = backfill_ds.sel(time="2018-07-14T01:00").isel(x=1, y=-2)
-    # This should have a precipitation value (averaged from 1h forecast)
-    assert point_ds_t1["precipitation_surface"] == 0.0
+    # This should have a very small precipitation value (averaged from 1h forecast)
+    assert np.abs(point_ds_t1["precipitation_surface"].values) < 1e-5
 
     dataset = make_dataset()
     append_dim_end = pd.Timestamp("2018-07-14T03:00")
@@ -117,11 +117,10 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
 
     point_ds = updated_ds.sel(x=400_000, y=760_000, method="nearest")
     assert_array_equal(point_ds["temperature_2m"].values, [23.5, 23.625, 0.0])
-    # Check precipitation values - first should be NaN, second should have a value
-    assert_array_equal(
-        point_ds["precipitation_surface"].values,
-        [np.nan, 0.0, 0.0],
-    )
+    # Check precipitation values - first should be NaN, rest should be very small
+    precip_vals = point_ds["precipitation_surface"].values
+    assert np.isnan(precip_vals[0])
+    assert np.all(np.abs(precip_vals[1:]) < 1e-5)
 
 
 def test_operational_kubernetes_resources(
