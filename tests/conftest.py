@@ -8,7 +8,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-# Enable faulthandler for debugging segfaults
 faulthandler.enable()
 
 # Spawn new processes since fork isn't safe with threads

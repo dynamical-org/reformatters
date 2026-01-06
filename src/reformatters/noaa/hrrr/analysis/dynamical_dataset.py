@@ -18,7 +18,7 @@ from .template_config import NoaaHrrrAnalysisTemplateConfig
 class NoaaHrrrAnalysisDataset(
     DynamicalDataset[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]
 ):
-    """DynamicalDataset implementation for NOAA HRRR analysis data."""
+    """DynamicalDataset implementation for NOAA HRRR analysis."""
 
     template_config: NoaaHrrrAnalysisTemplateConfig = NoaaHrrrAnalysisTemplateConfig()
     region_job_class: type[NoaaHrrrAnalysisRegionJob] = NoaaHrrrAnalysisRegionJob
