@@ -300,12 +300,8 @@ def test_coordinates_have_single_chunk(
         chunk_files = list(c_dir.iterdir())
         chunk_file_names = [f.name for f in chunk_files]
 
-        assert "0" in chunk_file_names, (
-            f"Coordinate '{coord_name}' should have chunk file '0', but found: {chunk_file_names}"
-        )
-
-        # Ensure no other chunk files exist (1, 2, 3, etc.)
-        assert len(chunk_file_names) == 1, (
+        # Ensure exactly one chunk file exists and it's named '0'
+        assert chunk_file_names == ["0"], (
             f"Coordinate '{coord_name}' should have only one chunk file '0', but found: {chunk_file_names}"
         )
 
@@ -339,7 +335,7 @@ def test_coordinates_not_sharded(
 
         # Check that the codecs list doesn't contain sharding_indexed
         codecs = coord_metadata.get("codecs", [])
-        codec_names = [codec["name"] for codec in codecs]
+        codec_names = [codec.get("name") for codec in codecs if isinstance(codec, dict)]
 
         assert "sharding_indexed" not in codec_names, (
             f"Coordinate '{coord_name}' should not use sharding, but found 'sharding_indexed' codec. "
