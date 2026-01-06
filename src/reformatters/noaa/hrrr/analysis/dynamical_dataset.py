@@ -44,7 +44,11 @@ class NoaaHrrrAnalysisDataset(
 
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="10 * * * *",
+            # Run this 23 mins after the operational update, which is at 57 */3 * * *
+            # That is, at 57 + 23 = 80th min of the hour, which is 20 mins into the next hour.
+            # To get every third hour, but offset by +1 hr 20 min versus the main cron,
+            # we do "20 1-23/3 * * *"
+            schedule="20 1-23/3 * * *",
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
