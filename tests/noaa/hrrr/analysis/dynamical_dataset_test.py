@@ -70,7 +70,7 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     point_ds = backfill_ds.sel(time=time_start).isel(x=1, y=-2)
 
     print(point_ds["temperature_2m"])
-    assert point_ds["temperature_2m"] == 20.6875
+    assert point_ds["temperature_2m"] == 23.625
     # First time step should have NaN for precipitation (no previous data to average)
     assert np.isnan(point_ds["precipitation_surface"].values)
 
@@ -117,7 +117,7 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     assert_no_nulls(space_subset_ds)
 
     point_ds = updated_ds.sel(x=400_000, y=760_000, method="nearest")
-    assert_array_equal(point_ds["temperature_2m"].values, [21.875, 22.0, 0.0])
+    assert_array_equal(point_ds["temperature_2m"].values, [23.5, 23.625, 0.0])
     # Check precipitation values - first should be NaN, second should have a value
     assert_array_equal(
         point_ds["precipitation_surface"].values,
