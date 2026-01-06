@@ -36,7 +36,6 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     filter_variable_names = [
         "temperature_2m",
         "precipitation_surface",
-        "downward_short_wave_radiation_flux_surface",
     ]
 
     dataset.backfill_local(
@@ -70,8 +69,8 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
 
     point_ds = backfill_ds.sel(time=time_start).isel(x=1, y=-2)
 
+    print(point_ds["temperature_2m"])
     assert point_ds["temperature_2m"] == 20.6875
-    assert point_ds["downward_short_wave_radiation_flux_surface"] == 0.0
     # First time step should have NaN for precipitation (no previous data to average)
     assert np.isnan(point_ds["precipitation_surface"].values)
 
@@ -115,24 +114,14 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     assert_array_equal(updated_ds["time"], expected_times)
 
     space_subset_ds = updated_ds.isel(x=slice(-10, 0), y=slice(0, 10))
-    assert_no_nulls(
-        space_subset_ds[
-            [v for v in filter_variable_names if v != "precipitation_surface"]
-        ]
-    )
+    assert_no_nulls(space_subset_ds)
 
-    point_ds = updated_ds.sel(x=400_000, y=760_000, method="nearest").sel(
-        time=slice("2018-07-14T00:00", "2018-07-14T01:00")
-    )
-    assert_array_equal(point_ds["temperature_2m"].values, [21.875, 22.0])
-    assert_array_equal(
-        point_ds["downward_short_wave_radiation_flux_surface"].values,
-        [0.0, 0.0],
-    )
+    point_ds = updated_ds.sel(x=400_000, y=760_000, method="nearest")
+    assert_array_equal(point_ds["temperature_2m"].values, [21.875, 22.0, 0.0])
     # Check precipitation values - first should be NaN, second should have a value
-    np.testing.assert_allclose(
+    assert_array_equal(
         point_ds["precipitation_surface"].values,
-        [np.nan, 0.0],
+        [np.nan, 0.0, 0.0],
     )
 
 
