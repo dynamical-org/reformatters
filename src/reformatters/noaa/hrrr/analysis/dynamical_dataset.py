@@ -25,16 +25,18 @@ class NoaaHrrrAnalysisDataset(
 
     def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
         """Define Kubernetes cron jobs for operational updates and validation."""
-        # TODO(aldenks): update schedule, set resource requests
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="55 * * * *",
-            pod_active_deadline=timedelta(minutes=10),
+            # Every 3 hours at 57 minutes past the hour.
+            # Data for forecast hour 0 is available 54 mins after init time on most issuances
+            # We could of course increase this to hourly
+            schedule="57 */3 * * *",
+            pod_active_deadline=timedelta(minutes=20),
             image=image_tag,
             dataset_id=self.dataset_id,
-            cpu="2",
-            memory="10G",
-            shared_memory="400M",
+            cpu="7",  # 8 shards can be compressed in parallel
+            memory="30G",
+            shared_memory="16.5G",
             ephemeral_storage="20G",
             secret_names=self.store_factory.k8s_secret_names(),
             suspend=True,
