@@ -335,6 +335,7 @@ def test_coordinates_not_sharded(
 
         # Check that the codecs list doesn't contain sharding_indexed
         codecs = coord_metadata.get("codecs", [])
+        # Defensively handle potentially malformed codec entries that may be missing the 'name' field
         codec_names = [codec.get("name") for codec in codecs if isinstance(codec, dict)]
 
         assert "sharding_indexed" not in codec_names, (
