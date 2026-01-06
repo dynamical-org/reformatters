@@ -9,7 +9,7 @@ Integrating a dataset in dynamical.org `reformatters` is done by subclassing a t
 There are three core base classes to subclass.
 
 1. `TemplateConfig` defines the dataset **structure**.
-1. `RegionConfig` defines the **process** by which a region of that dataset is reformatted: **downloading, reading, rewriting.**
+1. `RegionJob` defines the **process** by which a region of that dataset is reformatted: **downloading, reading, rewriting.**
 1. `DynamicalDataset` brings together a `TemplateConfig` and `RegionJob` and defines the compute resources to operationally update and validate a dataset.
 
 ### Words
@@ -55,7 +55,7 @@ If you plan to write this dataset to a location not maintained by dynamical.org,
 
 Work through `src/reformatters/$DATASET_PATH/template_config.py`, setting the attributes and method definitions to describe the structure of your dataset.
 
-Hint: providing an AI/LLM with 1) the example template config code to edit, 2) output of running `gdal-info <example source data file>` and 3) any dataset documentation will help it give you a decent first implementation of your `TemplateConfig` subclass.
+Providing an AI with 1) the example template config code to edit, 2) output of running `gdalinfo <example source data file>` and 3) any dataset documentation will help it give you a decent first implementation of your `TemplateConfig` subclass.
 
 Using the information in the `TemplateConfig`, `reformatters` writes the Zarr metadata for your dataset to `src/reformatters/$DATASET_PATH/templates/latest.zarr`. Run this command in your terminal to create or update the template based on the your `TemplateConfig` subclass:
 
@@ -101,7 +101,7 @@ Reformatting locally can be slow. Choosing an `<append_dim_end>` not long after 
 
 ### 5. Implement `DynamicalDataset` subclass
 
-To operationalize your dataset and have the `update` and `validate` Kubernetes cron jobs be deployed automatically by GitHub CI, implement the two methods in `src/reformatters/$DATASET_PATH/dynamical_dataset.py`
+To operationalize your dataset and have the `update` and `validate` Kubernetes cron jobs be deployed automatically by GitHub CI, implement the two methods in `src/reformatters/$DATASET_PATH/dynamical_dataset.py`.
 
 In `dynamical_dataset_test.py` create a test that runs `backfill_local` followed by `update` for a couple data variables.
 
@@ -117,6 +117,6 @@ The details here depend on the computing resources and the Zarr storage location
 1. Run a backfill on a kubernetes cluster:
    - This supports parallelism across servers to process much larger datasets.
    - Complete the steps in README.md > Deploying to the cloud > Setup.
-   - `DYNAMICAL_ENV=prod uv run main $DATASET_ID backfill-kubernetes <append-dim-end> --max-parallelism N`, then track the job with `kubectl get jobs`.
+   - `DYNAMICAL_ENV=prod uv run main $DATASET_ID backfill-kubernetes <append-dim-end> <jobs-per-pod> <max-parallelism>`, then track the job with `kubectl get jobs`.
 1. See operational cronjobs in your kubernetes cluster and check their schedule: `kubectl get cronjobs`.
 1. To enable issue reporting and cron monitoring with the error reporting service Sentry, create a secret in your kubernetes cluster with your Sentry account's DSN: `kubectl create secret generic sentry --from-literal='DYNAMICAL_SENTRY_DSN=xxx'`.
