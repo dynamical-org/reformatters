@@ -267,3 +267,81 @@ def test_update_template_fill_values_are_correct(
         np.testing.assert_array_equal(
             var_da.isel(dict.fromkeys(var_da.dims, 0)).values, var.encoding.fill_value
         )
+
+
+@pytest.mark.parametrize(
+    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+)
+def test_coordinates_have_single_chunk(
+    dataset: DynamicalDataset[Any, Any],
+) -> None:
+    """
+    Ensure that every coordinate array has only a single chunk.
+    Coordinates should have only file '0' in their c/ directory, no file '1', '2', etc.
+    """
+    template_config = dataset.template_config
+    template_path = template_config.template_path()
+
+    # Open the template to get the coordinates
+    template_ds = xr.open_zarr(template_path, decode_timedelta=True)
+
+    for coord_name in template_ds.coords:
+        coord_path = template_path / coord_name
+        # Skip scalar coordinates (like spatial_ref) which have no chunks
+        if not coord_path.is_dir():
+            continue
+
+        c_dir = coord_path / "c"
+        # Some coordinates might not have a c/ directory (e.g., scalar arrays)
+        if not c_dir.exists():
+            continue
+
+        # Check that only chunk file '0' exists
+        chunk_files = list(c_dir.iterdir())
+        chunk_file_names = [f.name for f in chunk_files]
+
+        assert "0" in chunk_file_names, (
+            f"Coordinate '{coord_name}' should have chunk file '0', but found: {chunk_file_names}"
+        )
+
+        # Ensure no other chunk files exist (1, 2, 3, etc.)
+        assert len(chunk_file_names) == 1, (
+            f"Coordinate '{coord_name}' should have only one chunk file '0', but found: {chunk_file_names}"
+        )
+
+
+@pytest.mark.parametrize(
+    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+)
+def test_coordinates_not_sharded(
+    dataset: DynamicalDataset[Any, Any],
+) -> None:
+    """
+    Ensure that all coordinate arrays are encoded without shards.
+    Coordinates should use standard zarr chunks, not sharding_indexed codec.
+    """
+    template_config = dataset.template_config
+    template_path = template_config.template_path()
+
+    # Open the template to get the coordinates
+    template_ds = xr.open_zarr(template_path, decode_timedelta=True)
+
+    for coord_name in template_ds.coords:
+        coord_zarr_json_path = template_path / coord_name / "zarr.json"
+
+        # Skip if zarr.json doesn't exist (shouldn't happen but be defensive)
+        if not coord_zarr_json_path.exists():
+            continue
+
+        # Read the zarr.json for this coordinate
+        with open(coord_zarr_json_path) as f:
+            coord_metadata = json.load(f)
+
+        # Check that the codecs list doesn't contain sharding_indexed
+        codecs = coord_metadata.get("codecs", [])
+        codec_names = [codec["name"] for codec in codecs]
+
+        assert "sharding_indexed" not in codec_names, (
+            f"Coordinate '{coord_name}' should not use sharding, but found 'sharding_indexed' codec. "
+            f"Codecs: {codec_names}"
+        )
