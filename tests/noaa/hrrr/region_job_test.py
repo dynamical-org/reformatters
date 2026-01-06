@@ -258,14 +258,16 @@ def test_region_job_read_data_no_matching_bands(
     rasterio_reader.__enter__ = Mock(return_value=rasterio_reader)
     rasterio_reader.__exit__ = Mock(return_value=False)
     rasterio_reader.count = 1
-    rasterio_reader.descriptions = ['Wrong description']
+    rasterio_reader.descriptions = ["Wrong description"]
     rasterio_reader.tags = Mock(return_value={"GRIB_ELEMENT": "WRONG"})
     monkeypatch.setattr(
         "reformatters.noaa.hrrr.region_job.rasterio.open",
         Mock(return_value=rasterio_reader),
     )
 
-    with pytest.raises(AssertionError, match="Expected exactly 1 matching band, found 0"):
+    with pytest.raises(
+        AssertionError, match="Expected exactly 1 matching band, found 0"
+    ):
         region_job.read_data(coord, template_config.data_vars[0])
 
 
@@ -296,14 +298,19 @@ def test_region_job_read_data_multiple_matching_bands(
     rasterio_reader.__enter__ = Mock(return_value=rasterio_reader)
     rasterio_reader.__exit__ = Mock(return_value=False)
     rasterio_reader.count = 2
-    rasterio_reader.descriptions = ['0[-] EATM="Entire Atmosphere"', '0[-] EATM="Entire Atmosphere"']
+    rasterio_reader.descriptions = [
+        '0[-] EATM="Entire Atmosphere"',
+        '0[-] EATM="Entire Atmosphere"',
+    ]
     rasterio_reader.tags = Mock(return_value={"GRIB_ELEMENT": "REFC"})
     monkeypatch.setattr(
         "reformatters.noaa.hrrr.region_job.rasterio.open",
         Mock(return_value=rasterio_reader),
     )
 
-    with pytest.raises(AssertionError, match="Expected exactly 1 matching band, found 2"):
+    with pytest.raises(
+        AssertionError, match="Expected exactly 1 matching band, found 2"
+    ):
         region_job.read_data(coord, template_config.data_vars[0])
 
 
@@ -312,7 +319,7 @@ def test_apply_data_transformations_binary_rounding(
 ) -> None:
     """Test that binary rounding is applied when keep_mantissa_bits is set."""
     import xarray as xr
-    from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrInternalAttrs
+
     from reformatters.common.pydantic import replace
 
     region_job = NoaaHrrrRegionJob.model_construct(
@@ -351,7 +358,7 @@ def test_apply_data_transformations_deaccumulation(
 ) -> None:
     """Test that deaccumulation is applied when deaccumulate_to_rate is True."""
     import xarray as xr
-    from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrInternalAttrs
+
     from reformatters.common.pydantic import replace
 
     region_job = NoaaHrrrRegionJob.model_construct(
