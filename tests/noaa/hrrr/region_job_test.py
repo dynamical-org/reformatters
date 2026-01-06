@@ -378,7 +378,9 @@ def test_apply_data_transformations_deaccumulation(
     # Create test data with accumulating values
     times = pd.date_range("2024-01-01", periods=5, freq="1h")
     test_data = np.array([0.0, 1.0, 2.0, 3.0, 4.0], dtype=np.float32)
-    data_array = xr.DataArray(test_data, dims=["time"], coords={"time": times})
+    data_array = xr.DataArray(
+        test_data, dims=["time"], coords={"time": times}, attrs={"units": "mm/s"}
+    )
 
     region_job.apply_data_transformations(data_array, data_var)
 
