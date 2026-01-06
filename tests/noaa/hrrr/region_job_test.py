@@ -389,12 +389,10 @@ def test_apply_data_transformations_deaccumulation(
     assert np.isnan(data_array.values[0])
     # Subsequent values should be rates per second (differences divided by time in seconds)
     # Hour 1: (3.6 - 0.0) / 3600 = 0.001 mm/s
-    # Hour 2: (7.2 - 3.6) / 3600 = 0.001 mm/s  
+    # Hour 2: (7.2 - 3.6) / 3600 = 0.001 mm/s
     # Hour 3: (10.8 - 7.2) / 3600 = 0.001 mm/s (continues accumulating, no reset detected)
     # Hour 4: (14.4 - 10.8) / 3600 = 0.001 mm/s
-    expected_rates = np.array(
-        [np.nan, 0.001, 0.001, 0.001, 0.001], dtype=np.float32
-    )
+    expected_rates = np.array([np.nan, 0.001, 0.001, 0.001, 0.001], dtype=np.float32)
     np.testing.assert_array_almost_equal(data_array.values, expected_rates, decimal=6)
 
 
