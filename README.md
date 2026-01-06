@@ -49,4 +49,4 @@ We use
 
 
 ### Development commands
-1. `DYNAMICAL_ENV=prod uv run main <DATASET_ID> backfill-kubernetes <INIT_TIME_END> <JOBS_PER_POD> <MAX_PARALLELISM>
+1. `DYNAMICAL_ENV=prod uv run main <DATASET_ID> backfill-kubernetes <APPEND_DIM_END> <JOBS_PER_POD> <MAX_PARALLELISM>`
