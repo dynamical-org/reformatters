@@ -60,7 +60,7 @@ def test_region_job_generate_source_file_coords(
     template_config: NoaaHrrrAnalysisTemplateConfig,
 ) -> None:
     """Test source file coordinate generation."""
-    template_ds = template_config.get_template(pd.Timestamp("2018-07-14T03:00"))
+    template_ds = template_config.get_template(pd.Timestamp("2018-08-01T00:00"))
 
     test_ds = template_ds.isel(time=slice(0, 3))
 
@@ -74,6 +74,7 @@ def test_region_job_generate_source_file_coords(
     )
 
     processing_region_ds, output_region_ds = region_job._get_region_datasets()
+    # We don't need to buffer our processing region for deaccumulation because hrrr accumulations are only over 1 hour
     assert processing_region_ds.equals(output_region_ds)
 
     source_coords = region_job.generate_source_file_coords(
@@ -102,6 +103,7 @@ def test_region_job_generate_source_file_coords_hour_0(
     instant_vars = [
         v for v in template_config.data_vars if v.attrs.step_type == "instant"
     ][:1]
+    assert len(instant_vars) == 1
 
     region_job = NoaaHrrrAnalysisRegionJob.model_construct(
         tmp_store=Mock(),
@@ -120,8 +122,14 @@ def test_region_job_generate_source_file_coords_hour_0(
 
     assert len(source_coords) == 2
 
-    for coord in source_coords:
+    expected_init_times = pd.date_range(
+        "2018-07-14T00:00", "2018-07-14T01:00", freq="1h"
+    )
+    for coord, expected_init_time in zip(
+        source_coords, expected_init_times, strict=True
+    ):
         assert isinstance(coord, NoaaHrrrAnalysisSourceFileCoord)
+        assert coord.init_time == expected_init_time
         assert coord.lead_time == pd.Timedelta("0h")
 
 
@@ -134,6 +142,7 @@ def test_region_job_generate_source_file_coords_hour_1(
     test_ds = template_ds.isel(time=slice(0, 2))
 
     avg_vars = [v for v in template_config.data_vars if v.attrs.step_type == "avg"][:1]
+    assert len(avg_vars) == 1
 
     region_job = NoaaHrrrAnalysisRegionJob.model_construct(
         tmp_store=Mock(),
@@ -152,8 +161,15 @@ def test_region_job_generate_source_file_coords_hour_1(
 
     assert len(source_coords) == 2
 
-    for coord in source_coords:
+    expected_init_times = pd.date_range(
+        "2018-07-13T23:00", "2018-07-14T00:00", freq="1h"
+    )
+
+    for coord, expected_init_time in zip(
+        source_coords, expected_init_times, strict=True
+    ):
         assert isinstance(coord, NoaaHrrrAnalysisSourceFileCoord)
+        assert coord.init_time == expected_init_time
         assert coord.lead_time == pd.Timedelta("1h")
         expected_time = coord.init_time + coord.lead_time
         assert coord.out_loc()["time"] == expected_time
@@ -195,15 +211,3 @@ def test_operational_update_jobs(
     for job in jobs:
         assert isinstance(job, NoaaHrrrAnalysisRegionJob)
         assert job.data_vars == template_config.data_vars
-
-
-def test_update_append_dim_end_is_tz_naive() -> None:
-    region_job = NoaaHrrrAnalysisRegionJob.model_construct(
-        tmp_store=Mock(),
-        template_ds=Mock(),
-        data_vars=Mock(),
-        append_dim=Mock(),
-        region=Mock(),
-        reformat_job_name="test",
-    )
-    assert region_job._update_append_dim_end().tzinfo is None

@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-from numpy.testing import assert_array_equal
+from numpy.testing import assert_allclose, assert_array_equal
 
 from reformatters.common import validation
 from reformatters.common.storage import DatasetFormat, StorageConfig
@@ -51,32 +51,19 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
         backfill_ds["time"],
         pd.date_range(time_start, "2018-07-14T01:00", freq="1h"),
     )
-    space_subset_ds = backfill_ds.isel(x=slice(-10, 0), y=slice(0, 10))
+    space_subset_ds = backfill_ds.isel(x=slice(-10, -1), y=slice(0, 10))
 
     assert_no_nulls(
         space_subset_ds[
             [v for v in filter_variable_names if v != "precipitation_surface"]
         ]
     )
+    assert_no_nulls(space_subset_ds["precipitation_surface"].isel(time=slice(1, None)))
 
-    # Check precipitation values - first value should be nan, rest should not be null
-    precip_data = backfill_ds["precipitation_surface"]
-    assert np.isnan(precip_data.isel(time=0, x=1, y=-2).values)
-    # Check that subsequent time steps have non-null values in at least some locations
-    assert_no_nulls(
-        precip_data.isel(time=slice(1, None)).isel(x=slice(-10, 0), y=slice(0, 10))
-    )
+    point_ds = backfill_ds.isel(x=1, y=-2)
 
-    point_ds = backfill_ds.sel(time=time_start).isel(x=1, y=-2)
-
-    assert point_ds["temperature_2m"] == 23.625
-    # First time step should have NaN for precipitation (no previous data to average)
-    assert np.isnan(point_ds["precipitation_surface"].values)
-
-    # Check a later time step for actual precipitation value
-    point_ds_t1 = backfill_ds.sel(time="2018-07-14T01:00").isel(x=1, y=-2)
-    # This should have a very small precipitation value (averaged from 1h forecast)
-    assert np.abs(point_ds_t1["precipitation_surface"].values) < 1e-5
+    assert_array_equal(point_ds["temperature_2m"].values, [23.625, 23.625])
+    assert_allclose(point_ds["precipitation_surface"].values, [np.nan, 2.771616e-06])
 
     dataset = make_dataset()
     append_dim_end = pd.Timestamp("2018-07-14T03:00")
@@ -116,11 +103,8 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     assert_no_nulls(space_subset_ds)
 
     point_ds = updated_ds.sel(x=400_000, y=760_000, method="nearest")
-    assert_array_equal(point_ds["temperature_2m"].values, [23.5, 23.625, 0.0])
-    # Check precipitation values - first should be NaN, rest should be very small
-    precip_vals = point_ds["precipitation_surface"].values
-    assert np.isnan(precip_vals[0])
-    assert np.all(np.abs(precip_vals[1:]) < 1e-5)
+    assert_array_equal(point_ds["temperature_2m"].values, [25.0, 24.25, 22.0])
+    assert_array_equal(point_ds["precipitation_surface"].values, [np.nan, 0.0, 0.0])
 
 
 def test_operational_kubernetes_resources(
