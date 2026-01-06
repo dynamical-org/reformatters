@@ -29,7 +29,7 @@ from reformatters.noaa.hrrr.template_config import NoaaHrrrCommonTemplateConfig
 class NoaaHrrrAnalysisTemplateConfig(NoaaHrrrCommonTemplateConfig):
     dims: tuple[Dim, ...] = ("time", "y", "x")
     append_dim: AppendDim = "time"
-    append_dim_start: Timestamp = pd.Timestamp("2018-07-13T12:00")  # start of HRRR v3
+    append_dim_start: Timestamp = pd.Timestamp("2018-07-14T00:00")  # start of HRRR v3
     append_dim_frequency: Timedelta = pd.Timedelta("1h")
 
     @computed_field  # type: ignore[prop-decorator]
@@ -102,17 +102,20 @@ class NoaaHrrrAnalysisTemplateConfig(NoaaHrrrCommonTemplateConfig):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def data_vars(self) -> Sequence[NoaaHrrrDataVar]:
-        # TODO(aldenks): update chunk and shard sizes
+        # ~18MB uncompressed, ~3.5MB compressed
         var_chunks: dict[Dim, int] = {
-            "time": 24,
-            "x": 300,
-            "y": 265,
+            "time": 90 * 24,  # 90 days of hourly data
+            # Chunks are 135 km by 135 km spatially
+            "x": 45,  # 40 chunks over 1799 pixels
+            "y": 45,  # 24 chunks over 1059 pixels
         }
 
+        # ~2GB uncompressed, ~400MB compressed
         var_shards: dict[Dim, int] = {
-            "time": 24,
-            "x": var_chunks["x"] * 6,
-            "y": var_chunks["y"] * 4,
+            "time": var_chunks["time"],
+            # Shards are 1350 km by 1620 km spatially
+            "x": var_chunks["x"] * 10,  # 4 shards over 1799 pixels
+            "y": var_chunks["y"] * 12,  # 2 shards over 1059 pixels
         }
 
         encoding_float32_default = Encoding(
