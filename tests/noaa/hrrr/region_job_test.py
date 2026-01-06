@@ -4,7 +4,9 @@ from unittest.mock import Mock
 import numpy as np
 import pandas as pd
 import pytest
+import xarray as xr
 
+from reformatters.common.pydantic import replace
 from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
     NoaaHrrrForecast48HourTemplateConfig,
 )
@@ -318,10 +320,6 @@ def test_apply_data_transformations_binary_rounding(
     template_config: NoaaHrrrCommonTemplateConfig,
 ) -> None:
     """Test that binary rounding is applied when keep_mantissa_bits is set."""
-    import xarray as xr
-
-    from reformatters.common.pydantic import replace
-
     region_job = NoaaHrrrRegionJob.model_construct(
         tmp_store=Mock(),
         template_ds=Mock(),
@@ -357,10 +355,6 @@ def test_apply_data_transformations_deaccumulation(
     template_config: NoaaHrrrCommonTemplateConfig,
 ) -> None:
     """Test that deaccumulation is applied when deaccumulate_to_rate is True."""
-    import xarray as xr
-
-    from reformatters.common.pydantic import replace
-
     region_job = NoaaHrrrRegionJob.model_construct(
         tmp_store=Mock(),
         template_ds=Mock(),
@@ -407,8 +401,6 @@ def test_update_append_dim_end() -> None:
 
 def test_update_append_dim_start() -> None:
     """Test that _update_append_dim_start returns max time from existing data."""
-    import xarray as xr
-
     times = pd.date_range("2024-01-01", periods=10, freq="1h")
     time_coord = xr.DataArray(times, dims=["time"])
 
