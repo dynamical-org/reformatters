@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+from obstore.exceptions import PermissionDeniedError
 
 from reformatters.common.config_models import DataVarAttrs, Encoding
 from reformatters.common.pydantic import replace
@@ -657,3 +658,57 @@ def test_operational_update_jobs(
             mock_open_zarr.assert_called_once_with(
                 store_factory.primary_store(), decode_timedelta=True, chunks=None
             )
+
+
+def test_download_file_fallback_permission_denied_converts_to_file_not_found(
+    template_ds: xr.Dataset,
+    example_data_vars: list[GEFSDataVar],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that PermissionDeniedError from fallback is converted to FileNotFoundError."""
+    tmp_store = get_local_tmp_store()
+    data_vars = example_data_vars[:1]
+
+    job = GefsForecast35DayRegionJob(
+        tmp_store=tmp_store,
+        template_ds=template_ds,
+        data_vars=data_vars,
+        append_dim="init_time",
+        region=slice(0, 1),
+        reformat_job_name="test-job",
+    )
+
+    # Use a recent init_time (within 4 days) to trigger fallback behavior
+    recent_init_time = pd.Timestamp.now() - pd.Timedelta(days=1)
+    coord = GefsForecast35DaySourceFileCoord(
+        init_time=recent_init_time,
+        lead_time=pd.Timedelta("3h"),
+        ensemble_member=1,
+        data_vars=data_vars,
+    )
+
+    primary_index_url = coord.get_index_url()
+    fallback_index_url = coord.get_index_url(fallback=True)
+
+    def mock_download_side_effect(url: str, dataset_id: str, **kwargs: object) -> Mock:
+        # Primary source fails with FileNotFoundError
+        if url == primary_index_url:
+            raise FileNotFoundError(f"Primary index not found: {url}")
+        # Fallback source fails with PermissionDeniedError
+        if url == fallback_index_url:
+            raise PermissionDeniedError("Permission denied")
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    mock_download = Mock(side_effect=mock_download_side_effect)
+    monkeypatch.setattr(
+        "reformatters.noaa.gefs.utils.http_download_to_disk",
+        mock_download,
+    )
+
+    # Should raise FileNotFoundError (not PermissionDeniedError)
+    with pytest.raises(FileNotFoundError) as exc_info:
+        job.download_file(coord)
+
+    # Verify it's a FileNotFoundError with PermissionDeniedError as cause
+    assert exc_info.value.__cause__ is not None
+    assert isinstance(exc_info.value.__cause__, PermissionDeniedError)

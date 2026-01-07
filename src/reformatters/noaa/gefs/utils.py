@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pandas as pd
+from obstore.exceptions import PermissionDeniedError
 
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import digest
@@ -42,11 +43,14 @@ def gefs_download_file(
     except FileNotFoundError:
         # if init time is within the last 4 days, try to download from the fallback source
         if coord.init_time >= pd.Timestamp.now() - pd.Timedelta(days=4):
-            return _download_file_from_gefs_source(
-                dataset_id,
-                coord,
-                coord.get_index_url(fallback=True),
-                coord.get_fallback_url(),
-            )
+            try:
+                return _download_file_from_gefs_source(
+                    dataset_id,
+                    coord,
+                    coord.get_index_url(fallback=True),
+                    coord.get_fallback_url(),
+                )
+            except PermissionDeniedError as e:
+                raise FileNotFoundError(coord.get_url()) from e
         else:
             raise
