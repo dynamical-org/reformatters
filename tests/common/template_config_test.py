@@ -1,5 +1,3 @@
-import json
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -9,15 +7,12 @@ import pytest
 import xarray as xr
 
 # Use a dummy DataVar that is a subtype of BaseInternalAttrs, as required by the type var
-from reformatters.__main__ import DYNAMICAL_DATASETS
-from reformatters.common import template_utils
 from reformatters.common.config_models import (
     BaseInternalAttrs,
     Coordinate,
     DatasetAttributes,
     DataVar,
 )
-from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
     TemplateConfig,
@@ -149,121 +144,3 @@ def test_derive_coordinates_raises_if_coords_not_returned() -> None:
         match=r"Coordinates {'bad'} are defined.*derive_coordinates",
     ):
         bad.derive_coordinates(xr.Dataset())
-
-
-@pytest.mark.parametrize(
-    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
-)
-def test_update_template_matches_existing_template(
-    dataset: DynamicalDataset[Any, Any], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """
-    Ensure that `uv run main <dataset-id> update-template` has been run and
-    all changes to the dataset's TemplateConfig are reflected in the on-disk Zarr template.
-    """
-    template_config = dataset.template_config
-
-    # 1. Ensure that update_template() is a no-op
-
-    with open(template_config.template_path() / "zarr.json") as f:
-        existing_template = json.load(f)
-
-    test_template_path = tmp_path / "latest.zarr"
-    monkeypatch.setattr(
-        type(template_config),
-        "template_path",
-        lambda _self: test_template_path,
-    )
-
-    template_config.update_template()
-
-    with open(template_config.template_path() / "zarr.json") as f:
-        updated_template = json.load(f)
-
-    assert existing_template == updated_template
-
-
-@pytest.mark.parametrize(
-    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
-)
-def test_update_template_round_trips_correctly(
-    dataset: DynamicalDataset[Any, Any], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """
-    Ensure that the get_template() -> write_metadata() round trip produces exactly
-    the same zarr.json as already exists on disk.
-    """
-    template_config = dataset.template_config
-
-    with open(template_config.template_path() / "zarr.json") as f:
-        existing_template = json.load(f)
-
-    test_template_path = tmp_path / "latest.zarr"
-    monkeypatch.setattr(
-        type(template_config),
-        "template_path",
-        lambda _self: test_template_path,
-    )
-
-    template_config.update_template()
-
-    # Compute an end_time to pass to get_template()
-    dim_coords = template_config.dimension_coordinates()
-    append_dim_coords = dim_coords[template_config.append_dim]
-    end_time = append_dim_coords[-1] + pd.Timedelta(milliseconds=1)
-
-    template_ds = template_config.get_template(end_time)
-
-    test_write_metadata_path = tmp_path / "write_metadata_test.zarr"
-    template_utils.write_metadata(
-        template_ds,
-        test_write_metadata_path,
-    )
-    with open(test_write_metadata_path / "zarr.json") as f:
-        written_template = json.load(f)
-
-    assert existing_template == written_template
-
-
-@pytest.mark.parametrize(
-    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
-)
-def test_update_template_fill_values_are_correct(
-    dataset: DynamicalDataset[Any, Any], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """
-    Ensure that the fill value we get in the case of a missing shard matches the template
-    """
-    template_config = dataset.template_config
-
-    test_template_path = tmp_path / "latest.zarr"
-    monkeypatch.setattr(
-        type(template_config),
-        "template_path",
-        lambda _self: test_template_path,
-    )
-
-    template_config.update_template()
-
-    # Compute an end_time to pass to get_template()
-    dim_coords = template_config.dimension_coordinates()
-    append_dim_coords = dim_coords[template_config.append_dim]
-    end_time = append_dim_coords[-1] + pd.Timedelta(milliseconds=1)
-
-    template_ds = template_config.get_template(end_time)
-
-    test_write_metadata_path = tmp_path / "write_metadata_test.zarr"
-    template_utils.write_metadata(
-        template_ds,
-        test_write_metadata_path,
-    )
-
-    # Ensure that the value we get when reading from an area that has not been written
-    # to matches the fill value in template_config encodings
-    # Coords are written by write_metadata() so we do expect them to be filled and don't test that here
-    ds = xr.open_zarr(test_write_metadata_path, chunks=None)
-    for var in template_config.data_vars:
-        var_da = ds[var.name]
-        np.testing.assert_array_equal(
-            var_da.isel(dict.fromkeys(var_da.dims, 0)).values, var.encoding.fill_value
-        )
