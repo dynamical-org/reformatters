@@ -3,10 +3,10 @@
     "dataset_id": "noaa-hrrr-analysis",
     "dataset_version": "0.1.0",
     "name": "NOAA HRRR analysis",
-    "description": "Analysis data from the High Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
+    "description": "Analysis data from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
     "attribution": "NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
     "spatial_domain": "Continental United States",
-    "spatial_resolution": "3km",
+    "spatial_resolution": "3 km",
     "time_domain": "2018-07-14 00:00:00 UTC to Present",
     "time_resolution": "1 hour"
   },

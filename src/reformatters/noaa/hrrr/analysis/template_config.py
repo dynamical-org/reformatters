@@ -39,10 +39,10 @@ class NoaaHrrrAnalysisTemplateConfig(NoaaHrrrCommonTemplateConfig):
             dataset_id="noaa-hrrr-analysis",
             dataset_version="0.1.0",
             name="NOAA HRRR analysis",
-            description="Analysis data from the High Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
+            description="Analysis data from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
             attribution="NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
             spatial_domain="Continental United States",
-            spatial_resolution="3km",
+            spatial_resolution="3 km",
             time_domain=f"{self.append_dim_start} UTC to Present",
             time_resolution=f"{whole_hours(self.append_dim_frequency)} hour",
         )
