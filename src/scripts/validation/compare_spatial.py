@@ -92,24 +92,35 @@ def create_comparison_plot(  # noqa: PLR0915 PLR0912
     """Create comparison plot matching the example image format"""
     is_forecast = is_forecast_dataset(validation_ds)
 
+    # Align datasets to a common time point (done once for all variables)
+    if is_forecast:
+        ds, ref_ds = align_to_valid_time_forecast(
+            validation_ds,
+            reference_ds,
+            init_time,
+            lead_time,
+        )
+    else:
+        ds, ref_ds = align_to_valid_time_analysis(
+            validation_ds,
+            reference_ds,
+            time,
+        )
+
+    # Format timestamps for titles (done once for all variables)
+    if is_forecast:
+        ds_init_time = pd.Timestamp(ds.init_time.item()).strftime("%Y-%m-%dT%H:%M")
+        ds_lead_time_hours = whole_hours(pd.Timedelta(ds.lead_time.item()))
+        ds_lead_time_str = f"{ds_lead_time_hours:g}h"
+        ds_time = f"{ds_init_time}+{ds_lead_time_str}"
+    else:
+        ds_time = pd.Timestamp(ds.time.item()).strftime("%Y-%m-%dT%H:%M")
+    ref_time = pd.Timestamp(ref_ds.time.item()).strftime("%Y-%m-%dT%H:%M")
+
     n_vars = len(variables)
     plt.figure(figsize=(15, 3 * n_vars))
 
     for i, var in enumerate(variables):
-        if is_forecast:
-            ds, ref_ds = align_to_valid_time_forecast(
-                validation_ds,
-                reference_ds,
-                init_time,
-                lead_time,
-            )
-        else:
-            ds, ref_ds = align_to_valid_time_analysis(
-                validation_ds,
-                reference_ds,
-                time,
-            )
-
         # Get validation data array
         data = ds[var].load()
 
@@ -123,16 +134,6 @@ def create_comparison_plot(  # noqa: PLR0915 PLR0912
         else:
             vmin = float(data.min())
             vmax = float(data.max())
-
-        # Dataset titles with timestamps
-        if is_forecast:
-            ds_init_time = pd.Timestamp(ds.init_time.item()).strftime("%Y-%m-%dT%H:%M")
-            ds_lead_time_hours = whole_hours(pd.Timedelta(ds.lead_time.item()))
-            ds_lead_time_str = f"{ds_lead_time_hours:g}h"
-            ds_time = f"{ds_init_time}+{ds_lead_time_str}"
-        else:
-            ds_time = pd.Timestamp(ds.time.item()).strftime("%Y-%m-%dT%H:%M")
-        ref_time = pd.Timestamp(ref_ds.time.item()).strftime("%Y-%m-%dT%H:%M")
 
         if var_in_reference:
             log.info(
