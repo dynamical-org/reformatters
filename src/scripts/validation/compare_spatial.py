@@ -10,6 +10,7 @@ from reformatters.common.time_utils import whole_hours
 from scripts.validation.utils import (
     OUTPUT_DIR,
     end_date_option,
+    is_forecast_dataset,
     load_zarr_dataset,
     scope_time_period,
     select_random_ensemble_member,
@@ -31,15 +32,13 @@ def align_reference_spatially(ds: xr.Dataset, reference_ds: xr.Dataset) -> xr.Da
     )
 
 
-def align_to_valid_time(
+def align_to_valid_time_forecast(
     ds: xr.Dataset,
     reference_ds: xr.Dataset,
     init_time: str | None,
     lead_time: str | None,
 ) -> tuple[xr.Dataset, xr.Dataset]:
-    selected_init_time: pd.Timestamp
-    selected_lead_time: str
-
+    """Align forecast dataset to reference dataset by selecting init_time/lead_time."""
     rng = np.random.default_rng()
 
     if init_time is None:
@@ -63,6 +62,24 @@ def align_to_valid_time(
     return ds, reference_ds
 
 
+def align_to_valid_time_analysis(
+    ds: xr.Dataset,
+    reference_ds: xr.Dataset,
+    time: str | None,
+) -> tuple[xr.Dataset, xr.Dataset]:
+    """Align analysis dataset to reference dataset by selecting a time."""
+    rng = np.random.default_rng()
+
+    if time is None:
+        selected_time = pd.Timestamp(rng.choice(ds.time, 1)[0])
+    else:
+        selected_time = pd.Timestamp(time)
+
+    ds = ds.sel(time=selected_time)
+    reference_ds = reference_ds.sel(time=selected_time, method="nearest")
+    return ds, reference_ds
+
+
 def create_comparison_plot(  # noqa: PLR0915 PLR0912
     validation_ds: xr.Dataset,
     reference_ds: xr.Dataset,
@@ -70,19 +87,28 @@ def create_comparison_plot(  # noqa: PLR0915 PLR0912
     ensemble_member: int | None = None,
     init_time: str | None = None,
     lead_time: str | None = None,
+    time: str | None = None,
 ) -> None:
     """Create comparison plot matching the example image format"""
+    is_forecast = is_forecast_dataset(validation_ds)
 
     n_vars = len(variables)
     plt.figure(figsize=(15, 3 * n_vars))
 
     for i, var in enumerate(variables):
-        ds, ref_ds = align_to_valid_time(
-            validation_ds,
-            reference_ds,
-            init_time,
-            lead_time,
-        )
+        if is_forecast:
+            ds, ref_ds = align_to_valid_time_forecast(
+                validation_ds,
+                reference_ds,
+                init_time,
+                lead_time,
+            )
+        else:
+            ds, ref_ds = align_to_valid_time_analysis(
+                validation_ds,
+                reference_ds,
+                time,
+            )
 
         # Get validation data array
         data = ds[var].load()
@@ -99,10 +125,13 @@ def create_comparison_plot(  # noqa: PLR0915 PLR0912
             vmax = float(data.max())
 
         # Dataset titles with timestamps
-        ds_init_time = pd.Timestamp(ds.init_time.item()).strftime("%Y-%m-%dT%H:%M")
-        ds_lead_time_hours = whole_hours(pd.Timedelta(ds.lead_time.item()))
-        ds_lead_time_str = f"{ds_lead_time_hours:g}h"
-        ds_time = f"{ds_init_time}+{ds_lead_time_str}"
+        if is_forecast:
+            ds_init_time = pd.Timestamp(ds.init_time.item()).strftime("%Y-%m-%dT%H:%M")
+            ds_lead_time_hours = whole_hours(pd.Timedelta(ds.lead_time.item()))
+            ds_lead_time_str = f"{ds_lead_time_hours:g}h"
+            ds_time = f"{ds_init_time}+{ds_lead_time_str}"
+        else:
+            ds_time = pd.Timestamp(ds.time.item()).strftime("%Y-%m-%dT%H:%M")
         ref_time = pd.Timestamp(ref_ds.time.item()).strftime("%Y-%m-%dT%H:%M")
 
         if var_in_reference:
@@ -287,15 +316,29 @@ def compare_spatial(
     show_plot: bool = False,
     init_time: str | None = None,
     lead_time: str | None = None,
+    time: str | None = None,
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
 ) -> None:
-    """Create comparison plots between two zarr datasets."""
+    """Create comparison plots between two zarr datasets.
+
+    For forecast datasets (with init_time and lead_time dimensions), use
+    --init-time and --lead-time to specify the point to plot.
+
+    For analysis datasets (with time dimension), use --time to specify
+    the point to plot.
+    """
 
     log.info(f"Loading validation dataset from: {validation_url}")
     validation_ds = load_zarr_dataset(validation_url)
     if start_date or end_date:
         validation_ds = scope_time_period(validation_ds, start_date, end_date)
+
+    is_forecast = is_forecast_dataset(validation_ds)
+    log.info(
+        f"Detected {'forecast' if is_forecast else 'analysis'} dataset "
+        f"(dimensions: {list(validation_ds.sizes.keys())})"
+    )
 
     log.info(f"Loading reference dataset from: {reference_url}")
     reference_ds = load_zarr_dataset(reference_url)
@@ -331,6 +374,7 @@ def compare_spatial(
         ensemble_member,
         init_time,
         lead_time,
+        time,
     )
 
     if show_plot:
