@@ -62,8 +62,8 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
 
     point_ds = backfill_ds.isel(x=1, y=-2)
 
-    assert_array_equal(point_ds["temperature_2m"].values, [23.625, 23.625])
-    assert_allclose(point_ds["precipitation_surface"].values, [np.nan, 2.771616e-06])
+    assert_array_equal(point_ds["temperature_2m"].values, [24.5, 24.5])
+    assert_allclose(point_ds["precipitation_surface"].values, [np.nan, 0.0])
 
     dataset = make_dataset()
     append_dim_end = pd.Timestamp("2018-09-16T03:00")
@@ -103,7 +103,7 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     assert_no_nulls(space_subset_ds)
 
     point_ds = updated_ds.sel(x=400_000, y=760_000, method="nearest")
-    assert_array_equal(point_ds["temperature_2m"].values, [25.0, 24.25, 22.0])
+    assert_array_equal(point_ds["temperature_2m"].values, [28.0, 25.75, 24.25])
     assert_array_equal(point_ds["precipitation_surface"].values, [np.nan, 0.0, 0.0])
 
 

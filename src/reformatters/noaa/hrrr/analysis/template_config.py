@@ -29,9 +29,8 @@ from reformatters.noaa.hrrr.template_config import NoaaHrrrCommonTemplateConfig
 class NoaaHrrrAnalysisTemplateConfig(NoaaHrrrCommonTemplateConfig):
     dims: tuple[Dim, ...] = ("time", "y", "x")
     append_dim: AppendDim = "time"
-    append_dim_start: Timestamp = pd.Timestamp(
-        "2018-09-16T00:00"
-    )  # start of reliable HRRR v3 data
+    # Could go as early as 2018-07-13T12:00, but we start at 2018-09-16T00:00 to avoid a high rate of missing data in the first 2 months.
+    append_dim_start: Timestamp = pd.Timestamp("2018-09-16T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("1h")
 
     @computed_field  # type: ignore[prop-decorator]
