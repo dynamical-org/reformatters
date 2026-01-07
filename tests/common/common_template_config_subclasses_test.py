@@ -156,11 +156,10 @@ def test_coordinates_have_single_chunk(
             continue
 
         c_dir = coord_path / "c"
-        # Some coordinates (like spatial_ref) are directories but don't have chunks
+
         if not c_dir.exists():
-            assert (
-                coord_name == "spatial_ref"
-            )  # spatial_ref doesn't write a chunk for older datasets where fill value = 0 and write empty chunks = false
+            # spatial_ref doesn't write a chunk for older datasets where fill value = 0 and write empty chunks = false
+            assert coord_name == "spatial_ref"
             continue
 
         # Check that only chunk file '0' exists
@@ -192,16 +191,11 @@ def test_coordinates_not_sharded(
     for coord_name in template_ds.coords:
         coord_zarr_json_path = template_path / coord_name / "zarr.json"
 
-        # Assert zarr.json exists for all coordinates
-        assert coord_zarr_json_path.exists(), (
-            f"zarr.json not found for coordinate '{coord_name}'"
-        )
+        assert coord_zarr_json_path.exists()
 
-        # Read the zarr.json for this coordinate
         with open(coord_zarr_json_path) as f:
             coord_metadata = json.load(f)
 
-        # Check that the codecs list doesn't contain sharding_indexed
         codecs = coord_metadata["codecs"]
         codec_names = [codec["name"] for codec in codecs]
 
