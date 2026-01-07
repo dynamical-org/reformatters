@@ -74,8 +74,8 @@ def test_region_job_generate_source_file_coords(
     )
 
     processing_region_ds, output_region_ds = region_job._get_region_datasets()
-    # We don't need to buffer our processing region for deaccumulation because hrrr accumulations are only over 1 hour
-    assert processing_region_ds.equals(output_region_ds)
+    # Processing region is buffered by 1 for deaccumulation, but not at the very start of the dataset
+    assert len(processing_region_ds.time) == len(output_region_ds.time)
 
     source_coords = region_job.generate_source_file_coords(
         processing_region_ds, template_config.data_vars[:1]
@@ -92,25 +92,77 @@ def test_region_job_generate_source_file_coords(
         )
 
 
+@pytest.mark.parametrize(
+    ("region", "expected_processing_region"),
+    [
+        (slice(0, 100), slice(0, 100)),  # At start: no buffer possible, clips to 0
+        (slice(1, 100), slice(0, 100)),  # At index 1: buffer clips to 0
+        (slice(2, 100), slice(1, 100)),  # At index 2+: full buffer of 1
+        (slice(10, 100), slice(9, 100)),  # Mid-dataset: full buffer of 1
+    ],
+)
+def test_get_processing_region(
+    template_config: NoaaHrrrAnalysisTemplateConfig,
+    region: slice,
+    expected_processing_region: slice,
+) -> None:
+    """Test that get_processing_region buffers by 1, clamped to 0 at dataset start."""
+    region_job = NoaaHrrrAnalysisRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=Mock(),
+        data_vars=template_config.data_vars[:1],
+        append_dim=template_config.append_dim,
+        region=region,
+        reformat_job_name="test",
+    )
+
+    assert region_job.get_processing_region() == expected_processing_region
+
+
+def test_region_job_processing_region_buffered(
+    template_config: NoaaHrrrAnalysisTemplateConfig,
+) -> None:
+    """Test that processing region is buffered by 1 step for deaccumulation (not at dataset start)."""
+    template_ds = template_config.get_template(pd.Timestamp("2018-09-16T05:00"))
+
+    test_ds = template_ds.isel(time=slice(0, 5))
+
+    # Region starting at index 2 (not the start of the dataset)
+    region_job = NoaaHrrrAnalysisRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=test_ds,
+        data_vars=template_config.data_vars[:1],
+        append_dim=template_config.append_dim,
+        region=slice(2, 5),
+        reformat_job_name="test",
+    )
+
+    processing_region_ds, output_region_ds = region_job._get_region_datasets()
+    # Processing region is buffered by 1 for deaccumulation
+    assert len(processing_region_ds.time) == len(output_region_ds.time) + 1
+    assert processing_region_ds.time[0] == output_region_ds.time[0] - pd.Timedelta("1h")
+
+
 def test_region_job_generate_source_file_coords_hour_0(
     template_config: NoaaHrrrAnalysisTemplateConfig,
 ) -> None:
     """Test that hour 0 variables use lead_time=0."""
-    template_ds = template_config.get_template(pd.Timestamp("2018-09-16T02:00"))
+    template_ds = template_config.get_template(pd.Timestamp("2018-09-16T04:00"))
 
-    test_ds = template_ds.isel(time=slice(0, 2))
+    test_ds = template_ds.isel(time=slice(0, 4))
 
     instant_vars = [
         v for v in template_config.data_vars if v.attrs.step_type == "instant"
     ][:1]
     assert len(instant_vars) == 1
 
+    # Use region starting at index 2 to test buffering behavior
     region_job = NoaaHrrrAnalysisRegionJob.model_construct(
         tmp_store=Mock(),
         template_ds=test_ds,
         data_vars=instant_vars,
         append_dim=template_config.append_dim,
-        region=slice(0, 2),
+        region=slice(2, 4),
         reformat_job_name="test",
     )
 
@@ -120,10 +172,11 @@ def test_region_job_generate_source_file_coords_hour_0(
         processing_region_ds, instant_vars
     )
 
-    assert len(source_coords) == 2
+    # 3 source coords: 1 buffer + 2 output
+    assert len(source_coords) == 3
 
     expected_init_times = pd.date_range(
-        "2018-09-16T00:00", "2018-09-16T01:00", freq="1h"
+        "2018-09-16T01:00", "2018-09-16T03:00", freq="1h"
     )
     for coord, expected_init_time in zip(
         source_coords, expected_init_times, strict=True
@@ -137,19 +190,20 @@ def test_region_job_generate_source_file_coords_hour_1(
     template_config: NoaaHrrrAnalysisTemplateConfig,
 ) -> None:
     """Test that non-hour 0 variables use lead_time=1."""
-    template_ds = template_config.get_template(pd.Timestamp("2018-09-16T02:00"))
+    template_ds = template_config.get_template(pd.Timestamp("2018-09-16T04:00"))
 
-    test_ds = template_ds.isel(time=slice(0, 2))
+    test_ds = template_ds.isel(time=slice(0, 4))
 
     avg_vars = [v for v in template_config.data_vars if v.attrs.step_type == "avg"][:1]
     assert len(avg_vars) == 1
 
+    # Use region starting at index 2 to test buffering behavior
     region_job = NoaaHrrrAnalysisRegionJob.model_construct(
         tmp_store=Mock(),
         template_ds=test_ds,
         data_vars=avg_vars,
         append_dim=template_config.append_dim,
-        region=slice(0, 2),
+        region=slice(2, 4),
         reformat_job_name="test",
     )
 
@@ -159,10 +213,11 @@ def test_region_job_generate_source_file_coords_hour_1(
         processing_region_ds, avg_vars
     )
 
-    assert len(source_coords) == 2
+    # 3 source coords: 1 buffer + 2 output
+    assert len(source_coords) == 3
 
     expected_init_times = pd.date_range(
-        "2018-09-15T23:00", "2018-09-16T00:00", freq="1h"
+        "2018-09-16T00:00", "2018-09-16T02:00", freq="1h"
     )
 
     for coord, expected_init_time in zip(
