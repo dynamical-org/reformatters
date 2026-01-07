@@ -37,7 +37,7 @@ class NoaaHrrrAnalysisDataset(
             cpu="7",  # 8 shards can be compressed in parallel
             memory="30G",
             shared_memory="16.5G",
-            ephemeral_storage="20G",
+            ephemeral_storage="30G",
             secret_names=self.store_factory.k8s_secret_names(),
             suspend=True,
         )
