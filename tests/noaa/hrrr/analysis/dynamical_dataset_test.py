@@ -39,17 +39,17 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     ]
 
     dataset.backfill_local(
-        append_dim_end=pd.Timestamp("2018-07-14T02:00"),
+        append_dim_end=pd.Timestamp("2018-09-16T02:00"),
         filter_variable_names=filter_variable_names,
     )
 
     backfill_ds = xr.open_zarr(
         dataset.store_factory.primary_store(), chunks=None, decode_timedelta=True
     )
-    time_start = pd.Timestamp("2018-07-14T00:00")
+    time_start = pd.Timestamp("2018-09-16T00:00")
     assert_array_equal(
         backfill_ds["time"],
-        pd.date_range(time_start, "2018-07-14T01:00", freq="1h"),
+        pd.date_range(time_start, "2018-09-16T01:00", freq="1h"),
     )
     space_subset_ds = backfill_ds.isel(x=slice(-10, -1), y=slice(0, 10))
 
@@ -66,7 +66,7 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     assert_allclose(point_ds["precipitation_surface"].values, [np.nan, 2.771616e-06])
 
     dataset = make_dataset()
-    append_dim_end = pd.Timestamp("2018-07-14T03:00")
+    append_dim_end = pd.Timestamp("2018-09-16T03:00")
     monkeypatch.setattr(
         dataset.region_job_class,
         "_update_append_dim_end",
@@ -95,7 +95,7 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     )
     assert_array_equal(
         expected_times,
-        pd.DatetimeIndex(["2018-07-14T00:00", "2018-07-14T01:00", "2018-07-14T02:00"]),
+        pd.DatetimeIndex(["2018-09-16T00:00", "2018-09-16T01:00", "2018-09-16T02:00"]),
     )
     assert_array_equal(updated_ds["time"], expected_times)
 

@@ -7,7 +7,7 @@
     "attribution": "NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
     "spatial_domain": "Continental United States",
     "spatial_resolution": "3 km",
-    "time_domain": "2018-07-14 00:00:00 UTC to Present",
+    "time_domain": "2018-09-16 00:00:00 UTC to Present",
     "time_resolution": "1 hour"
   },
   "zarr_format": 3,
@@ -1472,7 +1472,7 @@
         ],
         "attributes": {
           "statistics_approximate": {
-            "min": "2018-07-14T00:00:00",
+            "min": "2018-09-16T00:00:00",
             "max": "Present"
           },
           "units": "seconds since 1970-01-01",
