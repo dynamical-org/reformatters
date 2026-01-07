@@ -34,10 +34,10 @@ class NoaaHrrrAnalysisDataset(
             pod_active_deadline=timedelta(minutes=20),
             image=image_tag,
             dataset_id=self.dataset_id,
-            cpu="7",  # 8 shards can be compressed in parallel
-            memory="30G",
+            cpu="14",
+            memory="45G",
             shared_memory="16.5G",
-            ephemeral_storage="30G",
+            ephemeral_storage="42G",
             secret_names=self.store_factory.k8s_secret_names(),
             suspend=True,
         )
