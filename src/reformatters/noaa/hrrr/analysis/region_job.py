@@ -28,6 +28,10 @@ class NoaaHrrrAnalysisSourceFileCoord(NoaaHrrrSourceFileCoord):
 class NoaaHrrrAnalysisRegionJob(NoaaHrrrRegionJob):
     """Region job for HRRR analysis data processing."""
 
+    def get_processing_region(self) -> slice:
+        """Buffer start by one step to allow deaccumulation without gaps in resulting output."""
+        return slice(max(0, self.region.start - 1), self.region.stop)
+
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
