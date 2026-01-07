@@ -1,16 +1,14 @@
 {
   "attributes": {
-    "dataset_id": "noaa-hrrr-forecast-48-hour",
+    "dataset_id": "noaa-hrrr-analysis",
     "dataset_version": "0.1.0",
-    "name": "NOAA HRRR forecast, 48 hour",
-    "description": "Weather forecasts from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
+    "name": "NOAA HRRR analysis",
+    "description": "Analysis data from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
     "attribution": "NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
     "spatial_domain": "Continental United States",
     "spatial_resolution": "3 km",
-    "time_domain": "Forecasts initialized 2018-07-13 12:00:00 UTC to Present",
-    "time_resolution": "Forecasts initialized every 6 hours",
-    "forecast_domain": "Forecast lead time 0-48 hours ahead",
-    "forecast_resolution": "Hourly"
+    "time_domain": "2018-09-16 00:00:00 UTC to Present",
+    "time_resolution": "1 hour"
   },
   "zarr_format": 3,
   "consolidated_metadata": {
@@ -20,7 +18,6 @@
       "categorical_freezing_rain_surface": {
         "shape": [
           1,
-          49,
           1059,
           1799
         ],
@@ -29,10 +26,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1,
-              49,
-              1060,
-              1800
+              2160,
+              540,
+              450
             ]
           }
         },
@@ -42,16 +38,15 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                1,
-                49,
-                265,
-                300
+                2160,
+                45,
+                45
               ],
               "codecs": [
                 {
@@ -91,12 +86,11 @@
           "short_name": "cfrzr",
           "units": "0=no; 1=yes",
           "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "init_time",
-          "lead_time",
+          "time",
           "y",
           "x"
         ],
@@ -107,7 +101,6 @@
       "categorical_ice_pellets_surface": {
         "shape": [
           1,
-          49,
           1059,
           1799
         ],
@@ -116,10 +109,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1,
-              49,
-              1060,
-              1800
+              2160,
+              540,
+              450
             ]
           }
         },
@@ -129,16 +121,15 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                1,
-                49,
-                265,
-                300
+                2160,
+                45,
+                45
               ],
               "codecs": [
                 {
@@ -178,12 +169,11 @@
           "short_name": "cicep",
           "units": "0=no; 1=yes",
           "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "init_time",
-          "lead_time",
+          "time",
           "y",
           "x"
         ],
@@ -194,7 +184,6 @@
       "categorical_rain_surface": {
         "shape": [
           1,
-          49,
           1059,
           1799
         ],
@@ -203,10 +192,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1,
-              49,
-              1060,
-              1800
+              2160,
+              540,
+              450
             ]
           }
         },
@@ -216,16 +204,15 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                1,
-                49,
-                265,
-                300
+                2160,
+                45,
+                45
               ],
               "codecs": [
                 {
@@ -265,12 +252,11 @@
           "short_name": "crain",
           "units": "0=no; 1=yes",
           "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "init_time",
-          "lead_time",
+          "time",
           "y",
           "x"
         ],
@@ -281,7 +267,6 @@
       "categorical_snow_surface": {
         "shape": [
           1,
-          49,
           1059,
           1799
         ],
@@ -290,10 +275,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1,
-              49,
-              1060,
-              1800
+              2160,
+              540,
+              450
             ]
           }
         },
@@ -303,16 +287,15 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                1,
-                49,
-                265,
-                300
+                2160,
+                45,
+                45
               ],
               "codecs": [
                 {
@@ -352,12 +335,11 @@
           "short_name": "csnow",
           "units": "0=no; 1=yes",
           "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "init_time",
-          "lead_time",
+          "time",
           "y",
           "x"
         ],
@@ -368,7 +350,6 @@
       "composite_reflectivity": {
         "shape": [
           1,
-          49,
           1059,
           1799
         ],
@@ -377,10 +358,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1,
-              49,
-              1060,
-              1800
+              2160,
+              540,
+              450
             ]
           }
         },
@@ -390,16 +370,15 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                1,
-                49,
-                265,
-                300
+                2160,
+                45,
+                45
               ],
               "codecs": [
                 {
@@ -439,12 +418,11 @@
           "short_name": "refc",
           "units": "dBZ",
           "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "init_time",
-          "lead_time",
+          "time",
           "y",
           "x"
         ],
@@ -455,7 +433,6 @@
       "downward_long_wave_radiation_flux_surface": {
         "shape": [
           1,
-          49,
           1059,
           1799
         ],
@@ -464,10 +441,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1,
-              49,
-              1060,
-              1800
+              2160,
+              540,
+              450
             ]
           }
         },
@@ -477,16 +453,15 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                1,
-                49,
-                265,
-                300
+                2160,
+                45,
+                45
               ],
               "codecs": [
                 {
@@ -526,12 +501,11 @@
           "short_name": "sdlwrf",
           "units": "W/(m^2)",
           "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "init_time",
-          "lead_time",
+          "time",
           "y",
           "x"
         ],
@@ -542,7 +516,6 @@
       "downward_short_wave_radiation_flux_surface": {
         "shape": [
           1,
-          49,
           1059,
           1799
         ],
@@ -551,10 +524,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1,
-              49,
-              1060,
-              1800
+              2160,
+              540,
+              450
             ]
           }
         },
@@ -564,16 +536,15 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                1,
-                49,
-                265,
-                300
+                2160,
+                45,
+                45
               ],
               "codecs": [
                 {
@@ -613,67 +584,13 @@
           "short_name": "sdswrf",
           "units": "W/(m^2)",
           "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "init_time",
-          "lead_time",
+          "time",
           "y",
           "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "expected_forecast_length": {
-        "shape": [
-          1
-        ],
-        "data_type": "int64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              32120
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": -1,
-        "codecs": [
-          {
-            "name": "bytes",
-            "configuration": {
-              "endian": "little"
-            }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 8,
-              "cname": "zstd",
-              "clevel": 3,
-              "shuffle": "shuffle",
-              "blocksize": 0
-            }
-          }
-        ],
-        "attributes": {
-          "statistics_approximate": {
-            "min": "0 days 00:00:00",
-            "max": "2 days 00:00:00"
-          },
-          "dtype": "timedelta64[ns]",
-          "units": "seconds"
-        },
-        "dimension_names": [
-          "init_time"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -682,7 +599,6 @@
       "geopotential_height_cloud_ceiling": {
         "shape": [
           1,
-          49,
           1059,
           1799
         ],
@@ -691,10 +607,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1,
-              49,
-              1060,
-              1800
+              2160,
+              540,
+              450
             ]
           }
         },
@@ -704,16 +619,15 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                1,
-                49,
-                265,
-                300
+                2160,
+                45,
+                45
               ],
               "codecs": [
                 {
@@ -753,120 +667,13 @@
           "short_name": "gh",
           "units": "gpm",
           "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "init_time",
-          "lead_time",
+          "time",
           "y",
           "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "ingested_forecast_length": {
-        "shape": [
-          1
-        ],
-        "data_type": "int64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              32120
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": -1,
-        "codecs": [
-          {
-            "name": "bytes",
-            "configuration": {
-              "endian": "little"
-            }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 8,
-              "cname": "zstd",
-              "clevel": 3,
-              "shuffle": "shuffle",
-              "blocksize": 0
-            }
-          }
-        ],
-        "attributes": {
-          "statistics_approximate": {
-            "min": "0 days 00:00:00",
-            "max": "2 days 00:00:00"
-          },
-          "dtype": "timedelta64[ns]",
-          "units": "seconds"
-        },
-        "dimension_names": [
-          "init_time"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "init_time": {
-        "shape": [
-          1
-        ],
-        "data_type": "int64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              32120
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": 0,
-        "codecs": [
-          {
-            "name": "bytes",
-            "configuration": {
-              "endian": "little"
-            }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 8,
-              "cname": "zstd",
-              "clevel": 3,
-              "shuffle": "shuffle",
-              "blocksize": 0
-            }
-          }
-        ],
-        "attributes": {
-          "statistics_approximate": {
-            "min": "2018-07-13T12:00:00",
-            "max": "Present"
-          },
-          "units": "seconds since 1970-01-01",
-          "calendar": "proleptic_gregorian"
-        },
-        "dimension_names": [
-          "init_time"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -923,59 +730,6 @@
         "dimension_names": [
           "y",
           "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "lead_time": {
-        "shape": [
-          49
-        ],
-        "data_type": "int64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              49
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": -1,
-        "codecs": [
-          {
-            "name": "bytes",
-            "configuration": {
-              "endian": "little"
-            }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 8,
-              "cname": "zstd",
-              "clevel": 3,
-              "shuffle": "shuffle",
-              "blocksize": 0
-            }
-          }
-        ],
-        "attributes": {
-          "statistics_approximate": {
-            "min": "0 days 00:00:00",
-            "max": "2 days 00:00:00"
-          },
-          "dtype": "timedelta64[ns]",
-          "units": "seconds"
-        },
-        "dimension_names": [
-          "lead_time"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -1040,7 +794,6 @@
       "percent_frozen_precipitation_surface": {
         "shape": [
           1,
-          49,
           1059,
           1799
         ],
@@ -1049,10 +802,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1,
-              49,
-              1060,
-              1800
+              2160,
+              540,
+              450
             ]
           }
         },
@@ -1062,16 +814,15 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                1,
-                49,
-                265,
-                300
+                2160,
+                45,
+                45
               ],
               "codecs": [
                 {
@@ -1111,12 +862,11 @@
           "short_name": "cpofp",
           "units": "%",
           "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "init_time",
-          "lead_time",
+          "time",
           "y",
           "x"
         ],
@@ -1127,7 +877,6 @@
       "precipitable_water_atmosphere": {
         "shape": [
           1,
-          49,
           1059,
           1799
         ],
@@ -1136,10 +885,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1,
-              49,
-              1060,
-              1800
+              2160,
+              540,
+              450
             ]
           }
         },
@@ -1149,16 +897,15 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                1,
-                49,
-                265,
-                300
+                2160,
+                45,
+                45
               ],
               "codecs": [
                 {
@@ -1198,12 +945,11 @@
           "short_name": "pwat",
           "units": "kg/(m^2)",
           "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "init_time",
-          "lead_time",
+          "time",
           "y",
           "x"
         ],
@@ -1214,7 +960,6 @@
       "precipitation_surface": {
         "shape": [
           1,
-          49,
           1059,
           1799
         ],
@@ -1223,10 +968,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1,
-              49,
-              1060,
-              1800
+              2160,
+              540,
+              450
             ]
           }
         },
@@ -1236,16 +980,15 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                1,
-                49,
-                265,
-                300
+                2160,
+                45,
+                45
               ],
               "codecs": [
                 {
@@ -1286,12 +1029,11 @@
           "units": "mm/s",
           "comment": "Average precipitation rate since the previous forecast step.",
           "step_type": "avg",
-          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "init_time",
-          "lead_time",
+          "time",
           "y",
           "x"
         ],
@@ -1302,7 +1044,6 @@
       "pressure_reduced_to_mean_sea_level": {
         "shape": [
           1,
-          49,
           1059,
           1799
         ],
@@ -1311,10 +1052,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1,
-              49,
-              1060,
-              1800
+              2160,
+              540,
+              450
             ]
           }
         },
@@ -1324,16 +1064,15 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                1,
-                49,
-                265,
-                300
+                2160,
+                45,
+                45
               ],
               "codecs": [
                 {
@@ -1373,12 +1112,11 @@
           "short_name": "prmsl",
           "units": "Pa",
           "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "init_time",
-          "lead_time",
+          "time",
           "y",
           "x"
         ],
@@ -1389,7 +1127,6 @@
       "pressure_surface": {
         "shape": [
           1,
-          49,
           1059,
           1799
         ],
@@ -1398,10 +1135,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1,
-              49,
-              1060,
-              1800
+              2160,
+              540,
+              450
             ]
           }
         },
@@ -1411,16 +1147,15 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                1,
-                49,
-                265,
-                300
+                2160,
+                45,
+                45
               ],
               "codecs": [
                 {
@@ -1460,12 +1195,11 @@
           "short_name": "sp",
           "units": "Pa",
           "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "init_time",
-          "lead_time",
+          "time",
           "y",
           "x"
         ],
@@ -1476,7 +1210,6 @@
       "relative_humidity_2m": {
         "shape": [
           1,
-          49,
           1059,
           1799
         ],
@@ -1485,10 +1218,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1,
-              49,
-              1060,
-              1800
+              2160,
+              540,
+              450
             ]
           }
         },
@@ -1498,16 +1230,15 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                1,
-                49,
-                265,
-                300
+                2160,
+                45,
+                45
               ],
               "codecs": [
                 {
@@ -1547,12 +1278,11 @@
           "short_name": "r2",
           "units": "%",
           "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "init_time",
-          "lead_time",
+          "time",
           "y",
           "x"
         ],
@@ -1621,7 +1351,6 @@
       "temperature_2m": {
         "shape": [
           1,
-          49,
           1059,
           1799
         ],
@@ -1630,10 +1359,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1,
-              49,
-              1060,
-              1800
+              2160,
+              540,
+              450
             ]
           }
         },
@@ -1643,16 +1371,15 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                1,
-                49,
-                265,
-                300
+                2160,
+                45,
+                45
               ],
               "codecs": [
                 {
@@ -1693,12 +1420,11 @@
           "standard_name": "air_temperature",
           "units": "C",
           "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "init_time",
-          "lead_time",
+          "time",
           "y",
           "x"
         ],
@@ -1706,22 +1432,16 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "total_cloud_cover_atmosphere": {
+      "time": {
         "shape": [
-          1,
-          49,
-          1059,
-          1799
+          1
         ],
-        "data_type": "float32",
+        "data_type": "int64",
         "chunk_grid": {
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1,
-              49,
-              1060,
-              1800
+              192720
             ]
           }
         },
@@ -1731,16 +1451,72 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": 0,
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "blosc",
+            "configuration": {
+              "typesize": 8,
+              "cname": "zstd",
+              "clevel": 3,
+              "shuffle": "shuffle",
+              "blocksize": 0
+            }
+          }
+        ],
+        "attributes": {
+          "statistics_approximate": {
+            "min": "2018-09-16T00:00:00",
+            "max": "Present"
+          },
+          "units": "seconds since 1970-01-01",
+          "calendar": "proleptic_gregorian"
+        },
+        "dimension_names": [
+          "time"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "total_cloud_cover_atmosphere": {
+        "shape": [
+          1,
+          1059,
+          1799
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              2160,
+              540,
+              450
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                1,
-                49,
-                265,
-                300
+                2160,
+                45,
+                45
               ],
               "codecs": [
                 {
@@ -1780,70 +1556,13 @@
           "short_name": "tcc",
           "units": "%",
           "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "init_time",
-          "lead_time",
+          "time",
           "y",
           "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "valid_time": {
-        "shape": [
-          1,
-          49
-        ],
-        "data_type": "int64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              32120,
-              49
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": 0,
-        "codecs": [
-          {
-            "name": "bytes",
-            "configuration": {
-              "endian": "little"
-            }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 8,
-              "cname": "zstd",
-              "clevel": 3,
-              "shuffle": "shuffle",
-              "blocksize": 0
-            }
-          }
-        ],
-        "attributes": {
-          "statistics_approximate": {
-            "min": "2018-07-13T12:00:00",
-            "max": "Present + 48 hours"
-          },
-          "units": "seconds since 1970-01-01",
-          "calendar": "proleptic_gregorian"
-        },
-        "dimension_names": [
-          "init_time",
-          "lead_time"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -1852,7 +1571,6 @@
       "wind_u_10m": {
         "shape": [
           1,
-          49,
           1059,
           1799
         ],
@@ -1861,10 +1579,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1,
-              49,
-              1060,
-              1800
+              2160,
+              540,
+              450
             ]
           }
         },
@@ -1874,16 +1591,15 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                1,
-                49,
-                265,
-                300
+                2160,
+                45,
+                45
               ],
               "codecs": [
                 {
@@ -1924,12 +1640,11 @@
           "standard_name": "eastward_wind",
           "units": "m/s",
           "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "init_time",
-          "lead_time",
+          "time",
           "y",
           "x"
         ],
@@ -1940,7 +1655,6 @@
       "wind_u_80m": {
         "shape": [
           1,
-          49,
           1059,
           1799
         ],
@@ -1949,10 +1663,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1,
-              49,
-              1060,
-              1800
+              2160,
+              540,
+              450
             ]
           }
         },
@@ -1962,16 +1675,15 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                1,
-                49,
-                265,
-                300
+                2160,
+                45,
+                45
               ],
               "codecs": [
                 {
@@ -2012,12 +1724,11 @@
           "standard_name": "eastward_wind",
           "units": "m/s",
           "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "init_time",
-          "lead_time",
+          "time",
           "y",
           "x"
         ],
@@ -2028,7 +1739,6 @@
       "wind_v_10m": {
         "shape": [
           1,
-          49,
           1059,
           1799
         ],
@@ -2037,10 +1747,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1,
-              49,
-              1060,
-              1800
+              2160,
+              540,
+              450
             ]
           }
         },
@@ -2050,16 +1759,15 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                1,
-                49,
-                265,
-                300
+                2160,
+                45,
+                45
               ],
               "codecs": [
                 {
@@ -2100,12 +1808,11 @@
           "standard_name": "northward_wind",
           "units": "m/s",
           "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "init_time",
-          "lead_time",
+          "time",
           "y",
           "x"
         ],
@@ -2116,7 +1823,6 @@
       "wind_v_80m": {
         "shape": [
           1,
-          49,
           1059,
           1799
         ],
@@ -2125,10 +1831,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              1,
-              49,
-              1060,
-              1800
+              2160,
+              540,
+              450
             ]
           }
         },
@@ -2138,16 +1843,15 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                1,
-                49,
-                265,
-                300
+                2160,
+                45,
+                45
               ],
               "codecs": [
                 {
@@ -2188,12 +1892,11 @@
           "standard_name": "northward_wind",
           "units": "m/s",
           "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "init_time",
-          "lead_time",
+          "time",
           "y",
           "x"
         ],

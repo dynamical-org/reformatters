@@ -171,11 +171,14 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
         """Apply in-place data transformations to the output data array for a given data variable."""
         if data_var.internal_attrs.deaccumulate_to_rate:
             assert data_var.internal_attrs.window_reset_frequency is not None
-            log.info(f"Converting {data_var.name} from accumulations to rates")
+            deaccum_dim = "lead_time" if "lead_time" in data_array.dims else "time"
+            log.info(
+                f"Converting {data_var.name} from accumulations to rates along {deaccum_dim}"
+            )
             try:
                 deaccumulate_to_rates_inplace(
                     data_array,
-                    dim="lead_time",
+                    dim=deaccum_dim,
                     reset_frequency=data_var.internal_attrs.window_reset_frequency,
                 )
             except ValueError:

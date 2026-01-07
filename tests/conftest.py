@@ -1,4 +1,5 @@
 import contextlib
+import faulthandler
 import multiprocessing
 import os
 import sys
@@ -6,6 +7,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+
+faulthandler.enable()
 
 # Spawn new processes since fork isn't safe with threads
 with contextlib.suppress(RuntimeError):  # skip if already set
@@ -19,7 +22,8 @@ sys.path.append(str(Path(__file__).parent.parent))
 # Config.env is set to test.
 os.environ["DYNAMICAL_ENV"] = "test"
 
-from reformatters.common import storage
+
+from reformatters.common import storage  # noqa: E402
 
 
 def pytest_xdist_auto_num_workers(config: pytest.Config) -> int | None:

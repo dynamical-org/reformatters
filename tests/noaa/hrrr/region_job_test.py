@@ -4,7 +4,9 @@ from unittest.mock import Mock
 import numpy as np
 import pandas as pd
 import pytest
+import xarray as xr
 
+from reformatters.common.pydantic import replace
 from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
     NoaaHrrrForecast48HourTemplateConfig,
 )
@@ -229,3 +231,190 @@ def test_region_job_read_data(
     assert result.dtype == np.float32
 
     rasterio_reader.read.assert_called_once_with(1, out_dtype=np.float32)
+
+
+def test_region_job_read_data_no_matching_bands(
+    template_config: NoaaHrrrCommonTemplateConfig,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that read_data raises an error when no matching bands are found."""
+    coord = NoaaHrrrSourceFileCoord(
+        init_time=pd.Timestamp("2024-02-29T00:00"),
+        lead_time=pd.Timedelta(hours=0),
+        domain="conus",
+        file_type="sfc",
+        data_vars=template_config.data_vars[:1],
+        downloaded_path=Path("fake/path/to/downloaded/file.grib2"),
+    )
+
+    region_job = NoaaHrrrRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=Mock(),
+        data_vars=template_config.data_vars[:1],
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    rasterio_reader = Mock()
+    rasterio_reader.__enter__ = Mock(return_value=rasterio_reader)
+    rasterio_reader.__exit__ = Mock(return_value=False)
+    rasterio_reader.count = 1
+    rasterio_reader.descriptions = ["Wrong description"]
+    rasterio_reader.tags = Mock(return_value={"GRIB_ELEMENT": "WRONG"})
+    monkeypatch.setattr(
+        "reformatters.noaa.hrrr.region_job.rasterio.open",
+        Mock(return_value=rasterio_reader),
+    )
+
+    with pytest.raises(
+        AssertionError, match="Expected exactly 1 matching band, found 0"
+    ):
+        region_job.read_data(coord, template_config.data_vars[0])
+
+
+def test_region_job_read_data_multiple_matching_bands(
+    template_config: NoaaHrrrCommonTemplateConfig,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that read_data raises an error when multiple matching bands are found."""
+    coord = NoaaHrrrSourceFileCoord(
+        init_time=pd.Timestamp("2024-02-29T00:00"),
+        lead_time=pd.Timedelta(hours=0),
+        domain="conus",
+        file_type="sfc",
+        data_vars=template_config.data_vars[:1],
+        downloaded_path=Path("fake/path/to/downloaded/file.grib2"),
+    )
+
+    region_job = NoaaHrrrRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=Mock(),
+        data_vars=template_config.data_vars[:1],
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    rasterio_reader = Mock()
+    rasterio_reader.__enter__ = Mock(return_value=rasterio_reader)
+    rasterio_reader.__exit__ = Mock(return_value=False)
+    rasterio_reader.count = 2
+    rasterio_reader.descriptions = [
+        '0[-] EATM="Entire Atmosphere"',
+        '0[-] EATM="Entire Atmosphere"',
+    ]
+    rasterio_reader.tags = Mock(return_value={"GRIB_ELEMENT": "REFC"})
+    monkeypatch.setattr(
+        "reformatters.noaa.hrrr.region_job.rasterio.open",
+        Mock(return_value=rasterio_reader),
+    )
+
+    with pytest.raises(
+        AssertionError, match="Expected exactly 1 matching band, found 2"
+    ):
+        region_job.read_data(coord, template_config.data_vars[0])
+
+
+def test_apply_data_transformations_binary_rounding(
+    template_config: NoaaHrrrCommonTemplateConfig,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that binary rounding is called when keep_mantissa_bits is set."""
+    region_job = NoaaHrrrRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=Mock(),
+        data_vars=template_config.data_vars[:1],
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    # Create a data var with binary rounding enabled
+    data_var = replace(
+        template_config.data_vars[0],
+        internal_attrs=replace(
+            template_config.data_vars[0].internal_attrs,
+            keep_mantissa_bits=10,
+            deaccumulate_to_rate=False,
+        ),
+    )
+
+    test_data = np.array([1.23456789, 2.34567890, 3.45678901], dtype=np.float32)
+    data_array = xr.DataArray(test_data.copy(), dims=["x"])
+
+    mock_round = Mock()
+    monkeypatch.setattr(
+        "reformatters.noaa.hrrr.region_job.round_float32_inplace",
+        mock_round,
+    )
+
+    region_job.apply_data_transformations(data_array, data_var)
+
+    # Verify rounding was called with correct arguments
+    mock_round.assert_called_once_with(data_array.values, 10)
+
+
+def test_apply_data_transformations_deaccumulation(
+    template_config: NoaaHrrrCommonTemplateConfig,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that deaccumulation is called when deaccumulate_to_rate is True."""
+    region_job = NoaaHrrrRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=Mock(),
+        data_vars=template_config.data_vars[:1],
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    # Create a data var with deaccumulation enabled
+    data_var = replace(
+        template_config.data_vars[0],
+        internal_attrs=replace(
+            template_config.data_vars[0].internal_attrs,
+            deaccumulate_to_rate=True,
+            window_reset_frequency=pd.Timedelta(hours=1),
+            keep_mantissa_bits="no-rounding",
+        ),
+    )
+
+    times = pd.date_range("2024-01-01", periods=5, freq="1h")
+    test_data = np.array([0.0, 3.6, 7.2, 10.8, 14.4], dtype=np.float32)
+    data_array = xr.DataArray(
+        test_data, dims=["time"], coords={"time": times}, attrs={"units": "mm/s"}
+    )
+
+    mock_deaccumulate = Mock()
+    monkeypatch.setattr(
+        "reformatters.noaa.hrrr.region_job.deaccumulate_to_rates_inplace",
+        mock_deaccumulate,
+    )
+
+    region_job.apply_data_transformations(data_array, data_var)
+
+    # Verify deaccumulation was called with correct arguments
+    mock_deaccumulate.assert_called_once()
+    call_args = mock_deaccumulate.call_args
+    assert call_args.kwargs["dim"] == "time"
+    assert call_args.kwargs["reset_frequency"] == pd.Timedelta(hours=1)
+
+
+def test_update_append_dim_end() -> None:
+    """Test that _update_append_dim_end returns current time."""
+    before = pd.Timestamp.now()
+    result = NoaaHrrrRegionJob._update_append_dim_end()
+    after = pd.Timestamp.now()
+
+    assert before <= result <= after
+
+
+def test_update_append_dim_start() -> None:
+    """Test that _update_append_dim_start returns max time from existing data."""
+    times = pd.date_range("2024-01-01", periods=10, freq="1h")
+    time_coord = xr.DataArray(times, dims=["time"])
+
+    result = NoaaHrrrRegionJob._update_append_dim_start(time_coord)
+
+    assert result == pd.Timestamp("2024-01-01 09:00:00")
