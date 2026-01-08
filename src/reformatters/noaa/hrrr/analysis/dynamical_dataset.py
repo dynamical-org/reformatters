@@ -37,7 +37,7 @@ class NoaaHrrrAnalysisDataset(
             cpu="7",
             memory="45G",
             shared_memory="16.5G",
-            ephemeral_storage="55G",
+            ephemeral_storage="60G",
             secret_names=self.store_factory.k8s_secret_names(),
             suspend=True,
         )
