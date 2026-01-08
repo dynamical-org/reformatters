@@ -1,5 +1,6 @@
 from collections.abc import Iterable, Sequence
 from datetime import timedelta
+from functools import partial
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -34,12 +35,11 @@ class NoaaHrrrAnalysisDataset(
             pod_active_deadline=timedelta(minutes=20),
             image=image_tag,
             dataset_id=self.dataset_id,
-            cpu="14",
+            cpu="7",
             memory="45G",
             shared_memory="16.5G",
-            ephemeral_storage="42G",
+            ephemeral_storage="60G",
             secret_names=self.store_factory.k8s_secret_names(),
-            suspend=True,
         )
 
         validation_cron_job = ValidationCronJob(
@@ -55,13 +55,19 @@ class NoaaHrrrAnalysisDataset(
             cpu="0.7",
             memory="3.5G",
             secret_names=self.store_factory.k8s_secret_names(),
-            suspend=True,
         )
 
         return [operational_update_cron_job, validation_cron_job]
 
     def validators(self) -> Sequence[validation.DataValidator]:
+        max_expected_delay = timedelta(hours=4)
         return (
-            validation.check_analysis_current_data,
-            validation.check_analysis_recent_nans,
+            partial(
+                validation.check_analysis_current_data,
+                max_expected_delay=max_expected_delay,
+            ),
+            partial(
+                validation.check_analysis_recent_nans,
+                max_expected_delay=max_expected_delay,
+            ),
         )
