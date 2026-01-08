@@ -34,7 +34,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
             # (Ensemble stats get uploaded 15-20 mins later, but we don't process those.)
             schedule="50 7 * * *",
             suspend=False,
-            pod_active_deadline=timedelta(hours=2.5),
+            pod_active_deadline=timedelta(hours=3),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3",
