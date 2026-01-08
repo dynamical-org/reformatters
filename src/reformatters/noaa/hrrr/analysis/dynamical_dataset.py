@@ -34,10 +34,10 @@ class NoaaHrrrAnalysisDataset(
             pod_active_deadline=timedelta(minutes=20),
             image=image_tag,
             dataset_id=self.dataset_id,
-            cpu="14",
+            cpu="7",
             memory="45G",
             shared_memory="16.5G",
-            ephemeral_storage="42G",
+            ephemeral_storage="55G",
             secret_names=self.store_factory.k8s_secret_names(),
             suspend=True,
         )
