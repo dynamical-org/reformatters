@@ -59,3 +59,16 @@ class NoaaHrrrAnalysisRegionJob(NoaaHrrrRegionJob):
             )
             for init_time in init_times
         ]
+
+    def update_template_with_results(
+        self, process_results: Mapping[str, Sequence[NoaaHrrrSourceFileCoord]]
+    ) -> xr.Dataset:
+        # Remove the last hour. We pull accumulated variables (precipitation) from the 1 hour lead time,
+        # but use the 0 hour lead time for other variables. This results in one additional
+        # hour of data for accumulated variables. Trim it off so we aren't left with nans for
+        # most variables in the final step.
+        return (
+            super()
+            .update_template_with_results(process_results)
+            .isel(time=slice(None, -1))
+        )

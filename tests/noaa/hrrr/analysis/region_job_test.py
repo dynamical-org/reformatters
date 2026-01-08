@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from reformatters.common import template_utils
+from reformatters.common.region_job import SourceFileStatus
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.noaa.hrrr.analysis.region_job import (
     NoaaHrrrAnalysisRegionJob,
@@ -266,3 +267,34 @@ def test_operational_update_jobs(
     for job in jobs:
         assert isinstance(job, NoaaHrrrAnalysisRegionJob)
         assert job.data_vars == template_config.data_vars
+
+
+def test_update_template_with_results(
+    template_config: NoaaHrrrAnalysisTemplateConfig,
+) -> None:
+    """Test that update_template_with_results removes the last hour of data."""
+    template_ds = template_config.get_template(pd.Timestamp("2018-09-16T05:00"))
+
+    region_job = NoaaHrrrAnalysisRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_ds,
+        data_vars=template_config.data_vars[:1],
+        append_dim=template_config.append_dim,
+        region=slice(0, 5),
+        reformat_job_name="test",
+    )
+
+    # Create mock process_results that simulates successful processing up to the last time
+    last_time = template_ds.time.values[-1]
+    mock_coord = Mock()
+    mock_coord.status = SourceFileStatus.Succeeded
+    mock_coord.out_loc.return_value = {"time": last_time}
+
+    process_results = {template_config.data_vars[0].name: [mock_coord]}
+
+    result_ds = region_job.update_template_with_results(process_results)
+
+    # Result should have one fewer time step than the template
+    assert len(result_ds.time) == len(template_ds.time) - 1
+    assert result_ds.time[-1] == template_ds.time.values[-2]
+    assert result_ds.time[0] == template_ds.time.values[0]
