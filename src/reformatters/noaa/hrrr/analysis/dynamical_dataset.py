@@ -39,7 +39,6 @@ class NoaaHrrrAnalysisDataset(
             shared_memory="16.5G",
             ephemeral_storage="60G",
             secret_names=self.store_factory.k8s_secret_names(),
-            suspend=True,
         )
 
         validation_cron_job = ValidationCronJob(
@@ -55,7 +54,6 @@ class NoaaHrrrAnalysisDataset(
             cpu="0.7",
             memory="3.5G",
             secret_names=self.store_factory.k8s_secret_names(),
-            suspend=True,
         )
 
         return [operational_update_cron_job, validation_cron_job]
