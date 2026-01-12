@@ -9,16 +9,9 @@ This tool helps you:
 - **Search** for optimal chunk/shard layouts based on your dataset dimensions
 - **Compare** configurations with detailed diagnostics including access pattern costs
 
-## Installation
-
-The tool is part of the reformatters package. No additional dependencies required.
-
 ## Quick Start
 
 ```bash
-# Run from workspace root
-cd /workspace
-
 # Analysis mode (time-series dataset) - search for optimal layout
 uv run python src/scripts/chunk_shard_size.py \
   --time 73000:3:hour \
@@ -88,9 +81,9 @@ Activated when input includes both `init_time` AND `lead_time`.
 
 ## Layout Heuristics
 
-### Data Specifications
-- Element size: `float32` (4 bytes)
-- Compression ratio: 20% (0.2)
+### Data Specifications (configurable via flags)
+- Element size: 4 bytes (default, `--bytes_per_element`)
+- Compression ratio: 0.2 (default, `--compression_ratio`)
 
 ### Target Sizes (Compressed)
 | Type | Min | Max | Sweet Spot |
@@ -101,6 +94,7 @@ Activated when input includes both `init_time` AND `lead_time`.
 ### Constraints
 - Shards must be exact integer multiples of chunks
 - Spatial evenness prioritizes shard boundaries over chunk boundaries
+- **Spatial squareness**: Prefers equal-sized spatial dimensions (e.g., 32×32 over 32×64)
 
 ## Command Reference
 
@@ -111,6 +105,7 @@ usage: chunk_shard_size.py [-h] [--time TIME] [--init_time INIT_TIME]
                            [--longitude LONGITUDE] [--x X] [--y Y]
                            [--statistic STATISTIC] [--chunk_shape CHUNK_SHAPE]
                            [--shard_shape SHARD_SHAPE] [--search] [--top TOP]
+                           [--bytes_per_element N] [--compression_ratio R]
 
 Options:
   --time TIME           Spec: 'length:step:units' or 'length'
@@ -122,11 +117,18 @@ Options:
   --x, --y              Spec: 'length:step:units' or 'length'
   --statistic           Spec: 'length:step:units' or 'length'
   
-  --chunk_shape         Manual chunk shape (comma-separated)
-  --shard_shape         Manual shard shape (comma-separated)
+  --chunk_shape         Manual chunk shape (comma-separated, order matches dimension flags)
+  --shard_shape         Manual shard shape (comma-separated, order matches dimension flags)
   --search              Search for optimal configurations
   --top N               Show top N results in search mode (default: 5)
+  
+  --bytes_per_element N Bytes per array element (default: 4 for float32)
+  --compression_ratio R Expected compression ratio (default: 0.2 = 20%)
 ```
+
+**Note:** The order of values in `--chunk_shape` and `--shard_shape` must match the order of
+dimension flags provided (e.g., if you specify `--time ... --latitude ... --longitude ...`,
+then shapes should be `time_val,lat_val,lon_val`).
 
 ## Output Diagnostics
 
@@ -151,9 +153,14 @@ The tool outputs a comprehensive ASCII table with:
 2. **Shard Touch**: Total shard data opened for spatial slice
 3. **Full Time Series**: Shards/data needed for complete time series at single location
 
-### Spatial Evenness Score
-- Score from 0 to 1 (1.0 = perfectly even division)
-- Higher is better (less wasted space in edge chunks/shards)
+### Spatial Scores
+- **Evenness**: Score from 0 to 1 (1.0 = perfectly even division across the domain)
+- **Squareness**: Score from 0 to 1 (1.0 = spatial dimensions are equal, e.g., 32×32)
+- Higher is better for both scores
+
+### Template Config Code Block
+- In detailed analysis mode, outputs Python code ready to paste into your `template_config.py`
+- Includes properly formatted `var_chunks` and `var_shards` dictionaries with comments
 
 ## Example Commands and Output
 
@@ -229,11 +236,31 @@ uv run python src/scripts/chunk_shard_size.py \
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ SPATIAL EVENNESS SCORE (1.0 = perfectly even)                               │
+│ SPATIAL SCORES (1.0 = optimal)                                              │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│ Chunk evenness:  0.951                                                        │
-│ Shard evenness:  0.910                                                        │
+│ Chunk evenness:   0.951    Chunk squareness: 1.000                                │
+│ Shard evenness:   0.910    Shard squareness: 1.000                                │
 └──────────────────────────────────────────────────────────────────────────────┘
+
+────────────────────────────────────────────────────────────────────────────────
+ TEMPLATE CONFIG CODE (copy-paste into your template_config.py)
+────────────────────────────────────────────────────────────────────────────────
+
+```python
+        # ~6MB uncompressed, ~1.1MB compressed
+        var_chunks: dict[Dim, int] = {
+            "time": 1440,  # 180 days of 3-hourly data
+            "latitude": 32,  # 23 chunks over 721 pixels
+            "longitude": 32,  # 45 chunks over 1440 pixels
+        }
+
+        # ~1620MB uncompressed, ~324MB compressed
+        var_shards: dict[Dim, int] = {
+            "time": var_chunks["time"] * 2,  # 26 shards over 73000 pixels
+            "latitude": var_chunks["latitude"] * 12,  # 2 shards over 721 pixels
+            "longitude": var_chunks["longitude"] * 12,  # 4 shards over 1440 pixels
+        }
+```
 ```
 
 **Interpretation:**
@@ -241,6 +268,7 @@ uv run python src/scripts/chunk_shard_size.py \
 - ✓ OK on shard: 324 MB is within the 100-600 MB range
 - Spatial slice costs ~1.16 GB and touches 8 shards
 - Full time series for one pixel requires 26 shards
+- The template config code block can be copied directly into your `template_config.py`
 
 ---
 
@@ -266,31 +294,39 @@ Lengths: (73000, 721, 1440)
 ================================================================================
 
 #1
-  Chunk: (1825, 64, 40) → 3.56 MB compressed
-  Shard: (3650, 768, 160) → 342.19 MB compressed
-  Total shards: 180 | Evenness: 1.000
+  Chunk: (1000, 64, 64) → 3.12 MB compressed
+  Shard: (3000, 384, 384) → 337.50 MB compressed
+  Total shards: 200 | Evenness: 0.910 | Squareness: 1.000
 
-  [RECOMMENDED - Best balance of size and spatial evenness]
+  [RECOMMENDED - Best balance of size, evenness, and spatial squareness]
 
 #2
-  Chunk: (1825, 64, 40) → 3.56 MB compressed
-  Shard: (7300, 768, 80) → 342.19 MB compressed
-  Total shards: 180 | Evenness: 1.000
+  Chunk: (1000, 64, 64) → 3.12 MB compressed
+  Shard: (7000, 256, 256) → 350.00 MB compressed
+  Total shards: 198 | Evenness: 0.879 | Squareness: 1.000
 
 #3
-  Chunk: (1825, 64, 40) → 3.56 MB compressed
-  Shard: (14600, 768, 40) → 342.19 MB compressed
-  Total shards: 180 | Evenness: 1.000
+  Chunk: (1000, 64, 64) → 3.12 MB compressed
+  Shard: (1000, 768, 768) → 450.00 MB compressed
+  Total shards: 146 | Evenness: 0.967 | Squareness: 1.000
 
 --------------------------------------------------------------------------------
-To see detailed diagnostics for a configuration, run with --chunk_shape and --shard_shape
+Run this command to see detailed analysis of top recommendation:
+
+uv run python src/scripts/chunk_shard_size.py \
+    --time 73000:3.0:hour \
+    --latitude 721:0.25:degrees \
+    --longitude 1440:0.25:degrees \
+    --chunk_shape 1000,64,64 \
+    --shard_shape 3000,384,384
+
 ================================================================================
 ```
 
 **Interpretation:**
-- All top configurations achieve perfect spatial evenness (1.000)
-- Chunk size (3.56 MB) is near the 3.5 MB sweet spot
-- Total shards: 180 (manageable for cloud storage)
+- All top configurations achieve perfect spatial squareness (1.000) with 64×64 chunks
+- Chunk size (3.12 MB) is near the 3.5 MB sweet spot
+- The tool now outputs a ready-to-run command for the top recommendation
 
 ---
 
@@ -318,32 +354,42 @@ Lengths: (365, 31, 181, 721, 1440)
 ================================================================================
 
 #1
-  Chunk: (1, 31, 128, 64, 18) → 3.49 MB compressed
-  Shard: (1, 31, 256, 768, 72) → 334.80 MB compressed
-  Total shards: 7,300 | Evenness: 1.000
+  Chunk: (1, 31, 128, 32, 30) → 2.91 MB compressed
+  Shard: (1, 31, 256, 256, 240) → 372.00 MB compressed
+  Total shards: 6,570 | Evenness: 0.954 | Squareness: 0.938
 
-  [RECOMMENDED - Best balance of size and spatial evenness]
+  [RECOMMENDED - Best balance of size, evenness, and spatial squareness]
 
 #2
   Chunk: (1, 31, 128, 32, 36) → 3.49 MB compressed
-  Shard: (1, 31, 256, 384, 144) → 334.80 MB compressed
-  Total shards: 7,300 | Evenness: 0.967
+  Shard: (1, 31, 256, 256, 252) → 390.60 MB compressed
+  Total shards: 6,570 | Evenness: 0.898 | Squareness: 0.889
 
 #3
-  Chunk: (1, 31, 128, 64, 18) → 3.49 MB compressed
-  Shard: (1, 31, 256, 384, 144) → 334.80 MB compressed
-  Total shards: 7,300 | Evenness: 0.967
+  Chunk: (1, 31, 128, 32, 32) → 3.10 MB compressed
+  Shard: (1, 31, 256, 256, 256) → 396.80 MB compressed
+  Total shards: 6,570 | Evenness: 0.879 | Squareness: 1.000
 
 --------------------------------------------------------------------------------
-To see detailed diagnostics for a configuration, run with --chunk_shape and --shard_shape
+Run this command to see detailed analysis of top recommendation:
+
+uv run python src/scripts/chunk_shard_size.py \
+    --init_time 365 \
+    --ensemble_member 31 \
+    --lead_time 181:3.0:hour \
+    --latitude 721:0.25:degrees \
+    --longitude 1440:0.25:degrees \
+    --chunk_shape 1,31,128,32,30 \
+    --shard_shape 1,31,256,256,240
+
 ================================================================================
 ```
 
 **Interpretation:**
 - All configurations follow forecast mode constraint: 1 init_time per shard
 - All 31 ensemble members kept together in chunks and shards
-- Lead times grouped: 128 per chunk, ~256 per shard (covering all 181 lead times)
-- 7,300 total shards = 365 init_times × 20 spatial shards
+- Spatial dimensions now prefer squarer shapes (32×30 is close to square)
+- The detailed analysis includes a ready-to-paste template config code block
 
 ---
 
@@ -366,11 +412,13 @@ This analyzes the actual GEFS 35-day forecast configuration to validate the curr
 ## Tips for Choosing Layouts
 
 1. **Start with search mode** to get baseline recommendations
-2. **Prioritize spatial evenness** for cloud storage efficiency
-3. **Consider access patterns:**
+2. **Prefer square spatial dimensions** (e.g., 32×32 over 32×64) for balanced access patterns
+3. **Prioritize spatial evenness** for cloud storage efficiency
+4. **Consider access patterns:**
    - Frequent spatial slices → smaller spatial chunks
    - Frequent time series → smaller temporal chunks
-4. **Balance chunk/shard sizes:**
+5. **Balance chunk/shard sizes:**
    - Too small → HTTP overhead
    - Too large → wasted bandwidth for partial reads
-5. **For forecasts:** Always keep 1 init_time per shard for efficient forecast-by-forecast access
+6. **For forecasts:** Always keep 1 init_time per shard for efficient forecast-by-forecast access
+7. **Use the template config output** to quickly paste configurations into your `template_config.py`

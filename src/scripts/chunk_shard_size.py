@@ -39,9 +39,15 @@ VALID_DIMS = get_args(
     ]
 )
 
-# Storage constants
-BYTES_PER_ELEMENT = 4  # float32
-COMPRESSION_RATIO = 0.2  # 20% of raw size after compression
+# Storage constants (defaults, can be overridden via CLI)
+DEFAULT_BYTES_PER_ELEMENT = 4  # float32
+DEFAULT_COMPRESSION_RATIO = 0.2  # 20% of raw size after compression
+
+# Mutable storage params container (set from CLI args in main)
+STORAGE_PARAMS: dict[str, int | float] = {
+    "bytes_per_element": DEFAULT_BYTES_PER_ELEMENT,
+    "compression_ratio": DEFAULT_COMPRESSION_RATIO,
+}
 
 # Target sizes in bytes (compressed)
 CHUNK_MIN_MB = 2.5
@@ -121,8 +127,10 @@ class StorageMetrics:
 
 def calculate_storage(num_elements: int) -> StorageMetrics:
     """Calculate raw and compressed storage for given number of elements."""
-    raw_bytes = num_elements * BYTES_PER_ELEMENT
-    compressed_bytes = raw_bytes * COMPRESSION_RATIO
+    bytes_per_element = int(STORAGE_PARAMS["bytes_per_element"])
+    compression_ratio = float(STORAGE_PARAMS["compression_ratio"])
+    raw_bytes = num_elements * bytes_per_element
+    compressed_bytes = raw_bytes * compression_ratio
     return StorageMetrics(raw_bytes, compressed_bytes)
 
 
@@ -269,6 +277,31 @@ def calculate_spatial_evenness(
     return max(0.0, 1.0 - avg_cv)
 
 
+def calculate_spatial_squareness(
+    shape: tuple[int, ...],
+    dim_names: tuple[str, ...],
+) -> float:
+    """Calculate how 'square' the spatial dimensions are.
+
+    Returns a score from 0 to 1, where 1 means all spatial dims have equal size
+    (e.g., 32x32) and lower values indicate more rectangular shapes (e.g., 32x64).
+    """
+    spatial_dims = get_spatial_dims(dim_names)
+    if len(spatial_dims) < 2:
+        return 1.0
+
+    spatial_sizes = [shape[dim_names.index(name)] for name in spatial_dims]
+
+    # Calculate ratio of min to max - 1.0 means perfectly square
+    min_size = min(spatial_sizes)
+    max_size = max(spatial_sizes)
+
+    if max_size == 0:
+        return 1.0
+
+    return min_size / max_size
+
+
 def search_chunk_shapes(
     dim_specs: tuple[DimensionSpec, ...],
     mode: Literal["analysis", "forecast"],
@@ -361,16 +394,17 @@ def search_chunk_shapes(
 
     search_recursive([], 0)
 
-    # Score and sort by distance from target size and spatial evenness
+    # Score and sort by distance from target size, spatial evenness, and squareness
     def score_shape(shape: tuple[int, ...]) -> float:
         storage = calculate_storage(product(shape))
         size_diff = abs(storage.compressed_bytes - CHUNK_TARGET_BYTES)
         size_score = 1.0 / (1.0 + size_diff / CHUNK_TARGET_BYTES)
 
         evenness = calculate_spatial_evenness(dim_lengths, shape, dim_names)
+        squareness = calculate_spatial_squareness(shape, dim_names)
 
-        # Weight: 40% size score, 60% evenness
-        return 0.4 * size_score + 0.6 * evenness
+        # Weight: 30% size score, 40% evenness, 30% squareness
+        return 0.3 * size_score + 0.4 * evenness + 0.3 * squareness
 
     valid_shapes.sort(key=score_shape, reverse=True)
 
@@ -446,7 +480,7 @@ def search_shard_shapes(
 
     search_recursive([], 0)
 
-    # Score by size and spatial evenness
+    # Score by size, spatial evenness, and squareness
     def score_shape(shape: tuple[int, ...]) -> float:
         storage = calculate_storage(product(shape))
         # Prefer shards in the 200-400MB range
@@ -455,8 +489,10 @@ def search_shard_shapes(
         size_score = 1.0 / (1.0 + size_diff / target_shard)
 
         evenness = calculate_spatial_evenness(dim_lengths, shape, dim_names)
+        squareness = calculate_spatial_squareness(shape, dim_names)
 
-        return 0.3 * size_score + 0.7 * evenness
+        # Weight: 25% size score, 45% evenness, 30% squareness
+        return 0.25 * size_score + 0.45 * evenness + 0.3 * squareness
 
     valid_shapes.sort(key=score_shape, reverse=True)
 
@@ -524,6 +560,78 @@ def calculate_access_costs(
         "time_series_shards": str(time_series_shards),
         "time_series_mb": f"{time_series_mb:.2f}",
     }
+
+
+def generate_template_config_code(config: LayoutConfig) -> str:
+    """Generate code block for pasting into template config."""
+    chunk_storage = calculate_storage(product(config.chunk_shape))
+    shard_storage = calculate_storage(product(config.shard_shape))
+
+    lines = []
+
+    # Chunk comment
+    lines.append(
+        f"        # ~{chunk_storage.raw_mb:.0f}MB uncompressed, "
+        f"~{chunk_storage.compressed_mb:.1f}MB compressed"
+    )
+    lines.append("        var_chunks: dict[Dim, int] = {")
+
+    # Chunk entries
+    for i, spec in enumerate(config.dim_specs):
+        chunk_size = config.chunk_shape[i]
+        chunks_count = count_chunks_for_dim(spec.length, chunk_size)
+
+        # Generate comment based on dimension type
+        if spec.name in ("time", "init_time"):
+            if spec.units in ("hour", "hours"):
+                days = chunk_size * spec.step / 24
+                comment = f"# {days:.0f} days of {spec.step:.0f}-hourly data"
+            else:
+                comment = f"# {chunk_size} {spec.units}"
+        elif spec.name in ("latitude", "longitude", "x", "y"):
+            comment = f"# {chunks_count} chunks over {spec.length} pixels"
+        elif spec.name == "lead_time":
+            if spec.units in ("hour", "hours"):
+                days = chunk_size * spec.step / 24
+                comment = f"# {days:.1f} days of lead time"
+            else:
+                comment = f"# {chunk_size} lead time steps"
+        elif spec.name == "ensemble_member":
+            comment = f"# all {chunk_size} ensemble members"
+        else:
+            comment = f"# {chunks_count} chunks over {spec.length} values"
+
+        lines.append(f'            "{spec.name}": {chunk_size},  {comment}')
+
+    lines.append("        }")
+    lines.append("")
+
+    # Shard comment
+    lines.append(
+        f"        # ~{shard_storage.raw_mb:.0f}MB uncompressed, "
+        f"~{shard_storage.compressed_mb:.0f}MB compressed"
+    )
+    lines.append("        var_shards: dict[Dim, int] = {")
+
+    # Shard entries
+    for i, spec in enumerate(config.dim_specs):
+        chunk_size = config.chunk_shape[i]
+        shard_size = config.shard_shape[i]
+        multiplier = shard_size // chunk_size
+        shards_count = count_shards_for_dim(spec.length, shard_size)
+
+        if multiplier == 1:
+            value_str = f'var_chunks["{spec.name}"]'
+        else:
+            value_str = f'var_chunks["{spec.name}"] * {multiplier}'
+
+        comment = f"# {shards_count} shards over {spec.length} pixels"
+
+        lines.append(f'            "{spec.name}": {value_str},  {comment}')
+
+    lines.append("        }")
+
+    return "\n".join(lines)
 
 
 def print_diagnostic_table(
@@ -741,14 +849,57 @@ def print_diagnostic_table(
         dim_lengths, config.chunk_shape, config.dim_names
     )
 
+    chunk_squareness = calculate_spatial_squareness(
+        config.chunk_shape, config.dim_names
+    )
+    shard_squareness = calculate_spatial_squareness(
+        config.shard_shape, config.dim_names
+    )
+
     print("\n┌" + "─" * 78 + "┐")
-    print("│ SPATIAL EVENNESS SCORE (1.0 = perfectly even)" + " " * 31 + "│")
+    print("│ SPATIAL SCORES (1.0 = optimal)" + " " * 46 + "│")
     print("├" + "─" * 78 + "┤")
-    print(f"│ Chunk evenness:  {chunk_evenness:.3f}" + " " * 56 + "│")
-    print(f"│ Shard evenness:  {shard_evenness:.3f}" + " " * 56 + "│")
+    print(
+        f"│ Chunk evenness:   {chunk_evenness:.3f}    Chunk squareness: {chunk_squareness:.3f}"
+        + " " * 32
+        + "│"
+    )
+    print(
+        f"│ Shard evenness:   {shard_evenness:.3f}    Shard squareness: {shard_squareness:.3f}"
+        + " " * 32
+        + "│"
+    )
     print("└" + "─" * 78 + "┘")
 
+    # Template config code block
+    print("\n" + "─" * 80)
+    print(" TEMPLATE CONFIG CODE (copy-paste into your template_config.py)")
+    print("─" * 80)
+    print("\n```python")
+    print(generate_template_config_code(config))
+    print("```")
+
     print("\n" + "=" * 80 + "\n")
+
+
+def build_cli_command(
+    dim_specs: tuple[DimensionSpec, ...],
+    chunk_shape: tuple[int, ...],
+    shard_shape: tuple[int, ...],
+) -> str:
+    """Build the CLI command to run with specified shapes."""
+    parts = ["uv run python src/scripts/chunk_shard_size.py"]
+
+    for spec in dim_specs:
+        if spec.units == "values" and spec.step == 1.0:
+            parts.append(f"--{spec.name} {spec.length}")
+        else:
+            parts.append(f"--{spec.name} {spec.length}:{spec.step}:{spec.units}")
+
+    parts.append(f"--chunk_shape {','.join(str(c) for c in chunk_shape)}")
+    parts.append(f"--shard_shape {','.join(str(s) for s in shard_shape)}")
+
+    return " \\\n    ".join(parts)
 
 
 def print_search_results(
@@ -770,6 +921,7 @@ def print_search_results(
         chunk_storage = calculate_storage(product(chunk_shape))
         shard_storage = calculate_storage(product(shard_shape))
         shard_evenness = calculate_spatial_evenness(dim_lengths, shard_shape, dim_names)
+        chunk_squareness = calculate_spatial_squareness(chunk_shape, dim_names)
         total_shards = count_total_shards(dim_lengths, shard_shape)
 
         print(f"\n#{rank}")
@@ -779,16 +931,23 @@ def print_search_results(
         print(
             f"  Shard: {shard_shape} → {shard_storage.compressed_mb:.2f} MB compressed"
         )
-        print(f"  Total shards: {total_shards:,} | Evenness: {shard_evenness:.3f}")
+        print(
+            f"  Total shards: {total_shards:,} | Evenness: {shard_evenness:.3f} | Squareness: {chunk_squareness:.3f}"
+        )
 
         if rank == 1:
-            print("\n  [RECOMMENDED - Best balance of size and spatial evenness]")
+            print(
+                "\n  [RECOMMENDED - Best balance of size, evenness, and spatial squareness]"
+            )
 
-    print("\n" + "-" * 80)
-    print(
-        "To see detailed diagnostics for a configuration, run with --chunk_shape and --shard_shape"
-    )
-    print("=" * 80 + "\n")
+    # Print command to run top recommendation
+    if candidates:
+        best_chunk, best_shard = candidates[0]
+        print("\n" + "-" * 80)
+        print("Run this command to see detailed analysis of top recommendation:\n")
+        print(build_cli_command(dim_specs, best_chunk, best_shard))
+
+    print("\n" + "=" * 80 + "\n")
 
 
 def parse_shape(shape_str: str, num_dims: int) -> tuple[int, ...]:
@@ -851,7 +1010,25 @@ Examples:
         help="Number of top configurations to show in search mode (default: 5)",
     )
 
+    # Storage parameters
+    parser.add_argument(
+        "--bytes_per_element",
+        type=int,
+        default=DEFAULT_BYTES_PER_ELEMENT,
+        help=f"Bytes per array element (default: {DEFAULT_BYTES_PER_ELEMENT} for float32)",
+    )
+    parser.add_argument(
+        "--compression_ratio",
+        type=float,
+        default=DEFAULT_COMPRESSION_RATIO,
+        help=f"Expected compression ratio (default: {DEFAULT_COMPRESSION_RATIO} = {DEFAULT_COMPRESSION_RATIO * 100:.0f}%%)",
+    )
+
     args = parser.parse_args()
+
+    # Set storage parameters from CLI args
+    STORAGE_PARAMS["bytes_per_element"] = args.bytes_per_element
+    STORAGE_PARAMS["compression_ratio"] = args.compression_ratio
 
     # Collect dimension specs
     dim_specs: list[DimensionSpec] = []
@@ -923,9 +1100,15 @@ Examples:
             shard_evenness = calculate_spatial_evenness(
                 dim_lengths, shard_shape, dim_names
             )
+            chunk_squareness = calculate_spatial_squareness(chunk_shape, dim_names)
+            shard_squareness = calculate_spatial_squareness(shard_shape, dim_names)
 
             return (
-                0.2 * chunk_size_score + 0.2 * shard_size_score + 0.6 * shard_evenness
+                0.15 * chunk_size_score
+                + 0.15 * shard_size_score
+                + 0.35 * shard_evenness
+                + 0.175 * chunk_squareness
+                + 0.175 * shard_squareness
             )
 
         results.sort(key=combined_score, reverse=True)
