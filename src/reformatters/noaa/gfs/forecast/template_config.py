@@ -89,7 +89,9 @@ class NoaaGfsForecastTemplateConfig(NoaaGfsCommonTemplateConfig):
         dim_coords = self.dimension_coordinates()
         append_dim_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
 
-        return [
+        common_coords = super().coords
+
+        forecast_specific_coords = [
             Coordinate(
                 name=self.append_dim,
                 encoding=Encoding(
@@ -126,8 +128,6 @@ class NoaaGfsForecastTemplateConfig(NoaaGfsCommonTemplateConfig):
                     ),
                 ),
             ),
-            self._get_latitude_coord(dim_coords["latitude"]),
-            self._get_longitude_coord(dim_coords["longitude"]),
             Coordinate(
                 name="valid_time",
                 encoding=Encoding(
@@ -186,8 +186,9 @@ class NoaaGfsForecastTemplateConfig(NoaaGfsCommonTemplateConfig):
                     ),
                 ),
             ),
-            self._get_spatial_ref_coord(),
         ]
+
+        return [*forecast_specific_coords, *common_coords]
 
     @computed_field  # type: ignore[prop-decorator]
     @property

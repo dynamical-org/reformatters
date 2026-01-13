@@ -18,80 +18,75 @@ from reformatters.noaa.models import NoaaDataVar, NoaaInternalAttrs
 
 
 class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
-    """Common template configuration for GFS datasets. Subclassed by forecast and analysis datasets."""
+    """Common template configuration for GFS datasets."""
 
-    def _get_latitude_coord(
-        self, lat_values: np.ndarray[tuple[int], np.dtype[np.float64]]
-    ) -> Coordinate:
-        """Return latitude coordinate config."""
-        return Coordinate(
-            name="latitude",
-            encoding=Encoding(
-                dtype="float64",
-                fill_value=np.nan,
-                compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                chunks=len(lat_values),
-                shards=None,
-            ),
-            attrs=CoordinateAttrs(
-                units="degrees_north",
-                statistics_approximate=StatisticsApproximate(
-                    min=float(lat_values.min()),
-                    max=float(lat_values.max()),
+    @property
+    def coords(self) -> Sequence[Coordinate]:
+        dim_coords = self.dimension_coordinates()
+        lat_values = dim_coords["latitude"]
+        lon_values = dim_coords["longitude"]
+
+        return [
+            Coordinate(
+                name="latitude",
+                encoding=Encoding(
+                    dtype="float64",
+                    fill_value=np.nan,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    chunks=len(lat_values),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    units="degrees_north",
+                    statistics_approximate=StatisticsApproximate(
+                        min=float(lat_values.min()),
+                        max=float(lat_values.max()),
+                    ),
                 ),
             ),
-        )
-
-    def _get_longitude_coord(
-        self, lon_values: np.ndarray[tuple[int], np.dtype[np.float64]]
-    ) -> Coordinate:
-        """Return longitude coordinate config."""
-        return Coordinate(
-            name="longitude",
-            encoding=Encoding(
-                dtype="float64",
-                fill_value=np.nan,
-                compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                chunks=len(lon_values),
-                shards=None,
-            ),
-            attrs=CoordinateAttrs(
-                units="degrees_east",
-                statistics_approximate=StatisticsApproximate(
-                    min=float(lon_values.min()),
-                    max=float(lon_values.max()),
+            Coordinate(
+                name="longitude",
+                encoding=Encoding(
+                    dtype="float64",
+                    fill_value=np.nan,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    chunks=len(lon_values),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    units="degrees_east",
+                    statistics_approximate=StatisticsApproximate(
+                        min=float(lon_values.min()),
+                        max=float(lon_values.max()),
+                    ),
                 ),
             ),
-        )
-
-    def _get_spatial_ref_coord(self) -> Coordinate:
-        """Return spatial_ref coordinate config."""
-        return Coordinate(
-            name="spatial_ref",
-            encoding=Encoding(
-                dtype="int64",
-                fill_value=0,
-                chunks=(),  # Scalar coordinate
-                shards=None,
+            Coordinate(
+                name="spatial_ref",
+                encoding=Encoding(
+                    dtype="int64",
+                    fill_value=0,
+                    chunks=(),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    units=None,
+                    statistics_approximate=None,
+                    crs_wkt='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
+                    semi_major_axis=6371229.0,
+                    semi_minor_axis=6371229.0,
+                    inverse_flattening=0.0,
+                    reference_ellipsoid_name="unknown",
+                    longitude_of_prime_meridian=0.0,
+                    prime_meridian_name="Greenwich",
+                    geographic_crs_name="unknown",
+                    horizontal_datum_name="unknown",
+                    grid_mapping_name="latitude_longitude",
+                    spatial_ref='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
+                    comment="This coordinate reference system matches the source data which follows WMO conventions of assuming the earth is a perfect sphere with a radius of 6,371,229m. It is similar to EPSG:4326, but EPSG:4326 uses a more accurate representation of the earth's shape.",
+                ),
             ),
-            attrs=CoordinateAttrs(
-                units=None,
-                statistics_approximate=None,
-                # Deterived by running `ds.rio.write_crs("+proj=longlat +a=6371229 +b=6371229 +no_defs +type=crs")["spatial_ref"].attrs
-                crs_wkt='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
-                semi_major_axis=6371229.0,
-                semi_minor_axis=6371229.0,
-                inverse_flattening=0.0,
-                reference_ellipsoid_name="unknown",
-                longitude_of_prime_meridian=0.0,
-                prime_meridian_name="Greenwich",
-                geographic_crs_name="unknown",
-                horizontal_datum_name="unknown",
-                grid_mapping_name="latitude_longitude",
-                spatial_ref='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
-                comment="This coordinate reference system matches the source data which follows WMO conventions of assuming the earth is a perfect sphere with a radius of 6,371,229m. It is similar to EPSG:4326, but EPSG:4326 uses a more accurate representation of the earth's shape.",
-            ),
-        )
+        ]
 
     def get_data_vars(self, encoding: Encoding) -> Sequence[NoaaDataVar]:
         """Return the data variables for the dataset with the given encoding."""
