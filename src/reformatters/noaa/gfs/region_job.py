@@ -1,7 +1,6 @@
 import warnings
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import TypeVar
 
 import numpy as np
 import pandas as pd
@@ -38,7 +37,7 @@ log = get_logger(__name__)
 
 
 class NoaaGfsSourceFileCoord(SourceFileCoord):
-    """Coordinates of a single source file to process. Common attributes for GFS datasets."""
+    """Coordinates of a single source file to process."""
 
     init_time: Timestamp
     lead_time: Timedelta
@@ -55,11 +54,8 @@ class NoaaGfsSourceFileCoord(SourceFileCoord):
         raise NotImplementedError("Subclasses must implement out_loc()")
 
 
-SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=NoaaGfsSourceFileCoord)
-
-
-class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, SOURCE_FILE_COORD]):
-    """Common RegionJob for GFS datasets. Subclassed by forecast and analysis datasets."""
+class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
+    """Common RegionJob for GFS datasets."""
 
     @classmethod
     def source_groups(
@@ -69,7 +65,7 @@ class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, SOURCE_FILE_COORD]):
         """Return groups of variables that can be downloaded from the same source file."""
         return group_by(data_vars, has_hour_0_values)
 
-    def download_file(self, coord: SOURCE_FILE_COORD) -> Path:
+    def download_file(self, coord: NoaaGfsSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
         # Download grib index file
         idx_url = f"{coord.get_url()}.idx"
@@ -89,7 +85,7 @@ class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, SOURCE_FILE_COORD]):
 
     def read_data(
         self,
-        coord: SOURCE_FILE_COORD,
+        coord: NoaaGfsSourceFileCoord,
         data_var: NoaaDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
@@ -162,7 +158,7 @@ class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, SOURCE_FILE_COORD]):
         append_dim: AppendDim,
         all_data_vars: Sequence[NoaaDataVar],
         reformat_job_name: str,
-    ) -> tuple[Sequence["RegionJob[NoaaDataVar, SOURCE_FILE_COORD]"], xr.Dataset]:
+    ) -> tuple[Sequence["RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]"], xr.Dataset]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset
         from its current state to include the latest available data.

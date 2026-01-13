@@ -95,15 +95,16 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
             return mock_data_path
 
     mock_download.side_effect = mock_download_side_effect
+    # Monkeypatch the parent class's module since download_file is inherited
     monkeypatch.setattr(
-        "reformatters.noaa.gfs.forecast.region_job.http_download_to_disk",
+        "reformatters.noaa.gfs.region_job.http_download_to_disk",
         mock_download,
     )
 
     # Mock parse_grib_index to return some byte ranges
     mock_parse = Mock(return_value=([123456, 234567], [234566, 345678]))
     monkeypatch.setattr(
-        "reformatters.noaa.gfs.forecast.region_job.grib_message_byte_ranges_from_index",
+        "reformatters.noaa.gfs.region_job.grib_message_byte_ranges_from_index",
         mock_parse,
     )
 

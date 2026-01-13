@@ -7,14 +7,27 @@ from reformatters.noaa.gfs.forecast.template_config import NoaaGfsForecastTempla
 from reformatters.noaa.gfs.template_config import NoaaGfsCommonTemplateConfig
 
 
-def test_common_template_config_get_latitude_coord() -> None:
-    """Test that _get_latitude_coord returns correct coordinate config."""
+def test_common_template_config_coords_include_lat_lon_spatial_ref() -> None:
+    """Test that common template coords include latitude, longitude, and spatial_ref."""
+    config = NoaaGfsForecastTemplateConfig()
+
+    common_coords = NoaaGfsCommonTemplateConfig.coords.fget(config)  # type: ignore[attr-defined]
+    coord_names = [c.name for c in common_coords]
+
+    assert "latitude" in coord_names
+    assert "longitude" in coord_names
+    assert "spatial_ref" in coord_names
+    assert len(coord_names) == 3
+
+
+def test_common_template_config_latitude_coord_properties() -> None:
+    """Test latitude coordinate has correct properties."""
     config = NoaaGfsForecastTemplateConfig()
     lat_values = np.flip(np.arange(-90, 90.25, 0.25))
 
-    lat_coord = config._get_latitude_coord(lat_values)
+    common_coords = NoaaGfsCommonTemplateConfig.coords.fget(config)  # type: ignore[attr-defined]
+    lat_coord = next(c for c in common_coords if c.name == "latitude")
 
-    assert lat_coord.name == "latitude"
     assert lat_coord.encoding.dtype == "float64"
     assert lat_coord.encoding.chunks == len(lat_values)
     assert lat_coord.attrs.units == "degrees_north"
@@ -23,14 +36,14 @@ def test_common_template_config_get_latitude_coord() -> None:
     assert lat_coord.attrs.statistics_approximate.max == float(lat_values.max())
 
 
-def test_common_template_config_get_longitude_coord() -> None:
-    """Test that _get_longitude_coord returns correct coordinate config."""
+def test_common_template_config_longitude_coord_properties() -> None:
+    """Test longitude coordinate has correct properties."""
     config = NoaaGfsForecastTemplateConfig()
     lon_values = np.arange(-180, 180, 0.25).astype(np.float64)
 
-    lon_coord = config._get_longitude_coord(lon_values)
+    common_coords = NoaaGfsCommonTemplateConfig.coords.fget(config)  # type: ignore[attr-defined]
+    lon_coord = next(c for c in common_coords if c.name == "longitude")
 
-    assert lon_coord.name == "longitude"
     assert lon_coord.encoding.dtype == "float64"
     assert lon_coord.encoding.chunks == len(lon_values)
     assert lon_coord.attrs.units == "degrees_east"
@@ -39,18 +52,17 @@ def test_common_template_config_get_longitude_coord() -> None:
     assert lon_coord.attrs.statistics_approximate.max == float(lon_values.max())
 
 
-def test_common_template_config_get_spatial_ref_coord() -> None:
-    """Test that _get_spatial_ref_coord returns correct coordinate config."""
+def test_common_template_config_spatial_ref_coord_properties() -> None:
+    """Test spatial_ref coordinate has correct properties."""
     config = NoaaGfsForecastTemplateConfig()
 
-    spatial_ref_coord = config._get_spatial_ref_coord()
+    common_coords = NoaaGfsCommonTemplateConfig.coords.fget(config)  # type: ignore[attr-defined]
+    spatial_ref_coord = next(c for c in common_coords if c.name == "spatial_ref")
 
-    assert spatial_ref_coord.name == "spatial_ref"
     assert spatial_ref_coord.encoding.dtype == "int64"
     assert spatial_ref_coord.encoding.chunks == ()
     assert spatial_ref_coord.attrs.units is None
     assert spatial_ref_coord.attrs.statistics_approximate is None
-    # Check that the coordinate has the expected CRS attributes
     assert spatial_ref_coord.attrs.crs_wkt is not None
     assert "GEOGCS" in spatial_ref_coord.attrs.crs_wkt
     assert spatial_ref_coord.attrs.grid_mapping_name == "latitude_longitude"
@@ -158,18 +170,24 @@ def test_common_template_config_inheritance() -> None:
     assert issubclass(NoaaGfsForecastTemplateConfig, NoaaGfsCommonTemplateConfig)
 
 
-def test_common_template_config_coords_include_common_coords() -> None:
-    """Test that coords property includes latitude, longitude, spatial_ref from common config."""
+def test_forecast_template_config_coords_include_common_coords() -> None:
+    """Test that forecast coords property includes latitude, longitude, spatial_ref from common config."""
     config = NoaaGfsForecastTemplateConfig()
     coords = config.coords
     coord_names = [c.name for c in coords]
 
+    # Should include common coords
     assert "latitude" in coord_names
     assert "longitude" in coord_names
     assert "spatial_ref" in coord_names
 
+    # Should also include forecast-specific coords
+    assert "init_time" in coord_names
+    assert "lead_time" in coord_names
+    assert "valid_time" in coord_names
 
-def test_common_template_config_data_vars_match_forecast() -> None:
+
+def test_forecast_template_config_data_vars_match_common_get_data_vars() -> None:
     """Test that get_data_vars returns same variables as forecast data_vars property."""
     config = NoaaGfsForecastTemplateConfig()
 
