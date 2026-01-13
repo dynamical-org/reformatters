@@ -19,12 +19,10 @@ import argparse
 import asyncio
 import json
 import logging
-import math
 import random
 import sys
 import time
 from collections.abc import Callable, Coroutine
-from itertools import product
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -147,39 +145,6 @@ def create_source_store(uri: str, region: str) -> obstore.store.ObjectStore:
     parsed = urlparse(uri)
     if parsed.scheme == "s3":
         bucket = parsed.netloc
-        # Handle source.coop virtual-hosted style URLs
-        # Format: s3://region.opendata.source.coop/path
-        # Transforms to: https://data.source.coop/path
-        if "source.coop" in bucket:
-            # Use HTTP store for source.coop
-            return obstore.store.HTTPStore.from_url(
-                "https://data.source.coop",
-                client_options={
-                    "connect_timeout": "10 seconds",
-                    "timeout": "120 seconds",
-                },
-            )
-        # Handle other virtual-hosted style URLs
-        # Format: s3://region.bucket/path
-        if "." in bucket:
-            parts = bucket.split(".", 1)
-            first_part = parts[0]
-            # Check if first part looks like a region (starts with us-, eu-, ap-, etc.)
-            if first_part.startswith(("us-", "eu-", "ap-", "sa-", "ca-", "me-", "af-")):
-                actual_region = first_part
-                actual_bucket = parts[1] if len(parts) > 1 else bucket
-                base_url = f"s3://{actual_bucket}"
-                store = obstore.store.S3Store.from_url(
-                    base_url,
-                    region=actual_region,
-                    skip_signature=True,
-                    client_options={
-                        "connect_timeout": "10 seconds",
-                        "timeout": "120 seconds",
-                    },
-                )
-                return store
-        # Standard S3 URL
         store = obstore.store.S3Store.from_url(
             f"s3://{bucket}",
             region=region,
@@ -190,15 +155,6 @@ def create_source_store(uri: str, region: str) -> obstore.store.ObjectStore:
             },
         )
         return store
-    elif parsed.scheme in ("http", "https"):
-        base_url = f"{parsed.scheme}://{parsed.netloc}"
-        return obstore.store.HTTPStore.from_url(
-            base_url,
-            client_options={
-                "connect_timeout": "10 seconds",
-                "timeout": "120 seconds",
-            },
-        )
     elif parsed.scheme == "file" or not parsed.scheme:
         return obstore.store.LocalStore.from_url(uri)
     else:
@@ -208,13 +164,6 @@ def create_source_store(uri: str, region: str) -> obstore.store.ObjectStore:
 def get_source_path(uri: str) -> str:
     """Extract the path from the source URI."""
     parsed = urlparse(uri)
-    if parsed.scheme == "s3":
-        bucket = parsed.netloc
-        # Handle source.coop URLs - path is: /dynamical/dataset/path
-        if "source.coop" in bucket:
-            return parsed.path.lstrip("/")
-        # Just return the path portion, stripping leading slash
-        return parsed.path.lstrip("/")
     return parsed.path.lstrip("/")
 
 
@@ -337,42 +286,11 @@ def mode_init(args: argparse.Namespace) -> None:
                 except Exception as e:  # noqa: BLE001
                     log.warning(f"Could not copy coordinate data for {var_name}: {e}")
 
-    conflict_solver = BasicConflictSolver(on_chunk_conflict=VersionSelection.UseOurs)
+    conflict_solver = BasicConflictSolver(on_chunk_conflict=VersionSelection.Fail)
     snapshot_id = session.commit(
         "Initial metadata import from Zarr V3", rebase_with=conflict_solver
     )
     log.info(f"Initial commit successful. Snapshot ID: {snapshot_id}")
-
-
-def compute_shard_keys_from_metadata(
-    root_metadata: dict[str, Any], variable: str
-) -> list[str]:
-    """Compute expected shard keys from zarr metadata."""
-    consolidated = root_metadata.get("consolidated_metadata", {})
-    var_metadata = consolidated.get("metadata", {}).get(variable, {})
-
-    if not var_metadata:
-        return []
-
-    shape = var_metadata.get("shape", [])
-    chunk_config = var_metadata.get("chunk_grid", {}).get("configuration", {})
-    chunk_shape = chunk_config.get("chunk_shape", [])
-
-    if not shape or not chunk_shape:
-        return []
-
-    # Compute the number of shards in each dimension
-    num_shards = [math.ceil(s / c) for s, c in zip(shape, chunk_shape, strict=True)]
-
-    # Generate all shard coordinate tuples
-    shard_coords = list(product(*[range(n) for n in num_shards]))
-
-    # Convert to shard keys: variable/c/i/j/k
-    shard_keys = [
-        f"{variable}/c/" + "/".join(str(c) for c in coords) for coords in shard_coords
-    ]
-
-    return shard_keys
 
 
 async def migrate_variable_async(
@@ -382,27 +300,17 @@ async def migrate_variable_async(
     variable: str,
     limit_shards: int | None,
     concurrency: int,
-    root_metadata: dict[str, Any] | None = None,
 ) -> int:
     """Migrate chunks for a specific variable asynchronously."""
     semaphore = asyncio.Semaphore(concurrency)
     var_prefix = f"{source_path}/{variable}/c/" if source_path else f"{variable}/c/"
 
-    # First try to list chunks (works for S3 stores)
     log.info(f"Listing chunks under {var_prefix}")
     all_keys = await list_source_keys_async(source_store, var_prefix)
-    log.info(f"Found {len(all_keys)} chunk keys via listing")
-
-    # If no keys found via listing and we have metadata, compute from metadata
-    if not all_keys and root_metadata:
-        log.info("Computing shard keys from metadata...")
-        computed_keys = compute_shard_keys_from_metadata(root_metadata, variable)
-        all_keys = [f"{source_path}/{k}" if source_path else k for k in computed_keys]
-        log.info(f"Computed {len(all_keys)} shard keys from metadata")
+    log.info(f"Found {len(all_keys)} chunk keys")
 
     if not all_keys:
-        log.warning(f"No chunks found for variable {variable}")
-        return 0
+        raise RuntimeError(f"No chunks found for variable {variable}")
 
     # For sharded zarr, each computed key is a shard
     if limit_shards is not None and limit_shards < len(all_keys):
@@ -457,12 +365,6 @@ def mode_migrate(args: argparse.Namespace) -> None:
     source_store = create_source_store(args.source, args.source_region)
     source_path = get_source_path(args.source)
 
-    # Read root metadata to compute chunk keys for HTTP stores
-    root_zarr_path = f"{source_path}/zarr.json" if source_path else "zarr.json"
-    log.info(f"Reading root metadata from {root_zarr_path}")
-    root_metadata_bytes = read_source_file(source_store, root_zarr_path)
-    root_metadata: dict[str, Any] = json.loads(root_metadata_bytes)
-
     dest_storage = create_icechunk_storage(args.dest, args.dest_region)
 
     repo = icechunk.Repository.open(dest_storage)
@@ -477,16 +379,13 @@ def mode_migrate(args: argparse.Namespace) -> None:
             variable=args.variable,
             limit_shards=args.limit_shards,
             concurrency=args.concurrency,
-            root_metadata=root_metadata,
         )
     )
 
     log.info(f"Copied {chunks_copied} chunks for variable {args.variable}")
 
     if chunks_copied > 0:
-        conflict_solver = BasicConflictSolver(
-            on_chunk_conflict=VersionSelection.UseOurs
-        )
+        conflict_solver = BasicConflictSolver(on_chunk_conflict=VersionSelection.Fail)
         snapshot_id: str = retry_with_backoff(
             lambda: session.commit(
                 f"Migrated variable {args.variable}",
