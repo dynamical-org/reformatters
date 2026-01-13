@@ -4,17 +4,16 @@ from datetime import timedelta
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.noaa.gfs.region_job import NoaaGfsSourceFileCoord
 from reformatters.noaa.models import NoaaDataVar
 
-from .region_job import NoaaGfsForecastRegionJob, NoaaGfsForecastSourceFileCoord
+from .region_job import NoaaGfsForecastRegionJob
 from .template_config import NoaaGfsForecastTemplateConfig
 
 
-class NoaaGfsForecastDataset(
-    DynamicalDataset[NoaaDataVar, NoaaGfsForecastSourceFileCoord]
-):
+class NoaaGfsForecastDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoord]):
     template_config: NoaaGfsForecastTemplateConfig = NoaaGfsForecastTemplateConfig()
-    region_job_class: type[NoaaGfsForecastRegionJob] = NoaaGfsForecastRegionJob  # type: ignore[assignment]
+    region_job_class: type[NoaaGfsForecastRegionJob] = NoaaGfsForecastRegionJob
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
