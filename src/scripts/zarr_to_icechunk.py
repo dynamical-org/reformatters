@@ -10,7 +10,7 @@ A single-file script for migrating Zarr V3 datasets to Icechunk with support for
 Usage:
     python zarr_to_icechunk.py --mode init --source <uri> --dest <uri>
     python zarr_to_icechunk.py --mode migrate --source <uri> --dest <uri> --variable <path>
-    python zarr_to_icechunk.py --mode generate-k8s --source <uri> --dest <uri> --variable <path>
+    python zarr_to_icechunk.py --mode generate-k8s --source <uri> --dest <uri> [--limit-variables <n>]
 """
 
 from __future__ import annotations
@@ -34,6 +34,8 @@ import zarr.buffer
 from icechunk import BasicConflictSolver, VersionSelection
 from zarr.storage import ObjectStore
 
+from reformatters.common.kubernetes import load_secret
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -42,6 +44,7 @@ log = logging.getLogger(__name__)
 
 DEFAULT_CONCURRENCY = 16
 MAX_RETRY_ATTEMPTS = 6
+SECRET_NAME = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
 
 
 def parse_args() -> argparse.Namespace:
@@ -68,13 +71,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--variable",
         type=str,
-        help="Variable path to migrate (for migrate/generate-k8s modes)",
+        help="Variable path to migrate (for migrate mode, optional for generate-k8s)",
     )
     parser.add_argument(
         "--limit-shards",
         type=int,
         default=None,
         help="Limit number of shards to process (for testing)",
+    )
+    parser.add_argument(
+        "--limit-variables",
+        type=int,
+        default=None,
+        help="Limit number of variables to process (for generate-k8s mode, default: all)",
     )
     parser.add_argument(
         "--concurrency",
@@ -87,12 +96,6 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="us-west-2",
         help="AWS region for source S3 bucket",
-    )
-    parser.add_argument(
-        "--dest-region",
-        type=str,
-        default="us-west-2",
-        help="AWS region for destination S3 bucket",
     )
     return parser.parse_args()
 
@@ -172,16 +175,20 @@ def get_source_path(uri: str) -> str:
     return parsed.path.lstrip("/")
 
 
-def create_icechunk_storage(uri: str, region: str) -> icechunk.Storage:
+def create_icechunk_storage(
+    uri: str, storage_options: dict[str, Any] | None = None
+) -> icechunk.Storage:
     """Create Icechunk storage for the destination."""
     parsed = urlparse(uri)
     if parsed.scheme == "s3":
         bucket = parsed.netloc
         prefix = parsed.path.lstrip("/")
+        if storage_options is None:
+            storage_options = load_secret(SECRET_NAME)
         return icechunk.s3_storage(
             bucket=bucket,
             prefix=prefix,
-            region=region,
+            **storage_options,
         )
     elif parsed.scheme == "file" or not parsed.scheme:
         path = parsed.path if parsed.path else uri
@@ -224,6 +231,34 @@ async def list_source_keys_async(
     return keys
 
 
+def discover_data_variables(source_uri: str, source_region: str) -> list[str]:
+    """Discover data variables from source zarr, excluding coordinates."""
+    parsed = urlparse(source_uri)
+    if parsed.scheme == "s3":
+        zarr_store = ObjectStore(
+            obstore.store.S3Store.from_url(
+                source_uri,
+                region=source_region,
+                skip_signature=True,
+                client_options={
+                    "connect_timeout": "10 seconds",
+                    "timeout": "120 seconds",
+                },
+            )
+        )
+    elif parsed.scheme == "file" or not parsed.scheme:
+        zarr_store = source_uri  # type: ignore[assignment]
+    else:
+        raise ValueError(f"Unsupported URI scheme: {parsed.scheme}")
+
+    source_ds = xr.open_zarr(zarr_store, chunks=None)
+    coord_names = set(source_ds.coords.keys())
+    data_vars = sorted(source_ds.data_vars.keys())
+    variables = [v for v in data_vars if v not in coord_names]
+    source_ds.close()
+    return variables
+
+
 def mode_init(args: argparse.Namespace) -> None:  # noqa: PLR0915
     """Initialize Icechunk repository and copy metadata."""
     assert args.source is not None
@@ -261,7 +296,11 @@ def mode_init(args: argparse.Namespace) -> None:  # noqa: PLR0915
     log.info(f"Identified coordinates: {sorted(coord_names)}")
     source_ds.close()
 
-    dest_storage = create_icechunk_storage(args.dest, args.dest_region)
+    dest_parsed = urlparse(args.dest)
+    storage_options = None
+    if dest_parsed.scheme == "s3":
+        storage_options = load_secret(SECRET_NAME)
+    dest_storage = create_icechunk_storage(args.dest, storage_options)
 
     repo = icechunk.Repository.open_or_create(dest_storage)
     session = repo.writable_session("main")
@@ -405,7 +444,11 @@ def mode_migrate(args: argparse.Namespace) -> None:
     source_store = create_source_store(args.source, args.source_region)
     source_path = get_source_path(args.source)
 
-    dest_storage = create_icechunk_storage(args.dest, args.dest_region)
+    dest_parsed = urlparse(args.dest)
+    storage_options = None
+    if dest_parsed.scheme == "s3":
+        storage_options = load_secret(SECRET_NAME)
+    dest_storage = create_icechunk_storage(args.dest, storage_options)
 
     repo = icechunk.Repository.open(dest_storage)
     session = repo.writable_session("main")
@@ -438,49 +481,135 @@ def mode_migrate(args: argparse.Namespace) -> None:
 
 
 def mode_generate_k8s(args: argparse.Namespace) -> None:
-    """Generate Kubernetes Job JSON for migration."""
+    """Generate Kubernetes Indexed Job JSON for migration."""
     assert args.source is not None
     assert args.dest is not None
-    assert args.variable is not None
+
+    log.info("Discovering data variables from source zarr")
+    variables = discover_data_variables(args.source, args.source_region)
+    log.info(f"Found {len(variables)} data variables")
+
+    if args.limit_variables is not None and args.limit_variables < len(variables):
+        variables = variables[: args.limit_variables]
+        log.info(f"Limited to {len(variables)} variables")
+
+    if not variables:
+        log.error("No data variables found in source zarr")
+        sys.exit(1)
+
+    num_variables = len(variables)
+    parallelism = min(100, num_variables)
+    max_failed_indexes = min(100, max(min(5, num_variables), num_variables // 8))
 
     script_path = Path(__file__)
     script_content = script_path.read_text()
 
     script_escaped = script_content.replace("'", "'\"'\"'")
 
-    migrate_cmd = (
-        f"python3 /tmp/migrate.py "
-        f"--mode migrate "
-        f"--source '{args.source}' "
-        f"--dest '{args.dest}' "
-        f"--variable '{args.variable}' "
-        f"--source-region '{args.source_region}' "
-        f"--dest-region '{args.dest_region}' "
-        f"--concurrency {args.concurrency}"
-    )
-
-    if args.limit_shards is not None:
-        migrate_cmd += f" --limit-shards {args.limit_shards}"
-
     bootstrap_script = f"""#!/bin/bash
 set -e
-pip install obstore icechunk
+pip install obstore icechunk xarray zarr
 
 cat > /tmp/migrate.py << 'SCRIPT_EOF'
 {script_escaped}
 SCRIPT_EOF
 
-{migrate_cmd}
+python3 << 'PYTHON_SCRIPT'
+import sys
+import os
+from urllib.parse import urlparse
+import xarray as xr
+from zarr.storage import ObjectStore
+import obstore
+
+source_uri = '{args.source}'
+source_region = '{args.source_region}'
+worker_index = int(os.environ.get('WORKER_INDEX', '0'))
+
+parsed = urlparse(source_uri)
+if parsed.scheme == "s3":
+    zarr_store = ObjectStore(
+        obstore.store.S3Store.from_url(
+            source_uri,
+            region=source_region,
+            skip_signature=True,
+            client_options={{
+                "connect_timeout": "10 seconds",
+                "timeout": "120 seconds",
+            }},
+        )
+    )
+elif parsed.scheme == "file" or not parsed.scheme:
+    zarr_store = source_uri
+else:
+    raise ValueError(f"Unsupported URI scheme: {{parsed.scheme}}")
+
+source_ds = xr.open_zarr(zarr_store, chunks=None)
+coord_names = set(source_ds.coords.keys())
+data_vars = sorted([v for v in source_ds.data_vars.keys()])
+variables = [v for v in data_vars if v not in coord_names]
+source_ds.close()
+
+if worker_index >= len(variables):
+    print(f"ERROR: Worker index {{worker_index}} >= number of variables {{len(variables)}}", file=sys.stderr)
+    sys.exit(1)
+
+selected_variable = variables[worker_index]
+print(f"Worker {{worker_index}} processing variable: {{selected_variable}}")
+
+migrate_cmd = (
+    f"python3 /tmp/migrate.py "
+    f"--mode migrate "
+    f"--source '{args.source}' "
+    f"--dest '{args.dest}' "
+    f"--variable '{{selected_variable}}' "
+    f"--source-region '{args.source_region}' "
+    f"--concurrency {args.concurrency}"
+)
 """
 
-    job_name = f"zarr-icechunk-migrate-{args.variable.replace('/', '-').replace('_', '-')[:40]}"
+    if args.limit_shards is not None:
+        bootstrap_script += f"""
+if True:
+    migrate_cmd += f" --limit-shards {args.limit_shards}"
+"""
+    else:
+        bootstrap_script += """
+if False:
+    pass
+"""
+
+    bootstrap_script += """
+os.system(migrate_cmd)
+PYTHON_SCRIPT
+"""
+
+    job_name = "zarr-icechunk-migrate"
 
     job_spec: dict[str, Any] = {
         "apiVersion": "batch/v1",
         "kind": "Job",
         "metadata": {"name": job_name},
         "spec": {
-            "backoffLimit": 3,
+            "backoffLimitPerIndex": 5,
+            "completionMode": "Indexed",
+            "completions": num_variables,
+            "maxFailedIndexes": max_failed_indexes,
+            "parallelism": parallelism,
+            "podFailurePolicy": {
+                "rules": [
+                    {
+                        "action": "Ignore",
+                        "onPodConditions": [
+                            {"type": "DisruptionTarget", "status": "True"}
+                        ],
+                    },
+                    {
+                        "action": "FailJob",
+                        "onPodConditions": [{"type": "ConfigIssue", "status": "True"}],
+                    },
+                ]
+            },
             "template": {
                 "spec": {
                     "containers": [
@@ -490,20 +619,42 @@ SCRIPT_EOF
                             "command": ["/bin/bash", "-c", bootstrap_script],
                             "resources": {
                                 "requests": {
-                                    "cpu": "8",
-                                    "memory": "32Gi",
+                                    "cpu": "7",
+                                    "memory": "30G",
                                 },
                                 "limits": {
-                                    "cpu": "8",
-                                    "memory": "32Gi",
+                                    "cpu": "10",
+                                    "memory": "33G",
                                 },
                             },
                             "env": [
                                 {"name": "PYTHONUNBUFFERED", "value": "1"},
+                                {
+                                    "name": "WORKER_INDEX",
+                                    "valueFrom": {
+                                        "fieldRef": {
+                                            "fieldPath": "metadata.annotations['batch.kubernetes.io/job-completion-index']"
+                                        }
+                                    },
+                                },
+                            ],
+                            "volumeMounts": [
+                                {
+                                    "name": SECRET_NAME,
+                                    "mountPath": f"/secrets/{SECRET_NAME}.json",
+                                    "subPath": "contents",
+                                    "readOnly": True,
+                                }
                             ],
                         }
                     ],
                     "restartPolicy": "Never",
+                    "volumes": [
+                        {
+                            "name": SECRET_NAME,
+                            "secret": {"secretName": SECRET_NAME},
+                        }
+                    ],
                 }
             },
             "ttlSecondsAfterFinished": 86400,
@@ -527,10 +678,8 @@ def main() -> None:
             sys.exit(1)
         mode_migrate(args)
     elif args.mode == "generate-k8s":
-        if not args.source or not args.dest or not args.variable:
-            log.error(
-                "--source, --dest, and --variable are required for generate-k8s mode"
-            )
+        if not args.source or not args.dest:
+            log.error("--source and --dest are required for generate-k8s mode")
             sys.exit(1)
         mode_generate_k8s(args)
     else:
