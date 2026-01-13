@@ -40,9 +40,8 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-DEFAULT_CONCURRENCY = 5
+DEFAULT_CONCURRENCY = 16
 MAX_RETRY_ATTEMPTS = 6
-CHUNK_SIZE_LIMIT_MB = 500
 
 
 def parse_args() -> argparse.Namespace:
@@ -505,9 +504,6 @@ SCRIPT_EOF
                         }
                     ],
                     "restartPolicy": "Never",
-                    "nodeSelector": {
-                        "eks.amazonaws.com/compute-type": "auto",
-                    },
                 }
             },
             "ttlSecondsAfterFinished": 86400,
