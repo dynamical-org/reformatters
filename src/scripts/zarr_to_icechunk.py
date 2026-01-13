@@ -29,8 +29,10 @@ from urllib.parse import urlparse
 
 import icechunk
 import obstore
+import xarray as xr
 import zarr.buffer
 from icechunk import BasicConflictSolver, VersionSelection
+from zarr.storage import ObjectStore
 
 logging.basicConfig(
     level=logging.INFO,
@@ -106,6 +108,8 @@ def retry_with_backoff[T](
     for attempt in range(max_attempts):
         try:
             return func()
+        except FileNotFoundError:
+            raise
         except Exception as e:  # noqa: BLE001
             last_exception = e
             if attempt < max_attempts - 1:
@@ -128,6 +132,8 @@ async def retry_with_backoff_async[T](
     for attempt in range(max_attempts):
         try:
             return await coro_func()
+        except FileNotFoundError:
+            raise
         except Exception as e:  # noqa: BLE001
             last_exception = e
             if attempt < max_attempts - 1:
@@ -219,7 +225,7 @@ async def list_source_keys_async(
     return keys
 
 
-def mode_init(args: argparse.Namespace) -> None:
+def mode_init(args: argparse.Namespace) -> None:  # noqa: PLR0915
     """Initialize Icechunk repository and copy metadata."""
     assert args.source is not None
     assert args.dest is not None
@@ -229,6 +235,32 @@ def mode_init(args: argparse.Namespace) -> None:
 
     source_store = create_source_store(args.source, args.source_region)
     source_path = get_source_path(args.source)
+
+    # Open source zarr with xarray to identify coordinates
+    log.info("Opening source zarr with xarray to identify coordinates")
+    parsed = urlparse(args.source)
+    if parsed.scheme == "s3":
+        # Create store from full URI (including path) for xarray
+        zarr_store = ObjectStore(
+            obstore.store.S3Store.from_url(
+                args.source,
+                region=args.source_region,
+                skip_signature=True,
+                client_options={
+                    "connect_timeout": "10 seconds",
+                    "timeout": "120 seconds",
+                },
+            )
+        )
+    elif parsed.scheme == "file" or not parsed.scheme:
+        zarr_store = args.source
+    else:
+        raise ValueError(f"Unsupported URI scheme: {parsed.scheme}")
+
+    source_ds = xr.open_zarr(zarr_store, chunks=None)
+    coord_names = set(source_ds.coords.keys())
+    log.info(f"Identified coordinates: {sorted(coord_names)}")
+    source_ds.close()
 
     dest_storage = create_icechunk_storage(args.dest, args.dest_region)
 
@@ -259,32 +291,41 @@ def mode_init(args: argparse.Namespace) -> None:
         asyncio.run(icechunk_store.set(key, var_buffer))
         log.info(f"Wrote {key} to Icechunk")
 
-        if var_metadata.get("node_type") == "array":
-            shape = var_metadata.get("shape", [])
-            chunk_config = var_metadata.get("chunk_grid", {}).get("configuration", {})
-            chunk_shape = chunk_config.get("chunk_shape", [])
-
-            if not shape or not chunk_shape:
-                continue
-
-            is_coordinate = len(shape) == 1 and shape == chunk_shape
-            if is_coordinate:
-                coord_data_path = (
-                    f"{source_path}/{var_name}/c/0"
-                    if source_path
-                    else f"{var_name}/c/0"
-                )
-                try:
-                    coord_data = read_source_file(source_store, coord_data_path)
-                    coord_buffer = (
-                        zarr.buffer.default_buffer_prototype().buffer.from_bytes(
-                            coord_data
-                        )
+        # Copy coordinate data if this is a coordinate
+        if var_name in coord_names and var_metadata.get("node_type") == "array":
+            coord_chunks_prefix = (
+                f"{source_path}/{var_name}/c/" if source_path else f"{var_name}/c/"
+            )
+            try:
+                chunk_keys = list_source_keys(source_store, coord_chunks_prefix)
+                if not chunk_keys:
+                    log.warning(f"No chunk files found for coordinate {var_name}")
+                if len(chunk_keys) > 1:
+                    raise RuntimeError(
+                        f"Expected exactly one chunk for coords, found {len(chunk_keys)} for {var_name}"
                     )
-                    asyncio.run(icechunk_store.set(f"{var_name}/c/0", coord_buffer))
-                    log.info(f"Copied coordinate data for {var_name}")
-                except Exception as e:  # noqa: BLE001
-                    log.warning(f"Could not copy coordinate data for {var_name}: {e}")
+                else:
+                    for chunk_key in chunk_keys:
+                        # Remove source_path prefix to get relative path
+                        dest_key = (
+                            chunk_key.removeprefix(source_path + "/")
+                            if source_path
+                            else chunk_key
+                        )
+                        coord_data = read_source_file(source_store, chunk_key)
+                        coord_buffer = (
+                            zarr.buffer.default_buffer_prototype().buffer.from_bytes(
+                                coord_data
+                            )
+                        )
+                        asyncio.run(icechunk_store.set(dest_key, coord_buffer))
+                    log.info(
+                        f"Copied {len(chunk_keys)} chunk(s) for coordinate {var_name}"
+                    )
+            except FileNotFoundError:
+                log.warning(f"Coordinate data not found for {var_name}")
+            except Exception as e:  # noqa: BLE001
+                log.warning(f"Could not copy coordinate data for {var_name}: {e}")
 
     conflict_solver = BasicConflictSolver(on_chunk_conflict=VersionSelection.Fail)
     snapshot_id = session.commit(
