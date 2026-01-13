@@ -17,9 +17,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import json
 import logging
+import os
 import random
+import string
 import sys
 import time
 from collections.abc import Callable, Coroutine
@@ -27,14 +30,18 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+try:
+    from kubernetes import client, config  # type: ignore[import-untyped]
+except ImportError:
+    client = None  # type: ignore[assignment,unused-ignore]
+    config = None  # type: ignore[assignment,unused-ignore]
+
 import icechunk
 import obstore
 import xarray as xr
 import zarr.buffer
 from icechunk import BasicConflictSolver, VersionSelection
 from zarr.storage import ObjectStore
-
-from reformatters.common.kubernetes import load_secret
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,6 +52,52 @@ log = logging.getLogger(__name__)
 DEFAULT_CONCURRENCY = 16
 MAX_RETRY_ATTEMPTS = 6
 SECRET_NAME = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+_SECRET_MOUNT_PATH = "/secrets"  # noqa: S105
+_SECRET_CONTENTS_KEY = "contents"  # noqa: S105
+
+
+def _load_secret_from_kubernetes_api(
+    secret_name: str,
+) -> dict[str, Any]:
+    """Load secret directly from kubernetes API (for local development)."""
+    if config is None or client is None:
+        raise ImportError(
+            "kubernetes package is required for loading secrets from API. "
+            "Install with: pip install kubernetes"
+        )
+    config.load_kube_config()
+    v1 = client.CoreV1Api()
+    secret = v1.read_namespaced_secret(secret_name, "default")
+    assert isinstance(secret.data, dict)
+    contents_json = base64.b64decode(secret.data[_SECRET_CONTENTS_KEY]).decode("utf-8")
+    contents = json.loads(contents_json)
+    assert isinstance(contents, dict)
+    return contents
+
+
+def load_secret(secret_name: str) -> dict[str, Any]:
+    """
+    Load a secret from kubernetes, either from mounted file or directly from kubernetes API.
+
+    When running in a pod, loads from mounted secret file.
+    When running locally, falls back to kubernetes API if file not found.
+    """
+    secret_file = Path(_SECRET_MOUNT_PATH) / f"{secret_name}.json"
+
+    if not secret_file.exists():
+        if os.getenv("JOB_NAME") is not None:
+            # We're in a cluster, the secret should be mounted at the expected path
+            raise FileNotFoundError(
+                f"Secret file {secret_file} not found in production job"
+            )
+        else:
+            # Local case, e.g. to support init mode writing the zarr metadata
+            return _load_secret_from_kubernetes_api(secret_name)
+
+    with open(secret_file) as f:
+        contents = json.load(f)
+        assert isinstance(contents, dict)
+        return contents
 
 
 def parse_args() -> argparse.Namespace:
@@ -502,17 +555,14 @@ def mode_generate_k8s(args: argparse.Namespace) -> None:
     max_failed_indexes = min(100, max(min(5, num_variables), num_variables // 8))
 
     script_path = Path(__file__)
-    script_content = script_path.read_text()
-
-    script_escaped = script_content.replace("'", "'\"'\"'")
+    script_content = script_path.read_bytes()
+    script_b64 = base64.b64encode(script_content).decode("ascii")
 
     bootstrap_script = f"""#!/bin/bash
 set -e
 pip install obstore icechunk xarray zarr
 
-cat > /tmp/migrate.py << 'SCRIPT_EOF'
-{script_escaped}
-SCRIPT_EOF
+echo '{script_b64}' | base64 -d > /tmp/migrate.py
 
 python3 << 'PYTHON_SCRIPT'
 import sys
@@ -584,7 +634,16 @@ os.system(migrate_cmd)
 PYTHON_SCRIPT
 """
 
-    job_name = "zarr-icechunk-migrate"
+    dest_parsed = urlparse(args.dest)
+    dest_path_parts = [p for p in dest_parsed.path.strip("/").split("/") if p]
+    if len(dest_path_parts) >= 2:
+        base_name = f"zarr-to-icechunk-{dest_path_parts[-2]}"
+    else:
+        base_name = "zarr-to-icechunk"
+    random_chars = "".join(
+        random.choices(string.ascii_lowercase + string.digits, k=2)  # noqa: S311
+    )
+    job_name = f"{base_name}-{random_chars}"
 
     job_spec: dict[str, Any] = {
         "apiVersion": "batch/v1",
