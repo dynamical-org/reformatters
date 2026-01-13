@@ -47,9 +47,7 @@ class NoaaGfsForecastTemplateConfig(NoaaGfsCommonTemplateConfig):
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
-        """
-        Returns a dictionary of dimension names to coordinates for the dataset.
-        """
+        """Returns a dictionary of dimension names to coordinates for the dataset."""
         return {
             self.append_dim: self.append_dim_coordinates(
                 self.append_dim_start + self.append_dim_frequency
@@ -59,8 +57,7 @@ class NoaaGfsForecastTemplateConfig(NoaaGfsCommonTemplateConfig):
                     pd.timedelta_range("123h", "384h", freq="3h")
                 )
             ),
-            "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
-            "longitude": np.arange(-180, 180, 0.25),
+            **self._latitude_longitude_coordinates(),
         }
 
     def derive_coordinates(

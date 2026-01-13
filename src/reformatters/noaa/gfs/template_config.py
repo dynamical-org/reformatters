@@ -20,9 +20,15 @@ from reformatters.noaa.models import NoaaDataVar, NoaaInternalAttrs
 class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
     """Common template configuration for GFS datasets."""
 
+    def _latitude_longitude_coordinates(self) -> dict[str, np.ndarray]:
+        return {
+            "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
+            "longitude": np.arange(-180, 180, 0.25),
+        }
+
     @property
     def coords(self) -> Sequence[Coordinate]:
-        dim_coords = self.dimension_coordinates()
+        dim_coords = self._latitude_longitude_coordinates()
 
         return [
             Coordinate(
