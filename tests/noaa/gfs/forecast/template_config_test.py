@@ -102,12 +102,12 @@ def test_coords_property_order_and_names() -> None:
     cfg = NoaaGfsForecastTemplateConfig()
     names = [c.name for c in cfg.coords]
     assert names == [
+        "latitude",
+        "longitude",
+        "spatial_ref",
         "init_time",
         "lead_time",
         "valid_time",
         "ingested_forecast_length",
         "expected_forecast_length",
-        "latitude",
-        "longitude",
-        "spatial_ref",
     ]

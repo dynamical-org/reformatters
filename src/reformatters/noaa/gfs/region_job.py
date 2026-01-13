@@ -1,7 +1,6 @@
 import warnings
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Generic, TypeVar
 
 import numpy as np
 import pandas as pd
@@ -55,12 +54,7 @@ class NoaaGfsSourceFileCoord(SourceFileCoord):
         raise NotImplementedError("Subclasses must implement out_loc()")
 
 
-SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=NoaaGfsSourceFileCoord)
-
-
-class NoaaGfsCommonRegionJob(
-    RegionJob[NoaaDataVar, SOURCE_FILE_COORD], Generic[SOURCE_FILE_COORD]
-):
+class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
     """Common RegionJob for GFS datasets."""
 
     @classmethod
@@ -71,7 +65,7 @@ class NoaaGfsCommonRegionJob(
         """Return groups of variables that can be downloaded from the same source file."""
         return group_by(data_vars, has_hour_0_values)
 
-    def download_file(self, coord: SOURCE_FILE_COORD) -> Path:
+    def download_file(self, coord: NoaaGfsSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
         # Download grib index file
         idx_url = f"{coord.get_url()}.idx"
@@ -91,7 +85,7 @@ class NoaaGfsCommonRegionJob(
 
     def read_data(
         self,
-        coord: SOURCE_FILE_COORD,
+        coord: NoaaGfsSourceFileCoord,
         data_var: NoaaDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
@@ -164,7 +158,7 @@ class NoaaGfsCommonRegionJob(
         append_dim: AppendDim,
         all_data_vars: Sequence[NoaaDataVar],
         reformat_job_name: str,
-    ) -> tuple[Sequence["NoaaGfsCommonRegionJob[SOURCE_FILE_COORD]"], xr.Dataset]:
+    ) -> tuple[Sequence["RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]"], xr.Dataset]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset
         from its current state to include the latest available data.
@@ -184,4 +178,4 @@ class NoaaGfsCommonRegionJob(
             reformat_job_name=reformat_job_name,
             filter_start=append_dim_start,
         )
-        return jobs, template_ds  # type: ignore[return-value]
+        return jobs, template_ds

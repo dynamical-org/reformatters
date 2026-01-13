@@ -91,7 +91,8 @@ class NoaaGfsForecastTemplateConfig(NoaaGfsCommonTemplateConfig):
 
         common_coords = super().coords
 
-        forecast_specific_coords = [
+        return [
+            *common_coords,
             Coordinate(
                 name=self.append_dim,
                 encoding=Encoding(
@@ -187,8 +188,6 @@ class NoaaGfsForecastTemplateConfig(NoaaGfsCommonTemplateConfig):
                 ),
             ),
         ]
-
-        return [*forecast_specific_coords, *common_coords]
 
     @computed_field  # type: ignore[prop-decorator]
     @property

@@ -26,7 +26,7 @@ class NoaaGfsForecastSourceFileCoord(NoaaGfsSourceFileCoord):
         return {"init_time": self.init_time, "lead_time": self.lead_time}
 
 
-class NoaaGfsForecastRegionJob(NoaaGfsCommonRegionJob[NoaaGfsForecastSourceFileCoord]):
+class NoaaGfsForecastRegionJob(NoaaGfsCommonRegionJob):
     def generate_source_file_coords(
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[NoaaDataVar]
     ) -> Sequence[NoaaGfsForecastSourceFileCoord]:

@@ -14,7 +14,7 @@ class NoaaGfsForecastDataset(
     DynamicalDataset[NoaaDataVar, NoaaGfsForecastSourceFileCoord]
 ):
     template_config: NoaaGfsForecastTemplateConfig = NoaaGfsForecastTemplateConfig()
-    region_job_class: type[NoaaGfsForecastRegionJob] = NoaaGfsForecastRegionJob
+    region_job_class: type[NoaaGfsForecastRegionJob] = NoaaGfsForecastRegionJob  # type: ignore[assignment]
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""

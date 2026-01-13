@@ -23,8 +23,6 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
     @property
     def coords(self) -> Sequence[Coordinate]:
         dim_coords = self.dimension_coordinates()
-        lat_values = dim_coords["latitude"]
-        lon_values = dim_coords["longitude"]
 
         return [
             Coordinate(
@@ -33,14 +31,14 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                     dtype="float64",
                     fill_value=np.nan,
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    chunks=len(lat_values),
+                    chunks=len(dim_coords["latitude"]),
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
                     units="degrees_north",
                     statistics_approximate=StatisticsApproximate(
-                        min=float(lat_values.min()),
-                        max=float(lat_values.max()),
+                        min=float(dim_coords["latitude"].min()),
+                        max=float(dim_coords["latitude"].max()),
                     ),
                 ),
             ),
@@ -50,14 +48,14 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                     dtype="float64",
                     fill_value=np.nan,
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    chunks=len(lon_values),
+                    chunks=len(dim_coords["longitude"]),
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
                     units="degrees_east",
                     statistics_approximate=StatisticsApproximate(
-                        min=float(lon_values.min()),
-                        max=float(lon_values.max()),
+                        min=float(dim_coords["longitude"].min()),
+                        max=float(dim_coords["longitude"].max()),
                     ),
                 ),
             ),
