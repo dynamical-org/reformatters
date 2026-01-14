@@ -64,7 +64,6 @@ def copy_files_from_dwd_ftp(
     """
     file_list = list_ftp_files(ftp_host=ftp_host, ftp_path=ftp_path)
     copy_plan = _compute_copy_plan(
-        ftp_path=ftp_path,
         file_list=file_list,
         max_files_per_nwp_variable=max_files_per_nwp_variable,
     )
@@ -104,13 +103,15 @@ def list_ftp_files(
 
 
 def _compute_copy_plan(
-    ftp_path: PurePosixPath,
     file_list: list[PurePosixPath],
     max_files_per_nwp_variable: int = sys.maxsize,
-) -> dict[datetime, list[PurePosixPath]]:
-    """Groups files by their NWP initialization datetime."""
-    copy_plan: dict[datetime, list[PurePosixPath]] = defaultdict(list)
-    n_files_per_nwp_variable: dict[tuple[datetime, str], int] = defaultdict(int)
+) -> dict[tuple[datetime, str], list[PurePosixPath]]:
+    """Groups files by their NWP initialization datetime and variable name.
+
+    Returns dict[(nwp_init_datetime, nwp_variable_name)] = list[file_path].
+    Where `file_path` starts with (and includes) the NWP variable name.
+    """
+    copy_plan: dict[tuple[datetime, str], list[PurePosixPath]] = defaultdict(list)
     date_regex = re.compile(r"_(\d{10})_")
     n_expected_path_parts: Final[int] = 2
 
@@ -130,22 +131,11 @@ def _compute_copy_plan(
         timestamp_str = match.group(1)
         nwp_init_datetime = datetime.strptime(timestamp_str, "%Y%m%d%H")
         nwp_variable_name = file_to_be_copied.parts[0]
+        key = (nwp_init_datetime, nwp_variable_name)
 
-        n_files = n_files_per_nwp_variable[(nwp_init_datetime, nwp_variable_name)]
-        if n_files >= max_files_per_nwp_variable:
-            continue
-
-        copy_plan[nwp_init_datetime].append(file_to_be_copied)
-        n_files_per_nwp_variable[(nwp_init_datetime, nwp_variable_name)] += 1
-
-    if n_files_per_nwp_variable:
-        log.info(
-            "Number of candidates to be copied per NWP variable (we haven't yet checked if these files have been transferred already): %s",
-            {
-                var_name: n_files
-                for ((_, var_name), n_files) in n_files_per_nwp_variable.items()
-            },
-        )
+        n_files_for_nwp_var_and_init = len(copy_plan[key])
+        if n_files_for_nwp_var_and_init < max_files_per_nwp_variable:
+            copy_plan[key].append(file_to_be_copied)
 
     return copy_plan
 
@@ -154,21 +144,28 @@ def _copy_batches(
     ftp_host: str,
     ftp_path: PurePosixPath,
     dst_root: PurePosixPath,
-    copy_plan: dict[datetime, list[PurePosixPath]],
+    copy_plan: dict[tuple[datetime, str], list[PurePosixPath]],
     transfers: int = 10,
 ) -> None:
-    """Executes rclone copy for each timestamp batch in the plan."""
+    """Executes rclone copy for each timestamp and variable batch in the plan."""
     n_batches = len(copy_plan)
-    for i, (nwp_init_datetime, files_to_be_copied) in enumerate(copy_plan.items(), 1):
-        dst_path = dst_root / nwp_init_datetime.strftime("%Y-%m-%dT%HZ")
+    for i, ((nwp_init_dt, nwp_var), files_to_be_copied) in enumerate(copy_plan.items()):
+        nwp_init_datetime_str = nwp_init_dt.strftime("%Y-%m-%dT%HZ")
+        dst_path = dst_root / nwp_init_datetime_str
         log.info(
-            "Batch [%d/%d]: Copying %d files to %s",
-            i,
+            "Batch [%d/%d]: Asking rclone to copy %d file(s) to %s (if they don't already exist)...",
+            i + 1,
             n_batches,
             len(files_to_be_copied),
-            dst_path,
+            dst_path / nwp_var,
         )
-        _copy_batch(ftp_host, ftp_path, dst_path, files_to_be_copied, transfers)
+        _copy_batch(
+            ftp_host=ftp_host,
+            ftp_path=ftp_path,
+            dst_path=dst_path,
+            files_to_be_copied=files_to_be_copied,
+            transfers=transfers,
+        )
 
 
 def _copy_batch(
@@ -204,6 +201,9 @@ def _copy_batch(
             *_get_rclone_ftp_args(ftp_host),
             "--config=",
             "--no-check-certificate",
+            "--no-traverse",
+            "--ignore-checksum",
+            "--ignore-existing",
         ]
 
         try:

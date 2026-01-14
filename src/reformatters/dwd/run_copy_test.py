@@ -1,3 +1,4 @@
+import sys
 from pathlib import PurePosixPath
 
 import typer
@@ -18,8 +19,8 @@ def main(
         "opendata.dwd.de", help="The FTP host, e.g. 'opendata.dwd.de'"
     ),
     transfers: int = typer.Option(10, help="Number of parallel transfers."),
-    max_files: int | None = typer.Option(
-        None, help="Max number of files to transfer per NWP variable."
+    max_files: int = typer.Option(
+        sys.maxsize, help="Max number of files to transfer per NWP variable."
     ),
 ) -> None:
     """
@@ -30,7 +31,7 @@ def main(
         ftp_path=PurePosixPath("/weather/nwp/icon-eu/grib") / f"{nwp_init_hour:02d}",
         dst_root=PurePosixPath(dst_root),
         transfers=transfers,
-        max_files_per_variable=max_files,
+        max_files_per_nwp_variable=max_files,
     )
 
 
