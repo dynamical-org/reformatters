@@ -18,7 +18,7 @@ def mock_lsf_output() -> list[str]:
         "alb_rad/icon-eu_europe_regular-lat-lon_single-level_2026011400_000_ALB_RAD.grib2.bz2",
         "alb_rad/icon-eu_europe_regular-lat-lon_single-level_2026011400_001_ALB_RAD.grib2.bz2",
         "t_2m/icon-eu_europe_regular-lat-lon_single-level_2026011400_000_T_2M.grib2.bz2",
-        "pressure-level/ignore_me.grib2",
+        "ignore_me/pressure_level.grib2",
     ]
 
 
