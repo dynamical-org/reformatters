@@ -49,7 +49,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-DEFAULT_CONCURRENCY = 16
+DEFAULT_CONCURRENCY = 50
 MAX_RETRY_ATTEMPTS = 6
 SECRET_NAME = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
 _SECRET_MOUNT_PATH = "/secrets"  # noqa: S105
@@ -678,12 +678,12 @@ PYTHON_SCRIPT
                             "command": ["/bin/bash", "-c", bootstrap_script],
                             "resources": {
                                 "requests": {
-                                    "cpu": "7",
-                                    "memory": "30G",
+                                    "cpu": "14",
+                                    "memory": "50G",
                                 },
                                 "limits": {
-                                    "cpu": "10",
-                                    "memory": "33G",
+                                    "cpu": "16",
+                                    "memory": "64G",
                                 },
                             },
                             "env": [
@@ -708,6 +708,23 @@ PYTHON_SCRIPT
                         }
                     ],
                     "restartPolicy": "Never",
+                    "affinity": {
+                        "nodeAffinity": {
+                            "requiredDuringSchedulingIgnoredDuringExecution": {
+                                "nodeSelectorTerms": [
+                                    {
+                                        "matchExpressions": [
+                                            {
+                                                "key": "eks.amazonaws.com/instance-family",
+                                                "operator": "In",
+                                                "values": ["r8gn", "c8gn"],
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    },
                     "volumes": [
                         {
                             "name": SECRET_NAME,
