@@ -108,7 +108,8 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         replica_storage_configs=[NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig()],
     ),
     GefsForecast35DayDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig()
+        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
+        replica_storage_configs=[NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig()],
     ),
     NoaaHrrrForecast48HourDataset(
         primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
