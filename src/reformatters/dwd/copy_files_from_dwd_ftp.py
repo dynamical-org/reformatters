@@ -4,19 +4,26 @@ Restructure DWD GRIB files from FTP to a timestamped directory structure using `
 `rclone` is a command-line application to manage files on many different storage systems, including
 FTP, cloud object storage, and the local filesystem. See https://rclone.org
 
-## Example of desired transformation:
 
-Source (DWD's directory structure for ICON-EU as of January 2026):
+## EXAMPLE OF DESIRED TRANSFORMATION:
+
+Example source path (DWD's directory structure for ICON-EU as of January 2026):
+
     /weather/nwp/icon-eu/grib/00/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2026011400_000_ALB_RAD.grib2.bz2
 
-Source (DWD's directory structure for ICON-D2-RUC as of Jan 2026, which might become the directory
-structure for ICON-EU in the future[1]):
+
+Another example source path (DWD's directory structure for ICON-D2-RUC as of Jan 2026, which might
+become the directory structure for ICON-EU in the future[1]):
+
     /weather/nwp/v1/m/icon-d2-ruc/p/T_2M/r/2026-01-14T02:00/s/PT000H00M.grib2
 
-Destination:
+
+Example destination path:
+
     /2026-01-14T00Z/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2026011400_000_ALB_RAD.grib2.bz2
 
-## Why does this Python file exist? Can't we just use `rclone copy`?
+
+## WHY DOES THIS PYTHON FILE EXIST? CAN'T WE JUST USE `rclone copy`?
 
 `rclone copy --name-transform` cannot restructure the directory based on the timestamp in the
 filename because:
@@ -26,14 +33,29 @@ filename because:
 
 For example, when processing the path `00/alb_rad/icon-eu_2026012300.grib2.bz2`, `rclone` will
 process '00' first, before it has access to the datetime in the leaf filename. `rclone` cannot
-rename one part of the path based on information in another part of the path. This fundamental
-limitation persists, no matter if we use `regex=` or `command=` with `rclone copy --name-transform`.
+rename one part of the path based on a subsequent part of the path. This fundamental limitation
+persists, no matter if we use `regex=` or `command=` with `rclone copy --name-transform`.
 
 Consequently, rclone cannot dynamically create new directory levels based on filename content.
-Instead, we group files by their timestamp in Python and call `rclone copy --files-from-raw` for
-each of these groups of files.
+Instead, we group files by their NWP init time and NWP variable name in Python and call `rclone copy
+--files-from-raw` for each of these groups of files.
 
-## References
+
+## IF WE NEED MORE PERFORMANCE
+
+This code calls `rclone copy --files-from-raw` once per NWP variable. This wastes a bit of time
+because `rclone` has to re-establish its pool of FTP connections for each NWP variable. This wastes
+maybe 0.5 seconds to 1 second for each NWP variable. There are two ways to get more performance:
+
+1. Change `_compute_copy_plan` so it groups files _only_ by NWP init datetime. This will allow us to
+   send much larger batches to `rclone` in one go (But this won't work for DWD's new directory scheme.
+   See details in the docstring for `_compute_copy_plan`.)
+2. Call `rclone rc` (where rc is short for remote control). This runs `rclone` as a daemon which
+   listens for commands. This will make our code a little more complex. But it would allow `rclone`
+   to keep its FTP clients alive for the duration of the entire transfer.
+
+
+## REFERENCES
 
 1. https://www.dwd.de/DE/leistungen/opendata/neuigkeiten/opendata_april2025_1.html
 """
