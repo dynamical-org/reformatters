@@ -43,10 +43,18 @@ class DataVarAttrs(FrozenBaseModel):
     ensemble_statistic: EnsembleStatistic | None = None
 
 
+type CFAxis = Literal["X", "Y", "Z", "T"]
+
+
 class CoordinateAttrs(FrozenBaseModel):
     units: TimestampUnits | TimedeltaUnits | str | None
     statistics_approximate: StatisticsApproximate | None
     comment: str | None = None
+
+    # CF convention attributes
+    long_name: str | None = None
+    standard_name: str | None = None
+    axis: CFAxis | None = None
 
     # Rio xarray attributes to encode spatial reference system
     crs_wkt: str | None = None

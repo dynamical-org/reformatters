@@ -42,6 +42,9 @@
       "min": -180.0,
       "max": 179.75
     },
+    "long_name": "Longitude",
+    "standard_name": "longitude",
+    "axis": "X",
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [

@@ -41,6 +41,8 @@
       "min": "2021-05-01T00:00:00",
       "max": "Present"
     },
+    "long_name": "Forecast initialization time",
+    "standard_name": "forecast_reference_time",
     "units": "seconds since 1970-01-01",
     "calendar": "proleptic_gregorian"
   },

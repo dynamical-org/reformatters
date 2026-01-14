@@ -44,7 +44,10 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="X coordinate of projection",
+                    standard_name="projection_x_coordinate",
                     units="m",
+                    axis="X",
                     statistics_approximate=StatisticsApproximate(
                         min=-2700000.0,
                         max=2700000.0,
@@ -61,7 +64,10 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Y coordinate of projection",
+                    standard_name="projection_y_coordinate",
                     units="m",
+                    axis="Y",
                     statistics_approximate=StatisticsApproximate(
                         min=-1600000.0,
                         max=1600000.0,
@@ -78,6 +84,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Latitude",
+                    standard_name="latitude",
                     units="degrees_north",
                     statistics_approximate=StatisticsApproximate(
                         min=21.138123,
@@ -95,6 +103,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Longitude",
+                    standard_name="longitude",
                     units="degrees_east",
                     statistics_approximate=StatisticsApproximate(
                         min=-134.09548,

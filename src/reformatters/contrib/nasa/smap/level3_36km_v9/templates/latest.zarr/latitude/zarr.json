@@ -44,6 +44,8 @@
       "min": -85.044502,
       "max": 85.044502
     },
+    "long_name": "Latitude",
+    "standard_name": "latitude",
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [

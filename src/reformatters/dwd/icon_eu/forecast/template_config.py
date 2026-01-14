@@ -130,6 +130,8 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Forecast initialization time",
+                    standard_name="forecast_reference_time",
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
                         min=dim_coords[self.append_dim].min().isoformat(), max="Present"
@@ -147,6 +149,8 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Forecast lead time",
+                    standard_name="forecast_period",
                     units="seconds",
                     statistics_approximate=StatisticsApproximate(
                         min=str(dim_coords["lead_time"].min()),
@@ -164,7 +168,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Latitude",
+                    standard_name="latitude",
                     units="degrees_north",
+                    axis="Y",
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["latitude"].min()),
                         max=float(dim_coords["latitude"].max()),
@@ -181,7 +188,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Longitude",
+                    standard_name="longitude",
                     units="degrees_east",
+                    axis="X",
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["longitude"].min()),
                         max=float(dim_coords["longitude"].max()),
@@ -203,6 +213,8 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Valid time",
+                    standard_name="time",
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
                         min=self.append_dim_start.isoformat(),
@@ -221,6 +233,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Ingested forecast length",
                     units="seconds",
                     statistics_approximate=StatisticsApproximate(
                         min=str(dim_coords["lead_time"].min()),
@@ -239,6 +252,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Expected forecast length",
                     units="seconds",
                     statistics_approximate=StatisticsApproximate(
                         min=str(dim_coords["lead_time"].min()),

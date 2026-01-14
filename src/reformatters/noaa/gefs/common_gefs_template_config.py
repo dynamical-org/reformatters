@@ -40,7 +40,10 @@ def get_shared_coordinate_configs() -> Sequence[Coordinate]:
                 shards=None,
             ),
             attrs=CoordinateAttrs(
+                long_name="Latitude",
+                standard_name="latitude",
                 units="degrees_north",
+                axis="Y",
                 statistics_approximate=StatisticsApproximate(
                     min=_dim_coords["latitude"].min(),
                     max=_dim_coords["latitude"].max(),
@@ -57,7 +60,10 @@ def get_shared_coordinate_configs() -> Sequence[Coordinate]:
                 shards=None,
             ),
             attrs=CoordinateAttrs(
+                long_name="Longitude",
+                standard_name="longitude",
                 units="degrees_east",
+                axis="X",
                 statistics_approximate=StatisticsApproximate(
                     min=_dim_coords["longitude"].min(),
                     max=_dim_coords["longitude"].max(),

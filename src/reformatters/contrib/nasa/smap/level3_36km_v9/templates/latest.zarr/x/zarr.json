@@ -42,6 +42,9 @@
       "min": -17349513.89,
       "max": 17349513.96999885
     },
+    "long_name": "X coordinate of projection",
+    "standard_name": "projection_x_coordinate",
+    "axis": "X",
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [

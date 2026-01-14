@@ -37,6 +37,7 @@ main = "reformatters.__main__:app"
 
 [dependency-groups]
 dev = [
+    "cf-xarray>=0.10.10",
     "matplotlib~=3.9",
     "mypy~=1.18",
     "pandas-stubs~=2.2",

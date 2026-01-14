@@ -34,11 +34,13 @@
     }
   ],
   "attributes": {
-    "units": "realization",
+    "units": "1",
     "statistics_approximate": {
       "min": 0,
       "max": 30
-    }
+    },
+    "long_name": "Ensemble member",
+    "standard_name": "realization"
   },
   "dimension_names": [
     "ensemble_member"

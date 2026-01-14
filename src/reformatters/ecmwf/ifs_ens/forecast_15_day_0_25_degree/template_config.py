@@ -124,6 +124,8 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Forecast initialization time",
+                    standard_name="forecast_reference_time",
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
                         min=dim_coords[self.append_dim].min().isoformat(), max="Present"
@@ -141,6 +143,8 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Forecast lead time",
+                    standard_name="forecast_period",
                     units="seconds",
                     statistics_approximate=StatisticsApproximate(
                         min=str(dim_coords["lead_time"].min()),
@@ -158,7 +162,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
-                    units="realization",
+                    long_name="Ensemble member",
+                    standard_name="realization",
+                    units="1",
                     statistics_approximate=StatisticsApproximate(
                         min=int(dim_coords["ensemble_member"].min()),
                         max=int(dim_coords["ensemble_member"].max()),
@@ -175,7 +181,10 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Latitude",
+                    standard_name="latitude",
                     units="degrees_north",
+                    axis="Y",
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["latitude"].min()),
                         max=float(dim_coords["latitude"].max()),
@@ -192,7 +201,10 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Longitude",
+                    standard_name="longitude",
                     units="degrees_east",
+                    axis="X",
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["longitude"].min()),
                         max=float(dim_coords["longitude"].max()),
@@ -214,6 +226,8 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Valid time",
+                    standard_name="time",
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
                         min=self.append_dim_start.isoformat(),
@@ -232,6 +246,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Ingested forecast length",
                     units="seconds",
                     statistics_approximate=StatisticsApproximate(
                         min=str(dim_coords["lead_time"].min()),
@@ -250,6 +265,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Expected forecast length",
                     units="seconds",
                     statistics_approximate=StatisticsApproximate(
                         min=str(dim_coords["lead_time"].min()),

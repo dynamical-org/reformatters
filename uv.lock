@@ -152,6 +152,18 @@ wheels = [
 ]
 
 [[package]]
+name = "cf-xarray"
+version = "0.10.10"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "xarray" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8d/f3/b6d58d2cf6f39413504335ab1a8d98edc22ac0ab2603141ce8f17f161ea5/cf_xarray-0.10.10.tar.gz", hash = "sha256:09cb1ec94593913de4662182b5e9374f828e9540b7471a01c7abcb9bbfdaa3d1", size = 683343, upload-time = "2025-12-11T19:25:07.636Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a3/8f/c42a98f933022c7de00142526c9b6b7429fdcd0fc66c952b4ebbf0ff3b7f/cf_xarray-0.10.10-py3-none-any.whl", hash = "sha256:04cbe8b2b5773849bda989059239ee7edddf5b00bf1783a8202e3b50e5f369d1", size = 76614, upload-time = "2025-12-11T19:25:05.976Z" },
+]
+
+[[package]]
 name = "cfgv"
 version = "3.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1319,6 +1331,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "cf-xarray" },
     { name = "matplotlib" },
     { name = "mypy" },
     { name = "pandas-stubs" },
@@ -1356,6 +1369,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "cf-xarray", specifier = ">=0.10.10" },
     { name = "matplotlib", specifier = "~=3.9" },
     { name = "mypy", specifier = "~=1.18" },
     { name = "pandas-stubs", specifier = "~=2.2" },
