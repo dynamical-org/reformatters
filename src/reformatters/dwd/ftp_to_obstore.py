@@ -8,9 +8,7 @@ import tempfile
 from collections import defaultdict
 from datetime import datetime
 from pathlib import PurePosixPath
-from typing import Final, ReadOnly, TypedDict
-
-from numba import NamedTuple
+from typing import Final, NamedTuple, ReadOnly, TypedDict
 
 from reformatters.common.logging import get_logger
 
@@ -70,13 +68,15 @@ class FtpToObstore:
         stdout_str = _call_command_with_logging(cmd, timeout=90)
 
         try:
-            return json.loads(stdout_str)
+            decoded_json: list[_FtpListItem] = json.loads(stdout_str)
         except json.decoder.JSONDecodeError:
             log.exception(
                 "Failed to decode stdout of rclone as json. stdout='%s'.",
                 stdout_str,
             )
             raise
+        else:
+            return decoded_json
 
     @property
     def _ftp_host_and_credentials(self) -> list[str]:
@@ -204,7 +204,7 @@ class FtpToObstore:
                         log.debug("rclone stdout: %s", stdout_str)
 
 
-def _call_command_with_logging(cmd: list, timeout: int = 90) -> str:
+def _call_command_with_logging(cmd: list[str], timeout: int = 90) -> str:
     log.info("Command: %s", " ".join(cmd))
 
     # --------- Killing the subprocess when Python dies ---------------
@@ -215,7 +215,8 @@ def _call_command_with_logging(cmd: list, timeout: int = 90) -> str:
     # 1. `kill -9 python` (SIGKILL) or `kill python` (SIGTERM) -> the OS instantly kills Python.
     #    Python doesn't have time to throw any exceptions. We set `preexec_fn` to handle this case.
     # 2. `Ctrl+C` -> the OS sends SIGINT to Python -> Python raises a KeyboardInterrupt -> We catch
-    #     this and call `process.terminate()`. prctl DOES NOT fire here because Python is still "alive" handling the exception.
+    #    this and call `process.terminate()`. prctl DOES NOT fire here because Python is still
+    #    "alive" whilst handling the exception.
 
     process_name = cmd[0]
     process = subprocess.Popen(  # noqa: S603
@@ -272,7 +273,7 @@ def _set_death_signal() -> None:
     libc.prctl(pr_set_pdeathsig, signal.SIGTERM)
 
 
-def _terminate_child_process(process: subprocess.Popen, process_name: str) -> None:
+def _terminate_child_process(process: subprocess.Popen[str], process_name: str) -> None:
     log.exception("Terminating child process %s...", process_name)
     process.terminate()
     log.info(
