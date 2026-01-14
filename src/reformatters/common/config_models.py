@@ -43,7 +43,7 @@ class DataVarAttrs(FrozenBaseModel):
     ensemble_statistic: EnsembleStatistic | None = None
 
 
-type CFAxis = Literal["X", "Y", "Z", "T"]
+type CfAxis = Literal["X", "Y", "Z", "T"]
 
 
 class CoordinateAttrs(FrozenBaseModel):
@@ -54,7 +54,7 @@ class CoordinateAttrs(FrozenBaseModel):
     # CF convention attributes
     long_name: str | None = None
     standard_name: str | None = None
-    axis: CFAxis | None = None
+    axis: CfAxis | None = None
 
     # Rio xarray attributes to encode spatial reference system
     crs_wkt: str | None = None
