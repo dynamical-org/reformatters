@@ -59,6 +59,14 @@ class NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
     format: DatasetFormat = DatasetFormat.ICECHUNK
 
 
+class NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
+    """NOAA GEFS in Icechunk on AWS Open Data."""
+
+    base_path: str = "s3://dynamical-noaa-gefs"
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
 class EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
     """ECMWF IFS Ens in Icechunk on AWS Open Data."""
 
@@ -95,7 +103,10 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
         replica_storage_configs=[NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig()],
     ),
-    GefsAnalysisDataset(primary_storage_config=SourceCoopZarrDatasetStorageConfig()),
+    GefsAnalysisDataset(
+        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
+        replica_storage_configs=[NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig()],
+    ),
     GefsForecast35DayDataset(
         primary_storage_config=SourceCoopZarrDatasetStorageConfig()
     ),
