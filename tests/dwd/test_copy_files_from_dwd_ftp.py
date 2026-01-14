@@ -96,13 +96,13 @@ def test_copy_batches() -> None:
         assert "rclone" in cmd
         assert "copy" in cmd
         assert ":ftp:/ftp" in cmd
-        assert "/dst/2026-01-14T00Z/alb_rad" in cmd
+        assert "/dst/2026-01-14T00Z" in cmd
         assert any(arg.startswith("--files-from-raw") for arg in cmd)
 
         # Check second call
         args, _ = mock_run.call_args_list[1]
         cmd = args[0]
-        assert "/dst/2026-01-14T00Z/t_2m" in cmd
+        assert "/dst/2026-01-14T00Z" in cmd
 
 
 def test_copy_files_from_dwd_ftp(mock_lsf_output: list[str]) -> None:

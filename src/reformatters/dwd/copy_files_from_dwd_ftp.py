@@ -201,7 +201,6 @@ def _copy_batch(
             *_get_rclone_ftp_args(ftp_host),
             "--config=",
             "--no-check-certificate",
-            "--no-traverse",
             "--ignore-checksum",
             "--ignore-existing",
         ]
