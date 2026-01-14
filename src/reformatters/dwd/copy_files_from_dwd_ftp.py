@@ -6,23 +6,36 @@ FTP, cloud object storage, and the local filesystem. See https://rclone.org
 
 ## Example of desired transformation:
 
-Source:      00/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2026011400_000_ALB_RAD.grib2.bz2
-Destination: 2026-01-14T00Z/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2026011400_000_ALB_RAD.grib2.bz2
+Source (DWD's directory structure for ICON-EU as of January 2026):
+    /weather/nwp/icon-eu/grib/00/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2026011400_000_ALB_RAD.grib2.bz2
+
+Source (DWD's directory structure for ICON-D2-RUC as of Jan 2026, which might become the directory
+structure for ICON-EU in the future[1]):
+    /weather/nwp/v1/m/icon-d2-ruc/p/T_2M/r/2026-01-14T02:00/s/PT000H00M.grib2
+
+Destination:
+    /2026-01-14T00Z/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2026011400_000_ALB_RAD.grib2.bz2
 
 ## Why does this Python file exist? Can't we just use `rclone copy`?
 
 `rclone copy --name-transform` cannot restructure the directory based on the timestamp in the
 filename because:
 
-1. rclone processes path segments individually.
+1. rclone processes path segments individually, one by one, from left-to-right.
 2. rclone explicitly prohibits adding path separators (`/`) during a name transformation.
 
-For example, in the path `00/alb_rad/icon-eu_2026012300.grib2.bz2`, `rclone` has no access to the
-datetime in the leaf filename when `rclone` is transforming the '00' part of the filename.
+For example, when processing the path `00/alb_rad/icon-eu_2026012300.grib2.bz2`, `rclone` will
+process '00' first, before it has access to the datetime in the leaf filename. `rclone` cannot
+rename one part of the path based on information in another part of the path. This fundamental
+limitation persists, no matter if we use `regex=` or `command=` with `rclone copy --name-transform`.
 
 Consequently, rclone cannot dynamically create new directory levels based on filename content.
 Instead, we group files by their timestamp in Python and call `rclone copy --files-from-raw` for
 each of these groups of files.
+
+## References
+
+1. https://www.dwd.de/DE/leistungen/opendata/neuigkeiten/opendata_april2025_1.html
 """
 
 import ctypes
