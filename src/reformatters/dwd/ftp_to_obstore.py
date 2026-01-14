@@ -1,7 +1,6 @@
 import ctypes
 import json
 import logging
-import os
 import re
 import signal
 import subprocess
@@ -9,7 +8,9 @@ import tempfile
 from collections import defaultdict
 from datetime import datetime
 from pathlib import PurePosixPath
-from typing import ReadOnly, TypedDict
+from typing import Final, ReadOnly, TypedDict
+
+from numba import NamedTuple
 
 from reformatters.common.logging import get_logger
 
@@ -57,33 +58,24 @@ def _call_command_with_logging(cmd: list, timeout: int = 90) -> str:
     # 2. `Ctrl+C` -> the OS sends SIGINT to Python -> Python raises a KeyboardInterrupt -> We catch
     #     this and call `process.terminate()`. prctl DOES NOT fire here because Python is still "alive" handling the exception.
 
-    process = subprocess.Popen(
+    process_name = cmd[0]
+    process = subprocess.Popen(  # noqa: S603
         cmd,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,  # Rclone sends its progress and status messages to stderr.
-        text=True,  # stdout and stderr will be opened in text mode (not bytes).
+        stderr=subprocess.PIPE,  # rclone sends its progress and status messages to stderr.
+        text=True,  # Open stdout and stderr text mode (not bytes).
         bufsize=1,  # Enable line buffering for stdout and stderr.
         # preexec_fn will be called in the child process just before cmd is executed.
         # WARNING: preexec_fn is not supported in threaded code or in Python subinterpreters.
-        preexec_fn=_set_death_signal,
+        preexec_fn=_set_death_signal,  # noqa: PLW1509
     )
     try:
         # You might wonder why we're using `process.communicate` instead of `process.wait`.
-        # `process.wait` deadlocks if the process returns lots of data in a PIPE (e.g. rclone
-        # returning a long directory listing through stdout).
+        # `process.wait` deadlocks if the process returns lots of data in a pipe. In our case,
+        # `process.wait` deadlocks when `rclone` returns a long directory listing through stdout.
         stdout_str, stderr_str = process.communicate(timeout=timeout)
     except (KeyboardInterrupt, SystemExit):
-        log.exception("Python is shutting down! Terminating rclone...")
-        process.terminate()
-        try:
-            # Give `process` 5 seconds to wrap up:
-            stdout_str, stderr_str = process.communicate(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()  # Force kill if it's stubborn
-        else:
-            _log_rclone_stderr(stderr_str)
-            if stdout_str:
-                log.info("Rclone stdout during shutdown: %s", stdout_str)
+        _terminate_child_process(process, process_name)
         raise
 
     _log_rclone_stderr(stderr_str)
@@ -91,9 +83,30 @@ def _call_command_with_logging(cmd: list, timeout: int = 90) -> str:
     if process.returncode == 0:
         return stdout_str
     else:
-        error_msg = f"rclone return code is {process.returncode}. stdout={stdout_str}"
-        log.error(error_msg)
-        raise RuntimeError(error_msg)
+        raise subprocess.CalledProcessError(
+            cmd=cmd, returncode=process.returncode, output=stdout_str, stderr=stderr_str
+        )
+
+
+def _terminate_child_process(process: subprocess.Popen, process_name: str) -> None:
+    log.exception("Terminating child process %s...", process_name)
+    process.terminate()
+    log.info(
+        "Waiting 5 seconds for child %s process to terminate gracefully...",
+        process_name,
+    )
+    try:
+        stdout_str, stderr_str = process.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        log.warning(
+            "Child process %s has not terminated gracefully. So we will forcefully kill it.",
+            process_name,
+        )
+        process.kill()
+    else:
+        _log_rclone_stderr(stderr_str)
+        if stdout_str:
+            log.info("%s stdout during shutdown: %s", process_name, stdout_str)
 
 
 class _ListItem(TypedDict):
@@ -104,6 +117,11 @@ class _ListItem(TypedDict):
     Size: ReadOnly[int]
     ModTime: ReadOnly[str]
     IsDir: ReadOnly[bool]
+
+
+class _SrcAndDstPath(NamedTuple):
+    src: PurePosixPath
+    dst: PurePosixPath
 
 
 class FtpToObstore:
@@ -168,10 +186,10 @@ class FtpToObstore:
             "--config=",  # There is no rclone config file. We pass in all config as arguments.
         ]
 
-    def generate_batches(
+    def compute_directories_to_copy(
         self,
         file_list: list[_ListItem],
-    ) -> dict[tuple[PurePosixPath, PurePosixPath], list[str]]:
+    ) -> dict[_SrcAndDstPath, list[str]]:
         """
         Returns a dict which maps from (src_directory, dst_directory) to a list of filenames.
 
@@ -185,86 +203,94 @@ class FtpToObstore:
             ...
         ]
         """
-        batches = defaultdict(list)
-        # Regex to find the date in the filename (YYYYMMDDHH)
+        dirs_and_files_to_copy: dict[_SrcAndDstPath, list[str]] = defaultdict(list)
+        n_skipped_files_per_src_dir: dict[PurePosixPath, int] = defaultdict(int)
+
+        # Regex to find the date in the ICON-EU grib filename (YYYYMMDDHH)
         date_regex = re.compile(r"_(\d{10})_")
+
+        n_expected_path_parts: Final[int] = 2
 
         for file_info in file_list:
             if file_info["IsDir"]:
                 continue
 
+            # `file_path` should be of the form:
+            # alb_rad/icon-eu_europe_regular-lat-lon_single-level_2026011200_001_ALB_RAD.grib2.bz2
             file_path = PurePosixPath(file_info["Path"])
+            src_dir = self.ftp_path / file_path.parent
 
             # --- FILTERING ---
             if "pressure-level" in file_path.name:
+                n_skipped_files_per_src_dir[src_dir] += 1
+                continue
+
+            if len(file_path.parts) != n_expected_path_parts:
+                n_skipped_files_per_src_dir[src_dir] += 1
+                log.warning(
+                    "Expected %d parts in the path, not %d. Skipping FTP filename: %s",
+                    n_expected_path_parts,
+                    len(file_path.parts),
+                    file_path,
+                )
                 continue
 
             # --- PARSING ---
             match = date_regex.search(file_path.name)
             if not match:
-                log.warning("Skipping (no date found): %s", file_path.name)
+                log.warning("Skipping file (no date found): %s", file_path.name)
                 continue
 
-            raw_date = match.group(1)
-            dt = datetime.strptime(raw_date, "%Y%m%d%H")
-            date_dir = dt.strftime("%Y-%m-%dT%HZ")
+            src_nwp_init_datetime_str = match.group(1)
+            nwp_init_datetime = datetime.strptime(src_nwp_init_datetime_str, "%Y%m%d%H")
+            dst_nwp_init_datetime_str = nwp_init_datetime.strftime("%Y-%m-%dT%HZ")
 
-            # Extract the NWP parameter name from path (e.g., 'alb_rad' from 'alb_rad/file')
-            if len(file_path.parts) != 2:
-                continue
-            param_name = file_path.parts[0]  # e.g. 'alb_rad'
+            nwp_param = file_path.parts[0]
 
-            src_dir_url = self.ftp_path / file_path.parent
-            dest_dir_url = self.dst_path / date_dir / param_name
+            dst_dir = self.dst_path / dst_nwp_init_datetime_str / nwp_param
 
-            batch_key = (src_dir_url, dest_dir_url)
-            batches[batch_key].append(file_path.name)
+            src_and_dst = _SrcAndDstPath(src_dir, dst_dir)
+            dirs_and_files_to_copy[src_and_dst].append(file_path.name)
 
-        return batches
+        log.info(
+            "Number of files skipped per directory: %s", n_skipped_files_per_src_dir
+        )
 
-    def run_transfers(
-        self, batches: dict[tuple[str, PurePosixPath], list[str]]
+        return dirs_and_files_to_copy
+
+    def copy_directories(
+        self, dirs_and_files_to_copy: dict[_SrcAndDstPath, list[str]]
     ) -> None:
-        """
-        Iterates through batches, creates a temp file list, and runs rclone.
-        """
-        total_batches = len(batches)
-        log.info("Processing %s batch groups...", total_batches)
+        n_dirs = len(dirs_and_files_to_copy)
+        log.info("Copying %d directories from ftp://%s", n_dirs, self.ftp_host)
 
-        for i, ((src_url, dst_url), filenames) in enumerate(batches.items(), 1):
-            if i < 40:
-                continue
-            elif i > 50:
-                break
-
-            log.info(
-                f"[{i}/{total_batches}] Syncing {len(filenames)} files to {dst_url}..."
-            )
+        for i, ((src_url, dst_url), filenames) in enumerate(
+            dirs_and_files_to_copy.items(), 1
+        ):
+            info_str = f"copying {len(filenames)} files from ftp://{self.ftp_host}{src_url} to {dst_url}"
+            log.info("Directory [%d/%d]: %s...", i, n_dirs, info_str)
 
             # Create a temporary file to hold the list of filenames for this batch
-            with tempfile.NamedTemporaryFile(mode="w+", delete=False) as tmp:
-                tmp.write("\n".join(filenames))
-                tmp_file_containing_filenames = tmp.name
+            with tempfile.NamedTemporaryFile(mode="w+") as temp_file_of_filenames:
+                temp_file_of_filenames.write("\n".join(filenames))
 
-            cmd = [
-                "rclone",
-                "copy",
-                ":ftp:" + str(src_url),
-                str(dst_url),
-                "--files-from=" + tmp_file_containing_filenames,
-                "--transfers=10",  # Increase parallelism.
-                "--no-check-certificate",
-                "--no-traverse",
-                *self._ftp_host_and_user_and_pass,
-                *self._common_params_for_rclone,
-            ]
+                cmd = [
+                    "rclone",
+                    "copy",
+                    ":ftp:" + str(src_url),
+                    str(dst_url),
+                    "--files-from=" + temp_file_of_filenames.name,
+                    "--transfers=10",  # Increase parallelism.
+                    "--no-check-certificate",
+                    "--no-traverse",
+                    *self._ftp_host_and_user_and_pass,
+                    *self._common_params_for_rclone,
+                ]
 
-            try:
-                stdout_str = _call_command_with_logging(cmd, timeout=60 * 5)
-            except subprocess.CalledProcessError as e:
-                log.exception(f"Error syncing batch {src_url}: {e}")
-            else:
-                if stdout_str:
-                    log.info("Rclone stdout: %s", stdout_str)
-            finally:
-                os.remove(tmp_file_containing_filenames)
+                try:
+                    stdout_str = _call_command_with_logging(cmd, timeout=60 * 5)
+                except subprocess.CalledProcessError as e:
+                    log.exception("Error %s: %e", info_str, e)
+                else:
+                    if stdout_str:
+                        log.debug("rclone stdout: %s", stdout_str)
