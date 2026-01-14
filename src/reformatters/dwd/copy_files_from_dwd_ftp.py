@@ -74,6 +74,7 @@ def copy_files_from_dwd_ftp(
         transfers: Number of parallel transfers. DWD appears to limit the number of parallel
                    transfers from one IP address to about 10.
         max_files_per_nwp_variable: Optional limit on the number of files to transfer per NWP variable.
+                  This is useful for testing locally.
     """
     file_list = list_ftp_files(ftp_host=ftp_host, ftp_path=ftp_path)
     copy_plan = _compute_copy_plan(
@@ -123,6 +124,29 @@ def _compute_copy_plan(
 
     Returns dict[(nwp_init_datetime, nwp_variable_name)] = list[file_path].
     Where `file_path` starts with (and includes) the NWP variable name.
+
+    ## Implementation note:
+
+    While DWD continue to use their "legacy" directory structure [1] we _could_ group filenames by
+    _only_ the NWP initialisation datetime (instead of grouping by init time _and_ variable name).
+    We'd then give `rclone` one huge list of all the files below the init hour. This would work
+    because, below the init hour, the paths are both of the form variable_name/filename.grib2.bz2.
+
+    There are two main reasons that we group by both the init datetime _and_ variable name:
+
+    1. Crucially, grouping by _just_ the init datetime will break if/when DWD move to their new
+       directory structure [2].
+    2. Having smaller groups gives us more control and visibility into what `rclone` is doing. This
+       should help with debugging. (Although, if we _really_ wanted to leave `rclone` running for a
+       long time, we could stream `stderr` and `stdout` into the Python logger.)
+
+    ## Footnotes:
+
+    1. DWD's legacy directory structure:
+       /weather/nwp/icon-eu/grib/00/
+           alb_rad/icon-eu_europe_regular-lat-lon_single-level_2026011400_000_ALB_RAD.grib2.bz2
+    2. DWD's new directory structure (already used for ICON-D2-RUC):
+       /weather/nwp/v1/m/icon-d2-ruc/p/T_2M/r/2026-01-14T02:00/s/PT000H00M.grib2
     """
     copy_plan: dict[tuple[datetime, str], list[PurePosixPath]] = defaultdict(list)
     date_regex = re.compile(r"_(\d{10})_")
