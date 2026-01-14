@@ -362,7 +362,10 @@ def test_cf_data_variables_have_standard_names_where_applicable(
     dataset: DynamicalDataset[Any, Any],
 ) -> None:
     """
-    Verify that data variables have standard_name where CF Conventions defines one.
+    Verify that:
+    1. All data variables have standard_name where CF Conventions defines one
+    2. Variables with standard_name in config are properly recognized in the zarr template
+
     Variables in the allowlist are exempt because CF Conventions does not define
     standard names for them.
     """
@@ -390,15 +393,17 @@ def test_cf_data_variables_have_standard_names_where_applicable(
     # Check each data variable
     for var_config in template_config.data_vars:
         if var_config.attrs.standard_name is not None:
-            # The variable should be recognized by cf_xarray
+            # Variable has a standard_name - verify it's properly written to zarr
             expected_std_name = var_config.attrs.standard_name
             assert expected_std_name in recognized_standard_names, (
                 f"Variable '{var_config.name}' has standard_name='{expected_std_name}' configured "
-                f"but cf_xarray did not recognize it. Check the attrs are correctly set."
+                f"but cf_xarray did not recognize it in the zarr template. "
+                f"Run 'uv run main {dataset.dataset_id} update-template' to regenerate the template."
             )
             assert var_config.name in recognized_standard_names[expected_std_name], (
-                f"Variable '{var_config.name}' should be in cf standard_names['{expected_std_name}'] "
-                f"but found: {recognized_standard_names[expected_std_name]}"
+                f"Variable '{var_config.name}' has standard_name='{expected_std_name}' configured "
+                f"but is not recognized by cf_xarray in the zarr template. Found: {recognized_standard_names[expected_std_name]}. "
+                f"Run 'uv run main {dataset.dataset_id} update-template' to regenerate the template."
             )
         else:
             # Variable does not have a standard_name - it must be in the allowlist
