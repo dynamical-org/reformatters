@@ -76,7 +76,6 @@ from reformatters.common.logging import get_logger
 
 log = get_logger(__name__)
 
-SECS_PER_MINUTE: Final[int] = 60
 
 # Constants for Linux prctl (Process Control)
 PR_SET_PDEATHSIG = 1
