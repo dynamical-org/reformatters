@@ -67,7 +67,7 @@ import signal
 import subprocess
 import sys
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import PurePosixPath
 from tempfile import NamedTemporaryFile
 from typing import Final
@@ -75,6 +75,8 @@ from typing import Final
 from reformatters.common.logging import get_logger
 
 log = get_logger(__name__)
+
+SECS_PER_MINUTE: Final[int] = 60
 
 # Constants for Linux prctl (Process Control)
 PR_SET_PDEATHSIG = 1
@@ -115,7 +117,6 @@ def copy_files_from_dwd_ftp(
 def list_ftp_files(
     ftp_host: str,
     ftp_path: PurePosixPath,
-    timeout: int = 90,
 ) -> list[PurePosixPath]:
     """Recursively list all files below ftp_host/ftp_path."""
     ftp_url = f"ftp://{ftp_host}{ftp_path}"
@@ -130,7 +131,7 @@ def list_ftp_files(
         "--config=",  # There is no config file because we pass everything as command-line args.
     ]
 
-    stdout_str = _run_rclone(cmd, timeout=timeout)
+    stdout_str = _run_rclone(cmd, timeout=timedelta(seconds=90))
     file_list = [
         PurePosixPath(line.strip()) for line in stdout_str.splitlines() if line.strip()
     ]
@@ -265,7 +266,8 @@ def _copy_batch(
         ]
 
         try:
-            _run_rclone(cmd, timeout=5 * 60)
+            _run_rclone(cmd, timeout=timedelta(minutes=30))
+
         except subprocess.CalledProcessError:
             log.exception("Failed to copy batch to %s", dst_path)
 
@@ -280,7 +282,7 @@ def _get_rclone_ftp_args(ftp_host: str) -> list[str]:
     ]
 
 
-def _run_rclone(cmd: list[str], timeout: int) -> str:
+def _run_rclone(cmd: list[str], timeout: timedelta) -> str:
     """Runs a command with logging and safety measures and returns stdout."""
     log.debug("Running: %s", " ".join(cmd))
     try:
@@ -289,7 +291,7 @@ def _run_rclone(cmd: list[str], timeout: int) -> str:
             capture_output=True,
             text=True,  # Open stdout and stderr pipes in text mode (not bytes).
             check=True,  # Raise CalledProcessError if returncode != 0.
-            timeout=timeout,
+            timeout=round(timeout.total_seconds()),
             preexec_fn=_set_death_signal,
         )
     except subprocess.CalledProcessError as e:
