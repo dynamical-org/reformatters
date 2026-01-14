@@ -447,6 +447,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="tp",
+                    standard_name="precipitation_amount",
                     long_name="Total precipitation",
                     units="mm/s",
                     step_type="avg",
@@ -490,6 +491,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="sdlwrf",
+                    standard_name="surface_downwelling_longwave_flux_in_air",
                     long_name="Surface downward long-wave radiation flux",
                     units="W/(m^2)",
                     step_type="avg",
@@ -510,6 +512,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="sdswrf",
+                    standard_name="surface_downwelling_shortwave_flux_in_air",
                     long_name="Surface downward short-wave radiation flux",
                     units="W/(m^2)",
                     step_type="avg",

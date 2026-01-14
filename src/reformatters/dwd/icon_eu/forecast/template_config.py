@@ -350,6 +350,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="aswdir_s",
+                    standard_name="surface_direct_downwelling_shortwave_flux_in_air",
                     long_name="Downward direct short wave radiation flux at surface",
                     units="W m-2",
                     step_type="avg",
@@ -370,6 +371,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="cape_con",
+                    standard_name="atmosphere_convective_available_potential_energy",
                     long_name="Convective available potential energy",
                     units="J kg-1",
                     step_type="instant",
@@ -385,6 +387,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="clch",
+                    standard_name="cloud_area_fraction_in_atmosphere_layer",
                     long_name="High level clouds",
                     units="%",
                     step_type="instant",
@@ -400,6 +403,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="clcl",
+                    standard_name="cloud_area_fraction_in_atmosphere_layer",
                     long_name="Low level clouds",
                     units="%",
                     step_type="instant",
@@ -415,6 +419,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="clcm",
+                    standard_name="cloud_area_fraction_in_atmosphere_layer",
                     long_name="Mid level clouds",
                     units="%",
                     step_type="instant",
@@ -430,6 +435,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="clct",
+                    standard_name="cloud_area_fraction",
                     long_name="Total Cloud Cover",
                     units="%",
                     step_type="instant",
@@ -464,6 +470,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="prmsl",
+                    standard_name="air_pressure_at_mean_sea_level",
                     long_name="Pressure reduced to mean sea level (MSL)",
                     units="Pa",
                     step_type="instant",
@@ -511,6 +518,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="watr",
+                    standard_name="surface_runoff_amount",
                     long_name="Surface water Runoff",
                     units="kg m-2",
                     step_type="accum",
@@ -548,6 +556,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="tp",
+                    standard_name="precipitation_amount",
                     long_name="Total Precipitation",
                     units="kg m**-2",
                     step_type="accum",
@@ -620,6 +629,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="sd",
+                    standard_name="lwe_thickness_of_surface_snow_amount",
                     long_name="Snow depth water equivalent",
                     units="kg m**-2",
                     step_type="instant",
