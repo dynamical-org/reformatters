@@ -70,6 +70,7 @@
   "attributes": {
     "long_name": "Total Precipitation",
     "short_name": "tp",
+    "standard_name": "precipitation_amount",
     "units": "kg m**-2",
     "comment": "Total precipitation accumulated since model start. TOT_PREC = RAIN_GSP + SNOW_GSP + RAIN_CON + SNOW_CON.",
     "step_type": "accum",

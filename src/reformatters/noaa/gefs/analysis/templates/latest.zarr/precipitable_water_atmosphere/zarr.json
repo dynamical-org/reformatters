@@ -67,6 +67,7 @@
   "attributes": {
     "long_name": "Precipitable water",
     "short_name": "pwat",
+    "standard_name": "atmosphere_mass_content_of_water_vapor",
     "units": "kg/(m^2)",
     "step_type": "instant",
     "coordinates": "spatial_ref",

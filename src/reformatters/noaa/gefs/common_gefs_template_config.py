@@ -182,6 +182,7 @@ def get_shared_data_var_configs(
             encoding=encoding_float32,
             attrs=DataVarAttrs(
                 short_name="tmax",
+                standard_name="air_temperature",
                 long_name="Maximum temperature",
                 units="C",
                 step_type="max",
@@ -201,6 +202,7 @@ def get_shared_data_var_configs(
             encoding=encoding_float32,
             attrs=DataVarAttrs(
                 short_name="tmin",
+                standard_name="air_temperature",
                 long_name="Minimum temperature",
                 units="C",
                 step_type="min",
@@ -315,6 +317,7 @@ def get_shared_data_var_configs(
             encoding=encoding_float32,
             attrs=DataVarAttrs(
                 short_name="tp",
+                standard_name="precipitation_amount",
                 long_name="Total Precipitation",
                 units="mm/s",
                 comment="Average precipitation rate since the previous forecast step.",
@@ -413,6 +416,7 @@ def get_shared_data_var_configs(
             encoding=encoding_float32,
             attrs=DataVarAttrs(
                 short_name="pwat",
+                standard_name="atmosphere_mass_content_of_water_vapor",
                 long_name="Precipitable water",
                 units="kg/(m^2)",
                 step_type="instant",
@@ -431,6 +435,7 @@ def get_shared_data_var_configs(
             encoding=encoding_float32,
             attrs=DataVarAttrs(
                 short_name="tcc",
+                standard_name="cloud_area_fraction",
                 long_name="Total Cloud Cover",
                 units="%",
                 comment="Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
@@ -470,6 +475,7 @@ def get_shared_data_var_configs(
             encoding=encoding_float32,
             attrs=DataVarAttrs(
                 short_name="sdswrf",
+                standard_name="surface_downwelling_shortwave_flux_in_air",
                 long_name="Surface downward short-wave radiation flux",
                 units="W/(m^2)",
                 comment="Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
@@ -490,6 +496,7 @@ def get_shared_data_var_configs(
             encoding=encoding_float32,
             attrs=DataVarAttrs(
                 short_name="sdlwrf",
+                standard_name="surface_downwelling_longwave_flux_in_air",
                 long_name="Surface downward long-wave radiation flux",
                 units="W/(m^2)",
                 comment="Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
@@ -510,6 +517,7 @@ def get_shared_data_var_configs(
             encoding=encoding_float32,
             attrs=DataVarAttrs(
                 short_name="prmsl",
+                standard_name="air_pressure_at_mean_sea_level",
                 long_name="Pressure reduced to MSL",
                 units="Pa",
                 step_type="instant",

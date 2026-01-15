@@ -275,6 +275,7 @@
         "attributes": {
           "long_name": "Surface downward long-wave radiation flux",
           "short_name": "sdlwrf",
+          "standard_name": "surface_downwelling_longwave_flux_in_air",
           "units": "W/(m^2)",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
@@ -366,6 +367,7 @@
         "attributes": {
           "long_name": "Surface downward short-wave radiation flux",
           "short_name": "sdswrf",
+          "standard_name": "surface_downwelling_shortwave_flux_in_air",
           "units": "W/(m^2)",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
@@ -933,6 +935,7 @@
         "attributes": {
           "long_name": "Total precipitation",
           "short_name": "tp",
+          "standard_name": "precipitation_amount",
           "units": "mm/s",
           "comment": "Average precipitation rate since the previous forecast step.",
           "step_type": "avg",

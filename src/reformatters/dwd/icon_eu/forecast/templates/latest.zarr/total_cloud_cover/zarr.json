@@ -70,6 +70,7 @@
   "attributes": {
     "long_name": "Total Cloud Cover",
     "short_name": "clct",
+    "standard_name": "cloud_area_fraction",
     "units": "%",
     "comment": "Total cloud cover. Different agencies use different short_names for this same parameter: ECMWF: TCC; NOAA & WMO: TCDC.",
     "step_type": "instant",

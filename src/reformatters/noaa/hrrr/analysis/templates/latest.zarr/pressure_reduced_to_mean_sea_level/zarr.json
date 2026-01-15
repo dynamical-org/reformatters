@@ -67,6 +67,7 @@
   "attributes": {
     "long_name": "Pressure reduced to MSL",
     "short_name": "prmsl",
+    "standard_name": "air_pressure_at_mean_sea_level",
     "units": "Pa",
     "step_type": "instant",
     "coordinates": "latitude longitude spatial_ref",

@@ -67,6 +67,7 @@
   "attributes": {
     "long_name": "2 metre relative humidity",
     "short_name": "r2",
+    "standard_name": "relative_humidity",
     "units": "%",
     "step_type": "instant",
     "coordinates": "latitude longitude spatial_ref",

@@ -200,6 +200,7 @@
         "attributes": {
           "long_name": "Soil Moisture (AM)",
           "short_name": "soil_moisture_am",
+          "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "m\u00b3/m\u00b3",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
@@ -283,6 +284,7 @@
         "attributes": {
           "long_name": "Soil Moisture (PM)",
           "short_name": "soil_moisture_pm",
+          "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "m\u00b3/m\u00b3",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",

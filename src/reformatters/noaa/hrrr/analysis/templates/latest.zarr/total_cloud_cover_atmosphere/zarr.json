@@ -67,6 +67,7 @@
   "attributes": {
     "long_name": "Total Cloud Cover",
     "short_name": "tcc",
+    "standard_name": "cloud_area_fraction",
     "units": "%",
     "step_type": "instant",
     "coordinates": "latitude longitude spatial_ref",

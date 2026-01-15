@@ -70,6 +70,7 @@
   "attributes": {
     "long_name": "Precipitable water",
     "short_name": "pwat",
+    "standard_name": "atmosphere_mass_content_of_water_vapor",
     "units": "kg/(m^2)",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",

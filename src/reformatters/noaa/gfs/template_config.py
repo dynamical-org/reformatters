@@ -163,6 +163,7 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="tmax",
+                    standard_name="air_temperature",
                     long_name="Maximum temperature",
                     units="C",
                     step_type="max",
@@ -182,6 +183,7 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="tmin",
+                    standard_name="air_temperature",
                     long_name="Minimum temperature",
                     units="C",
                     step_type="min",
@@ -290,6 +292,7 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="tp",
+                    standard_name="precipitation_amount",
                     long_name="Total Precipitation",
                     units="mm/s",
                     comment="Average precipitation rate since the previous forecast step.",
@@ -386,6 +389,7 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="pwat",
+                    standard_name="atmosphere_mass_content_of_water_vapor",
                     long_name="Precipitable water",
                     units="kg/(m^2)",
                     step_type="instant",
@@ -403,6 +407,7 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="tcc",
+                    standard_name="cloud_area_fraction",
                     long_name="Total Cloud Cover",
                     units="%",
                     step_type="avg",
@@ -440,6 +445,7 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="sdswrf",
+                    standard_name="surface_downwelling_shortwave_flux_in_air",
                     long_name="Surface downward short-wave radiation flux",
                     units="W/(m^2)",
                     step_type="avg",
@@ -459,6 +465,7 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="sdlwrf",
+                    standard_name="surface_downwelling_longwave_flux_in_air",
                     long_name="Surface downward long-wave radiation flux",
                     units="W/(m^2)",
                     step_type="avg",
@@ -478,6 +485,7 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="prmsl",
+                    standard_name="air_pressure_at_mean_sea_level",
                     long_name="Pressure reduced to MSL",
                     units="Pa",
                     step_type="instant",

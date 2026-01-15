@@ -89,6 +89,7 @@
         "attributes": {
           "long_name": "Convective available potential energy",
           "short_name": "cape_con",
+          "standard_name": "atmosphere_convective_available_potential_energy",
           "units": "J kg-1",
           "comment": "Convective available potential energy",
           "step_type": "instant",
@@ -265,6 +266,7 @@
         "attributes": {
           "long_name": "Downward direct short wave radiation flux at surface",
           "short_name": "aswdir_s",
+          "standard_name": "surface_direct_downwelling_shortwave_flux_in_air",
           "units": "W m-2",
           "comment": "Downward solar direct radiation flux at the surface, averaged over forecast time. This quantity is not directly provided by the radiation scheme. It is aposteriori diagnosed from the definition of the surface net shortwave radiation flux.",
           "step_type": "avg",
@@ -407,6 +409,7 @@
         "attributes": {
           "long_name": "High level clouds",
           "short_name": "clch",
+          "standard_name": "cloud_area_fraction_in_atmosphere_layer",
           "units": "%",
           "comment": "Cloud Cover (0 - 400 hPa). Different agencies use different short_names for this same parameter: ECMWF: HCC; WMO GRIB table: HCDC.",
           "step_type": "instant",
@@ -771,6 +774,7 @@
         "attributes": {
           "long_name": "Low level clouds",
           "short_name": "clcl",
+          "standard_name": "cloud_area_fraction_in_atmosphere_layer",
           "units": "%",
           "comment": "Cloud Cover (800 hPa - Soil). Different agencies use different short_names for this same parameter: ECMWF: LCC; WMO GRIB table: LCDC.",
           "step_type": "instant",
@@ -859,6 +863,7 @@
         "attributes": {
           "long_name": "Time-maximum instantaneous 10 metre wind gust",
           "short_name": "i10fg",
+          "standard_name": "wind_speed_of_gust",
           "units": "m/s",
           "comment": "Maximum wind gust at 10 m above ground. It is diagnosed from the turbulence state in the atmospheric boundary layer, including a potential enhancement by the SSO parameterization over mountainous terrain. In the presence of deep convection, it contains an additional contribution due to convective gusts.",
           "step_type": "max",
@@ -947,6 +952,7 @@
         "attributes": {
           "long_name": "Mid level clouds",
           "short_name": "clcm",
+          "standard_name": "cloud_area_fraction_in_atmosphere_layer",
           "units": "%",
           "comment": "Cloud Cover (400 - 800 hPa). Different agencies use different short_names for this same parameter: ECMWF: MCC; WMO GRIB table: MCDC.",
           "step_type": "instant",
@@ -1035,6 +1041,7 @@
         "attributes": {
           "long_name": "Total Precipitation",
           "short_name": "tp",
+          "standard_name": "precipitation_amount",
           "units": "kg m**-2",
           "comment": "Total precipitation accumulated since model start. TOT_PREC = RAIN_GSP + SNOW_GSP + RAIN_CON + SNOW_CON.",
           "step_type": "accum",
@@ -1123,6 +1130,7 @@
         "attributes": {
           "long_name": "Pressure reduced to mean sea level (MSL)",
           "short_name": "prmsl",
+          "standard_name": "air_pressure_at_mean_sea_level",
           "units": "Pa",
           "comment": "Surface pressure reduced to MSL",
           "step_type": "instant",
@@ -1389,6 +1397,7 @@
         "attributes": {
           "long_name": "Snow depth water equivalent",
           "short_name": "sd",
+          "standard_name": "lwe_thickness_of_surface_snow_amount",
           "units": "kg m**-2",
           "comment": "Snow depth water equivalent in kg/m2. Set to 0 above water surfaces and snow-free land points.",
           "step_type": "instant",
@@ -1614,6 +1623,7 @@
         "attributes": {
           "long_name": "Surface water Runoff",
           "short_name": "watr",
+          "standard_name": "surface_runoff_amount",
           "units": "kg m-2",
           "comment": "Surface water runoff from interception and snow reservoir and from limited infiltration rate. Sum over forecast.",
           "step_type": "accum",
@@ -1791,6 +1801,7 @@
         "attributes": {
           "long_name": "Total Cloud Cover",
           "short_name": "clct",
+          "standard_name": "cloud_area_fraction",
           "units": "%",
           "comment": "Total cloud cover. Different agencies use different short_names for this same parameter: ECMWF: TCC; NOAA & WMO: TCDC.",
           "step_type": "instant",

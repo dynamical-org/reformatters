@@ -70,6 +70,7 @@
   "attributes": {
     "long_name": "Surface downward long-wave radiation flux",
     "short_name": "sdlwrf",
+    "standard_name": "surface_downwelling_longwave_flux_in_air",
     "units": "W/(m^2)",
     "comment": "Average over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
     "step_type": "avg",
