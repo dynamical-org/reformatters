@@ -338,7 +338,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Downward diffusive short wave radiation flux at surface",
                     units="W m-2",
                     step_type="avg",
-                    standard_name="Mean surface diffuse short-wave radiation flux",  # From ECMWF.
+                    standard_name="surface_diffuse_downwelling_shortwave_flux_in_air",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="aswdifd_s",
@@ -452,7 +452,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=DataVarAttrs(
                     short_name="sde",
                     long_name="Snow depth",
-                    standard_name="lwe_thickness_of_surface_snow_amount",
+                    standard_name="surface_snow_thickness",
                     units="m",
                     step_type="instant",
                     comment=(
@@ -558,7 +558,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     short_name="tp",
                     standard_name="precipitation_flux",
                     long_name="Total Precipitation",
-                    units="kg m**-2",
+                    units="kg m-2",
                     step_type="accum",
                     comment=(
                         "Total precipitation accumulated since model start."
@@ -632,7 +632,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     short_name="sd",
                     standard_name="lwe_thickness_of_surface_snow_amount",
                     long_name="Snow depth water equivalent",
-                    units="kg m**-2",
+                    units="kg m-2",
                     step_type="instant",
                     comment=(
                         "Snow depth water equivalent in kg/m2."

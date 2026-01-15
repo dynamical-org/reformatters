@@ -358,7 +358,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 attrs=DataVarAttrs(
                     short_name="t2m",
                     long_name="2 metre temperature",
-                    units="C",
+                    units="degC",
                     step_type="instant",
                     standard_name="air_temperature",
                 ),
@@ -493,7 +493,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     short_name="sdlwrf",
                     standard_name="surface_downwelling_longwave_flux_in_air",
                     long_name="Surface downward long-wave radiation flux",
-                    units="W/(m^2)",
+                    units="W m-2",
                     step_type="avg",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
@@ -514,7 +514,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     short_name="sdswrf",
                     standard_name="surface_downwelling_shortwave_flux_in_air",
                     long_name="Surface downward short-wave radiation flux",
-                    units="W/(m^2)",
+                    units="W m-2",
                     step_type="avg",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
@@ -552,7 +552,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 attrs=DataVarAttrs(
                     short_name="2d",
                     long_name="2 metre dewpoint temperature",
-                    units="C",
+                    units="degC",
                     step_type="instant",
                     standard_name="dew_point_temperature",
                 ),

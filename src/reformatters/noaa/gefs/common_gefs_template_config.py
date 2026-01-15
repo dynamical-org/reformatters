@@ -145,7 +145,7 @@ def get_shared_data_var_configs(
             attrs=DataVarAttrs(
                 short_name="t2m",
                 long_name="2 metre temperature",
-                units="C",
+                units="degC",
                 step_type="instant",
                 standard_name="air_temperature",
             ),
@@ -184,7 +184,7 @@ def get_shared_data_var_configs(
                 short_name="tmax",
                 standard_name="air_temperature",
                 long_name="Maximum temperature",
-                units="C",
+                units="degC",
                 step_type="max",
             ),
             internal_attrs=GEFSInternalAttrs(
@@ -204,7 +204,7 @@ def get_shared_data_var_configs(
                 short_name="tmin",
                 standard_name="air_temperature",
                 long_name="Minimum temperature",
-                units="C",
+                units="degC",
                 step_type="min",
             ),
             internal_attrs=GEFSInternalAttrs(
@@ -418,7 +418,7 @@ def get_shared_data_var_configs(
                 short_name="pwat",
                 standard_name="atmosphere_mass_content_of_water_vapor",
                 long_name="Precipitable water",
-                units="kg/(m^2)",
+                units="kg m-2",
                 step_type="instant",
             ),
             internal_attrs=GEFSInternalAttrs(
@@ -477,7 +477,7 @@ def get_shared_data_var_configs(
                 short_name="sdswrf",
                 standard_name="surface_downwelling_shortwave_flux_in_air",
                 long_name="Surface downward short-wave radiation flux",
-                units="W/(m^2)",
+                units="W m-2",
                 comment="Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
                 step_type="avg",
             ),
@@ -498,7 +498,7 @@ def get_shared_data_var_configs(
                 short_name="sdlwrf",
                 standard_name="surface_downwelling_longwave_flux_in_air",
                 long_name="Surface downward long-wave radiation flux",
-                units="W/(m^2)",
+                units="W m-2",
                 comment="Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
                 step_type="avg",
             ),

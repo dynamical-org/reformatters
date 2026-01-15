@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -463,3 +464,79 @@ def test_cf_data_variables_have_long_name(
             f"CF conventions require all data variables have a long_name. "
             f"Current attrs: {dict(var_attrs)}"
         )
+
+
+# Invalid unit patterns that should not be used in CF-compliant datasets
+# CF Conventions use UDUNITS-style unit expressions
+INVALID_UNIT_PATTERNS = [
+    # Pattern, explanation
+    (r"\*\*", "Use superscript notation like 'm-2' instead of 'm**-2'"),
+    (r"\(.*\^.*\)", "Use 'm-2' notation instead of parentheses like '/(m^2)'"),
+    (r"/\(", "Use 'm-2' notation instead of '/(...)' like 'kg/(m^2)'"),
+]
+
+# Invalid unit strings that should be replaced with CF-compliant alternatives
+INVALID_UNIT_STRINGS = {
+    "C": "Temperature should use 'K' (Kelvin) or 'degC' (degrees Celsius), not 'C'",
+    "unitless": "Dimensionless quantities should use '1' per CF conventions",
+    "categorical": "Categorical data should use '1' per CF conventions",
+}
+
+
+@pytest.mark.parametrize(
+    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+)
+def test_cf_units_use_valid_udunits_format(
+    dataset: DynamicalDataset[Any, Any],
+) -> None:
+    """
+    Ensure all unit strings follow CF Conventions UDUNITS-style formatting.
+
+    CF Conventions specify that units should be expressible in UDUNITS format:
+    - Use 'm-2' notation for inverse units, not '/(m^2)' or 'm**-2'
+    - Temperature should be 'K' or 'degC', not 'C'
+    - Dimensionless quantities should use '1', not 'unitless' or 'categorical'
+    """
+    template_config = dataset.template_config
+
+    errors: list[str] = []
+
+    # Check data variable units
+    for var_config in template_config.data_vars:
+        units = var_config.attrs.units
+        if units is None:
+            continue
+
+        # Check for invalid patterns
+        for pattern, explanation in INVALID_UNIT_PATTERNS:
+            if re.search(pattern, units):
+                errors.append(
+                    f"Variable '{var_config.name}' has invalid unit format '{units}': {explanation}"
+                )
+
+        # Check for invalid unit strings
+        if units in INVALID_UNIT_STRINGS:
+            errors.append(
+                f"Variable '{var_config.name}' has invalid unit '{units}': {INVALID_UNIT_STRINGS[units]}"
+            )
+
+    # Check coordinate units
+    for coord_config in template_config.coords:
+        units = coord_config.attrs.units
+        if units is None:
+            continue
+
+        # Check for invalid patterns
+        for pattern, explanation in INVALID_UNIT_PATTERNS:
+            if re.search(pattern, units):
+                errors.append(
+                    f"Coordinate '{coord_config.name}' has invalid unit format '{units}': {explanation}"
+                )
+
+        # Check for invalid unit strings
+        if units in INVALID_UNIT_STRINGS:
+            errors.append(
+                f"Coordinate '{coord_config.name}' has invalid unit '{units}': {INVALID_UNIT_STRINGS[units]}"
+            )
+
+    assert not errors, "CF unit format violations found:\n" + "\n".join(errors)

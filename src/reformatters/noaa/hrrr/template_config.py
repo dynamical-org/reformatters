@@ -176,7 +176,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="t2m",
                     long_name="2 metre temperature",
-                    units="C",
+                    units="degC",
                     step_type="instant",
                     standard_name="air_temperature",
                 ),
@@ -256,7 +256,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     short_name="pwat",
                     standard_name="atmosphere_mass_content_of_water_vapor",
                     long_name="Precipitable water",
-                    units="kg/(m^2)",
+                    units="kg m-2",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -294,7 +294,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     short_name="sdswrf",
                     standard_name="surface_downwelling_shortwave_flux_in_air",
                     long_name="Surface downward short-wave radiation flux",
-                    units="W/(m^2)",
+                    units="W m-2",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -313,7 +313,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     short_name="sdlwrf",
                     standard_name="surface_downwelling_longwave_flux_in_air",
                     long_name="Surface downward long-wave radiation flux",
-                    units="W/(m^2)",
+                    units="W m-2",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
