@@ -143,6 +143,7 @@ def select_variables_for_plotting(
             raise ValueError("No valid variables specified")
     else:
         selected_vars = available_vars
+    selected_vars.sort()
     return selected_vars
 
 
