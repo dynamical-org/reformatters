@@ -1,5 +1,14 @@
 This project contains code to reformat weather data into the zarr v3 file format.
 
+## Repo map (high level)
+* `src/reformatters/common/`: shared framework (template, region jobs, storage, kubernetes, validation)
+* `src/reformatters/noaa/`, `src/reformatters/ecmwf/`, `src/reformatters/dwd/`, `src/reformatters/contrib/`: dataset integrations + checked-in templates
+* `src/reformatters/example/`: scaffolding and examples for new integrations
+* `src/scripts/`: validation and utility scripts
+* `docs/`: design and integration docs (start with `docs/dataset_integration_guide.md`)
+* `deploy/`: Docker and Kubernetes deployment assets
+* `tests/`: pytest coverage
+
 ## Approach overview
 
 Datasets are created in 3 phases:
@@ -8,6 +17,31 @@ Datasets are created in 3 phases:
 3. Operational updates to the zarr are run using a kubernetes cronjob and validated by another kubernetes cronjob which runs after the update is expected to succeed. To ensure the archive is valid to readers throughout the update, the update writes data chunks for all data variables first, then updates the zarr metdata to reflect the larger dataset size. The operational update runs a single process to avoid interprocess communication while ensuring the metadata is updated last.
 
 Common utilities and conventions seek to reduce the amount of unique code required for a single source of weather data/zarr dataset.
+
+## Core dataset building blocks
+See `docs/dataset_integration_guide.md` for a full walkthrough.
+
+* `TemplateConfig`: defines dataset schema, coordinates, and metadata. Generates `templates/latest.zarr` that drives all processing.
+* `RegionJob`: unit of work for a slice of the append dimension. Computes required source files, reads/transforms, and writes shards.
+* `DynamicalDataset`: wires `TemplateConfig`, `RegionJob`, and storage together. Exposes the CLI and orchestrates backfill/update/validate flows.
+
+These classes are intended to be composed: a dataset defines a `TemplateConfig` subclass and a `RegionJob` subclass, then registers a `DynamicalDataset` instance in `src/reformatters/__main__.py`.
+
+## Dataset CLI commands
+Each dataset is a Typer subcommand: `uv run main DATASET_ID <command>`. Use `uv run main --help` and `uv run main DATASET_ID --help` to discover IDs and arguments.
+
+Commands from `DynamicalDataset.get_cli()`:
+* `update-template`: regenerate the checked-in template metadata (`templates/latest.zarr`)
+* `update`: run an operational update (cronjob entrypoint)
+* `backfill-kubernetes`: submit a Kubernetes indexed job for backfill
+* `backfill-local`: backfill in the local process (dev/test only)
+* `process-backfill-region-jobs`: worker entrypoint for a backfill job index
+* `validate`: run dataset validators against primary and replicas
+
+## Parallelization model
+* `RegionJob.get_jobs()` deterministically enumerates all region jobs for a backfill or update.
+* Each worker computes the full list and selects its subset by stride using `worker_index` and `workers_total` (see `get_worker_jobs`).
+* This makes job assignment stable and reproducible across distributed workers without a coordinator.
 
 ## Tools
 * `uv` to manage dependencies and python environments
