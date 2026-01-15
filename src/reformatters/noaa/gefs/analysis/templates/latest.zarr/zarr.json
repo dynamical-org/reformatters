@@ -417,7 +417,7 @@
           "long_name": "Surface downward long-wave radiation flux",
           "short_name": "sdlwrf",
           "standard_name": "surface_downwelling_longwave_flux_in_air",
-          "units": "W/(m^2)",
+          "units": "W m-2",
           "comment": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
           "step_type": "avg",
           "coordinates": "spatial_ref",
@@ -502,7 +502,7 @@
           "long_name": "Surface downward short-wave radiation flux",
           "short_name": "sdswrf",
           "standard_name": "surface_downwelling_shortwave_flux_in_air",
-          "units": "W/(m^2)",
+          "units": "W m-2",
           "comment": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
           "step_type": "avg",
           "coordinates": "spatial_ref",
@@ -783,7 +783,7 @@
           "long_name": "Maximum temperature",
           "short_name": "tmax",
           "standard_name": "air_temperature",
-          "units": "C",
+          "units": "degC",
           "step_type": "max",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -867,7 +867,7 @@
           "long_name": "Minimum temperature",
           "short_name": "tmin",
           "standard_name": "air_temperature",
-          "units": "C",
+          "units": "degC",
           "step_type": "min",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -1035,7 +1035,7 @@
           "long_name": "Precipitable water",
           "short_name": "pwat",
           "standard_name": "atmosphere_mass_content_of_water_vapor",
-          "units": "kg/(m^2)",
+          "units": "kg m-2",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -1505,7 +1505,7 @@
           "long_name": "2 metre temperature",
           "short_name": "t2m",
           "standard_name": "air_temperature",
-          "units": "C",
+          "units": "degC",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="

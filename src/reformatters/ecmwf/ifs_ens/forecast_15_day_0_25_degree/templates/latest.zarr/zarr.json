@@ -184,7 +184,7 @@
           "long_name": "2 metre dewpoint temperature",
           "short_name": "2d",
           "standard_name": "dew_point_temperature",
-          "units": "C",
+          "units": "degC",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -276,7 +276,7 @@
           "long_name": "Surface downward long-wave radiation flux",
           "short_name": "sdlwrf",
           "standard_name": "surface_downwelling_longwave_flux_in_air",
-          "units": "W/(m^2)",
+          "units": "W m-2",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -368,7 +368,7 @@
           "long_name": "Surface downward short-wave radiation flux",
           "short_name": "sdswrf",
           "standard_name": "surface_downwelling_shortwave_flux_in_air",
-          "units": "W/(m^2)",
+          "units": "W m-2",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1262,7 +1262,7 @@
           "long_name": "2 metre temperature",
           "short_name": "t2m",
           "standard_name": "air_temperature",
-          "units": "C",
+          "units": "degC",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
