@@ -71,7 +71,7 @@
     "long_name": "Total Cloud Cover",
     "short_name": "tcc",
     "standard_name": "cloud_area_fraction",
-    "units": "%",
+    "units": "percent",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

@@ -92,7 +92,8 @@
         "attributes": {
           "long_name": "Categorical freezing rain",
           "short_name": "cfrzr",
-          "units": "0=no; 1=yes",
+          "units": "1",
+          "comment": "0=no; 1=yes",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -183,7 +184,8 @@
         "attributes": {
           "long_name": "Categorical ice pellets",
           "short_name": "cicep",
-          "units": "0=no; 1=yes",
+          "units": "1",
+          "comment": "0=no; 1=yes",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -274,7 +276,8 @@
         "attributes": {
           "long_name": "Categorical rain",
           "short_name": "crain",
-          "units": "0=no; 1=yes",
+          "units": "1",
+          "comment": "0=no; 1=yes",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -365,7 +368,8 @@
         "attributes": {
           "long_name": "Categorical snow",
           "short_name": "csnow",
-          "units": "0=no; 1=yes",
+          "units": "1",
+          "comment": "0=no; 1=yes",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -457,7 +461,7 @@
           "long_name": "Surface downward long-wave radiation flux",
           "short_name": "sdlwrf",
           "standard_name": "surface_downwelling_longwave_flux_in_air",
-          "units": "W/(m^2)",
+          "units": "W m-2",
           "comment": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
@@ -550,7 +554,7 @@
           "long_name": "Surface downward short-wave radiation flux",
           "short_name": "sdswrf",
           "standard_name": "surface_downwelling_shortwave_flux_in_air",
-          "units": "W/(m^2)",
+          "units": "W m-2",
           "comment": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
@@ -1119,7 +1123,7 @@
           "long_name": "Maximum temperature",
           "short_name": "tmax",
           "standard_name": "air_temperature",
-          "units": "C",
+          "units": "degree_Celsius",
           "step_type": "max",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1211,7 +1215,7 @@
           "long_name": "Minimum temperature",
           "short_name": "tmin",
           "standard_name": "air_temperature",
-          "units": "C",
+          "units": "degree_Celsius",
           "step_type": "min",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1302,7 +1306,7 @@
         "attributes": {
           "long_name": "Percent frozen precipitation",
           "short_name": "cpofp",
-          "units": "%",
+          "units": "percent",
           "comment": "Contains the value -50 when there is no precipitation.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
@@ -1395,7 +1399,7 @@
           "long_name": "Precipitable water",
           "short_name": "pwat",
           "standard_name": "atmosphere_mass_content_of_water_vapor",
-          "units": "kg/(m^2)",
+          "units": "kg m-2",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1764,7 +1768,7 @@
           "long_name": "2 metre relative humidity",
           "short_name": "r2",
           "standard_name": "relative_humidity",
-          "units": "%",
+          "units": "percent",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1905,7 +1909,7 @@
           "long_name": "2 metre temperature",
           "short_name": "t2m",
           "standard_name": "air_temperature",
-          "units": "C",
+          "units": "degree_Celsius",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1997,7 +2001,7 @@
           "long_name": "Total Cloud Cover",
           "short_name": "tcc",
           "standard_name": "cloud_area_fraction",
-          "units": "%",
+          "units": "percent",
           "comment": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",

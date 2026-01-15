@@ -176,7 +176,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="t2m",
                     long_name="2 metre temperature",
-                    units="C",
+                    units="degree_Celsius",
                     step_type="instant",
                     standard_name="air_temperature",
                 ),
@@ -256,7 +256,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     short_name="pwat",
                     standard_name="atmosphere_mass_content_of_water_vapor",
                     long_name="Precipitable water",
-                    units="kg/(m^2)",
+                    units="kg m-2",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -275,7 +275,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     short_name="tcc",
                     standard_name="cloud_area_fraction",
                     long_name="Total Cloud Cover",
-                    units="%",
+                    units="percent",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -294,7 +294,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     short_name="sdswrf",
                     standard_name="surface_downwelling_shortwave_flux_in_air",
                     long_name="Surface downward short-wave radiation flux",
-                    units="W/(m^2)",
+                    units="W m-2",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -313,7 +313,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     short_name="sdlwrf",
                     standard_name="surface_downwelling_longwave_flux_in_air",
                     long_name="Surface downward long-wave radiation flux",
-                    units="W/(m^2)",
+                    units="W m-2",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -350,7 +350,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="cpofp",
                     long_name="Percent frozen precipitation",
-                    units="%",
+                    units="percent",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -387,7 +387,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="cicep",
                     long_name="Categorical ice pellets",
-                    units="0=no; 1=yes",
+                    units="1",
+                    comment="0=no; 1=yes",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -405,7 +406,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="csnow",
                     long_name="Categorical snow",
-                    units="0=no; 1=yes",
+                    units="1",
+                    comment="0=no; 1=yes",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -423,7 +425,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="cfrzr",
                     long_name="Categorical freezing rain",
-                    units="0=no; 1=yes",
+                    units="1",
+                    comment="0=no; 1=yes",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -441,7 +444,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="crain",
                     long_name="Categorical rain",
-                    units="0=no; 1=yes",
+                    units="1",
+                    comment="0=no; 1=yes",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -460,7 +464,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     short_name="r2",
                     standard_name="relative_humidity",
                     long_name="2 metre relative humidity",
-                    units="%",
+                    units="percent",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(

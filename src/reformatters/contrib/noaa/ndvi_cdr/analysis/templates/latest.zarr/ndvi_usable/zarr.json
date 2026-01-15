@@ -68,7 +68,7 @@
     "long_name": "normalized_difference_vegetation_index",
     "short_name": "ndvi_usable",
     "standard_name": "normalized_difference_vegetation_index",
-    "units": "unitless",
+    "units": "1",
     "comment": "NDVI values that have been quality checked",
     "step_type": "instant",
     "coordinates": "spatial_ref",

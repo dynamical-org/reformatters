@@ -68,7 +68,7 @@
     "long_name": "2 metre relative humidity",
     "short_name": "r2",
     "standard_name": "relative_humidity",
-    "units": "%",
+    "units": "percent",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

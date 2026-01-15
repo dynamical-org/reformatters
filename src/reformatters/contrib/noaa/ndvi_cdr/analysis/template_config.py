@@ -243,7 +243,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                     short_name="ndvi_raw",
                     long_name="normalized_difference_vegetation_index",
                     standard_name="normalized_difference_vegetation_index",
-                    units="unitless",
+                    units="1",
                     step_type="instant",
                     comment="Raw NDVI values from the NOAA CDR",
                 ),
@@ -264,7 +264,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                     short_name="ndvi_usable",
                     long_name="normalized_difference_vegetation_index",
                     standard_name="normalized_difference_vegetation_index",
-                    units="unitless",
+                    units="1",
                     step_type="instant",
                     comment="NDVI values that have been quality checked",
                 ),
@@ -284,7 +284,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="qa",
                     long_name="quality_assurance",
-                    units="categorical",
+                    units="1",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaNdviCdrInternalAttrs(

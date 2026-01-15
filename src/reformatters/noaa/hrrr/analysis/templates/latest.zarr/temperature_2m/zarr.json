@@ -68,7 +68,7 @@
     "long_name": "2 metre temperature",
     "short_name": "t2m",
     "standard_name": "air_temperature",
-    "units": "C",
+    "units": "degree_Celsius",
     "step_type": "instant",
     "coordinates": "latitude longitude spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

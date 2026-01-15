@@ -7,7 +7,7 @@ from reformatters.common.types import Array1D, ArrayFloat32
 
 # OK to add units to this list if you believe they are reasonable output units to deaccumulate to.
 # We typically expect these to be per-second rates.
-VALID_OUTPUT_UNITS_FOR_DEACCUMULATION = ["mm/s", "m/s", "W/(m^2)"]
+VALID_OUTPUT_UNITS_FOR_DEACCUMULATION = ["mm/s", "m/s", "W/(m^2)", "W m-2"]
 
 # mm/s, ~= 0.25 mm/h or "trace" precipitation
 PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD = -7e-5

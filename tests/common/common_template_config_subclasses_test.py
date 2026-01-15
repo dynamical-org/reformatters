@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -413,6 +414,68 @@ def test_cf_data_variables_have_standard_names_where_applicable(
                 f"If CF Conventions defines a standard name for this variable, add it to the DataVarAttrs. "
                 f"If CF Conventions does NOT define a standard name for this variable, "
                 f"add '{var_config.name}' to allowed_missing_standard_name in this test."
+            )
+
+
+@pytest.mark.parametrize(
+    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+)
+def test_cf_standard_names_use_snake_case(
+    dataset: DynamicalDataset[Any, Any],
+) -> None:
+    """
+    Ensure standard_name values follow CF naming style (snake_case).
+    """
+    template_path = dataset.template_config.template_path()
+    ds = xr.open_zarr(template_path)
+
+    standard_name_pattern = re.compile(r"^[a-z][a-z0-9_]*$")
+
+    for var_name in ds.variables:
+        standard_name = ds[var_name].attrs.get("standard_name")
+        if standard_name is None:
+            continue
+        assert standard_name_pattern.match(standard_name) is not None, (
+            f"Variable '{var_name}' has standard_name='{standard_name}', which is not CF-style snake_case."
+        )
+
+
+@pytest.mark.parametrize(
+    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+)
+def test_cf_units_are_udunits_style(
+    dataset: DynamicalDataset[Any, Any],
+) -> None:
+    """
+    Ensure units use UDUNITS-style strings and avoid common non-CF patterns.
+    """
+    template_path = dataset.template_config.template_path()
+    ds = xr.open_zarr(template_path)
+
+    invalid_units = {
+        "%",
+        "C",
+        "unitless",
+        "categorical",
+        "mm h20",
+        "mm snow thickness",
+    }
+    invalid_substrings = ("m³", "/(", "**")
+
+    for var_name in ds.variables:
+        units = ds[var_name].attrs.get("units")
+        if units is None:
+            continue
+        assert isinstance(units, str)
+        assert units.isascii(), (
+            f"Variable '{var_name}' has non-ASCII units='{units}'. Use ASCII UDUNITS."
+        )
+        assert units not in invalid_units, (
+            f"Variable '{var_name}' has non-CF units='{units}'."
+        )
+        for invalid in invalid_substrings:
+            assert invalid not in units, (
+                f"Variable '{var_name}' has non-CF units='{units}'."
             )
 
 

@@ -74,7 +74,7 @@
     "long_name": "Maximum temperature",
     "short_name": "tmax",
     "standard_name": "air_temperature",
-    "units": "C",
+    "units": "degree_Celsius",
     "step_type": "max",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
