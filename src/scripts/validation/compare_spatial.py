@@ -8,8 +8,8 @@ import zarr
 from reformatters.common.logging import get_logger
 from reformatters.common.time_utils import whole_hours
 from scripts.validation.utils import (
-    OUTPUT_DIR,
     end_date_option,
+    get_output_filepath,
     is_forecast_dataset,
     load_zarr_dataset,
     scope_time_period,
@@ -84,6 +84,7 @@ def create_comparison_plot(  # noqa: PLR0915 PLR0912
     validation_ds: xr.Dataset,
     reference_ds: xr.Dataset,
     variables: list[str],
+    validation_url: str,
     ensemble_member: int | None = None,
     init_time: str | None = None,
     lead_time: str | None = None,
@@ -304,8 +305,8 @@ def create_comparison_plot(  # noqa: PLR0915 PLR0912
         ref_time,
         f"{len(variables)}_variables",
     ]
-    filename = "_".join(filename_parts) + ".png"
-    filepath = f"{OUTPUT_DIR}/{filename}"
+    base_filename = "_".join(filename_parts)
+    filepath = get_output_filepath(base_filename, validation_url)
     plt.savefig(filepath, dpi=300, bbox_inches="tight")
     log.info(f"Comparison plot saved to {filepath}")
 
@@ -313,7 +314,7 @@ def create_comparison_plot(  # noqa: PLR0915 PLR0912
 def compare_spatial(
     validation_url: str,
     reference_url: str = GEFS_ANALYSIS_URL,
-    variables: list[str] = variables_option,
+    variables: list[str] | None = variables_option,
     show_plot: bool = False,
     init_time: str | None = None,
     lead_time: str | None = None,
@@ -372,10 +373,11 @@ def compare_spatial(
         validation_ds,
         spatially_aligned_reference_ds,
         selected_vars,
-        ensemble_member,
-        init_time,
-        lead_time,
-        time,
+        validation_url=validation_url,
+        ensemble_member=ensemble_member,
+        init_time=init_time,
+        lead_time=lead_time,
+        time=time,
     )
 
     if show_plot:
