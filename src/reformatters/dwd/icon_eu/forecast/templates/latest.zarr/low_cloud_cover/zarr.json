@@ -70,6 +70,7 @@
   "attributes": {
     "long_name": "Low level clouds",
     "short_name": "clcl",
+    "standard_name": "cloud_area_fraction_in_atmosphere_layer",
     "units": "%",
     "comment": "Cloud Cover (800 hPa - Soil). Different agencies use different short_names for this same parameter: ECMWF: LCC; WMO GRIB table: LCDC.",
     "step_type": "instant",

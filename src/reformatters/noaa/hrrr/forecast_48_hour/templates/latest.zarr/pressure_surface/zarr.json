@@ -70,6 +70,7 @@
   "attributes": {
     "long_name": "Surface pressure",
     "short_name": "sp",
+    "standard_name": "surface_air_pressure",
     "units": "Pa",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",

@@ -73,6 +73,7 @@
   "attributes": {
     "long_name": "Minimum temperature",
     "short_name": "tmin",
+    "standard_name": "air_temperature",
     "units": "C",
     "step_type": "min",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",

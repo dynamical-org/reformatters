@@ -67,6 +67,7 @@
   "attributes": {
     "long_name": "Minimum temperature",
     "short_name": "tmin",
+    "standard_name": "air_temperature",
     "units": "C",
     "step_type": "min",
     "coordinates": "spatial_ref",

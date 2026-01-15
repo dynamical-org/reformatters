@@ -456,6 +456,7 @@
         "attributes": {
           "long_name": "Surface downward long-wave radiation flux",
           "short_name": "sdlwrf",
+          "standard_name": "surface_downwelling_longwave_flux_in_air",
           "units": "W/(m^2)",
           "comment": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
           "step_type": "avg",
@@ -548,6 +549,7 @@
         "attributes": {
           "long_name": "Surface downward short-wave radiation flux",
           "short_name": "sdswrf",
+          "standard_name": "surface_downwelling_shortwave_flux_in_air",
           "units": "W/(m^2)",
           "comment": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
           "step_type": "avg",
@@ -1116,6 +1118,7 @@
         "attributes": {
           "long_name": "Maximum temperature",
           "short_name": "tmax",
+          "standard_name": "air_temperature",
           "units": "C",
           "step_type": "max",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
@@ -1207,6 +1210,7 @@
         "attributes": {
           "long_name": "Minimum temperature",
           "short_name": "tmin",
+          "standard_name": "air_temperature",
           "units": "C",
           "step_type": "min",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
@@ -1390,6 +1394,7 @@
         "attributes": {
           "long_name": "Precipitable water",
           "short_name": "pwat",
+          "standard_name": "atmosphere_mass_content_of_water_vapor",
           "units": "kg/(m^2)",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
@@ -1481,6 +1486,7 @@
         "attributes": {
           "long_name": "Total Precipitation",
           "short_name": "tp",
+          "standard_name": "precipitation_amount",
           "units": "mm/s",
           "comment": "Average precipitation rate since the previous forecast step.",
           "step_type": "avg",
@@ -1573,6 +1579,7 @@
         "attributes": {
           "long_name": "Pressure reduced to MSL",
           "short_name": "prmsl",
+          "standard_name": "air_pressure_at_mean_sea_level",
           "units": "Pa",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
@@ -1989,6 +1996,7 @@
         "attributes": {
           "long_name": "Total Cloud Cover",
           "short_name": "tcc",
+          "standard_name": "cloud_area_fraction",
           "units": "%",
           "comment": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
           "step_type": "avg",

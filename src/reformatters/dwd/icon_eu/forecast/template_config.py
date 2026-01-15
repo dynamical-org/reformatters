@@ -609,6 +609,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=DataVarAttrs(
                     short_name="i10fg",
                     long_name="Time-maximum instantaneous 10 metre wind gust",
+                    standard_name="wind_speed_of_gust",
                     units="m/s",
                     step_type="max",
                     comment=(

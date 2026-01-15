@@ -67,6 +67,7 @@
   "attributes": {
     "long_name": "Geopotential height",
     "short_name": "gh",
+    "standard_name": "geopotential_height",
     "units": "gpm",
     "step_type": "instant",
     "coordinates": "latitude longitude spatial_ref",

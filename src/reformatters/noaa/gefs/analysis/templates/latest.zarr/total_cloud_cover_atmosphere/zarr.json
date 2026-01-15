@@ -67,6 +67,7 @@
   "attributes": {
     "long_name": "Total Cloud Cover",
     "short_name": "tcc",
+    "standard_name": "cloud_area_fraction",
     "units": "%",
     "comment": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
     "step_type": "avg",
