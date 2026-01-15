@@ -47,14 +47,12 @@ type CfAxis = Literal["X", "Y", "Z", "T"]
 
 
 class CoordinateAttrs(FrozenBaseModel):
-    units: TimestampUnits | TimedeltaUnits | str | None
-    statistics_approximate: StatisticsApproximate | None
-    comment: str | None = None
-
-    # CF convention attributes
     long_name: str | None = None
     standard_name: str | None = None
     axis: CfAxis | None = None
+    units: TimestampUnits | TimedeltaUnits | str | None
+    statistics_approximate: StatisticsApproximate | None
+    comment: str | None = None
 
     # Rio xarray attributes to encode spatial reference system
     crs_wkt: str | None = None

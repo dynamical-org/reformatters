@@ -556,7 +556,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="tp",
-                    standard_name="precipitation_amount",
+                    standard_name="precipitation_flux",
                     long_name="Total Precipitation",
                     units="kg m**-2",
                     step_type="accum",

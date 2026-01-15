@@ -232,7 +232,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="tp",
-                    standard_name="precipitation_amount",
+                    standard_name="precipitation_flux",
                     long_name="Total Precipitation",
                     units="mm/s",
                     comment="Average precipitation rate since the previous forecast step.",

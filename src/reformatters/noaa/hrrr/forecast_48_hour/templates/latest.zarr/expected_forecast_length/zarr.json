@@ -37,11 +37,11 @@
     }
   ],
   "attributes": {
+    "long_name": "Expected forecast length",
     "statistics_approximate": {
       "min": "0 days 00:00:00",
       "max": "2 days 00:00:00"
     },
-    "long_name": "Expected forecast length",
     "dtype": "timedelta64[ns]",
     "units": "seconds"
   },

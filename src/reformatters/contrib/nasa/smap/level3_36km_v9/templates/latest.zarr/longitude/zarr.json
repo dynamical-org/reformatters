@@ -39,13 +39,13 @@
     }
   ],
   "attributes": {
+    "long_name": "Longitude",
+    "standard_name": "longitude",
     "units": "degrees_east",
     "statistics_approximate": {
       "min": -180.0,
       "max": 180.0
     },
-    "long_name": "Longitude",
-    "standard_name": "longitude",
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [

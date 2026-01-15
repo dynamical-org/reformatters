@@ -322,11 +322,11 @@
           }
         ],
         "attributes": {
+          "long_name": "Expected forecast length",
           "statistics_approximate": {
             "min": "0 days 00:00:00",
             "max": "5 days 00:00:00"
           },
-          "long_name": "Expected forecast length",
           "dtype": "timedelta64[ns]",
           "units": "seconds"
         },
@@ -465,11 +465,11 @@
           }
         ],
         "attributes": {
+          "long_name": "Ingested forecast length",
           "statistics_approximate": {
             "min": "0 days 00:00:00",
             "max": "5 days 00:00:00"
           },
-          "long_name": "Ingested forecast length",
           "dtype": "timedelta64[ns]",
           "units": "seconds"
         },
@@ -519,12 +519,12 @@
           }
         ],
         "attributes": {
+          "long_name": "Forecast initialization time",
+          "standard_name": "forecast_reference_time",
           "statistics_approximate": {
             "min": "2025-10-03T00:00:00",
             "max": "Present"
           },
-          "long_name": "Forecast initialization time",
-          "standard_name": "forecast_reference_time",
           "units": "seconds since 1970-01-01",
           "calendar": "proleptic_gregorian"
         },
@@ -574,14 +574,14 @@
           }
         ],
         "attributes": {
+          "long_name": "Latitude",
+          "standard_name": "latitude",
+          "axis": "Y",
           "units": "degrees_north",
           "statistics_approximate": {
             "min": 29.5,
             "max": 70.5
           },
-          "long_name": "Latitude",
-          "standard_name": "latitude",
-          "axis": "Y",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -630,12 +630,12 @@
           }
         ],
         "attributes": {
+          "long_name": "Forecast lead time",
+          "standard_name": "forecast_period",
           "statistics_approximate": {
             "min": "0 days 00:00:00",
             "max": "5 days 00:00:00"
           },
-          "long_name": "Forecast lead time",
-          "standard_name": "forecast_period",
           "dtype": "timedelta64[ns]",
           "units": "seconds"
         },
@@ -685,14 +685,14 @@
           }
         ],
         "attributes": {
+          "long_name": "Longitude",
+          "standard_name": "longitude",
+          "axis": "X",
           "units": "degrees_east",
           "statistics_approximate": {
             "min": -23.5,
             "max": 62.5
           },
-          "long_name": "Longitude",
-          "standard_name": "longitude",
-          "axis": "X",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -1041,7 +1041,7 @@
         "attributes": {
           "long_name": "Total Precipitation",
           "short_name": "tp",
-          "standard_name": "precipitation_amount",
+          "standard_name": "precipitation_flux",
           "units": "kg m**-2",
           "comment": "Total precipitation accumulated since model start. TOT_PREC = RAIN_GSP + SNOW_GSP + RAIN_CON + SNOW_CON.",
           "step_type": "accum",
@@ -1859,12 +1859,12 @@
           }
         ],
         "attributes": {
+          "long_name": "Valid time",
+          "standard_name": "time",
           "statistics_approximate": {
             "min": "2025-10-03T00:00:00",
             "max": "Present + 5 days"
           },
-          "long_name": "Valid time",
-          "standard_name": "time",
           "units": "seconds since 1970-01-01",
           "calendar": "proleptic_gregorian"
         },

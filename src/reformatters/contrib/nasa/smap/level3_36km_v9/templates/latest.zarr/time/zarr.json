@@ -37,13 +37,13 @@
     }
   ],
   "attributes": {
+    "long_name": "Time",
+    "standard_name": "time",
+    "axis": "T",
     "statistics_approximate": {
       "min": "2015-04-01T00:00:00",
       "max": "Present"
     },
-    "long_name": "Time",
-    "standard_name": "time",
-    "axis": "T",
     "units": "seconds since 1970-01-01",
     "calendar": "proleptic_gregorian"
   },

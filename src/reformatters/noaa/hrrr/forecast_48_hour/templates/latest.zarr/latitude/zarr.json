@@ -39,13 +39,13 @@
     }
   ],
   "attributes": {
+    "long_name": "Latitude",
+    "standard_name": "latitude",
     "units": "degrees_north",
     "statistics_approximate": {
       "min": 21.138123,
       "max": 52.615653
     },
-    "long_name": "Latitude",
-    "standard_name": "latitude",
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [

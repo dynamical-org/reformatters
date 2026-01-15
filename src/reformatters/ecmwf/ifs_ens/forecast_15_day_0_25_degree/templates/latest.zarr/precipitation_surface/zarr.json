@@ -73,7 +73,7 @@
   "attributes": {
     "long_name": "Total precipitation",
     "short_name": "tp",
-    "standard_name": "precipitation_amount",
+    "standard_name": "precipitation_flux",
     "units": "mm/s",
     "comment": "Average precipitation rate since the previous forecast step.",
     "step_type": "avg",

@@ -447,7 +447,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="tp",
-                    standard_name="precipitation_amount",
+                    standard_name="precipitation_flux",
                     long_name="Total precipitation",
                     units="mm/s",
                     step_type="avg",

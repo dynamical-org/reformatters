@@ -39,12 +39,12 @@
     }
   ],
   "attributes": {
+    "long_name": "Valid time",
+    "standard_name": "time",
     "statistics_approximate": {
       "min": "2021-05-01T00:00:00",
       "max": "Present + 16 days"
     },
-    "long_name": "Valid time",
-    "standard_name": "time",
     "units": "seconds since 1970-01-01",
     "calendar": "proleptic_gregorian"
   },

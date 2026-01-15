@@ -37,12 +37,12 @@
     }
   ],
   "attributes": {
+    "long_name": "Forecast lead time",
+    "standard_name": "forecast_period",
     "statistics_approximate": {
       "min": "0 days 00:00:00",
       "max": "2 days 00:00:00"
     },
-    "long_name": "Forecast lead time",
-    "standard_name": "forecast_period",
     "dtype": "timedelta64[ns]",
     "units": "seconds"
   },
