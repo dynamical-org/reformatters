@@ -50,7 +50,11 @@ DYNAMICAL_ENV=prod uv run main <DATASET_ID> backfill-kubernetes \
 
 ## 3. Validate
 
-Run the plotting tools and inspect the generated images in `data/output/`.
+Run the plotting tools and inspect the generated images in `data/output/<dataset-id>/`.
+
+```bash
+uv run python src/scripts/validation/plots.py run-all <DATASET_URL>
+```
 
 Common issues to look out for:
 - Unexpected missing data (nulls/holes where you expect coverage).
@@ -61,25 +65,8 @@ Common issues to look out for:
 Notes
 - `DATASET_URL` is the complete, direct URL to the dataset (`bucket-prefix/dataset-id/version`), e.g. `s3://us-west-2.opendata.source.coop/dynamical/ecmwf-ifs-ens-forecast-15-day-0-25-degree/v0.1.0.zarr`. The bucket prefix can be found in `__main__.py` and the dataset id and version in the `TemplateConfig.dataset_attributes`.
 - The spatial and timeseries plots will plot the data against a reference dataset (GEFS analysis by default) to highlight unexpected differences.
+- You can also run each validation plot individually, see `uv run src/scripts/validation/plots.py --help`.
 - You can add additional `--variable` flags if side by side plots help add context (e.g. show solar radiation alongside cloud cover).
-
-#### Null reporting
-
-```bash
-uv run python src/scripts/validation/plots.py report-nulls <DATASET_URL> --variable <VARIABLE_NAME>
-```
-
-#### Spatial plots
-
-```bash
-uv run python src/scripts/validation/plots.py compare-spatial <DATASET_URL> --variable <VARIABLE_NAME>
-```
-
-#### Timeseries plots
-
-```bash
-uv run python src/scripts/validation/plots.py compare-timeseries <DATASET_URL> --variable <VARIABLE_NAME>
-```
 
 ## 4. Update dataset catalog documentation
 
