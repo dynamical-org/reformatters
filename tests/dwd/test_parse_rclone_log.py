@@ -4,7 +4,7 @@ from reformatters.dwd.parse_rclone_log import TransferSummary, parse_and_log_rcl
 
 
 def test_parse_rclone_log() -> None:
-    example_log_path = Path(__file__).parent / "example_rclone_copy.json"
+    example_log_path = Path(__file__).parent / "example_rclone_copy.ndjson"
     stderr = example_log_path.read_text()
 
     log_entries = parse_and_log_rclone_json(stderr)

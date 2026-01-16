@@ -1,3 +1,16 @@
+"""
+`rclone copy --use-json-log --verbose` outputs newline-delimited JSON to stderr. The first lines
+contain information about each file that was transferred. (If files are identical on the source and
+destination then they won't be transferred, and hence won't be listed in the file-by-file list of
+transfers.) The last line contains a `stats` object. We parse into a `TransferSummary` object, so we
+can add up the stats for all invocations of `rclone`. An example NDJSON output from `rclone copy`
+is contained in `tests/dwd/example_rclone_copy.ndjson`.
+
+rclone docs:
+- https://rclone.org/docs/#use-json-log
+- https://rclone.org/rc/#core-stats
+"""
+
 import json
 import logging
 from typing import Any, Final, NamedTuple
@@ -11,11 +24,7 @@ _GIBIBYTE: Final[int] = 1024**3
 
 
 class TransferSummary(NamedTuple):
-    """A subset of the values returned by rclone at the end of a copy operation.
-
-    rclone docs:
-    - https://rclone.org/rc/#core-stats
-    """
+    """Stores a subset of the stats returned by rclone after copy operation."""
 
     total_transfers: int = 0  # number of files transferred
     total_bytes: int = 0
@@ -27,7 +36,7 @@ class TransferSummary(NamedTuple):
 
     @classmethod
     def from_rclone_stats(cls, log_entries: list[dict[str, Any]]) -> "TransferSummary":
-        """Extracts the final TransferSummary from rclone log entries."""
+        """Creates a TransferSummary from the `stats` entry in rclone log."""
         # Find the last JSON line that contains a "stats" key
         stats = {}
         for entry in reversed(log_entries):
