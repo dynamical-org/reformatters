@@ -44,10 +44,14 @@ def test_cf_latitude_longitude_recognized(
     ds = xr.open_zarr(template_path)
 
     # Check if this is a projected coordinate system (has x, y as dimension coords)
-    if "latitude" in ds.coords and "longitude" in ds.coords:
-        is_projected = False
-    elif "x" in ds.dims and "y" in ds.dims:
+    if "x" in ds.dims and "y" in ds.dims:
+        assert "x" in ds.coords
+        assert "y" in ds.coords
         is_projected = True
+    elif "latitude" in ds.dims and "longitude" in ds.dims:
+        assert "latitude" in ds.coords
+        assert "longitude" in ds.coords
+        is_projected = False
     else:
         raise ValueError(
             f"Unknown spatial coordinate dimensions for dataset {dataset.dataset_id}. "
