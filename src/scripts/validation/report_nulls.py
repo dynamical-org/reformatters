@@ -3,8 +3,8 @@ import zarr
 
 from reformatters.common.logging import get_logger
 from scripts.validation.utils import (
-    OUTPUT_DIR,
     end_date_option,
+    get_output_filepath,
     get_two_random_points,
     load_zarr_dataset,
     scope_time_period,
@@ -136,8 +136,8 @@ def report_nulls(
     plt.tight_layout()
 
     # Save plot
-    filename = f"{ds.attrs.get('dataset_id', 'unknown')}_null_analysis.png"
-    filepath = f"{OUTPUT_DIR}/{filename}"
+    base_filename = f"{ds.attrs['dataset_id']}_null_analysis"
+    filepath = get_output_filepath(base_filename, dataset_url)
     plt.savefig(filepath, dpi=300, bbox_inches="tight")
     log.info(f"Saved to {filepath}")
 

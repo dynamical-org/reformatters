@@ -8,8 +8,8 @@ from matplotlib.figure import Figure
 
 from reformatters.common.logging import get_logger
 from scripts.validation.utils import (
-    OUTPUT_DIR,
     end_date_option,
+    get_output_filepath,
     get_two_random_points,
     is_forecast_dataset,
     load_zarr_dataset,
@@ -149,9 +149,11 @@ def plot_single_variable_at_point(
     ax.autoscale_view()
 
 
-def save_and_show_plot(fig: Figure, dataset_id: str, show_plot: bool) -> None:
-    filename = f"{dataset_id}_timeseries_comparison.png"
-    filepath = f"{OUTPUT_DIR}/{filename}"
+def save_and_show_plot(
+    fig: Figure, dataset_id: str, validation_url: str, show_plot: bool
+) -> None:
+    base_filename = f"{dataset_id}_timeseries_comparison"
+    filepath = get_output_filepath(base_filename, validation_url)
     fig.savefig(filepath, dpi=300, bbox_inches="tight")
     log.info(f"Saved to {filepath}")
     if show_plot:
@@ -233,4 +235,4 @@ def compare_timeseries(
         f"Timeseries Comparison\n{ds_title} vs {ref_title}\n{title_suffix}", fontsize=14
     )
 
-    save_and_show_plot(fig, dataset_id, show_plot)
+    save_and_show_plot(fig, dataset_id, validation_url, show_plot)

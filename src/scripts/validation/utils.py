@@ -1,15 +1,16 @@
 from datetime import timedelta
+from pathlib import Path
 
+import icechunk
 import numpy as np
 import obstore
+import pandas as pd
 import typer
 import xarray as xr
 from zarr.storage import ObjectStore, StoreLike
 
-# Common constants
 OUTPUT_DIR = "data/output"
 
-# Common typer options
 variables_option = typer.Option(
     None,
     "--variable",
@@ -47,26 +48,39 @@ def scope_time_period(
     return ds
 
 
-# Utility: Load a zarr dataset as xarray.Dataset
 def load_zarr_dataset(url: str) -> xr.Dataset:
+    url = url.removesuffix("/")
     if url.startswith("s3://"):
-        store: StoreLike = ObjectStore(
-            obstore.store.from_url(
-                url,
-                region="us-west-2",
-                skip_signature=True,
-                retry_config={
-                    "max_retries": 16,
-                    "backoff": {
-                        "base": 2,
-                        "init_backoff": timedelta(seconds=1),
-                        "max_backoff": timedelta(seconds=16),
-                    },
-                    # A backstop, shouldn't hit this with the above backoff settings
-                    "retry_timeout": timedelta(minutes=5),
-                },
+        if url.endswith(".icechunk"):
+            path = url.removeprefix("s3://")
+            assert "/" in path
+            i = path.index("/")
+            bucket = path[:i]
+            prefix = path[i + 1 :]
+            storage = icechunk.s3_storage(
+                bucket=bucket, prefix=prefix, anonymous=True, region="us-west-2"
             )
-        )
+            repo = icechunk.Repository.open(storage)
+            session = repo.readonly_session("main")
+            store: StoreLike = session.store
+        else:
+            store = ObjectStore(
+                obstore.store.from_url(
+                    url,
+                    region="us-west-2",
+                    skip_signature=True,
+                    retry_config={
+                        "max_retries": 16,
+                        "backoff": {
+                            "base": 2,
+                            "init_backoff": timedelta(seconds=1),
+                            "max_backoff": timedelta(seconds=16),
+                        },
+                        # A backstop, shouldn't hit this with the above backoff settings
+                        "retry_timeout": timedelta(minutes=5),
+                    },
+                )
+            )
     else:
         store = url
 
@@ -77,17 +91,16 @@ def load_zarr_dataset(url: str) -> xr.Dataset:
     return ds
 
 
-# Utility: Get spatial dimension names
 def get_spatial_dimensions(ds: xr.Dataset) -> tuple[str, str]:
     if "latitude" in ds.dims and "longitude" in ds.dims:
         return "latitude", "longitude"
     return "y", "x"
 
 
-# Utility: Get two random spatial indices for plotting
 def get_random_spatial_indices(
     ds: xr.Dataset, lat_dim: str, lon_dim: str
 ) -> tuple[dict[str, int], dict[str, int]]:
+    """Get two random spatial indices for plotting."""
     rng = np.random.default_rng()
     lat_size = ds.sizes[lat_dim]
     lon_size = ds.sizes[lon_dim]
@@ -100,10 +113,10 @@ def get_random_spatial_indices(
     return point1_sel, point2_sel
 
 
-# Utility: Get two random spatial points (indices and coordinates)
 def get_two_random_points(
     ds: xr.Dataset,
 ) -> tuple[dict[str, int], dict[str, int], tuple[float, float], tuple[float, float]]:
+    """Get two random spatial points (indices and coordinates)."""
     lat_dim, lon_dim = get_spatial_dimensions(ds)
     point1_sel, point2_sel = get_random_spatial_indices(ds, lat_dim, lon_dim)
     if lat_dim == "latitude" and lon_dim == "longitude":
@@ -119,10 +132,10 @@ def get_two_random_points(
     return point1_sel, point2_sel, (lat1, lon1), (lat2, lon2)
 
 
-# Utility: Select and validate variables for plotting
 def select_variables_for_plotting(
     ds: xr.Dataset, requested_vars: list[str] | None
 ) -> list[str]:
+    """Select and validate variables for plotting."""
     available_vars = list(ds.data_vars.keys())
     if requested_vars:
         selected_vars = [var for var in requested_vars if var in available_vars]
@@ -130,11 +143,12 @@ def select_variables_for_plotting(
             raise ValueError("No valid variables specified")
     else:
         selected_vars = available_vars
+    selected_vars.sort()
     return selected_vars
 
 
-# Utility: Select a random ensemble member and return the member index
 def select_random_ensemble_member(ds: xr.Dataset) -> tuple[xr.Dataset, int | None]:
+    """Select a random ensemble member and return the member index."""
     if "ensemble_member" not in ds.dims:
         return ds, None
     rng = np.random.default_rng()
@@ -143,3 +157,19 @@ def select_random_ensemble_member(ds: xr.Dataset) -> tuple[xr.Dataset, int | Non
         ds.sel(ensemble_member=ensemble_member),
         ensemble_member,
     )
+
+
+def get_output_filepath(base_filename: str, url: str) -> Path:
+    """
+    Get output filepath by generating a filename with timestamp and
+    version suffix and creating the parent directory organized by dataset id.
+    """
+    timestamp_str = pd.Timestamp.now().strftime("%Y-%m-%dT%H-%M-%S")
+    url_clean = url.removesuffix("/")
+    path_components = url_clean.split("/")
+    url_suffix = path_components[-1].removesuffix("/")
+    dataset_id = path_components[-2]
+    filename = f"{base_filename}_{url_suffix}_{timestamp_str}.png"
+    filepath = Path(OUTPUT_DIR) / dataset_id / filename
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    return filepath

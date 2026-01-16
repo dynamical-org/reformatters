@@ -109,7 +109,7 @@ In `dynamical_dataset_test.py` create a test that runs `backfill_local` followed
 uv run pytest tests/$DATASET_PATH/dynamical_dataset_test.py
 ```
 
-### 6. Deployment
+### 6. Deploy
 
 The details here depend on the computing resources and the Zarr storage location you'll be using. Get in touch with feedback@dynamical.org for support at this point if you haven't already.
 
@@ -120,3 +120,27 @@ The details here depend on the computing resources and the Zarr storage location
    - `DYNAMICAL_ENV=prod uv run main $DATASET_ID backfill-kubernetes <append-dim-end> <jobs-per-pod> <max-parallelism>`, then track the job with `kubectl get jobs`.
 1. See operational cronjobs in your kubernetes cluster and check their schedule: `kubectl get cronjobs`.
 1. To enable issue reporting and cron monitoring with the error reporting service Sentry, create a secret in your kubernetes cluster with your Sentry account's DSN: `kubectl create secret generic sentry --from-literal='DYNAMICAL_SENTRY_DSN=xxx'`.
+
+## 7. Validate
+
+Run the plotting tools and inspect the generated images in `data/output/<dataset-id>/`.
+
+```bash
+uv run python src/scripts/validation/plots.py run-all <DATASET_URL>
+```
+
+Common issues to look out for:
+- Unexpected missing data (nulls/holes where you expect coverage).
+- Units vs values mismatch (e.g. mm/h vs mm/s).
+- Over-quantization (step changes in spatial or time series plots due to a too low `keep_mantissa_bits` value)
+- Time misalignment (e.g. diurnal cycle peaks shifted vs a reference dataset).
+
+Notes
+- `DATASET_URL` is the complete, direct URL to the dataset (`bucket-prefix/dataset-id/version`), e.g. `s3://us-west-2.opendata.source.coop/dynamical/ecmwf-ifs-ens-forecast-15-day-0-25-degree/v0.1.0.zarr`. The bucket prefix can be found in `__main__.py` and the dataset id and version in the `TemplateConfig.dataset_attributes`.
+- The spatial and timeseries plots will plot the data against a reference dataset (GEFS analysis by default) to highlight unexpected differences.
+- You can also run each validation plot individually, see `uv run src/scripts/validation/plots.py --help`.
+- You can add additional `--variable` flags if side by side plots help add context (e.g. show solar radiation alongside cloud cover).
+
+## 8. Update dataset catalog documentation
+
+Update the dataset catalog docs on `dynamical.org` by adding entries into the `catalog.js`, rebuilding (`npm run build`), and merging updates to main in `https://github.com/dynamical-org/dynamical.org`.
