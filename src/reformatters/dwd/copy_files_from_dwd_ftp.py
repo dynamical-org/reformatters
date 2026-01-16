@@ -60,7 +60,9 @@ maybe 0.5 seconds to 1 second for each NWP variable. There are two ways to get m
 1. https://www.dwd.de/DE/leistungen/opendata/neuigkeiten/opendata_april2025_1.html
 """
 
+import csv
 import ctypes
+import io
 import logging
 import re
 import signal
@@ -70,7 +72,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import PurePosixPath
 from tempfile import NamedTemporaryFile
-from typing import Final
+from typing import Final, NamedTuple
 
 from reformatters.common.logging import get_logger
 
@@ -79,6 +81,11 @@ log = get_logger(__name__)
 
 # Constants for Linux prctl (Process Control)
 PR_SET_PDEATHSIG = 1
+
+
+class _PathAndSize(NamedTuple):
+    path: PurePosixPath
+    size: int
 
 
 def copy_files_from_dwd_ftp(
@@ -116,7 +123,7 @@ def copy_files_from_dwd_ftp(
 def list_ftp_files(
     ftp_host: str,
     ftp_path: PurePosixPath,
-) -> list[PurePosixPath]:
+) -> list[_PathAndSize]:
     """Recursively list all files below ftp_host/ftp_path."""
     ftp_url = f"ftp://{ftp_host}{ftp_path}"
     log.info("Listing %s...", ftp_url)
@@ -127,24 +134,31 @@ def list_ftp_files(
         "--files-only",
         f":ftp:{ftp_path}",
         *_get_rclone_ftp_args(ftp_host),
+        '--format="ps"',  # Return the path and size.
+        "--csv",  # Separate path and size with a comma, and escape any commas.
         "--config=",  # There is no config file because we pass everything as command-line args.
     ]
 
     stdout_str = _run_rclone(cmd, timeout=timedelta(seconds=90))
-    file_list = [
-        PurePosixPath(line.strip()) for line in stdout_str.splitlines() if line.strip()
-    ]
+    file_list: list[_PathAndSize] = []
+    reader = csv.reader(io.StringIO(stdout_str))
+    for row in reader:
+        if not row:
+            continue
+        path_str, size_str = row
+        file_list.append(_PathAndSize(path=PurePosixPath(path_str), size=int(size_str)))
+
     log.info(f"Found {len(file_list):,d} files in {ftp_url}")
-    return sorted(file_list)
+    return sorted(file_list, key=lambda x: x.path)
 
 
 def _compute_copy_plan(
-    file_list: list[PurePosixPath],
+    file_list: list[_PathAndSize],
     max_files_per_nwp_variable: int = sys.maxsize,
-) -> dict[tuple[datetime, str], list[PurePosixPath]]:
+) -> dict[tuple[datetime, str], list[_PathAndSize]]:
     """Groups files by their NWP initialization datetime and variable name.
 
-    Returns dict[(nwp_init_datetime, nwp_variable_name)] = list[file_path].
+    Returns dict[(nwp_init_datetime, nwp_variable_name)] = list[file_path_and_size].
     Where `file_path` starts with (and includes) the NWP variable name.
 
     ## Implementation note:
@@ -170,26 +184,26 @@ def _compute_copy_plan(
     2. DWD's new directory structure (already used for ICON-D2-RUC):
        /weather/nwp/v1/m/icon-d2-ruc/p/T_2M/r/2026-01-14T02:00/s/PT000H00M.grib2
     """
-    copy_plan: dict[tuple[datetime, str], list[PurePosixPath]] = defaultdict(list)
+    copy_plan: dict[tuple[datetime, str], list[_PathAndSize]] = defaultdict(list)
     date_regex = re.compile(r"_(\d{10})_")
     n_expected_path_parts: Final[int] = 2
 
     for file_to_be_copied in file_list:
-        if "pressure-level" in file_to_be_copied.name:
+        if "pressure-level" in file_to_be_copied.path.name:
             continue
 
-        if len(file_to_be_copied.parts) != n_expected_path_parts:
-            log.warning("Unexpected path structure: %s", file_to_be_copied)
+        if len(file_to_be_copied.path.parts) != n_expected_path_parts:
+            log.warning("Unexpected path structure: %s", file_to_be_copied.path)
             continue
 
-        match = date_regex.search(file_to_be_copied.name)
+        match = date_regex.search(file_to_be_copied.path.name)
         if not match:
-            log.warning("Skipping file (no date found): %s", file_to_be_copied)
+            log.warning("Skipping file (no date found): %s", file_to_be_copied.path)
             continue
 
         timestamp_str = match.group(1)
         nwp_init_datetime = datetime.strptime(timestamp_str, "%Y%m%d%H")
-        nwp_variable_name = file_to_be_copied.parts[0]
+        nwp_variable_name = file_to_be_copied.path.parts[0]
         key = (nwp_init_datetime, nwp_variable_name)
 
         n_files_for_nwp_var_and_init = len(copy_plan[key])
@@ -203,7 +217,7 @@ def _copy_batches(
     ftp_host: str,
     ftp_path: PurePosixPath,
     dst_root: PurePosixPath,
-    copy_plan: dict[tuple[datetime, str], list[PurePosixPath]],
+    copy_plan: dict[tuple[datetime, str], list[_PathAndSize]],
     transfers: int = 10,
 ) -> None:
     """Executes rclone copy for each timestamp and variable batch in the plan."""
@@ -231,7 +245,7 @@ def _copy_batch(
     ftp_host: str,
     ftp_path: PurePosixPath,
     dst_path: PurePosixPath,
-    files_to_be_copied: list[PurePosixPath],
+    files_to_be_copied: list[_PathAndSize],
     transfers: int,
 ) -> None:
     """Executes a single rclone copy batch for a specific destination.
@@ -240,14 +254,14 @@ def _copy_batch(
         ftp_host: The FTP host (e.g. 'opendata.dwd.de').
         ftp_path: The root source path on the FTP server (including NWP init hour).
         dst_path: The specific destination directory (including NWP init timestamp).
-        files_to_be_copied: List of file paths relative to ftp_path to be copied.
+        files_to_be_copied: List of file path and sizes relative to ftp_path to be copied.
         transfers: Number of parallel transfers to use for this batch.
     """
     # Modern Linux platforms often install `rclone` as a sandboxed snap, which does not have access
     # to `/tmp`, to we store the temporary file in the current working directory.
     with NamedTemporaryFile(mode="w", dir=".", prefix=".rclone_files_") as list_file:
         # rel_paths are relative to ftp_path
-        list_file.write("\n".join(p.as_posix() for p in files_to_be_copied))
+        list_file.write("\n".join(p.path.as_posix() for p in files_to_be_copied))
         list_file.flush()
 
         cmd = [
