@@ -120,6 +120,9 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Time",
+                    standard_name="time",
+                    axis="T",
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
                         min=self.append_dim_start.isoformat(),
@@ -137,7 +140,10 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
-                    units="degrees_north",
+                    long_name="Latitude",
+                    standard_name="latitude",
+                    units="degree_north",
+                    axis="Y",
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["latitude"].min()),
                         max=float(dim_coords["latitude"].max()),
@@ -154,7 +160,10 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
-                    units="degrees_east",
+                    long_name="Longitude",
+                    standard_name="longitude",
+                    units="degree_east",
+                    axis="X",
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["longitude"].min()),
                         max=float(dim_coords["longitude"].max()),
@@ -233,7 +242,8 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="ndvi_raw",
                     long_name="normalized_difference_vegetation_index",
-                    units="unitless",
+                    standard_name="normalized_difference_vegetation_index",
+                    units="1",
                     step_type="instant",
                     comment="Raw NDVI values from the NOAA CDR",
                 ),
@@ -253,7 +263,8 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="ndvi_usable",
                     long_name="normalized_difference_vegetation_index",
-                    units="unitless",
+                    standard_name="normalized_difference_vegetation_index",
+                    units="1",
                     step_type="instant",
                     comment="NDVI values that have been quality checked",
                 ),
@@ -273,7 +284,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="qa",
                     long_name="quality_assurance",
-                    units="categorical",
+                    units="1",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaNdviCdrInternalAttrs(

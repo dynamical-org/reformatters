@@ -84,7 +84,8 @@
         "attributes": {
           "long_name": "Categorical freezing rain",
           "short_name": "cfrzr",
-          "units": "0=no; 1=yes",
+          "units": "1",
+          "comment": "0=no; 1=yes",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -167,7 +168,8 @@
         "attributes": {
           "long_name": "Categorical ice pellets",
           "short_name": "cicep",
-          "units": "0=no; 1=yes",
+          "units": "1",
+          "comment": "0=no; 1=yes",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -250,7 +252,8 @@
         "attributes": {
           "long_name": "Categorical rain",
           "short_name": "crain",
-          "units": "0=no; 1=yes",
+          "units": "1",
+          "comment": "0=no; 1=yes",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -333,7 +336,8 @@
         "attributes": {
           "long_name": "Categorical snow",
           "short_name": "csnow",
-          "units": "0=no; 1=yes",
+          "units": "1",
+          "comment": "0=no; 1=yes",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -499,7 +503,8 @@
         "attributes": {
           "long_name": "Surface downward long-wave radiation flux",
           "short_name": "sdlwrf",
-          "units": "W/(m^2)",
+          "standard_name": "surface_downwelling_longwave_flux_in_air",
+          "units": "W m-2",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -582,7 +587,8 @@
         "attributes": {
           "long_name": "Surface downward short-wave radiation flux",
           "short_name": "sdswrf",
-          "units": "W/(m^2)",
+          "standard_name": "surface_downwelling_shortwave_flux_in_air",
+          "units": "W m-2",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -665,7 +671,8 @@
         "attributes": {
           "long_name": "Geopotential height",
           "short_name": "gh",
-          "units": "gpm",
+          "standard_name": "geopotential_height",
+          "units": "m",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -720,7 +727,9 @@
           }
         ],
         "attributes": {
-          "units": "degrees_north",
+          "long_name": "Latitude",
+          "standard_name": "latitude",
+          "units": "degree_north",
           "statistics_approximate": {
             "min": 21.138123,
             "max": 52.615653
@@ -776,7 +785,9 @@
           }
         ],
         "attributes": {
-          "units": "degrees_east",
+          "long_name": "Longitude",
+          "standard_name": "longitude",
+          "units": "degree_east",
           "statistics_approximate": {
             "min": -134.09548,
             "max": -60.917192
@@ -860,7 +871,7 @@
         "attributes": {
           "long_name": "Percent frozen precipitation",
           "short_name": "cpofp",
-          "units": "%",
+          "units": "percent",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -943,7 +954,8 @@
         "attributes": {
           "long_name": "Precipitable water",
           "short_name": "pwat",
-          "units": "kg/(m^2)",
+          "standard_name": "atmosphere_mass_content_of_water_vapor",
+          "units": "kg m-2",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -1026,8 +1038,9 @@
         "attributes": {
           "long_name": "Total Precipitation",
           "short_name": "tp",
-          "units": "mm/s",
-          "comment": "Average precipitation rate since the previous forecast step.",
+          "standard_name": "precipitation_flux",
+          "units": "kg m-2 s-1",
+          "comment": "Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",
           "step_type": "avg",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -1110,6 +1123,7 @@
         "attributes": {
           "long_name": "Pressure reduced to MSL",
           "short_name": "prmsl",
+          "standard_name": "air_pressure_at_mean_sea_level",
           "units": "Pa",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
@@ -1193,6 +1207,7 @@
         "attributes": {
           "long_name": "Surface pressure",
           "short_name": "sp",
+          "standard_name": "surface_air_pressure",
           "units": "Pa",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
@@ -1276,7 +1291,8 @@
         "attributes": {
           "long_name": "2 metre relative humidity",
           "short_name": "r2",
-          "units": "%",
+          "standard_name": "relative_humidity",
+          "units": "percent",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -1418,7 +1434,7 @@
           "long_name": "2 metre temperature",
           "short_name": "t2m",
           "standard_name": "air_temperature",
-          "units": "C",
+          "units": "degree_Celsius",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -1471,6 +1487,9 @@
           }
         ],
         "attributes": {
+          "long_name": "Time",
+          "standard_name": "time",
+          "axis": "T",
           "statistics_approximate": {
             "min": "2018-09-16T00:00:00",
             "max": "Present"
@@ -1554,7 +1573,8 @@
         "attributes": {
           "long_name": "Total Cloud Cover",
           "short_name": "tcc",
-          "units": "%",
+          "standard_name": "cloud_area_fraction",
+          "units": "percent",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -1638,7 +1658,7 @@
           "long_name": "10 metre U wind component",
           "short_name": "u10",
           "standard_name": "eastward_wind",
-          "units": "m/s",
+          "units": "m s-1",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -1722,7 +1742,7 @@
           "long_name": "U-component of wind (80 m above ground)",
           "short_name": "u80",
           "standard_name": "eastward_wind",
-          "units": "m/s",
+          "units": "m s-1",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -1806,7 +1826,7 @@
           "long_name": "10 metre V wind component",
           "short_name": "v10",
           "standard_name": "northward_wind",
-          "units": "m/s",
+          "units": "m s-1",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -1890,7 +1910,7 @@
           "long_name": "V-component of wind (80 m above ground)",
           "short_name": "v80",
           "standard_name": "northward_wind",
-          "units": "m/s",
+          "units": "m s-1",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -1943,6 +1963,9 @@
           }
         ],
         "attributes": {
+          "long_name": "X coordinate of projection",
+          "standard_name": "projection_x_coordinate",
+          "axis": "X",
           "units": "m",
           "statistics_approximate": {
             "min": -2700000.0,
@@ -1996,6 +2019,9 @@
           }
         ],
         "attributes": {
+          "long_name": "Y coordinate of projection",
+          "standard_name": "projection_y_coordinate",
+          "axis": "Y",
           "units": "m",
           "statistics_approximate": {
             "min": -1600000.0,

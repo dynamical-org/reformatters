@@ -67,7 +67,8 @@
   "attributes": {
     "long_name": "Surface downward short-wave radiation flux",
     "short_name": "sdswrf",
-    "units": "W/(m^2)",
+    "standard_name": "surface_downwelling_shortwave_flux_in_air",
+    "units": "W m-2",
     "step_type": "instant",
     "coordinates": "latitude longitude spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

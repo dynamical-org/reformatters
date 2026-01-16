@@ -92,7 +92,8 @@
         "attributes": {
           "long_name": "Categorical precipitation type at surface",
           "short_name": "ptype",
-          "units": "0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13-191=Reserved; 192-254=Reserved for local use; 255=Missing",
+          "units": "1",
+          "comment": "0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13-191=Reserved; 192-254=Reserved for local use; 255=Missing",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -184,7 +185,7 @@
           "long_name": "2 metre dewpoint temperature",
           "short_name": "2d",
           "standard_name": "dew_point_temperature",
-          "units": "C",
+          "units": "degree_Celsius",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -275,7 +276,8 @@
         "attributes": {
           "long_name": "Surface downward long-wave radiation flux",
           "short_name": "sdlwrf",
-          "units": "W/(m^2)",
+          "standard_name": "surface_downwelling_longwave_flux_in_air",
+          "units": "W m-2",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -366,7 +368,8 @@
         "attributes": {
           "long_name": "Surface downward short-wave radiation flux",
           "short_name": "sdswrf",
-          "units": "W/(m^2)",
+          "standard_name": "surface_downwelling_shortwave_flux_in_air",
+          "units": "W m-2",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -421,7 +424,9 @@
           }
         ],
         "attributes": {
-          "units": "realization",
+          "long_name": "Ensemble member",
+          "standard_name": "realization",
+          "units": "1",
           "statistics_approximate": {
             "min": 0,
             "max": 50
@@ -473,6 +478,7 @@
           }
         ],
         "attributes": {
+          "long_name": "Expected forecast length",
           "statistics_approximate": {
             "min": "0 days 00:00:00",
             "max": "15 days 00:00:00"
@@ -563,7 +569,7 @@
           "long_name": "Geopotential height",
           "short_name": "gh",
           "standard_name": "geopotential_height",
-          "units": "gpm",
+          "units": "m",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -618,6 +624,7 @@
           }
         ],
         "attributes": {
+          "long_name": "Ingested forecast length",
           "statistics_approximate": {
             "min": "0 days 00:00:00",
             "max": "15 days 00:00:00"
@@ -671,6 +678,8 @@
           }
         ],
         "attributes": {
+          "long_name": "Forecast initialization time",
+          "standard_name": "forecast_reference_time",
           "statistics_approximate": {
             "min": "2024-04-01T00:00:00",
             "max": "Present"
@@ -724,7 +733,10 @@
           }
         ],
         "attributes": {
-          "units": "degrees_north",
+          "long_name": "Latitude",
+          "standard_name": "latitude",
+          "axis": "Y",
+          "units": "degree_north",
           "statistics_approximate": {
             "min": -90.0,
             "max": 90.0
@@ -777,6 +789,8 @@
           }
         ],
         "attributes": {
+          "long_name": "Forecast lead time",
+          "standard_name": "forecast_period",
           "statistics_approximate": {
             "min": "0 days 00:00:00",
             "max": "15 days 00:00:00"
@@ -830,7 +844,10 @@
           }
         ],
         "attributes": {
-          "units": "degrees_east",
+          "long_name": "Longitude",
+          "standard_name": "longitude",
+          "axis": "X",
+          "units": "degree_east",
           "statistics_approximate": {
             "min": -180.0,
             "max": 179.75
@@ -919,8 +936,9 @@
         "attributes": {
           "long_name": "Total precipitation",
           "short_name": "tp",
-          "units": "mm/s",
-          "comment": "Average precipitation rate since the previous forecast step.",
+          "standard_name": "precipitation_flux",
+          "units": "kg m-2 s-1",
+          "comment": "Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1245,7 +1263,7 @@
           "long_name": "2 metre temperature",
           "short_name": "t2m",
           "standard_name": "air_temperature",
-          "units": "C",
+          "units": "degree_Celsius",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1302,6 +1320,8 @@
           }
         ],
         "attributes": {
+          "long_name": "Valid time",
+          "standard_name": "time",
           "statistics_approximate": {
             "min": "2024-04-01T00:00:00",
             "max": "Present"
@@ -1393,7 +1413,7 @@
           "long_name": "100 metre U wind component",
           "short_name": "u100",
           "standard_name": "eastward_wind",
-          "units": "m/s",
+          "units": "m s-1",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1485,7 +1505,7 @@
           "long_name": "10 metre U wind component",
           "short_name": "u10",
           "standard_name": "eastward_wind",
-          "units": "m/s",
+          "units": "m s-1",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1577,7 +1597,7 @@
           "long_name": "100 metre V wind component",
           "short_name": "v100",
           "standard_name": "northward_wind",
-          "units": "m/s",
+          "units": "m s-1",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1669,7 +1689,7 @@
           "long_name": "10 metre V wind component",
           "short_name": "v10",
           "standard_name": "northward_wind",
-          "units": "m/s",
+          "units": "m s-1",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

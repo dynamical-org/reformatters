@@ -70,7 +70,8 @@
   "attributes": {
     "long_name": "2 metre relative humidity",
     "short_name": "r2",
-    "units": "%",
+    "standard_name": "relative_humidity",
+    "units": "percent",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

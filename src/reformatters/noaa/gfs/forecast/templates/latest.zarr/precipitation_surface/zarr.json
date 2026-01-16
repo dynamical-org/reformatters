@@ -70,8 +70,9 @@
   "attributes": {
     "long_name": "Total Precipitation",
     "short_name": "tp",
-    "units": "mm/s",
-    "comment": "Average precipitation rate since the previous forecast step.",
+    "standard_name": "precipitation_flux",
+    "units": "kg m-2 s-1",
+    "comment": "Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",
     "step_type": "avg",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

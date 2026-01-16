@@ -37,6 +37,8 @@
     }
   ],
   "attributes": {
+    "long_name": "Forecast lead time",
+    "standard_name": "forecast_period",
     "statistics_approximate": {
       "min": "0 days 00:00:00",
       "max": "35 days 00:00:00"

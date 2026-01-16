@@ -40,7 +40,10 @@ def get_shared_coordinate_configs() -> Sequence[Coordinate]:
                 shards=None,
             ),
             attrs=CoordinateAttrs(
-                units="degrees_north",
+                long_name="Latitude",
+                standard_name="latitude",
+                units="degree_north",
+                axis="Y",
                 statistics_approximate=StatisticsApproximate(
                     min=_dim_coords["latitude"].min(),
                     max=_dim_coords["latitude"].max(),
@@ -57,7 +60,10 @@ def get_shared_coordinate_configs() -> Sequence[Coordinate]:
                 shards=None,
             ),
             attrs=CoordinateAttrs(
-                units="degrees_east",
+                long_name="Longitude",
+                standard_name="longitude",
+                units="degree_east",
+                axis="X",
                 statistics_approximate=StatisticsApproximate(
                     min=_dim_coords["longitude"].min(),
                     max=_dim_coords["longitude"].max(),
@@ -139,7 +145,7 @@ def get_shared_data_var_configs(
             attrs=DataVarAttrs(
                 short_name="t2m",
                 long_name="2 metre temperature",
-                units="C",
+                units="degree_Celsius",
                 step_type="instant",
                 standard_name="air_temperature",
             ),
@@ -158,7 +164,7 @@ def get_shared_data_var_configs(
             attrs=DataVarAttrs(
                 short_name="r2",
                 long_name="2 metre relative humidity",
-                units="%",
+                units="percent",
                 step_type="instant",
                 standard_name="relative_humidity",
             ),
@@ -176,8 +182,9 @@ def get_shared_data_var_configs(
             encoding=encoding_float32,
             attrs=DataVarAttrs(
                 short_name="tmax",
+                standard_name="air_temperature",
                 long_name="Maximum temperature",
-                units="C",
+                units="degree_Celsius",
                 step_type="max",
             ),
             internal_attrs=GEFSInternalAttrs(
@@ -195,8 +202,9 @@ def get_shared_data_var_configs(
             encoding=encoding_float32,
             attrs=DataVarAttrs(
                 short_name="tmin",
+                standard_name="air_temperature",
                 long_name="Minimum temperature",
-                units="C",
+                units="degree_Celsius",
                 step_type="min",
             ),
             internal_attrs=GEFSInternalAttrs(
@@ -215,7 +223,7 @@ def get_shared_data_var_configs(
             attrs=DataVarAttrs(
                 short_name="u10",
                 long_name="10 metre U wind component",
-                units="m/s",
+                units="m s-1",
                 step_type="instant",
                 standard_name="eastward_wind",
             ),
@@ -234,7 +242,7 @@ def get_shared_data_var_configs(
             attrs=DataVarAttrs(
                 short_name="v10",
                 long_name="10 metre V wind component",
-                units="m/s",
+                units="m s-1",
                 step_type="instant",
                 standard_name="northward_wind",
             ),
@@ -254,7 +262,7 @@ def get_shared_data_var_configs(
                 short_name="u100",
                 long_name="100 metre U wind component",
                 standard_name="eastward_wind",
-                units="m/s",
+                units="m s-1",
                 step_type="instant",
             ),
             internal_attrs=GEFSInternalAttrs(
@@ -272,7 +280,7 @@ def get_shared_data_var_configs(
             attrs=DataVarAttrs(
                 short_name="v100",
                 long_name="100 metre V wind component",
-                units="m/s",
+                units="m s-1",
                 step_type="instant",
                 standard_name="northward_wind",
             ),
@@ -291,7 +299,7 @@ def get_shared_data_var_configs(
             attrs=DataVarAttrs(
                 short_name="cpofp",
                 long_name="Percent frozen precipitation",
-                units="%",
+                units="percent",
                 comment="Contains the value -50 when there is no precipitation.",
                 step_type="instant",
             ),
@@ -309,9 +317,10 @@ def get_shared_data_var_configs(
             encoding=encoding_float32,
             attrs=DataVarAttrs(
                 short_name="tp",
+                standard_name="precipitation_flux",
                 long_name="Total Precipitation",
-                units="mm/s",
-                comment="Average precipitation rate since the previous forecast step.",
+                units="kg m-2 s-1",
+                comment="Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",
                 step_type="avg",
             ),
             internal_attrs=GEFSInternalAttrs(
@@ -332,7 +341,8 @@ def get_shared_data_var_configs(
             attrs=DataVarAttrs(
                 short_name="csnow",
                 long_name="Categorical snow",
-                units="0=no; 1=yes",
+                units="1",
+                comment="0=no; 1=yes",
                 step_type="avg",
             ),
             internal_attrs=GEFSInternalAttrs(
@@ -351,7 +361,8 @@ def get_shared_data_var_configs(
             attrs=DataVarAttrs(
                 short_name="cicep",
                 long_name="Categorical ice pellets",
-                units="0=no; 1=yes",
+                units="1",
+                comment="0=no; 1=yes",
                 step_type="avg",
             ),
             internal_attrs=GEFSInternalAttrs(
@@ -370,7 +381,8 @@ def get_shared_data_var_configs(
             attrs=DataVarAttrs(
                 short_name="cfrzr",
                 long_name="Categorical freezing rain",
-                units="0=no; 1=yes",
+                units="1",
+                comment="0=no; 1=yes",
                 step_type="avg",
             ),
             internal_attrs=GEFSInternalAttrs(
@@ -389,7 +401,8 @@ def get_shared_data_var_configs(
             attrs=DataVarAttrs(
                 short_name="crain",
                 long_name="Categorical rain",
-                units="0=no; 1=yes",
+                units="1",
+                comment="0=no; 1=yes",
                 step_type="avg",
             ),
             internal_attrs=GEFSInternalAttrs(
@@ -407,8 +420,9 @@ def get_shared_data_var_configs(
             encoding=encoding_float32,
             attrs=DataVarAttrs(
                 short_name="pwat",
+                standard_name="atmosphere_mass_content_of_water_vapor",
                 long_name="Precipitable water",
-                units="kg/(m^2)",
+                units="kg m-2",
                 step_type="instant",
             ),
             internal_attrs=GEFSInternalAttrs(
@@ -425,8 +439,9 @@ def get_shared_data_var_configs(
             encoding=encoding_float32,
             attrs=DataVarAttrs(
                 short_name="tcc",
+                standard_name="cloud_area_fraction",
                 long_name="Total Cloud Cover",
-                units="%",
+                units="percent",
                 comment="Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
                 step_type="avg",
             ),
@@ -446,7 +461,7 @@ def get_shared_data_var_configs(
             attrs=DataVarAttrs(
                 short_name="gh",
                 long_name="Geopotential height",
-                units="gpm",
+                units="m",
                 step_type="instant",
                 standard_name="geopotential_height",
             ),
@@ -464,8 +479,9 @@ def get_shared_data_var_configs(
             encoding=encoding_float32,
             attrs=DataVarAttrs(
                 short_name="sdswrf",
+                standard_name="surface_downwelling_shortwave_flux_in_air",
                 long_name="Surface downward short-wave radiation flux",
-                units="W/(m^2)",
+                units="W m-2",
                 comment="Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
                 step_type="avg",
             ),
@@ -484,8 +500,9 @@ def get_shared_data_var_configs(
             encoding=encoding_float32,
             attrs=DataVarAttrs(
                 short_name="sdlwrf",
+                standard_name="surface_downwelling_longwave_flux_in_air",
                 long_name="Surface downward long-wave radiation flux",
-                units="W/(m^2)",
+                units="W m-2",
                 comment="Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
                 step_type="avg",
             ),
@@ -504,6 +521,7 @@ def get_shared_data_var_configs(
             encoding=encoding_float32,
             attrs=DataVarAttrs(
                 short_name="prmsl",
+                standard_name="air_pressure_at_mean_sea_level",
                 long_name="Pressure reduced to MSL",
                 units="Pa",
                 step_type="instant",

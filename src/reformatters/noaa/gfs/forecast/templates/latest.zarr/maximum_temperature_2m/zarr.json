@@ -70,7 +70,8 @@
   "attributes": {
     "long_name": "Maximum temperature",
     "short_name": "tmax",
-    "units": "C",
+    "standard_name": "air_temperature",
+    "units": "degree_Celsius",
     "comment": "Maximum over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
     "step_type": "max",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",

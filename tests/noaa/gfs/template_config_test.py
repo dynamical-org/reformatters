@@ -30,7 +30,7 @@ def test_common_template_config_latitude_coord_properties() -> None:
 
     assert lat_coord.encoding.dtype == "float64"
     assert lat_coord.encoding.chunks == len(lat_values)
-    assert lat_coord.attrs.units == "degrees_north"
+    assert lat_coord.attrs.units == "degree_north"
     assert lat_coord.attrs.statistics_approximate is not None
     assert lat_coord.attrs.statistics_approximate.min == float(lat_values.min())
     assert lat_coord.attrs.statistics_approximate.max == float(lat_values.max())
@@ -46,7 +46,7 @@ def test_common_template_config_longitude_coord_properties() -> None:
 
     assert lon_coord.encoding.dtype == "float64"
     assert lon_coord.encoding.chunks == len(lon_values)
-    assert lon_coord.attrs.units == "degrees_east"
+    assert lon_coord.attrs.units == "degree_east"
     assert lon_coord.attrs.statistics_approximate is not None
     assert lon_coord.attrs.statistics_approximate.min == float(lon_values.min())
     assert lon_coord.attrs.statistics_approximate.max == float(lon_values.max())

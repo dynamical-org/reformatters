@@ -38,6 +38,7 @@ class DwdIconEuInternalAttrs(BaseInternalAttrs):
     """
 
     variable_name_in_filename: str
+    window_reset_frequency: Timedelta | None = None
 
 
 class DwdIconEuDataVar(DataVar[DwdIconEuInternalAttrs]):
@@ -130,6 +131,8 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Forecast initialization time",
+                    standard_name="forecast_reference_time",
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
                         min=dim_coords[self.append_dim].min().isoformat(), max="Present"
@@ -147,6 +150,8 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Forecast lead time",
+                    standard_name="forecast_period",
                     units="seconds",
                     statistics_approximate=StatisticsApproximate(
                         min=str(dim_coords["lead_time"].min()),
@@ -164,7 +169,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
-                    units="degrees_north",
+                    long_name="Latitude",
+                    standard_name="latitude",
+                    units="degree_north",
+                    axis="Y",
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["latitude"].min()),
                         max=float(dim_coords["latitude"].max()),
@@ -181,7 +189,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
-                    units="degrees_east",
+                    long_name="Longitude",
+                    standard_name="longitude",
+                    units="degree_east",
+                    axis="X",
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["longitude"].min()),
                         max=float(dim_coords["longitude"].max()),
@@ -203,6 +214,8 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Valid time",
+                    standard_name="time",
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
                         min=self.append_dim_start.isoformat(),
@@ -221,6 +234,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Ingested forecast length",
                     units="seconds",
                     statistics_approximate=StatisticsApproximate(
                         min=str(dim_coords["lead_time"].min()),
@@ -239,6 +253,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Expected forecast length",
                     units="seconds",
                     statistics_approximate=StatisticsApproximate(
                         min=str(dim_coords["lead_time"].min()),
@@ -324,7 +339,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Downward diffusive short wave radiation flux at surface",
                     units="W m-2",
                     step_type="avg",
-                    standard_name="Mean surface diffuse short-wave radiation flux",  # From ECMWF.
+                    standard_name="surface_diffuse_downwelling_shortwave_flux_in_air",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="aswdifd_s",
@@ -336,6 +351,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="aswdir_s",
+                    standard_name="surface_direct_downwelling_shortwave_flux_in_air",
                     long_name="Downward direct short wave radiation flux at surface",
                     units="W m-2",
                     step_type="avg",
@@ -356,6 +372,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="cape_con",
+                    standard_name="atmosphere_convective_available_potential_energy",
                     long_name="Convective available potential energy",
                     units="J kg-1",
                     step_type="instant",
@@ -371,8 +388,9 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="clch",
+                    standard_name="cloud_area_fraction_in_atmosphere_layer",
                     long_name="High level clouds",
-                    units="%",
+                    units="percent",
                     step_type="instant",
                     comment="Cloud Cover (0 - 400 hPa). Different agencies use different short_names for this same parameter: ECMWF: HCC; WMO GRIB table: HCDC.",
                 ),
@@ -386,8 +404,9 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="clcl",
+                    standard_name="cloud_area_fraction_in_atmosphere_layer",
                     long_name="Low level clouds",
-                    units="%",
+                    units="percent",
                     step_type="instant",
                     comment="Cloud Cover (800 hPa - Soil). Different agencies use different short_names for this same parameter: ECMWF: LCC; WMO GRIB table: LCDC.",
                 ),
@@ -401,8 +420,9 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="clcm",
+                    standard_name="cloud_area_fraction_in_atmosphere_layer",
                     long_name="Mid level clouds",
-                    units="%",
+                    units="percent",
                     step_type="instant",
                     comment="Cloud Cover (400 - 800 hPa). Different agencies use different short_names for this same parameter: ECMWF: MCC; WMO GRIB table: MCDC.",
                 ),
@@ -416,8 +436,9 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="clct",
+                    standard_name="cloud_area_fraction",
                     long_name="Total Cloud Cover",
-                    units="%",
+                    units="percent",
                     step_type="instant",
                     comment="Total cloud cover. Different agencies use different short_names for this same parameter: ECMWF: TCC; NOAA & WMO: TCDC.",
                 ),
@@ -432,7 +453,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=DataVarAttrs(
                     short_name="sde",
                     long_name="Snow depth",
-                    standard_name="lwe_thickness_of_surface_snow_amount",
+                    standard_name="surface_snow_thickness",
                     units="m",
                     step_type="instant",
                     comment=(
@@ -450,6 +471,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="prmsl",
+                    standard_name="air_pressure_at_mean_sea_level",
                     long_name="Pressure reduced to mean sea level (MSL)",
                     units="Pa",
                     step_type="instant",
@@ -466,7 +488,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=DataVarAttrs(
                     short_name="r2",
                     long_name="2 metre relative humidity",
-                    units="%",
+                    units="percent",
                     step_type="instant",
                     comment="Relative humidity at 2m above ground. Other short_names used for this parameter: rh, 2r, r.",
                     standard_name="relative_humidity",
@@ -497,6 +519,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="watr",
+                    standard_name="surface_runoff_amount",
                     long_name="Surface water Runoff",
                     units="kg m-2",
                     step_type="accum",
@@ -534,18 +557,21 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="tp",
+                    standard_name="precipitation_flux",
                     long_name="Total Precipitation",
-                    units="kg m**-2",
+                    units="kg m-2 s-1",
                     step_type="accum",
                     comment=(
-                        "Total precipitation accumulated since model start."
+                        "Precipitation rate since previous forecast step."
                         " TOT_PREC = RAIN_GSP + SNOW_GSP + RAIN_CON + SNOW_CON."
+                        " Units equivalent to mm/s."
                     ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="tot_prec",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     deaccumulate_to_rate=True,
+                    window_reset_frequency=pd.Timedelta.max,  # accumulates over full lead time, never resetting
                 ),
             ),
             DwdIconEuDataVar(
@@ -554,7 +580,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=DataVarAttrs(
                     short_name="u10",
                     long_name="10 metre U wind component (eastward)",
-                    units="m/s",
+                    units="m s-1",
                     step_type="instant",
                     standard_name="eastward_wind",
                     comment="Zonal wind at 10m above ground",
@@ -570,7 +596,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=DataVarAttrs(
                     short_name="v10",
                     long_name="10 metre V wind component (northward)",
-                    units="m/s",
+                    units="m s-1",
                     step_type="instant",
                     standard_name="northward_wind",
                     comment="Meridional wind at 10m above ground",
@@ -586,7 +612,8 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=DataVarAttrs(
                     short_name="i10fg",
                     long_name="Time-maximum instantaneous 10 metre wind gust",
-                    units="m/s",
+                    standard_name="wind_speed_of_gust",
+                    units="m s-1",
                     step_type="max",
                     comment=(
                         "Maximum wind gust at 10 m above ground. It is diagnosed from the turbulence"
@@ -606,11 +633,12 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="sd",
+                    standard_name="lwe_thickness_of_surface_snow_amount",
                     long_name="Snow depth water equivalent",
-                    units="kg m**-2",
+                    units="mm",
                     step_type="instant",
                     comment=(
-                        "Snow depth water equivalent in kg/m2."
+                        "Snow depth water equivalent in mm (kg/m2)."
                         " Set to 0 above water surfaces and snow-free land points."
                     ),
                 ),

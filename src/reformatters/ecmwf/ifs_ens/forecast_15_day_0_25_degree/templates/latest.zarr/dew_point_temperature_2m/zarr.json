@@ -74,7 +74,7 @@
     "long_name": "2 metre dewpoint temperature",
     "short_name": "2d",
     "standard_name": "dew_point_temperature",
-    "units": "C",
+    "units": "degree_Celsius",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

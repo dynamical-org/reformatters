@@ -54,7 +54,10 @@
           }
         ],
         "attributes": {
-          "units": "degrees_north",
+          "long_name": "Latitude",
+          "standard_name": "latitude",
+          "axis": "Y",
+          "units": "degree_north",
           "statistics_approximate": {
             "min": 24.083333969118286,
             "max": 49.91666793823242
@@ -107,7 +110,10 @@
           }
         ],
         "attributes": {
-          "units": "degrees_east",
+          "long_name": "Longitude",
+          "standard_name": "longitude",
+          "axis": "X",
+          "units": "degree_east",
           "statistics_approximate": {
             "min": -125.0,
             "max": -66.49999999999335
@@ -191,7 +197,7 @@
           "long_name": "Snow depth",
           "short_name": "snow_depth",
           "standard_name": "surface_snow_thickness",
-          "units": "mm snow thickness",
+          "units": "mm",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -275,7 +281,7 @@
           "long_name": "Snow water equivalent",
           "short_name": "snow_water_equivalent",
           "standard_name": "lwe_thickness_of_surface_snow_amount",
-          "units": "mm h20",
+          "units": "mm",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -377,6 +383,9 @@
           }
         ],
         "attributes": {
+          "long_name": "Time",
+          "standard_name": "time",
+          "axis": "T",
           "statistics_approximate": {
             "min": "1981-10-01T00:00:00",
             "max": "Present"

@@ -56,7 +56,9 @@
           }
         ],
         "attributes": {
-          "units": "degrees_north",
+          "long_name": "Latitude",
+          "standard_name": "latitude",
+          "units": "degree_north",
           "statistics_approximate": {
             "min": -85.044502,
             "max": 85.044502
@@ -112,7 +114,9 @@
           }
         ],
         "attributes": {
-          "units": "degrees_east",
+          "long_name": "Longitude",
+          "standard_name": "longitude",
+          "units": "degree_east",
           "statistics_approximate": {
             "min": -180.0,
             "max": 180.0
@@ -196,7 +200,8 @@
         "attributes": {
           "long_name": "Soil Moisture (AM)",
           "short_name": "soil_moisture_am",
-          "units": "m\u00b3/m\u00b3",
+          "standard_name": "volume_fraction_of_condensed_water_in_soil",
+          "units": "1",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -279,7 +284,8 @@
         "attributes": {
           "long_name": "Soil Moisture (PM)",
           "short_name": "soil_moisture_pm",
-          "units": "m\u00b3/m\u00b3",
+          "standard_name": "volume_fraction_of_condensed_water_in_soil",
+          "units": "1",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -386,6 +392,9 @@
           }
         ],
         "attributes": {
+          "long_name": "Time",
+          "standard_name": "time",
+          "axis": "T",
           "statistics_approximate": {
             "min": "2015-04-01T00:00:00",
             "max": "Present"
@@ -439,6 +448,9 @@
           }
         ],
         "attributes": {
+          "long_name": "X coordinate of projection",
+          "standard_name": "projection_x_coordinate",
+          "axis": "X",
           "units": "m",
           "statistics_approximate": {
             "min": -17349513.89,
@@ -492,6 +504,9 @@
           }
         ],
         "attributes": {
+          "long_name": "Y coordinate of projection",
+          "standard_name": "projection_y_coordinate",
+          "axis": "Y",
           "units": "m",
           "statistics_approximate": {
             "min": -7296525.209999894,

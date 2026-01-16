@@ -67,7 +67,8 @@
   "attributes": {
     "long_name": "normalized_difference_vegetation_index",
     "short_name": "ndvi_raw",
-    "units": "unitless",
+    "standard_name": "normalized_difference_vegetation_index",
+    "units": "1",
     "comment": "Raw NDVI values from the NOAA CDR",
     "step_type": "instant",
     "coordinates": "spatial_ref",

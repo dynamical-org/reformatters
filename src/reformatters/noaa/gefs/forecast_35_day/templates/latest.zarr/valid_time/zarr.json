@@ -39,6 +39,8 @@
     }
   ],
   "attributes": {
+    "long_name": "Valid time",
+    "standard_name": "time",
     "statistics_approximate": {
       "min": "2020-10-01T00:00:00",
       "max": "Present + 35 days"

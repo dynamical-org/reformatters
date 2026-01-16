@@ -37,6 +37,8 @@
     }
   ],
   "attributes": {
+    "long_name": "Forecast initialization time",
+    "standard_name": "forecast_reference_time",
     "statistics_approximate": {
       "min": "2018-07-13T12:00:00",
       "max": "Present"

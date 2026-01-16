@@ -70,7 +70,7 @@
   "attributes": {
     "long_name": "Percent frozen precipitation",
     "short_name": "cpofp",
-    "units": "%",
+    "units": "percent",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
