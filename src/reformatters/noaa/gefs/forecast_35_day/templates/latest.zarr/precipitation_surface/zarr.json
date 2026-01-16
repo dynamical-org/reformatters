@@ -71,8 +71,8 @@
     }
   ],
   "attributes": {
-    "long_name": "Total Precipitation",
-    "short_name": "tp",
+    "long_name": "Precipitation rate",
+    "short_name": "prate",
     "standard_name": "precipitation_flux",
     "units": "kg m-2 s-1",
     "comment": "Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",

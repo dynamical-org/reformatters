@@ -195,7 +195,7 @@
         ],
         "attributes": {
           "long_name": "Snow depth",
-          "short_name": "snow_depth",
+          "short_name": "sde",
           "standard_name": "surface_snow_thickness",
           "units": "mm",
           "step_type": "instant",
