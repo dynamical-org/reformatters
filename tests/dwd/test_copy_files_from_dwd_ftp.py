@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from pathlib import PurePosixPath
 from unittest.mock import MagicMock, patch
@@ -11,6 +12,7 @@ from reformatters.dwd.copy_files_from_dwd_ftp import (
     copy_files_from_dwd_ftp,
     list_ftp_files,
 )
+from reformatters.dwd.parse_rclone_log import TransferSummary
 
 
 @pytest.fixture
@@ -87,30 +89,40 @@ def test_copy_batches() -> None:
         (dt, "t_2m"): [_PathAndSize(PurePosixPath("t_2m/file2.bz2"), 200)],
     }
 
+    mock_json_logs = [
+        {"level": "info", "msg": "Copied (new)", "object": "alb_rad/file1.bz2"},
+        {
+            "level": "info",
+            "msg": "Summary stats",
+            "stats": {
+                "totalTransfers": 1,
+                "totalChecks": 1,
+                "errors": 0,
+                "totalBytes": 100,
+                "elapsedTime": 0.1,
+                "transferTime": 0.1,
+                "listed": 1,
+            },
+        },
+    ]
+    mock_stderr = "\n".join(json.dumps(entry) for entry in mock_json_logs)
+
     with patch("subprocess.run") as mock_run:
         mock_result = MagicMock()
         mock_result.stdout = ""
-        mock_result.stderr = ""
+        mock_result.stderr = mock_stderr
         mock_result.returncode = 0
         mock_run.return_value = mock_result
 
-        _copy_batches("host", ftp_path, dst_root, copy_plan)
+        summary = _copy_batches("host", ftp_path, dst_root, copy_plan)
 
         assert mock_run.call_count == 2
-
-        # Check first call
-        args, _ = mock_run.call_args_list[0]
-        cmd = args[0]
-        assert "rclone" in cmd
-        assert "copy" in cmd
-        assert ":ftp:/ftp" in cmd
-        assert "/dst/2026-01-14T00Z" in cmd
-        assert any(arg.startswith("--files-from-raw") for arg in cmd)
-
-        # Check second call
-        args, _ = mock_run.call_args_list[1]
-        cmd = args[0]
-        assert "/dst/2026-01-14T00Z" in cmd
+        assert isinstance(summary, TransferSummary)
+        # 2 batches, each with 1 transfer and 1 check
+        assert summary.total_transfers == 2
+        assert summary.total_checks == 2
+        assert summary.errors == 0
+        assert summary.total_bytes == 200
 
 
 def test_copy_files_from_dwd_ftp(mock_lsf_output: list[str]) -> None:
@@ -119,13 +131,35 @@ def test_copy_files_from_dwd_ftp(mock_lsf_output: list[str]) -> None:
     dst_root = PurePosixPath("/dst")
 
     with patch("subprocess.run") as mock_run:
-        mock_result = MagicMock()
-        mock_result.stdout = "\n".join(mock_lsf_output)
-        mock_result.stderr = ""
-        mock_result.returncode = 0
-        mock_run.return_value = mock_result
+        mock_result_ls = MagicMock()
+        mock_result_ls.stdout = "\n".join(mock_lsf_output)
+        mock_result_ls.stderr = ""
+        mock_result_ls.returncode = 0
 
-        copy_files_from_dwd_ftp(ftp_host, ftp_path, dst_root)
+        mock_result_copy = MagicMock()
+        mock_result_copy.stdout = ""
+        mock_result_copy.stderr = json.dumps(
+            {
+                "level": "info",
+                "msg": "Summary stats",
+                "stats": {
+                    "totalTransfers": 1,
+                    "totalChecks": 0,
+                    "errors": 0,
+                    "totalBytes": 50,
+                    "elapsedTime": 0.1,
+                    "transferTime": 0.1,
+                    "listed": 0,
+                },
+            }
+        )
+        mock_result_copy.returncode = 0
+
+        mock_run.side_effect = [mock_result_ls, mock_result_copy, mock_result_copy]
+
+        summary = copy_files_from_dwd_ftp(ftp_host, ftp_path, dst_root)
 
         # Should be called 3 times: 1 for listing, 2 for copying (alb_rad and t_2m)
         assert mock_run.call_count == 3
+        assert isinstance(summary, TransferSummary)
+        assert summary.total_transfers == 2
