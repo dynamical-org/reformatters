@@ -264,6 +264,9 @@ def _copy_batch(
 ) -> None:
     """Executes a single rclone copy batch for a specific destination.
 
+    rclone will only transfer files that are missing from dst_path, or are present in dst_path but
+    have a different size (e.g. a partial copy from a previous transfer that crashed).
+
     Args:
         ftp_host: The FTP host (e.g. 'opendata.dwd.de').
         ftp_path: The root source path on the FTP server (including NWP init hour).
@@ -272,9 +275,9 @@ def _copy_batch(
         transfers: Number of parallel transfers to use for this batch.
     """
     # Modern Linux platforms often install `rclone` as a sandboxed snap, which does not have access
-    # to `/tmp`, to we store the temporary file in the current working directory.
+    # to `/tmp`, so we store the temporary file in the current working directory.
     with NamedTemporaryFile(mode="w", dir=".", prefix=".rclone_files_") as list_file:
-        # rel_paths are relative to ftp_path
+        # paths in `files_to_be_copied` are relative to `ftp_path`.
         list_file.write("\n".join(p.path.as_posix() for p in files_to_be_copied))
         list_file.flush()
 
@@ -289,12 +292,10 @@ def _copy_batch(
             "--config=",
             "--no-check-certificate",
             "--ignore-checksum",
-            "--ignore-existing",
         ]
 
         try:
             _run_rclone(cmd, timeout=timedelta(minutes=30))
-
         except subprocess.CalledProcessError:
             log.exception("Failed to copy batch to %s", dst_path)
 
