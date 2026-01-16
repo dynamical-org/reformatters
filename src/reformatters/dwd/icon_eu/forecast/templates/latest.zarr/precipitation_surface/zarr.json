@@ -72,7 +72,7 @@
     "short_name": "tp",
     "standard_name": "precipitation_flux",
     "units": "kg m-2 s-1",
-    "comment": "Total precipitation accumulated since model start. TOT_PREC = RAIN_GSP + SNOW_GSP + RAIN_CON + SNOW_CON.",
+    "comment": "Precipitation rate since previous forecast step. TOT_PREC = RAIN_GSP + SNOW_GSP + RAIN_CON + SNOW_CON.",
     "step_type": "accum",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

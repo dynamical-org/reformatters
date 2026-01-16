@@ -38,6 +38,7 @@ class DwdIconEuInternalAttrs(BaseInternalAttrs):
     """
 
     variable_name_in_filename: str
+    window_reset_frequency: Timedelta | None = None
 
 
 class DwdIconEuDataVar(DataVar[DwdIconEuInternalAttrs]):
@@ -561,7 +562,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     units="kg m-2 s-1",
                     step_type="accum",
                     comment=(
-                        "Total precipitation accumulated since model start."
+                        "Precipitation rate since previous forecast step."
                         " TOT_PREC = RAIN_GSP + SNOW_GSP + RAIN_CON + SNOW_CON."
                     ),
                 ),
@@ -569,6 +570,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     variable_name_in_filename="tot_prec",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     deaccumulate_to_rate=True,
+                    window_reset_frequency=pd.Timedelta.max,  # accumulates over full lead time, never resetting
                 ),
             ),
             DwdIconEuDataVar(
