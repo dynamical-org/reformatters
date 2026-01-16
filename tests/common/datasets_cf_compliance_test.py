@@ -44,7 +44,15 @@ def test_cf_latitude_longitude_recognized(
     ds = xr.open_zarr(template_path)
 
     # Check if this is a projected coordinate system (has x, y as dimension coords)
-    is_projected = "x" in ds.dims and "y" in ds.dims
+    if "latitude" in ds.coords and "longitude" in ds.coords:
+        is_projected = False
+    elif "x" in ds.dims and "y" in ds.dims:
+        is_projected = True
+    else:
+        raise ValueError(
+            f"Unknown spatial coordinate dimensions for dataset {dataset.dataset_id}. "
+            f"Expected latitude/longitude or x/y as dimension coordinates."
+        )
 
     # Check latitude is recognized
     if "latitude" in ds.coords:
@@ -122,6 +130,16 @@ def test_cf_time_coordinates_recognized(
     template_path = template_config.template_path()
 
     ds = xr.open_zarr(template_path)
+
+    # Analysis dataset: just time coordinate
+    if "time" in ds.coords:
+        assert "init_time" not in ds.coords
+        assert "lead_time" not in ds.coords
+
+    # Forecast dataset: init_time and lead_time coordinates
+    if "init_time" in ds.coords:
+        assert "lead_time" in ds.coords
+        assert "time" not in ds.coords
 
     # Check for time coordinate (used in analysis datasets)
     if "time" in ds.coords and "time" in ds.dims:
@@ -334,4 +352,11 @@ def test_cf_data_variables_have_long_name(
             f"Data variable '{var_name}' missing 'long_name' attribute. "
             f"CF conventions require all data variables have a long_name. "
             f"Current attrs: {dict(var_attrs)}"
+        )
+        assert isinstance(var_attrs["long_name"], str), (
+            f"Data variable '{var_name}' has 'long_name' that is not a string. "
+            f"Current value: {var_attrs['long_name']!r}"
+        )
+        assert var_attrs["long_name"] != "", (
+            f"Data variable '{var_name}' has an empty 'long_name' attribute."
         )

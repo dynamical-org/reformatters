@@ -34,11 +34,11 @@ type EnsembleStatistic = Literal["avg"]  # "spr" (spread) is also available
 
 
 class DataVarAttrs(FrozenBaseModel):
-    long_name: str
-    short_name: str
-    standard_name: str | None = None
-    units: str
-    comment: str | None = None
+    long_name: Annotated[str, pydantic.Field(min_length=1)]
+    short_name: Annotated[str, pydantic.Field(min_length=1)]
+    standard_name: Annotated[str, pydantic.Field(min_length=1)] | None = None
+    units: Annotated[str, pydantic.Field(min_length=1)]
+    comment: Annotated[str, pydantic.Field(min_length=1)] | None = None
     step_type: Literal["instant", "accum", "avg", "min", "max"]
     ensemble_statistic: EnsembleStatistic | None = None
 
@@ -47,12 +47,12 @@ type CfAxis = Literal["X", "Y", "Z", "T"]
 
 
 class CoordinateAttrs(FrozenBaseModel):
-    long_name: str | None = None
-    standard_name: str | None = None
+    long_name: Annotated[str, pydantic.Field(min_length=1)] | None = None
+    standard_name: Annotated[str, pydantic.Field(min_length=1)] | None = None
     axis: CfAxis | None = None
     units: TimestampUnits | TimedeltaUnits | str | None
     statistics_approximate: StatisticsApproximate | None
-    comment: str | None = None
+    comment: Annotated[str, pydantic.Field(min_length=1)] | None = None
 
     # Rio xarray attributes to encode spatial reference system
     crs_wkt: str | None = None
