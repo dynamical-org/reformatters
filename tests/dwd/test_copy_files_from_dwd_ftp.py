@@ -8,6 +8,7 @@ import pytest
 from reformatters.dwd.copy_files_from_dwd_ftp import (
     _compute_copy_plan,
     _copy_batches,
+    _parse_rclone_list_csv,
     _PathAndSize,
     copy_files_from_dwd_ftp,
     list_ftp_files,
@@ -21,7 +22,7 @@ def mock_lsf_output() -> list[str]:
         "alb_rad/icon-eu_europe_regular-lat-lon_single-level_2026011400_000_ALB_RAD.grib2.bz2,100",
         "alb_rad/icon-eu_europe_regular-lat-lon_single-level_2026011400_001_ALB_RAD.grib2.bz2,200",
         "t_2m/icon-eu_europe_regular-lat-lon_single-level_2026011400_000_T_2M.grib2.bz2,300",
-        "ignore_me/pressure_level.grib2,400",
+        "ignore_me/pressure-level_2026011400_000.grib2,400",
     ]
 
 
@@ -42,13 +43,13 @@ def test_list_ftp_files(mock_lsf_output: list[str]) -> None:
         mock_run.assert_called_once()
 
 
-def test_compute_copy_plan(mock_lsf_output: list[str]) -> None:
-    file_list = [
-        _PathAndSize(PurePosixPath(line.split(",")[0]), int(line.split(",")[1]))
-        for line in mock_lsf_output
-    ]
+@pytest.fixture
+def mock_file_list(mock_lsf_output: list[str]) -> list[_PathAndSize]:
+    return _parse_rclone_list_csv("\n".join(mock_lsf_output))
 
-    plan = _compute_copy_plan(file_list=file_list)
+
+def test_compute_copy_plan(mock_file_list: list[_PathAndSize]) -> None:
+    plan = _compute_copy_plan(file_list=mock_file_list)
 
     # Should have 2 batches keyed by (datetime, variable)
     dt = datetime(2026, 1, 14, 0)
@@ -59,25 +60,16 @@ def test_compute_copy_plan(mock_lsf_output: list[str]) -> None:
     assert len(plan[(dt, "t_2m")]) == 1
 
 
-def test_compute_copy_plan_with_limit(mock_lsf_output: list[str]) -> None:
-    file_list = [
-        _PathAndSize(PurePosixPath(line.split(",")[0]), int(line.split(",")[1]))
-        for line in mock_lsf_output
-    ]
-
-    # Limit to 1 file per variable.
-    plan = _compute_copy_plan(file_list=file_list, max_files_per_nwp_variable=1)
+def test_compute_copy_plan_with_limit(mock_file_list: list[_PathAndSize]) -> None:
+    plan = _compute_copy_plan(file_list=mock_file_list, max_files_per_nwp_variable=1)
 
     dt = datetime(2026, 1, 14, 0)
     assert len(plan) == 2
     assert len(plan[(dt, "alb_rad")]) == 1
     assert len(plan[(dt, "t_2m")]) == 1
-    # First alb_rad file should be there
-    assert file_list[0] in plan[(dt, "alb_rad")]
-    # Second alb_rad file should be skipped
-    assert file_list[1] not in plan[(dt, "alb_rad")]
-    # t_2m file should be there
-    assert file_list[2] in plan[(dt, "t_2m")]
+    assert mock_file_list[0] in plan[(dt, "alb_rad")]
+    assert mock_file_list[1] not in plan[(dt, "alb_rad")]
+    assert mock_file_list[2] in plan[(dt, "t_2m")]
 
 
 def test_copy_batches() -> None:

@@ -143,20 +143,27 @@ def list_ftp_files(
     ]
 
     stdout_str, _ = _run_rclone(cmd, timeout=timedelta(seconds=90))
+    file_list = _parse_rclone_list_csv(stdout_str)
+    log.info(
+        f"Before filtering: {len(file_list):,d} files,"
+        f" totalling {format_bytes(_sum_bytes(file_list))}, found in {ftp_url}"
+    )
+    return sorted(file_list, key=lambda x: x.path)
 
+
+def _parse_rclone_list_csv(rclone_csv: str) -> list[_PathAndSize]:
     # Parse rclone's listing as a CSV
-    reader = csv.reader(io.StringIO(stdout_str))
+    reader = csv.reader(io.StringIO(rclone_csv))
     file_list = [
         _PathAndSize(path=PurePosixPath(row[0]), size_bytes=int(row[1]))
         for row in reader
         if row
     ]
-    total_size_bytes = sum(f.size_bytes for f in file_list)
-    log.info(
-        f"Before filtering: {len(file_list):,d} files,"
-        f" totalling {format_bytes(total_size_bytes)}, found in {ftp_url}"
-    )
-    return sorted(file_list, key=lambda x: x.path)
+    return file_list
+
+
+def _sum_bytes(file_list: list[_PathAndSize]) -> int:
+    return sum(f.size_bytes for f in file_list)
 
 
 def _compute_copy_plan(
@@ -247,7 +254,7 @@ def _copy_batches(
             "%s starting: Asking rclone to copy %d file(s) totalling %s to %s (if they don't already exist)...",
             batch_info_str,
             len(files_to_be_copied),
-            format_bytes(sum([f.size_bytes for f in files_to_be_copied])),
+            format_bytes(sum(f.size_bytes for f in files_to_be_copied)),
             dst_path / nwp_var,
         )
         batch_summary = _copy_batch(
