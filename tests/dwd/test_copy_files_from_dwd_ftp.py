@@ -94,7 +94,15 @@ def test_copy_batches() -> None:
         {
             "level": "info",
             "msg": "Summary stats",
-            "stats": {"transfers": 1, "checks": 1, "errors": 0, "bytes": 100},
+            "stats": {
+                "totalTransfers": 1,
+                "totalChecks": 1,
+                "errors": 0,
+                "totalBytes": 100,
+                "elapsedTime": 0.1,
+                "transferTime": 0.1,
+                "listed": 1,
+            },
         },
     ]
     mock_stderr = "\n".join(json.dumps(entry) for entry in mock_json_logs)
@@ -134,7 +142,15 @@ def test_copy_files_from_dwd_ftp(mock_lsf_output: list[str]) -> None:
             {
                 "level": "info",
                 "msg": "Summary stats",
-                "stats": {"transfers": 1, "checks": 0, "errors": 0, "bytes": 50},
+                "stats": {
+                    "totalTransfers": 1,
+                    "totalChecks": 0,
+                    "errors": 0,
+                    "totalBytes": 50,
+                    "elapsedTime": 0.1,
+                    "transferTime": 0.1,
+                    "listed": 0,
+                },
             }
         )
         mock_result_copy.returncode = 0
