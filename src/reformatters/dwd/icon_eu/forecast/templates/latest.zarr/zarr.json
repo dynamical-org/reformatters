@@ -1128,11 +1128,11 @@
           }
         ],
         "attributes": {
-          "long_name": "Pressure reduced to mean sea level (MSL)",
+          "long_name": "Pressure reduced to MSL",
           "short_name": "prmsl",
           "standard_name": "air_pressure_at_mean_sea_level",
           "units": "Pa",
-          "comment": "Surface pressure reduced to MSL",
+          "comment": "Surface pressure reduced to mean sea level",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1309,8 +1309,8 @@
           "long_name": "Snow depth",
           "short_name": "sde",
           "standard_name": "surface_snow_thickness",
-          "units": "m",
-          "comment": "Snow depth in m. It is diagnosed from RHO_SNOW and W_SNOW according to H_SNOW = W_SNOW / RHO_SNOW and is limited to H_SNOW <= 40 m.",
+          "units": "mm",
+          "comment": "Snow depth in mm. It is diagnosed from RHO_SNOW and W_SNOW according to H_SNOW = W_SNOW / RHO_SNOW and is limited to H_SNOW <= 40 m.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1713,7 +1713,7 @@
           "long_name": "2 metre temperature",
           "short_name": "t2m",
           "standard_name": "air_temperature",
-          "units": "K",
+          "units": "degree_Celsius",
           "comment": "Temperature at 2m above ground, averaged over all tiles of a grid point. Different agencies use different short_names for this parameter: ECMWF: 2t; NOAA & DWD: t2m.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
@@ -1946,11 +1946,11 @@
           }
         ],
         "attributes": {
-          "long_name": "10 metre U wind component (eastward)",
+          "long_name": "10 metre U wind component",
           "short_name": "u10",
           "standard_name": "eastward_wind",
           "units": "m s-1",
-          "comment": "Zonal wind at 10m above ground",
+          "comment": "Zonal wind (eastward) at 10m above ground",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2035,11 +2035,11 @@
           }
         ],
         "attributes": {
-          "long_name": "10 metre V wind component (northward)",
+          "long_name": "10 metre V wind component",
           "short_name": "v10",
           "standard_name": "northward_wind",
           "units": "m s-1",
-          "comment": "Meridional wind at 10m above ground",
+          "comment": "Meridional wind (northward) at 10m above ground",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

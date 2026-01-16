@@ -934,7 +934,7 @@
           }
         ],
         "attributes": {
-          "long_name": "Total precipitation",
+          "long_name": "Total Precipitation",
           "short_name": "tp",
           "standard_name": "precipitation_flux",
           "units": "kg m-2 s-1",

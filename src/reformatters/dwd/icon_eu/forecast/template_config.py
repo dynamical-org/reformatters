@@ -454,10 +454,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     short_name="sde",
                     long_name="Snow depth",
                     standard_name="surface_snow_thickness",
-                    units="m",
+                    units="mm",
                     step_type="instant",
                     comment=(
-                        "Snow depth in m. It is diagnosed from RHO_SNOW and W_SNOW according to"
+                        "Snow depth in mm. It is diagnosed from RHO_SNOW and W_SNOW according to"
                         " H_SNOW = W_SNOW / RHO_SNOW and is limited to H_SNOW <= 40 m."
                     ),
                 ),
@@ -472,10 +472,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=DataVarAttrs(
                     short_name="prmsl",
                     standard_name="air_pressure_at_mean_sea_level",
-                    long_name="Pressure reduced to mean sea level (MSL)",
+                    long_name="Pressure reduced to MSL",
                     units="Pa",
                     step_type="instant",
-                    comment="Surface pressure reduced to MSL",
+                    comment="Surface pressure reduced to mean sea level",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="pmsl",
@@ -540,7 +540,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=DataVarAttrs(
                     short_name="t2m",
                     long_name="2 metre temperature",
-                    units="K",
+                    units="degree_Celsius",
                     step_type="instant",
                     comment=(
                         "Temperature at 2m above ground, averaged over all tiles of a grid point. Different agencies use different short_names for this parameter: ECMWF: 2t; NOAA & DWD: t2m."
@@ -579,11 +579,11 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="u10",
-                    long_name="10 metre U wind component (eastward)",
+                    long_name="10 metre U wind component",
                     units="m s-1",
                     step_type="instant",
                     standard_name="eastward_wind",
-                    comment="Zonal wind at 10m above ground",
+                    comment="Zonal wind (eastward) at 10m above ground",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="u_10m",
@@ -595,11 +595,11 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="v10",
-                    long_name="10 metre V wind component (northward)",
+                    long_name="10 metre V wind component",
                     units="m s-1",
                     step_type="instant",
                     standard_name="northward_wind",
-                    comment="Meridional wind at 10m above ground",
+                    comment="Meridional wind (northward) at 10m above ground",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="v_10m",

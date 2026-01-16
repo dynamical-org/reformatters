@@ -364,3 +364,84 @@ def test_cf_data_variables_have_long_name(
         assert var_attrs["long_name"] != "", (
             f"Data variable '{var_name}' has an empty 'long_name' attribute."
         )
+
+
+def test_cf_data_variable_metadata_consistency_across_datasets() -> None:
+    """
+    Ensure that data variables with the same name have consistent metadata
+    (units, standard_name, long_name) across all datasets.
+
+    This test helps ensure that users can trust that variables with the same name
+    represent the same physical quantity with consistent metadata across datasets.
+    """
+    # Collect metadata for all data variables across all datasets
+    # Structure: {var_name: {dataset_id: {units, standard_name, long_name}}}
+    var_metadata: dict[str, dict[str, dict[str, str | None]]] = {}
+
+    for dataset in DYNAMICAL_DATASETS:
+        template_config = dataset.template_config
+        for var_config in template_config.data_vars:
+            var_name = var_config.name
+            if var_name not in var_metadata:
+                var_metadata[var_name] = {}
+
+            var_metadata[var_name][dataset.dataset_id] = {
+                "units": var_config.attrs.units,
+                "standard_name": var_config.attrs.standard_name,
+                "long_name": var_config.attrs.long_name,
+            }
+
+    # Check for inconsistencies
+    conflicts: list[str] = []
+
+    for var_name, datasets_metadata in var_metadata.items():
+        # Skip variables that only appear in one dataset
+        if len(datasets_metadata) < 2:
+            continue
+
+        # Get all unique values for each attribute
+        units_values: dict[str | None, list[str]] = {}
+        standard_name_values: dict[str | None, list[str]] = {}
+        long_name_values: dict[str | None, list[str]] = {}
+
+        for dataset_id, metadata in datasets_metadata.items():
+            units = metadata["units"]
+            standard_name = metadata["standard_name"]
+            long_name = metadata["long_name"]
+
+            units_values.setdefault(units, []).append(dataset_id)
+            standard_name_values.setdefault(standard_name, []).append(dataset_id)
+            long_name_values.setdefault(long_name, []).append(dataset_id)
+
+        # Check for conflicts
+        if len(units_values) > 1:
+            conflict_details = ", ".join(
+                f"'{unit}' in [{', '.join(ds_ids)}]"
+                for unit, ds_ids in units_values.items()
+            )
+            conflicts.append(
+                f"Variable '{var_name}' has inconsistent units: {conflict_details}"
+            )
+
+        if len(standard_name_values) > 1:
+            conflict_details = ", ".join(
+                f"'{sn}' in [{', '.join(ds_ids)}]"
+                for sn, ds_ids in standard_name_values.items()
+            )
+            conflicts.append(
+                f"Variable '{var_name}' has inconsistent standard_name: {conflict_details}"
+            )
+
+        if len(long_name_values) > 1:
+            conflict_details = ", ".join(
+                f"'{ln}' in [{', '.join(ds_ids)}]"
+                for ln, ds_ids in long_name_values.items()
+            )
+            conflicts.append(
+                f"Variable '{var_name}' has inconsistent long_name: {conflict_details}"
+            )
+
+    assert not conflicts, (
+        "Data variable metadata inconsistencies found across datasets:\n\n"
+        + "\n".join(f"  - {conflict}" for conflict in conflicts)
+    )
