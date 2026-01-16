@@ -239,10 +239,11 @@ def _copy_batches(
         nwp_init_datetime_str = nwp_init_dt.strftime("%Y-%m-%dT%HZ")
         dst_path = dst_root / nwp_init_datetime_str
         log.info(
-            "Batch [%d/%d]: Asking rclone to copy %d file(s) to %s (if they don't already exist)...",
+            "Batch [%d/%d]: Asking rclone to copy %d file(s) totalling %s to %s (if they don't already exist)...",
             i + 1,
             n_batches,
             len(files_to_be_copied),
+            _format_bytes(sum([f.size_bytes for f in files_to_be_copied])),
             dst_path / nwp_var,
         )
         _copy_batch(
