@@ -63,6 +63,7 @@ maybe 0.5 seconds to 1 second for each NWP variable. There are two ways to get m
 import csv
 import ctypes
 import io
+import json
 import logging
 import re
 import signal
@@ -80,13 +81,19 @@ log = get_logger(__name__)
 
 GIBIBYTE: Final[int] = 1024**3
 
-# Constants for Linux prctl (Process Control)
-PR_SET_PDEATHSIG: Final[int] = 1
+
+PR_SET_PDEATHSIG: Final[int] = 1  # For Linux prctl (PRocess ConTroL)
 
 
 class _PathAndSize(NamedTuple):
     path: PurePosixPath
     size_bytes: int
+
+
+class TransferSummary(NamedTuple):
+    copied: list[PurePosixPath]
+    skipped: list[PurePosixPath]
+    failed: list[tuple[PurePosixPath, str]]
 
 
 def copy_files_from_dwd_ftp(
@@ -95,7 +102,7 @@ def copy_files_from_dwd_ftp(
     dst_root: PurePosixPath,
     transfers: int = 10,
     max_files_per_nwp_variable: int = sys.maxsize,
-) -> None:
+) -> TransferSummary:
     """Restructure DWD GRIB files from FTP to a timestamped directory structure.
 
     Args:
@@ -112,7 +119,7 @@ def copy_files_from_dwd_ftp(
         file_list=file_list,
         max_files_per_nwp_variable=max_files_per_nwp_variable,
     )
-    _copy_batches(
+    return _copy_batches(
         ftp_host=ftp_host,
         ftp_path=ftp_path,
         dst_root=dst_root,
@@ -140,9 +147,9 @@ def list_ftp_files(
         "--config=",  # There is no config file because we pass everything as command-line args.
     ]
 
-    stdout_str = _run_rclone(cmd, timeout=timedelta(seconds=90))
-    file_list: list[_PathAndSize] = []
+    stdout_str, _ = _run_rclone(cmd, timeout=timedelta(seconds=90))
     reader = csv.reader(io.StringIO(stdout_str))
+
     file_list = [
         _PathAndSize(path=PurePosixPath(row[0]), size_bytes=int(row[1]))
         for row in reader
@@ -232,9 +239,10 @@ def _copy_batches(
     dst_root: PurePosixPath,
     copy_plan: dict[tuple[datetime, str], list[_PathAndSize]],
     transfers: int = 10,
-) -> None:
+) -> TransferSummary:
     """Executes rclone copy for each timestamp and variable batch in the plan."""
     n_batches = len(copy_plan)
+    total_summary = TransferSummary(copied=[], skipped=[], failed=[])
     for i, ((nwp_init_dt, nwp_var), files_to_be_copied) in enumerate(copy_plan.items()):
         nwp_init_datetime_str = nwp_init_dt.strftime("%Y-%m-%dT%HZ")
         dst_path = dst_root / nwp_init_datetime_str
@@ -246,13 +254,24 @@ def _copy_batches(
             _format_bytes(sum([f.size_bytes for f in files_to_be_copied])),
             dst_path / nwp_var,
         )
-        _copy_batch(
+        batch_summary = _copy_batch(
             ftp_host=ftp_host,
             ftp_path=ftp_path,
             dst_path=dst_path,
             files_to_be_copied=files_to_be_copied,
             transfers=transfers,
         )
+        total_summary.copied.extend(batch_summary.copied)
+        total_summary.skipped.extend(batch_summary.skipped)
+        total_summary.failed.extend(batch_summary.failed)
+
+    log.info(
+        "Transfer complete: %d copied, %d skipped, %d failed.",
+        len(total_summary.copied),
+        len(total_summary.skipped),
+        len(total_summary.failed),
+    )
+    return total_summary
 
 
 def _copy_batch(
@@ -261,7 +280,7 @@ def _copy_batch(
     dst_path: PurePosixPath,
     files_to_be_copied: list[_PathAndSize],
     transfers: int,
-) -> None:
+) -> TransferSummary:
     """Executes a single rclone copy batch for a specific destination.
 
     rclone will only transfer files that are missing from dst_path, or are present in dst_path but
@@ -284,6 +303,8 @@ def _copy_batch(
         cmd = [
             "rclone",
             "copy",
+            "-v",
+            "--use-json-log",
             f":ftp:{ftp_path}",
             str(dst_path),
             "--files-from-raw=" + list_file.name,
@@ -295,9 +316,40 @@ def _copy_batch(
         ]
 
         try:
-            _run_rclone(cmd, timeout=timedelta(minutes=30))
-        except subprocess.CalledProcessError:
+            _, stderr = _run_rclone(cmd, timeout=timedelta(minutes=30))
+        except subprocess.CalledProcessError as e:
             log.exception("Failed to copy batch to %s", dst_path)
+            stderr = e.stderr
+
+    return _parse_rclone_json_logs(stderr)
+
+
+def _parse_rclone_json_logs(stderr: str) -> TransferSummary:
+    """Parses rclone JSON logs from stderr and categorizes transfers."""
+    copied: list[PurePosixPath] = []
+    skipped: list[PurePosixPath] = []
+    failed: list[tuple[PurePosixPath, str]] = []
+
+    for line in stderr.splitlines():
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        msg = entry.get("msg", "")
+        obj = entry.get("object", "")
+        if not obj:
+            continue
+
+        path = PurePosixPath(obj)
+        if "Copied (new)" in msg or "Updated" in msg:
+            copied.append(path)
+        elif "Skipped (existing)" in msg:
+            skipped.append(path)
+        elif entry.get("level") == "error" or "Failed to copy" in msg:
+            failed.append((path, msg))
+
+    return TransferSummary(copied=copied, skipped=skipped, failed=failed)
 
 
 def _get_rclone_ftp_args(ftp_host: str) -> list[str]:
@@ -310,8 +362,8 @@ def _get_rclone_ftp_args(ftp_host: str) -> list[str]:
     ]
 
 
-def _run_rclone(cmd: list[str], timeout: timedelta) -> str:
-    """Runs a command with logging and safety measures and returns stdout."""
+def _run_rclone(cmd: list[str], timeout: timedelta) -> tuple[str, str]:
+    """Runs a command with logging and safety measures and returns (stdout, stderr)."""
     log.debug("Running: %s", " ".join(cmd))
     try:
         result = subprocess.run(  # noqa: S603
@@ -326,14 +378,17 @@ def _run_rclone(cmd: list[str], timeout: timedelta) -> str:
         _log_rclone_stderr(e.stderr)
         raise
     except subprocess.TimeoutExpired as e:
-        if e.stderr:
-            _log_rclone_stderr(
-                e.stderr if isinstance(e.stderr, str) else e.stderr.decode()
-            )
+        stderr_str = (
+            e.stderr
+            if isinstance(e.stderr, str)
+            else (e.stderr.decode() if e.stderr is not None else "")
+        )
+        if stderr_str:
+            _log_rclone_stderr(stderr_str)
         raise
 
     _log_rclone_stderr(result.stderr)
-    return result.stdout
+    return result.stdout, result.stderr
 
 
 def _log_rclone_stderr(stderr: str) -> None:
