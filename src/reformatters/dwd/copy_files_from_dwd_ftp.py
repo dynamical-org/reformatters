@@ -73,7 +73,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import PurePosixPath
 from tempfile import NamedTemporaryFile
-from typing import Final, NamedTuple
+from typing import Any, Final, NamedTuple
 
 from reformatters.common.logging import get_logger
 
@@ -140,6 +140,7 @@ def list_ftp_files(
         "lsf",
         "--recursive",
         "--files-only",
+        "--use-json-log",
         f":ftp:{ftp_path}",
         *_get_rclone_ftp_args(ftp_host),
         "--format=ps",  # Return the path and size.
@@ -316,26 +317,21 @@ def _copy_batch(
         ]
 
         try:
-            _, stderr = _run_rclone(cmd, timeout=timedelta(minutes=30))
-        except subprocess.CalledProcessError as e:
+            _, log_entries = _run_rclone(cmd, timeout=timedelta(minutes=30), quiet=True)
+        except subprocess.CalledProcessError:
             log.exception("Failed to copy batch to %s", dst_path)
-            stderr = e.stderr
+            return TransferSummary(copied=[], skipped=[], failed=[])
 
-    return _parse_rclone_json_logs(stderr)
+    return _summarize_transfers(log_entries)
 
 
-def _parse_rclone_json_logs(stderr: str) -> TransferSummary:
-    """Parses rclone JSON logs from stderr and categorizes transfers."""
+def _summarize_transfers(log_entries: list[dict[str, Any]]) -> TransferSummary:
+    """Categorizes rclone log entries into a TransferSummary."""
     copied: list[PurePosixPath] = []
     skipped: list[PurePosixPath] = []
     failed: list[tuple[PurePosixPath, str]] = []
 
-    for line in stderr.splitlines():
-        try:
-            entry = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-
+    for entry in log_entries:
         msg = entry.get("msg", "")
         obj = entry.get("object", "")
         if not obj:
@@ -362,8 +358,12 @@ def _get_rclone_ftp_args(ftp_host: str) -> list[str]:
     ]
 
 
-def _run_rclone(cmd: list[str], timeout: timedelta) -> tuple[str, str]:
-    """Runs a command with logging and safety measures and returns (stdout, stderr)."""
+def _run_rclone(
+    cmd: list[str],
+    timeout: timedelta,
+    quiet: bool = False,
+) -> tuple[str, list[dict[str, Any]]]:
+    """Runs a command with logging and safety measures and returns (stdout, log_entries)."""
     log.debug("Running: %s", " ".join(cmd))
     try:
         result = subprocess.run(  # noqa: S603
@@ -375,7 +375,7 @@ def _run_rclone(cmd: list[str], timeout: timedelta) -> tuple[str, str]:
             preexec_fn=_set_death_signal,
         )
     except subprocess.CalledProcessError as e:
-        _log_rclone_stderr(e.stderr)
+        log_entries = _process_rclone_stderr(e.stderr, quiet=quiet)
         raise
     except subprocess.TimeoutExpired as e:
         stderr_str = (
@@ -383,27 +383,56 @@ def _run_rclone(cmd: list[str], timeout: timedelta) -> tuple[str, str]:
             if isinstance(e.stderr, str)
             else (e.stderr.decode() if e.stderr is not None else "")
         )
-        if stderr_str:
-            _log_rclone_stderr(stderr_str)
+        _process_rclone_stderr(stderr_str, quiet=quiet)
         raise
 
-    _log_rclone_stderr(result.stderr)
-    return result.stdout, result.stderr
+    log_entries = _process_rclone_stderr(result.stderr, quiet=quiet)
+    return result.stdout, log_entries
 
 
-def _log_rclone_stderr(stderr: str) -> None:
-    """Parses rclone stderr and logs with appropriate levels."""
+def _process_rclone_stderr(stderr: str, quiet: bool = False) -> list[dict[str, Any]]:
+    """Parses rclone stderr (as JSON if possible) and logs with appropriate levels."""
+    log_entries: list[dict[str, Any]] = []
     for line in stderr.splitlines():
         if not (clean_line := line.strip()):
             continue
-        line_upper = clean_line.upper()
-        if "ERROR" in line_upper or "FAILED" in line_upper:
-            log_level = logging.ERROR
-        elif "WARNING" in line_upper:
-            log_level = logging.WARNING
-        else:
-            log_level = logging.INFO
-        log.log(log_level, f"rclone: {clean_line}")
+
+        try:
+            entry = json.loads(clean_line)
+            log_entries.append(entry)
+            level_str = entry.get("level", "info").lower()
+            msg = entry.get("msg", "")
+
+            # Map rclone levels to Python logging levels
+            if level_str == "error":
+                log_level = logging.ERROR
+            elif level_str == "warning":
+                log_level = logging.WARNING
+            else:
+                log_level = logging.INFO
+
+            # Skip per-file info logs if quiet is True
+            if quiet and log_level == logging.INFO and "object" in entry:
+                continue
+
+            log.log(log_level, f"rclone: {msg}")
+
+        except json.JSONDecodeError:
+            # Fallback for non-JSON lines
+            line_upper = clean_line.upper()
+            if "ERROR" in line_upper or "FAILED" in line_upper:
+                log_level = logging.ERROR
+            elif "WARNING" in line_upper:
+                log_level = logging.WARNING
+            else:
+                log_level = logging.INFO
+
+            if quiet and log_level == logging.INFO:
+                continue
+
+            log.log(log_level, f"rclone: {clean_line}")
+
+    return log_entries
 
 
 def _set_death_signal() -> None:
