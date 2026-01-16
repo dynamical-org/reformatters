@@ -70,8 +70,8 @@
   "attributes": {
     "long_name": "Categorical ice pellets",
     "short_name": "cicep",
-    "units": "0=no; 1=yes",
-    "comment": "Presence/absence over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",
+    "units": "1",
+    "comment": "Presence/absence over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z). 0=no; 1=yes.",
     "step_type": "avg",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

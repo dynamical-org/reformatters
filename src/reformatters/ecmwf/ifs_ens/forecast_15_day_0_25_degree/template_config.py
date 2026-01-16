@@ -358,7 +358,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 attrs=DataVarAttrs(
                     short_name="t2m",
                     long_name="2 metre temperature",
-                    units="C",
+                    units="degree_Celsius",
                     step_type="instant",
                     standard_name="air_temperature",
                 ),
@@ -474,7 +474,8 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 attrs=DataVarAttrs(
                     short_name="ptype",
                     long_name="Categorical precipitation type at surface",
-                    units="0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13-191=Reserved; 192-254=Reserved for local use; 255=Missing",
+                    units="1",
+                    comment="0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13-191=Reserved; 192-254=Reserved for local use; 255=Missing",
                     step_type="instant",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
@@ -493,7 +494,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     short_name="sdlwrf",
                     standard_name="surface_downwelling_longwave_flux_in_air",
                     long_name="Surface downward long-wave radiation flux",
-                    units="W/(m^2)",
+                    units="W m-2",
                     step_type="avg",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
@@ -514,7 +515,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     short_name="sdswrf",
                     standard_name="surface_downwelling_shortwave_flux_in_air",
                     long_name="Surface downward short-wave radiation flux",
-                    units="W/(m^2)",
+                    units="W m-2",
                     step_type="avg",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
@@ -552,7 +553,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 attrs=DataVarAttrs(
                     short_name="2d",
                     long_name="2 metre dewpoint temperature",
-                    units="C",
+                    units="degree_Celsius",
                     step_type="instant",
                     standard_name="dew_point_temperature",
                 ),

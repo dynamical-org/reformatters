@@ -197,7 +197,7 @@
           "long_name": "normalized_difference_vegetation_index",
           "short_name": "ndvi_raw",
           "standard_name": "normalized_difference_vegetation_index",
-          "units": "unitless",
+          "units": "1",
           "comment": "Raw NDVI values from the NOAA CDR",
           "step_type": "instant",
           "coordinates": "spatial_ref",
@@ -282,7 +282,7 @@
           "long_name": "normalized_difference_vegetation_index",
           "short_name": "ndvi_usable",
           "standard_name": "normalized_difference_vegetation_index",
-          "units": "unitless",
+          "units": "1",
           "comment": "NDVI values that have been quality checked",
           "step_type": "instant",
           "coordinates": "spatial_ref",
@@ -366,7 +366,7 @@
         "attributes": {
           "long_name": "quality_assurance",
           "short_name": "qa",
-          "units": "categorical",
+          "units": "1",
           "step_type": "instant",
           "coordinates": "spatial_ref"
         },

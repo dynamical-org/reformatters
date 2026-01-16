@@ -278,7 +278,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                     short_name="soil_moisture_am",
                     long_name="Soil Moisture (AM)",
                     standard_name="volume_fraction_of_condensed_water_in_soil",
-                    units="m³/m³",
+                    units="1",
                     step_type="instant",
                 ),
                 internal_attrs=NasaSmapInternalAttrs(
@@ -294,7 +294,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                     short_name="soil_moisture_pm",
                     long_name="Soil Moisture (PM)",
                     standard_name="volume_fraction_of_condensed_water_in_soil",
-                    units="m³/m³",
+                    units="1",
                     step_type="instant",
                 ),
                 internal_attrs=NasaSmapInternalAttrs(

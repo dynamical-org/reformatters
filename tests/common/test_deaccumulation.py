@@ -52,7 +52,7 @@ def test_deaccumulate_higher_dimensional() -> None:
             "lead_time": lead_times,
         },
         dims=["init_time", "ensemble_member", "lead_time", "latitude", "longitude"],
-        attrs={"units": "mm/s"},
+        attrs={"units": "mm s-1"},
     )
 
     # Expected rates after deaccumulation
@@ -100,7 +100,7 @@ def test_deaccumulate_1d_3_and_6_hour_normal_cases() -> None:
         data,
         coords={"lead_time": lead_times},
         dims=["lead_time"],
-        attrs={"units": "mm/s"},
+        attrs={"units": "mm s-1"},
     )
 
     result = deaccumulate_to_rates_inplace(
@@ -121,7 +121,7 @@ def test_deaccumulate_1d_hourly_6h_reset_normal_cases() -> None:
         {"lt": 1, "in": 4 * sec, "out": 4.0},  # standard 1h case
         {"lt": 2, "in": 4 * sec, "out": 0.0},  # no new accumulation between 1h and 2h steps
         {"lt": 3, "in": 5 * sec, "out": 1.0},  # new accumulation between 2h and 3h steps
-        {"lt": 4, "in": 7 * sec, "out": 2.0},  # 2 mm/s new accumulation
+        {"lt": 4, "in": 7 * sec, "out": 2.0},  # 2 mm s-1 new accumulation
         {"lt": 5, "in": 7 * sec, "out": 0.0},  # no new accumulation
         {"lt": 6, "in": 7 * sec, "out": 0.0},  # no new accumulation
         {"lt": 7, "in": 7 * sec, "out": 7.0},  # 7 mm new accumulation after 6h reset
@@ -135,7 +135,7 @@ def test_deaccumulate_1d_hourly_6h_reset_normal_cases() -> None:
         data,
         coords={"lead_time": lead_times},
         dims=["lead_time"],
-        attrs={"units": "mm/s"},
+        attrs={"units": "mm s-1"},
     )
 
     result = deaccumulate_to_rates_inplace(
@@ -156,16 +156,16 @@ def test_deaccumulate_1d_hourly_3hourly_6hourly_6h_reset_normal_cases() -> None:
         {"lt": 1, "in": 4 * sec, "out": 4.0},  # standard 1h case
         {"lt": 2, "in": 4 * sec, "out": 0.0},  # no new accumulation between 1h and 2h steps
         {"lt": 3, "in": 5 * sec, "out": 1.0},  # new accumulation between 2h and 3h steps
-        {"lt": 4, "in": 7 * sec, "out": 2.0},  # 2 mm/s new accumulation
+        {"lt": 4, "in": 7 * sec, "out": 2.0},  # 2 mm s-1 new accumulation
         {"lt": 5, "in": 7 * sec, "out": 0.0},  # no new accumulation
         {"lt": 6, "in": 7 * sec, "out": 0.0},  # no new accumulation
         # 3 hourly step:
-        {"lt": 9, "in": 7 * sec * 3, "out": 7.0},  # 7 mm/s new accumulation over 3 hours after 6h reset
-        {"lt": 12, "in": 8 * sec * 3, "out": 1.0},  # 1 mm/s new accumulation over 3 hours
-        {"lt": 15, "in": 8 * sec * 3, "out": 8.0},  # 8 mm/s new accumulation over 3 hours
-        {"lt": 18, "in": 9 * sec * 3, "out": 1.0},  # 1 mm/s new accumulation over 3 hours
+        {"lt": 9, "in": 7 * sec * 3, "out": 7.0},  # 7 mm s-1 new accumulation over 3 hours after 6h reset
+        {"lt": 12, "in": 8 * sec * 3, "out": 1.0},  # 1 mm s-1 new accumulation over 3 hours
+        {"lt": 15, "in": 8 * sec * 3, "out": 8.0},  # 8 mm s-1 new accumulation over 3 hours
+        {"lt": 18, "in": 9 * sec * 3, "out": 1.0},  # 1 mm s-1 new accumulation over 3 hours
         # 6 hourly step:
-        {"lt": 24, "in": 3 * sec * 6, "out": 3.0},  # 3 mm/s new accumulation over 6 hours
+        {"lt": 24, "in": 3 * sec * 6, "out": 3.0},  # 3 mm s-1 new accumulation over 6 hours
         {"lt": 30, "in": 0 * sec * 6, "out": 0.0},  # no new accumulation over 6 hours
         {"lt": 36, "in": 5 * sec * 6, "out": 5.0},  # no new accumulation over 6 hours
     ]  # fmt: off
@@ -178,7 +178,7 @@ def test_deaccumulate_1d_hourly_3hourly_6hourly_6h_reset_normal_cases() -> None:
         data,
         coords={"lead_time": lead_times},
         dims=["lead_time"],
-        attrs={"units": "mm/s"},
+        attrs={"units": "mm s-1"},
     )
 
     result = deaccumulate_to_rates_inplace(
@@ -213,7 +213,7 @@ def test_deaccumulate_1d_hourly_6h_reset_missing_values() -> None:
         data,
         coords={"lead_time": lead_times},
         dims=["lead_time"],
-        attrs={"units": "mm/s"},
+        attrs={"units": "mm s-1"},
     )
 
     result = deaccumulate_to_rates_inplace(
@@ -240,7 +240,7 @@ def test_deaccumulate_1d_3_and_6_hour_small_accumulation_decreases() -> None:
         data,
         coords={"lead_time": lead_times},
         dims=["lead_time"],
-        attrs={"units": "mm/s"},
+        attrs={"units": "mm s-1"},
     )
 
     with pytest.raises(
@@ -267,7 +267,7 @@ def test_deaccumulate_1d_3_and_6_hour_large_accumulation_decreases() -> None:
         data,
         coords={"lead_time": lead_times},
         dims=["lead_time"],
-        attrs={"units": "mm/s"},
+        attrs={"units": "mm s-1"},
     )
 
     with pytest.raises(ValueError, match="Found 1 values below threshold"):
@@ -304,7 +304,7 @@ def test_deaccumulate_1d_time_dim_3_and_6_hour_normal_cases() -> None:
         data,
         coords={"time": times},
         dims=["time"],
-        attrs={"units": "mm/s"},
+        attrs={"units": "mm s-1"},
     )
 
     result = deaccumulate_to_rates_inplace(
@@ -342,7 +342,7 @@ def test_deaccumulate_skip_steps_all_false() -> None:
         data,
         coords={"time": times},
         dims=["time"],
-        attrs={"units": "mm/s"},
+        attrs={"units": "mm s-1"},
     )
 
     result = deaccumulate_to_rates_inplace(
@@ -374,7 +374,7 @@ def test_deaccumulate_1d_hourly_window_and_step() -> None:
         data,
         coords={"lead_time": lead_times},
         dims=["lead_time"],
-        attrs={"units": "mm/s"},
+        attrs={"units": "mm s-1"},
     )
 
     result = deaccumulate_to_rates_inplace(
@@ -394,9 +394,9 @@ def test_deaccumulate_1d_skip_every_other_step() -> None:
         # 3 hourly step with 6 hourly data
         {"lt": 0, "in": nan, "out": nan, "skip": False},  # no deaccum on first step
         {"lt": 3, "in": nan, "out": nan, "skip": True},  # skip step
-        {"lt": 6, "in": 4 * sec * 6, "out": 4.0, "skip": False},  # 4 mm/s accumulation in last 6 hours
+        {"lt": 6, "in": 4 * sec * 6, "out": 4.0, "skip": False},  # 4 mm s-1 accumulation in last 6 hours
         {"lt": 9, "in": nan, "out": nan, "skip": True},  # skip step
-        {"lt": 12, "in": 2 * sec * 6, "out": 2.0, "skip": False}, # 2 mm/s accumulation in last 6 hours
+        {"lt": 12, "in": 2 * sec * 6, "out": 2.0, "skip": False}, # 2 mm s-1 accumulation in last 6 hours
     ]  # fmt: off
 
     lead_times = pd.to_timedelta([step["lt"] for step in values], unit="h")
@@ -408,7 +408,7 @@ def test_deaccumulate_1d_skip_every_other_step() -> None:
         data,
         coords={"lead_time": lead_times},
         dims=["lead_time"],
-        attrs={"units": "mm/s"},
+        attrs={"units": "mm s-1"},
     )
 
     result = deaccumulate_to_rates_inplace(
@@ -440,7 +440,7 @@ def test_deaccumulate_reset_frequency_equals_max_lead_time() -> None:
         data,
         coords={"lead_time": lead_times},
         dims=["lead_time"],
-        attrs={"units": "mm/s"},
+        attrs={"units": "mm s-1"},
     )
 
     result = deaccumulate_to_rates_inplace(
@@ -469,7 +469,7 @@ def test_deaccumulate_first_step_non_nan_becomes_nan() -> None:
         data,
         coords={"lead_time": lead_times},
         dims=["lead_time"],
-        attrs={"units": "mm/s"},
+        attrs={"units": "mm s-1"},
     )
 
     result = deaccumulate_to_rates_inplace(
@@ -534,7 +534,7 @@ def test_custom_deaccumulate_invalid_threshold_rate(
         data,
         coords={"lead_time": lead_times},
         dims=["lead_time"],
-        attrs={"units": "mm/s"},
+        attrs={"units": "mm s-1"},
     )
 
     if should_raise:

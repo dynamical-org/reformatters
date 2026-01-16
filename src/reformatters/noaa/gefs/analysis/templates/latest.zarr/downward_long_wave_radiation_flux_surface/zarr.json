@@ -68,7 +68,7 @@
     "long_name": "Surface downward long-wave radiation flux",
     "short_name": "sdlwrf",
     "standard_name": "surface_downwelling_longwave_flux_in_air",
-    "units": "W/(m^2)",
+    "units": "W m-2",
     "comment": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
     "step_type": "avg",
     "coordinates": "spatial_ref",

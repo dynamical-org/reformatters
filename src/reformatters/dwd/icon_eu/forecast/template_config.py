@@ -338,7 +338,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Downward diffusive short wave radiation flux at surface",
                     units="W m-2",
                     step_type="avg",
-                    standard_name="Mean surface diffuse short-wave radiation flux",  # From ECMWF.
+                    standard_name="surface_diffuse_downwelling_shortwave_flux_in_air",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="aswdifd_s",
@@ -389,7 +389,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     short_name="clch",
                     standard_name="cloud_area_fraction_in_atmosphere_layer",
                     long_name="High level clouds",
-                    units="%",
+                    units="percent",
                     step_type="instant",
                     comment="Cloud Cover (0 - 400 hPa). Different agencies use different short_names for this same parameter: ECMWF: HCC; WMO GRIB table: HCDC.",
                 ),
@@ -405,7 +405,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     short_name="clcl",
                     standard_name="cloud_area_fraction_in_atmosphere_layer",
                     long_name="Low level clouds",
-                    units="%",
+                    units="percent",
                     step_type="instant",
                     comment="Cloud Cover (800 hPa - Soil). Different agencies use different short_names for this same parameter: ECMWF: LCC; WMO GRIB table: LCDC.",
                 ),
@@ -421,7 +421,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     short_name="clcm",
                     standard_name="cloud_area_fraction_in_atmosphere_layer",
                     long_name="Mid level clouds",
-                    units="%",
+                    units="percent",
                     step_type="instant",
                     comment="Cloud Cover (400 - 800 hPa). Different agencies use different short_names for this same parameter: ECMWF: MCC; WMO GRIB table: MCDC.",
                 ),
@@ -437,7 +437,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     short_name="clct",
                     standard_name="cloud_area_fraction",
                     long_name="Total Cloud Cover",
-                    units="%",
+                    units="percent",
                     step_type="instant",
                     comment="Total cloud cover. Different agencies use different short_names for this same parameter: ECMWF: TCC; NOAA & WMO: TCDC.",
                 ),
@@ -452,7 +452,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=DataVarAttrs(
                     short_name="sde",
                     long_name="Snow depth",
-                    standard_name="lwe_thickness_of_surface_snow_amount",
+                    standard_name="surface_snow_thickness",
                     units="m",
                     step_type="instant",
                     comment=(
@@ -487,7 +487,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=DataVarAttrs(
                     short_name="r2",
                     long_name="2 metre relative humidity",
-                    units="%",
+                    units="percent",
                     step_type="instant",
                     comment="Relative humidity at 2m above ground. Other short_names used for this parameter: rh, 2r, r.",
                     standard_name="relative_humidity",
@@ -558,7 +558,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     short_name="tp",
                     standard_name="precipitation_flux",
                     long_name="Total Precipitation",
-                    units="kg m**-2",
+                    units="kg m-2",
                     step_type="accum",
                     comment=(
                         "Total precipitation accumulated since model start."
@@ -632,7 +632,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     short_name="sd",
                     standard_name="lwe_thickness_of_surface_snow_amount",
                     long_name="Snow depth water equivalent",
-                    units="kg m**-2",
+                    units="kg m-2",
                     step_type="instant",
                     comment=(
                         "Snow depth water equivalent in kg/m2."
