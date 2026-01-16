@@ -83,9 +83,6 @@ from reformatters.dwd.parse_rclone_log import (
 log = get_logger(__name__)
 
 
-PR_SET_PDEATHSIG: Final[int] = 1  # For Linux prctl (PRocess ConTroL)
-
-
 class _PathAndSize(NamedTuple):
     path: PurePosixPath
     size_bytes: int
@@ -254,7 +251,7 @@ def _copy_batches(
             "%s starting: Asking rclone to copy %d file(s) totalling %s to %s (if they don't already exist)...",
             batch_info_str,
             len(files_to_be_copied),
-            format_bytes(sum(f.size_bytes for f in files_to_be_copied)),
+            format_bytes(_sum_bytes(files_to_be_copied)),
             dst_path / nwp_var,
         )
         batch_summary = _copy_batch(
@@ -367,6 +364,7 @@ def _run_rclone(cmd: list[str], timeout: timedelta) -> tuple[str, list[dict[str,
 
 def _set_death_signal() -> None:
     """Linux-specific: Ensure the child process dies if the parent dies."""
+    pr_set_pdeathsig: Final[int] = 1  # For Linux prctl (PRocess ConTroL)
     libc = ctypes.CDLL("libc.so.6")
     # Send SIGTERM to the child if the parent terminates.
-    libc.prctl(PR_SET_PDEATHSIG, signal.SIGTERM)
+    libc.prctl(pr_set_pdeathsig, signal.SIGTERM)
