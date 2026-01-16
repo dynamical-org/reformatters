@@ -169,8 +169,7 @@ def _compute_copy_plan(
 ) -> dict[tuple[datetime, str], list[_PathAndSize]]:
     """Groups files by their NWP initialization datetime and variable name.
 
-    Returns dict[(nwp_init_datetime, nwp_variable_name)] = list[file_path_and_size].
-    Where `file_path` starts with (and includes) the NWP variable name.
+    Returns dict[(nwp_init_datetime, nwp_variable_name)] = list[src_file_path_and_size].
 
     ## Implementation note:
 
@@ -264,7 +263,7 @@ def _copy_batches(
         log.info("%s complete: %s", batch_info_str, batch_summary)
         total_summary += batch_summary
 
-    log.info("Transfer complete: {total_summary}")
+    log.info(f"Transfer complete: {total_summary}")
     return total_summary
 
 
