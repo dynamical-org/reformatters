@@ -235,7 +235,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     standard_name="precipitation_flux",
                     long_name="Total Precipitation",
                     units="kg m-2 s-1",
-                    comment="Average precipitation rate since the previous forecast step.",
+                    comment="Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",
                     step_type="avg",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(

@@ -564,6 +564,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     comment=(
                         "Precipitation rate since previous forecast step."
                         " TOT_PREC = RAIN_GSP + SNOW_GSP + RAIN_CON + SNOW_CON."
+                        " Units equivalent to mm/s."
                     ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(

@@ -451,7 +451,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     long_name="Total precipitation",
                     units="kg m-2 s-1",
                     step_type="avg",
-                    comment="Average precipitation rate since the previous forecast step.",
+                    comment="Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",
                 ),
                 # The metadata for precipitation surface in the grib files is not correctly populated.
                 # We know that comment (prodType 0, cat 1, subcat 193) [-] is correct for precipitation surface,
