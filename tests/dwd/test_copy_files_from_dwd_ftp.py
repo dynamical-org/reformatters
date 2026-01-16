@@ -35,7 +35,7 @@ def test_list_ftp_files(mock_lsf_output: list[str]) -> None:
 
         assert len(result) == 4
         assert result[0].path.name.startswith("icon-eu")
-        assert result[0].size == 100
+        assert result[0].size_bytes == 100
         assert isinstance(result[0], _PathAndSize)
         mock_run.assert_called_once()
 

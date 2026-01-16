@@ -78,14 +78,15 @@ from reformatters.common.logging import get_logger
 
 log = get_logger(__name__)
 
+GIBIBYTE: Final[int] = 1024**3
 
 # Constants for Linux prctl (Process Control)
-PR_SET_PDEATHSIG = 1
+PR_SET_PDEATHSIG: Final[int] = 1
 
 
 class _PathAndSize(NamedTuple):
     path: PurePosixPath
-    size: int
+    size_bytes: int
 
 
 def copy_files_from_dwd_ftp(
@@ -134,7 +135,7 @@ def list_ftp_files(
         "--files-only",
         f":ftp:{ftp_path}",
         *_get_rclone_ftp_args(ftp_host),
-        '--format="ps"',  # Return the path and size.
+        "--format=ps",  # Return the path and size.
         "--csv",  # Separate path and size with a comma, and escape any commas.
         "--config=",  # There is no config file because we pass everything as command-line args.
     ]
@@ -142,13 +143,21 @@ def list_ftp_files(
     stdout_str = _run_rclone(cmd, timeout=timedelta(seconds=90))
     file_list: list[_PathAndSize] = []
     reader = csv.reader(io.StringIO(stdout_str))
+    total_size_bytes = 0
     for row in reader:
         if not row:
             continue
-        path_str, size_str = row
-        file_list.append(_PathAndSize(path=PurePosixPath(path_str), size=int(size_str)))
+        path_str, size_bytes_str = row
+        size_bytes_int = int(size_bytes_str)
+        total_size_bytes += size_bytes_int
+        file_list.append(
+            _PathAndSize(path=PurePosixPath(path_str), size_bytes=size_bytes_int)
+        )
 
-    log.info(f"Found {len(file_list):,d} files in {ftp_url}")
+    total_size_gibibytes = total_size_bytes / GIBIBYTE
+    log.info(
+        f"Found {len(file_list):,d} files (totalling {total_size_gibibytes:.3f} GiB) in {ftp_url} (before any filtering)"
+    )
     return sorted(file_list, key=lambda x: x.path)
 
 
