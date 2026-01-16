@@ -74,15 +74,13 @@ from tempfile import NamedTemporaryFile
 from typing import Any, Final, NamedTuple
 
 from reformatters.common.logging import get_logger
-from reformatters.dwd.transfer_summary import (
+from reformatters.dwd.parse_rclone_log import (
     TransferSummary,
+    format_bytes,
     parse_and_log_rclone_json,
-    summarize_transfers,
 )
 
 log = get_logger(__name__)
-
-GIBIBYTE: Final[int] = 1024**3
 
 
 PR_SET_PDEATHSIG: Final[int] = 1  # For Linux prctl (PRocess ConTroL)
@@ -137,17 +135,17 @@ def list_ftp_files(
         "lsf",
         "--recursive",
         "--files-only",
-        "--use-json-log",
         f":ftp:{ftp_path}",
+        "--format=ps",  # Return the path and size to stdout.
+        "--csv",  # Separate path and size with a comma, and escape any commas in path names.
         *_get_rclone_ftp_args(ftp_host),
-        "--format=ps",  # Return the path and size.
-        "--csv",  # Separate path and size with a comma, and escape any commas.
-        "--config=",  # There is no config file because we pass everything as command-line args.
+        *_get_common_rclone_args(),
     ]
 
     stdout_str, _ = _run_rclone(cmd, timeout=timedelta(seconds=90))
-    reader = csv.reader(io.StringIO(stdout_str))
 
+    # Parse rclone's listing as a CSV
+    reader = csv.reader(io.StringIO(stdout_str))
     file_list = [
         _PathAndSize(path=PurePosixPath(row[0]), size_bytes=int(row[1]))
         for row in reader
@@ -156,7 +154,7 @@ def list_ftp_files(
     total_size_bytes = sum(f.size_bytes for f in file_list)
     log.info(
         f"Before filtering: {len(file_list):,d} files,"
-        f" totalling {_format_bytes(total_size_bytes)}, found in {ftp_url}"
+        f" totalling {format_bytes(total_size_bytes)}, found in {ftp_url}"
     )
     return sorted(file_list, key=lambda x: x.path)
 
@@ -225,7 +223,7 @@ def _compute_copy_plan(
 
     log.info(
         f" After filtering: {total_files:,d} files,"
-        f" totalling {_format_bytes(total_bytes_after_filtering)},"
+        f" totalling {format_bytes(total_bytes_after_filtering)},"
         f" grouped into {len(copy_plan):d} NWP variables."
     )
     return copy_plan
@@ -240,19 +238,16 @@ def _copy_batches(
 ) -> TransferSummary:
     """Executes rclone copy for each timestamp and variable batch in the plan."""
     n_batches = len(copy_plan)
-    total_transfers = 0
-    total_checks = 0
-    total_errors = 0
-    total_bytes = 0
+    total_summary = TransferSummary()
     for i, ((nwp_init_dt, nwp_var), files_to_be_copied) in enumerate(copy_plan.items()):
         nwp_init_datetime_str = nwp_init_dt.strftime("%Y-%m-%dT%HZ")
         dst_path = dst_root / nwp_init_datetime_str
+        batch_info_str = f"Batch [{i + 1}/{n_batches}]"
         log.info(
-            "Batch [%d/%d]: Asking rclone to copy %d file(s) totalling %s to %s (if they don't already exist)...",
-            i + 1,
-            n_batches,
+            "%s starting: Asking rclone to copy %d file(s) totalling %s to %s (if they don't already exist)...",
+            batch_info_str,
             len(files_to_be_copied),
-            _format_bytes(sum([f.size_bytes for f in files_to_be_copied])),
+            format_bytes(sum([f.size_bytes for f in files_to_be_copied])),
             dst_path / nwp_var,
         )
         batch_summary = _copy_batch(
@@ -262,24 +257,11 @@ def _copy_batches(
             files_to_be_copied=files_to_be_copied,
             transfers=transfers,
         )
-        total_transfers += batch_summary.transfers
-        total_checks += batch_summary.checks
-        total_errors += batch_summary.errors
-        total_bytes += batch_summary.bytes_transferred
+        log.info("%s complete: %s", batch_info_str, batch_summary)
+        total_summary += batch_summary
 
-    log.info(
-        "Transfer complete: %d transferred, %d checked, %d errors, %s total transferred.",
-        total_transfers,
-        total_checks,
-        total_errors,
-        _format_bytes(total_bytes),
-    )
-    return TransferSummary(
-        transfers=total_transfers,
-        checks=total_checks,
-        errors=total_errors,
-        bytes_transferred=total_bytes,
-    )
+    log.info("Transfer complete: {total_summary}")
+    return total_summary
 
 
 def _copy_batch(
@@ -311,27 +293,26 @@ def _copy_batch(
         cmd = [
             "rclone",
             "copy",
-            "-v",
-            "--use-json-log",
+            "--verbose",
             f":ftp:{ftp_path}",
             str(dst_path),
             "--files-from-raw=" + list_file.name,
             f"--transfers={transfers}",
-            *_get_rclone_ftp_args(ftp_host),
-            "--config=",
             "--no-check-certificate",
             "--ignore-checksum",
+            *_get_rclone_ftp_args(ftp_host),
+            *_get_common_rclone_args(),
         ]
 
         try:
-            _, log_entries = _run_rclone(cmd, timeout=timedelta(minutes=30), quiet=True)
+            _, log_entries = _run_rclone(cmd, timeout=timedelta(minutes=30))
         except subprocess.CalledProcessError:
             log.exception("Failed to copy batch to %s", dst_path)
             return TransferSummary(
                 errors=len(files_to_be_copied),
             )
 
-    return summarize_transfers(log_entries)
+    return TransferSummary.from_rclone_stats(log_entries)
 
 
 def _get_rclone_ftp_args(ftp_host: str) -> list[str]:
@@ -344,11 +325,14 @@ def _get_rclone_ftp_args(ftp_host: str) -> list[str]:
     ]
 
 
-def _run_rclone(
-    cmd: list[str],
-    timeout: timedelta,
-    quiet: bool = False,
-) -> tuple[str, list[dict[str, Any]]]:
+def _get_common_rclone_args() -> list[str]:
+    return [
+        "--use-json-log",
+        "--config=",  # There is no config file because we pass everything as command-line args.
+    ]
+
+
+def _run_rclone(cmd: list[str], timeout: timedelta) -> tuple[str, list[dict[str, Any]]]:
     """Runs a command with logging and safety measures and returns (stdout, log_entries)."""
     log.debug("Running: `%s`", " ".join(cmd))
     try:
@@ -367,10 +351,10 @@ def _run_rclone(
             if isinstance(e.stderr, str)
             else (e.stderr.decode() if e.stderr is not None else "")
         )
-        parse_and_log_rclone_json(stderr_str, quiet=quiet)
+        parse_and_log_rclone_json(stderr_str)
         raise
 
-    log_entries = parse_and_log_rclone_json(result.stderr, quiet=quiet)
+    log_entries = parse_and_log_rclone_json(result.stderr)
     return result.stdout, log_entries
 
 
@@ -379,8 +363,3 @@ def _set_death_signal() -> None:
     libc = ctypes.CDLL("libc.so.6")
     # Send SIGTERM to the child if the parent terminates.
     libc.prctl(PR_SET_PDEATHSIG, signal.SIGTERM)
-
-
-def _format_bytes(size_bytes: int) -> str:
-    size_gibibytes = size_bytes / GIBIBYTE
-    return f"{size_gibibytes:.3f} GiB"

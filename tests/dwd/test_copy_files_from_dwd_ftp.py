@@ -12,7 +12,7 @@ from reformatters.dwd.copy_files_from_dwd_ftp import (
     copy_files_from_dwd_ftp,
     list_ftp_files,
 )
-from reformatters.dwd.transfer_summary import TransferSummary
+from reformatters.dwd.parse_rclone_log import TransferSummary
 
 
 @pytest.fixture
@@ -111,10 +111,10 @@ def test_copy_batches() -> None:
         assert mock_run.call_count == 2
         assert isinstance(summary, TransferSummary)
         # 2 batches, each with 1 transfer and 1 check
-        assert summary.transfers == 2
-        assert summary.checks == 2
+        assert summary.total_transfers == 2
+        assert summary.total_checks == 2
         assert summary.errors == 0
-        assert summary.bytes_transferred == 200
+        assert summary.total_bytes == 200
 
 
 def test_copy_files_from_dwd_ftp(mock_lsf_output: list[str]) -> None:
@@ -146,4 +146,4 @@ def test_copy_files_from_dwd_ftp(mock_lsf_output: list[str]) -> None:
         # Should be called 3 times: 1 for listing, 2 for copying (alb_rad and t_2m)
         assert mock_run.call_count == 3
         assert isinstance(summary, TransferSummary)
-        assert summary.transfers == 2
+        assert summary.total_transfers == 2
