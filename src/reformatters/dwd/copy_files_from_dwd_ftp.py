@@ -148,10 +148,10 @@ def list_ftp_files(
         for row in reader
         if row
     ]
-    total_size_gibibytes = sum(f.size_bytes for f in file_list) / GIBIBYTE
+    total_size_bytes = sum(f.size_bytes for f in file_list)
     log.info(
-        f"Found {len(file_list):,d} files (totalling {total_size_gibibytes:.3f} GiB)"
-        f" in {ftp_url} (before any filtering)"
+        f"Before filtering: {len(file_list):,d} files,"
+        f" totalling {_format_bytes(total_size_bytes)}, found in {ftp_url}"
     )
     return sorted(file_list, key=lambda x: x.path)
 
@@ -167,31 +167,33 @@ def _compute_copy_plan(
 
     ## Implementation note:
 
-    While DWD continue to use their "legacy" directory structure [1] we _could_ group filenames by
+    While DWD continue to use their "legacy" directory structure[1] we _could_ group filenames by
     _only_ the NWP initialisation datetime (instead of grouping by init time _and_ variable name).
     We'd then give `rclone` one huge list of all the files below the init hour. This would work
-    because, below the init hour, the paths are both of the form variable_name/filename.grib2.bz2.
+    because, below the init hour, the source and destination paths are both of the form
+    variable_name/filename.grib2.bz2.
 
     There are two main reasons that we group by both the init datetime _and_ variable name:
 
-    1. Crucially, grouping by _just_ the init datetime will break if/when DWD move to their new
-       directory structure [2].
+    1. Grouping by _just_ the init datetime will break when DWD move to their new directory structure[2].
     2. Having smaller groups gives us more control and visibility into what `rclone` is doing. This
        should help with debugging. (Although, if we _really_ wanted to leave `rclone` running for a
        long time, we could stream `stderr` and `stdout` into the Python logger.)
 
     ## Footnotes:
 
-    1. DWD's legacy directory structure:
-       /weather/nwp/icon-eu/grib/00/
+    1. DWD's legacy directory structure looks like this:
+           /weather/nwp/icon-eu/grib/00/
            alb_rad/icon-eu_europe_regular-lat-lon_single-level_2026011400_000_ALB_RAD.grib2.bz2
-    2. DWD's new directory structure (already used for ICON-D2-RUC):
-       /weather/nwp/v1/m/icon-d2-ruc/p/T_2M/r/2026-01-14T02:00/s/PT000H00M.grib2
+    2. DWD's new directory structure looks like this, and is already used for ICON-D2-RUC:
+           /weather/nwp/v1/m/icon-d2-ruc/p/T_2M/r/2026-01-14T02:00/s/PT000H00M.grib2
     """
     copy_plan: dict[tuple[datetime, str], list[_PathAndSize]] = defaultdict(list)
     date_regex = re.compile(r"_(\d{10})_")
     n_expected_path_parts: Final[int] = 2
 
+    total_bytes_after_filtering = 0
+    total_files = 0
     for file_to_be_copied in file_list:
         if "pressure-level" in file_to_be_copied.path.name:
             continue
@@ -213,7 +215,14 @@ def _compute_copy_plan(
         n_files_for_nwp_var_and_init = len(copy_plan[key])
         if n_files_for_nwp_var_and_init < max_files_per_nwp_variable:
             copy_plan[key].append(file_to_be_copied)
+            total_bytes_after_filtering += file_to_be_copied.size_bytes
+            total_files += 1
 
+    log.info(
+        f" After filtering: {total_files:,d} files,"
+        f" totalling {_format_bytes(total_bytes_after_filtering)},"
+        f" grouped into {len(copy_plan):d} NWP variables."
+    )
     return copy_plan
 
 
@@ -345,3 +354,8 @@ def _set_death_signal() -> None:
     libc = ctypes.CDLL("libc.so.6")
     # Send SIGTERM to the child if the parent terminates.
     libc.prctl(PR_SET_PDEATHSIG, signal.SIGTERM)
+
+
+def _format_bytes(size_bytes: int) -> str:
+    size_gibibytes = size_bytes / GIBIBYTE
+    return f"{size_gibibytes:.3f} GiB"
