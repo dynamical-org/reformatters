@@ -86,7 +86,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 attrs=CoordinateAttrs(
                     long_name="Latitude",
                     standard_name="latitude",
-                    units="degrees_north",
+                    units="degree_north",
                     statistics_approximate=StatisticsApproximate(
                         min=21.138123,
                         max=52.615653,
@@ -105,7 +105,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 attrs=CoordinateAttrs(
                     long_name="Longitude",
                     standard_name="longitude",
-                    units="degrees_east",
+                    units="degree_east",
                     statistics_approximate=StatisticsApproximate(
                         min=-134.09548,
                         max=-60.917192,
@@ -195,7 +195,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="u10",
                     long_name="10 metre U wind component",
-                    units="m/s",
+                    units="m s-1",
                     step_type="instant",
                     standard_name="eastward_wind",
                 ),
@@ -214,7 +214,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="v10",
                     long_name="10 metre V wind component",
-                    units="m/s",
+                    units="m s-1",
                     step_type="instant",
                     standard_name="northward_wind",
                 ),
@@ -234,7 +234,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     short_name="tp",
                     standard_name="precipitation_flux",
                     long_name="Total Precipitation",
-                    units="mm/s",
+                    units="kg m-2 s-1",
                     comment="Average precipitation rate since the previous forecast step.",
                     step_type="avg",
                 ),
@@ -483,7 +483,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     short_name="gh",
                     standard_name="geopotential_height",
                     long_name="Geopotential height",
-                    units="gpm",
+                    units="m",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -502,7 +502,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="u80",
                     long_name="U-component of wind (80 m above ground)",
-                    units="m/s",
+                    units="m s-1",
                     step_type="instant",
                     standard_name="eastward_wind",
                 ),
@@ -521,7 +521,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="v80",
                     long_name="V-component of wind (80 m above ground)",
-                    units="m/s",
+                    units="m s-1",
                     step_type="instant",
                     standard_name="northward_wind",
                 ),

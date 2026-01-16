@@ -50,7 +50,7 @@ def test_cf_latitude_longitude_recognized(
     if "latitude" in ds.coords:
         assert "latitude" in ds.cf.coordinates, (
             f"latitude coordinate not recognized by cf_xarray. "
-            f"Ensure it has standard_name='latitude', units='degrees_north'. "
+            f"Ensure it has standard_name='latitude', units='degree_north'. "
             f"Current attrs: {dict(ds['latitude'].attrs)}"
         )
         # Verify latitude attrs are CF compliant
@@ -58,8 +58,8 @@ def test_cf_latitude_longitude_recognized(
         assert lat_attrs.get("standard_name") == "latitude", (
             f"latitude missing standard_name='latitude', got: {lat_attrs.get('standard_name')}"
         )
-        assert lat_attrs.get("units") == "degrees_north", (
-            f"latitude missing units='degrees_north', got: {lat_attrs.get('units')}"
+        assert lat_attrs.get("units") == "degree_north", (
+            f"latitude missing units='degree_north', got: {lat_attrs.get('units')}"
         )
         # Only check for axis if latitude is a dimension coordinate (not projected)
         if not is_projected:
@@ -71,7 +71,7 @@ def test_cf_latitude_longitude_recognized(
     if "longitude" in ds.coords:
         assert "longitude" in ds.cf.coordinates, (
             f"longitude coordinate not recognized by cf_xarray. "
-            f"Ensure it has standard_name='longitude', units='degrees_east'. "
+            f"Ensure it has standard_name='longitude', units='degree_east'. "
             f"Current attrs: {dict(ds['longitude'].attrs)}"
         )
         # Verify longitude attrs are CF compliant
@@ -79,8 +79,8 @@ def test_cf_latitude_longitude_recognized(
         assert lon_attrs.get("standard_name") == "longitude", (
             f"longitude missing standard_name='longitude', got: {lon_attrs.get('standard_name')}"
         )
-        assert lon_attrs.get("units") == "degrees_east", (
-            f"longitude missing units='degrees_east', got: {lon_attrs.get('units')}"
+        assert lon_attrs.get("units") == "degree_east", (
+            f"longitude missing units='degree_east', got: {lon_attrs.get('units')}"
         )
         # Only check for axis if longitude is a dimension coordinate (not projected)
         if not is_projected:
@@ -239,6 +239,12 @@ def test_cf_data_variables_have_standard_names_where_applicable(
 
 CF_UNITS_VARIANCES_ALLOWLIST: set[tuple[str, str]] = {
     ("air_temperature", "degree_Celsius"),
+    ("dew_point_temperature", "degree_Celsius"),
+    ("cloud_area_fraction", "percent"),
+    ("cloud_area_fraction_in_atmosphere_layer", "percent"),
+    ("relative_humidity", "percent"),
+    ("surface_snow_thickness", "mm"),
+    ("lwe_thickness_of_surface_snow_amount", "mm"),
 }
 
 
@@ -276,7 +282,7 @@ def test_cf_standard_names_and_units(
             continue
 
         assert units == canonical_units, (
-            f"Variable '{var_name}' has standard_name='{standard_name}' with units='{units}', "
+            f"{ds.attrs['dataset_id']}: Variable '{var_name}' has standard_name='{standard_name}' with units='{units}', "
             f"but expected canonical units '{canonical_units}'. "
             f"If this is an intentional exception, add ('{standard_name}', '{units}') to CF_UNITS_VARIANCES_ALLOWLIST."
         )

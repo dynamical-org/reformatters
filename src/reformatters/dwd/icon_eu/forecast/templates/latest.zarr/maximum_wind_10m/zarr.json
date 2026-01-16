@@ -71,7 +71,7 @@
     "long_name": "Time-maximum instantaneous 10 metre wind gust",
     "short_name": "i10fg",
     "standard_name": "wind_speed_of_gust",
-    "units": "m/s",
+    "units": "m s-1",
     "comment": "Maximum wind gust at 10 m above ground. It is diagnosed from the turbulence state in the atmospheric boundary layer, including a potential enhancement by the SSO parameterization over mountainous terrain. In the presence of deep convection, it contains an additional contribution due to convective gusts.",
     "step_type": "max",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",

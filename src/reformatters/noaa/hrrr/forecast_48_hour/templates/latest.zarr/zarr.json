@@ -759,7 +759,7 @@
           "long_name": "Geopotential height",
           "short_name": "gh",
           "standard_name": "geopotential_height",
-          "units": "gpm",
+          "units": "m",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -926,7 +926,7 @@
         "attributes": {
           "long_name": "Latitude",
           "standard_name": "latitude",
-          "units": "degrees_north",
+          "units": "degree_north",
           "statistics_approximate": {
             "min": 21.138123,
             "max": 52.615653
@@ -1039,7 +1039,7 @@
         "attributes": {
           "long_name": "Longitude",
           "standard_name": "longitude",
-          "units": "degrees_east",
+          "units": "degree_east",
           "statistics_approximate": {
             "min": -134.09548,
             "max": -60.917192
@@ -1302,7 +1302,7 @@
           "long_name": "Total Precipitation",
           "short_name": "tp",
           "standard_name": "precipitation_flux",
-          "units": "mm/s",
+          "units": "kg m-2 s-1",
           "comment": "Average precipitation rate since the previous forecast step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
@@ -1947,7 +1947,7 @@
           "long_name": "10 metre U wind component",
           "short_name": "u10",
           "standard_name": "eastward_wind",
-          "units": "m/s",
+          "units": "m s-1",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2035,7 +2035,7 @@
           "long_name": "U-component of wind (80 m above ground)",
           "short_name": "u80",
           "standard_name": "eastward_wind",
-          "units": "m/s",
+          "units": "m s-1",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2123,7 +2123,7 @@
           "long_name": "10 metre V wind component",
           "short_name": "v10",
           "standard_name": "northward_wind",
-          "units": "m/s",
+          "units": "m s-1",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2211,7 +2211,7 @@
           "long_name": "V-component of wind (80 m above ground)",
           "short_name": "v80",
           "standard_name": "northward_wind",
-          "units": "m/s",
+          "units": "m s-1",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

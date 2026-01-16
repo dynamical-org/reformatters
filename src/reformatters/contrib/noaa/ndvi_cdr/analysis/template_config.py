@@ -142,7 +142,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                 attrs=CoordinateAttrs(
                     long_name="Latitude",
                     standard_name="latitude",
-                    units="degrees_north",
+                    units="degree_north",
                     axis="Y",
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["latitude"].min()),
@@ -162,7 +162,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                 attrs=CoordinateAttrs(
                     long_name="Longitude",
                     standard_name="longitude",
-                    units="degrees_east",
+                    units="degree_east",
                     axis="X",
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["longitude"].min()),

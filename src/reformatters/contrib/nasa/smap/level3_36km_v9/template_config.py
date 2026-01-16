@@ -186,7 +186,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                 attrs=CoordinateAttrs(
                     long_name="Latitude",
                     standard_name="latitude",
-                    units="degrees_north",
+                    units="degree_north",
                     statistics_approximate=StatisticsApproximate(
                         min=-85.044502,
                         max=85.044502,
@@ -205,7 +205,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                 attrs=CoordinateAttrs(
                     long_name="Longitude",
                     standard_name="longitude",
-                    units="degrees_east",
+                    units="degree_east",
                     statistics_approximate=StatisticsApproximate(
                         min=-180.0,
                         max=180.0,

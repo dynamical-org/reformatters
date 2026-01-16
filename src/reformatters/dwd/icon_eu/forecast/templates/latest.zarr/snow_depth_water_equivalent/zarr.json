@@ -71,8 +71,8 @@
     "long_name": "Snow depth water equivalent",
     "short_name": "sd",
     "standard_name": "lwe_thickness_of_surface_snow_amount",
-    "units": "kg m-2",
-    "comment": "Snow depth water equivalent in kg/m2. Set to 0 above water surfaces and snow-free land points.",
+    "units": "mm",
+    "comment": "Snow depth water equivalent in mm (kg/m2). Set to 0 above water surfaces and snow-free land points.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

@@ -41,7 +41,7 @@
   "attributes": {
     "long_name": "Longitude",
     "standard_name": "longitude",
-    "units": "degrees_east",
+    "units": "degree_east",
     "statistics_approximate": {
       "min": -180.0,
       "max": 180.0

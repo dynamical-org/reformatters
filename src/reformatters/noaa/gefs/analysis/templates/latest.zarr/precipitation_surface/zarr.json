@@ -68,7 +68,7 @@
     "long_name": "Total Precipitation",
     "short_name": "tp",
     "standard_name": "precipitation_flux",
-    "units": "mm/s",
+    "units": "kg m-2 s-1",
     "comment": "Average precipitation rate since the previous forecast step.",
     "step_type": "avg",
     "coordinates": "spatial_ref",

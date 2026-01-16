@@ -40,7 +40,7 @@
     "long_name": "Latitude",
     "standard_name": "latitude",
     "axis": "Y",
-    "units": "degrees_north",
+    "units": "degree_north",
     "statistics_approximate": {
       "min": -90.0,
       "max": 90.0

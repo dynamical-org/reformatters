@@ -170,7 +170,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=CoordinateAttrs(
                     long_name="Latitude",
                     standard_name="latitude",
-                    units="degrees_north",
+                    units="degree_north",
                     axis="Y",
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["latitude"].min()),
@@ -190,7 +190,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=CoordinateAttrs(
                     long_name="Longitude",
                     standard_name="longitude",
-                    units="degrees_east",
+                    units="degree_east",
                     axis="X",
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["longitude"].min()),
@@ -558,7 +558,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     short_name="tp",
                     standard_name="precipitation_flux",
                     long_name="Total Precipitation",
-                    units="kg m-2",
+                    units="kg m-2 s-1",
                     step_type="accum",
                     comment=(
                         "Total precipitation accumulated since model start."
@@ -577,7 +577,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=DataVarAttrs(
                     short_name="u10",
                     long_name="10 metre U wind component (eastward)",
-                    units="m/s",
+                    units="m s-1",
                     step_type="instant",
                     standard_name="eastward_wind",
                     comment="Zonal wind at 10m above ground",
@@ -593,7 +593,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=DataVarAttrs(
                     short_name="v10",
                     long_name="10 metre V wind component (northward)",
-                    units="m/s",
+                    units="m s-1",
                     step_type="instant",
                     standard_name="northward_wind",
                     comment="Meridional wind at 10m above ground",
@@ -610,7 +610,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     short_name="i10fg",
                     long_name="Time-maximum instantaneous 10 metre wind gust",
                     standard_name="wind_speed_of_gust",
-                    units="m/s",
+                    units="m s-1",
                     step_type="max",
                     comment=(
                         "Maximum wind gust at 10 m above ground. It is diagnosed from the turbulence"
@@ -632,10 +632,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     short_name="sd",
                     standard_name="lwe_thickness_of_surface_snow_amount",
                     long_name="Snow depth water equivalent",
-                    units="kg m-2",
+                    units="mm",
                     step_type="instant",
                     comment=(
-                        "Snow depth water equivalent in kg/m2."
+                        "Snow depth water equivalent in mm (kg/m2)."
                         " Set to 0 above water surfaces and snow-free land points."
                     ),
                 ),
