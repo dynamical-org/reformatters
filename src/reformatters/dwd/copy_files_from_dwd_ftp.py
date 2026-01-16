@@ -143,20 +143,15 @@ def list_ftp_files(
     stdout_str = _run_rclone(cmd, timeout=timedelta(seconds=90))
     file_list: list[_PathAndSize] = []
     reader = csv.reader(io.StringIO(stdout_str))
-    total_size_bytes = 0
-    for row in reader:
-        if not row:
-            continue
-        path_str, size_bytes_str = row
-        size_bytes_int = int(size_bytes_str)
-        total_size_bytes += size_bytes_int
-        file_list.append(
-            _PathAndSize(path=PurePosixPath(path_str), size_bytes=size_bytes_int)
-        )
-
-    total_size_gibibytes = total_size_bytes / GIBIBYTE
+    file_list = [
+        _PathAndSize(path=PurePosixPath(row[0]), size_bytes=int(row[1]))
+        for row in reader
+        if row
+    ]
+    total_size_gibibytes = sum(f.size_bytes for f in file_list) / GIBIBYTE
     log.info(
-        f"Found {len(file_list):,d} files (totalling {total_size_gibibytes:.3f} GiB) in {ftp_url} (before any filtering)"
+        f"Found {len(file_list):,d} files (totalling {total_size_gibibytes:.3f} GiB)"
+        f" in {ftp_url} (before any filtering)"
     )
     return sorted(file_list, key=lambda x: x.path)
 
