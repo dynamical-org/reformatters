@@ -6,13 +6,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from reformatters.dwd.copy_files_from_dwd_ftp import (
-    TransferSummary,
     _compute_copy_plan,
     _copy_batches,
     _PathAndSize,
     copy_files_from_dwd_ftp,
     list_ftp_files,
 )
+from reformatters.dwd.transfer_summary import TransferSummary
 
 
 @pytest.fixture
@@ -91,7 +91,11 @@ def test_copy_batches() -> None:
 
     mock_json_logs = [
         {"level": "info", "msg": "Copied (new)", "object": "alb_rad/file1.bz2"},
-        {"level": "info", "msg": "Skipped (existing)", "object": "t_2m/file2.bz2"},
+        {
+            "level": "info",
+            "msg": "Summary stats",
+            "stats": {"transfers": 1, "checks": 1, "errors": 0, "bytes": 100},
+        },
     ]
     mock_stderr = "\n".join(json.dumps(entry) for entry in mock_json_logs)
 
@@ -106,11 +110,11 @@ def test_copy_batches() -> None:
 
         assert mock_run.call_count == 2
         assert isinstance(summary, TransferSummary)
-        # In this mock, each batch returns the same stderr, so we get duplicates in the summary
-        # which is fine for this test.
-        assert len(summary.copied) == 2
-        assert len(summary.skipped) == 2
-        assert len(summary.failed) == 0
+        # 2 batches, each with 1 transfer and 1 check
+        assert summary.transfers == 2
+        assert summary.checks == 2
+        assert summary.errors == 0
+        assert summary.bytes_transferred == 200
 
 
 def test_copy_files_from_dwd_ftp(mock_lsf_output: list[str]) -> None:
@@ -127,7 +131,11 @@ def test_copy_files_from_dwd_ftp(mock_lsf_output: list[str]) -> None:
         mock_result_copy = MagicMock()
         mock_result_copy.stdout = ""
         mock_result_copy.stderr = json.dumps(
-            {"level": "info", "msg": "Copied (new)", "object": "some/file"}
+            {
+                "level": "info",
+                "msg": "Summary stats",
+                "stats": {"transfers": 1, "checks": 0, "errors": 0, "bytes": 50},
+            }
         )
         mock_result_copy.returncode = 0
 
@@ -138,4 +146,4 @@ def test_copy_files_from_dwd_ftp(mock_lsf_output: list[str]) -> None:
         # Should be called 3 times: 1 for listing, 2 for copying (alb_rad and t_2m)
         assert mock_run.call_count == 3
         assert isinstance(summary, TransferSummary)
-        assert len(summary.copied) == 2
+        assert summary.transfers == 2

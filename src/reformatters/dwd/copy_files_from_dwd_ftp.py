@@ -63,8 +63,6 @@ maybe 0.5 seconds to 1 second for each NWP variable. There are two ways to get m
 import csv
 import ctypes
 import io
-import json
-import logging
 import re
 import signal
 import subprocess
@@ -76,6 +74,11 @@ from tempfile import NamedTemporaryFile
 from typing import Any, Final, NamedTuple
 
 from reformatters.common.logging import get_logger
+from reformatters.dwd.transfer_summary import (
+    TransferSummary,
+    parse_and_log_rclone_json,
+    summarize_transfers,
+)
 
 log = get_logger(__name__)
 
@@ -88,12 +91,6 @@ PR_SET_PDEATHSIG: Final[int] = 1  # For Linux prctl (PRocess ConTroL)
 class _PathAndSize(NamedTuple):
     path: PurePosixPath
     size_bytes: int
-
-
-class TransferSummary(NamedTuple):
-    copied: list[PurePosixPath]
-    skipped: list[PurePosixPath]
-    failed: list[tuple[PurePosixPath, str]]
 
 
 def copy_files_from_dwd_ftp(
@@ -243,7 +240,10 @@ def _copy_batches(
 ) -> TransferSummary:
     """Executes rclone copy for each timestamp and variable batch in the plan."""
     n_batches = len(copy_plan)
-    total_summary = TransferSummary(copied=[], skipped=[], failed=[])
+    total_transfers = 0
+    total_checks = 0
+    total_errors = 0
+    total_bytes = 0
     for i, ((nwp_init_dt, nwp_var), files_to_be_copied) in enumerate(copy_plan.items()):
         nwp_init_datetime_str = nwp_init_dt.strftime("%Y-%m-%dT%HZ")
         dst_path = dst_root / nwp_init_datetime_str
@@ -262,17 +262,24 @@ def _copy_batches(
             files_to_be_copied=files_to_be_copied,
             transfers=transfers,
         )
-        total_summary.copied.extend(batch_summary.copied)
-        total_summary.skipped.extend(batch_summary.skipped)
-        total_summary.failed.extend(batch_summary.failed)
+        total_transfers += batch_summary.transfers
+        total_checks += batch_summary.checks
+        total_errors += batch_summary.errors
+        total_bytes += batch_summary.bytes_transferred
 
     log.info(
-        "Transfer complete: %d copied, %d skipped, %d failed.",
-        len(total_summary.copied),
-        len(total_summary.skipped),
-        len(total_summary.failed),
+        "Transfer complete: %d transferred, %d checked, %d errors, %s total transferred.",
+        total_transfers,
+        total_checks,
+        total_errors,
+        _format_bytes(total_bytes),
     )
-    return total_summary
+    return TransferSummary(
+        transfers=total_transfers,
+        checks=total_checks,
+        errors=total_errors,
+        bytes_transferred=total_bytes,
+    )
 
 
 def _copy_batch(
@@ -321,35 +328,10 @@ def _copy_batch(
         except subprocess.CalledProcessError:
             log.exception("Failed to copy batch to %s", dst_path)
             return TransferSummary(
-                copied=[],
-                skipped=[],
-                failed=[(f.path, "rclone failed") for f in files_to_be_copied],
+                errors=len(files_to_be_copied),
             )
 
-    return _summarize_transfers(log_entries)
-
-
-def _summarize_transfers(log_entries: list[dict[str, Any]]) -> TransferSummary:
-    """Categorizes rclone log entries into a TransferSummary."""
-    copied: list[PurePosixPath] = []
-    skipped: list[PurePosixPath] = []
-    failed: list[tuple[PurePosixPath, str]] = []
-
-    for entry in log_entries:
-        msg = entry.get("msg", "")
-        obj = entry.get("object", "")
-        if not obj:
-            continue
-
-        path = PurePosixPath(obj)
-        if "Copied (new)" in msg or "Updated" in msg:
-            copied.append(path)
-        elif "Skipped (existing)" in msg:
-            skipped.append(path)
-        elif entry.get("level") == "error" or "Failed to copy" in msg:
-            failed.append((path, msg))
-
-    return TransferSummary(copied=copied, skipped=skipped, failed=failed)
+    return summarize_transfers(log_entries)
 
 
 def _get_rclone_ftp_args(ftp_host: str) -> list[str]:
@@ -385,45 +367,11 @@ def _run_rclone(
             if isinstance(e.stderr, str)
             else (e.stderr.decode() if e.stderr is not None else "")
         )
-        _parse_and_log_rclone_json(stderr_str, quiet=quiet)
+        parse_and_log_rclone_json(stderr_str, quiet=quiet)
         raise
 
-    log_entries = _parse_and_log_rclone_json(result.stderr, quiet=quiet)
+    log_entries = parse_and_log_rclone_json(result.stderr, quiet=quiet)
     return result.stdout, log_entries
-
-
-def _parse_and_log_rclone_json(
-    stderr: str, quiet: bool = False
-) -> list[dict[str, Any]]:
-    """Parses rclone stderr and logs with appropriate levels."""
-    log_entries: list[dict[str, Any]] = []
-    for line in stderr.splitlines():
-        if not (clean_line := line.strip()):
-            continue
-
-        log.info(f"Full JSON: {clean_line}")
-
-        entry = json.loads(clean_line)
-        level_str = entry.get("level", "info").lower()
-        msg = entry.get("msg", "")
-
-        # Map rclone levels to Python logging levels
-        if level_str == "error":
-            log_level = logging.ERROR
-        elif level_str == "warning":
-            log_level = logging.WARNING
-        else:
-            log_level = logging.INFO
-
-        entry["python_log_level"] = log_level
-
-        log_entries.append(entry)
-
-        # Skip per-file info logs if quiet is True
-        if not (quiet and log_level == logging.INFO and "object" in entry):
-            log.log(log_level, f"rclone: {msg}")
-
-    return log_entries
 
 
 def _set_death_signal() -> None:
