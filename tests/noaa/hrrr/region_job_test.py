@@ -383,7 +383,7 @@ def test_apply_data_transformations_deaccumulation(
     times = pd.date_range("2024-01-01", periods=5, freq="1h")
     test_data = np.array([0.0, 3.6, 7.2, 10.8, 14.4], dtype=np.float32)
     data_array = xr.DataArray(
-        test_data, dims=["time"], coords={"time": times}, attrs={"units": "mm/s"}
+        test_data, dims=["time"], coords={"time": times}, attrs={"units": "mm s-1"}
     )
 
     mock_deaccumulate = Mock()
