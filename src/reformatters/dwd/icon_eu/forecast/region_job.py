@@ -31,9 +31,6 @@ from .template_config import DwdIconEuDataVar
 
 log = get_logger(__name__)
 
-KELVIN_TO_CELSIUS_OFFSET = 273.15
-METERS_TO_MM_FACTOR = 1000.0
-
 
 class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
     """Coordinates of a single source file to process."""
@@ -150,32 +147,6 @@ class DwdIconEuForecastRegionJob(
             )
             result: ArrayFloat32 = reader.read(indexes=1, out_dtype=np.float32)
             return result
-
-    def apply_data_transformations(
-        self, data_array: xr.DataArray, data_var: DwdIconEuDataVar
-    ) -> None:
-        """
-        Apply in-place data transformations to the output data array for a given data variable.
-
-        This method is called after reading all data for a variable into the shared-memory array,
-        and before writing shards to the output store.
-
-        Parameters
-        ----------
-        data_array : xr.DataArray
-            The output data array to be transformed in-place.
-        data_var : DwdIconEuDataVar
-            The data variable metadata object, which may contain transformation parameters.
-        """
-        # Convert temperature from Kelvin to Celsius for consistency with other datasets
-        if data_var.name == "temperature_2m":
-            data_array.values -= KELVIN_TO_CELSIUS_OFFSET
-
-        # Convert snow depth from meters to millimeters for consistency with other datasets
-        if data_var.name == "snow_depth":
-            data_array.values *= METERS_TO_MM_FACTOR
-
-        super().apply_data_transformations(data_array, data_var)
 
     def update_template_with_results(
         self, process_results: Mapping[str, Sequence[DwdIconEuForecastSourceFileCoord]]

@@ -366,6 +366,34 @@ def test_cf_data_variables_have_long_name(
         )
 
 
+# Datasets that are allowed to have different metadata for specific variables.
+# Format: (variable_name, attribute_name, dataset_id)
+# These are intentional exceptions where source data conventions differ.
+CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
+    # U Arizona SWANN uses mm for snow variables to match source data conventions,
+    # while other datasets use CF-compliant meters.
+    ("snow_depth", "units", "u-arizona-swann-analysis"),
+    ("snow_depth", "short_name", "u-arizona-swann-analysis"),
+    ("snow_water_equivalent", "units", "u-arizona-swann-analysis"),
+    ("snow_water_equivalent", "short_name", "u-arizona-swann-analysis"),
+}
+
+
+def _format_conflict(
+    var_name: str, attr_name: str, values_to_datasets: dict[str | None, list[str]]
+) -> str:
+    """Format a conflict message showing which datasets use which values."""
+    values_list = list(values_to_datasets.keys())
+    values_str = " vs ".join(f"'{v}'" for v in values_list)
+    header = f"{var_name} {attr_name} conflict: {values_str}"
+
+    lines = [header]
+    for value, dataset_ids in values_to_datasets.items():
+        lines.append(f"  '{value}': {', '.join(dataset_ids)}")
+
+    return "\n".join(lines)
+
+
 def test_cf_data_variable_metadata_consistency_across_datasets() -> None:
     """
     Ensure that data variables with the same name have consistent metadata
@@ -400,61 +428,34 @@ def test_cf_data_variable_metadata_consistency_across_datasets() -> None:
         if len(datasets_metadata) < 2:
             continue
 
-        # Get all unique values for each attribute
-        short_name_values: dict[str | None, list[str]] = {}
-        units_values: dict[str | None, list[str]] = {}
-        standard_name_values: dict[str | None, list[str]] = {}
-        long_name_values: dict[str | None, list[str]] = {}
+        for attr_name in ["short_name", "units", "standard_name", "long_name"]:
+            # Group datasets by their value for this attribute
+            values_to_datasets: dict[str | None, list[str]] = {}
+            for dataset_id, metadata in datasets_metadata.items():
+                value = metadata[attr_name]
+                values_to_datasets.setdefault(value, []).append(dataset_id)
 
-        for dataset_id, metadata in datasets_metadata.items():
-            short_name = metadata["short_name"]
-            units = metadata["units"]
-            standard_name = metadata["standard_name"]
-            long_name = metadata["long_name"]
+            # Check for conflicts (more than one unique value)
+            if len(values_to_datasets) > 1:
+                # Filter out allowed exceptions
+                filtered_values: dict[str | None, list[str]] = {}
+                for value, dataset_ids in values_to_datasets.items():
+                    remaining_datasets = [
+                        ds_id
+                        for ds_id in dataset_ids
+                        if (var_name, attr_name, ds_id)
+                        not in CROSS_DATASET_CONSISTENCY_EXCEPTIONS
+                    ]
+                    if remaining_datasets:
+                        filtered_values[value] = remaining_datasets
 
-            short_name_values.setdefault(short_name, []).append(dataset_id)
-            units_values.setdefault(units, []).append(dataset_id)
-            standard_name_values.setdefault(standard_name, []).append(dataset_id)
-            long_name_values.setdefault(long_name, []).append(dataset_id)
-
-        # Check for conflicts
-        if len(short_name_values) > 1:
-            conflict_details = ", ".join(
-                f"'{sn}' in [{', '.join(ds_ids)}]"
-                for sn, ds_ids in short_name_values.items()
-            )
-            conflicts.append(
-                f"Variable '{var_name}' has inconsistent short_name: {conflict_details}"
-            )
-
-        if len(units_values) > 1:
-            conflict_details = ", ".join(
-                f"'{unit}' in [{', '.join(ds_ids)}]"
-                for unit, ds_ids in units_values.items()
-            )
-            conflicts.append(
-                f"Variable '{var_name}' has inconsistent units: {conflict_details}"
-            )
-
-        if len(standard_name_values) > 1:
-            conflict_details = ", ".join(
-                f"'{sn}' in [{', '.join(ds_ids)}]"
-                for sn, ds_ids in standard_name_values.items()
-            )
-            conflicts.append(
-                f"Variable '{var_name}' has inconsistent standard_name: {conflict_details}"
-            )
-
-        if len(long_name_values) > 1:
-            conflict_details = ", ".join(
-                f"'{ln}' in [{', '.join(ds_ids)}]"
-                for ln, ds_ids in long_name_values.items()
-            )
-            conflicts.append(
-                f"Variable '{var_name}' has inconsistent long_name: {conflict_details}"
-            )
+                # If after filtering we still have multiple values, it's a conflict
+                if len(filtered_values) > 1:
+                    conflicts.append(
+                        _format_conflict(var_name, attr_name, filtered_values)
+                    )
 
     assert not conflicts, (
         "Data variable metadata inconsistencies found across datasets:\n\n"
-        + "\n".join(f"  - {conflict}" for conflict in conflicts)
+        + "\n\n".join(conflicts)
     )

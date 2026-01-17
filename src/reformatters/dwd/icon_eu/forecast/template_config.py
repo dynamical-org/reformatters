@@ -454,10 +454,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     short_name="sde",
                     long_name="Snow depth",
                     standard_name="surface_snow_thickness",
-                    units="mm",
+                    units="m",
                     step_type="instant",
                     comment=(
-                        "Snow depth in mm. It is diagnosed from RHO_SNOW and W_SNOW according to"
+                        "Snow depth in m. It is diagnosed from RHO_SNOW and W_SNOW according to"
                         " H_SNOW = W_SNOW / RHO_SNOW and is limited to H_SNOW <= 40 m."
                     ),
                 ),

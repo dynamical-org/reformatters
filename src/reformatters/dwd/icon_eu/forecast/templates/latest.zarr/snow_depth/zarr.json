@@ -71,8 +71,8 @@
     "long_name": "Snow depth",
     "short_name": "sde",
     "standard_name": "surface_snow_thickness",
-    "units": "mm",
-    "comment": "Snow depth in mm. It is diagnosed from RHO_SNOW and W_SNOW according to H_SNOW = W_SNOW / RHO_SNOW and is limited to H_SNOW <= 40 m.",
+    "units": "m",
+    "comment": "Snow depth in m. It is diagnosed from RHO_SNOW and W_SNOW according to H_SNOW = W_SNOW / RHO_SNOW and is limited to H_SNOW <= 40 m.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
