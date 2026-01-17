@@ -148,6 +148,31 @@ class DwdIconEuForecastRegionJob(
             result: ArrayFloat32 = reader.read(indexes=1, out_dtype=np.float32)
             return result
 
+    # Implement this to apply transformations to the array (e.g. deaccumulation)
+    #
+    # def apply_data_transformations(
+    #     self, data_array: xr.DataArray, data_var: DwdIconEuDataVar
+    # ) -> None:
+    #     """
+    #     Apply in-place data transformations to the output data array for a given data variable.
+    #
+    #     This method is called after reading all data for a variable into the shared-memory array,
+    #     and before writing shards to the output store. The default implementation applies binary
+    #     rounding to float32 arrays if `data_var.internal_attrs.keep_mantissa_bits` is set.
+    #
+    #     Subclasses may override this method to implement additional transformations such as
+    #     deaccumulation, interpolation or other custom logic. All transformations should be
+    #     performed in-place (don't copy `data_array`, it's large).
+    #
+    #     Parameters
+    #     ----------
+    #     data_array : xr.DataArray
+    #         The output data array to be transformed in-place.
+    #     data_var : DwdIconEuDataVar
+    #         The data variable metadata object, which may contain transformation parameters.
+    #     """
+    #     super().apply_data_transformations(data_array, data_var)
+
     def update_template_with_results(
         self, process_results: Mapping[str, Sequence[DwdIconEuForecastSourceFileCoord]]
     ) -> xr.Dataset:
