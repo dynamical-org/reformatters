@@ -373,9 +373,7 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     # U Arizona SWANN uses mm for snow variables to match source data conventions,
     # while other datasets use CF-compliant meters.
     ("snow_depth", "units", "u-arizona-swann-analysis"),
-    ("snow_depth", "short_name", "u-arizona-swann-analysis"),
     ("snow_water_equivalent", "units", "u-arizona-swann-analysis"),
-    ("snow_water_equivalent", "short_name", "u-arizona-swann-analysis"),
 }
 
 
