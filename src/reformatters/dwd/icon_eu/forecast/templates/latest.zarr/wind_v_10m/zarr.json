@@ -68,11 +68,11 @@
     }
   ],
   "attributes": {
-    "long_name": "10 metre V wind component (northward)",
+    "long_name": "10 metre V wind component",
     "short_name": "v10",
     "standard_name": "northward_wind",
     "units": "m s-1",
-    "comment": "Meridional wind at 10m above ground",
+    "comment": "Meridional wind (northward) at 10m above ground",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

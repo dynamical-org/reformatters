@@ -446,9 +446,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 name="precipitation_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="tp",
+                    short_name="prate",
                     standard_name="precipitation_flux",
-                    long_name="Total precipitation",
+                    long_name="Precipitation rate",
                     units="kg m-2 s-1",
                     step_type="avg",
                     comment="Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",

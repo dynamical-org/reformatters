@@ -364,3 +364,164 @@ def test_cf_data_variables_have_long_name(
         assert var_attrs["long_name"] != "", (
             f"Data variable '{var_name}' has an empty 'long_name' attribute."
         )
+
+
+# Datasets that are allowed to have different metadata for specific variables.
+# Format: (variable_name, attribute_name, dataset_id)
+# These are intentional exceptions where source data conventions differ.
+CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
+    # U Arizona SWANN uses mm for snow variables to match source data conventions,
+    # while other datasets use CF-compliant meters.
+    ("snow_depth", "units", "u-arizona-swann-analysis"),
+    ("snow_water_equivalent", "units", "u-arizona-swann-analysis"),
+}
+
+
+def _format_conflict(
+    var_name: str, attr_name: str, values_to_datasets: dict[str | None, list[str]]
+) -> str:
+    """Format a conflict message showing which datasets use which values."""
+    values_list = list(values_to_datasets.keys())
+    values_str = " vs ".join(f"'{v}'" for v in values_list)
+    header = f"{var_name} {attr_name} conflict: {values_str}"
+
+    lines = [header]
+    for value, dataset_ids in values_to_datasets.items():
+        lines.append(f"  '{value}': {', '.join(dataset_ids)}")
+
+    return "\n".join(lines)
+
+
+def test_cf_data_variable_metadata_consistency_across_datasets() -> None:
+    """
+    Ensure that data variables with the same name have consistent metadata
+    (short_name, units, standard_name, long_name) across all datasets.
+
+    This test helps ensure that users can trust that variables with the same name
+    represent the same physical quantity with consistent metadata across datasets.
+    """
+    # Collect metadata for all data variables across all datasets
+    # Structure: {var_name: {dataset_id: {short_name, units, standard_name, long_name}}}
+    var_metadata: dict[str, dict[str, dict[str, str | None]]] = {}
+
+    for dataset in DYNAMICAL_DATASETS:
+        template_config = dataset.template_config
+        for var_config in template_config.data_vars:
+            var_name = var_config.name
+            if var_name not in var_metadata:
+                var_metadata[var_name] = {}
+
+            var_metadata[var_name][dataset.dataset_id] = {
+                "short_name": var_config.attrs.short_name,
+                "units": var_config.attrs.units,
+                "standard_name": var_config.attrs.standard_name,
+                "long_name": var_config.attrs.long_name,
+            }
+
+    # Check for inconsistencies
+    conflicts: list[str] = []
+
+    for var_name, datasets_metadata in var_metadata.items():
+        # Skip variables that only appear in one dataset
+        if len(datasets_metadata) < 2:
+            continue
+
+        for attr_name in ["short_name", "units", "standard_name", "long_name"]:
+            # Group datasets by their value for this attribute
+            values_to_datasets: dict[str | None, list[str]] = {}
+            for dataset_id, metadata in datasets_metadata.items():
+                value = metadata[attr_name]
+                values_to_datasets.setdefault(value, []).append(dataset_id)
+
+            # Check for conflicts (more than one unique value)
+            if len(values_to_datasets) > 1:
+                # Filter out allowed exceptions
+                filtered_values: dict[str | None, list[str]] = {}
+                for value, dataset_ids in values_to_datasets.items():
+                    remaining_datasets = [
+                        ds_id
+                        for ds_id in dataset_ids
+                        if (var_name, attr_name, ds_id)
+                        not in CROSS_DATASET_CONSISTENCY_EXCEPTIONS
+                    ]
+                    if remaining_datasets:
+                        filtered_values[value] = remaining_datasets
+
+                # If after filtering we still have multiple values, it's a conflict
+                if len(filtered_values) > 1:
+                    conflicts.append(
+                        _format_conflict(var_name, attr_name, filtered_values)
+                    )
+
+    assert not conflicts, (
+        "Data variable metadata inconsistencies found across datasets:\n\n"
+        + "\n\n".join(conflicts)
+    )
+
+
+def test_cf_coordinate_metadata_consistency_across_datasets() -> None:
+    """
+    Ensure that coordinates with the same name have consistent metadata
+    (long_name, standard_name, units) across all datasets.
+
+    This test helps ensure that users can trust that coordinates with the same name
+    represent the same physical quantity with consistent metadata across datasets.
+
+    Note: Coordinates do not have short_name attributes.
+    """
+    # Collect metadata for all coordinates across all datasets
+    # Structure: {coord_name: {dataset_id: {long_name, standard_name, units}}}
+    coord_metadata: dict[str, dict[str, dict[str, str | None]]] = {}
+
+    for dataset in DYNAMICAL_DATASETS:
+        template_config = dataset.template_config
+        for coord_config in template_config.coords:
+            coord_name = coord_config.name
+            if coord_name not in coord_metadata:
+                coord_metadata[coord_name] = {}
+
+            coord_metadata[coord_name][dataset.dataset_id] = {
+                "long_name": coord_config.attrs.long_name,
+                "standard_name": coord_config.attrs.standard_name,
+                "units": coord_config.attrs.units,
+            }
+
+    # Check for inconsistencies
+    conflicts: list[str] = []
+
+    for coord_name, datasets_metadata in coord_metadata.items():
+        # Skip coordinates that only appear in one dataset
+        if len(datasets_metadata) < 2:
+            continue
+
+        for attr_name in ["long_name", "standard_name", "units"]:
+            # Group datasets by their value for this attribute
+            values_to_datasets: dict[str | None, list[str]] = {}
+            for dataset_id, metadata in datasets_metadata.items():
+                value = metadata[attr_name]
+                values_to_datasets.setdefault(value, []).append(dataset_id)
+
+            # Check for conflicts (more than one unique value)
+            if len(values_to_datasets) > 1:
+                # Filter out allowed exceptions (using same exception mechanism)
+                filtered_values: dict[str | None, list[str]] = {}
+                for value, dataset_ids in values_to_datasets.items():
+                    remaining_datasets = [
+                        ds_id
+                        for ds_id in dataset_ids
+                        if (coord_name, attr_name, ds_id)
+                        not in CROSS_DATASET_CONSISTENCY_EXCEPTIONS
+                    ]
+                    if remaining_datasets:
+                        filtered_values[value] = remaining_datasets
+
+                # If after filtering we still have multiple values, it's a conflict
+                if len(filtered_values) > 1:
+                    conflicts.append(
+                        _format_conflict(coord_name, attr_name, filtered_values)
+                    )
+
+    assert not conflicts, (
+        "Coordinate metadata inconsistencies found across datasets:\n\n"
+        + "\n\n".join(conflicts)
+    )

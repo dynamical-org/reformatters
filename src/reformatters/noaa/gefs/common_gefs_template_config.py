@@ -316,9 +316,9 @@ def get_shared_data_var_configs(
             name="precipitation_surface",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
-                short_name="tp",
+                short_name="prate",
                 standard_name="precipitation_flux",
-                long_name="Total Precipitation",
+                long_name="Precipitation rate",
                 units="kg m-2 s-1",
                 comment="Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",
                 step_type="avg",
