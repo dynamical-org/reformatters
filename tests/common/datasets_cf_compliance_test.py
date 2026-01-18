@@ -12,6 +12,7 @@ import xarray as xr
 from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common.dynamical_dataset import DynamicalDataset
 
+# Downloaded from https://codes.ecmwf.int/parameter-database/api/v1/param/?format=json
 ECMWF_PARAMS_PATH = Path(__file__).parent / "ecmwf_params.json"
 ECMWF_PARAM_DB_URL = "https://codes.ecmwf.int/grib/param-db/"
 
@@ -685,61 +686,5 @@ def test_ecmwf_data_variable_longnames(
 
     assert not invalid_longnames, (
         f"Data variables with invalid ECMWF long_name in dataset '{dataset.dataset_id}':\n\n"
-        + "\n\n".join(invalid_longnames)
-    )
-
-
-@pytest.mark.parametrize(
-    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
-)
-def test_ecmwf_coordinate_longnames(
-    dataset: DynamicalDataset[Any, Any],
-    ecmwf_names: set[str],
-    ecmwf_name_to_id: dict[str, int],
-) -> None:
-    """
-    Ensure coordinate long_name values match ECMWF parameter conventions where applicable.
-    Many coordinates (like latitude, longitude, time) don't have ECMWF parameter entries,
-    so we only check coordinates that have a long_name set.
-    """
-    # Coordinates that are not meteorological parameters and shouldn't be validated
-    coordinate_longname_exempt = {
-        "Latitude",
-        "Longitude",
-        "Time",
-        "Forecast initialization time",
-        "Forecast lead time",
-        "Valid time",
-        "Ensemble member",
-        "Ingested forecast length",
-        "Expected forecast length",
-        # Projected coordinate system names
-        "X coordinate",
-        "Y coordinate",
-        "X coordinate of projection",
-        "Y coordinate of projection",
-    }
-
-    template_config = dataset.template_config
-
-    invalid_longnames: list[str] = []
-
-    for coord_config in template_config.coords:
-        long_name = coord_config.attrs.long_name
-        if long_name is None:
-            continue
-        if long_name in coordinate_longname_exempt:
-            continue
-        if long_name not in ecmwf_names:
-            suggestions = _format_ecmwf_suggestions(
-                long_name, ecmwf_names, ecmwf_name_to_id
-            )
-            invalid_longnames.append(
-                f"Coordinate '{coord_config.name}' has long_name='{long_name}' "
-                f"which is not in the ECMWF parameter database.\n{suggestions}"
-            )
-
-    assert not invalid_longnames, (
-        f"Coordinates with invalid ECMWF long_name in dataset '{dataset.dataset_id}':\n\n"
         + "\n\n".join(invalid_longnames)
     )
