@@ -6,7 +6,6 @@ from typing import Any
 
 import cf_xarray  # noqa: F401 - needed for ds.cf accessor
 import pytest
-import requests
 import xarray as xr
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
@@ -15,6 +14,9 @@ from reformatters.common.dynamical_dataset import DynamicalDataset
 # Downloaded from https://codes.ecmwf.int/parameter-database/api/v1/param/?format=json
 ECMWF_PARAMS_PATH = Path(__file__).parent / "ecmwf_params.json"
 ECMWF_PARAM_DB_URL = "https://codes.ecmwf.int/grib/param-db/"
+
+# Downloaded from https://cfconventions.org/Data/cf-standard-names/current/src/cf-standard-name-table.xml
+CF_STANDARD_NAME_TABLE_PATH = Path(__file__).parent / "cf-standard-name-table.xml"
 
 
 @pytest.fixture(scope="session")
@@ -49,16 +51,13 @@ def ecmwf_name_to_id(ecmwf_params: list[dict[str, Any]]) -> dict[str, int]:
     return {p["name"]: p["id"] for p in ecmwf_params}
 
 
-@pytest.fixture(scope="session")  # session scope downloads once per test run
+@pytest.fixture(scope="session")
 def cf_standard_name_to_canonical_units() -> dict[str, str]:
     """
-    Download the latest CF Standard Name Table.
+    Load the CF Standard Name Table from the local XML file.
     Returns a dict mapping standard_name -> canonical_units.
     """
-    url = "https://cfconventions.org/Data/cf-standard-names/current/src/cf-standard-name-table.xml"
-    response = requests.get(url, timeout=30)
-    response.raise_for_status()
-    xml = ET.fromstring(response.content)  # noqa: S314 cfconventions.org is fairly safe and this is test not prod
+    xml = ET.parse(CF_STANDARD_NAME_TABLE_PATH).getroot()  # noqa: S314 trusted local file
     return {
         standard_name: entry.find("canonical_units").text  # type: ignore[union-attr,misc]
         for entry in xml.findall(".//entry")
