@@ -1,4 +1,7 @@
+import json
 import xml.etree.ElementTree as ET
+from difflib import get_close_matches
+from pathlib import Path
 from typing import Any
 
 import cf_xarray  # noqa: F401 - needed for ds.cf accessor
@@ -8,6 +11,41 @@ import xarray as xr
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common.dynamical_dataset import DynamicalDataset
+
+ECMWF_PARAMS_PATH = Path(__file__).parent / "ecmwf_params.json"
+ECMWF_PARAM_DB_URL = "https://codes.ecmwf.int/grib/param-db/"
+
+
+@pytest.fixture(scope="session")
+def ecmwf_params() -> list[dict[str, Any]]:
+    """Load the ECMWF parameter database from the local JSON file."""
+    with open(ECMWF_PARAMS_PATH) as f:
+        params: list[dict[str, Any]] = json.load(f)
+        return params
+
+
+@pytest.fixture(scope="session")
+def ecmwf_shortnames(ecmwf_params: list[dict[str, Any]]) -> set[str]:
+    """Get all ECMWF shortnames."""
+    return {p["shortname"] for p in ecmwf_params}
+
+
+@pytest.fixture(scope="session")
+def ecmwf_names(ecmwf_params: list[dict[str, Any]]) -> set[str]:
+    """Get all ECMWF parameter names (long names)."""
+    return {p["name"] for p in ecmwf_params}
+
+
+@pytest.fixture(scope="session")
+def ecmwf_shortname_to_id(ecmwf_params: list[dict[str, Any]]) -> dict[str, int]:
+    """Map ECMWF shortnames to their parameter IDs for linking."""
+    return {p["shortname"]: p["id"] for p in ecmwf_params}
+
+
+@pytest.fixture(scope="session")
+def ecmwf_name_to_id(ecmwf_params: list[dict[str, Any]]) -> dict[str, int]:
+    """Map ECMWF names to their parameter IDs for linking."""
+    return {p["name"]: p["id"] for p in ecmwf_params}
 
 
 @pytest.fixture(scope="session")  # session scope downloads once per test run
@@ -524,4 +562,176 @@ def test_cf_coordinate_metadata_consistency_across_datasets() -> None:
     assert not conflicts, (
         "Coordinate metadata inconsistencies found across datasets:\n\n"
         + "\n\n".join(conflicts)
+    )
+
+
+# Variables that don't have ECMWF parameter database entries and are exempt from validation.
+# These are either non-meteorological variables or dataset-specific variables.
+ECMWF_SHORTNAME_EXEMPT: set[str] = {
+    # NOAA NDVI CDR variables
+    "ndvi_raw",
+    "ndvi_usable",
+    "qa",
+    # NASA SMAP soil moisture variables
+    "soil_moisture_am",
+    "soil_moisture_pm",
+    # DWD ICON-specific variables
+    "aswdifd_s",
+    "aswdir_s",
+}
+
+ECMWF_LONGNAME_EXEMPT: set[str] = {
+    # Non-meteorological or dataset-specific variables
+    "normalized_difference_vegetation_index",
+    "quality_assurance",
+    "Soil Moisture (AM)",
+    "Soil Moisture (PM)",
+    # DWD ICON-specific variables
+    "Downward diffusive short wave radiation flux at surface",
+    "Downward direct short wave radiation flux at surface",
+}
+
+
+def _format_ecmwf_suggestions(
+    value: str,
+    all_values: set[str],
+    value_to_id: dict[str, int],
+    n: int = 5,
+) -> str:
+    """Format suggestions for ECMWF parameter values with links."""
+    matches = get_close_matches(value, list(all_values), n=n, cutoff=0.4)
+    if not matches:
+        return f"No close matches found. See {ECMWF_PARAM_DB_URL}"
+
+    suggestions = []
+    for match in matches:
+        param_id = value_to_id.get(match)
+        if param_id:
+            suggestions.append(f"  - '{match}' ({ECMWF_PARAM_DB_URL}?id={param_id})")
+        else:
+            suggestions.append(f"  - '{match}'")
+    return "Possible matches:\n" + "\n".join(suggestions)
+
+
+@pytest.mark.parametrize(
+    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+)
+def test_ecmwf_data_variable_shortnames(
+    dataset: DynamicalDataset[Any, Any],
+    ecmwf_shortnames: set[str],
+    ecmwf_shortname_to_id: dict[str, int],
+) -> None:
+    """
+    Ensure data variable short_name values match ECMWF parameter conventions.
+    ECMWF short_name is the 'shortname' field in the ECMWF parameter database.
+    """
+    template_config = dataset.template_config
+
+    invalid_shortnames: list[str] = []
+
+    for var_config in template_config.data_vars:
+        short_name = var_config.attrs.short_name
+        if short_name in ECMWF_SHORTNAME_EXEMPT:
+            continue
+        if short_name not in ecmwf_shortnames:
+            suggestions = _format_ecmwf_suggestions(
+                short_name, ecmwf_shortnames, ecmwf_shortname_to_id
+            )
+            invalid_shortnames.append(
+                f"Variable '{var_config.name}' has short_name='{short_name}' "
+                f"which is not in the ECMWF parameter database.\n{suggestions}"
+            )
+
+    assert not invalid_shortnames, (
+        f"Data variables with invalid ECMWF short_name in dataset '{dataset.dataset_id}':\n\n"
+        + "\n\n".join(invalid_shortnames)
+    )
+
+
+@pytest.mark.parametrize(
+    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+)
+def test_ecmwf_data_variable_longnames(
+    dataset: DynamicalDataset[Any, Any],
+    ecmwf_names: set[str],
+    ecmwf_name_to_id: dict[str, int],
+) -> None:
+    """
+    Ensure data variable long_name values match ECMWF parameter conventions.
+    ECMWF long_name is the 'name' field in the ECMWF parameter database.
+    """
+    template_config = dataset.template_config
+
+    invalid_longnames: list[str] = []
+
+    for var_config in template_config.data_vars:
+        long_name = var_config.attrs.long_name
+        if long_name in ECMWF_LONGNAME_EXEMPT:
+            continue
+        if long_name not in ecmwf_names:
+            suggestions = _format_ecmwf_suggestions(
+                long_name, ecmwf_names, ecmwf_name_to_id
+            )
+            invalid_longnames.append(
+                f"Variable '{var_config.name}' has long_name='{long_name}' "
+                f"which is not in the ECMWF parameter database.\n{suggestions}"
+            )
+
+    assert not invalid_longnames, (
+        f"Data variables with invalid ECMWF long_name in dataset '{dataset.dataset_id}':\n\n"
+        + "\n\n".join(invalid_longnames)
+    )
+
+
+@pytest.mark.parametrize(
+    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+)
+def test_ecmwf_coordinate_longnames(
+    dataset: DynamicalDataset[Any, Any],
+    ecmwf_names: set[str],
+    ecmwf_name_to_id: dict[str, int],
+) -> None:
+    """
+    Ensure coordinate long_name values match ECMWF parameter conventions where applicable.
+    Many coordinates (like latitude, longitude, time) don't have ECMWF parameter entries,
+    so we only check coordinates that have a long_name set.
+    """
+    # Coordinates that are not meteorological parameters and shouldn't be validated
+    coordinate_longname_exempt = {
+        "Latitude",
+        "Longitude",
+        "Time",
+        "Forecast initialization time",
+        "Forecast lead time",
+        "Valid time",
+        "Ensemble member",
+        "Ingested forecast length",
+        "Expected forecast length",
+        # Projected coordinate system names
+        "X coordinate",
+        "Y coordinate",
+    }
+
+    template_config = dataset.template_config
+
+    invalid_longnames: list[str] = []
+
+    for coord_config in template_config.coords:
+        long_name = coord_config.attrs.long_name
+        if long_name is None:
+            continue
+        if long_name in coordinate_longname_exempt:
+            continue
+        if long_name not in ecmwf_names:
+            suggestions = _format_ecmwf_suggestions(
+                long_name, ecmwf_names, ecmwf_name_to_id
+            )
+            invalid_longnames.append(
+                f"Coordinate '{coord_config.name}' has long_name='{long_name}' "
+                f"which is not in the ECMWF parameter database.\n{suggestions}"
+            )
+
+    assert not invalid_longnames, (
+        f"Coordinates with invalid ECMWF long_name in dataset '{dataset.dataset_id}':\n\n"
+        + "\n\n".join(invalid_longnames)
     )
