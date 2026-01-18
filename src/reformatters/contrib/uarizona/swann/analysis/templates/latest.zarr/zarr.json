@@ -278,7 +278,7 @@
           }
         ],
         "attributes": {
-          "long_name": "Snow water equivalent",
+          "long_name": "Snow depth water equivalent",
           "short_name": "sd",
           "standard_name": "lwe_thickness_of_surface_snow_amount",
           "units": "mm",

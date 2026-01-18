@@ -68,7 +68,7 @@
     }
   ],
   "attributes": {
-    "long_name": "Soil water runoff",
+    "long_name": "Water runoff",
     "short_name": "watr",
     "units": "kg m-2",
     "comment": "Soil water runoff (accumulated since model start)",

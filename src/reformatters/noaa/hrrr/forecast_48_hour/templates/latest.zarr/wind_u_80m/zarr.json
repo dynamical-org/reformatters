@@ -68,8 +68,8 @@
     }
   ],
   "attributes": {
-    "long_name": "U-component of wind (80 m above ground)",
-    "short_name": "u80",
+    "long_name": "80 metre U wind component",
+    "short_name": "80u",
     "standard_name": "eastward_wind",
     "units": "m s-1",
     "step_type": "instant",

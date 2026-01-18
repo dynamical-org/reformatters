@@ -69,7 +69,7 @@
   ],
   "attributes": {
     "long_name": "2 metre temperature",
-    "short_name": "t2m",
+    "short_name": "2t",
     "standard_name": "air_temperature",
     "units": "degree_Celsius",
     "comment": "Temperature at 2m above ground, averaged over all tiles of a grid point. Different agencies use different short_names for this parameter: ECMWF: 2t; NOAA & DWD: t2m.",

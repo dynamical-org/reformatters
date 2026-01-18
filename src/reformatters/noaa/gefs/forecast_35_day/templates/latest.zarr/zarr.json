@@ -1766,7 +1766,7 @@
         ],
         "attributes": {
           "long_name": "2 metre relative humidity",
-          "short_name": "r2",
+          "short_name": "2r",
           "standard_name": "relative_humidity",
           "units": "percent",
           "step_type": "instant",
@@ -1907,7 +1907,7 @@
         ],
         "attributes": {
           "long_name": "2 metre temperature",
-          "short_name": "t2m",
+          "short_name": "2t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
           "step_type": "instant",
@@ -2150,7 +2150,7 @@
         ],
         "attributes": {
           "long_name": "100 metre U wind component",
-          "short_name": "u100",
+          "short_name": "100u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
           "step_type": "instant",
@@ -2242,7 +2242,7 @@
         ],
         "attributes": {
           "long_name": "10 metre U wind component",
-          "short_name": "u10",
+          "short_name": "10u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
           "step_type": "instant",
@@ -2334,7 +2334,7 @@
         ],
         "attributes": {
           "long_name": "100 metre V wind component",
-          "short_name": "v100",
+          "short_name": "100v",
           "standard_name": "northward_wind",
           "units": "m s-1",
           "step_type": "instant",
@@ -2426,7 +2426,7 @@
         ],
         "attributes": {
           "long_name": "10 metre V wind component",
-          "short_name": "v10",
+          "short_name": "10v",
           "standard_name": "northward_wind",
           "units": "m s-1",
           "step_type": "instant",

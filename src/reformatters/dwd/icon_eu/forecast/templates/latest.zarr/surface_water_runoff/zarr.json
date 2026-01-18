@@ -68,8 +68,8 @@
     }
   ],
   "attributes": {
-    "long_name": "Surface water Runoff",
-    "short_name": "watr",
+    "long_name": "Surface runoff",
+    "short_name": "sro",
     "standard_name": "surface_runoff_amount",
     "units": "kg m-2",
     "comment": "Surface water runoff from interception and snow reservoir and from limited infiltration rate. Sum over forecast.",
