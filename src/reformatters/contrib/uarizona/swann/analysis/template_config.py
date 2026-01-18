@@ -221,7 +221,7 @@ class UarizonaSwannAnalysisTemplateConfig(TemplateConfig[UarizonaSwannDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="sd",
-                    long_name="Snow water equivalent",
+                    long_name="Snow depth water equivalent",
                     standard_name="lwe_thickness_of_surface_snow_amount",
                     units="mm",
                     step_type="instant",

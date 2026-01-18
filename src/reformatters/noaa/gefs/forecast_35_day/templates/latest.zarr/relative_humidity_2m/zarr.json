@@ -72,7 +72,7 @@
   ],
   "attributes": {
     "long_name": "2 metre relative humidity",
-    "short_name": "r2",
+    "short_name": "2r",
     "standard_name": "relative_humidity",
     "units": "percent",
     "step_type": "instant",

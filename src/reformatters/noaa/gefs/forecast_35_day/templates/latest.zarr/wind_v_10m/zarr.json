@@ -72,7 +72,7 @@
   ],
   "attributes": {
     "long_name": "10 metre V wind component",
-    "short_name": "v10",
+    "short_name": "10v",
     "standard_name": "northward_wind",
     "units": "m s-1",
     "step_type": "instant",

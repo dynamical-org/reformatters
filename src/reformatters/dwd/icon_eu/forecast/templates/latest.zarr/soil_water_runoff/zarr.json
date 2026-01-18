@@ -68,8 +68,8 @@
     }
   ],
   "attributes": {
-    "long_name": "Soil water runoff",
-    "short_name": "watr",
+    "long_name": "Sub-surface runoff",
+    "short_name": "ssro",
     "units": "kg m-2",
     "comment": "Soil water runoff (accumulated since model start)",
     "step_type": "accum",

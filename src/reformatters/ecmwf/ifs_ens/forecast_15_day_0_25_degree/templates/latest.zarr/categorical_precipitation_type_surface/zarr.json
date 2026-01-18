@@ -71,7 +71,7 @@
     }
   ],
   "attributes": {
-    "long_name": "Categorical precipitation type at surface",
+    "long_name": "Precipitation type",
     "short_name": "ptype",
     "units": "1",
     "comment": "0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13-191=Reserved; 192-254=Reserved for local use; 255=Missing",

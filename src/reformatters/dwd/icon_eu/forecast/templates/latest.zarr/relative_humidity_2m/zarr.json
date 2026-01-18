@@ -69,7 +69,7 @@
   ],
   "attributes": {
     "long_name": "2 metre relative humidity",
-    "short_name": "r2",
+    "short_name": "2r",
     "standard_name": "relative_humidity",
     "units": "percent",
     "comment": "Relative humidity at 2m above ground. Other short_names used for this parameter: rh, 2r, r.",

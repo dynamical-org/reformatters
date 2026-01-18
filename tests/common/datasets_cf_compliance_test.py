@@ -1,5 +1,7 @@
+import difflib
 import xml.etree.ElementTree as ET
-from typing import Any
+from collections.abc import Sequence
+from typing import Any, TypedDict
 
 import cf_xarray  # noqa: F401 - needed for ds.cf accessor
 import pytest
@@ -25,6 +27,73 @@ def cf_standard_name_to_canonical_units() -> dict[str, str]:
         for entry in xml.findall(".//entry")
         if (standard_name := entry.get("id")) is not None
     }
+
+
+class EcmwfParamDatabase(TypedDict):
+    names: set[str]
+    shortnames: set[str]
+    name_list: list[str]
+    shortname_list: list[str]
+
+
+@pytest.fixture(scope="session")
+def ecmwf_parameter_database() -> EcmwfParamDatabase:
+    url = "https://codes.ecmwf.int/parameter-database/api/v1/param/?format=json"
+    response = requests.get(url, timeout=30)
+    response.raise_for_status()
+    data = response.json()
+    names = {entry["name"] for entry in data if entry.get("name")}
+    shortnames = {entry["shortname"] for entry in data if entry.get("shortname")}
+    return {
+        "names": names,
+        "shortnames": shortnames,
+        "name_list": sorted(names),
+        "shortname_list": sorted(shortnames),
+    }
+
+
+ECMWF_COORD_LONG_NAME_ALLOWLIST: set[str] = {
+    "Ensemble member",
+    "Expected forecast length",
+    "Forecast initialization time",
+    "Forecast lead time",
+    "Ingested forecast length",
+    "Time",
+    "Valid time",
+    "X coordinate of projection",
+    "Y coordinate of projection",
+}
+
+ECMWF_DATA_VAR_LONG_NAME_ALLOWLIST: set[str] = {
+    "Quality assurance",
+}
+
+ECMWF_DATA_VAR_SHORT_NAME_ALLOWLIST: set[str] = {
+    "quality_assurance",
+}
+
+
+def _format_ecmwf_suggestions(
+    value: str,
+    candidates: Sequence[str],
+    *,
+    limit: int = 5,
+) -> str:
+    suggestions = difflib.get_close_matches(value, candidates, n=limit, cutoff=0.6)
+    if not suggestions:
+        lowered = value.lower()
+        suggestions = [
+            candidate
+            for candidate in candidates
+            if lowered in candidate.lower() or candidate.lower() in lowered
+        ][:limit]
+    if suggestions:
+        formatted = ", ".join(repr(item) for item in suggestions)
+        return (
+            f" Possible matches: {formatted}. "
+            "See https://codes.ecmwf.int/grib/param-db/"
+        )
+    return " See https://codes.ecmwf.int/grib/param-db/"
 
 
 @pytest.mark.parametrize(
@@ -196,6 +265,58 @@ def test_cf_ensemble_member_recognized(
         assert ens_attrs.get("standard_name") == "realization", (
             f"ensemble_member missing standard_name='realization', got: {ens_attrs.get('standard_name')}"
         )
+
+
+@pytest.mark.parametrize(
+    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+)
+def test_ecmwf_parameter_name_conventions(
+    dataset: DynamicalDataset[Any, Any],
+    ecmwf_parameter_database: EcmwfParamDatabase,
+) -> None:
+    """
+    Ensure coordinate and data variable long_name/short_name values are valid
+    ECMWF parameter names/shortnames where available.
+    """
+    names = ecmwf_parameter_database["names"]
+    shortnames = ecmwf_parameter_database["shortnames"]
+    name_list = ecmwf_parameter_database["name_list"]
+    shortname_list = ecmwf_parameter_database["shortname_list"]
+
+    for coord_config in dataset.template_config.coords:
+        long_name = coord_config.attrs.long_name
+        if long_name is None or coord_config.name == "spatial_ref":
+            continue
+        if long_name in ECMWF_COORD_LONG_NAME_ALLOWLIST:
+            continue
+        assert long_name in names, (
+            f"{dataset.dataset_id}: Coordinate '{coord_config.name}' has long_name='{long_name}' "
+            "which is not in the ECMWF parameter database."
+            + _format_ecmwf_suggestions(long_name, name_list)
+        )
+
+    for var_config in dataset.template_config.data_vars:
+        long_name = var_config.attrs.long_name
+        if (
+            long_name not in names
+            and long_name not in ECMWF_DATA_VAR_LONG_NAME_ALLOWLIST
+        ):
+            pytest.fail(
+                f"{dataset.dataset_id}: Data variable '{var_config.name}' has long_name='{long_name}' "
+                "which is not in the ECMWF parameter database."
+                + _format_ecmwf_suggestions(long_name, name_list)
+            )
+
+        short_name = var_config.attrs.short_name
+        if (
+            short_name not in shortnames
+            and short_name not in ECMWF_DATA_VAR_SHORT_NAME_ALLOWLIST
+        ):
+            pytest.fail(
+                f"{dataset.dataset_id}: Data variable '{var_config.name}' has short_name='{short_name}' "
+                "which is not in the ECMWF parameter database."
+                + _format_ecmwf_suggestions(short_name, shortname_list)
+            )
 
 
 @pytest.mark.parametrize(

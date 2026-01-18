@@ -69,7 +69,7 @@
   ],
   "attributes": {
     "long_name": "10 metre U wind component",
-    "short_name": "u10",
+    "short_name": "10u",
     "standard_name": "eastward_wind",
     "units": "m s-1",
     "step_type": "instant",

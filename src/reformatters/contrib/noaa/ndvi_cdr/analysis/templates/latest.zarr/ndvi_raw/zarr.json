@@ -65,8 +65,8 @@
     }
   ],
   "attributes": {
-    "long_name": "normalized_difference_vegetation_index",
-    "short_name": "ndvi_raw",
+    "long_name": "Normalized Difference Vegetation Index",
+    "short_name": "ndvi",
     "standard_name": "normalized_difference_vegetation_index",
     "units": "1",
     "comment": "Raw NDVI values from the NOAA CDR",
