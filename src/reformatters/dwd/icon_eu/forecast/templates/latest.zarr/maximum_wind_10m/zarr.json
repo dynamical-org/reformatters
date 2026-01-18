@@ -68,7 +68,7 @@
     }
   ],
   "attributes": {
-    "long_name": "Time-maximum instantaneous 10 metre wind gust",
+    "long_name": "Instantaneous 10 metre wind gust",
     "short_name": "i10fg",
     "standard_name": "wind_speed_of_gust",
     "units": "m s-1",

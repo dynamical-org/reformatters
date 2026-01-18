@@ -34,9 +34,13 @@ type EnsembleStatistic = Literal["avg"]  # "spr" (spread) is also available
 
 
 class DataVarAttrs(FrozenBaseModel):
+    # Use ECMWF parameter `name` if one is applicable
     long_name: Annotated[str, pydantic.Field(min_length=1)]
+    # Use ECMWF parameter `shortname` if one is applicable
     short_name: Annotated[str, pydantic.Field(min_length=1)]
+    # Must follow CF Conventions or be None
     standard_name: Annotated[str, pydantic.Field(min_length=1)] | None = None
+    # Must follow CF Conventions if CF defines a standard name for this variable
     units: Annotated[str, pydantic.Field(min_length=1)]
     comment: Annotated[str, pydantic.Field(min_length=1)] | None = None
     step_type: Literal["instant", "accum", "avg", "min", "max"]
@@ -48,7 +52,10 @@ type CfAxis = Literal["X", "Y", "Z", "T"]
 
 class CoordinateAttrs(FrozenBaseModel):
     long_name: Annotated[str, pydantic.Field(min_length=1)] | None = None
+    short_name: Annotated[str, pydantic.Field(min_length=1)] | None = None
+    # Must follow CF Conventions or be None
     standard_name: Annotated[str, pydantic.Field(min_length=1)] | None = None
+    # Must follow CF Conventions if CF defines a standard name for this coordinate
     axis: CfAxis | None = None
     units: TimestampUnits | TimedeltaUnits | str | None
     statistics_approximate: StatisticsApproximate | None

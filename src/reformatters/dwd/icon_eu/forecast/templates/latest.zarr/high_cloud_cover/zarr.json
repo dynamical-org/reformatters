@@ -68,7 +68,7 @@
     }
   ],
   "attributes": {
-    "long_name": "High level clouds",
+    "long_name": "High cloud cover",
     "short_name": "clch",
     "standard_name": "cloud_area_fraction_in_atmosphere_layer",
     "units": "percent",

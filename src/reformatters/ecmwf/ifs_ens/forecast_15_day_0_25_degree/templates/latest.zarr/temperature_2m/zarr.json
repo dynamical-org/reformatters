@@ -72,7 +72,7 @@
   ],
   "attributes": {
     "long_name": "2 metre temperature",
-    "short_name": "t2m",
+    "short_name": "2t",
     "standard_name": "air_temperature",
     "units": "degree_Celsius",
     "step_type": "instant",

@@ -68,7 +68,7 @@
     }
   ],
   "attributes": {
-    "long_name": "Low level clouds",
+    "long_name": "Low cloud cover",
     "short_name": "clcl",
     "standard_name": "cloud_area_fraction_in_atmosphere_layer",
     "units": "percent",

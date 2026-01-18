@@ -389,7 +389,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=DataVarAttrs(
                     short_name="clch",
                     standard_name="cloud_area_fraction_in_atmosphere_layer",
-                    long_name="High level clouds",
+                    long_name="High cloud cover",
                     units="percent",
                     step_type="instant",
                     comment="Cloud Cover (0 - 400 hPa). Different agencies use different short_names for this same parameter: ECMWF: HCC; WMO GRIB table: HCDC.",
@@ -405,7 +405,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=DataVarAttrs(
                     short_name="clcl",
                     standard_name="cloud_area_fraction_in_atmosphere_layer",
-                    long_name="Low level clouds",
+                    long_name="Low cloud cover",
                     units="percent",
                     step_type="instant",
                     comment="Cloud Cover (800 hPa - Soil). Different agencies use different short_names for this same parameter: ECMWF: LCC; WMO GRIB table: LCDC.",
@@ -421,7 +421,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=DataVarAttrs(
                     short_name="clcm",
                     standard_name="cloud_area_fraction_in_atmosphere_layer",
-                    long_name="Mid level clouds",
+                    long_name="Medium cloud cover",
                     units="percent",
                     step_type="instant",
                     comment="Cloud Cover (400 - 800 hPa). Different agencies use different short_names for this same parameter: ECMWF: MCC; WMO GRIB table: MCDC.",
@@ -486,7 +486,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 name="relative_humidity_2m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="r2",
+                    short_name="2r",
                     long_name="2 metre relative humidity",
                     units="percent",
                     step_type="instant",
@@ -503,7 +503,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="watr",
-                    long_name="Soil water runoff",
+                    long_name="Water runoff",
                     units="kg m-2",
                     step_type="accum",
                     comment="Soil water runoff (accumulated since model start)",
@@ -518,9 +518,9 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 name="surface_water_runoff",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="watr",
+                    short_name="sro",
                     standard_name="surface_runoff_amount",
-                    long_name="Surface water Runoff",
+                    long_name="Surface runoff",
                     units="kg m-2",
                     step_type="accum",
                     comment=(
@@ -538,7 +538,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 name="temperature_2m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="t2m",
+                    short_name="2t",
                     long_name="2 metre temperature",
                     units="degree_Celsius",
                     step_type="instant",
@@ -578,7 +578,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 name="wind_u_10m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="u10",
+                    short_name="10u",
                     long_name="10 metre U wind component",
                     units="m s-1",
                     step_type="instant",
@@ -594,7 +594,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 name="wind_v_10m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="v10",
+                    short_name="10v",
                     long_name="10 metre V wind component",
                     units="m s-1",
                     step_type="instant",
@@ -611,7 +611,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="i10fg",
-                    long_name="Time-maximum instantaneous 10 metre wind gust",
+                    long_name="Instantaneous 10 metre wind gust",
                     standard_name="wind_speed_of_gust",
                     units="m s-1",
                     step_type="max",

@@ -157,7 +157,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="refc",
-                    long_name="Composite reflectivity",
+                    long_name="Maximum/Composite radar reflectivity",
                     units="dBZ",
                     step_type="instant",
                 ),
@@ -174,7 +174,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 name="temperature_2m",
                 encoding=encoding,
                 attrs=DataVarAttrs(
-                    short_name="t2m",
+                    short_name="2t",
                     long_name="2 metre temperature",
                     units="degree_Celsius",
                     step_type="instant",
@@ -193,7 +193,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 name="wind_u_10m",
                 encoding=encoding,
                 attrs=DataVarAttrs(
-                    short_name="u10",
+                    short_name="10u",
                     long_name="10 metre U wind component",
                     units="m s-1",
                     step_type="instant",
@@ -212,7 +212,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 name="wind_v_10m",
                 encoding=encoding,
                 attrs=DataVarAttrs(
-                    short_name="v10",
+                    short_name="10v",
                     long_name="10 metre V wind component",
                     units="m s-1",
                     step_type="instant",
@@ -461,7 +461,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 name="relative_humidity_2m",
                 encoding=encoding,
                 attrs=DataVarAttrs(
-                    short_name="r2",
+                    short_name="2r",
                     standard_name="relative_humidity",
                     long_name="2 metre relative humidity",
                     units="percent",
@@ -500,8 +500,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 name="wind_u_80m",
                 encoding=encoding,
                 attrs=DataVarAttrs(
-                    short_name="u80",
-                    long_name="U-component of wind (80 m above ground)",
+                    short_name="80u",
+                    long_name="80 metre U wind component",
                     units="m s-1",
                     step_type="instant",
                     standard_name="eastward_wind",
@@ -519,8 +519,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 name="wind_v_80m",
                 encoding=encoding,
                 attrs=DataVarAttrs(
-                    short_name="v80",
-                    long_name="V-component of wind (80 m above ground)",
+                    short_name="80v",
+                    long_name="80 metre V wind component",
                     units="m s-1",
                     step_type="instant",
                     standard_name="northward_wind",

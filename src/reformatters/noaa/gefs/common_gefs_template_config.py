@@ -143,7 +143,7 @@ def get_shared_data_var_configs(
             name="temperature_2m",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
-                short_name="t2m",
+                short_name="2t",
                 long_name="2 metre temperature",
                 units="degree_Celsius",
                 step_type="instant",
@@ -162,7 +162,7 @@ def get_shared_data_var_configs(
             name="relative_humidity_2m",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
-                short_name="r2",
+                short_name="2r",
                 long_name="2 metre relative humidity",
                 units="percent",
                 step_type="instant",
@@ -221,7 +221,7 @@ def get_shared_data_var_configs(
             name="wind_u_10m",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
-                short_name="u10",
+                short_name="10u",
                 long_name="10 metre U wind component",
                 units="m s-1",
                 step_type="instant",
@@ -240,7 +240,7 @@ def get_shared_data_var_configs(
             name="wind_v_10m",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
-                short_name="v10",
+                short_name="10v",
                 long_name="10 metre V wind component",
                 units="m s-1",
                 step_type="instant",
@@ -259,7 +259,7 @@ def get_shared_data_var_configs(
             name="wind_u_100m",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
-                short_name="u100",
+                short_name="100u",
                 long_name="100 metre U wind component",
                 standard_name="eastward_wind",
                 units="m s-1",
@@ -278,7 +278,7 @@ def get_shared_data_var_configs(
             name="wind_v_100m",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
-                short_name="v100",
+                short_name="100v",
                 long_name="100 metre V wind component",
                 units="m s-1",
                 step_type="instant",

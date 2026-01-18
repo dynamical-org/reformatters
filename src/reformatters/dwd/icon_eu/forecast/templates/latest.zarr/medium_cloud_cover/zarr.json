@@ -68,7 +68,7 @@
     }
   ],
   "attributes": {
-    "long_name": "Mid level clouds",
+    "long_name": "Medium cloud cover",
     "short_name": "clcm",
     "standard_name": "cloud_area_fraction_in_atmosphere_layer",
     "units": "percent",
