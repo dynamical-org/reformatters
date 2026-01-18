@@ -578,6 +578,9 @@ ECMWF_SHORTNAME_EXEMPT: set[str] = {
     # DWD ICON-specific variables
     "aswdifd_s",
     "aswdir_s",
+    # HRRR 80m wind (no ECMWF equivalent)
+    "80u",
+    "80v",
 }
 
 ECMWF_LONGNAME_EXEMPT: set[str] = {
@@ -589,6 +592,9 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     # DWD ICON-specific variables
     "Downward diffusive short wave radiation flux at surface",
     "Downward direct short wave radiation flux at surface",
+    # HRRR 80m wind (no ECMWF equivalent)
+    "80 metre U wind component",
+    "80 metre V wind component",
 }
 
 
@@ -710,6 +716,8 @@ def test_ecmwf_coordinate_longnames(
         # Projected coordinate system names
         "X coordinate",
         "Y coordinate",
+        "X coordinate of projection",
+        "Y coordinate of projection",
     }
 
     template_config = dataset.template_config
