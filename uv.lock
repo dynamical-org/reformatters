@@ -30,15 +30,6 @@ wheels = [
 ]
 
 [[package]]
-name = "aioftp"
-version = "0.27.2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/cc/a3/d1af4b69c09dc9955fdb329de5a9ea73f6a3ba50ac4861882453254ffa99/aioftp-0.27.2.tar.gz", hash = "sha256:7c048c3220081796c59832a6fd9fd8fad97e3cec12a50be3abccf2dcbbeb261a", size = 70248, upload-time = "2025-09-24T21:51:31.297Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7c/6c/d56c290696f91c4f0fa4be7cfdb38e710d9735c10c57e481cd4bd6066506/aioftp-0.27.2-py3-none-any.whl", hash = "sha256:83befd4091be0e26eeba44dadebb7e7bea653f7b6bda3ba9b6785d4372a93e10", size = 44292, upload-time = "2025-09-24T21:51:29.448Z" },
-]
-
-[[package]]
 name = "aiohappyeyeballs"
 version = "2.6.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1258,18 +1249,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pytest-asyncio"
-version = "1.3.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pytest" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/90/2c/8af215c0f776415f3590cac4f9086ccefd6fd463befeae41cd4d3f193e5a/pytest_asyncio-1.3.0.tar.gz", hash = "sha256:d7f52f36d231b80ee124cd216ffb19369aa168fc10095013c6b014a34d3ee9e5", size = 50087, upload-time = "2025-11-10T16:07:47.256Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e5/35/f8b19922b6a25bc0880171a2f1a003eaeb93657475193ab516fd87cac9da/pytest_asyncio-1.3.0-py3-none-any.whl", hash = "sha256:611e26147c7f77640e6d0a92a38ed17c3e9848063698d5c93d5aa7aa11cebff5", size = 15075, upload-time = "2025-11-10T16:07:45.537Z" },
-]
-
-[[package]]
 name = "pytest-sugar"
 version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1360,7 +1339,6 @@ name = "reformatters"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "aioftp" },
     { name = "dask" },
     { name = "icechunk" },
     { name = "kubernetes" },
@@ -1389,7 +1367,6 @@ dev = [
     { name = "pre-commit" },
     { name = "pyqt6" },
     { name = "pytest" },
-    { name = "pytest-asyncio" },
     { name = "pytest-sugar" },
     { name = "pytest-xdist" },
     { name = "ruff" },
@@ -1398,7 +1375,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aioftp", specifier = "~=0.27" },
     { name = "dask", specifier = "~=2025.0" },
     { name = "icechunk", specifier = "~=1.1" },
     { name = "kubernetes", specifier = "~=33.1" },
@@ -1427,7 +1403,6 @@ dev = [
     { name = "pre-commit", specifier = "==4.3.0" },
     { name = "pyqt6", specifier = ">=6.7.1" },
     { name = "pytest", specifier = "~=8.4" },
-    { name = "pytest-asyncio", specifier = "~=1.3" },
     { name = "pytest-sugar", specifier = "~=1.0" },
     { name = "pytest-xdist", specifier = "~=3.8" },
     { name = "ruff", specifier = "==0.13.1" },
