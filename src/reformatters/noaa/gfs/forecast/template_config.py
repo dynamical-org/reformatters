@@ -102,6 +102,8 @@ class NoaaGfsForecastTemplateConfig(NoaaGfsCommonTemplateConfig):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Forecast initialization time",
+                    standard_name="forecast_reference_time",
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
                         min=dim_coords[self.append_dim].min().isoformat(), max="Present"
@@ -119,6 +121,8 @@ class NoaaGfsForecastTemplateConfig(NoaaGfsCommonTemplateConfig):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Forecast lead time",
+                    standard_name="forecast_period",
                     units="seconds",
                     statistics_approximate=StatisticsApproximate(
                         min=str(dim_coords["lead_time"].min()),
@@ -141,6 +145,8 @@ class NoaaGfsForecastTemplateConfig(NoaaGfsCommonTemplateConfig):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Valid time",
+                    standard_name="time",
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
                         min=self.append_dim_start.isoformat(),
@@ -159,6 +165,7 @@ class NoaaGfsForecastTemplateConfig(NoaaGfsCommonTemplateConfig):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Ingested forecast length",
                     units="seconds",
                     statistics_approximate=StatisticsApproximate(
                         min=str(dim_coords["lead_time"].min()),
@@ -177,6 +184,7 @@ class NoaaGfsForecastTemplateConfig(NoaaGfsCommonTemplateConfig):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Expected forecast length",
                     units="seconds",
                     statistics_approximate=StatisticsApproximate(
                         min=str(dim_coords["lead_time"].min()),

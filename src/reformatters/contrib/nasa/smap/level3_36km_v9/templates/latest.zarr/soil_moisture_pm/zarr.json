@@ -67,7 +67,8 @@
   "attributes": {
     "long_name": "Soil Moisture (PM)",
     "short_name": "soil_moisture_pm",
-    "units": "m\u00b3/m\u00b3",
+    "standard_name": "volume_fraction_of_condensed_water_in_soil",
+    "units": "1",
     "step_type": "instant",
     "coordinates": "latitude longitude spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

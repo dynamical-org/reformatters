@@ -89,6 +89,7 @@
         "attributes": {
           "long_name": "Convective available potential energy",
           "short_name": "cape_con",
+          "standard_name": "atmosphere_convective_available_potential_energy",
           "units": "J kg-1",
           "comment": "Convective available potential energy",
           "step_type": "instant",
@@ -177,7 +178,7 @@
         "attributes": {
           "long_name": "Downward diffusive short wave radiation flux at surface",
           "short_name": "aswdifd_s",
-          "standard_name": "Mean surface diffuse short-wave radiation flux",
+          "standard_name": "surface_diffuse_downwelling_shortwave_flux_in_air",
           "units": "W m-2",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
@@ -265,6 +266,7 @@
         "attributes": {
           "long_name": "Downward direct short wave radiation flux at surface",
           "short_name": "aswdir_s",
+          "standard_name": "surface_direct_downwelling_shortwave_flux_in_air",
           "units": "W m-2",
           "comment": "Downward solar direct radiation flux at the surface, averaged over forecast time. This quantity is not directly provided by the radiation scheme. It is aposteriori diagnosed from the definition of the surface net shortwave radiation flux.",
           "step_type": "avg",
@@ -320,6 +322,7 @@
           }
         ],
         "attributes": {
+          "long_name": "Expected forecast length",
           "statistics_approximate": {
             "min": "0 days 00:00:00",
             "max": "5 days 00:00:00"
@@ -404,9 +407,10 @@
           }
         ],
         "attributes": {
-          "long_name": "High level clouds",
+          "long_name": "High cloud cover",
           "short_name": "clch",
-          "units": "%",
+          "standard_name": "cloud_area_fraction_in_atmosphere_layer",
+          "units": "percent",
           "comment": "Cloud Cover (0 - 400 hPa). Different agencies use different short_names for this same parameter: ECMWF: HCC; WMO GRIB table: HCDC.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
@@ -461,6 +465,7 @@
           }
         ],
         "attributes": {
+          "long_name": "Ingested forecast length",
           "statistics_approximate": {
             "min": "0 days 00:00:00",
             "max": "5 days 00:00:00"
@@ -514,6 +519,8 @@
           }
         ],
         "attributes": {
+          "long_name": "Forecast initialization time",
+          "standard_name": "forecast_reference_time",
           "statistics_approximate": {
             "min": "2025-10-03T00:00:00",
             "max": "Present"
@@ -567,7 +574,10 @@
           }
         ],
         "attributes": {
-          "units": "degrees_north",
+          "long_name": "Latitude",
+          "standard_name": "latitude",
+          "axis": "Y",
+          "units": "degree_north",
           "statistics_approximate": {
             "min": 29.5,
             "max": 70.5
@@ -620,6 +630,8 @@
           }
         ],
         "attributes": {
+          "long_name": "Forecast lead time",
+          "standard_name": "forecast_period",
           "statistics_approximate": {
             "min": "0 days 00:00:00",
             "max": "5 days 00:00:00"
@@ -673,7 +685,10 @@
           }
         ],
         "attributes": {
-          "units": "degrees_east",
+          "long_name": "Longitude",
+          "standard_name": "longitude",
+          "axis": "X",
+          "units": "degree_east",
           "statistics_approximate": {
             "min": -23.5,
             "max": 62.5
@@ -757,9 +772,10 @@
           }
         ],
         "attributes": {
-          "long_name": "Low level clouds",
+          "long_name": "Low cloud cover",
           "short_name": "clcl",
-          "units": "%",
+          "standard_name": "cloud_area_fraction_in_atmosphere_layer",
+          "units": "percent",
           "comment": "Cloud Cover (800 hPa - Soil). Different agencies use different short_names for this same parameter: ECMWF: LCC; WMO GRIB table: LCDC.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
@@ -845,9 +861,10 @@
           }
         ],
         "attributes": {
-          "long_name": "Time-maximum instantaneous 10 metre wind gust",
+          "long_name": "Instantaneous 10 metre wind gust",
           "short_name": "i10fg",
-          "units": "m/s",
+          "standard_name": "wind_speed_of_gust",
+          "units": "m s-1",
           "comment": "Maximum wind gust at 10 m above ground. It is diagnosed from the turbulence state in the atmospheric boundary layer, including a potential enhancement by the SSO parameterization over mountainous terrain. In the presence of deep convection, it contains an additional contribution due to convective gusts.",
           "step_type": "max",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
@@ -933,9 +950,10 @@
           }
         ],
         "attributes": {
-          "long_name": "Mid level clouds",
+          "long_name": "Medium cloud cover",
           "short_name": "clcm",
-          "units": "%",
+          "standard_name": "cloud_area_fraction_in_atmosphere_layer",
+          "units": "percent",
           "comment": "Cloud Cover (400 - 800 hPa). Different agencies use different short_names for this same parameter: ECMWF: MCC; WMO GRIB table: MCDC.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
@@ -1021,10 +1039,11 @@
           }
         ],
         "attributes": {
-          "long_name": "Total Precipitation",
-          "short_name": "tp",
-          "units": "kg m**-2",
-          "comment": "Total precipitation accumulated since model start. TOT_PREC = RAIN_GSP + SNOW_GSP + RAIN_CON + SNOW_CON.",
+          "long_name": "Precipitation rate",
+          "short_name": "prate",
+          "standard_name": "precipitation_flux",
+          "units": "kg m-2 s-1",
+          "comment": "Precipitation rate since previous forecast step. TOT_PREC = RAIN_GSP + SNOW_GSP + RAIN_CON + SNOW_CON. Units equivalent to mm/s.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1109,10 +1128,11 @@
           }
         ],
         "attributes": {
-          "long_name": "Pressure reduced to mean sea level (MSL)",
+          "long_name": "Pressure reduced to MSL",
           "short_name": "prmsl",
+          "standard_name": "air_pressure_at_mean_sea_level",
           "units": "Pa",
-          "comment": "Surface pressure reduced to MSL",
+          "comment": "Surface pressure reduced to mean sea level",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1198,9 +1218,9 @@
         ],
         "attributes": {
           "long_name": "2 metre relative humidity",
-          "short_name": "r2",
+          "short_name": "2r",
           "standard_name": "relative_humidity",
-          "units": "%",
+          "units": "percent",
           "comment": "Relative humidity at 2m above ground. Other short_names used for this parameter: rh, 2r, r.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
@@ -1288,7 +1308,7 @@
         "attributes": {
           "long_name": "Snow depth",
           "short_name": "sde",
-          "standard_name": "lwe_thickness_of_surface_snow_amount",
+          "standard_name": "surface_snow_thickness",
           "units": "m",
           "comment": "Snow depth in m. It is diagnosed from RHO_SNOW and W_SNOW according to H_SNOW = W_SNOW / RHO_SNOW and is limited to H_SNOW <= 40 m.",
           "step_type": "instant",
@@ -1377,8 +1397,9 @@
         "attributes": {
           "long_name": "Snow depth water equivalent",
           "short_name": "sd",
-          "units": "kg m**-2",
-          "comment": "Snow depth water equivalent in kg/m2. Set to 0 above water surfaces and snow-free land points.",
+          "standard_name": "lwe_thickness_of_surface_snow_amount",
+          "units": "mm",
+          "comment": "Snow depth water equivalent in mm (kg/m2). Set to 0 above water surfaces and snow-free land points.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1463,7 +1484,7 @@
           }
         ],
         "attributes": {
-          "long_name": "Soil water runoff",
+          "long_name": "Water runoff",
           "short_name": "watr",
           "units": "kg m-2",
           "comment": "Soil water runoff (accumulated since model start)",
@@ -1600,8 +1621,9 @@
           }
         ],
         "attributes": {
-          "long_name": "Surface water Runoff",
-          "short_name": "watr",
+          "long_name": "Surface runoff",
+          "short_name": "sro",
+          "standard_name": "surface_runoff_amount",
           "units": "kg m-2",
           "comment": "Surface water runoff from interception and snow reservoir and from limited infiltration rate. Sum over forecast.",
           "step_type": "accum",
@@ -1689,9 +1711,9 @@
         ],
         "attributes": {
           "long_name": "2 metre temperature",
-          "short_name": "t2m",
+          "short_name": "2t",
           "standard_name": "air_temperature",
-          "units": "K",
+          "units": "degree_Celsius",
           "comment": "Temperature at 2m above ground, averaged over all tiles of a grid point. Different agencies use different short_names for this parameter: ECMWF: 2t; NOAA & DWD: t2m.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
@@ -1779,7 +1801,8 @@
         "attributes": {
           "long_name": "Total Cloud Cover",
           "short_name": "clct",
-          "units": "%",
+          "standard_name": "cloud_area_fraction",
+          "units": "percent",
           "comment": "Total cloud cover. Different agencies use different short_names for this same parameter: ECMWF: TCC; NOAA & WMO: TCDC.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
@@ -1836,6 +1859,8 @@
           }
         ],
         "attributes": {
+          "long_name": "Valid time",
+          "standard_name": "time",
           "statistics_approximate": {
             "min": "2025-10-03T00:00:00",
             "max": "Present + 5 days"
@@ -1921,11 +1946,11 @@
           }
         ],
         "attributes": {
-          "long_name": "10 metre U wind component (eastward)",
-          "short_name": "u10",
+          "long_name": "10 metre U wind component",
+          "short_name": "10u",
           "standard_name": "eastward_wind",
-          "units": "m/s",
-          "comment": "Zonal wind at 10m above ground",
+          "units": "m s-1",
+          "comment": "Zonal wind (eastward) at 10m above ground",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2010,11 +2035,11 @@
           }
         ],
         "attributes": {
-          "long_name": "10 metre V wind component (northward)",
-          "short_name": "v10",
+          "long_name": "10 metre V wind component",
+          "short_name": "10v",
           "standard_name": "northward_wind",
-          "units": "m/s",
-          "comment": "Meridional wind at 10m above ground",
+          "units": "m s-1",
+          "comment": "Meridional wind (northward) at 10m above ground",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

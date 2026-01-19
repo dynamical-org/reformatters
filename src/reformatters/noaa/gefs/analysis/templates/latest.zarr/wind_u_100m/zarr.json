@@ -66,9 +66,9 @@
   ],
   "attributes": {
     "long_name": "100 metre U wind component",
-    "short_name": "u100",
+    "short_name": "100u",
     "standard_name": "eastward_wind",
-    "units": "m/s",
+    "units": "m s-1",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

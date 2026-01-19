@@ -39,6 +39,8 @@
     }
   ],
   "attributes": {
+    "long_name": "Valid time",
+    "standard_name": "time",
     "statistics_approximate": {
       "min": "2024-04-01T00:00:00",
       "max": "Present"

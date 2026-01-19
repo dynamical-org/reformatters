@@ -123,6 +123,8 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #             shards=None,
         #         ),
         #         attrs=CoordinateAttrs(
+        #             long_name="Forecast initialization time",
+        #             standard_name="forecast_reference_time",
         #             units="seconds since 1970-01-01 00:00:00",
         #             statistics_approximate=StatisticsApproximate(
         #                 min=dim_coords[self.append_dim].min().isoformat(), max="Present"
@@ -140,6 +142,8 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #             shards=None,
         #         ),
         #         attrs=CoordinateAttrs(
+        #             long_name="Forecast lead time",
+        #             standard_name="forecast_period",
         #             units="seconds",
         #             statistics_approximate=StatisticsApproximate(
         #                 min=str(dim_coords["lead_time"].min()),
@@ -157,7 +161,10 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #             shards=None,
         #         ),
         #         attrs=CoordinateAttrs(
-        #             units="degrees_north",
+        #             long_name="Latitude",
+        #             standard_name="latitude",
+        #             units="degree_north",
+        #             axis="Y",
         #             statistics_approximate=StatisticsApproximate(
         #                 min=float(dim_coords["latitude"].min()),
         #                 max=float(dim_coords["latitude"].max()),
@@ -174,7 +181,10 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #             shards=None,
         #         ),
         #         attrs=CoordinateAttrs(
-        #             units="degrees_east",
+        #             long_name="Longitude",
+        #             standard_name="longitude",
+        #             units="degree_east",
+        #             axis="X",
         #             statistics_approximate=StatisticsApproximate(
         #                 min=float(dim_coords["longitude"].min()),
         #                 max=float(dim_coords["longitude"].max()),
@@ -196,6 +206,8 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #             shards=None,
         #         ),
         #         attrs=CoordinateAttrs(
+        #             long_name="Valid time",
+        #             standard_name="time",
         #             units="seconds since 1970-01-01 00:00:00",
         #             statistics_approximate=StatisticsApproximate(
         #                 min=self.append_dim_start.isoformat(),
@@ -214,6 +226,7 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #             shards=None,
         #         ),
         #         attrs=CoordinateAttrs(
+        #             long_name="Ingested forecast length",
         #             units="seconds",
         #             statistics_approximate=StatisticsApproximate(
         #                 min=str(dim_coords["lead_time"].min()),
@@ -255,11 +268,7 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
     def data_vars(self) -> Sequence[ExampleDataVar]:
         """Define metadata and encoding for each data variable."""
         # # Data variable chunking and sharding
-        # #
-        # # Aim for one of these roughly equivalent quantities:
-        # # 1.5-4MB chunks compressed (assume compression to 20% of original size)
-        # # 8-20MB uncompressed
-        # # 2-5 million float32 values
+        # # see docs/chunk_shard_layout_tool.md to find good chunk and shard sizes
         #
         # # XXMB uncompressed, XXMB compressed
         # var_chunks: dict[Dim, int] = {
@@ -268,9 +277,6 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #     "latitude": 121,
         #     "longitude": 121,
         # }
-        # # Aim for one of these roughly equivalent quantities:
-        # # 64-512MB shards compressed (assume compression to 20% of original size)
-        # # 320MB-2.5GB uncompressed
         #
         # # XXMB uncompressed, XXMB compressed
         # var_shards: dict[Dim, int] = {
@@ -297,7 +303,7 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #         attrs=DataVarAttrs(
         #             short_name="t2m",
         #             long_name="2 metre temperature",
-        #             units="C",
+        #             units="degree_Celsius",
         #             step_type="instant",
         #             standard_name="air_temperature",
         #         ),
@@ -313,10 +319,11 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #         name="precipitation_surface",
         #         encoding=encoding_float32_default,
         #         attrs=DataVarAttrs(
-        #             short_name="tp",
-        #             long_name="Total Precipitation",
-        #             units="mm/s",
-        #             comment="Average precipitation rate since the previous forecast step.",
+        #             short_name="prate",
+        #             standard_name="precipitation_flux",
+        #             long_name="Precipitation rate",
+        #             units="kg m-2 s-1",
+        #             comment="Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",
         #             step_type="avg",
         #         ),
         #         internal_attrs=ExampleInternalAttrs(
@@ -371,8 +378,9 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #         encoding=encoding_float32_default,
         #         attrs=DataVarAttrs(
         #             short_name="tcc",
+        #             standard_name="cloud_area_fraction",
         #             long_name="Total Cloud Cover",
-        #             units="%",
+        #             units="percent",
         #             step_type="avg",
         #         ),
         #         internal_attrs=ExampleInternalAttrs(

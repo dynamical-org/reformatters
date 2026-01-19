@@ -37,6 +37,9 @@
     }
   ],
   "attributes": {
+    "long_name": "Y coordinate of projection",
+    "standard_name": "projection_y_coordinate",
+    "axis": "Y",
     "units": "m",
     "statistics_approximate": {
       "min": -1600000.0,

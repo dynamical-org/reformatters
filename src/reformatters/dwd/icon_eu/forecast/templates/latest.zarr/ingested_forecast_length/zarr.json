@@ -37,6 +37,7 @@
     }
   ],
   "attributes": {
+    "long_name": "Ingested forecast length",
     "statistics_approximate": {
       "min": "0 days 00:00:00",
       "max": "5 days 00:00:00"

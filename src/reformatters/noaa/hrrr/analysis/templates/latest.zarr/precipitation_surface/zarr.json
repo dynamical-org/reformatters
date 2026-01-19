@@ -65,10 +65,11 @@
     }
   ],
   "attributes": {
-    "long_name": "Total Precipitation",
-    "short_name": "tp",
-    "units": "mm/s",
-    "comment": "Average precipitation rate since the previous forecast step.",
+    "long_name": "Precipitation rate",
+    "short_name": "prate",
+    "standard_name": "precipitation_flux",
+    "units": "kg m-2 s-1",
+    "comment": "Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",
     "step_type": "avg",
     "coordinates": "latitude longitude spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

@@ -67,7 +67,7 @@
   "attributes": {
     "long_name": "Percent frozen precipitation",
     "short_name": "cpofp",
-    "units": "%",
+    "units": "percent",
     "step_type": "instant",
     "coordinates": "latitude longitude spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

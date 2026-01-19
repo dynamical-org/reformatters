@@ -69,9 +69,9 @@
   ],
   "attributes": {
     "long_name": "2 metre temperature",
-    "short_name": "t2m",
+    "short_name": "2t",
     "standard_name": "air_temperature",
-    "units": "C",
+    "units": "degree_Celsius",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

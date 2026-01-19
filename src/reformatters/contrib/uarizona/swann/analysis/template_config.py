@@ -111,6 +111,9 @@ class UarizonaSwannAnalysisTemplateConfig(TemplateConfig[UarizonaSwannDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Time",
+                    standard_name="time",
+                    axis="T",
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
                         min=pd.Timestamp(self.append_dim_start).isoformat(),
@@ -128,7 +131,10 @@ class UarizonaSwannAnalysisTemplateConfig(TemplateConfig[UarizonaSwannDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
-                    units="degrees_north",
+                    long_name="Latitude",
+                    standard_name="latitude",
+                    units="degree_north",
+                    axis="Y",
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["latitude"].min()),
                         max=float(dim_coords["latitude"].max()),
@@ -145,7 +151,10 @@ class UarizonaSwannAnalysisTemplateConfig(TemplateConfig[UarizonaSwannDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
-                    units="degrees_east",
+                    long_name="Longitude",
+                    standard_name="longitude",
+                    units="degree_east",
+                    axis="X",
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["longitude"].min()),
                         max=float(dim_coords["longitude"].max()),
@@ -211,10 +220,10 @@ class UarizonaSwannAnalysisTemplateConfig(TemplateConfig[UarizonaSwannDataVar]):
                 name="snow_water_equivalent",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="snow_water_equivalent",
-                    long_name="Snow water equivalent",
+                    short_name="sd",
+                    long_name="Snow depth water equivalent",
                     standard_name="lwe_thickness_of_surface_snow_amount",
-                    units="mm h20",
+                    units="mm",
                     step_type="instant",
                 ),
                 internal_attrs=UarizonaSwannInternalAttrs(
@@ -227,10 +236,10 @@ class UarizonaSwannAnalysisTemplateConfig(TemplateConfig[UarizonaSwannDataVar]):
                 name="snow_depth",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="snow_depth",
+                    short_name="sde",
                     long_name="Snow depth",
                     standard_name="surface_snow_thickness",
-                    units="mm snow thickness",
+                    units="mm",
                     step_type="instant",
                 ),
                 internal_attrs=UarizonaSwannInternalAttrs(

@@ -68,10 +68,11 @@
     }
   ],
   "attributes": {
-    "long_name": "Pressure reduced to mean sea level (MSL)",
+    "long_name": "Pressure reduced to MSL",
     "short_name": "prmsl",
+    "standard_name": "air_pressure_at_mean_sea_level",
     "units": "Pa",
-    "comment": "Surface pressure reduced to MSL",
+    "comment": "Surface pressure reduced to mean sea level",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

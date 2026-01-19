@@ -70,6 +70,7 @@
   "attributes": {
     "long_name": "Convective available potential energy",
     "short_name": "cape_con",
+    "standard_name": "atmosphere_convective_available_potential_energy",
     "units": "J kg-1",
     "comment": "Convective available potential energy",
     "step_type": "instant",

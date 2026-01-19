@@ -67,7 +67,7 @@
   "attributes": {
     "long_name": "quality_assurance",
     "short_name": "qa",
-    "units": "categorical",
+    "units": "1",
     "step_type": "instant",
     "coordinates": "spatial_ref"
   },

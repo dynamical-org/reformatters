@@ -70,7 +70,8 @@
   "attributes": {
     "long_name": "Geopotential height",
     "short_name": "gh",
-    "units": "gpm",
+    "standard_name": "geopotential_height",
+    "units": "m",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

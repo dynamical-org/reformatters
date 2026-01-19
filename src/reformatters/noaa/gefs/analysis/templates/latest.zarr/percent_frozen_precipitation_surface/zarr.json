@@ -67,7 +67,7 @@
   "attributes": {
     "long_name": "Percent frozen precipitation",
     "short_name": "cpofp",
-    "units": "%",
+    "units": "percent",
     "comment": "Contains the value -50 when there is no precipitation.",
     "step_type": "instant",
     "coordinates": "spatial_ref",

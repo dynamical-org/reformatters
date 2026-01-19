@@ -212,7 +212,7 @@ def test_source_groups(example_data_vars: list[GEFSDataVar]) -> None:
             attrs=DataVarAttrs(
                 long_name="Geopotential height",
                 short_name="gh",
-                units="gpm",
+                units="m",
                 step_type="instant",
             ),
             internal_attrs=GEFSInternalAttrs(

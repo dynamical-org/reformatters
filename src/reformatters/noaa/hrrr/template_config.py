@@ -44,7 +44,10 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="X coordinate of projection",
+                    standard_name="projection_x_coordinate",
                     units="m",
+                    axis="X",
                     statistics_approximate=StatisticsApproximate(
                         min=-2700000.0,
                         max=2700000.0,
@@ -61,7 +64,10 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Y coordinate of projection",
+                    standard_name="projection_y_coordinate",
                     units="m",
+                    axis="Y",
                     statistics_approximate=StatisticsApproximate(
                         min=-1600000.0,
                         max=1600000.0,
@@ -78,7 +84,9 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
-                    units="degrees_north",
+                    long_name="Latitude",
+                    standard_name="latitude",
+                    units="degree_north",
                     statistics_approximate=StatisticsApproximate(
                         min=21.138123,
                         max=52.615653,
@@ -95,7 +103,9 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
-                    units="degrees_east",
+                    long_name="Longitude",
+                    standard_name="longitude",
+                    units="degree_east",
                     statistics_approximate=StatisticsApproximate(
                         min=-134.09548,
                         max=-60.917192,
@@ -147,7 +157,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="refc",
-                    long_name="Composite reflectivity",
+                    long_name="Maximum/Composite radar reflectivity",
                     units="dBZ",
                     step_type="instant",
                 ),
@@ -164,9 +174,9 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 name="temperature_2m",
                 encoding=encoding,
                 attrs=DataVarAttrs(
-                    short_name="t2m",
+                    short_name="2t",
                     long_name="2 metre temperature",
-                    units="C",
+                    units="degree_Celsius",
                     step_type="instant",
                     standard_name="air_temperature",
                 ),
@@ -183,9 +193,9 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 name="wind_u_10m",
                 encoding=encoding,
                 attrs=DataVarAttrs(
-                    short_name="u10",
+                    short_name="10u",
                     long_name="10 metre U wind component",
-                    units="m/s",
+                    units="m s-1",
                     step_type="instant",
                     standard_name="eastward_wind",
                 ),
@@ -202,9 +212,9 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 name="wind_v_10m",
                 encoding=encoding,
                 attrs=DataVarAttrs(
-                    short_name="v10",
+                    short_name="10v",
                     long_name="10 metre V wind component",
-                    units="m/s",
+                    units="m s-1",
                     step_type="instant",
                     standard_name="northward_wind",
                 ),
@@ -221,10 +231,11 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 name="precipitation_surface",
                 encoding=encoding,
                 attrs=DataVarAttrs(
-                    short_name="tp",
-                    long_name="Total Precipitation",
-                    units="mm/s",
-                    comment="Average precipitation rate since the previous forecast step.",
+                    short_name="prate",
+                    standard_name="precipitation_flux",
+                    long_name="Precipitation rate",
+                    units="kg m-2 s-1",
+                    comment="Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",
                     step_type="avg",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -243,8 +254,9 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="pwat",
+                    standard_name="atmosphere_mass_content_of_water_vapor",
                     long_name="Precipitable water",
-                    units="kg/(m^2)",
+                    units="kg m-2",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -261,8 +273,9 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="tcc",
+                    standard_name="cloud_area_fraction",
                     long_name="Total Cloud Cover",
-                    units="%",
+                    units="percent",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -279,8 +292,9 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="sdswrf",
+                    standard_name="surface_downwelling_shortwave_flux_in_air",
                     long_name="Surface downward short-wave radiation flux",
-                    units="W/(m^2)",
+                    units="W m-2",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -297,8 +311,9 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="sdlwrf",
+                    standard_name="surface_downwelling_longwave_flux_in_air",
                     long_name="Surface downward long-wave radiation flux",
-                    units="W/(m^2)",
+                    units="W m-2",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -315,6 +330,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="prmsl",
+                    standard_name="air_pressure_at_mean_sea_level",
                     long_name="Pressure reduced to MSL",
                     units="Pa",
                     step_type="instant",
@@ -334,7 +350,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="cpofp",
                     long_name="Percent frozen precipitation",
-                    units="%",
+                    units="percent",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -351,6 +367,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="sp",
+                    standard_name="surface_air_pressure",
                     long_name="Surface pressure",
                     units="Pa",
                     step_type="instant",
@@ -370,7 +387,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="cicep",
                     long_name="Categorical ice pellets",
-                    units="0=no; 1=yes",
+                    units="1",
+                    comment="0=no; 1=yes",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -388,7 +406,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="csnow",
                     long_name="Categorical snow",
-                    units="0=no; 1=yes",
+                    units="1",
+                    comment="0=no; 1=yes",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -406,7 +425,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="cfrzr",
                     long_name="Categorical freezing rain",
-                    units="0=no; 1=yes",
+                    units="1",
+                    comment="0=no; 1=yes",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -424,7 +444,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 attrs=DataVarAttrs(
                     short_name="crain",
                     long_name="Categorical rain",
-                    units="0=no; 1=yes",
+                    units="1",
+                    comment="0=no; 1=yes",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -440,9 +461,10 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 name="relative_humidity_2m",
                 encoding=encoding,
                 attrs=DataVarAttrs(
-                    short_name="r2",
+                    short_name="2r",
+                    standard_name="relative_humidity",
                     long_name="2 metre relative humidity",
-                    units="%",
+                    units="percent",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -459,8 +481,9 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="gh",
+                    standard_name="geopotential_height",
                     long_name="Geopotential height",
-                    units="gpm",
+                    units="m",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -477,9 +500,9 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 name="wind_u_80m",
                 encoding=encoding,
                 attrs=DataVarAttrs(
-                    short_name="u80",
-                    long_name="U-component of wind (80 m above ground)",
-                    units="m/s",
+                    short_name="80u",
+                    long_name="80 metre U wind component",
+                    units="m s-1",
                     step_type="instant",
                     standard_name="eastward_wind",
                 ),
@@ -496,9 +519,9 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 name="wind_v_80m",
                 encoding=encoding,
                 attrs=DataVarAttrs(
-                    short_name="v80",
-                    long_name="V-component of wind (80 m above ground)",
-                    units="m/s",
+                    short_name="80v",
+                    long_name="80 metre V wind component",
+                    units="m s-1",
                     step_type="instant",
                     standard_name="northward_wind",
                 ),

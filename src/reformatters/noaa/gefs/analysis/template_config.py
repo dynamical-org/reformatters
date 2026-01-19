@@ -84,6 +84,9 @@ class GefsAnalysisTemplateConfig(TemplateConfig[GEFSDataVar]):
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Time",
+                    standard_name="time",
+                    axis="T",
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
                         min=self.append_dim_start.isoformat(), max="Present"

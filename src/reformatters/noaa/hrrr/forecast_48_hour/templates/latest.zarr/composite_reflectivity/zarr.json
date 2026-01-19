@@ -68,7 +68,7 @@
     }
   ],
   "attributes": {
-    "long_name": "Composite reflectivity",
+    "long_name": "Maximum/Composite radar reflectivity",
     "short_name": "refc",
     "units": "dBZ",
     "step_type": "instant",

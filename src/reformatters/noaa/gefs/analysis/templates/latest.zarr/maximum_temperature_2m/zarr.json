@@ -67,7 +67,8 @@
   "attributes": {
     "long_name": "Maximum temperature",
     "short_name": "tmax",
-    "units": "C",
+    "standard_name": "air_temperature",
+    "units": "degree_Celsius",
     "step_type": "max",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

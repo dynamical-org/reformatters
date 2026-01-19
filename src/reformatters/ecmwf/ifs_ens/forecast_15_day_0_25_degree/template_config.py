@@ -124,6 +124,8 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Forecast initialization time",
+                    standard_name="forecast_reference_time",
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
                         min=dim_coords[self.append_dim].min().isoformat(), max="Present"
@@ -141,6 +143,8 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Forecast lead time",
+                    standard_name="forecast_period",
                     units="seconds",
                     statistics_approximate=StatisticsApproximate(
                         min=str(dim_coords["lead_time"].min()),
@@ -158,7 +162,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
-                    units="realization",
+                    long_name="Ensemble member",
+                    standard_name="realization",
+                    units="1",
                     statistics_approximate=StatisticsApproximate(
                         min=int(dim_coords["ensemble_member"].min()),
                         max=int(dim_coords["ensemble_member"].max()),
@@ -175,7 +181,10 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
-                    units="degrees_north",
+                    long_name="Latitude",
+                    standard_name="latitude",
+                    units="degree_north",
+                    axis="Y",
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["latitude"].min()),
                         max=float(dim_coords["latitude"].max()),
@@ -192,7 +201,10 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
-                    units="degrees_east",
+                    long_name="Longitude",
+                    standard_name="longitude",
+                    units="degree_east",
+                    axis="X",
                     statistics_approximate=StatisticsApproximate(
                         min=float(dim_coords["longitude"].min()),
                         max=float(dim_coords["longitude"].max()),
@@ -214,6 +226,8 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Valid time",
+                    standard_name="time",
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
                         min=self.append_dim_start.isoformat(),
@@ -232,6 +246,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Ingested forecast length",
                     units="seconds",
                     statistics_approximate=StatisticsApproximate(
                         min=str(dim_coords["lead_time"].min()),
@@ -250,6 +265,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
+                    long_name="Expected forecast length",
                     units="seconds",
                     statistics_approximate=StatisticsApproximate(
                         min=str(dim_coords["lead_time"].min()),
@@ -340,9 +356,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 name="temperature_2m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="t2m",
+                    short_name="2t",
                     long_name="2 metre temperature",
-                    units="C",
+                    units="degree_Celsius",
                     step_type="instant",
                     standard_name="air_temperature",
                 ),
@@ -358,9 +374,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 name="wind_u_10m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="u10",
+                    short_name="10u",
                     long_name="10 metre U wind component",
-                    units="m/s",
+                    units="m s-1",
                     step_type="instant",
                     standard_name="eastward_wind",
                 ),
@@ -376,9 +392,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 name="wind_v_10m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="v10",
+                    short_name="10v",
                     long_name="10 metre V wind component",
-                    units="m/s",
+                    units="m s-1",
                     step_type="instant",
                     standard_name="northward_wind",
                 ),
@@ -394,10 +410,10 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 name="wind_u_100m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="u100",
+                    short_name="100u",
                     long_name="100 metre U wind component",
                     standard_name="eastward_wind",
-                    units="m/s",
+                    units="m s-1",
                     step_type="instant",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
@@ -412,9 +428,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 name="wind_v_100m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="v100",
+                    short_name="100v",
                     long_name="100 metre V wind component",
-                    units="m/s",
+                    units="m s-1",
                     step_type="instant",
                     standard_name="northward_wind",
                 ),
@@ -430,11 +446,12 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 name="precipitation_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="tp",
-                    long_name="Total precipitation",
-                    units="mm/s",
+                    short_name="prate",
+                    standard_name="precipitation_flux",
+                    long_name="Precipitation rate",
+                    units="kg m-2 s-1",
                     step_type="avg",
-                    comment="Average precipitation rate since the previous forecast step.",
+                    comment="Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",
                 ),
                 # The metadata for precipitation surface in the grib files is not correctly populated.
                 # We know that comment (prodType 0, cat 1, subcat 193) [-] is correct for precipitation surface,
@@ -456,8 +473,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="ptype",
-                    long_name="Categorical precipitation type at surface",
-                    units="0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13-191=Reserved; 192-254=Reserved for local use; 255=Missing",
+                    long_name="Precipitation type",
+                    units="1",
+                    comment="0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13-191=Reserved; 192-254=Reserved for local use; 255=Missing",
                     step_type="instant",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
@@ -474,8 +492,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="sdlwrf",
+                    standard_name="surface_downwelling_longwave_flux_in_air",
                     long_name="Surface downward long-wave radiation flux",
-                    units="W/(m^2)",
+                    units="W m-2",
                     step_type="avg",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
@@ -494,8 +513,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="sdswrf",
+                    standard_name="surface_downwelling_shortwave_flux_in_air",
                     long_name="Surface downward short-wave radiation flux",
-                    units="W/(m^2)",
+                    units="W m-2",
                     step_type="avg",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
@@ -533,7 +553,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 attrs=DataVarAttrs(
                     short_name="2d",
                     long_name="2 metre dewpoint temperature",
-                    units="C",
+                    units="degree_Celsius",
                     step_type="instant",
                     standard_name="dew_point_temperature",
                 ),
@@ -551,7 +571,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                 attrs=DataVarAttrs(
                     short_name="gh",
                     long_name="Geopotential height",
-                    units="gpm",
+                    units="m",
                     step_type="instant",
                     standard_name="geopotential_height",
                 ),

@@ -69,9 +69,9 @@
   ],
   "attributes": {
     "long_name": "2 metre temperature",
-    "short_name": "t2m",
+    "short_name": "2t",
     "standard_name": "air_temperature",
-    "units": "K",
+    "units": "degree_Celsius",
     "comment": "Temperature at 2m above ground, averaged over all tiles of a grid point. Different agencies use different short_names for this parameter: ECMWF: 2t; NOAA & DWD: t2m.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",

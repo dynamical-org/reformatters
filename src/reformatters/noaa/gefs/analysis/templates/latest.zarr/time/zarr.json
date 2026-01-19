@@ -37,6 +37,9 @@
     }
   ],
   "attributes": {
+    "long_name": "Time",
+    "standard_name": "time",
+    "axis": "T",
     "statistics_approximate": {
       "min": "2000-01-01T00:00:00",
       "max": "Present"

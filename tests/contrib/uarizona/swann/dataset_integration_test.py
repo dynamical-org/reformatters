@@ -13,7 +13,10 @@ from reformatters.contrib.uarizona.swann.analysis.region_job import (
     UarizonaSwannAnalysisSourceFileCoord,
 )
 
-pytestmark = pytest.mark.slow
+pytestmark = [
+    pytest.mark.slow,
+    pytest.mark.skip(reason="Temporary (2026-01-17): UA server is down"),
+]
 
 
 noop_storage_config = StorageConfig(
