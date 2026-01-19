@@ -199,7 +199,7 @@ def _compute_copy_plan(
     n_expected_path_parts: Final[int] = 2
 
     total_bytes_after_filtering = 0
-    total_files = 0
+    total_files_after_filtering = 0
     for file_to_be_copied in file_list:
         if "pressure-level" in file_to_be_copied.path.name:
             continue
@@ -208,12 +208,20 @@ def _compute_copy_plan(
             log.warning("Unexpected path structure: %s", file_to_be_copied.path)
             continue
 
-        match = date_regex.search(file_to_be_copied.path.name)
-        if not match:
+        match = date_regex.findall(file_to_be_copied.path.name)
+        if len(match) == 0:
             log.warning("Skipping file (no date found): %s", file_to_be_copied.path)
             continue
+        elif len(match) > 1:
+            log.warning(
+                "Expected exactly one 10-digit number in the filename (the NWP init date"
+                " represented as YYYYMMDDHH), but instead found %d 10-digit numbers in path %s",
+                len(match),
+                file_to_be_copied.path,
+            )
+            continue
 
-        timestamp_str = match.group(1)
+        timestamp_str = match[0]
         nwp_init_datetime = datetime.strptime(timestamp_str, "%Y%m%d%H")
         nwp_variable_name = file_to_be_copied.path.parts[0]
         key = (nwp_init_datetime, nwp_variable_name)
@@ -222,10 +230,10 @@ def _compute_copy_plan(
         if n_files_for_nwp_var_and_init < max_files_per_nwp_variable:
             copy_plan[key].append(file_to_be_copied)
             total_bytes_after_filtering += file_to_be_copied.size_bytes
-            total_files += 1
+            total_files_after_filtering += 1
 
     log.info(
-        f" After filtering: {total_files:,d} files,"
+        f" After filtering: {total_files_after_filtering:,d} files,"
         f" totalling {format_bytes(total_bytes_after_filtering)},"
         f" grouped into {len(copy_plan):d} NWP variables."
     )
