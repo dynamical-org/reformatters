@@ -50,8 +50,10 @@ Defines the **structure** of a dataset: dimensions, coordinates, data variables,
 - Declare `dims`, `append_dim`, `append_dim_start`, `append_dim_frequency`
 - Implement `dataset_attributes`, `coords`, `data_vars`, `dimension_coordinates()`, and optionally `derive_coordinates()`
 - Generates and persists zarr metadata to `templates/latest.zarr` via `update_template()`
-- Always regenerate the template after any metadata changes with `uv run main <dataset-id> update-template`
-- Run these tests after updating a template: `uv run pytest tests/common/common_template_config_subclasses_test.py tests/common/datasets_cf_compliance_test.py`
+
+Always regenerate the template after any metadata changes with `uv run main <dataset-id> update-template`.
+
+Run these tests after updating a template: `uv run pytest tests/common/common_template_config_subclasses_test.py tests/common/datasets_cf_compliance_test.py`.
 
 #### Metadata conventions
 Metadata attributes for variables and coordinates must follow CF Conventions.
