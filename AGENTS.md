@@ -57,7 +57,7 @@ Run these tests after updating a template: `uv run pytest tests/common/common_te
 
 #### Metadata conventions
 Metadata attributes for variables and coordinates must follow CF Conventions.
-The `standard_name` and `units` fields must match CF definitions if one exists for that variable; if one doesn't use SI `units` and leave `standard_name` unset.
+The `standard_name` and `units` fields must match CF definitions if one exists for that variable; if one doesn't, use SI `units` and leave `standard_name` unset.
 Use ECMWF variable name for `long_name` and ECMWF short name for `short_name`.
 
 
