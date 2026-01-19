@@ -94,7 +94,7 @@ Spatial dimensions: If the source data uses a geographic projection we use dimen
 
 ## CLI commands
 
-Run via `uv run main`. (Do not attempt `python3 ...`, instead use `uv run python ...` for one-offs that use our venv.)
+Run via `uv run main`.
 
 ### Global commands
 - `uv run main --help` - Show all commands and registered datasets
@@ -133,15 +133,15 @@ then deterministically selects its subset. No coordinator or job queue is needed
 * Fast/unit tests: `uv run pytest -m "not slow"`
 * Single test: `uv run pytest tests/test_file.py::test_function_name`
 * Run before commiting: `uv run ruff format && uv run ruff check --fix && uv run mypy`.
-* Use `uv run ...` to run python commands in the environment, e.g. `uv run python -c "..."`, `uv run src/scripts/foo.py`.
+* Use `uv run ...` to run python commands in the environment, e.g. `uv run python -c "..."`, `uv run src/scripts/foo.py`. Do not call `python3` when working in this repo.
 
 ## Code Style
-* Write code that explains itself rather than needs comments
+* Write code that explains itself rather than needs comments.
 * Simplicity is paramount. Always look for ways to simplify, use existing utilities and approaches in the code base rather than creating new code, and identify and suggest architectural improvements.
-* Add only extremely minimal code comments and no docstrings unless I ask for them, but don't remove existing comments
-  * Add comments only when doing things out of the ordinary, to highlight gotchas, or if less clear code is required due to an optimization
+* Don't write error handing code unless I ask for it, nor smooth over exceptions/errors unless they are expected as part of control flow. In general, write code that will raise an exception early if something isn't expected. Enforce important expectations with asserts.
+* Add only extremely minimal code comments and no docstrings unless I ask for them, but don't remove existing comments.
+  * Add comments only when doing things out of the ordinary, to highlight gotchas, or if less clear code is required due to an optimization.
 * Use Python 3.13+ features
 * Follow mypy strict mode. If you need to add an ignore, ignore a specific check like `# type: ignore[specific]`. Always annotate types on all function arguments and return types.
-* Try to follow ruff format
-* Don't write error handing code unless I ask for it, nor smooth over exceptions/errors unless they are expected as part of control flow. In general, write code that will raise an exception early if something isn't expected. Enforce important expectations with asserts.
+* Follow ruff format
 * Test each module with pytest
