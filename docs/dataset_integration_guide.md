@@ -45,7 +45,9 @@ from reformatters.provider.model.variant import ProviderModelVariantDataset
 
 DYNAMICAL_DATASETS = [
     ...,
-    ProviderModelVariantDataset(primary_storage_config=SourceCoopDatasetStorageConfig()),
+    ProviderModelVariantDataset(
+        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
+        replica_storage_configs=[ProviderModelIcechunkAwsOpenDataDatasetStorageConfig()],
 ]
 ```
 
@@ -56,6 +58,8 @@ If you plan to write this dataset to a location not maintained by dynamical.org,
 Work through `src/reformatters/$DATASET_PATH/template_config.py`, setting the attributes and method definitions to describe the structure of your dataset.
 
 Providing an AI with 1) the example template config code to edit, 2) output of running `gdalinfo <example source data file>` and 3) any dataset documentation will help it give you a decent first implementation of your `TemplateConfig` subclass.
+
+Use the [chunk/shard layout tool](./chunk_shard_layout_tool.md) to find chunk and shard sizes for your data variables.
 
 Using the information in the `TemplateConfig`, `reformatters` writes the Zarr metadata for your dataset to `src/reformatters/$DATASET_PATH/templates/latest.zarr`. Run this command in your terminal to create or update the template based on the your `TemplateConfig` subclass:
 
