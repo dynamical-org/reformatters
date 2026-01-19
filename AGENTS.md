@@ -80,6 +80,16 @@ Base class: `src/reformatters/common/dynamical_dataset.py`, commented example su
 - Implement `operational_kubernetes_resources()` - define update/validate cron jobs
 - Implement `validators()` - return validation functions for the dataset
 
+## Common dataset structures
+
+1. **Forecast dataset** Dimensions init_time, lead_time, latitude/y, longitude/x [, ensemble_member].
+
+2. **Analysis dataset** Dimensions time, latitude/y, longitude/x [, ensemble_member]. When creating an analysis dataset from a forecast archive we take the shortest available lead time, flattening the init_time and lead_time dims into a single time dim.
+
+Vertical levels: Our current datasets include selected vertical levels, which we combine with the variable’s name to create the variable name in the dataset (e.g. temperature_2m). In the future we plan to include model_level and/or pressure_level dimensions for core variables to save their values at all levels.
+
+Spatial dimensions: If the source data uses a geographic projection we use dimensions latitude and longitude, else y and x are used for projected datasets.
+
 ## CLI commands
 
 Run via `uv run main`. (Do not attempt `python3 ...`, instead use `uv run python ...` for one-offs that use our venv.)
