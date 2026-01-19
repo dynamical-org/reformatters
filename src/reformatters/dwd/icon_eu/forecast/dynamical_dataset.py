@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from datetime import timedelta
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -16,33 +17,27 @@ class DwdIconEuForecastDataset(
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
-        # operational_update_cron_job = ReformatCronJob(
-        #     name=f"{self.dataset_id}-update",
-        #     schedule=_OPERATIONAL_CRON_SCHEDULE,
-        #     pod_active_deadline=timedelta(minutes=30),
-        #     image=image_tag,
-        #     dataset_id=self.dataset_id,
-        #     cpu="14",
-        #     memory="30G",
-        #     shared_memory="12G",
-        #     ephemeral_storage="30G",
-        #     secret_names=self.store_factory.k8s_secret_names(),
-        # )
-        # validation_cron_job = ValidationCronJob(
-        #     name=f"{self.dataset_id}-validate",
-        #     schedule=_VALIDATION_CRON_SCHEDULE,
-        #     pod_active_deadline=timedelta(minutes=10),
-        #     image=image_tag,
-        #     dataset_id=self.dataset_id,
-        #     cpu="1.3",
-        #     memory="7G",
-        #     secret_names=self.store_factory.k8s_secret_names(),
-        # )
-
-        # return [operational_update_cron_job, validation_cron_job]
-        raise NotImplementedError(
-            f"Implement `operational_kubernetes_resources` on {self.__class__.__name__}"
+        # TODO(Jack): Instantiate and return `ReformatCronJob` and `ValidationCronJob`. See example.
+        suspend = True  # TODO(Jack): Remove when we're ready to run operationally!
+        archive_grib_files_job = CronJob(
+            command=["archive-grib-files"],
+            workers_total=1,
+            parallelism=1,
+            name=f"{self.dataset_id}-archive-grib-files",
+            # We want the 00, 06, 12, and 18 NWP inits. The grib files for each init are fully available
+            # on DWD's FTP server about 4 hours after the init hour.
+            schedule="0 0 4,10,16,22 * *",
+            pod_active_deadline=timedelta(minutes=30),
+            image=image_tag,
+            dataset_id=self.dataset_id,
+            cpu="14",
+            memory="30G",
+            shared_memory="12G",
+            ephemeral_storage="30G",
+            secret_names=self.store_factory.k8s_secret_names(),
+            suspend=suspend,
         )
+        return [archive_grib_files_job]
 
     def validators(self) -> Sequence[validation.DataValidator]:
         """Return a sequence of DataValidators to run on this dataset."""
