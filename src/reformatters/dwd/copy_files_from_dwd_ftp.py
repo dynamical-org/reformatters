@@ -309,8 +309,8 @@ def _copy_batch(
             str(dst_path),
             "--files-from-raw=" + list_file.name,
             f"--transfers={transfers}",
-            "--no-check-certificate",
-            "--ignore-checksum",
+            "--ignore-checksum",  # DWD's FTP server does not support hashing.
+            "--update",  # Skip files that are newer on the destination.
             *_get_rclone_ftp_args(ftp_host),
             *_get_common_rclone_args(),
         ]
@@ -340,6 +340,11 @@ def _get_common_rclone_args() -> list[str]:
     return [
         "--use-json-log",
         "--config=",  # There is no config file because we pass everything as command-line args.
+        "--fast-list",  # Use less API calls to S3, in exchange for using more RAM.
+        "--min-age=5m",  # Ignore very young files because they might be in the process of being updated.
+        # Ignore old files because they might be about to be replaced.
+        # (DWD's FTP server only stores a 24-hour rolling archive).
+        "--max-age=24h",
     ]
 
 
