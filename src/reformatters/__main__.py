@@ -32,6 +32,7 @@ from reformatters.noaa.gefs.analysis.dynamical_dataset import GefsAnalysisDatase
 from reformatters.noaa.gefs.forecast_35_day.dynamical_dataset import (
     GefsForecast35DayDataset,
 )
+from reformatters.noaa.gfs.analysis import NoaaGfsAnalysisDataset
 from reformatters.noaa.gfs.forecast import NoaaGfsForecastDataset
 from reformatters.noaa.hrrr.analysis.dynamical_dataset import (
     NoaaHrrrAnalysisDataset,
@@ -100,6 +101,10 @@ class UpstreamGriddedZarrsDatasetStorageConfig(StorageConfig):
 DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     # NOAA
     NoaaGfsForecastDataset(
+        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
+        replica_storage_configs=[NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig()],
+    ),
+    NoaaGfsAnalysisDataset(
         primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
         replica_storage_configs=[NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig()],
     ),
