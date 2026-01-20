@@ -30,9 +30,15 @@ class DwdIconEuForecastDataset(
             workers_total=1,
             parallelism=1,
             name=f"{self.dataset_id}-archive-grib-files",
-            schedule="0 0 * * *",
-            # Copying 1 NWP init takes 45 minutes on a 1Gbps Internet connection. But, when this
-            # script first runs, or if it hasn't run for 24 hours, then it'll transfer 4 NWP inits.
+            # We want the 00, 06, 12, and 18 ICON-EU runs. DWD's transfer to their FTP server starts
+            # about 2 hours 15 mins after the init time, and finishes about 3 hours 45 minutes after
+            # the init hour. So, to avoid copying incomplete files, we fetch the files 4 hours after
+            # each init. But, every time the cron job runs, the script checks all 4 NWP inits, to
+            # keep the code simple, especially when recovering if the script hasn't run for a while.
+            # It only takes 4 minutes to check an NWP run that we've already transferred.
+            schedule="0 0 4,10,16,22 * *",
+            # Copying 1 NWP run takes 45 minutes on a 1 Gbps internet connection. But, when this
+            # script first runs, or if it hasn't run for >6 hours, then it'll transfer up to 4 NWP runs.
             pod_active_deadline=timedelta(hours=3),
             image=image_tag,
             dataset_id=self.dataset_id,
