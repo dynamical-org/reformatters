@@ -94,17 +94,24 @@ def copy_files_from_dwd_ftp(
     dst_root: PurePosixPath,
     transfers: int = 10,
     max_files_per_nwp_variable: int = sys.maxsize,
+    env_vars: dict[str, Any] | None = None,
 ) -> TransferSummary:
     """Restructure DWD GRIB files from FTP to a timestamped directory structure.
 
     Args:
         ftp_host: The FTP host, e.g. 'opendata.dwd.de'
         ftp_path: The source path on the FTP host, e.g. '/weather/nwp/icon-eu/grib/00'
-        dst_root: The destination root directory.
+        dst_root: The destination root directory. e.g. for S3, the dst_root could be: 's3:bucket/foo/bar'
         transfers: Number of parallel transfers. DWD appears to limit the number of parallel
                    transfers from one IP address to about 10.
         max_files_per_nwp_variable: Optional limit on the number of files to transfer per NWP variable.
                   This is useful for testing locally.
+        env_vars: Additional environment variables to give to `rclone`. For example:
+            {
+                "RCLONE_S3_ENV_AUTH": True,
+                "RCLONE_S3_ACCESS_KEY_ID": "key",
+                "RCLONE_S3_SECRET_ACCESS_KEY": "secret",
+            }
     """
     file_list = list_ftp_files(ftp_host=ftp_host, ftp_path=ftp_path)
     copy_plan = _compute_copy_plan(
