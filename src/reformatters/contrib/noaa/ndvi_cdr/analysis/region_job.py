@@ -25,6 +25,7 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
 )
+from reformatters.common.retry import retry
 from reformatters.common.types import (
     AppendDim,
     Array2D,
@@ -280,7 +281,7 @@ class NoaaNdviCdrAnalysisRegionJob(
         """
         ncei_url = f"{self.root_nc_url}/{year}/"
 
-        response = requests.get(ncei_url, timeout=15)
+        response = retry(lambda: requests.get(ncei_url, timeout=15))
         if response.status_code == 404:
             now = pd.Timestamp.now()
             if now.year == year and now.month == 1:
