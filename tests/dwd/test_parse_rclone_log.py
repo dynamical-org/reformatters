@@ -34,6 +34,6 @@ def test_transfer_summary_str() -> None:
     expected = (
         "52 files transferred, 23.076 MiB/sec, 0.056 GiB total transferred, "
         "0 files checked, 0 errors, 2.636 seconds rclone runtime, "
-        "2.502 seconds transfer time, 155 number of directories listed."
+        "2.502 seconds transfer time, 155 directories listed."
     )
     assert str(summary) == expected
