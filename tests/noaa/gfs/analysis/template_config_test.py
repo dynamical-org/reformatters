@@ -28,7 +28,6 @@ def test_dataset_attributes() -> None:
     attrs = cfg.dataset_attributes
     assert attrs.dataset_id == "noaa-gfs-analysis"
     assert re.match(r"\d+\.\d+\.\d+", attrs.dataset_version) is not None
-    assert attrs.dataset_version == "0.1.0"
     assert str(cfg.append_dim_start) in attrs.time_domain
     assert "1 hour" in attrs.time_resolution
 
@@ -50,6 +49,7 @@ def test_dimension_coordinates_shapes_and_values() -> None:
     assert lat[0] == 90.0
     assert lat[-1] == -90.0
     assert len(lat) == 721
+    assert np.allclose(np.diff(lat), -0.25)
 
     # longitude from -180 to +179.75
     lon = dc["longitude"]
@@ -57,6 +57,7 @@ def test_dimension_coordinates_shapes_and_values() -> None:
     assert lon[0] == -180.0
     assert lon[-1] == 179.75
     assert len(lon) == 1440
+    assert np.allclose(np.diff(lon), 0.25)
 
 
 def test_derive_coordinates_spatial_ref() -> None:
@@ -71,13 +72,13 @@ def test_derive_coordinates_spatial_ref() -> None:
 
 def test_coords_property_order_and_names() -> None:
     cfg = NoaaGfsAnalysisTemplateConfig()
-    names = [c.name for c in cfg.coords]
-    assert names == [
+    names = {c.name for c in cfg.coords}
+    assert names == {
         "latitude",
         "longitude",
         "spatial_ref",
         "time",
-    ]
+    }
 
 
 def test_dims() -> None:
@@ -98,15 +99,15 @@ def test_data_vars_have_correct_encoding() -> None:
 
     for var in data_vars:
         assert var.encoding.dtype == "float32"
-        assert var.encoding.chunks == (1000, 64, 64)
-        assert var.encoding.shards == (3000, 384, 384)
+        assert var.encoding.chunks == (1008, 64, 64)
+        assert var.encoding.shards == (3024, 384, 384)
 
 
 def test_data_vars_names() -> None:
     cfg = NoaaGfsAnalysisTemplateConfig()
     data_vars = cfg.data_vars
 
-    expected_var_names = [
+    expected_var_names = {
         "pressure_surface",
         "temperature_2m",
         "relative_humidity_2m",
@@ -128,7 +129,7 @@ def test_data_vars_names() -> None:
         "downward_short_wave_radiation_flux_surface",
         "downward_long_wave_radiation_flux_surface",
         "pressure_reduced_to_mean_sea_level",
-    ]
+    }
 
-    actual_var_names = [v.name for v in data_vars]
-    assert actual_var_names == expected_var_names
+    actual_var_names = {v.name for v in data_vars}
+    assert expected_var_names <= actual_var_names

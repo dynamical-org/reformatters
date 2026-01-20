@@ -9,7 +9,7 @@
     "name": "regular",
     "configuration": {
       "chunk_shape": [
-        3000,
+        3024,
         384,
         384
       ]
@@ -27,7 +27,7 @@
       "name": "sharding_indexed",
       "configuration": {
         "chunk_shape": [
-          1000,
+          1008,
           64,
           64
         ],

@@ -24,9 +24,11 @@ class NoaaGfsAnalysisDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
 
     def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
         """Define Kubernetes cron jobs for operational updates and validation."""
+        # TODO(@aldenks): verify resource requirements, schedules and max expected delay
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="30 */6 * * *",
+            suspend=True,
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -37,9 +39,11 @@ class NoaaGfsAnalysisDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
             secret_names=self.store_factory.k8s_secret_names(),
         )
 
+        # TODO(@aldenks): verify resource requirements, schedules and max expected delay
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
             schedule="0 1,7,13,19 * * *",
+            suspend=True,
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,

@@ -7,6 +7,7 @@ from reformatters.common.iterating import item
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
 )
+from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     Dim,
 )
@@ -16,6 +17,8 @@ from reformatters.noaa.gfs.region_job import (
 )
 from reformatters.noaa.models import NoaaDataVar
 from reformatters.noaa.noaa_utils import has_hour_0_values
+
+NOAA_GFS_INIT_FREQUENCY = pd.Timedelta("6h")
 
 
 class NoaaGfsAnalysisSourceFileCoord(NoaaGfsSourceFileCoord):
@@ -40,10 +43,11 @@ class NoaaGfsAnalysisRegionJob(NoaaGfsCommonRegionJob):
         times = pd.to_datetime(processing_region_ds["time"].values)
         group_has_hour_0 = item({has_hour_0_values(var) for var in data_var_group})
 
+        init_freq_hours = f"{whole_hours(NOAA_GFS_INIT_FREQUENCY)}h"
         if group_has_hour_0:
-            init_times = times.floor("6h")
+            init_times = times.floor(init_freq_hours)
         else:
-            init_times = (times - pd.Timedelta("1h")).floor("6h")
+            init_times = (times - pd.Timedelta("1h")).floor(init_freq_hours)
 
         lead_times = times - init_times
 

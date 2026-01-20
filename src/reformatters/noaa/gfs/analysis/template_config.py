@@ -96,14 +96,14 @@ class NoaaGfsAnalysisTemplateConfig(NoaaGfsCommonTemplateConfig):
     def data_vars(self) -> Sequence[NoaaDataVar]:
         # ~16MB uncompressed, ~3.1MB compressed
         var_chunks: dict[Dim, int] = {
-            "time": 1000,  # 42 days of 1-hourly data
+            "time": 1008,  # 42 days of 1-hourly data
             "latitude": 64,  # 12 chunks over 721 pixels
             "longitude": 64,  # 23 chunks over 1440 pixels
         }
 
         # ~1688MB uncompressed, ~338MB compressed
         var_shards: dict[Dim, int] = {
-            "time": var_chunks["time"] * 3,  # 25 shards over 73000 pixels
+            "time": var_chunks["time"] * 3,  # 126 days per shard
             "latitude": var_chunks["latitude"] * 6,  # 2 shards over 721 pixels
             "longitude": var_chunks["longitude"] * 6,  # 4 shards over 1440 pixels
         }

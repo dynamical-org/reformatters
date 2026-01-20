@@ -141,9 +141,6 @@ def test_validators(dataset: NoaaGfsAnalysisDataset) -> None:
     assert all(isinstance(v, validation.DataValidator) for v in validators)
 
 
-@pytest.mark.skip(
-    reason="Shard boundary test requires special handling for analysis dataset deaccumulation"
-)
 @pytest.mark.slow
 def test_precipitation_not_null_at_shard_boundary() -> None:
     """
@@ -166,13 +163,13 @@ def test_precipitation_not_null_at_shard_boundary() -> None:
         config.append_dim_start + time_shard_size * config.append_dim_frequency
     )
 
-    # Verify our computed value matches expected (3000 hours after start)
-    assert time_shard_size == 3000
-    assert shard_2_start == pd.Timestamp("2021-09-03T00:00")
+    # Verify our computed value matches expected (3024 hours after start)
+    assert time_shard_size == 3024
+    assert shard_2_start == pd.Timestamp("2021-09-04T00:00")
 
     dataset.backfill_local(
         # Get first 3 timesteps of 2nd shard (00:00, 01:00, 02:00)
-        append_dim_end=pd.Timestamp("2021-09-03T04:00"),
+        append_dim_end=pd.Timestamp("2021-09-04T04:00"),
         filter_start=shard_2_start,
         filter_variable_names=["precipitation_surface"],
     )
@@ -185,7 +182,7 @@ def test_precipitation_not_null_at_shard_boundary() -> None:
     shard_2_ds = ds.sel(time=slice(shard_2_start, None))
 
     expected_times = pd.DatetimeIndex(
-        ["2021-09-03T00:00", "2021-09-03T01:00", "2021-09-03T02:00"]
+        ["2021-09-04T00:00", "2021-09-04T01:00", "2021-09-04T02:00"]
     )
     assert_array_equal(shard_2_ds["time"].values, expected_times)
 

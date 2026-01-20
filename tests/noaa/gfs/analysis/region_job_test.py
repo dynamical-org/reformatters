@@ -8,17 +8,26 @@ from reformatters.common import template_utils
 from reformatters.common.region_job import SourceFileStatus
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.noaa.gfs.analysis.region_job import (
+    NOAA_GFS_INIT_FREQUENCY,
     NoaaGfsAnalysisRegionJob,
     NoaaGfsAnalysisSourceFileCoord,
 )
 from reformatters.noaa.gfs.analysis.template_config import (
     NoaaGfsAnalysisTemplateConfig,
 )
+from reformatters.noaa.gfs.forecast.template_config import NoaaGfsForecastTemplateConfig
 
 
 @pytest.fixture
 def template_config() -> NoaaGfsAnalysisTemplateConfig:
     return NoaaGfsAnalysisTemplateConfig()
+
+
+def test_noaa_gfs_init_frequency_equals_forecast_append_dim_frequency() -> None:
+    """Test that NOAA_GFS_INIT_FREQUENCY equals NoaaGfsForecastTemplateConfig.append_dim_frequency."""
+    assert (
+        NOAA_GFS_INIT_FREQUENCY == NoaaGfsForecastTemplateConfig().append_dim_frequency
+    )
 
 
 def test_source_file_coord_out_loc(
@@ -92,35 +101,6 @@ def test_get_processing_region(
     assert region_job.get_processing_region() == expected_processing_region
 
 
-def test_region_job_generate_source_file_coords(
-    template_config: NoaaGfsAnalysisTemplateConfig,
-) -> None:
-    """Test source file coordinate generation."""
-    template_ds = template_config.get_template(pd.Timestamp("2021-05-01T05:00"))
-
-    test_ds = template_ds.isel(time=slice(0, 5))
-
-    region_job = NoaaGfsAnalysisRegionJob.model_construct(
-        tmp_store=Mock(),
-        template_ds=test_ds,
-        data_vars=template_config.data_vars[:1],
-        append_dim=template_config.append_dim,
-        region=slice(0, 5),
-        reformat_job_name="test",
-    )
-
-    processing_region_ds, _output_region_ds = region_job._get_region_datasets()
-
-    source_coords = region_job.generate_source_file_coords(
-        processing_region_ds, template_config.data_vars[:1]
-    )
-
-    assert len(source_coords) == 5
-
-    for coord in source_coords:
-        assert isinstance(coord, NoaaGfsAnalysisSourceFileCoord)
-
-
 def test_region_job_processing_region_buffered(
     template_config: NoaaGfsAnalysisTemplateConfig,
 ) -> None:
@@ -175,6 +155,9 @@ def test_region_job_generate_source_file_coords_hour_0_vars(
 
     assert len(source_coords) == 6
 
+    for coord in source_coords:
+        assert isinstance(coord, NoaaGfsAnalysisSourceFileCoord)
+
     # For instant variables: init_times = times.floor("6h")
     # times: 00, 01, 02, 03, 04, 05
     # init_times: 00, 00, 00, 00, 00, 00
@@ -223,6 +206,9 @@ def test_region_job_generate_source_file_coords_non_hour_0_vars(
     )
 
     assert len(source_coords) == 6
+
+    for coord in source_coords:
+        assert isinstance(coord, NoaaGfsAnalysisSourceFileCoord)
 
     # For non-instant variables: init_times = (times - 1h).floor("6h")
     # times: 00, 01, 02, 03, 04, 05
