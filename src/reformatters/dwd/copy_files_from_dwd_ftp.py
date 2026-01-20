@@ -63,6 +63,7 @@ maybe 0.5 seconds to 1 second for each NWP variable. There are two ways to get m
 import csv
 import ctypes
 import io
+import os
 import re
 import signal
 import subprocess
@@ -124,6 +125,7 @@ def copy_files_from_dwd_ftp(
         dst_root=dst_root,
         copy_plan=copy_plan,
         transfers=transfers,
+        env_vars=env_vars,
     )
 
 
@@ -253,6 +255,7 @@ def _copy_batches(
     dst_root: PurePosixPath,
     copy_plan: dict[tuple[datetime, str], list[_PathAndSize]],
     transfers: int = 10,
+    env_vars: dict[str, Any] | None = None,
 ) -> TransferSummary:
     """Executes rclone copy for each timestamp and variable batch in the plan."""
     n_batches = len(copy_plan)
@@ -274,6 +277,7 @@ def _copy_batches(
             dst_path=dst_path,
             files_to_be_copied=files_to_be_copied,
             transfers=transfers,
+            env_vars=env_vars,
         )
         log.info("%s complete: %s", batch_info_str, batch_summary)
         total_summary += batch_summary
@@ -288,6 +292,7 @@ def _copy_batch(
     dst_path: PurePosixPath,
     files_to_be_copied: list[_PathAndSize],
     transfers: int,
+    env_vars: dict[str, Any] | None = None,
 ) -> TransferSummary:
     """Executes a single rclone copy batch for a specific destination.
 
@@ -300,6 +305,7 @@ def _copy_batch(
         dst_path: The specific destination directory (including NWP init timestamp).
         files_to_be_copied: List of file path and sizes relative to ftp_path to be copied.
         transfers: Number of parallel transfers to use for this batch.
+        env_vars: Additional environment variables to give to `rclone`.
     """
     # Modern Linux platforms often install `rclone` as a sandboxed snap, which does not have access
     # to `/tmp`, so we store the temporary file in the current working directory.
@@ -318,17 +324,18 @@ def _copy_batch(
             f"--transfers={transfers}",
             "--ignore-checksum",  # DWD's FTP server does not support hashing.
             "--update",  # Skip files that are newer on the destination.
+            "--fast-list",  # Use less API calls to S3, in exchange for using more RAM.
             *_get_rclone_ftp_args(ftp_host),
             *_get_common_rclone_args(),
         ]
 
         try:
-            _, log_entries = _run_rclone(cmd, timeout=timedelta(minutes=30))
+            _, log_entries = _run_rclone(
+                cmd, timeout=timedelta(minutes=30), env_vars=env_vars
+            )
         except subprocess.CalledProcessError:
             log.exception("Failed to copy batch to %s", dst_path)
-            return TransferSummary(
-                errors=len(files_to_be_copied),
-            )
+            raise
 
     return TransferSummary.from_rclone_stats(log_entries)
 
@@ -347,17 +354,22 @@ def _get_common_rclone_args() -> list[str]:
     return [
         "--use-json-log",
         "--config=",  # There is no config file because we pass everything as command-line args.
-        "--fast-list",  # Use less API calls to S3, in exchange for using more RAM.
-        "--min-age=5m",  # Ignore very young files because they might be in the process of being updated.
-        # Ignore old files because they might be about to be replaced.
-        # (DWD's FTP server only stores a 24-hour rolling archive).
-        "--max-age=24h",
     ]
 
 
-def _run_rclone(cmd: list[str], timeout: timedelta) -> tuple[str, list[dict[str, Any]]]:
+def _run_rclone(
+    cmd: list[str],
+    timeout: timedelta,
+    env_vars: dict[str, Any] | None = None,
+) -> tuple[str, list[dict[str, Any]]]:
     """Runs a command with logging and safety measures and returns (stdout, log_entries)."""
-    log.debug("Running: `%s`", " ".join(cmd))
+    cmd_str = " ".join(cmd)
+    log.debug("Running: `%s`", cmd_str)
+
+    full_env = os.environ.copy()
+    if env_vars:
+        full_env.update(env_vars)
+
     try:
         result = subprocess.run(  # noqa: S603
             cmd,
@@ -366,18 +378,30 @@ def _run_rclone(cmd: list[str], timeout: timedelta) -> tuple[str, list[dict[str,
             check=True,  # Raise CalledProcessError if returncode != 0.
             timeout=round(timeout.total_seconds()),
             preexec_fn=_set_death_signal,
+            env=full_env,
         )
     except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
-        log.exception("Exception when running command `%s`", " ".join(cmd))
         stderr_str = (
             e.stderr
             if isinstance(e.stderr, str)
             else (e.stderr.decode() if e.stderr is not None else "")
         )
-        parse_and_log_rclone_json(stderr_str)
+        log.exception(
+            "Exception when running command `%s`. stdout='%s'",
+            cmd_str,
+            stderr_str,
+        )
         raise
 
-    log_entries = parse_and_log_rclone_json(result.stderr)
+    try:
+        log_entries = parse_and_log_rclone_json(result.stderr)
+    except:
+        log.exception(
+            "Failed to parse JSON output from rclone. rclone's stderr='%s'. Command=`%s`",
+            result.stderr,
+            cmd_str,
+        )
+        raise
     return result.stdout, log_entries
 
 
