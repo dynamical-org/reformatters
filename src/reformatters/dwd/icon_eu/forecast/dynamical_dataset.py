@@ -24,11 +24,7 @@ class DwdIconEuForecastDataset(
             workers_total=1,
             parallelism=1,
             name=f"{self.dataset_id}-archive-grib-files",
-            # We want the 00, 06, 12, and 18 ICON-EU runs. For these runs, DWD's transfer to their
-            # FTP server starts about 2 hours 15 mins after the init time, and finishes about 3
-            # hours 45 minutes after the init hour. So, to avoid copying incomplete files, we fetch
-            # the files 4 hours after each init:
-            schedule="0 0 4,10,16,22 * *",
+            schedule="0 0 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
