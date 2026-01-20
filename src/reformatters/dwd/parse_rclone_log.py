@@ -78,7 +78,7 @@ class TransferSummary(NamedTuple):
             f"{format_bytes(self.total_bytes)} total transferred, "
             f"{self.total_checks} files checked, "
             f"{self.errors} errors, "
-            f"{self.elapsed_time} seconds rsync runtime, "
+            f"{self.elapsed_time} seconds rclone runtime, "
             f"{self.transfer_time} seconds transfer time, "
             f"{self.listed} number of directories listed."
         )
