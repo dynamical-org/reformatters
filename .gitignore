@@ -166,3 +166,5 @@ cython_debug/
 .aider*
 
 depot.json
+
+.rclone_files_*
