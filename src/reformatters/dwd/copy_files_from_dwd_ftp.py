@@ -242,7 +242,7 @@ def _compute_copy_plan(
             total_files_after_filtering += 1
 
     log.info(
-        f" After filtering: {total_files_after_filtering:,d} files,"
+        f"After filtering: {total_files_after_filtering:,d} files,"
         f" totalling {format_bytes(total_bytes_after_filtering)},"
         f" grouped into {len(copy_plan):d} NWP variables."
     )
@@ -282,7 +282,7 @@ def _copy_batches(
         log.info("%s complete: %s", batch_info_str, batch_summary)
         total_summary += batch_summary
 
-    log.info(f"Transfer complete: {total_summary}")
+    log.info("Transfer from %s to %s complete: %s", ftp_path, dst_root, total_summary)
     return total_summary
 
 
