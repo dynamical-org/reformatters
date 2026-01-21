@@ -8,6 +8,7 @@ import pandas as pd
 import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 import zarr
+from obstore.exceptions import GenericError
 
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import item
@@ -145,10 +146,16 @@ class DwdIconEuForecastRegionJob(
         url = coord.get_url()
         try:
             bz2_file_path = http_download_to_disk(url, self.dataset_id)
-        except FileNotFoundError:
+        except (FileNotFoundError, GenericError) as e:
             fallback_url = coord.get_fallback_url()
-            log.exception(
-                f"Failed to download from {url}. Attempting to download from {fallback_url}"
+            if isinstance(e, GenericError):
+                log.debug("%s", e)
+                # GenericError contains multiple lines that aren't informative.
+                error_msg = str(e).splitlines()[0]
+            else:
+                error_msg = str(e)
+            log.warning(
+                f"{error_msg}. Failed to download {url}. Attempting to download {fallback_url=}"
             )
             bz2_file_path = http_download_to_disk(fallback_url, self.dataset_id)
         grib_file_path = decompress_bz2_file(compressed_file_path=bz2_file_path)
