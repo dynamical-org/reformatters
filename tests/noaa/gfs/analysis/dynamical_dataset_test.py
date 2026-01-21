@@ -148,7 +148,8 @@ def test_precipitation_not_null_at_shard_boundary() -> None:
 
     When deaccumulating, the first timestep of each shard processing could incorrectly
     get NaN values because deaccumulation needs a previous value to compute the difference.
-    However, at shard boundaries (not the dataset start), we should have valid data.
+    However, at shard boundaries (not the dataset start), we should have valid data
+    because we buffer the start of the processing region by one step to enable correct deaccumulation.
     """
     dataset = make_dataset()
     config = dataset.template_config
@@ -159,8 +160,8 @@ def test_precipitation_not_null_at_shard_boundary() -> None:
     assert isinstance(precip_var.encoding.shards, tuple)
     time_shard_size = precip_var.encoding.shards[time_dim_index]
 
-    shard_2_start = (
-        config.append_dim_start + time_shard_size * config.append_dim_frequency
+    shard_2_start = config.append_dim_start + (
+        time_shard_size * config.append_dim_frequency
     )
 
     # Verify our computed value matches expected (3024 hours after start)
@@ -169,7 +170,7 @@ def test_precipitation_not_null_at_shard_boundary() -> None:
 
     dataset.backfill_local(
         # Get first 3 timesteps of 2nd shard (00:00, 01:00, 02:00)
-        append_dim_end=pd.Timestamp("2021-09-04T04:00"),
+        append_dim_end=pd.Timestamp("2021-09-04T03:00"),
         filter_start=shard_2_start,
         filter_variable_names=["precipitation_surface"],
     )
