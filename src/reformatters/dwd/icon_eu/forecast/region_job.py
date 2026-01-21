@@ -155,7 +155,7 @@ class DwdIconEuForecastRegionJob(
             else:
                 error_msg = str(e)
             log.warning(
-                f"{error_msg}. Failed to download {url}. Attempting to download {fallback_url=}"
+                f"{error_msg}. Failed to download '{url}'. Attempting to download from {fallback_url=}"
             )
             bz2_file_path = http_download_to_disk(fallback_url, self.dataset_id)
         grib_file_path = decompress_bz2_file(compressed_file_path=bz2_file_path)
