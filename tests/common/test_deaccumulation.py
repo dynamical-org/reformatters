@@ -553,3 +553,239 @@ def test_custom_deaccumulate_invalid_threshold_rate(
             invalid_below_threshold_rate=threshold,
         )
         np.testing.assert_equal(result.values, expected)
+
+
+def test_deaccumulate_non_reset_aligned_first_step() -> None:
+    """Test deaccumulation when first step is NOT aligned with reset frequency.
+
+    This tests the shard boundary case where processing starts at e.g. hour 23
+    instead of hour 0/6/12/18. The first step's accumulation value should be
+    used as the baseline for subsequent calculations.
+
+    Scenario with 6-hour reset frequency:
+    - Hour 23: accumulation = 2.0 (accumulated since hour 18 reset)
+    - Hour 0: accumulation = 5.0 (accumulated since hour 18, just before reset)
+    - Hour 1: accumulation = 1.0 (fresh window since hour 0 reset)
+
+    Expected rates:
+    - Hour 23 → NaN (can't compute without hour 22 value)
+    - Hour 0: rate = (5.0 - 2.0) / 3600 = 3.0/3600 per second
+    - Hour 1: rate = 1.0 / 3600 per second (fresh window, baseline is 0)
+    """
+    reset_frequency = pd.Timedelta(hours=6)
+
+    # Times starting at hour 23 (NOT a reset point, last reset was at 18:00)
+    times = pd.DatetimeIndex(
+        [
+            "2024-01-01T23:00",  # 5h since reset, NOT a reset point
+            "2024-01-02T00:00",  # 6h since reset, IS a reset point
+            "2024-01-02T01:00",  # 1h since new reset at 00:00
+        ]
+    )
+
+    # Accumulation values (accumulated since their respective reset points)
+    # Hour 23: 2.0 accumulated since 18:00
+    # Hour 0: 5.0 accumulated since 18:00 (3.0 more than hour 23)
+    # Hour 1: 1.0 accumulated since 00:00 reset
+    accumulations = np.array([2.0, 5.0, 1.0], dtype=np.float32)
+
+    # Expected rates (per second)
+    # Hour 23: NaN (can't compute)
+    # Hour 0: (5.0 - 2.0) / 3600 seconds = 3.0 / 3600
+    # Hour 1: 1.0 / 3600 seconds (fresh window)
+    expected_rates = np.array([np.nan, 3.0 / 3600, 1.0 / 3600], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        accumulations,
+        coords={"time": times},
+        dims=["time"],
+        attrs={"units": "mm s-1"},
+    )
+
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="time",
+        reset_frequency=reset_frequency,
+    )
+
+    np.testing.assert_allclose(
+        result.values,
+        expected_rates,
+        rtol=1e-6,
+        equal_nan=True,
+    )
+
+
+def test_deaccumulate_non_reset_aligned_first_step_with_lead_time() -> None:
+    """Test non-reset-aligned first step using lead_time (timedelta) dimension."""
+    reset_frequency = pd.Timedelta(hours=6)
+
+    # Lead times starting at 5h (NOT a reset point for 6h reset)
+    lead_times = pd.to_timedelta(["5h", "6h", "7h"])
+
+    # Accumulation values
+    # 5h: 2.0 accumulated since 0h
+    # 6h: 5.0 accumulated since 0h (reset happens at 6h)
+    # 7h: 1.0 accumulated since 6h reset
+    accumulations = np.array([2.0, 5.0, 1.0], dtype=np.float32)
+
+    # Expected rates (per second)
+    # 5h: NaN (first step)
+    # 6h: (5.0 - 2.0) / 3600 = 3.0 / 3600
+    # 7h: 1.0 / 3600 (fresh window after reset)
+    expected_rates = np.array([np.nan, 3.0 / 3600, 1.0 / 3600], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        accumulations,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "mm s-1"},
+    )
+
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="lead_time",
+        reset_frequency=reset_frequency,
+    )
+
+    np.testing.assert_allclose(
+        result.values,
+        expected_rates,
+        rtol=1e-6,
+        equal_nan=True,
+    )
+
+
+def test_deaccumulate_non_reset_aligned_multidimensional() -> None:
+    """Test non-reset-aligned first step with multiple spatial dimensions."""
+    reset_frequency = pd.Timedelta(hours=6)
+
+    # Times starting at hour 23 (NOT a reset point)
+    times = pd.DatetimeIndex(
+        [
+            "2024-01-01T23:00",
+            "2024-01-02T00:00",
+            "2024-01-02T01:00",
+        ]
+    )
+
+    # 2x2 spatial grid, time in middle dimension
+    # Shape: (2, 3, 2) = (y, time, x)
+    accumulations = np.array(
+        [
+            [[2.0, 4.0], [5.0, 10.0], [1.0, 2.0]],  # y=0
+            [[1.0, 2.0], [2.5, 5.0], [0.5, 1.0]],  # y=1
+        ],
+        dtype=np.float32,
+    )
+
+    # Expected rates - same pattern scaled by spatial location
+    expected_rates = np.array(
+        [
+            [[np.nan, np.nan], [3.0 / 3600, 6.0 / 3600], [1.0 / 3600, 2.0 / 3600]],
+            [[np.nan, np.nan], [1.5 / 3600, 3.0 / 3600], [0.5 / 3600, 1.0 / 3600]],
+        ],
+        dtype=np.float32,
+    )
+
+    data_array = xr.DataArray(
+        accumulations,
+        coords={"y": [0, 1], "time": times, "x": [0, 1]},
+        dims=["y", "time", "x"],
+        attrs={"units": "mm s-1"},
+    )
+
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="time",
+        reset_frequency=reset_frequency,
+    )
+
+    np.testing.assert_allclose(
+        result.values,
+        expected_rates,
+        rtol=1e-6,
+        equal_nan=True,
+    )
+
+
+def test_deaccumulate_float64_input() -> None:
+    """Test that float64 input arrays are supported."""
+    reset_frequency = pd.Timedelta(hours=6)
+    lead_times = pd.to_timedelta(["0h", "3h", "6h"])
+
+    # Explicitly create float64 array
+    accumulations = np.array([0.0, 3600.0 * 3, 3600.0 * 6], dtype=np.float64)
+    assert accumulations.dtype == np.float64
+
+    data_array = xr.DataArray(
+        accumulations,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "mm s-1"},
+    )
+
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="lead_time",
+        reset_frequency=reset_frequency,
+    )
+
+    # Should work and produce correct rates
+    expected_rates = np.array([np.nan, 1.0, 1.0])
+    np.testing.assert_allclose(
+        result.values,
+        expected_rates,
+        rtol=1e-6,
+        equal_nan=True,
+    )
+
+
+def test_deaccumulate_non_reset_aligned_first_step_nan() -> None:
+    """Test when first step is NOT reset-aligned AND the first value is NaN.
+
+    When the first value is NaN and it's not a reset point, subsequent values
+    that depend on it (before the next reset) will also be NaN since we can't
+    compute a valid rate without knowing the baseline accumulation.
+    """
+    reset_frequency = pd.Timedelta(hours=6)
+
+    # Times starting at hour 23 (NOT a reset point)
+    times = pd.DatetimeIndex(
+        [
+            "2024-01-01T23:00",  # 5h since reset, NOT a reset point, value is NaN
+            "2024-01-02T00:00",  # 6h since reset, IS a reset point
+            "2024-01-02T01:00",  # 1h since new reset at 00:00
+        ]
+    )
+
+    # First value is NaN (missing data at hour 23)
+    # Hour 0: 5.0 accumulated since 18:00
+    # Hour 1: 1.0 accumulated since 00:00 reset
+    accumulations = np.array([np.nan, 5.0, 1.0], dtype=np.float32)
+
+    # Expected rates:
+    # Hour 23: NaN (first step always NaN)
+    # Hour 0: NaN (because previous_accumulation was NaN, so 5.0 - NaN = NaN)
+    # Hour 1: 1.0 / 3600 (fresh window after reset, baseline is 0)
+    expected_rates = np.array([np.nan, np.nan, 1.0 / 3600], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        accumulations,
+        coords={"time": times},
+        dims=["time"],
+        attrs={"units": "mm s-1"},
+    )
+
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="time",
+        reset_frequency=reset_frequency,
+    )
+
+    np.testing.assert_allclose(
+        result.values,
+        expected_rates,
+        rtol=1e-6,
+        equal_nan=True,
+    )
