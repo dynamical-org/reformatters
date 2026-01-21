@@ -7,7 +7,7 @@
     "name": "regular",
     "configuration": {
       "chunk_shape": [
-        21900
+        20440
       ]
     }
   },
@@ -40,7 +40,7 @@
     "long_name": "Forecast initialization time",
     "standard_name": "forecast_reference_time",
     "statistics_approximate": {
-      "min": "2025-10-03T00:00:00",
+      "min": "2026-01-21T00:00:00",
       "max": "Present"
     },
     "units": "seconds since 1970-01-01",
