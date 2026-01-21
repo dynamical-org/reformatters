@@ -149,9 +149,10 @@ class DwdIconEuForecastRegionJob(
         except (FileNotFoundError, GenericError) as e:
             fallback_url = coord.get_fallback_url()
             if isinstance(e, GenericError):
-                log.debug("%s", e)
-                # GenericError contains multiple lines that aren't informative.
+                # GenericError contains multiple lines that aren't informative. So, log gory details
+                # at the debug log level, and shorten the error message for the warning log level.
                 error_msg = str(e).splitlines()[0]
+                log.debug("%s", e)
             else:
                 error_msg = str(e)
             log.warning(
