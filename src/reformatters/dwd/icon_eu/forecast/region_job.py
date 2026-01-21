@@ -42,9 +42,8 @@ class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
     def get_url(self) -> str:
         """Return URLs to .grib2.bz2 files on DWD's HTTP server.
 
-        Note that this only handles single-level variables. Also note
-        that, unlike NOAA's NWPs, ICON-EU is published as one GRIB2 file
-        per variable.
+        Note that this only handles single-level variables. Also note that, unlike NOAA's NWPs,
+        ICON-EU is published as one GRIB2 file per variable.
         """
         # Example DWD URL:
         # https://opendata.dwd.de/weather/nwp/icon-eu/grib/00/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2025090700_000_ALB_RAD.grib2.bz2
@@ -55,7 +54,12 @@ class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
 
         # TODO(Jack): DWD plan to change their URL format. See this comment for details:
         # https://github.com/dynamical-org/reformatters/issues/183#issuecomment-3365068327
-        return f"https://opendata.dwd.de/weather/nwp/icon-eu/grib/{init_hour_str}/{self.variable_name_in_filename}/icon-eu_europe_regular-lat-lon_single-level_{init_date_str}_{lead_time_hours:03d}_{self.variable_name_in_filename.upper()}.grib2.bz2"
+        return (
+            "https://opendata.dwd.de/weather/nwp/icon-eu/grib/"
+            f"{init_hour_str}/{self.variable_name_in_filename}/"
+            f"icon-eu_europe_regular-lat-lon_single-level_{init_date_str}_{lead_time_hours:03d}_"
+            f"{self.variable_name_in_filename.upper()}.grib2.bz2"
+        )
 
     def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
         """Return the output location for this file's data in the dataset."""
@@ -89,15 +93,15 @@ class DwdIconEuForecastRegionJob(
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[DwdIconEuDataVar],
     ) -> Sequence[DwdIconEuForecastSourceFileCoord]:
-        """Return a sequence of coords, one for each source file required to
-        process the data covered by processing_region_ds.
+        """Return a sequence of coords, one for each source file required to process the data
+        covered by processing_region_ds.
 
         Parameters
         ----------
         processing_region_ds : xr.Dataset
         data_var_group : Sequence[DwdIconEuDataVar]
-            A sequence containing a single `DwdIconEuDataVar` (because each ICON-EU grib file contains a
-            single variable).
+            A sequence containing a single `DwdIconEuDataVar` (because each ICON-EU grib file
+            contains a single variable).
         """
         init_times = pd.to_datetime(processing_region_ds["init_time"].values)
         lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
@@ -120,8 +124,7 @@ class DwdIconEuForecastRegionJob(
         ]
 
     def download_file(self, coord: DwdIconEuForecastSourceFileCoord) -> Path:
-        """Download the file for the given coordinate and return the local
-        path.
+        """Download the file for the given coordinate and return the local path.
 
         Downloads the `.bz2` file from DWD, decompresses the `.bz2` file, deletes the `.bz2` file,
         and returns the `Path` of the decompressed file.
@@ -136,8 +139,7 @@ class DwdIconEuForecastRegionJob(
         coord: DwdIconEuForecastSourceFileCoord,
         data_var: DwdIconEuDataVar,
     ) -> ArrayFloat32:
-        """Read and return an array of data for the given variable and source
-        file coordinate."""
+        """Read and return an array of data for the given variable and source file coordinate."""
         assert coord.downloaded_path is not None  # for type check, system guarantees it
         with rasterio.open(coord.downloaded_path) as reader:
             assert reader.count == 1, (
@@ -176,8 +178,8 @@ class DwdIconEuForecastRegionJob(
     def update_template_with_results(
         self, process_results: Mapping[str, Sequence[DwdIconEuForecastSourceFileCoord]]
     ) -> xr.Dataset:
-        """Update template dataset based on processing results. This method is
-        called during operational updates.
+        """Update template dataset based on processing results. This method is called during
+        operational updates.
 
         Subclasses should implement this method to apply dataset-specific adjustments
         based on the processing results. Examples include:
@@ -185,8 +187,8 @@ class DwdIconEuForecastRegionJob(
         - Loading existing coordinate values from the primary store and updating them based on results
         - Updating metadata based on what was actually processed vs what was planned
 
-        The default implementation trims along append_dim to end at the most recent
-        successfully processed coordinate (timestamp).
+        The default implementation trims along append_dim to end at the most recent successfully
+        processed coordinate (timestamp).
 
         Parameters
         ----------
@@ -239,13 +241,13 @@ class DwdIconEuForecastRegionJob(
         Sequence["RegionJob[DwdIconEuDataVar, DwdIconEuForecastSourceFileCoord]"],
         xr.Dataset,
     ]:
-        """Return the sequence of RegionJob instances necessary to update the
-        dataset from its current state to include the latest available data.
+        """Return the sequence of RegionJob instances necessary to update the dataset from its
+        current state to include the latest available data.
 
-        Also return the template_ds, expanded along append_dim through the end of
-        the data to process. The dataset returned here may extend beyond the
-        available data at the source, in which case `update_template_with_results`
-        will trim the dataset to the actual data processed.
+        Also return the template_ds, expanded along append_dim through the end of the data to
+        process. The dataset returned here may extend beyond the available data at the source, in
+        which case `update_template_with_results` will trim the dataset to the actual data
+        processed.
 
         The exact logic is dataset-specific, but it generally follows this pattern:
         1. Figure out the range of time to process: append_dim_start (inclusive) and append_dim_end (exclusive)
