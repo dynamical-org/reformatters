@@ -48,9 +48,8 @@ class DwdIconEuDataVar(DataVar[DwdIconEuInternalAttrs]):
 class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
     dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
     append_dim: AppendDim = "init_time"
-    append_dim_start: Timestamp = pd.Timestamp(
-        "2025-10-03T00:00"  # TODO @JackKelly: Update this when we actual deploy operationally.
-    )
+    # TODO(@JackKelly): Update `append_dim_start` when we actual deploy operationally.
+    append_dim_start: Timestamp = pd.Timestamp("2026-01-21T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
 
     @computed_field  # type: ignore[prop-decorator]
@@ -60,7 +59,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
             dataset_id="dwd-icon-eu-forecast",
             dataset_version="0.1.0",
             name="DWD ICON-EU Forecast",
-            description="High-resolution weather forecasts for Europe from the ICON-EU model operated by Deutscher Wetterdienst (DWD).",
+            description=(
+                "High-resolution weather forecasts for Europe from the ICON-EU model operated by"
+                " Deutscher Wetterdienst (DWD)."
+            ),
             attribution="DWD ICON-EU data processed by dynamical.org.",
             spatial_domain="Europe",
             spatial_resolution="0.0625 degrees (~7km)",
@@ -71,8 +73,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
-        """Returns a dictionary of dimension names to coordinates for the
-        dataset."""
+        """Returns a dictionary of dimension names to coordinates for the dataset."""
         return {
             self.append_dim: self.append_dim_coordinates(
                 self.append_dim_start + self.append_dim_frequency
@@ -300,16 +301,16 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
         # Roughly 12.5MB uncompressed, 2.5MB compressed
         var_chunks: dict[Dim, int] = {
             "init_time": 1,
-            "lead_time": 93,
-            "latitude": 219,  # 219 = 657 / 3
-            "longitude": 153,  # 153 = 1377 / 9
+            "lead_time": 93,  # All lead times
+            "latitude": 219,  # All latitudes / 3
+            "longitude": 153,  # All longitudes / 9
         }
         # Roughly 337MB uncompressed, 67MB compressed
         var_shards: dict[Dim, int] = {
             "init_time": 1,
-            "lead_time": 93,
-            "latitude": 657,
-            "longitude": 1377,
+            "lead_time": 93,  # All lead times
+            "latitude": 657,  # All latitudes
+            "longitude": 1377,  # All longitudes
         }
 
         encoding_float32_default = Encoding(
@@ -392,7 +393,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="High cloud cover",
                     units="percent",
                     step_type="instant",
-                    comment="Cloud Cover (0 - 400 hPa). Different agencies use different short_names for this same parameter: ECMWF: HCC; WMO GRIB table: HCDC.",
+                    comment=(
+                        "Cloud Cover (0 - 400 hPa). Different agencies use different short_names"
+                        " for this same parameter: ECMWF: HCC; WMO GRIB table: HCDC."
+                    ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="clch",
@@ -408,7 +412,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Low cloud cover",
                     units="percent",
                     step_type="instant",
-                    comment="Cloud Cover (800 hPa - Soil). Different agencies use different short_names for this same parameter: ECMWF: LCC; WMO GRIB table: LCDC.",
+                    comment=(
+                        "Cloud Cover (800 hPa - Soil). Different agencies use different short_names"
+                        " for this same parameter: ECMWF: LCC; WMO GRIB table: LCDC."
+                    ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="clcl",
@@ -424,7 +431,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Medium cloud cover",
                     units="percent",
                     step_type="instant",
-                    comment="Cloud Cover (400 - 800 hPa). Different agencies use different short_names for this same parameter: ECMWF: MCC; WMO GRIB table: MCDC.",
+                    comment=(
+                        "Cloud Cover (400 - 800 hPa). Different agencies use different short_names"
+                        " for this same parameter: ECMWF: MCC; WMO GRIB table: MCDC."
+                    ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="clcm",
@@ -440,7 +450,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Total Cloud Cover",
                     units="percent",
                     step_type="instant",
-                    comment="Total cloud cover. Different agencies use different short_names for this same parameter: ECMWF: TCC; NOAA & WMO: TCDC.",
+                    comment=(
+                        "Total cloud cover. Different agencies use different short_names for this"
+                        " same parameter: ECMWF: TCC; NOAA & WMO: TCDC."
+                    ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="clct",
@@ -490,7 +503,10 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="2 metre relative humidity",
                     units="percent",
                     step_type="instant",
-                    comment="Relative humidity at 2m above ground. Other short_names used for this parameter: rh, 2r, r.",
+                    comment=(
+                        "Relative humidity at 2m above ground. Other short_names used for this"
+                        " parameter: rh, 2r, r."
+                    ),
                     standard_name="relative_humidity",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
@@ -543,7 +559,9 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     units="degree_Celsius",
                     step_type="instant",
                     comment=(
-                        "Temperature at 2m above ground, averaged over all tiles of a grid point. Different agencies use different short_names for this parameter: ECMWF: 2t; NOAA & DWD: t2m."
+                        "Temperature at 2m above ground, averaged over all tiles of a grid point."
+                        " Different agencies use different short_names for this parameter:"
+                        " ECMWF: 2t; NOAA & DWD: t2m."
                     ),
                     standard_name="air_temperature",
                 ),
