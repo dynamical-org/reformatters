@@ -7,7 +7,7 @@
     "attribution": "DWD ICON-EU data processed by dynamical.org.",
     "spatial_domain": "Europe",
     "spatial_resolution": "0.0625 degrees (~7km)",
-    "time_domain": "Forecasts initialized 2025-10-03 00:00:00 UTC to Present",
+    "time_domain": "Forecasts initialized 2026-01-21 00:00:00 UTC to Present",
     "time_resolution": "Forecasts initialized every 6 hours",
     "forecast_domain": "Forecast lead time 0-120 hours (0-5 days) ahead",
     "forecast_resolution": "Forecast step 0-78 hours: hourly, 81-120 hours: 3 hourly"
@@ -292,7 +292,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              21900
+              20440
             ]
           }
         },
@@ -435,7 +435,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              21900
+              20440
             ]
           }
         },
@@ -489,7 +489,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              21900
+              20440
             ]
           }
         },
@@ -522,7 +522,7 @@
           "long_name": "Forecast initialization time",
           "standard_name": "forecast_reference_time",
           "statistics_approximate": {
-            "min": "2025-10-03T00:00:00",
+            "min": "2026-01-21T00:00:00",
             "max": "Present"
           },
           "units": "seconds since 1970-01-01",
@@ -1828,7 +1828,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              21900,
+              20440,
               93
             ]
           }
@@ -1862,7 +1862,7 @@
           "long_name": "Valid time",
           "standard_name": "time",
           "statistics_approximate": {
-            "min": "2025-10-03T00:00:00",
+            "min": "2026-01-21T00:00:00",
             "max": "Present + 5 days"
           },
           "units": "seconds since 1970-01-01",
