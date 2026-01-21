@@ -11,7 +11,7 @@ from reformatters.dwd.icon_eu.forecast.template_config import (
 )
 
 
-def test_source_file_coord_get_url() -> None:
+def test_source_file_coord_get_fallback_url() -> None:
     coord = DwdIconEuForecastSourceFileCoord(
         init_time=pd.Timestamp("2000-01-01T00:00"),
         lead_time=pd.Timedelta(0),
@@ -19,7 +19,7 @@ def test_source_file_coord_get_url() -> None:
     )
     expected = "https://opendata.dwd.de/weather/nwp/icon-eu/grib/00/t_2m/icon-eu_europe_regular-lat-lon_single-level_2000010100_000_T_2M.grib2.bz2"
 
-    assert coord.get_url() == expected
+    assert coord.get_fallback_url() == expected
 
 
 def test_region_job_generete_source_file_coords() -> None:
