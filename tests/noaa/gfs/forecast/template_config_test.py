@@ -7,8 +7,10 @@ import pytest
 import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 
+from reformatters.common.download import http_download_to_disk
 from reformatters.common.template_config import SPATIAL_REF_COORDS
 from reformatters.noaa.gfs.forecast.template_config import NoaaGfsForecastTemplateConfig
+from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 
 
 def test_get_template_spatial_ref() -> None:
@@ -67,6 +69,7 @@ def test_dimension_coordinates_shapes_and_values() -> None:
     assert len(lon) == 1440
 
 
+@pytest.mark.slow
 def test_lat_lon_pixel_centers_from_source_grib() -> None:
     cfg = NoaaGfsForecastTemplateConfig()
     coords = cfg.dimension_coordinates()
@@ -77,13 +80,26 @@ def test_lat_lon_pixel_centers_from_source_grib() -> None:
         "gfs.20241101/00/atmos/gfs.t00z.pgrb2.0p25.f000"
     )
 
-    try:
-        with rasterio.Env(AWS_NO_SIGN_REQUEST="YES"), rasterio.open(url) as reader:
-            bounds = reader.bounds
-            pixel_size_x = reader.transform.a
-            pixel_size_y = abs(reader.transform.e)
-    except rasterio.errors.RasterioIOError:
-        pytest.skip("Remote GFS GRIB sample unavailable")
+    assert cfg.data_vars
+    idx_path = http_download_to_disk(f"{url}.idx", "noaa-gfs-forecast-test")
+    start_bytes, end_bytes = grib_message_byte_ranges_from_index(
+        idx_path,
+        (cfg.data_vars[0],),
+        pd.Timestamp("2024-11-01T00:00"),
+        pd.Timedelta("0h"),
+    )
+
+    partial_path = http_download_to_disk(
+        url,
+        "noaa-gfs-forecast-test",
+        byte_ranges=(start_bytes, end_bytes),
+        local_path_suffix="-first-message",
+    )
+
+    with rasterio.Env(AWS_NO_SIGN_REQUEST="YES"), rasterio.open(partial_path) as reader:
+        bounds = reader.bounds
+        pixel_size_x = reader.transform.a
+        pixel_size_y = abs(reader.transform.e)
 
     lon = coords["longitude"]
     lat = coords["latitude"]
