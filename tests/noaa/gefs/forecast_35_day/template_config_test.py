@@ -1,8 +1,16 @@
+from pathlib import Path
+from unittest.mock import Mock
+
 import numpy as np
 import pandas as pd
 import pytest
+import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 
+from reformatters.noaa.gefs.forecast_35_day.region_job import (
+    GefsForecast35DayRegionJob,
+    GefsForecast35DaySourceFileCoord,
+)
 from reformatters.noaa.gefs.forecast_35_day.template_config import (
     GefsForecast35DayTemplateConfig,
 )
@@ -12,6 +20,31 @@ from reformatters.noaa.gefs.forecast_35_day.template_config import (
 def template_config() -> GefsForecast35DayTemplateConfig:
     """Create a GEFS 35-day forecast template config for testing."""
     return GefsForecast35DayTemplateConfig()
+
+
+@pytest.fixture(scope="session")
+def gefs_first_message_path() -> Path:
+    cfg = GefsForecast35DayTemplateConfig()
+    assert cfg.data_vars
+    init_time = pd.Timestamp("2024-11-01T00:00")
+
+    coord = GefsForecast35DaySourceFileCoord(
+        init_time=init_time,
+        lead_time=pd.Timedelta("0h"),
+        data_vars=(cfg.data_vars[0],),
+        ensemble_member=0,
+    )
+
+    region_job = GefsForecast35DayRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=cfg.get_template(init_time),
+        data_vars=cfg.data_vars,
+        append_dim=cfg.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    return region_job.download_file(coord)
 
 
 def test_dataset_attributes(template_config: GefsForecast35DayTemplateConfig) -> None:
@@ -27,6 +60,44 @@ def test_dataset_attributes(template_config: GefsForecast35DayTemplateConfig) ->
     assert "Forecasts initialized every 24 hours" in attrs.time_resolution
     assert attrs.forecast_domain == "Forecast lead time 0-840 hours (0-35 days) ahead"
     assert "2020-10-01 00:00:00 UTC" in attrs.time_domain
+
+
+@pytest.mark.slow
+def test_spatial_ref_matches_grib(
+    template_config: GefsForecast35DayTemplateConfig,
+    gefs_first_message_path: Path,
+) -> None:
+    ds = template_config.get_template(pd.Timestamp("2024-11-01T00:00"))
+
+    ds_raster = xr.open_dataset(gefs_first_message_path, engine="rasterio")
+
+    assert ds.rio.shape == ds_raster.rio.shape
+    assert np.allclose(ds.rio.bounds(), ds_raster.rio.bounds())
+    assert ds.rio.resolution() == ds_raster.rio.resolution()
+    assert ds.rio.crs.to_proj4() == ds_raster.rio.crs.to_proj4()
+
+
+@pytest.mark.slow
+def test_lat_lon_pixel_centers_from_source_grib(
+    template_config: GefsForecast35DayTemplateConfig,
+    gefs_first_message_path: Path,
+) -> None:
+    coords = template_config.dimension_coordinates()
+
+    with rasterio.open(gefs_first_message_path) as reader:
+        bounds = reader.bounds
+        pixel_size_x = reader.transform.a
+        pixel_size_y = abs(reader.transform.e)
+
+    lon = coords["longitude"]
+    lat = coords["latitude"]
+
+    atol = 1e-6
+    rtol = 0.0
+    assert np.isclose(bounds.left + pixel_size_x / 2, lon.min(), atol=atol, rtol=rtol)
+    assert np.isclose(bounds.right - pixel_size_x / 2, lon.max(), atol=atol, rtol=rtol)
+    assert np.isclose(bounds.top - pixel_size_y / 2, lat.max(), atol=atol, rtol=rtol)
+    assert np.isclose(bounds.bottom + pixel_size_y / 2, lat.min(), atol=atol, rtol=rtol)
 
 
 def test_dimensions_and_append_dim(

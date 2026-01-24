@@ -38,7 +38,7 @@ def gfs_first_message_path() -> Path:
         reformat_job_name="test",
     )
 
-    return Path(region_job.download_file(coord))
+    return region_job.download_file(coord)
 
 
 def test_get_template_spatial_ref() -> None:
