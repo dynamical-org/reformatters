@@ -60,11 +60,12 @@ def test_spatial_ref_matches_grib(gfs_first_message_path: Path) -> None:
     cfg = NoaaGfsForecastTemplateConfig()
     ds = cfg.get_template(pd.Timestamp("2024-11-01T00:00"))
 
-    with rasterio.open(gfs_first_message_path) as reader:
-        grib_crs = reader.crs
+    ds_raster = xr.open_dataset(gfs_first_message_path, engine="rasterio")
 
-    assert grib_crs is not None
-    assert ds.rio.crs == grib_crs
+    assert ds.rio.shape == ds_raster.rio.shape
+    assert np.allclose(ds.rio.bounds(), ds_raster.rio.bounds())
+    assert ds.rio.resolution() == ds_raster.rio.resolution()
+    assert ds.rio.crs.to_proj4() == ds_raster.rio.crs.to_proj4()
 
 
 def test_dataset_attributes() -> None:
