@@ -696,9 +696,7 @@ def print_diagnostic_table(
 
     # Calculate shared memory estimate
     append_dim = "init_time" if mode == "forecast" else "time"
-    shared_memory_gb = calculate_shared_memory_estimate(
-        config, append_dim
-    )
+    shared_memory_gb = calculate_shared_memory_estimate(config, append_dim)
 
     # Calculate chunks per shard
     chunks_per_shard = 1
@@ -890,11 +888,7 @@ def print_diagnostic_table(
         + " " * (78 - len(f"│ 4. SHARED MEMORY ESTIMATE (slice along {append_dim})"))
         + "│"
     )
-    print(
-        f"│    Uncompressed data:   {shared_memory_gb:>10.2f} GB"
-        + " " * 39
-        + "│"
-    )
+    print(f"│    Uncompressed data:   {shared_memory_gb:>10.2f} GB" + " " * 39 + "│")
 
     print("└" + "─" * 78 + "┘")
 
