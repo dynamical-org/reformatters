@@ -507,7 +507,7 @@ def calculate_shared_memory_estimate(
 
     The shared memory needed is equal to the sum of all shards touched by a single
     slice along the AppendDim (in uncompressed bytes). This is calculated as:
-    (number of shards along all dims except append_dim) × (uncompressed shard size)
+    (number of shards along all dims except append_dim) x (uncompressed shard size)
 
     Args:
         config: Layout configuration
@@ -532,7 +532,7 @@ def calculate_shared_memory_estimate(
     shard_storage = calculate_storage(shard_elements)
     uncompressed_shard_gb = shard_storage.raw_bytes / (1024 * 1024 * 1024)
 
-    # Total shared memory needed = shards touched × uncompressed shard size
+    # Total shared memory needed = shards touched x uncompressed shard size
     shared_memory_gb = shards_touched * uncompressed_shard_gb
 
     return shared_memory_gb
