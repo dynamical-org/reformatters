@@ -1,8 +1,15 @@
+from pathlib import Path
+from unittest.mock import Mock
+
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.noaa.gefs.analysis.region_job import (
+    GefsAnalysisRegionJob,
+    GefsAnalysisSourceFileCoord,
+)
 from reformatters.noaa.gefs.analysis.template_config import GefsAnalysisTemplateConfig
 
 
@@ -10,6 +17,31 @@ from reformatters.noaa.gefs.analysis.template_config import GefsAnalysisTemplate
 def template_config() -> GefsAnalysisTemplateConfig:
     """Create a GEFS analysis template config for testing."""
     return GefsAnalysisTemplateConfig()
+
+
+@pytest.fixture(scope="session")
+def gefs_analysis_first_message_path() -> Path:
+    cfg = GefsAnalysisTemplateConfig()
+    assert cfg.data_vars
+    init_time = pd.Timestamp("2024-11-01T00:00")
+
+    coord = GefsAnalysisSourceFileCoord(
+        init_time=init_time,
+        lead_time=pd.Timedelta("0h"),
+        data_vars=(cfg.data_vars[0],),
+        ensemble_member=0,
+    )
+
+    region_job = GefsAnalysisRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=cfg.get_template(init_time),
+        data_vars=cfg.data_vars,
+        append_dim=cfg.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    return region_job.download_file(coord)
 
 
 def test_dataset_attributes(template_config: GefsAnalysisTemplateConfig) -> None:
