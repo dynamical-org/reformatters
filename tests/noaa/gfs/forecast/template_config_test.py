@@ -1,5 +1,6 @@
 import re
 from copy import deepcopy
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -7,10 +8,40 @@ import pytest
 import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 
-from reformatters.common.download import http_download_to_disk
 from reformatters.common.template_config import SPATIAL_REF_COORDS
+from reformatters.noaa.gfs.forecast.region_job import (
+    NoaaGfsForecastRegionJob,
+    NoaaGfsForecastSourceFileCoord,
+)
 from reformatters.noaa.gfs.forecast.template_config import NoaaGfsForecastTemplateConfig
-from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
+
+
+@pytest.fixture(scope="session")
+def gfs_first_message_path(tmp_path_factory: pytest.TempPathFactory) -> str:
+    cfg = NoaaGfsForecastTemplateConfig()
+    assert cfg.data_vars
+    init_time = pd.Timestamp("2024-11-01T00:00")
+
+    coord = NoaaGfsForecastSourceFileCoord(
+        init_time=init_time,
+        lead_time=pd.Timedelta("0h"),
+        data_vars=(cfg.data_vars[0],),
+    )
+
+    region_job = NoaaGfsForecastRegionJob.model_construct(
+        tmp_store=tmp_path_factory.mktemp("tmp_store"),
+        template_ds=cfg.get_template(init_time),
+        data_vars=cfg.data_vars,
+        append_dim=cfg.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    partial_path = region_job.download_file(coord)
+
+    target = tmp_path_factory.mktemp("grib_msg") / "first_message.grib2"
+    target.write_bytes(Path(partial_path).read_bytes())
+    return str(target)
 
 
 def test_get_template_spatial_ref() -> None:
@@ -25,6 +56,19 @@ def test_get_template_spatial_ref() -> None:
     calculated_spatial_ref_attrs = ds.rio.write_crs(expected_crs).spatial_ref.attrs
     original_attrs.pop("comment")
     assert original_attrs == calculated_spatial_ref_attrs
+
+
+@pytest.mark.slow
+def test_spatial_ref_matches_grib(gfs_first_message_path: str) -> None:
+    cfg = NoaaGfsForecastTemplateConfig()
+    ds = cfg.get_template(pd.Timestamp("2024-11-01T00:00"))
+
+    with rasterio.open(gfs_first_message_path) as reader:
+        grib_crs = reader.crs
+
+    assert grib_crs is not None
+    ds_with_crs = ds.rio.write_crs(grib_crs)
+    assert ds_with_crs.rio.crs == grib_crs
 
 
 def test_dataset_attributes() -> None:
@@ -70,33 +114,13 @@ def test_dimension_coordinates_shapes_and_values() -> None:
 
 
 @pytest.mark.slow
-def test_lat_lon_pixel_centers_from_source_grib() -> None:
+def test_lat_lon_pixel_centers_from_source_grib(
+    gfs_first_message_path: str,
+) -> None:
     cfg = NoaaGfsForecastTemplateConfig()
     coords = cfg.dimension_coordinates()
 
-    # NOAA BDP PDS retains archived forecasts; use a known archived 2024-11-01T00Z file
-    url = (
-        "https://noaa-gfs-bdp-pds.s3.amazonaws.com/"
-        "gfs.20241101/00/atmos/gfs.t00z.pgrb2.0p25.f000"
-    )
-
-    assert cfg.data_vars
-    idx_path = http_download_to_disk(f"{url}.idx", "noaa-gfs-forecast-test")
-    start_bytes, end_bytes = grib_message_byte_ranges_from_index(
-        idx_path,
-        (cfg.data_vars[0],),
-        pd.Timestamp("2024-11-01T00:00"),
-        pd.Timedelta("0h"),
-    )
-
-    partial_path = http_download_to_disk(
-        url,
-        "noaa-gfs-forecast-test",
-        byte_ranges=(start_bytes, end_bytes),
-        local_path_suffix="-first-message",
-    )
-
-    with rasterio.Env(AWS_NO_SIGN_REQUEST="YES"), rasterio.open(partial_path) as reader:
+    with rasterio.open(gfs_first_message_path) as reader:
         bounds = reader.bounds
         pixel_size_x = reader.transform.a
         pixel_size_y = abs(reader.transform.e)
