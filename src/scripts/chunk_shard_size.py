@@ -499,6 +499,45 @@ def search_shard_shapes(
     return valid_shapes[:10]
 
 
+def calculate_shared_memory_estimate(
+    config: LayoutConfig,
+    append_dim: str,
+) -> float:
+    """Calculate shared memory estimate for a single slice along the append dimension.
+
+    The shared memory needed is equal to the sum of all shards touched by a single
+    slice along the AppendDim (in uncompressed bytes). This is calculated as:
+    (number of shards along all dims except append_dim) × (uncompressed shard size)
+
+    Args:
+        config: Layout configuration
+        append_dim: Name of the append dimension (e.g., 'init_time' or 'time')
+
+    Returns:
+        Shared memory estimate in GB
+    """
+    dim_names = config.dim_names
+    dim_lengths = tuple(spec.length for spec in config.dim_specs)
+
+    # Count shards along all dimensions except the append dimension
+    shards_touched = 1
+    for i, name in enumerate(dim_names):
+        if name != append_dim:
+            shards_touched *= count_shards_for_dim(
+                dim_lengths[i], config.shard_shape[i]
+            )
+
+    # Calculate uncompressed shard size in GB
+    shard_elements = product(config.shard_shape)
+    shard_storage = calculate_storage(shard_elements)
+    uncompressed_shard_gb = shard_storage.raw_bytes / (1024 * 1024 * 1024)
+
+    # Total shared memory needed = shards touched × uncompressed shard size
+    shared_memory_gb = shards_touched * uncompressed_shard_gb
+
+    return shared_memory_gb
+
+
 def calculate_access_costs(
     config: LayoutConfig,
     _mode: Literal["analysis", "forecast"],
@@ -654,6 +693,12 @@ def print_diagnostic_table(
     shard_span = format_physical_span(config.shard_shape, config.dim_specs)
 
     access_costs = calculate_access_costs(config, mode)
+
+    # Calculate shared memory estimate
+    append_dim = "init_time" if mode == "forecast" else "time"
+    shared_memory_gb = calculate_shared_memory_estimate(
+        config, append_dim
+    )
 
     # Calculate chunks per shard
     chunks_per_shard = 1
@@ -835,6 +880,18 @@ def print_diagnostic_table(
     )
     print(
         f"│    Compressed data:     {access_costs['time_series_mb']:>10} MB"
+        + " " * 39
+        + "│"
+    )
+    print("│" + " " * 78 + "│")
+
+    print(
+        f"│ 4. SHARED MEMORY ESTIMATE (slice along {append_dim})"
+        + " " * (78 - len(f"│ 4. SHARED MEMORY ESTIMATE (slice along {append_dim})"))
+        + "│"
+    )
+    print(
+        f"│    Uncompressed data:   {shared_memory_gb:>10.2f} GB"
         + " " * 39
         + "│"
     )
