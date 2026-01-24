@@ -1,6 +1,7 @@
 import re
 from copy import deepcopy
 from pathlib import Path
+from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
@@ -17,7 +18,7 @@ from reformatters.noaa.gfs.forecast.template_config import NoaaGfsForecastTempla
 
 
 @pytest.fixture(scope="session")
-def gfs_first_message_path(tmp_path_factory: pytest.TempPathFactory) -> str:
+def gfs_first_message_path() -> Path:
     cfg = NoaaGfsForecastTemplateConfig()
     assert cfg.data_vars
     init_time = pd.Timestamp("2024-11-01T00:00")
@@ -29,7 +30,7 @@ def gfs_first_message_path(tmp_path_factory: pytest.TempPathFactory) -> str:
     )
 
     region_job = NoaaGfsForecastRegionJob.model_construct(
-        tmp_store=tmp_path_factory.mktemp("tmp_store"),
+        tmp_store=Mock(),
         template_ds=cfg.get_template(init_time),
         data_vars=cfg.data_vars,
         append_dim=cfg.append_dim,
@@ -37,11 +38,7 @@ def gfs_first_message_path(tmp_path_factory: pytest.TempPathFactory) -> str:
         reformat_job_name="test",
     )
 
-    partial_path = region_job.download_file(coord)
-
-    target = tmp_path_factory.mktemp("grib_msg") / "first_message.grib2"
-    target.write_bytes(Path(partial_path).read_bytes())
-    return str(target)
+    return Path(region_job.download_file(coord))
 
 
 def test_get_template_spatial_ref() -> None:
@@ -59,7 +56,7 @@ def test_get_template_spatial_ref() -> None:
 
 
 @pytest.mark.slow
-def test_spatial_ref_matches_grib(gfs_first_message_path: str) -> None:
+def test_spatial_ref_matches_grib(gfs_first_message_path: Path) -> None:
     cfg = NoaaGfsForecastTemplateConfig()
     ds = cfg.get_template(pd.Timestamp("2024-11-01T00:00"))
 
@@ -67,8 +64,7 @@ def test_spatial_ref_matches_grib(gfs_first_message_path: str) -> None:
         grib_crs = reader.crs
 
     assert grib_crs is not None
-    ds_with_crs = ds.rio.write_crs(grib_crs)
-    assert ds_with_crs.rio.crs == grib_crs
+    assert ds.rio.crs == grib_crs
 
 
 def test_dataset_attributes() -> None:
