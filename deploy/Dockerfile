@@ -119,6 +119,7 @@ apt-get install -qyy \
     python3.13 \
     libpython3.13 \
     libgdal-dev \
+    rclone \
 
 apt-get clean
 rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
