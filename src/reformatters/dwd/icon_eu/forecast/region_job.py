@@ -9,6 +9,7 @@ import zarr
 from obstore.exceptions import GenericError
 from rasterio.io import MemoryFile  # type: ignore[import-untyped]
 
+from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
@@ -173,30 +174,40 @@ class DwdIconEuForecastRegionJob(
             result: ArrayFloat32 = reader.read(indexes=1, out_dtype=np.float32)
         return result
 
-    # Implement this to apply transformations to the array (e.g. deaccumulation)
-    #
-    # def apply_data_transformations(
-    #     self, data_array: xr.DataArray, data_var: DwdIconEuDataVar
-    # ) -> None:
-    #     """
-    #     Apply in-place data transformations to the output data array for a given data variable.
-    #
-    #     This method is called after reading all data for a variable into the shared-memory array,
-    #     and before writing shards to the output store. The default implementation applies binary
-    #     rounding to float32 arrays if `data_var.internal_attrs.keep_mantissa_bits` is set.
-    #
-    #     Subclasses may override this method to implement additional transformations such as
-    #     deaccumulation, interpolation or other custom logic. All transformations should be
-    #     performed in-place (don't copy `data_array`, it's large).
-    #
-    #     Parameters
-    #     ----------
-    #     data_array : xr.DataArray
-    #         The output data array to be transformed in-place.
-    #     data_var : DwdIconEuDataVar
-    #         The data variable metadata object, which may contain transformation parameters.
-    #     """
-    #     super().apply_data_transformations(data_array, data_var)
+    def apply_data_transformations(
+        self, data_array: xr.DataArray, data_var: DwdIconEuDataVar
+    ) -> None:
+        """
+        Apply in-place data transformations to the output data array for a given data variable.
+
+        This method is called after reading all data for a variable into the shared-memory array,
+        and before writing shards to the output store.
+
+        Parameters
+        ----------
+        data_array : xr.DataArray
+            The output data array to be transformed in-place.
+        data_var : DwdIconEuDataVar
+            The data variable metadata object, which may contain transformation parameters.
+        """
+
+        if data_var.internal_attrs.deaccumulate_to_rate:
+            assert data_var.internal_attrs.window_reset_frequency is not None
+            deaccum_dim = "lead_time" if "lead_time" in data_array.dims else "time"
+            log.info(
+                f"Converting {data_var.name} from accumulations to rates along {deaccum_dim}"
+            )
+            try:
+                deaccumulate_to_rates_inplace(
+                    data_array,
+                    dim=deaccum_dim,
+                    reset_frequency=data_var.internal_attrs.window_reset_frequency,
+                )
+            except ValueError:
+                # Log exception so we are notified if deaccumulation errors are larger than expected.
+                log.exception(f"Error deaccumulating {data_var.name}")
+
+        super().apply_data_transformations(data_array, data_var)
 
     def update_template_with_results(
         self, process_results: Mapping[str, Sequence[DwdIconEuForecastSourceFileCoord]]
