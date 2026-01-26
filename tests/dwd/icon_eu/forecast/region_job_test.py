@@ -221,17 +221,16 @@ def test_operational_update_jobs(
     )
 
     # Set current time
-    now = pd.Timestamp("2026-02-02T15:48")
+    now = pd.Timestamp("2026-05-02T15:48")
     monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *args, **kwargs: now))
 
-    # Set existing data max time
-    existing_ds = template_config.get_template(pd.Timestamp("2026-02-01T00:01"))
+    # Set the append_dim_start for the update
+    # Use a template_ds as a lightweight way to create a mock dataset with a known max append dim coordinate
+    existing_ds_end_time = pd.Timestamp(
+        "2026-05-01T00:01"
+    )  # 00z will be max existing init time
+    existing_ds = template_config.get_template(end_time=existing_ds_end_time)
     template_utils.write_metadata(existing_ds, store_factory)
-
-    # Actually write the coordinate data so max() works
-    existing_ds[["init_time"]].to_zarr(
-        store_factory.primary_store(writable=True), mode="a"
-    )
 
     jobs, template_ds = DwdIconEuForecastRegionJob.operational_update_jobs(
         primary_store=store_factory.primary_store(),
@@ -242,7 +241,8 @@ def test_operational_update_jobs(
         reformat_job_name="test_job",
     )
 
-    assert template_ds.init_time.max() >= now.floor("12h")
-    assert len(jobs) > 0
+    assert template_ds.init_time.max() == pd.Timestamp("2026-05-02T12:00")
+    assert len(jobs) == 7  # NWP runs: 2026-05-01T00, 06, 12, 18; 2026-05-02T00, 06, 12
     for job in jobs:
         assert isinstance(job, DwdIconEuForecastRegionJob)
+        assert job.data_vars == template_config.data_vars
