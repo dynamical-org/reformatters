@@ -103,6 +103,7 @@ def copy_files_from_dwd_ftp(
         ftp_host: The FTP host, e.g. 'opendata.dwd.de'
         ftp_path: The source path on the FTP host, e.g. '/weather/nwp/icon-eu/grib/00'
         dst_root: The destination root directory. e.g. for S3, the dst_root could be: 's3:bucket/foo/bar'
+            This must be in the form that `rclone` expects (without a double slash after 's3:').
         transfer_parallelism: Number of parallel transfers. DWD appears to limit the number of parallel
                    transfers from one IP address to about 10.
         max_files_per_nwp_variable: Optional limit on the number of files to transfer per NWP variable.
