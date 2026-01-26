@@ -515,42 +515,6 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
             ),
             DwdIconEuDataVar(
-                name="soil_water_runoff",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="watr",
-                    long_name="Water runoff",
-                    units="kg m-2",
-                    step_type="accum",
-                    comment="Soil water runoff (accumulated since model start)",
-                ),
-                internal_attrs=DwdIconEuInternalAttrs(
-                    variable_name_in_filename="runoff_g",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                    deaccumulate_to_rate=True,
-                ),
-            ),
-            DwdIconEuDataVar(
-                name="surface_water_runoff",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="sro",
-                    standard_name="surface_runoff_amount",
-                    long_name="Surface runoff",
-                    units="kg m-2",
-                    step_type="accum",
-                    comment=(
-                        "Surface water runoff from interception and snow reservoir and from"
-                        " limited infiltration rate. Sum over forecast."
-                    ),
-                ),
-                internal_attrs=DwdIconEuInternalAttrs(
-                    variable_name_in_filename="runoff_s",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                    deaccumulate_to_rate=True,
-                ),
-            ),
-            DwdIconEuDataVar(
                 name="temperature_2m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
