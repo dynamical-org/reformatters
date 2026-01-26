@@ -7,7 +7,7 @@ import pandas as pd
 import xarray as xr
 import zarr
 from obstore.exceptions import GenericError
-from rasterio.io import MemoryFile
+from rasterio.io import MemoryFile  # type: ignore[import-untyped]
 
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import item
