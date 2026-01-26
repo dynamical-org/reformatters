@@ -8,6 +8,7 @@ import pandas as pd
 import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 import zarr
+from obstore.exceptions import GenericError
 
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import item
@@ -33,31 +34,44 @@ log = get_logger(__name__)
 
 
 class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
-    """Coordinates of a single source file to process."""
+    """Coordinates of a single source file to process.
+
+    Note that, unlike NOAA's NWPs, ICON-EU is published as one GRIB2 file per variable.
+    """
 
     init_time: Timestamp
     lead_time: Timedelta
     variable_name_in_filename: str
 
     def get_url(self) -> str:
+        """Return URL to .grib2.bz2 files on Dynamical.org's public archive of ICON-EU hosted on Source Co-Op."""
+        init_time_str = self.init_time.strftime("%Y-%m-%dT%HZ")
+        return (
+            "https://source.coop/dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/"
+            f"{init_time_str}/{self.variable_name_in_filename}/"
+        ) + self._get_basename()
+
+    def get_fallback_url(self) -> str:
         """Return URLs to .grib2.bz2 files on DWD's HTTP server.
 
-        Note that this only handles single-level variables. Also note that, unlike NOAA's NWPs,
-        ICON-EU is published as one GRIB2 file per variable.
+        Note that DWD may change their directory structure for ICON-EU. See this comment for
+        details: https://github.com/dynamical-org/reformatters/issues/183#issuecomment-3365068327
         """
         # Example DWD URL:
         # https://opendata.dwd.de/weather/nwp/icon-eu/grib/00/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2025090700_000_ALB_RAD.grib2.bz2
 
-        lead_time_hours: int = whole_hours(self.lead_time)
-        init_date_str: str = self.init_time.strftime("%Y%m%d%H")
-        init_hour_str: str = self.init_time.strftime("%H")
-
-        # TODO(Jack): DWD plan to change their URL format. See this comment for details:
-        # https://github.com/dynamical-org/reformatters/issues/183#issuecomment-3365068327
+        init_hour_str = self.init_time.strftime("%H")
         return (
             "https://opendata.dwd.de/weather/nwp/icon-eu/grib/"
             f"{init_hour_str}/{self.variable_name_in_filename}/"
-            f"icon-eu_europe_regular-lat-lon_single-level_{init_date_str}_{lead_time_hours:03d}_"
+        ) + self._get_basename()
+
+    def _get_basename(self) -> str:
+        """Note that this only handles single-level variables."""
+        init_time_str: str = self.init_time.strftime("%Y%m%d%H")
+        lead_time_hours: int = whole_hours(self.lead_time)
+        return (
+            f"icon-eu_europe_regular-lat-lon_single-level_{init_time_str}_{lead_time_hours:03d}_"
             f"{self.variable_name_in_filename.upper()}.grib2.bz2"
         )
 
@@ -126,12 +140,19 @@ class DwdIconEuForecastRegionJob(
     def download_file(self, coord: DwdIconEuForecastSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path.
 
-        Downloads the `.bz2` file from DWD, decompresses the `.bz2` file, deletes the `.bz2` file,
+        Downloads the `.bz2` file, decompresses the `.bz2` file, deletes the `.bz2` file,
         and returns the `Path` of the decompressed file.
         """
-        bz2_file_path = http_download_to_disk(coord.get_url(), self.dataset_id)
+        url = coord.get_url()
+        try:
+            bz2_file_path = http_download_to_disk(url, self.dataset_id)
+        except (FileNotFoundError, GenericError) as e:
+            log.debug(f"Failed to download '{url}': {e}")
+            fallback_url = coord.get_fallback_url()
+            log.debug(f"Attempting to download from {fallback_url=}")
+            bz2_file_path = http_download_to_disk(fallback_url, self.dataset_id)
         grib_file_path = decompress_bz2_file(compressed_file_path=bz2_file_path)
-        bz2_file_path.unlink()  # Remove the bz2 file after decompressing it.
+        bz2_file_path.unlink()  # Remove the local .bz2 file after decompressing it.
         return grib_file_path
 
     def read_data(
