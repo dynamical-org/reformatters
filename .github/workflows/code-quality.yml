@@ -60,7 +60,7 @@ jobs:
         run: uv run mypy
 
       - name: Run Pytest
-        run: uv run pytest
+        run: uv run pytest -p no:sugar --verbose
 
       - name: Ensure SHA pinned actions
         uses: zgosalvez/github-actions-ensure-sha-pinned-actions@fc87bb5b5a97953d987372e74478de634726b3e5 # v3

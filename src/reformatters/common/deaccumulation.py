@@ -45,13 +45,9 @@ def deaccumulate_to_rates_inplace(
         assert np.issubdtype(times.dtype, np.timedelta64)
         timedeltas = times
 
-    # First step must be a resetting step so we know the start point of the accumulation is zero.
-    assert timedeltas[0] % reset_frequency == pd.Timedelta(0)
-
     seconds = timedeltas.astype("timedelta64[s]").astype(np.int64)
 
     reset_after = (seconds % reset_frequency.total_seconds()) == 0
-    assert reset_after[0]  # Again, first step must be a resetting step
 
     if skip_step is None:
         skip_step = np.zeros(seconds.shape, dtype=np.bool)
@@ -115,7 +111,10 @@ def _deaccumulate_to_rates_numba(
         for j in range(values.shape[2]):
             sequence = values[i, :, j]
             previous_seconds = seconds[0]
-            previous_accumulation = 0
+
+            # If first step is a reset point, accumulation starts from 0.
+            # Otherwise, use the actual value at first step as baseline for subsequent calculations.
+            previous_accumulation = 0 if reset_after[0] else sequence[0]
 
             # Without any previous values to deaccumulate from we write nan into the first step
             sequence[0] = np.nan

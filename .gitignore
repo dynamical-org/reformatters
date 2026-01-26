@@ -166,3 +166,6 @@ cython_debug/
 .aider*
 
 depot.json
+
+# Temporary files created when copying files from DWD's FTP server
+.rclone_files_*

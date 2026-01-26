@@ -24,7 +24,8 @@ rclone`.
 
 ### Testing FTP transfer locally 
 
-The simple script in `run_copy_test.py` can be run locally with `uv run run_copy_test.py
-/path/to/local/data/directory`. Optionally, for the purposes of testing, you can pass in
-`--max-files n` to only transfer up to `n` files per NWP variable. See `run_copy_test.py --help` for
-more options.
+You can test locally like this:
+`uv run main dwd-icon-eu-forecast archive-grib-files --dst-root=/local/path`
+
+For command line arguments that allow you to limit the number of files downloaded, see 
+`uv run main dwd-icon-eu-forecast archive-grib-files --help`

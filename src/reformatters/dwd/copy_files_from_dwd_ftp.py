@@ -63,6 +63,7 @@ maybe 0.5 seconds to 1 second for each NWP variable. There are two ways to get m
 import csv
 import ctypes
 import io
+import os
 import re
 import signal
 import subprocess
@@ -92,19 +93,27 @@ def copy_files_from_dwd_ftp(
     ftp_host: str,
     ftp_path: PurePosixPath,
     dst_root: PurePosixPath,
-    transfers: int = 10,
+    transfer_parallelism: int = 10,
     max_files_per_nwp_variable: int = sys.maxsize,
+    env_vars: dict[str, Any] | None = None,
 ) -> TransferSummary:
     """Restructure DWD GRIB files from FTP to a timestamped directory structure.
 
     Args:
         ftp_host: The FTP host, e.g. 'opendata.dwd.de'
         ftp_path: The source path on the FTP host, e.g. '/weather/nwp/icon-eu/grib/00'
-        dst_root: The destination root directory.
-        transfers: Number of parallel transfers. DWD appears to limit the number of parallel
+        dst_root: The destination root directory. e.g. for S3, the dst_root could be: 's3:bucket/foo/bar'
+            This must be in the form that `rclone` expects (without a double slash after 's3:').
+        transfer_parallelism: Number of parallel transfers. DWD appears to limit the number of parallel
                    transfers from one IP address to about 10.
         max_files_per_nwp_variable: Optional limit on the number of files to transfer per NWP variable.
                   This is useful for testing locally.
+        env_vars: Additional environment variables to give to `rclone`. For example:
+            {
+                "RCLONE_S3_ENV_AUTH": True,
+                "RCLONE_S3_ACCESS_KEY_ID": "key",
+                "RCLONE_S3_SECRET_ACCESS_KEY": "secret",
+            }
     """
     file_list = list_ftp_files(ftp_host=ftp_host, ftp_path=ftp_path)
     copy_plan = _compute_copy_plan(
@@ -116,7 +125,8 @@ def copy_files_from_dwd_ftp(
         ftp_path=ftp_path,
         dst_root=dst_root,
         copy_plan=copy_plan,
-        transfers=transfers,
+        transfer_parallelism=transfer_parallelism,
+        env_vars=env_vars,
     )
 
 
@@ -233,7 +243,7 @@ def _compute_copy_plan(
             total_files_after_filtering += 1
 
     log.info(
-        f" After filtering: {total_files_after_filtering:,d} files,"
+        f"After filtering: {total_files_after_filtering:,d} files,"
         f" totalling {format_bytes(total_bytes_after_filtering)},"
         f" grouped into {len(copy_plan):d} NWP variables."
     )
@@ -245,7 +255,8 @@ def _copy_batches(
     ftp_path: PurePosixPath,
     dst_root: PurePosixPath,
     copy_plan: dict[tuple[datetime, str], list[_PathAndSize]],
-    transfers: int = 10,
+    transfer_parallelism: int = 10,
+    env_vars: dict[str, Any] | None = None,
 ) -> TransferSummary:
     """Executes rclone copy for each timestamp and variable batch in the plan."""
     n_batches = len(copy_plan)
@@ -266,12 +277,13 @@ def _copy_batches(
             ftp_path=ftp_path,
             dst_path=dst_path,
             files_to_be_copied=files_to_be_copied,
-            transfers=transfers,
+            transfer_parallelism=transfer_parallelism,
+            env_vars=env_vars,
         )
         log.info("%s complete: %s", batch_info_str, batch_summary)
         total_summary += batch_summary
 
-    log.info(f"Transfer complete: {total_summary}")
+    log.info("Transfer from %s to %s complete: %s", ftp_path, dst_root, total_summary)
     return total_summary
 
 
@@ -280,7 +292,8 @@ def _copy_batch(
     ftp_path: PurePosixPath,
     dst_path: PurePosixPath,
     files_to_be_copied: list[_PathAndSize],
-    transfers: int,
+    transfer_parallelism: int,
+    env_vars: dict[str, Any] | None = None,
 ) -> TransferSummary:
     """Executes a single rclone copy batch for a specific destination.
 
@@ -292,7 +305,8 @@ def _copy_batch(
         ftp_path: The root source path on the FTP server (including NWP init hour).
         dst_path: The specific destination directory (including NWP init timestamp).
         files_to_be_copied: List of file path and sizes relative to ftp_path to be copied.
-        transfers: Number of parallel transfers to use for this batch.
+        transfer_parallelism: Number of parallel transfers to use for this batch.
+        env_vars: Additional environment variables to give to `rclone`.
     """
     # Modern Linux platforms often install `rclone` as a sandboxed snap, which does not have access
     # to `/tmp`, so we store the temporary file in the current working directory.
@@ -308,20 +322,21 @@ def _copy_batch(
             f":ftp:{ftp_path}",
             str(dst_path),
             "--files-from-raw=" + list_file.name,
-            f"--transfers={transfers}",
-            "--no-check-certificate",
-            "--ignore-checksum",
+            f"--transfers={transfer_parallelism}",
+            "--ignore-checksum",  # DWD's FTP server does not support hashing.
+            "--update",  # Skip files that are newer on the destination.
+            "--fast-list",  # Use less API calls to S3, in exchange for using more RAM.
             *_get_rclone_ftp_args(ftp_host),
             *_get_common_rclone_args(),
         ]
 
         try:
-            _, log_entries = _run_rclone(cmd, timeout=timedelta(minutes=30))
+            _, log_entries = _run_rclone(
+                cmd, timeout=timedelta(minutes=30), env_vars=env_vars
+            )
         except subprocess.CalledProcessError:
             log.exception("Failed to copy batch to %s", dst_path)
-            return TransferSummary(
-                errors=len(files_to_be_copied),
-            )
+            raise
 
     return TransferSummary.from_rclone_stats(log_entries)
 
@@ -343,9 +358,19 @@ def _get_common_rclone_args() -> list[str]:
     ]
 
 
-def _run_rclone(cmd: list[str], timeout: timedelta) -> tuple[str, list[dict[str, Any]]]:
+def _run_rclone(
+    cmd: list[str],
+    timeout: timedelta,
+    env_vars: dict[str, Any] | None = None,
+) -> tuple[str, list[dict[str, Any]]]:
     """Runs a command with logging and safety measures and returns (stdout, log_entries)."""
-    log.debug("Running: `%s`", " ".join(cmd))
+    cmd_str = " ".join(cmd)
+    log.debug("Running: `%s`", cmd_str)
+
+    full_env = os.environ.copy()
+    if env_vars:
+        full_env.update(env_vars)
+
     try:
         result = subprocess.run(  # noqa: S603
             cmd,
@@ -354,18 +379,30 @@ def _run_rclone(cmd: list[str], timeout: timedelta) -> tuple[str, list[dict[str,
             check=True,  # Raise CalledProcessError if returncode != 0.
             timeout=round(timeout.total_seconds()),
             preexec_fn=_set_death_signal,
+            env=full_env,
         )
     except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
-        log.exception("Exception when running command `%s`", " ".join(cmd))
         stderr_str = (
             e.stderr
             if isinstance(e.stderr, str)
             else (e.stderr.decode() if e.stderr is not None else "")
         )
-        parse_and_log_rclone_json(stderr_str)
+        log.exception(
+            "Exception when running command `%s`. stdout='%s'",
+            cmd_str,
+            stderr_str,
+        )
         raise
 
-    log_entries = parse_and_log_rclone_json(result.stderr)
+    try:
+        log_entries = parse_and_log_rclone_json(result.stderr)
+    except:
+        log.exception(
+            "Failed to parse JSON output from rclone. rclone's stderr='%s'. Command=`%s`",
+            result.stderr,
+            cmd_str,
+        )
+        raise
     return result.stdout, log_entries
 
 
