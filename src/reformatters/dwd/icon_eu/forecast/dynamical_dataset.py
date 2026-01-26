@@ -35,10 +35,11 @@ class DwdIconEuForecastDataset(
             name=f"{self.dataset_id}-archive-grib-files",
             # We want the 00, 06, 12, and 18 ICON-EU runs. DWD's transfer to their FTP server starts
             # about 2 hours 15 mins after the init time, and finishes about 3 hours 45 minutes after
-            # the init hour. So, to avoid copying incomplete files, we fetch the files 4 hours after
-            # each init. But, every time the cron job runs, the script checks all 4 NWP inits, to
-            # keep the code simple, especially when recovering if the script hasn't run for a while.
-            # It only takes 4 minutes to check an NWP run that we've already transferred.
+            # the init time. So, to avoid copying incomplete files, we fetch the files 4 hours after
+            # each init. But note that, every time the cron job runs, the script checks all 4 NWP
+            # inits. This design helps to keep the code simple, especially when recovering if the
+            # script hasn't run for a while. It only takes 4 minutes to check an NWP run that we've
+            # already transferred.
             schedule="0 0 4,10,16,22 * *",
             # Copying 1 NWP run takes 45 minutes on a 1 Gbps internet connection. But, when this
             # script first runs, or if it hasn't run for >6 hours, then it'll transfer up to 4 NWP runs.
@@ -65,6 +66,8 @@ class DwdIconEuForecastDataset(
 
     def archive_grib_files(
         self,
+        # It would've made more sense for `dst_root` to be a `PurePosixPath` but Typer doesn't
+        # handle `PurePosixPath`, so we use a `str` to keep Typer happy.
         dst_root: str = grib_archive_path,
         # The `type: ignore` on the line below is because Typer doesn't understand the type hints
         # `tuple[int, ...]` or `Sequence[int]`, so we have to use `list[int]`.
