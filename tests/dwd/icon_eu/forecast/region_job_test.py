@@ -67,6 +67,23 @@ def source_file_coord(
     )
 
 
+@pytest.fixture
+def region_job() -> DwdIconEuForecastRegionJob:
+    template_config = DwdIconEuForecastTemplateConfig()
+    template_ds = template_config.get_template(
+        end_time=template_config.append_dim_start + template_config.append_dim_frequency
+    )
+    # use `model_construct` to skip pydantic validation so we can pass mock stores
+    return DwdIconEuForecastRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_ds,
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+
 def test_source_file_coord_get_url(
     source_file_coord: DwdIconEuForecastSourceFileCoord,
 ) -> None:
@@ -87,49 +104,25 @@ def test_source_file_coord_get_variable_name_in_filename(
     assert source_file_coord.variable_name_in_filename == "t_2m"
 
 
-def test_region_job_generete_source_file_coords() -> None:
+def test_region_job_generate_source_file_coords(
+    region_job: DwdIconEuForecastRegionJob,
+) -> None:
     template_config = DwdIconEuForecastTemplateConfig()
-    template_ds = template_config.get_template(
-        template_config.append_dim_start + template_config.append_dim_frequency
-    )
-
-    # use `model_construct` to skip pydantic validation so we can pass mock stores
-    region_job = DwdIconEuForecastRegionJob.model_construct(
-        tmp_store=Mock(),
-        template_ds=template_ds,
-        data_vars=template_config.data_vars[:1],
-        append_dim=template_config.append_dim,
-        region=slice(0, 10),
-        reformat_job_name="test",
-    )
-
     processing_region_ds, _ = region_job._get_region_datasets()
 
-    # Test with a single data variable
     source_file_coords = region_job.generate_source_file_coords(
         processing_region_ds, template_config.data_vars[:1]
     )
 
-    # 1 init_time x 1 variable x 93 time steps = 93
+    # 1 init_time x 1 variables x 93 time steps
     assert len(source_file_coords) == 93
 
 
 def test_region_job_download_file(
+    region_job: DwdIconEuForecastRegionJob,
     source_file_coord: DwdIconEuForecastSourceFileCoord,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    template_config = DwdIconEuForecastTemplateConfig()
-    template_ds = template_config.get_template(pd.Timestamp("2000-01-01"))
-
-    region_job = DwdIconEuForecastRegionJob.model_construct(
-        tmp_store=Mock(),
-        template_ds=template_ds,
-        data_vars=template_config.data_vars,
-        append_dim=template_config.append_dim,
-        region=slice(0, 1),
-        reformat_job_name="test",
-    )
-
     download_to_disk_mock = Mock()
     monkeypatch.setattr(
         "reformatters.dwd.icon_eu.forecast.region_job.http_download_to_disk",
@@ -145,19 +138,12 @@ def test_region_job_download_file(
 
 
 def test_region_job_read_data(
+    region_job: DwdIconEuForecastRegionJob,
     source_file_coord: DwdIconEuForecastSourceFileCoord,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source_file_coord = replace(
         source_file_coord, downloaded_path=Path("/fake/path.grib2.bz2")
-    )
-    region_job = DwdIconEuForecastRegionJob.model_construct(
-        tmp_store=Mock(),
-        template_ds=xr.Dataset(attrs={"dataset_id": "test-dwd"}),
-        data_vars=[source_file_coord.data_var],
-        append_dim="init_time",
-        region=slice(0, 1),
-        reformat_job_name="test",
     )
 
     # Mock bz2.open to return a BytesIO with some dummy grib data
@@ -193,6 +179,7 @@ def test_region_job_read_data(
 
 
 def test_region_job_apply_data_transformations(
+    region_job: DwdIconEuForecastRegionJob,
     t_2m_data_var: DwdIconEuDataVar,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -205,16 +192,6 @@ def test_region_job_apply_data_transformations(
             window_reset_frequency=pd.Timedelta(hours=1),
         ),
     )
-
-    region_job = DwdIconEuForecastRegionJob.model_construct(
-        tmp_store=Mock(),
-        template_ds=xr.Dataset(attrs={"dataset_id": "test-dwd"}),
-        data_vars=[t_2m_data_var],
-        append_dim="init_time",
-        region=slice(0, 1),
-        reformat_job_name="test",
-    )
-
     times = pd.date_range("2000-01-01", periods=3, freq="1h")
     data = np.array([0, 1, 2], dtype=np.float32)
     data_array = xr.DataArray(data, coords={"lead_time": times}, dims=["lead_time"])
