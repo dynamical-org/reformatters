@@ -147,17 +147,9 @@ class DwdIconEuForecastRegionJob(
         try:
             bz2_file_path = http_download_to_disk(url, self.dataset_id)
         except (FileNotFoundError, GenericError) as e:
+            log.debug(f"Failed to download '{url}': {e}")
             fallback_url = coord.get_fallback_url()
-            if isinstance(e, GenericError):
-                # GenericError contains multiple lines that aren't informative. So, log gory details
-                # at the debug log level, and shorten the error message for the warning log level.
-                error_msg = str(e).splitlines()[0]
-                log.debug("%s", e)
-            else:
-                error_msg = str(e)
-            log.warning(
-                f"{error_msg}. Failed to download '{url}'. Attempting to download from {fallback_url=}"
-            )
+            log.debug(f"Attempting to download from {fallback_url=}")
             bz2_file_path = http_download_to_disk(fallback_url, self.dataset_id)
         grib_file_path = decompress_bz2_file(compressed_file_path=bz2_file_path)
         bz2_file_path.unlink()  # Remove the local .bz2 file after decompressing it.
