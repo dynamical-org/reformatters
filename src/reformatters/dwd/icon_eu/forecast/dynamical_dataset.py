@@ -72,7 +72,7 @@ class DwdIconEuForecastDataset(
         # The `type: ignore` on the line below is because Typer doesn't understand the type hints
         # `tuple[int, ...]` or `Sequence[int]`, so we have to use `list[int]`.
         nwp_init_hours: list[int] = (0, 6, 12, 18),  # type: ignore[assignment]
-        transfers: int = 10,
+        transfer_parallelism: int = 10,
         max_files_per_nwp_variable: int = sys.maxsize,
     ) -> None:
         """Restructure DWD GRIB files from FTP to a timestamped directory structure.
@@ -80,7 +80,7 @@ class DwdIconEuForecastDataset(
         Args:
             dst_root: The destination root directory. e.g. for S3, the dst_root could be: 's3:bucket/foo/bar'
             nwp_init_hours: All the ICON-EU NWP runs to transfer.
-            transfers: Number of parallel transfers. DWD appears to limit the number of parallel
+            transfer_parallelism: Number of parallel transfers. DWD appears to limit the number of parallel
                        transfers from one IP address to about 10.
             max_files_per_nwp_variable: Optional limit on the number of files to transfer per NWP variable.
                       This is useful for testing locally.
@@ -105,7 +105,7 @@ class DwdIconEuForecastDataset(
                 ftp_path=ftp_path,
                 dst_root=PurePosixPath(dst_root),
                 env_vars=s3_credentials_env_vars_for_rclone,
-                transfers=transfers,
+                transfer_parallelism=transfer_parallelism,
                 max_files_per_nwp_variable=max_files_per_nwp_variable,
             )
 

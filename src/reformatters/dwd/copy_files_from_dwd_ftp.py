@@ -93,7 +93,7 @@ def copy_files_from_dwd_ftp(
     ftp_host: str,
     ftp_path: PurePosixPath,
     dst_root: PurePosixPath,
-    transfers: int = 10,
+    transfer_parallelism: int = 10,
     max_files_per_nwp_variable: int = sys.maxsize,
     env_vars: dict[str, Any] | None = None,
 ) -> TransferSummary:
@@ -103,7 +103,7 @@ def copy_files_from_dwd_ftp(
         ftp_host: The FTP host, e.g. 'opendata.dwd.de'
         ftp_path: The source path on the FTP host, e.g. '/weather/nwp/icon-eu/grib/00'
         dst_root: The destination root directory. e.g. for S3, the dst_root could be: 's3:bucket/foo/bar'
-        transfers: Number of parallel transfers. DWD appears to limit the number of parallel
+        transfer_parallelism: Number of parallel transfers. DWD appears to limit the number of parallel
                    transfers from one IP address to about 10.
         max_files_per_nwp_variable: Optional limit on the number of files to transfer per NWP variable.
                   This is useful for testing locally.
@@ -124,7 +124,7 @@ def copy_files_from_dwd_ftp(
         ftp_path=ftp_path,
         dst_root=dst_root,
         copy_plan=copy_plan,
-        transfers=transfers,
+        transfer_parallelism=transfer_parallelism,
         env_vars=env_vars,
     )
 
@@ -254,7 +254,7 @@ def _copy_batches(
     ftp_path: PurePosixPath,
     dst_root: PurePosixPath,
     copy_plan: dict[tuple[datetime, str], list[_PathAndSize]],
-    transfers: int = 10,
+    transfer_parallelism: int = 10,
     env_vars: dict[str, Any] | None = None,
 ) -> TransferSummary:
     """Executes rclone copy for each timestamp and variable batch in the plan."""
@@ -276,7 +276,7 @@ def _copy_batches(
             ftp_path=ftp_path,
             dst_path=dst_path,
             files_to_be_copied=files_to_be_copied,
-            transfers=transfers,
+            transfer_parallelism=transfer_parallelism,
             env_vars=env_vars,
         )
         log.info("%s complete: %s", batch_info_str, batch_summary)
@@ -291,7 +291,7 @@ def _copy_batch(
     ftp_path: PurePosixPath,
     dst_path: PurePosixPath,
     files_to_be_copied: list[_PathAndSize],
-    transfers: int,
+    transfer_parallelism: int,
     env_vars: dict[str, Any] | None = None,
 ) -> TransferSummary:
     """Executes a single rclone copy batch for a specific destination.
@@ -304,7 +304,7 @@ def _copy_batch(
         ftp_path: The root source path on the FTP server (including NWP init hour).
         dst_path: The specific destination directory (including NWP init timestamp).
         files_to_be_copied: List of file path and sizes relative to ftp_path to be copied.
-        transfers: Number of parallel transfers to use for this batch.
+        transfer_parallelism: Number of parallel transfers to use for this batch.
         env_vars: Additional environment variables to give to `rclone`.
     """
     # Modern Linux platforms often install `rclone` as a sandboxed snap, which does not have access
@@ -321,7 +321,7 @@ def _copy_batch(
             f":ftp:{ftp_path}",
             str(dst_path),
             "--files-from-raw=" + list_file.name,
-            f"--transfers={transfers}",
+            f"--transfers={transfer_parallelism}",
             "--ignore-checksum",  # DWD's FTP server does not support hashing.
             "--update",  # Skip files that are newer on the destination.
             "--fast-list",  # Use less API calls to S3, in exchange for using more RAM.
