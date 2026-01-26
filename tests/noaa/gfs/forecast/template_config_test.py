@@ -1,12 +1,44 @@
 import re
 from copy import deepcopy
+from pathlib import Path
+from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
+import pytest
+import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 
 from reformatters.common.template_config import SPATIAL_REF_COORDS
+from reformatters.noaa.gfs.forecast.region_job import (
+    NoaaGfsForecastRegionJob,
+    NoaaGfsForecastSourceFileCoord,
+)
 from reformatters.noaa.gfs.forecast.template_config import NoaaGfsForecastTemplateConfig
+
+
+@pytest.fixture(scope="session")
+def gfs_first_message_path() -> Path:
+    cfg = NoaaGfsForecastTemplateConfig()
+    assert cfg.data_vars
+    init_time = pd.Timestamp("2024-11-01T00:00")
+
+    coord = NoaaGfsForecastSourceFileCoord(
+        init_time=init_time,
+        lead_time=pd.Timedelta("0h"),
+        data_vars=(cfg.data_vars[0],),
+    )
+
+    region_job = NoaaGfsForecastRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=cfg.get_template(init_time),
+        data_vars=cfg.data_vars,
+        append_dim=cfg.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    return region_job.download_file(coord)
 
 
 def test_get_template_spatial_ref() -> None:
@@ -21,6 +53,19 @@ def test_get_template_spatial_ref() -> None:
     calculated_spatial_ref_attrs = ds.rio.write_crs(expected_crs).spatial_ref.attrs
     original_attrs.pop("comment")
     assert original_attrs == calculated_spatial_ref_attrs
+
+
+@pytest.mark.slow
+def test_spatial_ref_matches_grib(gfs_first_message_path: Path) -> None:
+    cfg = NoaaGfsForecastTemplateConfig()
+    ds = cfg.get_template(pd.Timestamp("2024-11-01T00:00"))
+
+    ds_raster = xr.open_dataset(gfs_first_message_path, engine="rasterio")
+
+    assert ds.rio.shape == ds_raster.rio.shape
+    assert np.allclose(ds.rio.bounds(), ds_raster.rio.bounds())
+    assert ds.rio.resolution() == ds_raster.rio.resolution()
+    assert ds.rio.crs.to_proj4() == ds_raster.rio.crs.to_proj4()
 
 
 def test_dataset_attributes() -> None:
@@ -63,6 +108,29 @@ def test_dimension_coordinates_shapes_and_values() -> None:
     assert lon[0] == -180.0
     assert lon[-1] == 179.75
     assert len(lon) == 1440
+
+
+@pytest.mark.slow
+def test_lat_lon_pixel_centers_from_source_grib(
+    gfs_first_message_path: str,
+) -> None:
+    cfg = NoaaGfsForecastTemplateConfig()
+    coords = cfg.dimension_coordinates()
+
+    with rasterio.open(gfs_first_message_path) as reader:
+        bounds = reader.bounds
+        pixel_size_x = reader.transform.a
+        pixel_size_y = abs(reader.transform.e)
+
+    lon = coords["longitude"]
+    lat = coords["latitude"]
+
+    atol = 1e-6
+    rtol = 0.0
+    assert np.isclose(bounds.left + pixel_size_x / 2, lon.min(), atol=atol, rtol=rtol)
+    assert np.isclose(bounds.right - pixel_size_x / 2, lon.max(), atol=atol, rtol=rtol)
+    assert np.isclose(bounds.top - pixel_size_y / 2, lat.max(), atol=atol, rtol=rtol)
+    assert np.isclose(bounds.bottom + pixel_size_y / 2, lat.min(), atol=atol, rtol=rtol)
 
 
 def test_derive_coordinates_and_spatial_ref() -> None:

@@ -152,6 +152,7 @@ The tool outputs a comprehensive ASCII table with:
 1. **Spatial Slice**: Chunks/data needed to read full spatial domain for single time
 2. **Shard Touch**: Total shard data opened for spatial slice
 3. **Full Time Series**: Shards/data needed for complete time series at single location
+4. **Shared Memory Estimate**: Uncompressed memory needed for a single slice along the append dimension (init_time for forecast mode, time for analysis mode)
 
 ### Spatial Scores
 - **Evenness**: Score from 0 to 1 (1.0 = perfectly even division across the domain)
@@ -233,6 +234,9 @@ uv run python src/scripts/chunk_shard_size.py \
 │ 3. FULL TIME SERIES (all time, single spatial pixel)                        │
 │    Shards to read:              26                                          │
 │    Compressed data:          57.38 MB                                       │
+│                                                                              │
+│ 4. SHARED MEMORY ESTIMATE (slice along time)                                │
+│    Uncompressed data:        12.66 GB                                       │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -268,6 +272,7 @@ uv run python src/scripts/chunk_shard_size.py \
 - ✓ OK on shard: 324 MB is within the 100-600 MB range
 - Spatial slice costs ~1.16 GB and touches 8 shards
 - Full time series for one pixel requires 26 shards
+- Shared memory estimate: 12.66 GB of uncompressed data needed for a single slice along the time dimension
 - The template config code block can be copied directly into your `template_config.py`
 
 ---
