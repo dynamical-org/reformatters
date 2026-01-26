@@ -1,23 +1,54 @@
 from unittest.mock import Mock
 
+import numpy as np
 import pandas as pd
 import pytest
 
+from reformatters.common.config_models import DataVarAttrs, Encoding
 from reformatters.dwd.icon_eu.forecast.region_job import (
     DwdIconEuForecastRegionJob,
     DwdIconEuForecastSourceFileCoord,
 )
 from reformatters.dwd.icon_eu.forecast.template_config import (
+    DwdIconEuDataVar,
     DwdIconEuForecastTemplateConfig,
+    DwdIconEuInternalAttrs,
 )
 
 
 @pytest.fixture
-def source_file_coord() -> DwdIconEuForecastSourceFileCoord:
+def t_2m_data_var() -> DwdIconEuDataVar:
+    return DwdIconEuDataVar(
+        name="temperature_2m",
+        encoding=Encoding(
+            dtype="float32",
+            fill_value=np.nan,
+            chunks=(1, 100, 100),
+            shards=(1, 100, 100),
+        ),
+        attrs=DataVarAttrs(
+            short_name="2t",
+            long_name="2 metre temperature",
+            units="degree_Celsius",
+            step_type="instant",
+            comment="Temperature at 2m above ground, averaged over all tiles of a grid point.",
+            standard_name="air_temperature",
+        ),
+        internal_attrs=DwdIconEuInternalAttrs(
+            variable_name_in_filename="t_2m",
+            keep_mantissa_bits=7,
+        ),
+    )
+
+
+@pytest.fixture
+def source_file_coord(
+    t_2m_data_var: DwdIconEuDataVar,
+) -> DwdIconEuForecastSourceFileCoord:
     return DwdIconEuForecastSourceFileCoord(
         init_time=pd.Timestamp("2000-01-01T00:00"),
         lead_time=pd.Timedelta(0),
-        variable_name_in_filename="t_2m",
+        data_var=t_2m_data_var,
     )
 
 

@@ -40,7 +40,7 @@ class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
 
     init_time: Timestamp
     lead_time: Timedelta
-    variable_name_in_filename: str
+    data_var: DwdIconEuDataVar
 
     def get_url(self) -> str:
         """Return URL to .grib2.bz2 files on Dynamical.org's public archive of ICON-EU hosted on Source Co-Op."""
@@ -82,6 +82,10 @@ class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
             "lead_time": self.lead_time,
         }
 
+    @property
+    def variable_name_in_filename(self) -> str:
+        return self.data_var.internal_attrs.variable_name_in_filename
+
 
 class DwdIconEuForecastRegionJob(
     RegionJob[DwdIconEuDataVar, DwdIconEuForecastSourceFileCoord]
@@ -118,9 +122,7 @@ class DwdIconEuForecastRegionJob(
         """
         init_times = pd.to_datetime(processing_region_ds["init_time"].values)
         lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
-        variable_name_in_filename = item(
-            data_var_group
-        ).internal_attrs.variable_name_in_filename
+        data_var = item(data_var_group)
 
         # Sanity checks
         assert len(init_times) > 0
@@ -130,7 +132,7 @@ class DwdIconEuForecastRegionJob(
             DwdIconEuForecastSourceFileCoord(
                 init_time=init_time,
                 lead_time=lead_time,
-                variable_name_in_filename=variable_name_in_filename,
+                data_var=data_var,
             )
             for init_time in init_times
             for lead_time in lead_times
