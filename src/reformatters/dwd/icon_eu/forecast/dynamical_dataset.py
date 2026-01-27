@@ -90,7 +90,7 @@ class DwdIconEuForecastDataset(
         secret = kubernetes.load_secret("source-coop-storage-options-key")
         if secret:
             s3_credentials_env_vars_for_rclone = {
-                "RCLONE_S3_ENV_AUTH": True,
+                "RCLONE_S3_PROVIDER": "AWS",
                 "RCLONE_S3_ACCESS_KEY_ID": secret["key"],
                 "RCLONE_S3_SECRET_ACCESS_KEY": secret["secret"],
                 "RCLONE_S3_REGION": "us-west-2",

@@ -110,9 +110,10 @@ def copy_files_from_dwd_ftp(
                   This is useful for testing locally.
         env_vars: Additional environment variables to give to `rclone`. For example:
             {
-                "RCLONE_S3_ENV_AUTH": True,
+                "RCLONE_S3_PROVIDER": "AWS",
                 "RCLONE_S3_ACCESS_KEY_ID": "key",
                 "RCLONE_S3_SECRET_ACCESS_KEY": "secret",
+                "RCLONE_S3_REGION": "us-west-2",
             }
     """
     file_list = list_ftp_files(ftp_host=ftp_host, ftp_path=ftp_path)
