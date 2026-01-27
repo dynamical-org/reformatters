@@ -70,7 +70,9 @@ class TransferSummary(NamedTuple):
         )
 
     def __str__(self) -> str:
-        bytes_per_sec = self.total_bytes / self.transfer_time
+        bytes_per_sec = (
+            self.total_bytes / self.transfer_time if self.transfer_time > 0 else 0.0
+        )
         mibibytes_per_sec = bytes_per_sec / _MIBIBYTE
         return (
             f"{self.total_transfers} files transferred, "
