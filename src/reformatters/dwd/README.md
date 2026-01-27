@@ -19,8 +19,9 @@ a web browser.
 
 The code in `copy_files_from_dwd_ftp.py` copies files from DWD's FTP server, and transforms the
 destination path to the form `2026-01-20T00Z/t2_m/filename.grib2.bz2`. This code uses
-[`rclone`](https://rclone.org) under the hood. Install `rclone` on `Ubuntu` with `sudo snap install
-rclone`.
+[`rclone`](https://rclone.org) under the hood. Install `rclone` on `Ubuntu` with or `sudo apt
+install rclone` or `sudo snap install rclone --devmode` (the `--devmode` is to allow a snap to run
+on a server; see [this discussion](https://forum.snapcraft.io/t/system-slice-cron-service-is-not-a-snap-cgroup/30196/7)).
 
 ### Testing FTP transfer locally 
 
