@@ -164,6 +164,7 @@ cython_debug/
 #.idea/
 
 .aider*
+.claude/
 
 depot.json
 
