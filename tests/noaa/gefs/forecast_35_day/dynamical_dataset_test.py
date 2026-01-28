@@ -110,15 +110,15 @@ def test_backfill_local_and_operational_update(
         "categorical_freezing_rain_surface",  # average over window
     ]
     init_time_start = dataset.template_config.append_dim_start
-    init_time_end = init_time_start + timedelta(days=2)
+    init_time_end = init_time_start + timedelta(days=1)
 
-    # Trim to one ensemble member to speed up test
+    # Trim lead_time and ensemble_member to speed up test
     orig_get_template = dataset.template_config.get_template
     monkeypatch.setattr(
         type(dataset.template_config),
         "get_template",
         lambda self, end_time: orig_get_template(end_time).sel(
-            lead_time=slice("0h", "12h"), ensemble_member=slice(0, 1)
+            lead_time=slice("0h", "3h"), ensemble_member=slice(0, 1)
         ),
     )
 
@@ -200,8 +200,8 @@ def test_backfill_local_and_operational_update(
     assert point_ds["maximum_temperature_2m"] == 23.875
 
     # Operational update
-    # Advance the init_time_end to the next day to ensure we get the next day's data
-    init_time_end = init_time_end + timedelta(days=1)
+    # Advance the init_time_end to add more data
+    init_time_end = init_time_end + timedelta(hours=12)
     monkeypatch.setattr(
         pd.Timestamp,
         "now",

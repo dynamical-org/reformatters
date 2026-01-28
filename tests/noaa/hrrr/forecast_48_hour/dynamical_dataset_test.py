@@ -39,7 +39,7 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
         type(dataset.template_config),
         "get_template",
         lambda self, end_time: orig_get_template(end_time).sel(
-            lead_time=slice("0h", "5h")
+            lead_time=slice("0h", "2h")
         ),
     )
 
@@ -123,7 +123,7 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     )
     assert_array_equal(updated_ds["init_time"], expected_init_times)
     assert_array_equal(
-        updated_ds["lead_time"], pd.timedelta_range("0h", "5h", freq="1h")
+        updated_ds["lead_time"], pd.timedelta_range("0h", "2h", freq="1h")
     )
 
     space_subset_ds = updated_ds.isel(x=slice(-10, 0), y=slice(0, 10))

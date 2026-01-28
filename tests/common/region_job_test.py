@@ -102,7 +102,9 @@ def template_ds() -> xr.Dataset:
     return _create_template_ds()
 
 
-def _create_template_ds(var_fill_value: float = np.nan) -> xr.Dataset:
+def _create_template_ds(
+    var_fill_value: float = np.nan, num_vars: int = 4
+) -> xr.Dataset:
     num_time = 48
     ds = xr.Dataset(
         {
@@ -121,7 +123,7 @@ def _create_template_ds(var_fill_value: float = np.nan) -> xr.Dataset:
                     "fill_value": var_fill_value,
                 },
             )
-            for i in range(4)
+            for i in range(num_vars)
         },
         coords={
             "time": pd.date_range("2025-01-01", freq="h", periods=num_time),
@@ -175,7 +177,8 @@ def test_region_job_empty_chunk_writing(
     monkeypatch: pytest.MonkeyPatch,
     var_fill_value: float,
 ) -> None:
-    template_ds = _create_template_ds(var_fill_value)
+    # Use only 2 variables to reduce processing time while still testing empty chunk behavior
+    template_ds = _create_template_ds(var_fill_value, num_vars=2)
 
     tmp_store = get_local_tmp_store()
 
