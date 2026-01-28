@@ -69,7 +69,7 @@ def deaccumulate_to_rates_inplace(
     return data_array
 
 
-@njit(parallel=True)  # type: ignore[misc]
+@njit(parallel=True)  # type: ignore[untyped-decorator]
 def _deaccumulate_to_rates_numba(
     values: ArrayFloat32,
     seconds: Array1D[np.int64],

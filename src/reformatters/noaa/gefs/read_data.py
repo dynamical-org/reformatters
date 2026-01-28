@@ -4,6 +4,7 @@ from typing import Literal, assert_never
 
 import numpy as np
 import rasterio  # type: ignore[import-untyped]
+import rioxarray  # noqa: F401  # Registers .rio accessor on xarray objects
 import xarray as xr
 
 from reformatters.common.config import Config

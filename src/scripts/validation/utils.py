@@ -136,7 +136,7 @@ def select_variables_for_plotting(
     ds: xr.Dataset, requested_vars: list[str] | None
 ) -> list[str]:
     """Select and validate variables for plotting."""
-    available_vars = list(ds.data_vars.keys())
+    available_vars = [str(k) for k in ds.data_vars]
     if requested_vars:
         selected_vars = [var for var in requested_vars if var in available_vars]
         if not selected_vars:
