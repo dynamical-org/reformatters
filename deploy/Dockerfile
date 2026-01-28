@@ -9,7 +9,7 @@ SHELL ["sh", "-exc"]
 
 ### Start Build Prep.
 # - Deadsnakes PPA to get newer python versions
-# - gdal & build-essential/gcc packages are needed to compile numcodecs on ARM64.
+# - build-essential/gcc packages are needed to compile numcodecs on ARM64.
 RUN <<EOT
 apt-get update -qy && \
 apt-get install -y software-properties-common && \
@@ -24,8 +24,6 @@ apt-get install -qyy \
     python3.13-dev \
     build-essential \
     gcc \
-    gdal-bin \
-    libgdal-dev
 EOT
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -111,14 +109,12 @@ COPY --from=build /etc/apt/sources.list.d/deadsnakes-ubuntu-ppa-noble.sources /e
 
 # Note how the runtime dependencies differ from build-time ones.
 # Notably, there is no uv either!
-# libgdal-dev is needed for rasterio at runtime on arm64.
 RUN <<EOT
 apt-get update -qy
 apt-get install -qyy \
     -o APT::Install-Suggests=false \
     python3.13 \
     libpython3.13 \
-    libgdal-dev \
     rclone \
 
 apt-get clean
