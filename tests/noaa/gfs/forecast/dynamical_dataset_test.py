@@ -29,7 +29,7 @@ def test_backfill_local_and_operational_update(
     init_time_start = dataset.template_config.append_dim_start
     init_time_end = init_time_start + timedelta(hours=12)
 
-    # Trim to first 3 hours of lead time dimension to speed up test
+    # Trim to first few lead times to speed up test
     orig_get_template = dataset.template_config.get_template
     monkeypatch.setattr(
         type(dataset.template_config),
