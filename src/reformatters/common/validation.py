@@ -10,6 +10,7 @@ import pandas as pd
 import pydantic
 import xarray as xr
 import zarr
+from zarr.abc.store import Store
 
 from reformatters.common import iterating
 from reformatters.common.logging import get_logger
@@ -288,9 +289,7 @@ def compare_replica_and_primary(
         )
 
 
-def check_for_expected_shards(
-    store: zarr.abc.store.Store, ds: xr.Dataset
-) -> ValidationResult:
+def check_for_expected_shards(store: Store, ds: xr.Dataset) -> ValidationResult:
     """Check that the expected shards are present in the store."""
     log.info(f"Checking for expected shards in {store}")
 
@@ -348,9 +347,9 @@ def check_for_expected_shards(
     )
 
 
-def _sync_list_shards(store: zarr.abc.store.Store, var: str) -> set[str]:
+def _sync_list_shards(store: Store, var: str) -> set[str]:
     return zarr.core.sync.sync(_list_shards(store, var))
 
 
-async def _list_shards(store: zarr.abc.store.Store, var: str) -> set[str]:
+async def _list_shards(store: Store, var: str) -> set[str]:
     return {key.split(f"{var}/c/")[-1] async for key in store.list_prefix(f"{var}/c/")}

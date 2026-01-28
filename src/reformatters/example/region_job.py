@@ -2,7 +2,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 import xarray as xr
-import zarr
+from zarr.abc.store import Store
 
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
@@ -213,7 +213,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
     @classmethod
     def operational_update_jobs(
         cls,
-        primary_store: zarr.abc.store.Store,
+        primary_store: Store,
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
@@ -240,7 +240,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
 
         Parameters
         ----------
-        primary_store : zarr.abc.store.Store
+        primary_store : Store
             The primary store to read existing data from and write updates to.
         tmp_store : Path
             The temporary Zarr store to write into while processing.

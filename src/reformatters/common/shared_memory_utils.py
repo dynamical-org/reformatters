@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import xarray as xr
-import zarr
+from zarr.abc.store import Store
 
 from reformatters.common.iterating import consume, shard_slice_indexers
 from reformatters.common.logging import get_logger
@@ -123,7 +123,7 @@ def write_shards(
     shared_buffer: SharedMemory,
     append_dim: AppendDim,
     output_region_ds: xr.Dataset,
-    store: zarr.abc.store.Store | Path,
+    store: Store | Path,
     cpu_process_executor: ProcessPoolExecutor,
 ) -> None:
     """
@@ -170,7 +170,7 @@ def write_shard_to_zarr(
     shared_buffer_name: str,
     append_dim: AppendDim,
     output_region_ds: xr.Dataset,
-    store: zarr.abc.store.Store | Path,
+    store: Store | Path,
     shard_indexer: tuple[slice, ...],
 ) -> None:
     """Write a shard of data held in shared memory to a zarr store."""
@@ -203,4 +203,4 @@ def write_shard_to_zarr(
             message="In a future version of xarray decode_timedelta will default to False rather than None.",
             category=FutureWarning,
         )
-        data_array[shard_indexer].to_zarr(store, region="auto", write_empty_chunks=True)  # type: ignore[call-overload]
+        data_array[shard_indexer].to_zarr(store, region="auto", write_empty_chunks=True)
