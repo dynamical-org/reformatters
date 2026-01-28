@@ -36,23 +36,24 @@ jobs:
       - name: Install Arm Build Dependencies
         if: matrix.arch == 'arm64'
         run: |
-          # Speed up apt for ARM CI runners' slower package indexes
+          # Speed up apt for CI by not fetching uncessary data
           sudo tee /etc/apt/apt.conf.d/99ci-speedups <<'EOF'
           Acquire::Languages "none";
           Acquire::IndexTargets::deb::cnf::Enabled "false";
           EOF
 
-          # Remove third-party repositories not needed for GDAL
-          sudo rm -f /etc/apt/sources.list.d/*microsoft*.list
-          sudo rm -f /etc/apt/sources.list.d/*azure*.list
-          sudo rm -f /etc/apt/sources.list.d/ondrej*.list
+          # Remove third-party repositories (list + sources)
+          sudo rm -f /etc/apt/sources.list.d/*microsoft*.*
+          sudo rm -f /etc/apt/sources.list.d/*azure*.*
+          sudo rm -f /etc/apt/sources.list.d/ondrej*.*
 
-          # Drop unused Ubuntu components
+          # Disable unused Ubuntu components at the source level
           sudo sed -i \
             -e 's/ restricted//g' \
             -e 's/ multiverse//g' \
             -e 's/ backports//g' \
-            /etc/apt/sources.list
+            /etc/apt/sources.list \
+            /etc/apt/sources.list.d/*.sources
 
           sudo apt-get update -qy
           sudo apt-get install -qy --no-install-recommends libgdal-dev
