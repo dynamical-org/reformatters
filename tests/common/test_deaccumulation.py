@@ -45,7 +45,7 @@ def test_deaccumulate_higher_dimensional() -> None:
     data = np.stack([data, data], axis=-1)
 
     data_array = xr.DataArray(
-        data,  # Shape will be (2, 3, 5, 1, 1) for (init_time, ensemble_member, lead_time, lat, lon)
+        data,  # Shape will be (2, 3, 5, 2, 2) for (init_time, ensemble_member, lead_time, lat, lon)
         coords={
             "init_time": [init_time, init_time + pd.Timedelta(hours=6)],
             "ensemble_member": [0, 1, 2],

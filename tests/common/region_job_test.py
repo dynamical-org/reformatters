@@ -29,10 +29,16 @@ from reformatters.common.storage import (
 )
 from reformatters.common.types import ArrayFloat32, Timestamp
 
+_LAT_SIZE = 3
+_LON_SIZE = 4
+
 
 class ExampleDataVar(DataVar[BaseInternalAttrs]):
     encoding: Encoding = Encoding(
-        dtype="float32", fill_value=np.nan, chunks=(1, 10, 15), shards=None
+        dtype="float32",
+        fill_value=np.nan,
+        chunks=(1, _LAT_SIZE, _LON_SIZE),
+        shards=None,
     )
     attrs: DataVarAttrs = DataVarAttrs(
         units="C",
@@ -82,7 +88,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoords]):
     ) -> ArrayFloat32:
         if coord.time == pd.Timestamp("2025-01-01T06"):
             raise ValueError("Test error")  # simulate a read error
-        return np.ones((10, 15), dtype=np.float32)
+        return np.ones((_LAT_SIZE, _LON_SIZE), dtype=np.float32)
 
 
 @pytest.fixture
@@ -97,29 +103,25 @@ def store_factory() -> StoreFactory:
     )
 
 
-@pytest.fixture
-def template_ds() -> xr.Dataset:
-    return _create_template_ds()
-
-
 def _create_template_ds(
-    var_fill_value: float = np.nan, num_vars: int = 4
+    var_fill_value: float = np.nan,
+    num_vars: int = 4,
+    num_time: int = 48,
 ) -> xr.Dataset:
-    num_time = 48
     ds = xr.Dataset(
         {
             f"var{i}": xr.Variable(
                 data=dask.array.full(  # type: ignore[no-untyped-call]
-                    (num_time, 10, 15),
+                    (num_time, _LAT_SIZE, _LON_SIZE),
                     var_fill_value,
                     dtype=np.float32,
-                    chunks=(num_time // 4, 10, 15),
+                    chunks=(num_time // 4, _LAT_SIZE, _LON_SIZE),
                 ),
                 dims=["time", "latitude", "longitude"],
                 encoding={
                     "dtype": "float32",
-                    "chunks": (num_time // 4, 10, 15),
-                    "shards": (num_time // 2, 10, 15),
+                    "chunks": (num_time // 4, _LAT_SIZE, _LON_SIZE),
+                    "shards": (num_time // 2, _LAT_SIZE, _LON_SIZE),
                     "fill_value": var_fill_value,
                 },
             )
@@ -127,8 +129,8 @@ def _create_template_ds(
         },
         coords={
             "time": pd.date_range("2025-01-01", freq="h", periods=num_time),
-            "latitude": np.linspace(0, 90, 10),
-            "longitude": np.linspace(0, 140, 15),
+            "latitude": np.linspace(0, 90, _LAT_SIZE),
+            "longitude": np.linspace(0, 140, _LON_SIZE),
         },
         attrs={"dataset_id": "test-dataset-A"},
     )
@@ -138,7 +140,13 @@ def _create_template_ds(
     return ds
 
 
-def test_region_job(template_ds: xr.Dataset, store_factory: StoreFactory) -> None:
+@pytest.fixture
+def template_ds() -> xr.Dataset:
+    return _create_template_ds(var_fill_value=np.nan, num_vars=4, num_time=48)
+
+
+def test_region_job(store_factory: StoreFactory) -> None:
+    template_ds = _create_template_ds(num_vars=2)
     tmp_store = get_local_tmp_store()
 
     # Write zarr metadata for this RegionJob to write into
@@ -164,7 +172,7 @@ def test_region_job(template_ds: xr.Dataset, store_factory: StoreFactory) -> Non
     region_ds = ds.isel({job.append_dim: job.region})
     assert np.array_equal(region_ds.time.values, region_template_ds.time.values)
 
-    expected_values = np.ones((18, 10, 15))
+    expected_values = np.ones((18, _LAT_SIZE, _LON_SIZE))
     expected_values[0, :, :] = np.nan
     expected_values[6, :, :] = np.nan
     for data_var in region_ds.data_vars.values():
@@ -205,9 +213,9 @@ def test_region_job_empty_chunk_writing(
         # so we should expect the 1.0.0 shards to be present and they should
         # be read as filled with var_fill_value.
         if coord.time >= pd.Timestamp("2025-01-02T00"):
-            return np.full((10, 15), var_fill_value, dtype=np.float32)
+            return np.full((_LAT_SIZE, _LON_SIZE), var_fill_value, dtype=np.float32)
         else:
-            return np.full((10, 15), 1.0, dtype=np.float32)
+            return np.full((_LAT_SIZE, _LON_SIZE), 1.0, dtype=np.float32)
 
     monkeypatch.setattr(ExampleRegionJob, "read_data", read_data)
 

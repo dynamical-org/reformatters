@@ -61,9 +61,12 @@ def test_region_job_generate_source_file_coords() -> None:
 
     region_job = EcmwfIfsEnsForecast15Day025DegreeRegionJob.model_construct(
         tmp_store=Mock(),
+        # Slice so dataset represents the last 3 init times (Nov 12, 13, 14), 2 ensemble members, and 12 lead times
         template_ds=template_ds.isel(
-            init_time=slice(-3, None)
-        ),  # Slice so dataset represents the last 3 init times (Nov 12, 13, 14)
+            init_time=slice(-3, None),
+            ensemble_member=slice(0, 2),
+            lead_time=slice(0, 12),
+        ),
         data_vars=template_config.data_vars,
         append_dim=template_config.append_dim,
         region=slice(0, 3),
@@ -79,8 +82,9 @@ def test_region_job_generate_source_file_coords() -> None:
     group_0_source_file_coords = region_job.generate_source_file_coords(
         processing_region_ds, groups[0]
     )
-    # Since our region is three init times (slice(0, 3)), we should get 51 * 85 * 3 = 13005 source file coords
-    assert len(group_0_source_file_coords) == 51 * 85 * 3
+    # Since our region is three init times (slice(0, 3)), 2 ensemble members, and 12 lead times,
+    # we should get 3 * 2 * 12 = 72 source file coords
+    assert len(group_0_source_file_coords) == 3 * 2 * 12
 
     group_1_source_file_coords = region_job.generate_source_file_coords(
         processing_region_ds, groups[1]
