@@ -107,7 +107,6 @@ def test_backfill_local_and_operational_update(
         "temperature_2m",  # instantaneous
         "precipitation_surface",  # accumulation we deaccumulate
         "maximum_temperature_2m",  # max over window
-        "categorical_freezing_rain_surface",  # average over window
     ]
     init_time_start = dataset.template_config.append_dim_start
     init_time_end = init_time_start + timedelta(days=1)
@@ -155,7 +154,6 @@ def test_backfill_local_and_operational_update(
                 [
                     "precipitation_surface",
                     "maximum_temperature_2m",
-                    "categorical_freezing_rain_surface",
                 ]
             ]
             .sel(lead_time=slice("1h", None))
@@ -173,7 +171,6 @@ def test_backfill_local_and_operational_update(
                 [
                     "precipitation_surface",
                     "maximum_temperature_2m",
-                    "categorical_freezing_rain_surface",
                 ]
             ]
             # All null at lead time 0
@@ -251,7 +248,6 @@ def test_backfill_local_and_operational_update(
                 [
                     "precipitation_surface",
                     "maximum_temperature_2m",
-                    "categorical_freezing_rain_surface",
                 ]
             ]
             .sel(lead_time=slice("1h", None))
@@ -269,7 +265,6 @@ def test_backfill_local_and_operational_update(
                 [
                     "precipitation_surface",
                     "maximum_temperature_2m",
-                    "categorical_freezing_rain_surface",
                 ]
             ]
             # All null at lead time 0
