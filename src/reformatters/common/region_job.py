@@ -504,6 +504,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             make_shared_buffer(processing_region_ds) as shared_buffer,
             ThreadPoolExecutor(max_workers=1) as download_executor,
             ThreadPoolExecutor(max_workers=1) as upload_executor,
+            ProcessPoolExecutor(max_workers=os.cpu_count() or 1) as write_executor,
         ):
             log.info(f"Starting {self!r}")
 
@@ -549,6 +550,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         shared_buffer,
                         output_region_ds,
                         self.tmp_store,
+                        write_executor,
                     )
 
                     def track_progress_callback(data_var: DATA_VAR = data_var) -> None:
@@ -689,16 +691,16 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         shared_buffer: SharedMemory,
         output_region_ds: xr.Dataset,
         tmp_store: Path,
+        write_executor: ProcessPoolExecutor,
     ) -> None:
-        with ProcessPoolExecutor(max_workers=os.cpu_count() or 1) as process_executor:
-            write_shards(
-                processing_region_da_template,
-                shared_buffer,
-                self.append_dim,
-                output_region_ds,
-                tmp_store,
-                process_executor,
-            )
+        write_shards(
+            processing_region_da_template,
+            shared_buffer,
+            self.append_dim,
+            output_region_ds,
+            tmp_store,
+            write_executor,
+        )
 
     def _cleanup_local_files(
         self, source_file_coords: Sequence[SOURCE_FILE_COORD]
