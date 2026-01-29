@@ -491,3 +491,506 @@ def test_get_jobs_grouping_filter_contains_all_shards(template_ds: xr.Dataset) -
         slice(24, 48),
         slice(24, 48),
     ]
+
+
+def test_get_jobs_many_shards_combined_filters() -> None:
+    """Test get_jobs performance with 10,000 shards and combined filters."""
+    num_shards = 10_000
+
+    # Create template with chunk and shard size of 1 along init_time
+    large_template_ds = xr.Dataset(
+        {
+            f"var{i}": xr.Variable(
+                data=dask.array.full(  # type: ignore[no-untyped-call]
+                    (num_shards, _LAT_SIZE, _LON_SIZE),
+                    np.nan,
+                    dtype=np.float32,
+                    chunks=(1, _LAT_SIZE, _LON_SIZE),
+                ),
+                dims=["init_time", "latitude", "longitude"],
+                encoding={
+                    "dtype": "float32",
+                    "chunks": (1, _LAT_SIZE, _LON_SIZE),
+                    "shards": (1, _LAT_SIZE, _LON_SIZE),
+                    "fill_value": np.nan,
+                },
+            )
+            for i in range(3)
+        },
+        coords={
+            "init_time": pd.date_range("2020-01-01", freq="6h", periods=num_shards),
+            "latitude": np.linspace(0, 90, _LAT_SIZE),
+            "longitude": np.linspace(0, 140, _LON_SIZE),
+        },
+        attrs={"dataset_id": "test-dataset-large"},
+    )
+    large_template_ds["init_time"].encoding["fill_value"] = -1
+    large_template_ds["latitude"].encoding["fill_value"] = np.nan
+    large_template_ds["longitude"].encoding["fill_value"] = np.nan
+
+    data_vars = [ExampleDataVar(name=str(name)) for name in large_template_ds.data_vars]
+    tmp_store = get_local_tmp_store()
+    init_time_coords = large_template_ds.coords["init_time"].values
+
+    # filter_start drops first 100 shards (indices 0-99)
+    filter_start = pd.Timestamp(init_time_coords[100])
+    # filter_end drops last 100 shards (indices 9900-9999)
+    filter_end = pd.Timestamp(init_time_coords[9900])
+    # filter_contains: 100 every-other timestamps from indices 50, 52, 54, ... 248
+    # 25 of these (50-98) are in first 100 (dropped by filter_start), leaving 75
+    filter_contains = [pd.Timestamp(init_time_coords[i]) for i in range(50, 250, 2)]
+
+    jobs = ExampleRegionJob.get_jobs(
+        kind="backfill",
+        tmp_store=tmp_store,
+        template_ds=large_template_ds,
+        append_dim="init_time",
+        all_data_vars=data_vars,
+        reformat_job_name="test-job",
+        filter_start=filter_start,
+        filter_end=filter_end,
+        filter_contains=filter_contains,
+        filter_variable_names=["var0", "var1"],  # 2 of 3 vars
+    )
+
+    # Expected: 75 unique shards (indices 100-248 stepping by 2) x 1 var group = 75 jobs
+    # With max_vars_per_backfill_job=2, [var0, var1] stays as one group
+    expected_shard_indices = list(range(100, 250, 2))  # 75 shards
+    assert len(jobs) == 75
+    assert all(len(j.data_vars) == 2 for j in jobs)
+    assert all(j.data_vars[0].name == "var0" for j in jobs)
+    assert all(j.data_vars[1].name == "var1" for j in jobs)
+    assert [j.region for j in jobs] == [slice(i, i + 1) for i in expected_shard_indices]
+
+
+# --- Edge case tests for get_jobs filtering ---
+# Uses a simple 4-shard dataset: each shard has 2 hours
+# Shard 0: hours 0,1 (2025-01-01 00:00, 01:00)
+# Shard 1: hours 2,3 (2025-01-01 02:00, 03:00)
+# Shard 2: hours 4,5 (2025-01-01 04:00, 05:00)
+# Shard 3: hours 6,7 (2025-01-01 06:00, 07:00)
+
+
+@pytest.fixture
+def small_template_ds() -> xr.Dataset:
+    """4 shards, 2 hours each, 1 variable for fast tests."""
+    num_time = 8
+    ds = xr.Dataset(
+        {
+            "var0": xr.Variable(
+                data=dask.array.zeros(
+                    (num_time, _LAT_SIZE, _LON_SIZE),
+                    dtype=np.float32,
+                    chunks=(2, _LAT_SIZE, _LON_SIZE),
+                ),
+                dims=["time", "latitude", "longitude"],
+                encoding={
+                    "dtype": "float32",
+                    "chunks": (2, _LAT_SIZE, _LON_SIZE),
+                    "shards": (2, _LAT_SIZE, _LON_SIZE),
+                    "fill_value": np.nan,
+                },
+            )
+        },
+        coords={
+            "time": pd.date_range("2025-01-01", freq="h", periods=num_time),
+            "latitude": np.linspace(0, 90, _LAT_SIZE),
+            "longitude": np.linspace(0, 140, _LON_SIZE),
+        },
+        attrs={"dataset_id": "test-edge-cases"},
+    )
+    ds["time"].encoding["fill_value"] = -1
+    ds["latitude"].encoding["fill_value"] = np.nan
+    ds["longitude"].encoding["fill_value"] = np.nan
+    return ds
+
+
+def _get_regions(
+    ds: xr.Dataset,
+    filter_start: pd.Timestamp | None = None,
+    filter_end: pd.Timestamp | None = None,
+    filter_contains: list[pd.Timestamp] | None = None,
+) -> list[slice]:
+    """Helper to get just the regions from get_jobs."""
+    data_vars = [ExampleDataVar(name=str(name)) for name in ds.data_vars]
+    jobs = ExampleRegionJob.get_jobs(
+        kind="backfill",
+        tmp_store=get_local_tmp_store(),
+        template_ds=ds,
+        append_dim="time",
+        all_data_vars=data_vars,
+        reformat_job_name="test-job",
+        filter_start=filter_start,
+        filter_end=filter_end,
+        filter_contains=filter_contains,
+    )
+    return [j.region for j in jobs]
+
+
+class TestFilterStartEdgeCases:
+    def test_filter_start_equals_first_coord(
+        self, small_template_ds: xr.Dataset
+    ) -> None:
+        """filter_start at first coord keeps all shards."""
+        regions = _get_regions(
+            small_template_ds, filter_start=pd.Timestamp("2025-01-01 00:00")
+        )
+        assert regions == [slice(0, 2), slice(2, 4), slice(4, 6), slice(6, 8)]
+
+    def test_filter_start_equals_last_coord(
+        self, small_template_ds: xr.Dataset
+    ) -> None:
+        """filter_start at last coord keeps only last shard."""
+        regions = _get_regions(
+            small_template_ds, filter_start=pd.Timestamp("2025-01-01 07:00")
+        )
+        assert regions == [slice(6, 8)]
+
+    def test_filter_start_before_all_coords(
+        self, small_template_ds: xr.Dataset
+    ) -> None:
+        """filter_start before data keeps all shards."""
+        regions = _get_regions(
+            small_template_ds, filter_start=pd.Timestamp("2024-01-01")
+        )
+        assert regions == [slice(0, 2), slice(2, 4), slice(4, 6), slice(6, 8)]
+
+    def test_filter_start_after_all_coords(self, small_template_ds: xr.Dataset) -> None:
+        """filter_start after data keeps no shards."""
+        regions = _get_regions(
+            small_template_ds, filter_start=pd.Timestamp("2026-01-01")
+        )
+        assert regions == []
+
+    def test_filter_start_on_shard_boundary(
+        self, small_template_ds: xr.Dataset
+    ) -> None:
+        """filter_start exactly at shard 2 boundary (hour 4)."""
+        regions = _get_regions(
+            small_template_ds, filter_start=pd.Timestamp("2025-01-01 04:00")
+        )
+        assert regions == [slice(4, 6), slice(6, 8)]
+
+    def test_filter_start_mid_shard(self, small_template_ds: xr.Dataset) -> None:
+        """filter_start in middle of shard 1 (hour 3) keeps shard 1 onward."""
+        regions = _get_regions(
+            small_template_ds, filter_start=pd.Timestamp("2025-01-01 03:00")
+        )
+        assert regions == [slice(2, 4), slice(4, 6), slice(6, 8)]
+
+
+class TestFilterEndEdgeCases:
+    def test_filter_end_equals_first_coord(self, small_template_ds: xr.Dataset) -> None:
+        """filter_end at first coord keeps no shards (min must be < end)."""
+        regions = _get_regions(
+            small_template_ds, filter_end=pd.Timestamp("2025-01-01 00:00")
+        )
+        assert regions == []
+
+    def test_filter_end_equals_second_coord(
+        self, small_template_ds: xr.Dataset
+    ) -> None:
+        """filter_end at second coord keeps only first shard."""
+        regions = _get_regions(
+            small_template_ds, filter_end=pd.Timestamp("2025-01-01 01:00")
+        )
+        assert regions == [slice(0, 2)]
+
+    def test_filter_end_after_all_coords(self, small_template_ds: xr.Dataset) -> None:
+        """filter_end after data keeps all shards."""
+        regions = _get_regions(small_template_ds, filter_end=pd.Timestamp("2026-01-01"))
+        assert regions == [slice(0, 2), slice(2, 4), slice(4, 6), slice(6, 8)]
+
+    def test_filter_end_before_all_coords(self, small_template_ds: xr.Dataset) -> None:
+        """filter_end before data keeps no shards."""
+        regions = _get_regions(small_template_ds, filter_end=pd.Timestamp("2024-01-01"))
+        assert regions == []
+
+    def test_filter_end_on_shard_boundary(self, small_template_ds: xr.Dataset) -> None:
+        """filter_end exactly at shard 2 boundary (hour 4) keeps shards 0,1."""
+        regions = _get_regions(
+            small_template_ds, filter_end=pd.Timestamp("2025-01-01 04:00")
+        )
+        assert regions == [slice(0, 2), slice(2, 4)]
+
+    def test_filter_end_mid_shard(self, small_template_ds: xr.Dataset) -> None:
+        """filter_end in middle of shard 1 (hour 3) keeps shards 0,1."""
+        regions = _get_regions(
+            small_template_ds, filter_end=pd.Timestamp("2025-01-01 03:00")
+        )
+        assert regions == [slice(0, 2), slice(2, 4)]
+
+
+class TestFilterContainsEdgeCases:
+    def test_filter_contains_not_in_coords(self, small_template_ds: xr.Dataset) -> None:
+        """filter_contains with non-existent timestamp returns no shards."""
+        regions = _get_regions(
+            small_template_ds, filter_contains=[pd.Timestamp("2025-01-01 00:30")]
+        )
+        assert regions == []
+
+    def test_filter_contains_empty_list(self, small_template_ds: xr.Dataset) -> None:
+        """filter_contains with empty list returns no shards."""
+        regions = _get_regions(small_template_ds, filter_contains=[])
+        assert regions == []
+
+    def test_filter_contains_first_coord(self, small_template_ds: xr.Dataset) -> None:
+        """filter_contains with first coord returns first shard."""
+        regions = _get_regions(
+            small_template_ds, filter_contains=[pd.Timestamp("2025-01-01 00:00")]
+        )
+        assert regions == [slice(0, 2)]
+
+    def test_filter_contains_last_coord(self, small_template_ds: xr.Dataset) -> None:
+        """filter_contains with last coord returns last shard."""
+        regions = _get_regions(
+            small_template_ds, filter_contains=[pd.Timestamp("2025-01-01 07:00")]
+        )
+        assert regions == [slice(6, 8)]
+
+    def test_filter_contains_duplicates(self, small_template_ds: xr.Dataset) -> None:
+        """filter_contains with duplicate timestamps deduplicates."""
+        regions = _get_regions(
+            small_template_ds,
+            filter_contains=[
+                pd.Timestamp("2025-01-01 02:00"),
+                pd.Timestamp("2025-01-01 02:00"),
+                pd.Timestamp("2025-01-01 03:00"),  # same shard
+            ],
+        )
+        assert regions == [slice(2, 4)]
+
+    def test_filter_contains_multiple_shards(
+        self, small_template_ds: xr.Dataset
+    ) -> None:
+        """filter_contains spanning shards 0 and 2 (skipping 1)."""
+        regions = _get_regions(
+            small_template_ds,
+            filter_contains=[
+                pd.Timestamp("2025-01-01 00:00"),
+                pd.Timestamp("2025-01-01 05:00"),
+            ],
+        )
+        assert regions == [slice(0, 2), slice(4, 6)]
+
+
+class TestCombinedFilterEdgeCases:
+    def test_filter_start_greater_than_end(self, small_template_ds: xr.Dataset) -> None:
+        """filter_start > filter_end returns no shards."""
+        regions = _get_regions(
+            small_template_ds,
+            filter_start=pd.Timestamp("2025-01-01 06:00"),
+            filter_end=pd.Timestamp("2025-01-01 02:00"),
+        )
+        assert regions == []
+
+    def test_filter_start_equals_end(self, small_template_ds: xr.Dataset) -> None:
+        """filter_start == filter_end returns no shards (end is exclusive)."""
+        regions = _get_regions(
+            small_template_ds,
+            filter_start=pd.Timestamp("2025-01-01 04:00"),
+            filter_end=pd.Timestamp("2025-01-01 04:00"),
+        )
+        assert regions == []
+
+    def test_filter_contains_outside_start_end_range(
+        self, small_template_ds: xr.Dataset
+    ) -> None:
+        """filter_contains timestamps outside start/end range returns no shards."""
+        regions = _get_regions(
+            small_template_ds,
+            filter_start=pd.Timestamp("2025-01-01 04:00"),
+            filter_end=pd.Timestamp("2025-01-01 06:00"),
+            filter_contains=[pd.Timestamp("2025-01-01 00:00")],  # in shard 0, excluded
+        )
+        assert regions == []
+
+    def test_all_filters_narrow_to_single_shard(
+        self, small_template_ds: xr.Dataset
+    ) -> None:
+        """All filters combine to select single shard."""
+        regions = _get_regions(
+            small_template_ds,
+            filter_start=pd.Timestamp("2025-01-01 02:00"),
+            filter_end=pd.Timestamp("2025-01-01 06:00"),
+            filter_contains=[pd.Timestamp("2025-01-01 03:00")],
+        )
+        assert regions == [slice(2, 4)]
+
+    # --- filter_contains + filter_end interactions ---
+
+    def test_filter_contains_equals_filter_end(
+        self, small_template_ds: xr.Dataset
+    ) -> None:
+        """filter_contains at exactly filter_end is excluded (end is exclusive)."""
+        # filter_end=04:00 excludes shard 2 (hours 4,5), filter_contains=[04:00] is in shard 2
+        regions = _get_regions(
+            small_template_ds,
+            filter_end=pd.Timestamp("2025-01-01 04:00"),
+            filter_contains=[pd.Timestamp("2025-01-01 04:00")],
+        )
+        assert regions == []
+
+    def test_filter_contains_in_last_included_shard_before_end(
+        self, small_template_ds: xr.Dataset
+    ) -> None:
+        """filter_contains in last shard before filter_end is included."""
+        # filter_end=04:00 keeps shards 0,1. filter_contains=[03:00] is in shard 1
+        regions = _get_regions(
+            small_template_ds,
+            filter_end=pd.Timestamp("2025-01-01 04:00"),
+            filter_contains=[pd.Timestamp("2025-01-01 03:00")],
+        )
+        assert regions == [slice(2, 4)]
+
+    def test_filter_contains_in_first_excluded_shard_after_end(
+        self, small_template_ds: xr.Dataset
+    ) -> None:
+        """filter_contains in first excluded shard (after filter_end) returns empty."""
+        # filter_end=04:00 keeps shards 0,1 (hours 0-3). filter_contains=[05:00] is in shard 2
+        regions = _get_regions(
+            small_template_ds,
+            filter_end=pd.Timestamp("2025-01-01 04:00"),
+            filter_contains=[pd.Timestamp("2025-01-01 05:00")],
+        )
+        assert regions == []
+
+    # --- filter_contains + filter_start interactions ---
+
+    def test_filter_contains_equals_filter_start(
+        self, small_template_ds: xr.Dataset
+    ) -> None:
+        """filter_contains at exactly filter_start is included."""
+        # filter_start=04:00 keeps shards 2,3. filter_contains=[04:00] is in shard 2
+        regions = _get_regions(
+            small_template_ds,
+            filter_start=pd.Timestamp("2025-01-01 04:00"),
+            filter_contains=[pd.Timestamp("2025-01-01 04:00")],
+        )
+        assert regions == [slice(4, 6)]
+
+    def test_filter_contains_in_last_excluded_shard_before_start(
+        self, small_template_ds: xr.Dataset
+    ) -> None:
+        """filter_contains in last excluded shard (before filter_start) returns empty."""
+        # filter_start=04:00 keeps shards 2,3. filter_contains=[03:00] is in shard 1 (excluded)
+        regions = _get_regions(
+            small_template_ds,
+            filter_start=pd.Timestamp("2025-01-01 04:00"),
+            filter_contains=[pd.Timestamp("2025-01-01 03:00")],
+        )
+        assert regions == []
+
+    def test_filter_contains_in_first_included_shard_at_start(
+        self, small_template_ds: xr.Dataset
+    ) -> None:
+        """filter_contains in first included shard (at filter_start) is included."""
+        # filter_start=04:00 keeps shards 2,3. filter_contains=[05:00] is in shard 2
+        regions = _get_regions(
+            small_template_ds,
+            filter_start=pd.Timestamp("2025-01-01 04:00"),
+            filter_contains=[pd.Timestamp("2025-01-01 05:00")],
+        )
+        assert regions == [slice(4, 6)]
+
+    # --- filter_contains with mixed included/excluded timestamps ---
+
+    def test_filter_contains_some_in_range_some_out(
+        self, small_template_ds: xr.Dataset
+    ) -> None:
+        """filter_contains with some timestamps in range and some out keeps only valid."""
+        # filter_start=02:00, filter_end=06:00 keeps shards 1,2 (hours 2-5)
+        # filter_contains has: 01:00 (shard 0, excluded), 03:00 (shard 1), 06:00 (shard 3, excluded)
+        regions = _get_regions(
+            small_template_ds,
+            filter_start=pd.Timestamp("2025-01-01 02:00"),
+            filter_end=pd.Timestamp("2025-01-01 06:00"),
+            filter_contains=[
+                pd.Timestamp("2025-01-01 01:00"),  # shard 0, before start
+                pd.Timestamp("2025-01-01 03:00"),  # shard 1, in range
+                pd.Timestamp("2025-01-01 06:00"),  # shard 3, at/after end
+            ],
+        )
+        assert regions == [slice(2, 4)]
+
+
+class TestSingleShardEdgeCases:
+    @pytest.fixture
+    def single_shard_ds(self) -> xr.Dataset:
+        """Dataset with only 1 shard (2 hours)."""
+        ds = xr.Dataset(
+            {
+                "var0": xr.Variable(
+                    data=dask.array.zeros(
+                        (2, _LAT_SIZE, _LON_SIZE),
+                        dtype=np.float32,
+                        chunks=(2, _LAT_SIZE, _LON_SIZE),
+                    ),
+                    dims=["time", "latitude", "longitude"],
+                    encoding={
+                        "dtype": "float32",
+                        "chunks": (2, _LAT_SIZE, _LON_SIZE),
+                        "shards": (2, _LAT_SIZE, _LON_SIZE),
+                        "fill_value": np.nan,
+                    },
+                )
+            },
+            coords={
+                "time": pd.date_range("2025-01-01", freq="h", periods=2),
+                "latitude": np.linspace(0, 90, _LAT_SIZE),
+                "longitude": np.linspace(0, 140, _LON_SIZE),
+            },
+            attrs={"dataset_id": "test-single-shard"},
+        )
+        ds["time"].encoding["fill_value"] = -1
+        ds["latitude"].encoding["fill_value"] = np.nan
+        ds["longitude"].encoding["fill_value"] = np.nan
+        return ds
+
+    def test_single_shard_filter_start_keeps(self, single_shard_ds: xr.Dataset) -> None:
+        """Single shard kept when filter_start matches."""
+        regions = _get_regions(
+            single_shard_ds, filter_start=pd.Timestamp("2025-01-01 00:00")
+        )
+        assert regions == [slice(0, 2)]
+
+    def test_single_shard_filter_start_excludes(
+        self, single_shard_ds: xr.Dataset
+    ) -> None:
+        """Single shard excluded when filter_start is after."""
+        regions = _get_regions(single_shard_ds, filter_start=pd.Timestamp("2025-01-02"))
+        assert regions == []
+
+    def test_single_shard_filter_end_keeps(self, single_shard_ds: xr.Dataset) -> None:
+        """Single shard kept when filter_end is after."""
+        regions = _get_regions(
+            single_shard_ds, filter_end=pd.Timestamp("2025-01-01 01:00")
+        )
+        assert regions == [slice(0, 2)]
+
+    def test_single_shard_filter_end_excludes(
+        self, single_shard_ds: xr.Dataset
+    ) -> None:
+        """Single shard excluded when filter_end is at or before first coord."""
+        regions = _get_regions(
+            single_shard_ds, filter_end=pd.Timestamp("2025-01-01 00:00")
+        )
+        assert regions == []
+
+    def test_single_shard_filter_contains_keeps(
+        self, single_shard_ds: xr.Dataset
+    ) -> None:
+        """Single shard kept when filter_contains matches."""
+        regions = _get_regions(
+            single_shard_ds, filter_contains=[pd.Timestamp("2025-01-01 01:00")]
+        )
+        assert regions == [slice(0, 2)]
+
+    def test_single_shard_filter_contains_excludes(
+        self, single_shard_ds: xr.Dataset
+    ) -> None:
+        """Single shard excluded when filter_contains doesn't match."""
+        regions = _get_regions(
+            single_shard_ds, filter_contains=[pd.Timestamp("2025-01-01 00:30")]
+        )
+        assert regions == []
