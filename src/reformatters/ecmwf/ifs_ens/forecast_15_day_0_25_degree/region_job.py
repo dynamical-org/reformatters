@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import rasterio  # type: ignore[import-untyped]
 import xarray as xr
-import zarr
+from zarr.abc.store import Store
 
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import (
@@ -244,7 +244,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     @classmethod
     def operational_update_jobs(
         cls,
-        primary_store: zarr.abc.store.Store,
+        primary_store: Store,
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
@@ -265,7 +265,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
 
         Parameters
         ----------
-        primary_store : zarr.abc.store.Store
+        primary_store : Store
             The primary store to read existing data from and write updates to.
         tmp_store : Path
             The temporary Zarr store to write into while processing.

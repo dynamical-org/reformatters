@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 import zarr
+from zarr.abc.store import Store
 
 from reformatters.common.config_models import Coordinate, DataVar
 from reformatters.common.logging import get_logger
@@ -24,8 +25,8 @@ def write_metadata(
     mode: Literal["w", "w-"] | None = None,
     skip_icechunk_commit: bool = False,
 ) -> None:
-    store: zarr.abc.store.Store | Path
-    replica_stores: list[zarr.abc.store.Store]
+    store: Store | Path
+    replica_stores: list[Store]
 
     assert_fill_values_set(template_ds)
 
@@ -35,7 +36,7 @@ def write_metadata(
         mode = storage.mode()
         replica_stores = storage.replica_stores(writable=True)
     else:
-        assert isinstance(storage, (zarr.abc.store.Store, Path))
+        assert isinstance(storage, (Store, Path))
         store = storage
         replica_stores = []
         # respect mode if provided by legacy implementations
@@ -54,10 +55,10 @@ def write_metadata(
 
         for replica_store in replica_stores:
             log.info(f"Writing metadata to replica {replica_store} with mode {mode}")
-            template_ds.to_zarr(replica_store, mode=mode, compute=False)  # type: ignore[call-overload]
+            template_ds.to_zarr(replica_store, mode=mode, compute=False)
 
         log.info(f"Writing metadata to store {store} with mode {mode}")
-        template_ds.to_zarr(store, mode=mode, compute=False)  # type: ignore[call-overload]
+        template_ds.to_zarr(store, mode=mode, compute=False)
 
     if isinstance(store, Path | str):
         sort_consolidated_metadata(Path(store) / "zarr.json")

@@ -39,7 +39,7 @@ def round_float32_inplace(value: ArrayFloat32, keep_mantissa_bits: int) -> Array
     return cast(ArrayFloat32, bits.view(np.float32))
 
 
-@njit(parallel=True)  # type: ignore[misc]
+@njit(parallel=True)  # type: ignore[untyped-decorator]
 def _round_float32_inplace_numba(
     bits: np.ndarray[tuple[int, ...], np.dtype[np.uint32]],
     keep_mantissa_bits: int,

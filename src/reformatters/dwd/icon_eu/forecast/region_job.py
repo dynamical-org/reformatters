@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import rasterio  # type: ignore[import-untyped]
 import xarray as xr
-import zarr
 from obstore.exceptions import GenericError
+from zarr.abc.store import Store
 
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import item
@@ -252,7 +252,7 @@ class DwdIconEuForecastRegionJob(
     @classmethod
     def operational_update_jobs(
         cls,
-        primary_store: zarr.abc.store.Store,
+        primary_store: Store,
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
@@ -279,7 +279,7 @@ class DwdIconEuForecastRegionJob(
 
         Parameters
         ----------
-        primary_store : zarr.abc.store.Store
+        primary_store : Store
             The primary store to read existing data from and write updates to.
         tmp_store : Path
             The temporary Zarr store to write into while processing.
