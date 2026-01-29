@@ -464,7 +464,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
             if filter_contains is not None:
                 coord_index = pd.Index(coord_values)
-                indices = coord_index.get_indexer(filter_contains)
+                indices = coord_index.get_indexer(pd.Index(filter_contains))
                 valid_indices = indices[indices >= 0]
                 shard_indices = set(valid_indices // shard_size)
                 regions = [
