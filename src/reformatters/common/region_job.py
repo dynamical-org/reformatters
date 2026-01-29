@@ -5,7 +5,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import suppress
 from copy import deepcopy
 from enum import Enum, auto
-from itertools import batched, chain
+from itertools import batched, chain, pairwise
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar, get_args
@@ -351,7 +351,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         filter_variable_names: list[str] | None = None,
     ) -> Sequence["RegionJob[DATA_VAR, SOURCE_FILE_COORD]"]:
         """
-        Return a sequence of RegionJob instances for backfill processing.
+        Return a sequence of RegionJob instances to process.
 
         If `workers_total` and `worker_index` are provided the returned jobs are
         filtered to only include jobs which should be processed by `worker_index`.
@@ -375,14 +375,19 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         reformat_job_name : str
             The name of the reformatting job, used for progress tracking.
             This is often the name of the Kubernetes job, or "local".
-
         worker_index : int, default 0
+            Index of the current worker (0-indexed).
         workers_total : int, default 1
-
+            Total number of workers processing jobs in parallel.
         filter_start : Timestamp | None, default None
+            Keep shards where max(shard_coords) >= filter_start. Inclusive.
         filter_end : Timestamp | None, default None
+            Keep shards where min(shard_coords) < filter_end. Exclusive.
         filter_contains : list[Timestamp] | None, default None
+            Keep only shards containing at least one of the specified timestamps.
+            Timestamps must exactly match coordinate values. Empty list returns no jobs.
         filter_variable_names : list[str] | None, default None
+            Keep only the specified variables. If None, all variables are included.
 
         Returns
         -------
@@ -420,29 +425,53 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         # Regions along append dimension
         regions = dimension_slices(template_ds, append_dim, kind="shards")
 
-        # Filter regions - Note: these operations could be optimized significantly
-        append_dim_coords = template_ds.coords[append_dim]
-        if filter_start is not None:
-            regions = [
-                region
-                for region in regions
-                if append_dim_coords[region].max() >= filter_start  # type: ignore[operator]
-            ]
-        if filter_end is not None:
-            regions = [
-                region
-                for region in regions
-                if append_dim_coords[region].min() < filter_end  # type: ignore[operator]
-            ]
-        if filter_contains is not None:
-            regions = [
-                region
-                for region in regions
-                if any(
-                    timestamp in append_dim_coords[region]
-                    for timestamp in filter_contains
-                )
-            ]
+        # Filter regions by time
+        if (
+            filter_start is not None
+            or filter_end is not None
+            or filter_contains is not None
+        ):
+            coord_values = template_ds.coords[append_dim].values
+            shard_size = regions[0].stop - regions[0].start
+            n_shards = len(regions)
+
+            # Validate assumptions required for binary search
+            assert len(coord_values) > 1, f"{append_dim} must have > 1 coordinate"
+            assert np.all(coord_values[1:] > coord_values[:-1]), (
+                f"{append_dim} coordinates must be sorted ascending"
+            )
+            assert all(r.stop - r.start == shard_size for r in regions[:-1]), (
+                "all shards except last must have uniform size"
+            )
+            assert all(r1.stop == r2.start for r1, r2 in pairwise(regions)), (
+                "shards must be contiguous"
+            )
+
+            start_shard = 0
+            end_shard = n_shards
+
+            if filter_start is not None:
+                filter_start_np = np.array(filter_start, dtype=coord_values.dtype)
+                idx = int(np.searchsorted(coord_values, filter_start_np, side="left"))
+                start_shard = min(idx // shard_size, n_shards)
+
+            if filter_end is not None:
+                filter_end_np = np.array(filter_end, dtype=coord_values.dtype)
+                idx = int(np.searchsorted(coord_values, filter_end_np, side="left"))
+                end_shard = min((idx - 1) // shard_size + 1, n_shards) if idx > 0 else 0
+
+            regions = regions[start_shard:end_shard]
+
+            if filter_contains is not None:
+                coord_index = pd.Index(coord_values)
+                indices = coord_index.get_indexer(filter_contains)
+                valid_indices = indices[indices >= 0]
+                shard_indices = set(valid_indices // shard_size)
+                regions = [
+                    r
+                    for i, r in enumerate(regions, start=start_shard)
+                    if i in shard_indices
+                ]
 
         all_jobs = [
             cls(
