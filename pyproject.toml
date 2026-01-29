@@ -38,7 +38,7 @@ main = "reformatters.__main__:app"
 dev = [
     "cf-xarray>=0.10.10",
     "matplotlib~=3.9",
-    "mypy~=1.18",
+    "mypy~=1.19",
     "pandas-stubs~=2.2",
     "pre-commit==4.3.0",
     "pyqt6>=6.7.1",
@@ -46,7 +46,7 @@ dev = [
     "pytest-sugar~=1.0",
     "pytest-xdist~=3.8",
     # NOTE: keep this in sync with .pre-commit-config.yaml
-    "ruff==0.13.1",
+    "ruff==0.14.14",
     "types-requests~=2.32",
 ]
 
