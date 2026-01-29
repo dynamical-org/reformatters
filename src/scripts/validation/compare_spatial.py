@@ -345,13 +345,13 @@ def compare_spatial(
     log.info(f"Loading reference dataset from: {reference_url}")
     reference_ds = load_zarr_dataset(reference_url)
 
-    validation_vars = list(validation_ds.data_vars.keys())
+    validation_vars = [str(k) for k in validation_ds.data_vars]
     log.info(f"Found {len(validation_vars)} variables in validation dataset")
 
     if variables:
         # Use specified variables that exist in validation dataset
         selected_vars = [var for var in variables if var in validation_ds.data_vars]
-        missing_vars = set(variables) - set(validation_ds.data_vars.keys())
+        missing_vars = set(variables) - set(validation_vars)
 
         if missing_vars:
             log.warning(f"Variables not found in validation dataset: {missing_vars}")

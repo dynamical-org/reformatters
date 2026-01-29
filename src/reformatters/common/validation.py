@@ -229,8 +229,9 @@ def compare_replica_and_primary(
         return ValidationResult(passed=False, message=message)
 
     num_variables_to_check = min(5, len(primary_ds.data_vars))
+    data_var_names = [str(k) for k in primary_ds.data_vars]
     variables_to_check = rng.choice(
-        list(primary_ds.data_vars.keys()), num_variables_to_check, replace=False
+        data_var_names, num_variables_to_check, replace=False
     )
 
     last_chunk = iterating.dimension_slices(primary_ds, append_dim, "chunks")[-1]
