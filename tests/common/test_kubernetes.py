@@ -90,6 +90,12 @@ def test_as_kubernetes_object_comprehensive() -> None:
                                 },
                             },
                             {
+                                "name": "POD_NAME",
+                                "valueFrom": {
+                                    "fieldRef": {"fieldPath": "metadata.name"}
+                                },
+                            },
+                            {
                                 "name": "WORKER_INDEX",
                                 "valueFrom": {
                                     "fieldRef": {
