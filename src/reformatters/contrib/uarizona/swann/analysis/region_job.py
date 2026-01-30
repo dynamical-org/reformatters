@@ -5,9 +5,9 @@ from typing import ClassVar
 import numpy as np
 import pandas as pd
 import xarray as xr
-import zarr
 from pydantic import Field
 from rasterio import rasterio  # type: ignore[import-untyped]
+from zarr.abc.store import Store
 
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.region_job import (
@@ -87,7 +87,7 @@ class UarizonaSwannAnalysisRegionJob(
     @classmethod
     def operational_update_jobs(
         cls,
-        primary_store: zarr.abc.store.Store,
+        primary_store: Store,
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,

@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import rasterio  # type: ignore[import-untyped]
+import rioxarray  # noqa: F401  # Registers .rio accessor on xarray objects
 import xarray as xr
 
 from reformatters.common.template_config import SPATIAL_REF_COORDS

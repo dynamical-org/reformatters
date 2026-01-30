@@ -26,7 +26,7 @@ def linear_interpolate_1d_inplace(
     return data_array
 
 
-@njit(parallel=True)  # type: ignore[misc]
+@njit(parallel=True)  # type: ignore[untyped-decorator]
 def _linear_interpolate_zero_dim_1d_inplace_numba(
     values: ArrayFloat32, where: Array1D[np.bool]
 ) -> None:
