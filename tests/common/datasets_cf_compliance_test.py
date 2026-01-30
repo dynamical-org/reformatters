@@ -62,7 +62,11 @@ def cf_standard_name_to_canonical_units() -> dict[str, str]:
     for entry in xml.findall(".//entry"):
         standard_name = entry.get("id")
         canonical_units_elem = entry.find("canonical_units")
-        if standard_name is not None and canonical_units_elem is not None and canonical_units_elem.text is not None:
+        if (
+            standard_name is not None
+            and canonical_units_elem is not None
+            and canonical_units_elem.text is not None
+        ):
             result[standard_name] = canonical_units_elem.text
     return result
 

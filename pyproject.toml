@@ -114,17 +114,6 @@ ignore = [
     "ARG005",  # unused lambda arg
 ]
 
-[tool.ty.environment]
-python-version = "3.13"
-
-[tool.ty.rules]
-# Submodule attribute access is a warning (e.g. zarr.abc, sentry_sdk.crons)
-possibly-missing-attribute = "warn"
-# xarray stubs incomplete - to_zarr overloads not fully typed
-no-matching-overload = "warn"
-# Subclass method return type covariance is valid Python
-invalid-method-override = "warn"
-
 [project.package-data]
 reformatters = ["py.typed"]
 

@@ -15,8 +15,6 @@ repos:
         entry: "uv run ty check"
         language: system
         types: [python]
-        # use require_serial so that script
-        # is only called once per commit
         require_serial: true
       - id: generate-manual-workflows
         name: generate manual workflows
