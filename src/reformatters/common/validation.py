@@ -353,4 +353,4 @@ def _sync_list_shards(store: Store, var: str) -> set[str]:
 
 
 async def _list_shards(store: Store, var: str) -> set[str]:
-    return {key.split(f"{var}/c/")[-1] async for key in store.list_prefix(f"{var}/c/")}
+    return {key.split(f"{var}/c/")[-1] async for key in store.list_prefix(f"{var}")}

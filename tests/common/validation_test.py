@@ -1,9 +1,11 @@
 from datetime import timedelta
 
+import icechunk
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+import zarr
 
 from reformatters.common import validation
 
@@ -465,3 +467,171 @@ def test_compare_replica_and_primary_passes(
 
     assert result.passed
     assert "replica and primary stores is the same" in result.message
+
+
+def test_check_for_expected_shards_passes(rng: np.random.Generator) -> None:
+    """Test that check_for_expected_shards passes when all expected shards are present."""
+    times = pd.date_range("2024-01-01", periods=16, freq="1h")
+    x = np.arange(10)
+    y = np.arange(8)
+
+    ds = xr.Dataset(
+        {
+            "temperature": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+            "humidity": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+        },
+        coords={"time": times, "y": y, "x": x},
+        attrs={"dataset_id": "test-dataset"},
+    )
+
+    # Set chunking and sharding to create multiple shards
+    chunk_sizes = (4, 4, 5)
+    shard_sizes = (4, 4, 5)
+    for var in ds.data_vars.values():
+        var.encoding["chunks"] = chunk_sizes
+        var.encoding["shards"] = shard_sizes
+
+    # Write to memory store
+    store = zarr.storage.MemoryStore()
+    ds.to_zarr(store, mode="w", consolidated=False)
+
+    result = validation.check_for_expected_shards(store, ds)
+
+    assert result.passed
+    assert "All variables have expected shards" in result.message
+
+
+def test_check_for_expected_shards_fails_missing_shards(
+    rng: np.random.Generator,
+) -> None:
+    """Test that check_for_expected_shards fails when expected shards are missing."""
+    times = pd.date_range("2024-01-01", periods=16, freq="1h")
+    x = np.arange(10)
+    y = np.arange(8)
+
+    ds = xr.Dataset(
+        {
+            "temperature": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+        },
+        coords={"time": times, "y": y, "x": x},
+        attrs={"dataset_id": "test-dataset"},
+    )
+
+    # Set chunking and sharding to create multiple shards (4x2x2 = 16 total shards)
+    chunk_sizes = (4, 4, 5)
+    shard_sizes = (4, 4, 5)
+    for var in ds.data_vars.values():
+        var.encoding["chunks"] = chunk_sizes
+        var.encoding["shards"] = shard_sizes
+
+    # Write to memory store
+    store = zarr.storage.MemoryStore()
+    ds.to_zarr(store, mode="w", consolidated=False)
+
+    # Manually delete a shard to simulate missing data
+    # Delete shard 0/0/0 for temperature using sync wrapper
+    zarr.core.sync.sync(store.delete("temperature/c/0/0/0"))
+
+    result = validation.check_for_expected_shards(store, ds)
+
+    assert not result.passed
+    assert "temperature" in result.message
+    assert "missing expected shards" in result.message
+
+
+def test_check_for_expected_shards_passes_with_extra_shards(
+    rng: np.random.Generator,
+) -> None:
+    """Test that check_for_expected_shards passes when extra shards are present."""
+    times = pd.date_range("2024-01-01", periods=8, freq="1h")
+    x = np.arange(10)
+    y = np.arange(8)
+
+    ds = xr.Dataset(
+        {
+            "temperature": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+        },
+        coords={"time": times, "y": y, "x": x},
+        attrs={"dataset_id": "test-dataset"},
+    )
+
+    chunk_sizes = (4, 4, 5)
+    shard_sizes = (4, 4, 5)
+    for var in ds.data_vars.values():
+        var.encoding["chunks"] = chunk_sizes
+        var.encoding["shards"] = shard_sizes
+
+    # Write full dataset to store
+    store = zarr.storage.MemoryStore()
+    ds.to_zarr(store, mode="w", consolidated=False)
+
+    # Trim the dataset to only include first chunk of time
+    ds_trimmed = ds.isel(time=slice(0, 4))
+    # Need to preserve encoding on the trimmed dataset
+    for var in ds_trimmed.data_vars.values():
+        var.encoding["chunks"] = chunk_sizes
+        var.encoding["shards"] = shard_sizes
+
+    # The store has shards for all 8 time steps, but metadata only exposes first 4
+    # This simulates the operational update scenario where extra shards exist
+    result = validation.check_for_expected_shards(store, ds_trimmed)
+
+    assert result.passed
+    assert "All variables have expected shards" in result.message
+
+
+def test_check_for_expected_shards_icechunk_store(rng: np.random.Generator) -> None:
+    """Test that check_for_expected_shards works with an IcechunkStore."""
+    times = pd.date_range("2024-01-01", periods=8, freq="1h")
+    x = np.arange(6)
+    y = np.arange(4)
+
+    ds = xr.Dataset(
+        {
+            "temperature": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+            "pressure": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+        },
+        coords={"time": times, "y": y, "x": x},
+        attrs={"dataset_id": "test-icechunk-dataset"},
+    )
+
+    chunk_sizes = (4, 2, 3)
+    shard_sizes = (4, 2, 3)
+    for var in ds.data_vars.values():
+        var.encoding["chunks"] = chunk_sizes
+        var.encoding["shards"] = shard_sizes
+
+    # Create in-memory Icechunk store
+    storage = icechunk.in_memory_storage()
+    repo = icechunk.Repository.open_or_create(storage)
+    session = repo.writable_session("main")
+    store = session.store
+
+    # Write dataset
+    ds.to_zarr(store, mode="w", consolidated=False)
+
+    # Commit the changes
+    session.commit("Initial commit")
+
+    result = validation.check_for_expected_shards(store, ds)
+
+    assert result.passed
+    assert "All variables have expected shards" in result.message
