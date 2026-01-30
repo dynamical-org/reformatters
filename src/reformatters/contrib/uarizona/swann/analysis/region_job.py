@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from pydantic import Field
-from rasterio import rasterio  # type: ignore[import-untyped]
+from rasterio import rasterio
 from zarr.abc.store import Store
 
 from reformatters.common.download import http_download_to_disk

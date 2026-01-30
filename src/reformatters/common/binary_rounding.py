@@ -1,7 +1,7 @@
 from typing import Final, cast
 
 import numpy as np
-from numba import njit, prange  # type: ignore[import-untyped]
+from numba import njit, prange
 
 from reformatters.common.types import ArrayFloat32
 
@@ -39,7 +39,7 @@ def round_float32_inplace(value: ArrayFloat32, keep_mantissa_bits: int) -> Array
     return cast(ArrayFloat32, bits.view(np.float32))
 
 
-@njit(parallel=True)  # type: ignore[untyped-decorator]
+@njit(parallel=True)
 def _round_float32_inplace_numba(
     bits: np.ndarray[tuple[int, ...], np.dtype[np.uint32]],
     keep_mantissa_bits: int,
@@ -55,7 +55,7 @@ def _round_float32_inplace_numba(
 
     flat_bits = bits.ravel()  # modify 1D view in place
 
-    for i in prange(len(flat_bits)):
+    for i in prange(len(flat_bits)):  # ty: ignore[not-iterable]
         mantissa = flat_bits[i] & mantissa_mask
         round_bit = flat_bits[i] & np.uint32(1 << drop_bits)
         half_bit = flat_bits[i] & np.uint32(1 << (drop_bits - 1))

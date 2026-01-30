@@ -10,6 +10,7 @@ from typing import Annotated, Any, Generic, Literal, TypeVar
 import numpy as np
 import pandas as pd
 import sentry_sdk
+import sentry_sdk.crons
 import typer
 import xarray as xr
 from pydantic import Field, computed_field
@@ -50,7 +51,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     use_progress_tracker: bool = False
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def store_factory(self) -> StoreFactory:
         return StoreFactory(
@@ -115,7 +116,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     # ----- Most subclasses will not need to override the attributes and methods below -----
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def dataset_id(self) -> str:
         return self.template_config.dataset_id

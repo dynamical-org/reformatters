@@ -130,7 +130,8 @@ class GefsSourceFileCoord(SourceFileCoord):
                 else:
                     return "b"
             else:
-                return gefs_file_type
+                # ty can't narrow through if/elif chain; remaining values are "a" | "b"
+                return gefs_file_type  # ty: ignore[invalid-return-type]
 
         elif self.init_time >= GEFS_REFORECAST_END:
             match gefs_file_type:
@@ -139,7 +140,7 @@ class GefsSourceFileCoord(SourceFileCoord):
                 case "s+b" | "s+b-b22" | "b":
                     return "b"
                 case _ as unreachable:
-                    assert_never(unreachable)
+                    assert_never(unreachable)  # ty: ignore[type-assertion-failure]
         elif self.init_time >= GEFS_REFORECAST_START:
             return "reforecast"
         else:

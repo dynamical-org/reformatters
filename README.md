@@ -9,17 +9,17 @@ Browse the datasets produced by this repo at https://dynamical.org/catalog/.
 
 ## Local development
 
-We use 
+We use
 * `uv` to manage dependencies and python environments
 * `ruff` for linting and formatting
-* `mypy` for type checking
+* `ty` for type checking
 * `pytest` for testing
 * `prek` to automatically lint and format as you git commit
 
 ### Setup
 1. [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
 1. Run `uv run prek install` to setup the git hooks
-1. If you use VSCode, you may want to install the extensions (ruff, mypy) it will recommend when you open this folder
+1. If you use VSCode, you may want to install the extensions (ruff) it will recommend when you open this folder
 
 ### Running locally
 
@@ -30,7 +30,7 @@ We use
 ### Development commands
 * Add dependency: `uv add <package> [--dev]`. Use `--dev` to add a development only dependency.
 * Lint: `uv run ruff check [--fix]`
-* Type check: `uv run mypy`
+* Type check: `uv run ty check`
 * Format: `uv run ruff format`
 * Tests: 
    * Run tests in parallel on all available cores: `uv run pytest`

@@ -58,11 +58,13 @@ def cf_standard_name_to_canonical_units() -> dict[str, str]:
     Returns a dict mapping standard_name -> canonical_units.
     """
     xml = ET.parse(CF_STANDARD_NAME_TABLE_PATH).getroot()  # noqa: S314 trusted local file
-    return {
-        standard_name: entry.find("canonical_units").text  # type: ignore[union-attr,misc]
-        for entry in xml.findall(".//entry")
-        if (standard_name := entry.get("id")) is not None
-    }
+    result: dict[str, str] = {}
+    for entry in xml.findall(".//entry"):
+        standard_name = entry.get("id")
+        canonical_units_elem = entry.find("canonical_units")
+        if standard_name is not None and canonical_units_elem is not None and canonical_units_elem.text is not None:
+            result[standard_name] = canonical_units_elem.text
+    return result
 
 
 @pytest.mark.parametrize(

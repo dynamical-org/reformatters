@@ -7,10 +7,12 @@ from typing import Any, Literal, assert_never
 from urllib.parse import urlparse
 from uuid import uuid4
 
-import fsspec  # type: ignore[import-untyped]
+import fsspec
 import icechunk
 import xarray as xr
 import zarr
+import zarr.abc.store
+import zarr.storage
 from icechunk.store import IcechunkStore
 from pydantic import Field, computed_field, field_validator
 from zarr.abc.store import Store
@@ -70,7 +72,7 @@ class StoreFactory(FrozenBaseModel):
             raise ValueError("Primary storage config cannot be set to Icechunk format.")
         return v
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def version(self) -> str:
         match Config.env:

@@ -50,8 +50,8 @@ jobs:
       - name: Check code format
         run: uv run ruff format --check
 
-      - name: Run Mypy
-        run: uv run mypy
+      - name: Run ty
+        run: uv run ty check
 
       - name: Run Pytest
         run: uv run pytest -p no:sugar --verbose

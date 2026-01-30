@@ -8,6 +8,8 @@ from pathlib import Path
 
 import numpy as np
 import xarray as xr
+import zarr
+import zarr.abc.store
 from zarr.abc.store import Store
 
 from reformatters.common.iterating import consume, shard_slice_indexers

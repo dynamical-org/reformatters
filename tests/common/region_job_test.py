@@ -111,7 +111,7 @@ def _create_template_ds(
     ds = xr.Dataset(
         {
             f"var{i}": xr.Variable(
-                data=dask.array.full(  # type: ignore[no-untyped-call]
+                data=dask.array.full(
                     (num_time, _LAT_SIZE, _LON_SIZE),
                     var_fill_value,
                     dtype=np.float32,
@@ -501,7 +501,7 @@ def test_get_jobs_many_shards_combined_filters() -> None:
     large_template_ds = xr.Dataset(
         {
             f"var{i}": xr.Variable(
-                data=dask.array.full(  # type: ignore[no-untyped-call]
+                data=dask.array.full(
                     (num_shards, _LAT_SIZE, _LON_SIZE),
                     np.nan,
                     dtype=np.float32,

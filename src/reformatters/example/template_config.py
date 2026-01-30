@@ -47,7 +47,7 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
     append_dim_start: Timestamp = pd.Timestamp("2020-01-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def dataset_attributes(self) -> DatasetAttributes:
         # return DatasetAttributes(
@@ -103,7 +103,7 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         # }
         raise NotImplementedError("Subclasses implement `derive_coordinates`")
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def coords(self) -> Sequence[Coordinate]:
         """Define metadata and encoding for each coordinate."""
@@ -263,7 +263,7 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         # ]
         raise NotImplementedError("Subclasses implement `coords`")
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def data_vars(self) -> Sequence[ExampleDataVar]:
         """Define metadata and encoding for each data variable."""

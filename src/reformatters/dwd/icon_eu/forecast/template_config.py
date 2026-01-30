@@ -52,7 +52,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
     append_dim_start: Timestamp = pd.Timestamp("2026-01-21T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
@@ -112,7 +112,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
             "spatial_ref": SPATIAL_REF_COORDS,
         }
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def coords(self) -> Sequence[Coordinate]:
         """Define metadata and encoding for each coordinate."""
@@ -294,7 +294,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
             ),
         ]
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def data_vars(self) -> Sequence[DwdIconEuDataVar]:
         """Define metadata and encoding for each data variable."""

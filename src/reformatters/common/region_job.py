@@ -14,6 +14,8 @@ import numpy as np
 import pandas as pd
 import pydantic
 import xarray as xr
+import zarr
+import zarr.abc.store
 from pydantic import AfterValidator, Field, computed_field
 from zarr.abc.store import Store
 
@@ -253,10 +255,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         max_append_dim_processed = max(
             (
-                c.out_loc()[self.append_dim]  # type: ignore[type-var]
+                c.out_loc()[self.append_dim]
                 for c in chain.from_iterable(process_results.values())
                 if c.status == SourceFileStatus.Succeeded
-            ),
+            ),  # ty: ignore[invalid-argument-type]
             default=None,
         )
         if max_append_dim_processed is None:
@@ -329,7 +331,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         arbitrary_types_allowed=True, frozen=True, strict=True
     )
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def dataset_id(self) -> str:
         return str(self.template_ds.attrs["dataset_id"])
@@ -612,7 +614,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         return results
 
     def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
-        ds = self.template_ds[[v.name for v in self.data_vars]]
+        # xarray's __getitem__ with a list returns Dataset, but ty stubs say DataArray
+        ds: xr.Dataset = self.template_ds[[v.name for v in self.data_vars]]  # type: ignore[assignment]
         processing_region = self.get_processing_region()
         processing_region_ds = ds.isel({self.append_dim: processing_region})
         output_region_ds = ds.isel({self.append_dim: self.region})

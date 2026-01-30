@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import numpy as np
 import obstore
 import pandas as pd
-import rasterio  # type: ignore[import-untyped]
+import rasterio
 import requests
 import xarray as xr
 from zarr.abc.store import Store

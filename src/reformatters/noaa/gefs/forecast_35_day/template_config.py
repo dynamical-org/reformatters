@@ -38,7 +38,7 @@ class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
     append_dim_start: Timestamp = pd.Timestamp("2020-10-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("24h")
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def dataset_attributes(self) -> DatasetAttributes:
         """Dataset metadata attributes."""
@@ -122,7 +122,7 @@ class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
             "spatial_ref": SPATIAL_REF_COORDS,
         }
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def coords(self) -> Sequence[Coordinate]:
         """Define metadata and encoding for each coordinate."""
@@ -255,7 +255,7 @@ class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
             ),
         )
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def data_vars(self) -> Sequence[GEFSDataVar]:
         """Define metadata and encoding for each data variable."""

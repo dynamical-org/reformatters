@@ -3,7 +3,7 @@ import warnings
 from typing import Literal, assert_never
 
 import numpy as np
-import rasterio  # type: ignore[import-untyped]
+import rasterio
 import rioxarray  # noqa: F401  # Registers .rio accessor on xarray objects
 import xarray as xr
 

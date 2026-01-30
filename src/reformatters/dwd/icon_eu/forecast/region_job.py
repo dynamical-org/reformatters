@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import rasterio  # type: ignore[import-untyped]
+import rasterio
 import xarray as xr
 from obstore.exceptions import GenericError
 from zarr.abc.store import Store
@@ -225,7 +225,7 @@ class DwdIconEuForecastRegionJob(
         #
         # max_append_dim_processed = max(
         #     (
-        #         c.out_loc()[self.append_dim]  # type: ignore[type-var]
+        #         c.out_loc()[self.append_dim]
         #         for c in chain.from_iterable(process_results.values())
         #         if c.status == SourceFileStatus.Succeeded
         #     ),

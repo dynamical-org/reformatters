@@ -29,7 +29,7 @@ class NoaaGfsForecastTemplateConfig(NoaaGfsCommonTemplateConfig):
     append_dim_start: Timestamp = pd.Timestamp("2021-05-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
@@ -80,7 +80,7 @@ class NoaaGfsForecastTemplateConfig(NoaaGfsCommonTemplateConfig):
             "spatial_ref": SPATIAL_REF_COORDS,
         }
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def coords(self) -> Sequence[Coordinate]:
         dim_coords = self.dimension_coordinates()
@@ -194,7 +194,7 @@ class NoaaGfsForecastTemplateConfig(NoaaGfsCommonTemplateConfig):
             ),
         ]
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def data_vars(self) -> Sequence[NoaaDataVar]:
         var_chunks: dict[Dim, int] = {

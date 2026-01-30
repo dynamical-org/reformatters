@@ -6,7 +6,7 @@ from typing import ClassVar
 
 import numpy as np
 import pandas as pd
-import rasterio  # type: ignore[import-untyped]
+import rasterio
 import xarray as xr
 from zarr.abc.store import Store
 

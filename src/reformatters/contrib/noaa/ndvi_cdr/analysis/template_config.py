@@ -57,7 +57,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
     append_dim_start: Timestamp = pd.Timestamp("1981-06-24")
     append_dim_frequency: Timedelta = pd.Timedelta("1D")
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
@@ -100,7 +100,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
             "longitude": lat_lon_values["longitude"],
         }
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def coords(self) -> Sequence[Coordinate]:
         """Define metadata and encoding for each coordinate."""
@@ -198,7 +198,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
             ),
         ]
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def data_vars(self) -> Sequence[NoaaNdviCdrDataVar]:
         """Define metadata and encoding for each data variable."""

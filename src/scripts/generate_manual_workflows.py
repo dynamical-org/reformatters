@@ -8,7 +8,7 @@ It should be run automatically via prek hook to keep workflows in sync with code
 from pathlib import Path
 from typing import Any
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common.kubernetes import CronJob

@@ -31,17 +31,17 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
     append_dim_start: Timestamp
     append_dim_frequency: Timedelta
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def dataset_attributes(self) -> DatasetAttributes:
         raise NotImplementedError("Implement `dataset_attributes` in your subclass")
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def coords(self) -> Sequence[Coordinate]:
         raise NotImplementedError("Implement `coords` in your subclass")
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def data_vars(self) -> Sequence[DATA_VAR]:
         raise NotImplementedError("Implement `data_vars` in your subclass")
@@ -69,12 +69,12 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
 
     # ----- Most subclasses will not need to override the attributes and methods below -----
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def dataset_id(self) -> str:
         return self.dataset_attributes.dataset_id
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def version(self) -> str:
         return self.dataset_attributes.dataset_version
