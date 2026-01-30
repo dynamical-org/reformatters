@@ -39,5 +39,5 @@ jobs:
           sudo apt-get update -qy
           sudo apt-get install -qy -o APT::Install-Suggests=false gdal-bin
 
-      - name: Install pre-commit hooks
-        run: uv run pre-commit install
+      - name: Install prek hooks
+        run: uv run prek install
