@@ -4,6 +4,7 @@ import threading
 from collections.abc import Sequence
 
 import fsspec
+import fsspec.implementations.local
 
 from reformatters.common.config_models import BaseInternalAttrs, DataVar
 from reformatters.common.logging import get_logger

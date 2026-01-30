@@ -1,9 +1,10 @@
 from collections.abc import Sequence
 from itertools import batched, pairwise
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, override
 
 import dask
+import dask.array
 import numpy as np
 import pandas as pd
 import pytest
@@ -66,25 +67,28 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoords]):
     ) -> Sequence[Sequence[ExampleDataVar]]:
         return list(batched(data_vars, 3, strict=False))
 
+    @override
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
-        _data_var_group: Sequence[ExampleDataVar],
+        data_var_group: Sequence[ExampleDataVar],
     ) -> Sequence[ExampleSourceFileCoords]:
         return [
             ExampleSourceFileCoords(time=t)
             for t in processing_region_ds[self.append_dim].values
         ]
 
+    @override
     def download_file(self, coord: ExampleSourceFileCoords) -> Path:
         if coord.time == pd.Timestamp("2025-01-01T00"):
             raise FileNotFoundError()  # simulate a missing file
         return Path("testfile")
 
+    @override
     def read_data(
         self,
         coord: ExampleSourceFileCoords,
-        _data_var: ExampleDataVar,
+        data_var: ExampleDataVar,
     ) -> ArrayFloat32:
         if coord.time == pd.Timestamp("2025-01-01T06"):
             raise ValueError("Test error")  # simulate a read error

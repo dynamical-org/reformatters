@@ -1,5 +1,6 @@
 import concurrent.futures
 import os
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import suppress
@@ -14,8 +15,6 @@ import numpy as np
 import pandas as pd
 import pydantic
 import xarray as xr
-import zarr
-import zarr.abc.store
 from pydantic import AfterValidator, Field, computed_field
 from zarr.abc.store import Store
 
@@ -110,7 +109,7 @@ def region_slice(s: slice) -> slice:
     return s
 
 
-class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
+class RegionJob(ABC, pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     tmp_store: Path
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
@@ -158,6 +157,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         return self.region
 
+    @abstractmethod
     def generate_source_file_coords(
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[DATA_VAR]
     ) -> Sequence[SOURCE_FILE_COORD]:
@@ -166,12 +166,14 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             "Return a sequence of SourceFileCoord objects, one for each source file required to process the data covered by processing_region_ds."
         )
 
+    @abstractmethod
     def download_file(self, coord: SOURCE_FILE_COORD) -> Path:
         """Download the file for the given coordinate and return the local path."""
         raise NotImplementedError(
             "Download the file for the given coordinate and return the local path."
         )
 
+    @abstractmethod
     def read_data(
         self,
         coord: SOURCE_FILE_COORD,
@@ -273,6 +275,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
 
     @classmethod
+    @abstractmethod
     def operational_update_jobs(
         cls,
         primary_store: Store,
@@ -614,7 +617,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         return results
 
     def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
-        # xarray's __getitem__ with a list returns Dataset, but ty stubs say DataArray
+        # xarray's __getitem__ with a list returns Dataset, but stubs are wrong
         ds: xr.Dataset = self.template_ds[[v.name for v in self.data_vars]]  # type: ignore[assignment]
         processing_region = self.get_processing_region()
         processing_region_ds = ds.isel({self.append_dim: processing_region})

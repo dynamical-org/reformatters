@@ -972,7 +972,6 @@ wheels = [
 ]
 
 [[package]]
-[[package]]
 name = "numba"
 version = "0.63.1"
 source = { registry = "https://pypi.org/simple" }

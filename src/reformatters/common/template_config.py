@@ -1,4 +1,5 @@
 import sys
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Generic, TypeVar
@@ -23,7 +24,7 @@ DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 SPATIAL_REF_COORDS = ((), np.array(0))
 
 
-class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
+class TemplateConfig(ABC, FrozenBaseModel, Generic[DATA_VAR]):
     """Define a subclass of this class to configure the structure of a dataset."""
 
     dims: tuple[Dim, ...]
@@ -33,25 +34,30 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
 
     @computed_field
     @property
+    @abstractmethod
     def dataset_attributes(self) -> DatasetAttributes:
         raise NotImplementedError("Implement `dataset_attributes` in your subclass")
 
     @computed_field
     @property
+    @abstractmethod
     def coords(self) -> Sequence[Coordinate]:
         raise NotImplementedError("Implement `coords` in your subclass")
 
     @computed_field
     @property
+    @abstractmethod
     def data_vars(self) -> Sequence[DATA_VAR]:
         raise NotImplementedError("Implement `data_vars` in your subclass")
 
+    @abstractmethod
     def dimension_coordinates(self) -> dict[str, Any]:
         """Returns a dictionary of dimension names to coordinates for the dataset."""
         raise NotImplementedError("Implement `dimension_coordinates` in your subclass")
 
     def derive_coordinates(
-        self, _ds: xr.Dataset
+        self,
+        ds: xr.Dataset,  # noqa: ARG002
     ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
         """
         Compute non-dimension coordinates.
@@ -181,7 +187,10 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         # Give ourselves about 15 years of future dataset appending.
         # 10 as a minimum to ensure we have some buffer.
         num_years = max(2025 - self.append_dim_start.year + 15, 10)
-        return int(pd.Timedelta(days=365 * num_years) / self.append_dim_frequency)
+        total_timedelta = pd.Timedelta(days=365 * num_years)
+        # Division of two Timedeltas returns a float
+        result: float = total_timedelta / self.append_dim_frequency  # type: ignore[assignment]
+        return int(result)
 
     def template_path(self) -> Path:
         """Returns the templates/latest.zarr which is a sibling of the template config file."""

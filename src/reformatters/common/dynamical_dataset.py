@@ -1,5 +1,6 @@
 import json
 import subprocess
+from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
@@ -40,7 +41,7 @@ SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
 log = get_logger(__name__)
 
 
-class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
+class DynamicalDataset(ABC, FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     """Top level class managing a dataset configuration and processing."""
 
     template_config: TemplateConfig[DATA_VAR]
@@ -61,6 +62,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             template_config_version=self.template_config.version,
         )
 
+    @abstractmethod
     def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
         """
         Return the kubernetes cron job definitions to operationally
@@ -98,6 +100,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             f"Implement `operational_kubernetes_resources` on {self.__class__.__name__}"
         )
 
+    @abstractmethod
     def validators(self) -> Sequence[validation.DataValidator]:
         """
         Return a sequence of DataValidators to run on this dataset.

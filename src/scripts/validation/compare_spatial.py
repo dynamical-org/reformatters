@@ -160,19 +160,19 @@ def create_comparison_plot(  # noqa: PLR0915 PLR0912
 
         if var_in_reference:
             im1 = ax1.pcolormesh(
-                ref_data.longitude,
-                ref_data.latitude,
-                ref_data.values,
+                ref_data.longitude,  # ty: ignore[possibly-unresolved-reference]
+                ref_data.latitude,  # ty: ignore[possibly-unresolved-reference]
+                ref_data.values,  # ty: ignore[possibly-unresolved-reference]
                 vmin=vmin,
                 vmax=vmax,
             )
             plt.colorbar(im1, ax=ax1)
 
             # Use combined bounds from both datasets for consistent axis ranges
-            lon_min = min(float(ref_data.longitude.min()), float(data.longitude.min()))
-            lon_max = max(float(ref_data.longitude.max()), float(data.longitude.max()))
-            lat_min = min(float(ref_data.latitude.min()), float(data.latitude.min()))
-            lat_max = max(float(ref_data.latitude.max()), float(data.latitude.max()))
+            lon_min = min(float(ref_data.longitude.min()), float(data.longitude.min()))  # ty: ignore[possibly-unresolved-reference]
+            lon_max = max(float(ref_data.longitude.max()), float(data.longitude.max()))  # ty: ignore[possibly-unresolved-reference]
+            lat_min = min(float(ref_data.latitude.min()), float(data.latitude.min()))  # ty: ignore[possibly-unresolved-reference]
+            lat_max = max(float(ref_data.latitude.max()), float(data.latitude.max()))  # ty: ignore[possibly-unresolved-reference]
         else:
             # Show empty plot for missing variable
             ax1.text(
@@ -239,9 +239,9 @@ def create_comparison_plot(  # noqa: PLR0915 PLR0912
             ax1.set_ylim(0, 1)
             continue
 
-        if var_in_reference and not np.isnan(ref_data.values).all():
+        if var_in_reference and not np.isnan(ref_data.values).all():  # ty: ignore[possibly-unresolved-reference]
             # Include reference data in histogram if available
-            ref_values_flat = ref_data.values.flat
+            ref_values_flat = ref_data.values.flat  # ty: ignore[possibly-unresolved-reference]
             ref_clean = ref_values_flat[~np.isnan(ref_values_flat)]
 
             # Calculate combined range for consistent bins

@@ -10,8 +10,10 @@ import numpy as np
 import pandas as pd
 import pytest
 import sentry_sdk
+import sentry_sdk.crons
 import xarray as xr
 import zarr
+import zarr.errors
 from pydantic import computed_field
 
 from reformatters.common import docker, storage, template_utils, validation

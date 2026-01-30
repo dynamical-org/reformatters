@@ -128,7 +128,7 @@ then deterministically selects its subset. No coordinator or job queue is needed
 * `uv run prek install` to set up the git hooks that will ensure ruff check, ruff format and ty pass.
 * Add dependency: `uv add <package> [--dev]`. Use `--dev` to add a development only dependency.
 * Lint: `uv run ruff check [--fix]`
-* Type check: `uv run ty check`
+* Type check: `uv run ty check --output-format concise`. Remove the output format flag for more detailed errors. `uv run ty check [--flags] specific/dirs or/files.py`
 * Format: `uv run ruff format`
 * Test: `uv run pytest`
 * Fast/unit tests: `uv run pytest -m "not slow"`
@@ -143,6 +143,6 @@ then deterministically selects its subset. No coordinator or job queue is needed
 * Add only extremely minimal code comments and no docstrings unless I ask for them, but don't remove existing comments.
   * Add comments only when doing things out of the ordinary, to highlight gotchas, or if less clear code is required due to an optimization.
 * Use Python 3.13+ features
-* Follow ty type checking. If you need to add an ignore, ignore a specific check like `# ty: ignore[specific]` or `# type: ignore[specific]`. Always annotate types on all function arguments and return types.
+* Follow ty type checking. If you need to add an ignore, ignore a specific check like `# ty: ignore[specific]`. Always annotate types on all function arguments and return types.
 * Follow ruff format
 * Test each module with pytest
