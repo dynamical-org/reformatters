@@ -73,7 +73,7 @@ class DwdIconEuForecastDataset(
         # `tuple[int, ...]` or `Sequence[int]`, so we have to use `list[int]`.
         nwp_init_hours: list[int] = (0, 6, 12, 18),  # type: ignore[assignment]
         transfer_parallelism: int = 64,
-        checkers: int = 64,
+        checkers: int = 32,
         stats_logging_freq: str = "1m",
     ) -> None:
         """Restructure DWD GRIB files from FTP to a timestamped directory structure.
