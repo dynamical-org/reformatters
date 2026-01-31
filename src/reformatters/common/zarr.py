@@ -5,6 +5,8 @@ import xarray as xr
 import zarr
 import zarr.buffer
 from icechunk.store import IcechunkStore
+from zarr.abc.store import Store
+from zarr.codecs import BloscCodec
 
 from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
@@ -13,7 +15,7 @@ log = get_logger(__name__)
 
 _LOCAL_ZARR_STORE_BASE_PATH = "data/output"
 
-BLOSC_2BYTE_ZSTD_LEVEL3_SHUFFLE = zarr.codecs.BloscCodec(
+BLOSC_2BYTE_ZSTD_LEVEL3_SHUFFLE = BloscCodec(
     typesize=2,
     cname="zstd",
     clevel=3,
@@ -21,14 +23,14 @@ BLOSC_2BYTE_ZSTD_LEVEL3_SHUFFLE = zarr.codecs.BloscCodec(
 ).to_dict()
 
 
-BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE = zarr.codecs.BloscCodec(
+BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE = BloscCodec(
     typesize=4,
     cname="zstd",
     clevel=3,
     shuffle="shuffle",  # byte shuffle to improve compression
 ).to_dict()
 
-BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE = zarr.codecs.BloscCodec(
+BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE = BloscCodec(
     typesize=8,
     cname="zstd",
     clevel=3,
@@ -42,8 +44,8 @@ def copy_data_var(
     template_ds: xr.Dataset,
     append_dim: str,
     tmp_store: Path,
-    primary_store: zarr.abc.store.Store,
-    replica_stores: Iterable[zarr.abc.store.Store] = (),
+    primary_store: Store,
+    replica_stores: Iterable[Store] = (),
     track_progress_callback: Callable[[], None] | None = None,
 ) -> None:
     dim_index = template_ds[data_var_name].dims.index(append_dim)
@@ -84,7 +86,7 @@ def copy_data_var(
 def _copy_data_var_chunks(
     tmp_store: Path,
     relative_dir: str,
-    store: zarr.abc.store.Store,
+    store: Store,
 ) -> None:
     for file in tmp_store.glob(f"{relative_dir}**/*"):
         if not file.is_file():
@@ -96,8 +98,8 @@ def _copy_data_var_chunks(
 def copy_zarr_metadata(
     template_ds: xr.Dataset,
     tmp_store: Path,
-    primary_store: zarr.abc.store.Store,
-    replica_stores: Iterable[zarr.abc.store.Store] = (),
+    primary_store: Store,
+    replica_stores: Iterable[Store] = (),
     icechunk_only: bool = False,
 ) -> None:
     """
@@ -149,14 +151,14 @@ def copy_zarr_metadata(
 def _copy_metadata_files(
     metadata_files: list[Path],
     tmp_store: Path,
-    store: zarr.abc.store.Store,
+    store: Store,
 ) -> None:
     for file in metadata_files:
         relative_path = str(file.relative_to(tmp_store))
         sync_to_store(store, relative_path, file.read_bytes())
 
 
-def sync_to_store(store: zarr.abc.store.Store, key: str, data: bytes) -> None:
+def sync_to_store(store: Store, key: str, data: bytes) -> None:
     retry(
         lambda: zarr.core.sync.sync(
             store.set(

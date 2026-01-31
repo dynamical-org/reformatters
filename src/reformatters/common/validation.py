@@ -10,6 +10,7 @@ import pandas as pd
 import pydantic
 import xarray as xr
 import zarr
+from zarr.abc.store import Store
 
 from reformatters.common import iterating
 from reformatters.common.logging import get_logger
@@ -228,8 +229,9 @@ def compare_replica_and_primary(
         return ValidationResult(passed=False, message=message)
 
     num_variables_to_check = min(5, len(primary_ds.data_vars))
+    data_var_names = [str(k) for k in primary_ds.data_vars]
     variables_to_check = rng.choice(
-        list(primary_ds.data_vars.keys()), num_variables_to_check, replace=False
+        data_var_names, num_variables_to_check, replace=False
     )
 
     last_chunk = iterating.dimension_slices(primary_ds, append_dim, "chunks")[-1]
@@ -288,9 +290,7 @@ def compare_replica_and_primary(
         )
 
 
-def check_for_expected_shards(
-    store: zarr.abc.store.Store, ds: xr.Dataset
-) -> ValidationResult:
+def check_for_expected_shards(store: Store, ds: xr.Dataset) -> ValidationResult:
     """Check that the expected shards are present in the store."""
     log.info(f"Checking for expected shards in {store}")
 
@@ -348,9 +348,9 @@ def check_for_expected_shards(
     )
 
 
-def _sync_list_shards(store: zarr.abc.store.Store, var: str) -> set[str]:
+def _sync_list_shards(store: Store, var: str) -> set[str]:
     return zarr.core.sync.sync(_list_shards(store, var))
 
 
-async def _list_shards(store: zarr.abc.store.Store, var: str) -> set[str]:
-    return {key.split(f"{var}/c/")[-1] async for key in store.list_prefix(f"{var}/c/")}
+async def _list_shards(store: Store, var: str) -> set[str]:
+    return {key.split(f"{var}/c/")[-1] async for key in store.list_prefix(f"{var}")}

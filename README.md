@@ -14,11 +14,11 @@ We use
 * `ruff` for linting and formatting
 * `mypy` for type checking
 * `pytest` for testing
-* `pre-commit` to automatically lint and format as you git commit
+* `prek` to automatically lint and format as you git commit
 
 ### Setup
 1. [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
-1. Run `uv run pre-commit install` to setup the git hooks
+1. Run `uv run prek install` to setup the git hooks
 1. If you use VSCode, you may want to install the extensions (ruff, mypy) it will recommend when you open this folder
 
 ### Running locally

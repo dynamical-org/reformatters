@@ -13,6 +13,7 @@ import xarray as xr
 import zarr
 from icechunk.store import IcechunkStore
 from pydantic import Field, computed_field, field_validator
+from zarr.abc.store import Store
 
 from reformatters.common import kubernetes
 from reformatters.common.config import Config, Env
@@ -86,7 +87,7 @@ class StoreFactory(FrozenBaseModel):
             *[config.k8s_secret_name for config in self.replica_storage_configs],
         ]
 
-    def primary_store(self, writable: bool = False) -> zarr.abc.store.Store:
+    def primary_store(self, writable: bool = False) -> Store:
         store_path = _get_store_path(
             self.dataset_id,
             self.version,
@@ -95,7 +96,7 @@ class StoreFactory(FrozenBaseModel):
 
         return _get_store(store_path, self.primary_storage_config, writable)
 
-    def replica_stores(self, writable: bool = False) -> list[zarr.abc.store.Store]:
+    def replica_stores(self, writable: bool = False) -> list[Store]:
         # Disable replica stores in dev environment
         if Config.is_dev:
             return []
@@ -166,9 +167,7 @@ def _get_store_path(
     return f"{base_path}/{dataset_id}/v{version}.{extension}"
 
 
-def _get_store(
-    store_path: str, storage_config: StorageConfig, writable: bool
-) -> zarr.abc.store.Store:
+def _get_store(store_path: str, storage_config: StorageConfig, writable: bool) -> Store:
     match storage_config.format:
         case DatasetFormat.ICECHUNK:
             assert store_path.endswith(".icechunk")
@@ -182,7 +181,7 @@ def _get_store(
 
 def _get_zarr3_store(
     store_path: str, storage_config: StorageConfig, writable: bool
-) -> zarr.abc.store.Store:
+) -> Store:
     if Config.is_prod:
         return zarr.storage.FsspecStore.from_url(
             store_path, storage_options=storage_config.load_storage_options()
@@ -235,7 +234,7 @@ def _get_icechunk_store(
 def commit_if_icechunk(
     message: str,
     primary_store: zarr.storage.StoreLike,
-    replica_stores: Sequence[zarr.abc.store.Store],
+    replica_stores: Sequence[Store],
 ) -> None:
     """Conveience function to handle committing to icechunk stores.
 

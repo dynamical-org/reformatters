@@ -120,12 +120,12 @@ then deterministically selects its subset. No coordinator or job queue is needed
 * `ruff` for linting and formatting
 * `mypy` for type checking
 * `pytest` for testing
-* `pre-commit` to automatically lint and format as you git commit
+* `prek` to automatically lint and format as you git commit
 * `docker` to package the code and dependencies
 * `kubernetes` indexed jobs to run work in parallel and cronjobs to run ongoing dataset updates and validation
 
 ## Development commands
-* `uv run pre-commit install` to set up the git hooks that will ensure ruff check, ruff format and mypy pass.
+* `uv run prek install` to set up the git hooks that will ensure ruff check, ruff format and mypy pass.
 * Add dependency: `uv add <package> [--dev]`. Use `--dev` to add a development only dependency.
 * Lint: `uv run ruff check [--fix]`
 * Type check: `uv run mypy`
