@@ -1,6 +1,5 @@
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import override
 from urllib.parse import urlparse
 
 import numpy as np
@@ -46,11 +45,10 @@ class NasaSmapLevel336KmV9SourceFileCoord(SourceFileCoord):
 class NasaSmapLevel336KmV9RegionJob(
     RegionJob[NasaSmapDataVar, NasaSmapLevel336KmV9SourceFileCoord]
 ):
-    @override
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
-        data_var_group: Sequence[NasaSmapDataVar],
+        data_var_group: Sequence[NasaSmapDataVar],  # noqa: ARG002
     ) -> Sequence[NasaSmapLevel336KmV9SourceFileCoord]:
         """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
         return [

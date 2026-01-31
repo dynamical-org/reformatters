@@ -1,6 +1,6 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import ClassVar, override
+from typing import ClassVar
 
 import numpy as np
 import pandas as pd
@@ -113,11 +113,10 @@ class UarizonaSwannAnalysisRegionJob(
         )
         return jobs, template_ds
 
-    @override
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
-        data_var_group: Sequence[UarizonaSwannDataVar],
+        data_var_group: Sequence[UarizonaSwannDataVar],  # noqa: ARG002
     ) -> Sequence[UarizonaSwannAnalysisSourceFileCoord]:
         times = processing_region_ds["time"].values
         return [UarizonaSwannAnalysisSourceFileCoord(time=t) for t in times]

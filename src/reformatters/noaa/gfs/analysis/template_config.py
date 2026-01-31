@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import Any, override
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -53,9 +53,8 @@ class NoaaGfsAnalysisTemplateConfig(NoaaGfsCommonTemplateConfig):
             **self._latitude_longitude_coordinates(),
         }
 
-    @override
     def derive_coordinates(
-        self, ds: xr.Dataset
+        self, ds: xr.Dataset,  # noqa: ARG002
     ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
         return {
             "spatial_ref": SPATIAL_REF_COORDS,

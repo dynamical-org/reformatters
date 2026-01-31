@@ -1,7 +1,7 @@
 import re
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import cast, override
+from typing import cast
 from urllib.parse import urlparse
 
 import numpy as np
@@ -83,11 +83,10 @@ class NoaaNdviCdrAnalysisRegionJob(
         "http://ncei.noaa.gov/data/land-normalized-difference-vegetation-index/access"
     )
 
-    @override
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
-        data_var_group: Sequence[NoaaNdviCdrDataVar],
+        data_var_group: Sequence[NoaaNdviCdrDataVar],  # noqa: ARG002
     ) -> Sequence[NoaaNdviCdrAnalysisSourceFileCoord]:
         """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds.
 
