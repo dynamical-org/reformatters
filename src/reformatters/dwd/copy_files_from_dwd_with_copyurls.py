@@ -175,7 +175,7 @@ def run_command_with_concurrent_logging(cmd: Sequence[str]) -> int:
 
         # Create threads to read stdout and stderr simultaneously
         t1 = threading.Thread(target=log_stdout, args=(process.stdout,))
-        t2 = threading.Thread(target=log_stderr_json, args=(process.stderr,))
+        t2 = threading.Thread(target=log_stderr_stats, args=(process.stderr,))
 
         t1.start()
         t2.start()
@@ -205,10 +205,51 @@ def log_stdout(pipe: IO[str]) -> None:
             log.info(f"stdout: {line.strip()}")
 
 
-def log_stderr_json(pipe: IO[str]) -> None:
+def log_stderr_stats(pipe: IO[str]) -> None:
     with pipe:
         for line in pipe:
-            log.info(f"stderr: {line.strip()}")
+            try:
+                tidy_line = tidy_stats(line)
+            except Exception:  # noqa: BLE001
+                # An exception here just means the line wasn't a stats line,
+                # so let's log it and move on. No biggie.
+                log.info("stderr: '%s'", line)
+            else:
+                log.info(f"Rclone stats: {tidy_line}")
+
+
+def tidy_stats(line: str) -> str:
+    """Remove meaningless (and hence confusing) numbers from rclone stats!
+
+    Example raw stats output from rclone copyurl:
+
+        2026/01/31 16:15:41 ERROR :    16.342 MiB / 18.818 MiB, 87%, 0 B/s, ETA -
+                            ^^^^^                 ^^^^^^^^^^^^  ^^^         ^^^^^
+    Issues to fix:    It's not an error!          And these numbers means nothing!
+    """
+    # Split by the first colon to ignore the timestamp and 'ERROR'
+    split_on: Final[str] = "ERROR :"
+    if split_on not in line:
+        raise ValueError("Expected a colon in rclone stats line: '%s'", line)
+    line = line.split(split_on, 1)[1]
+
+    # Split the remaining data by comma
+    # parts[0] = "16.342 MiB / 18.818 MiB" (Size info)
+    # parts[1] = " 87%" (Percentage)
+    # parts[2] = " 0 B/s" (Speed)
+    # parts[3] = " ETA -"
+    parts = line.split(",")
+    n_expected_parts: Final[int] = 4
+    if len(parts) != n_expected_parts:
+        raise ValueError(
+            "Expected %d comma-separated values in rclone stats line. Line: '%s'",
+            n_expected_parts,
+            line,
+        )
+
+    transferred_bytes = parts[0].split("/")[0].strip()
+    speed = parts[2].strip()
+    return f"Transferred so far: {transferred_bytes}. Recent throughput: {speed}"
 
 
 def run_rclone_copyurls(csv_of_files_to_transfer: str) -> None:
@@ -226,7 +267,7 @@ def run_rclone_copyurls(csv_of_files_to_transfer: str) -> None:
         "--transfers=16",  # TODO(Jack): transfers and checkers should be configurable.
         "--checkers=16",
         # Logging:
-        "--stats=2s",  # Output statistics every 2 seconds.
+        "--stats=2s",  # Output statistics every 2 seconds. TODO(Jack): Reduce this to 1 minute?
         # "--use-json-log",  # Output stats in JSON.
         "--stats-log-level=ERROR",  # Output stats to stderr.
         # TODO(Jack): Delete these commented-out args if we no longer need them.
@@ -244,14 +285,14 @@ def list_files_on_dst_for_nwp_runs_available_from_dwd(
     src_paths_starting_with_nwp_var: Sequence[PurePosixPath],
     src_root_path_ending_with_init_hour: PurePosixPath,
     dst_root_path_without_init_dt: PurePosixPath,
-) -> list[PurePosixPath]:
+) -> set[PurePosixPath]:
     """The returned paths include (and start with) the NWP init datetime."""
     # Find unique NWP runs available from DWD. Usually, a DWD path like
     # `/weather/nwp/icon-eu/grib/00/` will only contain files for a single NWP run (today's midnight
     # run). But, if the time now is between 2 hours and 4 hours after the init time, then DWD will
     # be in the process of overwriting the files for yesterday's midnight run with today's midnight
     # run, and the 00/ directory will contain files from two NWP runs.
-    unique_nwp_init_datetimes = {
+    unique_nwp_init_datetimes: set[datetime] = {
         extract_nwp_init_datetime_from_grib_filename(src_path.name)
         for src_path in src_paths_starting_with_nwp_var
     }
@@ -260,15 +301,15 @@ def list_files_on_dst_for_nwp_runs_available_from_dwd(
         f" in '{src_root_path_ending_with_init_hour}': {unique_nwp_init_datetimes}"
     )
 
-    # Get a list of all the files in the destination:
-    # The paths in this list start with and *include* the NWP init datetime part of the path.
-    existing_dst_paths_starting_with_init_dt: list[PurePosixPath] = []
+    # Get a set of all the files in the destination:
+    # The paths in this set start with and *include* the NWP init datetime part of the path.
+    existing_dst_paths_starting_with_init_dt: set[PurePosixPath] = set()
     for nwp_init_dt in unique_nwp_init_datetimes:
         nwp_init_dt_str = format_datetime_for_dst_path(nwp_init_dt)
         dst_paths_starting_with_nwp_var = list_files(
             str(dst_root_path_without_init_dt / nwp_init_dt_str)
         )
-        existing_dst_paths_starting_with_init_dt.extend(
+        existing_dst_paths_starting_with_init_dt.update(
             nwp_init_dt_str / dst_path for dst_path in dst_paths_starting_with_nwp_var
         )
 
