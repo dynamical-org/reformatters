@@ -47,6 +47,7 @@ def _run_command_with_concurrent_logging(
     cmd_str = " ".join(cmd)
     log.info("Running command: %s", cmd_str)
 
+    process = None
     try:
         process = subprocess.Popen(  # noqa: S603
             cmd, text=True, stdout=PIPE, stderr=PIPE, bufsize=1, env=env_vars
@@ -67,7 +68,8 @@ def _run_command_with_concurrent_logging(
     except KeyboardInterrupt:
         # Avoid having a zombie rclone process if user kills Python with Ctrl-C
         log.warning("Received KeyboardInterrupt... terminating subprocess...")
-        process.terminate()
+        if process:
+            process.terminate()
         raise
     else:
         log.info("return code = %d after running command: '%s'", return_code, cmd_str)
@@ -106,7 +108,7 @@ def _tidy_stats(line: str) -> str:
     # Split by the first colon to ignore the timestamp and 'ERROR'
     split_on: Final[str] = "ERROR :"
     if split_on not in line:
-        raise ValueError("Expected a colon in rclone stats line: '%s'", line)
+        raise ValueError(f"Expected a colon in rclone stats line: '{line}'")
     line = line.split(split_on, 1)[1]
 
     # Split the remaining data by comma
@@ -118,9 +120,7 @@ def _tidy_stats(line: str) -> str:
     n_expected_parts: Final[int] = 4
     if len(parts) != n_expected_parts:
         raise ValueError(
-            "Expected %d comma-separated values in rclone stats line. Line: '%s'",
-            n_expected_parts,
-            line,
+            f"Expected {n_expected_parts} comma-separated values in rclone stats line. Line: '{line}'"
         )
 
     transferred_bytes = parts[0].split("/")[0].strip()

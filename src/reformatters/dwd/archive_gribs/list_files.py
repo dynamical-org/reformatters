@@ -132,7 +132,7 @@ def list_files_on_dst_for_all_nwp_runs_available_from_dwd(
     # Get a set of all the files in the destination:
     # The paths in this set start with and *include* the NWP init datetime part of the path.
     existing_dst_paths_starting_with_init_dt: set[PurePosixPath] = set()
-    for nwp_init_dt in unique_nwp_init_datetimes:
+    for nwp_init_dt in sorted(unique_nwp_init_datetimes):
         nwp_init_dt_str = format_datetime_for_dst_path(nwp_init_dt)
         dst_paths_starting_with_nwp_var = list_files(
             str(dst_root_path_without_init_dt / nwp_init_dt_str),

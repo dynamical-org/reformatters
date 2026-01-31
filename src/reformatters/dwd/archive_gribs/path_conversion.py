@@ -31,10 +31,8 @@ def extract_nwp_var_from_src_path(src_path: PurePosixPath) -> str:
     n_expected_parts: Final[int] = 2
     if len(src_path.parts) != n_expected_parts:
         raise RuntimeError(
-            "Expected %d parts in the DWD path, found %d parts. Path: %s",
-            n_expected_parts,
-            len(src_path.parts),
-            src_path,
+            f"Expected {n_expected_parts} parts in the DWD path, found "
+            f"{len(src_path.parts)} parts. Path: {src_path}"
         )
     return src_path.parts[0]
 
@@ -46,16 +44,15 @@ class DateExtractionError(Exception):
 def extract_nwp_init_datetime_from_grib_filename(
     grib_filename: str,
 ) -> datetime:
-    dwd_nwp_init_date_regex: Final[re.Pattern[str]] = re.compile(r"_(\d{10})_")
+    dwd_nwp_init_date_regex: Final[re.Pattern[str]] = re.compile(r"_(\d{10})(?=_)")
     nwp_init_date_matches = dwd_nwp_init_date_regex.findall(grib_filename)
     if len(nwp_init_date_matches) == 0:
-        raise DateExtractionError("No date found in file: %s", grib_filename)
+        raise DateExtractionError(f"No date found in file: {grib_filename}")
     elif len(nwp_init_date_matches) > 1:
         raise DateExtractionError(
             "Expected exactly one 10-digit number in the filename (the NWP init date"
-            " represented as YYYYMMDDHH), but instead found %d 10-digit numbers in path %s",
-            len(nwp_init_date_matches),
-            grib_filename,
+            f" represented as YYYYMMDDHH), but instead found {len(nwp_init_date_matches)}"
+            f" 10-digit numbers in path {grib_filename}"
         )
     nwp_init_date_str = nwp_init_date_matches[0]
     return datetime.strptime(nwp_init_date_str, "%Y%m%d%H")
