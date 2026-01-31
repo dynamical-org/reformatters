@@ -155,7 +155,7 @@ def run_rclone_copyurls(csv_of_files_to_transfer: str) -> None:
         "--transfers=16",
         "--checkers=16",
         # "--log-level=ERROR",
-        "--stats-log-level=NOTICE",
+        # "--stats-log-level=NOTICE",
         "--use-json-log",
     ]
     run_command_with_concurrent_logging(cmd)
