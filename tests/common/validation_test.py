@@ -5,7 +5,8 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-import zarr
+import zarr.core.sync
+import zarr.storage
 
 from reformatters.common import validation
 
