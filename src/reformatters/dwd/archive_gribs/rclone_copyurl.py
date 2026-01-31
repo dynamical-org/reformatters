@@ -15,7 +15,7 @@ def run_rclone_copyurl(
     dst_root_path: PurePosixPath,
     transfer_parallelism: int,
     checkers: int,
-    stats_logging_freq: str,  # e.g. "1m" for every 1 minute.
+    stats_logging_freq: str,  # e.g. "1m" to log stats every minute.
     env_vars: dict[str, Any] | None = None,
 ) -> None:
     csv_file = Path("copyurls.csv")
@@ -101,7 +101,7 @@ def _tidy_stats(line: str) -> str:
 
         2026/01/31 16:15:41 ERROR :    16.342 MiB / 18.818 MiB, 87%, 0 B/s, ETA -
                             ^^^^^                 ^^^^^^^^^^^^  ^^^         ^^^^^
-    Issues to fix:    Stats aren't an error!      And these numbers means nothing!
+    Issues to fix:    Stats aren't an error!      And these numbers mean nothing!
     """
     # Split by the first colon to ignore the timestamp and 'ERROR'
     split_on: Final[str] = "ERROR :"
