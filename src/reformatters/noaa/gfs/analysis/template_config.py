@@ -54,7 +54,8 @@ class NoaaGfsAnalysisTemplateConfig(NoaaGfsCommonTemplateConfig):
         }
 
     def derive_coordinates(
-        self, ds: xr.Dataset,  # noqa: ARG002
+        self,
+        ds: xr.Dataset,  # noqa: ARG002
     ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
         return {
             "spatial_ref": SPATIAL_REF_COORDS,
