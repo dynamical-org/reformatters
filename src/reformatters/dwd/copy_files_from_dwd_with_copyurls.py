@@ -1,3 +1,4 @@
+import os
 import re
 import subprocess
 import threading
@@ -5,7 +6,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from subprocess import PIPE, CalledProcessError
-from typing import IO, Final
+from typing import IO, Any, Final
 
 from reformatters.common.logging import get_logger
 
@@ -13,7 +14,10 @@ log = get_logger(__name__)
 
 
 def list_files(
-    path: str, checkers: int | None = None, rclone_args: Sequence[str] = ()
+    path: str,
+    checkers: int,
+    rclone_args: Sequence[str] = (),
+    env_vars: dict[str, Any] | None = None,
 ) -> list[PurePosixPath]:
     """List files recursively.
 
@@ -34,13 +38,13 @@ def list_files(
             above 32, and this actually slows down file listing.
             For more info, see the rclone docs: https://rclone.org/docs/#checkers-int
         rclone_args: Additional args to be passed to `rclone lsf`.
+        env_vars: Additional environment variables to give to `rclone`.
 
     Returns:
         paths: A sorted list of all the files found in `path`. Returns an empty list if the
         directory does not exist.
     """
     log.info("Listing files on '%s'...", path)
-    checkers = checkers or 32
     cmd = (
         "rclone",
         "lsf",
@@ -53,8 +57,14 @@ def list_files(
     )
     log.info("Running command: '%s'", " ".join(cmd))
     try:
-        # TODO(Jack): Set timeout & env vars.
-        result = subprocess.run(cmd, check=True, text=True, capture_output=True)  # noqa: S603
+        result = subprocess.run(  # noqa: S603
+            cmd,
+            check=True,
+            text=True,
+            capture_output=True,
+            env=env_vars,
+            timeout=120,
+        )
     except CalledProcessError as e:
         if (
             e.returncode == 3
@@ -75,16 +85,25 @@ def list_files(
 
 
 def list_grib_files_on_dwd_https(
-    path: str, checkers: int | None = None
+    http_url: str,
+    path: str | PurePosixPath,
+    checkers: int,
+    env_vars: dict[str, Any] | None = None,
 ) -> list[PurePosixPath]:
     rclone_args = (
+        f"--http-url={http_url}",
         "--min-age=1m",  # Ignore files that are so young they might be incomplete.
         # The ordering of these filters matters:
         "--filter=- *pressure-level*",
         "--filter=+ *.grib2.bz2",
         "--filter=- *",
     )
-    return list_files(path=path, checkers=checkers, rclone_args=rclone_args)
+    return list_files(
+        path=f":http:{path}",
+        checkers=checkers,
+        rclone_args=rclone_args,
+        env_vars=env_vars,
+    )
 
 
 def extract_nwp_var_from_src_path(src_path: PurePosixPath) -> str:
@@ -165,13 +184,17 @@ def convert_called_process_error_output_to_str(output: None | str | bytes) -> st
         return output.decode()
 
 
-def run_command_with_concurrent_logging(cmd: Sequence[str]) -> int:
+def run_command_with_concurrent_logging(
+    cmd: Sequence[str],
+    env_vars: dict[str, Any] | None = None,
+) -> int:
     cmd_str = " ".join(cmd)
     log.info("Running command: %s", cmd_str)
-    # TODO(Jack): Set timeout & env vars & catch KeboardException & terminate process.
 
     try:
-        process = subprocess.Popen(cmd, text=True, stdout=PIPE, stderr=PIPE, bufsize=1)  # noqa: S603
+        process = subprocess.Popen(  # noqa: S603
+            cmd, text=True, stdout=PIPE, stderr=PIPE, bufsize=1, env=env_vars
+        )
 
         # Create threads to read stdout and stderr simultaneously
         t1 = threading.Thread(target=log_stdout, args=(process.stdout,))
@@ -225,7 +248,7 @@ def tidy_stats(line: str) -> str:
 
         2026/01/31 16:15:41 ERROR :    16.342 MiB / 18.818 MiB, 87%, 0 B/s, ETA -
                             ^^^^^                 ^^^^^^^^^^^^  ^^^         ^^^^^
-    Issues to fix:    It's not an error!          And these numbers means nothing!
+    Issues to fix:    Stats aren't an error!      And these numbers means nothing!
     """
     # Split by the first colon to ignore the timestamp and 'ERROR'
     split_on: Final[str] = "ERROR :"
@@ -252,39 +275,42 @@ def tidy_stats(line: str) -> str:
     return f"Transferred so far: {transferred_bytes}. Recent throughput: {speed}"
 
 
-def run_rclone_copyurls(csv_of_files_to_transfer: str) -> None:
+def run_rclone_copyurl(
+    csv_of_files_to_transfer: str,
+    dst_root_path: PurePosixPath,
+    transfer_parallelism: int,
+    checkers: int,
+    stats_logging_freq: str,  # e.g. "1m" for every 1 minute.
+    env_vars: dict[str, Any] | None = None,
+) -> None:
     csv_file = Path("copyurls.csv")
     csv_file.write_text(csv_of_files_to_transfer)
-
-    cmd = [
+    cmd = (
         "rclone",
-        "copyurl",
+        "copyurl",  # https://rclone.org/commands/rclone_copyurl
         "--urls",
-        "copyurls.csv",
-        "/home/jack/data/ICON-EU/grib/rclone_copyurls/",  # TODO(Jack): Replace this with dst_root_path
+        str(csv_file),
+        str(dst_root_path),
         # Performance:
         "--fast-list",
-        "--transfers=16",  # TODO(Jack): transfers and checkers should be configurable.
-        "--checkers=16",
+        f"--transfers={transfer_parallelism:d}",
+        f"--checkers={checkers:d}",
         # Logging:
-        "--stats=2s",  # Output statistics every 2 seconds. TODO(Jack): Reduce this to 1 minute?
-        # "--use-json-log",  # Output stats in JSON.
+        f"--stats={stats_logging_freq}",
         "--stats-log-level=ERROR",  # Output stats to stderr.
-        # TODO(Jack): Delete these commented-out args if we no longer need them.
-        # "--progress",
         "--quiet",  # Only output logs at error level.
         "--stats-one-line",  # Output stats as a single line.
-        # "--log-level=ERROR",
-    ]
-    run_command_with_concurrent_logging(cmd)
-
-    # csv_file.unlink()  # TODO(Jack): uncomment this after testing!!!
+    )
+    run_command_with_concurrent_logging(cmd, env_vars=env_vars)
+    csv_file.unlink()
 
 
 def list_files_on_dst_for_nwp_runs_available_from_dwd(
     src_paths_starting_with_nwp_var: Sequence[PurePosixPath],
     src_root_path_ending_with_init_hour: PurePosixPath,
     dst_root_path_without_init_dt: PurePosixPath,
+    checkers: int,
+    env_vars: dict[str, Any] | None = None,
 ) -> set[PurePosixPath]:
     """The returned paths include (and start with) the NWP init datetime."""
     # Find unique NWP runs available from DWD. Usually, a DWD path like
@@ -307,7 +333,9 @@ def list_files_on_dst_for_nwp_runs_available_from_dwd(
     for nwp_init_dt in unique_nwp_init_datetimes:
         nwp_init_dt_str = format_datetime_for_dst_path(nwp_init_dt)
         dst_paths_starting_with_nwp_var = list_files(
-            str(dst_root_path_without_init_dt / nwp_init_dt_str)
+            str(dst_root_path_without_init_dt / nwp_init_dt_str),
+            env_vars=env_vars,
+            checkers=checkers,
         )
         existing_dst_paths_starting_with_init_dt.update(
             nwp_init_dt_str / dst_path for dst_path in dst_paths_starting_with_nwp_var
@@ -316,37 +344,110 @@ def list_files_on_dst_for_nwp_runs_available_from_dwd(
     return existing_dst_paths_starting_with_init_dt
 
 
-def main() -> None:
-    src_root_path = PurePosixPath("/weather/nwp/icon-eu/grib/03/")
-    dst_root_path = PurePosixPath("/home/jack/data/ICON-EU/grib/rclone_copyurls/")
+def copy_gribs_from_dwd_https(
+    src_root_path: PurePosixPath,
+    dst_root_path: PurePosixPath,
+    src_host: str = "https://opendata.dwd.de",
+    transfer_parallelism: int = 64,
+    checkers: int = 16,
+    stats_logging_freq: str = "1m",
+    env_vars: dict[str, Any] | None = None,
+) -> None:
+    """
+    Args:
+        src_root_path: The absolute path on src_host for one NWP run.
+            Must start with a forwards slash, e.g. "/weather/nwp/icon-eu/grib/00/"
+        dst_root_path: The destination path, e.g. "/data/ICON-EU/" or ":s3:bucket/path".
+            Must be in the format that rclone expects.
+        src_host: The HTTP or HTTPS URL, e.g. "https://opendata.dwd.de".
+            Should not include a trailing slash.
+        transfer_parallelism: Number of concurrent workers during the copy operation.
+            Each worker fetches a file from src_host, copies it to the destination, and waits for
+            the destination to acknowledge completion before fetching another file from the source.
+            When fetching from HTTPS and writing to object storage, this could be set arbitrarily
+            high, although setting it too high (>256?) might be detrimental to performance.
+        stats_logging_freq: The period between each stats log. e.g. "1m" to log stats every minute.
+            See https://rclone.org/docs/#stats-duration
+        env_vars: Additional environment variables to give to `rclone`. For example:
+            {
+                "RCLONE_S3_PROVIDER": "AWS",
+                "RCLONE_S3_ACCESS_KEY_ID": "key",
+                "RCLONE_S3_SECRET_ACCESS_KEY": "secret",
+                "RCLONE_S3_REGION": "us-west-2",
+            }
+    """
+    # Check inputs:
+    if src_host[-1] == "/":
+        log.info("Stripping trailing slash from src_host %s", src_host)
+        src_host = src_host[:-1]
+    if not src_root_path.is_absolute():
+        raise ValueError(
+            "src_root_path '%s' must start with a forward slash.", src_root_path
+        )
+
+    # Set full_env variables:
+    if env_vars:
+        full_env = os.environ.copy()
+        full_env.update(env_vars)
+    else:
+        full_env = None
 
     src_paths_starting_with_nwp_var = list_grib_files_on_dwd_https(
-        path=f"dwd-http:{src_root_path}",  # rclone_remote:path
+        http_url=src_host,
+        path=src_root_path,
+        checkers=checkers,
+        env_vars=full_env,
     )
 
     files_already_on_dst = list_files_on_dst_for_nwp_runs_available_from_dwd(
         src_paths_starting_with_nwp_var=src_paths_starting_with_nwp_var,
         src_root_path_ending_with_init_hour=src_root_path,
         dst_root_path_without_init_dt=dst_root_path,
+        checkers=checkers,
+        env_vars=full_env,
     )
 
-    # Prepare a CSV with two columns:
-    # 1. The source path, from `https://opendata.dwd.de` onwards.
-    # 2. The destination path, from the NWP init datetime onwards.
-    # This is the format required by `rclone copyurls`.
+    csv_of_files_to_transfer = compute_which_files_still_need_to_be_transferred(
+        src_paths_starting_with_nwp_var=src_paths_starting_with_nwp_var,
+        files_already_on_dst=files_already_on_dst,
+        src_host_and_root_path=f"{src_host}{src_root_path}",
+    )
+
+    run_rclone_copyurl(
+        "\n".join(csv_of_files_to_transfer),
+        dst_root_path=dst_root_path,
+        transfer_parallelism=transfer_parallelism,
+        checkers=checkers,
+        env_vars=full_env,
+        stats_logging_freq=stats_logging_freq,
+    )
+
+
+def compute_which_files_still_need_to_be_transferred(
+    src_paths_starting_with_nwp_var: Sequence[PurePosixPath],
+    files_already_on_dst: set[PurePosixPath],
+    src_host_and_root_path: str,
+) -> list[str]:
+    """Returns list of strings, each of which is a row of a CSV with two columns:
+
+    1. The full source path, e.g. `https://opendata.dwd.de/.../filename.grib2.bz2`.
+    2. The destination path, from the NWP init datetime onwards.
+
+    This is the format required by `rclone copyurls`.
+    """
     csv_of_files_to_transfer: list[str] = []  # Each list item is one line of the CSV.
     for src_path in src_paths_starting_with_nwp_var:
         dst_path = convert_src_path_to_dst_path(src_path)
         if dst_path not in files_already_on_dst:
-            full_src_path = f"https://opendata.dwd.de{src_root_path / src_path}"
+            full_src_path = src_host_and_root_path / src_path
             dst_path = convert_src_path_to_dst_path(src_path)
             csv_of_files_to_transfer.append(f"{full_src_path},{dst_path}")
     log.info(f"Planning to transfer {len(csv_of_files_to_transfer):,d} files.")
-
-    run_rclone_copyurls("\n".join(csv_of_files_to_transfer))
-
-    # TODO(Jack): Stream stats? Maybe use json stats again? With an update every minute?
+    return csv_of_files_to_transfer
 
 
 if __name__ == "__main__":
-    main()
+    copy_gribs_from_dwd_https(
+        src_root_path=PurePosixPath("/weather/nwp/icon-eu/grib/03/"),
+        dst_root_path=PurePosixPath("/home/jack/data/ICON-EU/grib/rclone_copyurls/"),
+    )
