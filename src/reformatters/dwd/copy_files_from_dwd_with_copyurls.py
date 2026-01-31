@@ -3,7 +3,7 @@ import subprocess
 import threading
 from collections.abc import Sequence
 from datetime import datetime
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from subprocess import PIPE, CompletedProcess
 from typing import IO, Final
 
@@ -15,7 +15,26 @@ log = get_logger(__name__)
 def list_files(
     path: str, checkers: int | None = None, rclone_args: Sequence[str] = ()
 ) -> list[PurePosixPath]:
-    """The returned paths do not include the input `path`."""
+    """List files recursively.
+
+    Uses `rclone lsf` (list files) command: https://rclone.org/commands/rclone_lsf
+
+    The returned paths do not include the input `path`. For example, if there's just 1 file on disk:
+    "/foo/bar/baz.qux", and `list_files` is called with `path="/foo/"` then the returned path will
+    be "bar/baz.qux".
+
+    Args:
+        path: List all the files in this path recursively. This must be in the form that `rclone`
+            expects, such as `remote:path` (e.g. `dwd-http:/weather/nwp/icon-eu-grib/00/`) or, for a
+            path on a local file system, just use the absolute path.
+        checkers: This number is passed to the `rclone --checkers` argument.
+            In the context of recursive file listing, it appears `checkers` controls the number of
+            directories that are listed in parallel. Note that more is not always better. For
+            example, on a small VM with only 2 CPUs, `rclone` maxes out the CPUs if `checkers` is
+            above 32, and this actually slows down file listing.
+            For more info, see the rclone docs: https://rclone.org/docs/#checkers-int
+        rclone_args: Additional args to be passed to `rclone lsf`.
+    """
     log.info("Listing files on %s", path)
     checkers = checkers or 32
     cmd = (
@@ -25,12 +44,12 @@ def list_files(
         "--fast-list",
         "--recursive",
         "--files-only",
-        f"--checkers={checkers}",
+        f"--checkers={checkers:d}",
         *rclone_args,
     )
     result = run_command(cmd)
     paths = sorted(PurePosixPath(p) for p in result.stdout.splitlines())
-    log.info(f"Found {len(paths):,d} files on {path}")
+    log.info(f"Found {len(paths):,d} files on '{path}'.")
     return paths
 
 
@@ -65,17 +84,23 @@ def extract_nwp_var_from_dwd_path(dwd_path: PurePosixPath) -> str:
     return dwd_path.parts[0]
 
 
-def extract_nwp_init_datetime_from_dwd_path(dwd_path: PurePosixPath) -> datetime:
+class DateExtractionError(Exception):
+    pass
+
+
+def extract_nwp_init_datetime_from_dwd_path(
+    dwd_path_without_root: PurePosixPath,
+) -> datetime:
     dwd_nwp_init_date_regex: Final[re.Pattern[str]] = re.compile(r"_(\d{10})_")
-    nwp_init_date_match = dwd_nwp_init_date_regex.findall(dwd_path.name)
+    nwp_init_date_match = dwd_nwp_init_date_regex.findall(dwd_path_without_root.name)
     if len(nwp_init_date_match) == 0:
-        raise RuntimeError("No date found in file: %s", dwd_path)
+        raise DateExtractionError("No date found in file: %s", dwd_path_without_root)
     elif len(nwp_init_date_match) > 1:
-        raise ValueError(
+        raise DateExtractionError(
             "Expected exactly one 10-digit number in the filename (the NWP init date"
             " represented as YYYYMMDDHH), but instead found %d 10-digit numbers in path %s",
             len(nwp_init_date_match),
-            dwd_path,
+            dwd_path_without_root,
         )
     nwp_init_date_str = nwp_init_date_match[0]
     return datetime.strptime(nwp_init_date_str, "%Y%m%d%H")
@@ -99,13 +124,6 @@ def convert_dwd_path_to_dst_path(dwd_path: PurePosixPath) -> PurePosixPath:
     return dst_path
 
 
-def stream_reader(pipe: IO[str], info: str) -> None:
-    """Reads a pipe line-by-line and logs it using the provided function."""
-    with pipe:
-        for line in pipe:
-            log.info(f"{info}: {line.strip()}")
-
-
 def run_command(cmd: Sequence[str], log_stdout: bool = False) -> CompletedProcess[str]:
     log.info("Running command: %s", " ".join(cmd))
     result = subprocess.run(cmd, check=True, text=True, capture_output=True)
@@ -116,7 +134,7 @@ def run_command(cmd: Sequence[str], log_stdout: bool = False) -> CompletedProces
     return result
 
 
-def run_command_with_concurrent_logging(cmd: Sequence[str]) -> None:
+def run_command_with_concurrent_logging(cmd: Sequence[str]) -> int:
     log.info("Running command: %s", " ".join(cmd))
     process = subprocess.Popen(cmd, text=True, stdout=PIPE, stderr=PIPE, bufsize=1)
 
@@ -132,85 +150,106 @@ def run_command_with_concurrent_logging(cmd: Sequence[str]) -> None:
     t2.join()
 
     return_code = process.wait()
-
     log.info("return code = %s", return_code)
+    return return_code
+
+
+def stream_reader(pipe: IO[str], prefix: str) -> None:
+    """Reads a pipe line-by-line and logs it."""
+    with pipe:
+        for line in pipe:
+            log.info(f"{prefix}: {line.strip()}")
 
 
 def run_rclone_copyurls(csv_of_files_to_transfer: str) -> None:
-    # csv_file = Path("copyurls.csv")
-    # csv_file.write_text(csv_of_files_to_transfer)
+    csv_file = Path("copyurls.csv")
+    csv_file.write_text(csv_of_files_to_transfer)
 
     cmd = [
         "rclone",
         "copyurl",
         "--urls",
         "copyurls.csv",
-        # TODO(Jack): Replace this with dst_root_path
-        "/home/jack/data/ICON-EU/grib/rclone_copyurls/",
+        "/home/jack/data/ICON-EU/grib/rclone_copyurls/",  # TODO(Jack): Replace this with dst_root_path
+        # Performance:
+        "--fast-list",
+        "--transfers=16",  # TODO(Jack): transfers and checkers should be configurable.
+        "--checkers=16",
+        # Logging:
+        "--stats=2s",  # Output statistics every 2 seconds.
+        "--use-json-log",  # Output all logs in JSON.
         # "--progress",
-        "--stats=2s",
         # "--quiet",
         # "--stats-one-line",
-        "--fast-list",
-        "--transfers=16",
-        "--checkers=16",
         # "--log-level=ERROR",
         # "--stats-log-level=NOTICE",
-        "--use-json-log",
     ]
     run_command_with_concurrent_logging(cmd)
 
-    # csv_file.unlink()  # TODO(Jack): uncomment this after testing.
+    # csv_file.unlink()  # TODO(Jack): uncomment this after testing!!!
+
+
+def list_files_on_dst_for_nwp_runs_available_from_dwd(
+    dwd_paths_without_root: Sequence[PurePosixPath],
+    dwd_root_path: PurePosixPath,
+    dst_root_path: PurePosixPath,
+) -> list[PurePosixPath]:
+    """The returned paths include (and start with) the NWP init datetime."""
+    # Find unique NWP runs available from DWD. Usually, a DWD path like
+    # `/weather/nwp/icon-eu/grib/00/` will only contain files for a single NWP run (today's midnight
+    # run). But, if the time now is between 2 hours and 4 hours after the init time, then DWD will
+    # be in the process of overwriting the files for yesterday's midnight run with today's midnight
+    # run, and the 00/ directory will contain files from two NWP runs.
+    unique_nwp_init_datetimes = {
+        extract_nwp_init_datetime_from_dwd_path(dwd_path_without_root)
+        for dwd_path_without_root in dwd_paths_without_root
+    }
+    log.info(
+        f"Found {len(unique_nwp_init_datetimes)} unique NWP init datetime(s) in {dwd_root_path}: {unique_nwp_init_datetimes}"
+    )
+
+    # Get a list of all the files in the destination:
+    # The paths in this list start with and *include* the NWP init datetime part of the path.
+    existing_dst_paths_starting_with_init_dt: list[PurePosixPath] = []
+    for nwp_init_dt in unique_nwp_init_datetimes:
+        nwp_init_dt_str = format_datetime_for_use_in_dst_path(nwp_init_dt)
+        dst_paths_starting_with_nwp_var = list_files(
+            str(dst_root_path / nwp_init_dt_str)
+        )
+        existing_dst_paths_starting_with_init_dt.extend(
+            nwp_init_dt_str / dst_path for dst_path in dst_paths_starting_with_nwp_var
+        )
+
+    return existing_dst_paths_starting_with_init_dt
 
 
 def main() -> None:
     dwd_root_path = PurePosixPath("/weather/nwp/icon-eu/grib/03/")
     dst_root_path = PurePosixPath("/home/jack/data/ICON-EU/grib/rclone_copyurls/")
 
-    # These dwd_paths do not include the the dwd_root_path.
+    # These dwd_paths do not include the dwd_root_path.
+    dwd_paths_without_root = list_grib_files_on_dwd_https(
+        path=f"dwd-http:{dwd_root_path}",  # rclone_remote:path
+    )
 
-    # dwd_paths = list_grib_files_on_dwd_https(
-    #     path=f"dwd-http:{dwd_root_path}",  # remote:path
-    # )
-
-    # Find set of unique nwp_init_datetimes.
-    # Usually, a DWD path like /weather/nwp/icon-eu/grib/00/ will only contain files for a
-    # single NWP init (the midnight init for today). But, if we've listed the HTTPS server while
-    # DWD are copying a new NWP run to their FTP server then the 00/ directory will contain
-    # files from two NWP init datetimes.
-
-    # unique_nwp_init_datetimes = {
-    #     extract_nwp_init_datetime_from_dwd_path(dwd_path) for dwd_path in dwd_paths
-    # }
-    # log.info(
-    #     f"Found {len(unique_nwp_init_datetimes)} unique NWP init datetime(s) in {dwd_root_path}: {unique_nwp_init_datetimes}"
-    # )
-
-    # Get a list of all the files in the destination:
-    # The paths in this list *include* the NWP init datetime part of the path.
-
-    # files_already_on_dst: list[PurePosixPath] = []
-    # for nwp_init_dt in unique_nwp_init_datetimes:
-    #     nwp_init_dt_str = format_datetime_for_use_in_dst_path(nwp_init_dt)
-    #     files_below_init_dt_folder = list_files(f"{dst_root_path / nwp_init_dt_str}")
-    #     files_including_dt_folder = [
-    #         nwp_init_dt_str / path for path in files_below_init_dt_folder
-    #     ]
-    #     files_already_on_dst.extend(files_including_dt_folder)
+    files_already_on_dst = list_files_on_dst_for_nwp_runs_available_from_dwd(
+        dwd_paths_without_root=dwd_paths_without_root,
+        dwd_root_path=dwd_root_path,
+        dst_root_path=dst_root_path,
+    )
 
     # Prepare a CSV with two columns:
     # 1. The source path, from `https://opendata.dwd.de` onwards.
     # 2. The destination path, from the NWP init datetime onwards.
     # This is the format required by `rclone copyurls`.
-
     csv_of_files_to_transfer: list[str] = []  # Each list item is one line of the CSV.
-    # for dwd_path in dwd_paths:
-    #     dst_path = convert_dwd_path_to_dst_path(dwd_path)
-    #     if dst_path not in files_already_on_dst:
-    #         src_path = f"https://opendata.dwd.de{dwd_root_path / dwd_path}"
-    #         dst_path = convert_dwd_path_to_dst_path(dwd_path)
-    #         csv_of_files_to_transfer.append(f"{src_path},{dst_path}")
-    # log.info("Planning to transfer %d files.", len(csv_of_files_to_transfer))
+    for dwd_path in dwd_paths_without_root:
+        dst_path = convert_dwd_path_to_dst_path(dwd_path)
+        if dst_path not in files_already_on_dst:
+            src_path = f"https://opendata.dwd.de{dwd_root_path / dwd_path}"
+            dst_path = convert_dwd_path_to_dst_path(dwd_path)
+            csv_of_files_to_transfer.append(f"{src_path},{dst_path}")
+    log.info("Planning to transfer %d files.", len(csv_of_files_to_transfer))
 
     run_rclone_copyurls("\n".join(csv_of_files_to_transfer))
 
