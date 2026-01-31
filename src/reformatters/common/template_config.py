@@ -1,5 +1,4 @@
 import sys
-from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Generic, TypeVar
@@ -24,7 +23,7 @@ DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 SPATIAL_REF_COORDS = ((), np.array(0))
 
 
-class TemplateConfig(ABC, FrozenBaseModel, Generic[DATA_VAR]):
+class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
     """Define a subclass of this class to configure the structure of a dataset."""
 
     dims: tuple[Dim, ...]
@@ -34,23 +33,19 @@ class TemplateConfig(ABC, FrozenBaseModel, Generic[DATA_VAR]):
 
     @computed_field
     @property
-    @abstractmethod
     def dataset_attributes(self) -> DatasetAttributes:
         raise NotImplementedError("Implement `dataset_attributes` in your subclass")
 
     @computed_field
     @property
-    @abstractmethod
     def coords(self) -> Sequence[Coordinate]:
         raise NotImplementedError("Implement `coords` in your subclass")
 
     @computed_field
     @property
-    @abstractmethod
     def data_vars(self) -> Sequence[DATA_VAR]:
         raise NotImplementedError("Implement `data_vars` in your subclass")
 
-    @abstractmethod
     def dimension_coordinates(self) -> dict[str, Any]:
         """Returns a dictionary of dimension names to coordinates for the dataset."""
         raise NotImplementedError("Implement `dimension_coordinates` in your subclass")

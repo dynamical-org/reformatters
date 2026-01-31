@@ -1,6 +1,5 @@
 import concurrent.futures
 import os
-from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import suppress
@@ -109,7 +108,7 @@ def region_slice(s: slice) -> slice:
     return s
 
 
-class RegionJob(ABC, pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
+class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     tmp_store: Path
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
@@ -157,7 +156,6 @@ class RegionJob(ABC, pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         return self.region
 
-    @abstractmethod
     def generate_source_file_coords(
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[DATA_VAR]
     ) -> Sequence[SOURCE_FILE_COORD]:
@@ -166,14 +164,12 @@ class RegionJob(ABC, pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             "Return a sequence of SourceFileCoord objects, one for each source file required to process the data covered by processing_region_ds."
         )
 
-    @abstractmethod
     def download_file(self, coord: SOURCE_FILE_COORD) -> Path:
         """Download the file for the given coordinate and return the local path."""
         raise NotImplementedError(
             "Download the file for the given coordinate and return the local path."
         )
 
-    @abstractmethod
     def read_data(
         self,
         coord: SOURCE_FILE_COORD,
@@ -275,7 +271,6 @@ class RegionJob(ABC, pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
 
     @classmethod
-    @abstractmethod
     def operational_update_jobs(
         cls,
         primary_store: Store,
