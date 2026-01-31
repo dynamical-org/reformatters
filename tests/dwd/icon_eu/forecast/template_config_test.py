@@ -1,6 +1,7 @@
 from copy import deepcopy
 
 import pandas as pd
+import rioxarray  # noqa: F401
 from pyproj import CRS
 
 from reformatters.dwd.icon_eu.forecast.template_config import (
