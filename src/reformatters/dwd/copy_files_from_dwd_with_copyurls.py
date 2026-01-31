@@ -227,13 +227,13 @@ def run_rclone_copyurls(csv_of_files_to_transfer: str) -> None:
         "--checkers=16",
         # Logging:
         "--stats=2s",  # Output statistics every 2 seconds.
-        "--use-json-log",  # Output all logs in JSON.
+        # "--use-json-log",  # Output stats in JSON.
+        "--stats-log-level=ERROR",  # Output stats to stderr.
         # TODO(Jack): Delete these commented-out args if we no longer need them.
         # "--progress",
-        # "--quiet",
-        # "--stats-one-line",
+        "--quiet",  # Only output logs at error level.
+        "--stats-one-line",  # Output stats as a single line.
         # "--log-level=ERROR",
-        # "--stats-log-level=NOTICE",
     ]
     run_command_with_concurrent_logging(cmd)
 
