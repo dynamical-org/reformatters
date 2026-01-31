@@ -20,7 +20,7 @@ def test_tidy_stats_invalid() -> None:
         _tidy_stats("some random log line")
 
     with pytest.raises(ValueError, match="Expected 4 comma-separated values"):
-        _tidy_stats("2026/01/31 16:15:41 ERROR : only, one, comma")
+        _tidy_stats("2026/01/31 16:15:41 ERROR : only, three, values")
 
 
 @patch(
