@@ -12,7 +12,6 @@ from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar, get_args
 
 import numpy as np
 import pandas as pd
-import pydantic
 import xarray as xr
 from pydantic import AfterValidator, Field, computed_field
 from zarr.abc.store import Store
@@ -21,7 +20,11 @@ from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config_models import DataVar
 from reformatters.common.iterating import dimension_slices, get_worker_jobs
 from reformatters.common.logging import get_logger
-from reformatters.common.pydantic import FrozenBaseModel, replace
+from reformatters.common.pydantic import (
+    FrozenArbitraryBaseModel,
+    FrozenBaseModel,
+    replace,
+)
 from reformatters.common.shared_memory_utils import (
     create_data_array_and_template,
     make_shared_buffer,
@@ -108,7 +111,7 @@ def region_slice(s: slice) -> slice:
     return s
 
 
-class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
+class RegionJob(FrozenArbitraryBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     tmp_store: Path
     template_ds: xr.Dataset
     data_vars: Sequence[DATA_VAR]
@@ -324,10 +327,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
 
     # ----- Most subclasses will not need to override the attributes and methods below -----
-
-    model_config = pydantic.ConfigDict(
-        arbitrary_types_allowed=True, frozen=True, strict=True
-    )
 
     @computed_field  # type: ignore[prop-decorator]
     @property

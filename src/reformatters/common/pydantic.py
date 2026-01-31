@@ -16,3 +16,12 @@ class FrozenBaseModel(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(
         frozen=True, strict=True, revalidate_instances="always"
     )
+
+
+class FrozenArbitraryBaseModel(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(
+        frozen=True,
+        strict=True,
+        arbitrary_types_allowed=True,
+        revalidate_instances="always",
+    )
