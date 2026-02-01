@@ -6,7 +6,8 @@ Before integrating a dataset, thoroughly explore the source data to understand w
 
 Copy and fill out this template as you explore. It captures everything needed for integration.
 
-```markdown
+---
+
 ## Dataset: [Provider] [Model] [Variant]
 
 ### Source Information
@@ -68,7 +69,8 @@ Common variables observed (not exhaustive):
 
 ### Notable Observations
 - [Coordinate system changes, metadata variations, file structure differences, accumulation periods, etc.]
-```
+
+---
 
 ## Exploration Process
 
@@ -148,8 +150,6 @@ As you compare files from different periods, note:
 - Metadata changes (attribute names/values)
 - File naming pattern changes
 - Coordinate shifts or resolution changes
-
-These affect how you implement `RegionJob.get_processing_region()` and may require trimming the dataset to a consistent subset.
 
 ### 7. Fill out the template
 
