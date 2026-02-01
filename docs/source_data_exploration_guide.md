@@ -11,7 +11,7 @@ Copy and fill out this template as you explore. It captures everything needed fo
 ## Dataset: [Provider] [Model] [Variant]
 
 ### Source Information
-- **Primary archive URL**:
+- **Primary archive URL format**:
 - **Additional/historical archives**:
 - **File format**: (e.g., GRIB2, NetCDF4, GeoTIFF)
 - **Temporal coverage**: [start] to [end/present]
