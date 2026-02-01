@@ -23,6 +23,10 @@ There are three core base classes to subclass.
 
 Before getting started, follow the brief setup steps in README.md > Local development > Setup.
 
+### 0. Explore the source dataset
+
+Explore the source dataset to understand the nuances of what's available and how to access it. See [docs/source_data_exploration_guide.md](source_data_exploration_guide.md).
+
 ### 1. Initialize a new integration
 
 ```bash
