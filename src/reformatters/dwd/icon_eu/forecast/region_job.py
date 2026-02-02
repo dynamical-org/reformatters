@@ -1,15 +1,15 @@
 import bz2
-import shutil
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import rasterio  # type: ignore[import-untyped]
 import xarray as xr
 from obstore.exceptions import GenericError
+from rasterio.io import MemoryFile  # type: ignore[import-untyped]
 from zarr.abc.store import Store
 
+from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
@@ -41,7 +41,7 @@ class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
 
     init_time: Timestamp
     lead_time: Timedelta
-    variable_name_in_filename: str
+    data_var: DwdIconEuDataVar
 
     def get_url(self) -> str:
         """Return URL to .grib2.bz2 files on Dynamical.org's public archive of ICON-EU hosted on Source Co-Op."""
@@ -83,6 +83,10 @@ class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
             "lead_time": self.lead_time,
         }
 
+    @property
+    def variable_name_in_filename(self) -> str:
+        return self.data_var.internal_attrs.variable_name_in_filename
+
 
 class DwdIconEuForecastRegionJob(
     RegionJob[DwdIconEuDataVar, DwdIconEuForecastSourceFileCoord]
@@ -119,9 +123,7 @@ class DwdIconEuForecastRegionJob(
         """
         init_times = pd.to_datetime(processing_region_ds["init_time"].values)
         lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
-        variable_name_in_filename = item(
-            data_var_group
-        ).internal_attrs.variable_name_in_filename
+        data_var = item(data_var_group)
 
         # Sanity checks
         assert len(init_times) > 0
@@ -131,7 +133,7 @@ class DwdIconEuForecastRegionJob(
             DwdIconEuForecastSourceFileCoord(
                 init_time=init_time,
                 lead_time=lead_time,
-                variable_name_in_filename=variable_name_in_filename,
+                data_var=data_var,
             )
             for init_time in init_times
             for lead_time in lead_times
@@ -140,8 +142,7 @@ class DwdIconEuForecastRegionJob(
     def download_file(self, coord: DwdIconEuForecastSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path.
 
-        Downloads the `.bz2` file, decompresses the `.bz2` file, deletes the `.bz2` file,
-        and returns the `Path` of the decompressed file.
+        Downloads the `.grib.bz2` file and returns its local `Path`.
         """
         url = coord.get_url()
         try:
@@ -151,9 +152,7 @@ class DwdIconEuForecastRegionJob(
             fallback_url = coord.get_fallback_url()
             log.debug(f"Attempting to download from {fallback_url=}")
             bz2_file_path = http_download_to_disk(fallback_url, self.dataset_id)
-        grib_file_path = decompress_bz2_file(compressed_file_path=bz2_file_path)
-        bz2_file_path.unlink()  # Remove the local .bz2 file after decompressing it.
-        return grib_file_path
+        return bz2_file_path
 
     def read_data(
         self,
@@ -162,39 +161,53 @@ class DwdIconEuForecastRegionJob(
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
         assert coord.downloaded_path is not None  # for type check, system guarantees it
-        with rasterio.open(coord.downloaded_path) as reader:
+
+        with bz2.open(coord.downloaded_path, "rb") as f:
+            grib_data = f.read()
+
+        with MemoryFile(grib_data) as memfile, memfile.open() as reader:
             assert reader.count == 1, (
                 f"Expected exactly 1 element in each ICON-EU grib file, found {reader.count=}. "
                 f"{data_var.internal_attrs.variable_name_in_filename=}, "
                 f"{coord.downloaded_path=}"
             )
             result: ArrayFloat32 = reader.read(indexes=1, out_dtype=np.float32)
-            return result
+        return result
 
-    # Implement this to apply transformations to the array (e.g. deaccumulation)
-    #
-    # def apply_data_transformations(
-    #     self, data_array: xr.DataArray, data_var: DwdIconEuDataVar
-    # ) -> None:
-    #     """
-    #     Apply in-place data transformations to the output data array for a given data variable.
-    #
-    #     This method is called after reading all data for a variable into the shared-memory array,
-    #     and before writing shards to the output store. The default implementation applies binary
-    #     rounding to float32 arrays if `data_var.internal_attrs.keep_mantissa_bits` is set.
-    #
-    #     Subclasses may override this method to implement additional transformations such as
-    #     deaccumulation, interpolation or other custom logic. All transformations should be
-    #     performed in-place (don't copy `data_array`, it's large).
-    #
-    #     Parameters
-    #     ----------
-    #     data_array : xr.DataArray
-    #         The output data array to be transformed in-place.
-    #     data_var : DwdIconEuDataVar
-    #         The data variable metadata object, which may contain transformation parameters.
-    #     """
-    #     super().apply_data_transformations(data_array, data_var)
+    def apply_data_transformations(
+        self, data_array: xr.DataArray, data_var: DwdIconEuDataVar
+    ) -> None:
+        """
+        Apply in-place data transformations to the output data array for a given data variable.
+
+        This method is called after reading all data for a variable into the shared-memory array,
+        and before writing shards to the output store.
+
+        Parameters
+        ----------
+        data_array : xr.DataArray
+            The output data array to be transformed in-place.
+        data_var : DwdIconEuDataVar
+            The data variable metadata object, which may contain transformation parameters.
+        """
+
+        if data_var.internal_attrs.deaccumulate_to_rate:
+            assert data_var.internal_attrs.window_reset_frequency is not None
+            deaccum_dim = "lead_time" if "lead_time" in data_array.dims else "time"
+            log.info(
+                f"Converting {data_var.name} from accumulations to rates along {deaccum_dim}"
+            )
+            try:
+                deaccumulate_to_rates_inplace(
+                    data_array,
+                    dim=deaccum_dim,
+                    reset_frequency=data_var.internal_attrs.window_reset_frequency,
+                )
+            except ValueError:
+                # Log exception so we are notified if deaccumulation errors are larger than expected.
+                log.exception(f"Error deaccumulating {data_var.name}")
+
+        super().apply_data_transformations(data_array, data_var)
 
     def update_template_with_results(
         self, process_results: Mapping[str, Sequence[DwdIconEuForecastSourceFileCoord]]
@@ -315,22 +328,3 @@ class DwdIconEuForecastRegionJob(
             filter_start=append_dim_start,
         )
         return jobs, template_ds
-
-
-def decompress_bz2_file(compressed_file_path: Path) -> Path:
-    """Decompress a `.bz2` file to a new file.
-
-    Returns the filename of the uncompressed file.
-    """
-    if compressed_file_path.suffix != ".bz2":
-        raise ValueError(
-            f"compressed_file_path must end in .bz2. Instead, {compressed_file_path=}"
-        )
-    decompressed_file_path = compressed_file_path.with_suffix("")
-    with (
-        bz2.open(compressed_file_path, "rb") as src_file_object,
-        open(decompressed_file_path, "wb") as dst_file_object,
-    ):
-        # Use shutil.copyfileobj for efficient memory usage
-        shutil.copyfileobj(src_file_object, dst_file_object)
-    return decompressed_file_path
