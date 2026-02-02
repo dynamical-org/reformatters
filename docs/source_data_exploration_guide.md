@@ -1,26 +1,43 @@
 # Source Data Exploration Guide
 
-Before integrating a dataset, thoroughly explore the source data to understand what's available, how it's structured, and how to access it. This information drives your `TemplateConfig` and `RegionJob` implementations.
+The most open-ended and often most challenging part of integrating a dataset is finding reliable sources, determining exactly what is available, how it is structured, and how to access it. This guide outlines a process to approach this work, along with a template to capture a concise summary of the information needed to integrate a dataset successfully.
+
+Copy and fill out the template below as you explore. If you cannot verify a piece of information from the source files, note that rather than making a best guess. Leave blank any parts that are not relevant for your dataset, and add extra notes for unique details related to the questions below that aren't captured in the template.
+
+Multiple sources: Our goal is to create the longest possible archive. Sometimes this requires combining data from the same underlying model or system stored in multiple locations. If using multiple sources provides better combined coverage than a single one, repeat the `Source Information` section for each.
+
+Priorities for choosing a good source:
+1. Completeness of data
+2. Reliability and operational support (prefer sourcing directly from the producer over a mirror)
+3. Access throughput (object storage is great)
+
+The last two priorities can sometimes be in tension. In those cases, we often want to integrate with both sources, using code that first tries the high-throughput source and falls back to the high-reliability source if necessary.
+
 
 ## Exploration Template
 
-Copy and fill out this template as you explore. It captures everything needed for integration.
-
 ---
 
-## Dataset: [Provider] [Model] [Variant]
+## Dataset: [Provider] [Model]
 
 ### Source Information
-- **Primary archive URL format**:
-- **Additional/historical archives**:
-- **File format**: (e.g., GRIB2, NetCDF4, GeoTIFF)
+- **Summary of data organization**: (e.g. "One file with all variables per lead time and init time", "One file for each init time, ensemble member, and variable, including all lead times")
+- **File format**: (e.g. GRIB2, NetCDF4, HDF5)
 - **Temporal coverage**: [start] to [end/present]
-- **Update frequency**: (e.g., hourly, every 6 hours, daily)
-- **Latency**: (typical delay from valid time to availability)
-
-### File Naming Pattern
+- **Temporal frequency**: (e.g. One initialization time every 6 hours, with a 1 hour forecast step for hours 0-90 and a 3 hour step for hours 93-384.)
+- **Latency**: (e.g. Files for lead time 0 are available ~60 minutes after init time, and the last step is published 120 to 123 minutes after init time.)
+- **Access notes**:
+- **Browse root**: (link to browsable file listing, if available)
+- **URL format**:
 ```
-[Example file names and URL pattern]
+https://example.com/data/{YYYY}/{MM}/{DD}/model.t{HH}z.pgrb2.0p25.f{FFF}
+https://example.com/data/{YYYY}/{MM}/{DD}/model.t{HH}z.pgrb2.0p25.f{FFF}.idx - if index files are available
+```
+- **Example URLs**:
+```
+https://example.com/data/2024/01/15/model.t00z.pgrb2.0p25.anl
+https://example.com/data/2024/01/15/model.t00z.pgrb2.0p25.f000
+https://example.com/data/2024/01/15/model.t00z.pgrb2.0p25.f003.idx
 ```
 
 ### GRIB Index (if applicable)
@@ -32,7 +49,7 @@ Copy and fill out this template as you explore. It captures everything needed fo
 ```
 
 ### Coordinate Reference System
-- **CRS**: (e.g., WGS84 geographic, Lambert Conformal Conic, etc.)
+- **Common name**: (e.g. WGS84 geographic, Lambert Conformal Conic, etc.)
 - **PROJ string or EPSG**:
 
 ### Dimensions & Dimension Coordinates
@@ -40,25 +57,39 @@ Copy and fill out this template as you explore. It captures everything needed fo
 | Dimension | Min | Max | Step | Notes |
 |-----------|-----|-----|------|-------|
 | time / init_time | | | | |
-| lead_time | | | | |
+| [lead_time] | | | | |
 | latitude / y | | | | |
 | longitude / x | | | | |
+| [ensemble_member] | | | | |
+| [model_level / pressure_level] | | | | |
 | [other] | | | | |
 
-### Data Variables (Sample)
+We use pixel centers for spatial coordinates.
 
-Common variables observed (not exhaustive):
+### Data Variables
 
-| Variable | Units | Available from | Notes |
-|----------|-------|----------------|-------|
-| temperature_2m | K | [start date] | |
-| wind_u_10m | m/s | [start date] | |
-| wind_v_10m | m/s | [start date] | |
-| ... | | | |
+Check availability for these core variables. If they aren't relevant, list the key variables available. We're generally interested in widely used parameters near the earth's surface.
+
+| Variable name | Level | Units | Available from | Notes |
+|---------------|-------|-------|----------------|-------|
+| temperature_2m | 2 m | K or C | | |
+| wind_u_10m | 10 m | m/s | | |
+| wind_v_10m | 10 m | m/s | | |
+| wind_u_100m | 100 m | m/s | | |
+| wind_v_100m | 100 m | m/s | | |
+| precipitation_surface | surface | mm or kg/m2 | | Note accumulation behavior |
+| downward_short_wave_radiation_flux_surface | surface | W/m2 | | |
+| downward_long_wave_radiation_flux_surface | surface | W/m2 | | |
+| pressure_surface | surface | Pa | | |
+| pressure_reduced_to_mean_sea_level | MSL | Pa | | |
+| total_cloud_cover_atmosphere | atmosphere | % | | |
+| relative_humidity_2m | 2 m | % | | |
+| specific_humidity_2m | 2 m | kg/kg | | |
+| dew_point_temperature_2m | 2 m | K or C | | |
 
 **Temporal availability changes**:
-- [Variable X] only available from [date] onward
-- [Variable Y] discontinued after [date]
+- [Variable X] only available from [timestamp] onward
+- [Variable Y] discontinued after [timestamp]
 - [Other changes in variable availability]
 
 ### Sample Files Examined
@@ -76,12 +107,12 @@ Common variables observed (not exhaustive):
 
 ### 1. Find the longest possible archive
 
-Search aggressively for data sources. Archives may be split across:
+Search widely for data sources. Archives may be split across:
 - Operational systems (recent data, shorter retention)
 - Historical archives (older data, may be years behind)
 - Different providers or mirror sites
 
-Check documentation, data catalogs, and existing integrations for similar datasets to find leads.
+Search online, review documentation, browse data catalogs, and examine existing integrations for related datasets to identify potential sources.
 
 ### 2. Get sample files from multiple time periods
 
@@ -108,12 +139,8 @@ with rasterio.open('path/to/file.grib2') as src:
     # Get coordinate bounds
     print(src.bounds)
     print(src.transform)
-```
 
-For multi-band files (common in GRIB), iterate bands to catalog variables:
-
-```python
-with rasterio.open('file.grib2') as src:
+    # Get per-band metadata
     for i in src.indexes:
         print(f"Band {i}: {src.tags(i)}")
 ```
@@ -131,8 +158,6 @@ If the source provides GRIB index files (`.idx`), download samples. Index files 
   ```
   {"_type":"field","stream":"oper","levtype":"sfc","param":"2t",...}
   ```
-
-Index style affects how you parse them in `RegionJob.generate_source_file_coords()`. See existing implementations for examples.
 
 ### 5. Trust only what you see
 
