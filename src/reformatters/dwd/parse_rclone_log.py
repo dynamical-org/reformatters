@@ -47,13 +47,13 @@ class TransferSummary(NamedTuple):
             raise ValueError("No stats in log_entries!")
 
         return TransferSummary(
-            total_transfers=stats["totalTransfers"],
-            total_bytes=stats["totalBytes"],
-            total_checks=stats["totalChecks"],
-            errors=stats["errors"],
-            elapsed_time=stats["elapsedTime"],
-            transfer_time=stats["transferTime"],
-            listed=stats["listed"],
+            total_transfers=stats.get("totalTransfers", 0),
+            total_bytes=stats.get("totalBytes", 0),
+            total_checks=stats.get("totalChecks", 0),
+            errors=stats.get("errors", 0),
+            elapsed_time=stats.get("elapsedTime", 0),
+            transfer_time=stats.get("transferTime", 0),
+            listed=stats.get("listed", 0),
         )
 
     def __add__(self, other: object) -> "TransferSummary":
@@ -70,7 +70,9 @@ class TransferSummary(NamedTuple):
         )
 
     def __str__(self) -> str:
-        bytes_per_sec = self.total_bytes / self.transfer_time
+        bytes_per_sec = (
+            self.total_bytes / self.transfer_time if self.transfer_time > 0 else 0.0
+        )
         mibibytes_per_sec = bytes_per_sec / _MIBIBYTE
         return (
             f"{self.total_transfers} files transferred, "

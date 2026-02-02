@@ -163,5 +163,8 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+.aider*
+.claude/
+
 # Temporary files created when copying files from DWD's FTP server
 .rclone_files_*

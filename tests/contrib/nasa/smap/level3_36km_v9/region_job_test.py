@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-import zarr
+from zarr.abc.store import Store
 
 from reformatters.common.types import ArrayFloat32
 from reformatters.contrib.nasa.smap.level3_36km_v9.region_job import (
@@ -323,7 +323,7 @@ def test_operational_update_jobs(
     original_open_zarr = xr.open_zarr
 
     def open_zarr(
-        store: zarr.abc.store.Store,
+        store: Store,
         decode_timedelta: bool = True,
     ) -> xr.Dataset:
         if store == mock_store:

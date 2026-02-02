@@ -20,9 +20,10 @@ class DwdIconEuForecastDataset(
     template_config: DwdIconEuForecastTemplateConfig = DwdIconEuForecastTemplateConfig()
     region_job_class: type[DwdIconEuForecastRegionJob] = DwdIconEuForecastRegionJob
 
-    # The `grib_archive_path` must be in the format that `rclone` expects: `s3:<bucket>/<path>`.
-    # Note that there is no double slash after `s3:`!
-    grib_archive_path: str = "s3:us-west-2.opendata.source.coop/dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/"
+    # The `grib_archive_path` must be in the format that `rclone` expects: `:s3:<bucket>/<path>`.
+    # Note that there is no double slash after `:s3:`.
+    # The leading colon tells `rclone` to create an on the fly rclone backend and use the environment variables we set.
+    grib_archive_path: str = ":s3:us-west-2.opendata.source.coop/dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/"
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
@@ -90,7 +91,7 @@ class DwdIconEuForecastDataset(
         secret = kubernetes.load_secret("source-coop-storage-options-key")
         if secret:
             s3_credentials_env_vars_for_rclone = {
-                "RCLONE_S3_ENV_AUTH": True,
+                "RCLONE_S3_PROVIDER": "AWS",
                 "RCLONE_S3_ACCESS_KEY_ID": secret["key"],
                 "RCLONE_S3_SECRET_ACCESS_KEY": secret["secret"],
                 "RCLONE_S3_REGION": "us-west-2",

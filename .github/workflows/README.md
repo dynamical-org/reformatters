@@ -11,7 +11,7 @@ These workflows allow team members to manually trigger specific Kubernetes opera
 
 Manually trigger a one-off job from an existing cronjob.
 
-- **Input:** Dropdown list of all available cronjobs (auto-updated via pre-commit)
+- **Input:** Dropdown list of all available cronjobs (auto-updated via prek hook)
 - **Job naming:** Auto-generates job names in format: `{cronjobname}-{username}-{random}`
   - Automatically truncates to meet Kubernetes 63-character limit
 - **Usage:** 
@@ -43,7 +43,7 @@ The cronjob dropdown in `manual-create-job-from-cronjob.yml` is automatically ge
    - Extracts all `CronJob` instances from `operational_kubernetes_resources()`
    - Generates workflow YAML with dropdown choices
 
-2. **Pre-commit Hook:** Configured in `.pre-commit-config.yaml`
+2. **Prek Hook:** Configured in `.pre-commit-config.yaml`
    - Automatically runs generator when relevant files change
    - Triggers on changes to:
      - `src/reformatters/__main__.py`

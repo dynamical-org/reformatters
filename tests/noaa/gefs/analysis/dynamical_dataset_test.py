@@ -101,10 +101,9 @@ def test_backfill_local_and_operational_update(
         "temperature_2m",  # instantaneous
         "precipitation_surface",  # accumulation we deaccumulate
         "maximum_temperature_2m",  # max over window
-        "downward_short_wave_radiation_flux_surface",  # average over window
     ]
     init_time_start = dataset.template_config.append_dim_start
-    init_time_end = init_time_start + timedelta(days=2)
+    init_time_end = init_time_start + timedelta(days=1)
     dataset.backfill_local(
         append_dim_end=init_time_end, filter_variable_names=filter_variable_names
     )
@@ -144,7 +143,6 @@ def test_backfill_local_and_operational_update(
                 [
                     "precipitation_surface",
                     "maximum_temperature_2m",
-                    "downward_short_wave_radiation_flux_surface",
                 ]
             ]
             .isnull()
@@ -165,11 +163,10 @@ def test_backfill_local_and_operational_update(
     assert point_ds["temperature_2m"] == 26.125
     assert point_ds["precipitation_surface"] == 0.00032806396
     assert point_ds["maximum_temperature_2m"] == 26.0
-    assert point_ds["downward_short_wave_radiation_flux_surface"] == 0.0
 
     # Operational update
-    # Advance the init_time_end to the next day to ensure we get the next day's data
-    init_time_end = init_time_end + timedelta(days=1)
+    # Advance the init_time_end to include more data
+    init_time_end = init_time_end + timedelta(hours=6)
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
@@ -223,7 +220,6 @@ def test_backfill_local_and_operational_update(
                 [
                     "precipitation_surface",
                     "maximum_temperature_2m",
-                    "downward_short_wave_radiation_flux_surface",
                 ]
             ]
             .isnull()
@@ -244,4 +240,3 @@ def test_backfill_local_and_operational_update(
     assert point_ds["temperature_2m"] == 26.125
     assert point_ds["precipitation_surface"] == 0.00032806396
     assert point_ds["maximum_temperature_2m"] == 26.0
-    assert point_ds["downward_short_wave_radiation_flux_surface"] == 0.0

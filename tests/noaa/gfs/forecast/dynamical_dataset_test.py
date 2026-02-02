@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-import zarr
+from zarr.abc.store import Store
 
 from reformatters.common import validation
 from reformatters.common.storage import DatasetFormat, StorageConfig
@@ -29,13 +29,13 @@ def test_backfill_local_and_operational_update(
     init_time_start = dataset.template_config.append_dim_start
     init_time_end = init_time_start + timedelta(hours=12)
 
-    # Trim to first 12 hours of lead time dimension to speed up test
+    # Trim to first few lead times to speed up test
     orig_get_template = dataset.template_config.get_template
     monkeypatch.setattr(
         type(dataset.template_config),
         "get_template",
         lambda self, end_time: orig_get_template(end_time).sel(
-            lead_time=slice("0h", "12h")
+            lead_time=slice("0h", "3h")
         ),
     )
 
@@ -52,7 +52,7 @@ def test_backfill_local_and_operational_update(
         append_dim_end=init_time_end, filter_variable_names=filter_variable_names
     )
 
-    def _check_store(store: zarr.abc.store.Store) -> None:
+    def _check_store(store: Store) -> None:
         original_ds = xr.open_zarr(
             store,
             decode_timedelta=True,
@@ -164,7 +164,7 @@ def test_backfill_local_and_operational_update(
 
     dataset.update("test-update-job-name")
 
-    def _check_updated_store(store: zarr.abc.store.Store) -> None:
+    def _check_updated_store(store: Store) -> None:
         updated_ds = xr.open_zarr(
             store,
             decode_timedelta=True,

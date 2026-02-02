@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import rasterio  # type: ignore[import-untyped]
 import xarray as xr
-import zarr
+from zarr.abc.store import Store
 
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import (
@@ -188,9 +188,16 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             grib_comment = reader.tags(rasterio_band_index)["GRIB_COMMENT"]
             grib_description = reader.descriptions[rasterio_band_index - 1]
 
-            assert grib_comment == data_var.internal_attrs.grib_comment, (
-                f"{grib_comment=} != {data_var.internal_attrs.grib_comment=}"
-            )
+            if data_var.name == "categorical_precipitation_type_surface":
+                # ECMWF occasionally adds new values in the reserved range.
+                # Check the first 6 categories that shouldn't change.
+                assert (
+                    grib_comment[:100] == data_var.internal_attrs.grib_comment[:100]
+                ), f"{grib_comment=} != {data_var.internal_attrs.grib_comment=}"
+            else:
+                assert grib_comment == data_var.internal_attrs.grib_comment, (
+                    f"{grib_comment=} != {data_var.internal_attrs.grib_comment=}"
+                )
             assert grib_description == data_var.internal_attrs.grib_description, (
                 f"{grib_description=} != {data_var.internal_attrs.grib_description}"
             )
@@ -244,7 +251,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     @classmethod
     def operational_update_jobs(
         cls,
-        primary_store: zarr.abc.store.Store,
+        primary_store: Store,
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.Dataset],
         append_dim: AppendDim,
@@ -265,7 +272,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
 
         Parameters
         ----------
-        primary_store : zarr.abc.store.Store
+        primary_store : Store
             The primary store to read existing data from and write updates to.
         tmp_store : Path
             The temporary Zarr store to write into while processing.

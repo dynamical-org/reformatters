@@ -3,8 +3,8 @@ from unittest.mock import Mock, call
 
 import pytest
 import xarray as xr
-import zarr
 from icechunk.store import IcechunkStore
+from zarr.abc.store import Store
 
 from reformatters.common import zarr as zarr_module
 from reformatters.common.zarr import copy_zarr_metadata
@@ -64,8 +64,8 @@ def test_copy_zarr_metadata_calls_copy_metadata_files_for_all_stores(
     mock_copy_metadata_files = Mock()
     monkeypatch.setattr(zarr_module, "_copy_metadata_files", mock_copy_metadata_files)
 
-    mock_primary_store = Mock(spec=zarr.abc.store.Store)
-    mock_replica_store_zarr = Mock(spec=zarr.abc.store.Store)
+    mock_primary_store = Mock(spec=Store)
+    mock_replica_store_zarr = Mock(spec=Store)
     mock_replica_store_icechunk = Mock(spec=IcechunkStore)
     replica_stores = [mock_replica_store_zarr, mock_replica_store_icechunk]
 
@@ -95,7 +95,7 @@ def test_copy_zarr_metadata_skips_non_icechunk_stores_when_icechunk_only(
 
     mock_primary_icechunk = Mock(spec=IcechunkStore)
     mock_replica_store_icechunk = Mock(spec=IcechunkStore)
-    mock_replica_store_zarr = Mock(spec=zarr.abc.store.Store)
+    mock_replica_store_zarr = Mock(spec=Store)
     replica_stores = [mock_replica_store_icechunk, mock_replica_store_zarr]
 
     copy_zarr_metadata(
@@ -132,7 +132,7 @@ def test_copy_zarr_metadata_noops_when_icechunk_only_and_no_icechunk_store(
     mock_copy_metadata_files = Mock()
     monkeypatch.setattr(zarr_module, "_copy_metadata_files", mock_copy_metadata_files)
 
-    mock_primary_store = Mock(spec=zarr.abc.store.Store)
+    mock_primary_store = Mock(spec=Store)
 
     copy_zarr_metadata(
         template_ds,
