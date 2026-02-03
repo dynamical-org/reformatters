@@ -4,9 +4,9 @@ from typing import ClassVar
 
 import numpy as np
 import pandas as pd
+import rasterio
 import xarray as xr
 from pydantic import Field
-import rasterio
 from zarr.abc.store import Store
 
 from reformatters.common.download import http_download_to_disk
