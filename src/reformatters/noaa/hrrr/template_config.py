@@ -28,7 +28,7 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
 
 
 class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def coords(self) -> Sequence[Coordinate]:
         y_coords, x_coords = self._y_x_coordinates()

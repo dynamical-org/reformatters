@@ -11,7 +11,7 @@ def test_common_template_config_coords_include_lat_lon_spatial_ref() -> None:
     """Test that common template coords include latitude, longitude, and spatial_ref."""
     config = NoaaGfsForecastTemplateConfig()
 
-    common_coords = NoaaGfsCommonTemplateConfig.coords.fget(config)  # type: ignore[attr-defined]
+    common_coords = NoaaGfsCommonTemplateConfig.coords.fget(config)
     coord_names = [c.name for c in common_coords]
 
     assert "latitude" in coord_names
@@ -25,7 +25,7 @@ def test_common_template_config_latitude_coord_properties() -> None:
     config = NoaaGfsForecastTemplateConfig()
     lat_values = np.flip(np.arange(-90, 90.25, 0.25))
 
-    common_coords = NoaaGfsCommonTemplateConfig.coords.fget(config)  # type: ignore[attr-defined]
+    common_coords = NoaaGfsCommonTemplateConfig.coords.fget(config)
     lat_coord = next(c for c in common_coords if c.name == "latitude")
 
     assert lat_coord.encoding.dtype == "float64"
@@ -41,7 +41,7 @@ def test_common_template_config_longitude_coord_properties() -> None:
     config = NoaaGfsForecastTemplateConfig()
     lon_values = np.arange(-180, 180, 0.25).astype(np.float64)
 
-    common_coords = NoaaGfsCommonTemplateConfig.coords.fget(config)  # type: ignore[attr-defined]
+    common_coords = NoaaGfsCommonTemplateConfig.coords.fget(config)
     lon_coord = next(c for c in common_coords if c.name == "longitude")
 
     assert lon_coord.encoding.dtype == "float64"
@@ -56,7 +56,7 @@ def test_common_template_config_spatial_ref_coord_properties() -> None:
     """Test spatial_ref coordinate has correct properties."""
     config = NoaaGfsForecastTemplateConfig()
 
-    common_coords = NoaaGfsCommonTemplateConfig.coords.fget(config)  # type: ignore[attr-defined]
+    common_coords = NoaaGfsCommonTemplateConfig.coords.fget(config)
     spatial_ref_coord = next(c for c in common_coords if c.name == "spatial_ref")
 
     assert spatial_ref_coord.encoding.dtype == "int64"

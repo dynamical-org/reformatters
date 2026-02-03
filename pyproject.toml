@@ -38,7 +38,6 @@ main = "reformatters.__main__:app"
 dev = [
     "cf-xarray>=0.10.10",
     "matplotlib~=3.9",
-    "mypy~=1.19",
     "pandas-stubs~=2.2",
     "prek==0.3.0",
     "pyqt6>=6.7.1",
@@ -47,6 +46,7 @@ dev = [
     "pytest-xdist~=3.8",
     # NOTE: keep this in sync with .pre-commit-config.yaml
     "ruff==0.14.14",
+    "ty~=0.0.14",
     "types-requests~=2.32",
 ]
 
@@ -96,8 +96,8 @@ ignore = [
     "S101",    # disallow asserts
     "E501",    # line too long (ruff format will handle)
     "W293",    # black line contains whitespace
-    "UP046",   # non-pep695-generic-class - mypy doesn't support this yet
-    "UP047",   # non-pep695-generic-function - mypy doesn't support this yet
+    "UP046",   # non-pep695-generic-class - defer migration to PEP 695 generics
+    "UP047",   # non-pep695-generic-function - defer migration to PEP 695 generics
     "PLC0414", # import aliases to same name - we use to specifically re-export
     "PLR0913", # too many arguments
     "TD003",   # don't require issue link in todos
@@ -114,15 +114,12 @@ ignore = [
     "ARG005",  # unused lambda arg
 ]
 
-[tool.mypy]
-files = "."
-strict = true
-plugins = ["pydantic.mypy"]
+[tool.ty.terminal]
+error-on-warning = true
 
-[tool.pydantic-mypy]
-init_forbid_extra = true
-init_typed = true
-warn_required_dynamic_aliases = true
+[tool.ty.rules]
+possibly-unresolved-reference = "error"
+possibly-missing-attribute = "error"
 
 [project.package-data]
 reformatters = ["py.typed"]

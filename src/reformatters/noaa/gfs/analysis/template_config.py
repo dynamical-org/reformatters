@@ -30,7 +30,7 @@ class NoaaGfsAnalysisTemplateConfig(NoaaGfsCommonTemplateConfig):
     append_dim_start: Timestamp = pd.Timestamp("2021-05-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("1h")
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
@@ -54,13 +54,14 @@ class NoaaGfsAnalysisTemplateConfig(NoaaGfsCommonTemplateConfig):
         }
 
     def derive_coordinates(
-        self, _ds: xr.Dataset
+        self,
+        ds: xr.Dataset,  # noqa: ARG002
     ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
         return {
             "spatial_ref": SPATIAL_REF_COORDS,
         }
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def coords(self) -> Sequence[Coordinate]:
         append_dim_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
@@ -91,7 +92,7 @@ class NoaaGfsAnalysisTemplateConfig(NoaaGfsCommonTemplateConfig):
             ),
         ]
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def data_vars(self) -> Sequence[NoaaDataVar]:
         # ~16MB uncompressed, ~3.1MB compressed

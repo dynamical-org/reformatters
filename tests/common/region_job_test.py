@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import ClassVar
 
 import dask
+import dask.array
 import numpy as np
 import pandas as pd
 import pytest
@@ -69,7 +70,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoords]):
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
-        _data_var_group: Sequence[ExampleDataVar],
+        data_var_group: Sequence[ExampleDataVar],  # noqa: ARG002
     ) -> Sequence[ExampleSourceFileCoords]:
         return [
             ExampleSourceFileCoords(time=t)
@@ -84,7 +85,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoords]):
     def read_data(
         self,
         coord: ExampleSourceFileCoords,
-        _data_var: ExampleDataVar,
+        data_var: ExampleDataVar,  # noqa: ARG002
     ) -> ArrayFloat32:
         if coord.time == pd.Timestamp("2025-01-01T06"):
             raise ValueError("Test error")  # simulate a read error
@@ -111,7 +112,7 @@ def _create_template_ds(
     ds = xr.Dataset(
         {
             f"var{i}": xr.Variable(
-                data=dask.array.full(  # type: ignore[no-untyped-call]
+                data=dask.array.full(
                     (num_time, _LAT_SIZE, _LON_SIZE),
                     var_fill_value,
                     dtype=np.float32,
@@ -501,7 +502,7 @@ def test_get_jobs_many_shards_combined_filters() -> None:
     large_template_ds = xr.Dataset(
         {
             f"var{i}": xr.Variable(
-                data=dask.array.full(  # type: ignore[no-untyped-call]
+                data=dask.array.full(
                     (num_shards, _LAT_SIZE, _LON_SIZE),
                     np.nan,
                     dtype=np.float32,

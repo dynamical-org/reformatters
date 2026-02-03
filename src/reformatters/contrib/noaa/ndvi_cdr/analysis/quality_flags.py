@@ -84,7 +84,7 @@ def get_avhrr_mask(qa_array: Array2D[np.int16]) -> Array2D[np.bool_]:
     bad_quality = (qa_array & bad_mask).astype(bool)
 
     # Fill values are always bad quality
-    return bad_quality | is_fill  # type: ignore[no-any-return]
+    return bad_quality | is_fill
 
 
 def get_viirs_mask(qa_array: Array2D[np.int16]) -> Array2D[np.bool_]:
@@ -111,4 +111,4 @@ def get_viirs_mask(qa_array: Array2D[np.int16]) -> Array2D[np.bool_]:
     bad_quality = (qa_array & bad_mask) != VIIRS_AEROSOL_QUALITY_OK
 
     # Fill values are always bad quality
-    return bad_quality | is_fill  # type: ignore[no-any-return]
+    return bad_quality | is_fill

@@ -4,7 +4,7 @@ from unittest.mock import Mock
 import numpy as np
 import pandas as pd
 import pytest
-import rasterio  # type: ignore[import-untyped]
+import rasterio
 import xarray as xr
 
 from reformatters.noaa.gefs.forecast_35_day.region_job import (

@@ -1,6 +1,7 @@
 import icechunk
 import pytest
 import zarr
+import zarr.storage
 
 from reformatters.common.config import Config, Env
 from reformatters.common.storage import (

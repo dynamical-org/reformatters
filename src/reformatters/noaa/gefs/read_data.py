@@ -3,7 +3,8 @@ import warnings
 from typing import Literal, assert_never
 
 import numpy as np
-import rasterio  # type: ignore[import-untyped]
+import rasterio
+import rasterio.warp
 import rioxarray  # noqa: F401  # Registers .rio accessor on xarray objects
 import xarray as xr
 
@@ -76,13 +77,14 @@ def read_rasterio(
             "ignore", category=rasterio.errors.NotGeoreferencedWarning
         )
         with rasterio.open(path) as reader:
-            matching_bands = [
-                rasterio_band_i
-                for band_i in range(reader.count)
-                if reader.descriptions[band_i] == grib_description
-                and reader.tags(rasterio_band_i := band_i + 1)["GRIB_ELEMENT"]
-                == grib_element
-            ]
+            matching_bands: list[int] = []
+            for band_i in range(reader.count):
+                rasterio_band_i = band_i + 1
+                if (
+                    reader.descriptions[band_i] == grib_description
+                    and reader.tags(rasterio_band_i)["GRIB_ELEMENT"] == grib_element
+                ):
+                    matching_bands.append(rasterio_band_i)
 
             assert len(matching_bands) == 1, f"Expected exactly 1 matching band, found {matching_bands}. {grib_element=}, {grib_description=}, {path=}"  # fmt: skip
             rasterio_band_index = matching_bands[0]

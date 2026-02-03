@@ -62,7 +62,7 @@ def template_setup(
         test_write_metadata_path = tmp_path / "write_metadata_test.zarr"
         template_utils.write_metadata(template_ds, test_write_metadata_path)
     finally:
-        type(template_config).template_path = original_template_path  # type: ignore[method-assign]
+        type(template_config).template_path = original_template_path
 
     setup = TemplateSetup(
         dataset=dataset,
@@ -77,7 +77,7 @@ def template_setup(
 @pytest.fixture
 def dataset(request: pytest.FixtureRequest) -> DynamicalDataset[Any, Any]:
     """Fixture that returns the dataset from the parametrize marker."""
-    return request.param  # type: ignore[no-any-return]
+    return request.param
 
 
 @pytest.mark.parametrize(

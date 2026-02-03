@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import pydantic
-from kubernetes import client, config  # type: ignore[import-untyped]
+from kubernetes import client, config
 
 from reformatters.common.config import Config
 

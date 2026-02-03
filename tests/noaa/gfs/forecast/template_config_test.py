@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import numpy as np
 import pandas as pd
 import pytest
-import rasterio  # type: ignore[import-untyped]
+import rasterio
 import rioxarray  # noqa: F401  # Registers .rio accessor on xarray objects
 import xarray as xr
 

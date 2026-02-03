@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import numpy as np
 import obstore
 import pandas as pd
-import rasterio  # type: ignore[import-untyped]
+import rasterio
 import requests
 import xarray as xr
 from zarr.abc.store import Store
@@ -86,7 +86,7 @@ class NoaaNdviCdrAnalysisRegionJob(
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
-        _data_var_group: Sequence[NoaaNdviCdrDataVar],
+        data_var_group: Sequence[NoaaNdviCdrDataVar],  # noqa: ARG002
     ) -> Sequence[NoaaNdviCdrAnalysisSourceFileCoord]:
         """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds.
 

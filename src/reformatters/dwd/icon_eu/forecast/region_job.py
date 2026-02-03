@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from obstore.exceptions import GenericError
-from rasterio.io import MemoryFile  # type: ignore[import-untyped]
+from rasterio.io import MemoryFile
 from zarr.abc.store import Store
 
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
@@ -238,7 +238,7 @@ class DwdIconEuForecastRegionJob(
         #
         # max_append_dim_processed = max(
         #     (
-        #         c.out_loc()[self.append_dim]  # type: ignore[type-var]
+        #         c.out_loc()[self.append_dim]
         #         for c in chain.from_iterable(process_results.values())
         #         if c.status == SourceFileStatus.Succeeded
         #     ),

@@ -40,7 +40,7 @@ class NoaaHrrrForecast48HourTemplateConfig(NoaaHrrrCommonTemplateConfig):
     append_dim_start: Timestamp = pd.Timestamp("2018-07-13T12:00")  # start of HRRR v3
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
@@ -96,7 +96,7 @@ class NoaaHrrrForecast48HourTemplateConfig(NoaaHrrrCommonTemplateConfig):
             "spatial_ref": SPATIAL_REF_COORDS,
         }
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def coords(self) -> Sequence[Coordinate]:
         dim_coords = self.dimension_coordinates()
@@ -209,7 +209,7 @@ class NoaaHrrrForecast48HourTemplateConfig(NoaaHrrrCommonTemplateConfig):
             ),
         ]
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def data_vars(self) -> Sequence[NoaaHrrrDataVar]:
         # ~15.6MB uncompressed, ~3.1MB compressed

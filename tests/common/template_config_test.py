@@ -118,7 +118,8 @@ def test_append_dim_coordinate_chunk_size_varies_with_start(
         append_dim_frequency=pd.Timedelta(days=1),
     )
     # total days = 365 * expected_years, freq = 1 day
-    expected = int(pd.Timedelta(days=365 * expected_years) / inst.append_dim_frequency)
+    result: float = pd.Timedelta(days=365 * expected_years) / inst.append_dim_frequency  # type: ignore[assignment]
+    expected = int(result)
     assert inst.append_dim_coordinate_chunk_size() == expected
 
 

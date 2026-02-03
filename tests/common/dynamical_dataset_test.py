@@ -10,8 +10,10 @@ import numpy as np
 import pandas as pd
 import pytest
 import sentry_sdk
+import sentry_sdk.crons
 import xarray as xr
 import zarr
+import zarr.errors
 from pydantic import computed_field
 
 from reformatters.common import docker, storage, template_utils, validation
@@ -74,17 +76,17 @@ class ExampleConfig(TemplateConfig[ExampleDataVar]):
     append_dim_start: Timestamp = pd.Timestamp("2000-01-01")
     append_dim_frequency: Timedelta = pd.Timedelta("1D")
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def dataset_id(self) -> str:
         return "example-dataset"
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def version(self) -> str:
         return "1.2.3"
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def data_vars(self) -> list[ExampleDataVar]:
         return [ExampleDataVar()]

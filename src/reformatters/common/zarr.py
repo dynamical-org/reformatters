@@ -4,6 +4,7 @@ from pathlib import Path
 import xarray as xr
 import zarr
 import zarr.buffer
+import zarr.core.sync
 from icechunk.store import IcechunkStore
 from zarr.abc.store import Store
 from zarr.codecs import BloscCodec

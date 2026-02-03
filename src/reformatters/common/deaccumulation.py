@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import xarray as xr
-from numba import njit, prange  # type: ignore[import-untyped]
+from numba import njit, prange
 
 from reformatters.common.types import Array1D, ArrayFloat32
 
@@ -69,7 +69,7 @@ def deaccumulate_to_rates_inplace(
     return data_array
 
 
-@njit(parallel=True)  # type: ignore[untyped-decorator]
+@njit(parallel=True)
 def _deaccumulate_to_rates_numba(
     values: ArrayFloat32,
     seconds: Array1D[np.int64],
@@ -107,7 +107,7 @@ def _deaccumulate_to_rates_numba(
     negative_count = 0
     clamped_count = 0
 
-    for i in prange(values.shape[0]):
+    for i in prange(values.shape[0]):  # ty: ignore[not-iterable]
         for j in range(values.shape[2]):
             sequence = values[i, :, j]
             previous_seconds = seconds[0]

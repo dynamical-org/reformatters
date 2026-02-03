@@ -4,9 +4,9 @@ from typing import ClassVar
 
 import numpy as np
 import pandas as pd
+import rasterio
 import xarray as xr
 from pydantic import Field
-from rasterio import rasterio  # type: ignore[import-untyped]
 from zarr.abc.store import Store
 
 from reformatters.common.download import http_download_to_disk
@@ -116,7 +116,7 @@ class UarizonaSwannAnalysisRegionJob(
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
-        _data_var_group: Sequence[UarizonaSwannDataVar],
+        data_var_group: Sequence[UarizonaSwannDataVar],  # noqa: ARG002
     ) -> Sequence[UarizonaSwannAnalysisSourceFileCoord]:
         times = processing_region_ds["time"].values
         return [UarizonaSwannAnalysisSourceFileCoord(time=t) for t in times]

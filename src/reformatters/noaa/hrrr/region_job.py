@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import rasterio  # type: ignore[import-untyped]
+import rasterio
 import xarray as xr
 from zarr.abc.store import Store
 
@@ -146,13 +146,14 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
             grib_element = f"{grib_element}{whole_hours(reset_freq):02d}"
 
         with rasterio.open(coord.downloaded_path) as reader:
-            matching_bands = [
-                rasterio_band_i
-                for band_i in range(reader.count)
-                if reader.descriptions[band_i] == grib_description
-                and reader.tags(rasterio_band_i := band_i + 1)["GRIB_ELEMENT"]
-                == grib_element
-            ]
+            matching_bands: list[int] = []
+            for band_i in range(reader.count):
+                rasterio_band_i = band_i + 1
+                if (
+                    reader.descriptions[band_i] == grib_description
+                    and reader.tags(rasterio_band_i)["GRIB_ELEMENT"] == grib_element
+                ):
+                    matching_bands.append(rasterio_band_i)
 
             assert len(matching_bands) == 1, (
                 f"Expected exactly 1 matching band, found {len(matching_bands)}: {matching_bands}. "
