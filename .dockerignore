@@ -166,5 +166,5 @@ cython_debug/
 .aider*
 .claude/
 
-# Temporary files created when copying files from DWD's FTP server
-.rclone_files_*
+# Temporary files created when copying files from DWD's HTTPS server
+copyurls.csv
