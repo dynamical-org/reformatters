@@ -1,4 +1,3 @@
-import sys
 from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import PurePosixPath
@@ -8,7 +7,7 @@ import typer
 from reformatters.common import kubernetes, validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob
-from reformatters.dwd.copy_files_from_dwd_ftp import copy_files_from_dwd_ftp
+from reformatters.dwd.archive_gribs.copy_files_from_dwd import copy_files_from_dwd_https
 
 from .region_job import DwdIconEuForecastRegionJob, DwdIconEuForecastSourceFileCoord
 from .template_config import DwdIconEuDataVar, DwdIconEuForecastTemplateConfig
@@ -69,22 +68,32 @@ class DwdIconEuForecastDataset(
         self,
         # It would've made more sense for `dst_root` to be a `PurePosixPath` but Typer doesn't
         # handle `PurePosixPath`, so we use a `str` to keep Typer happy.
-        dst_root: str = grib_archive_path,
+        dst_root_path: str = grib_archive_path,
         # The `type: ignore` on the line below is because Typer doesn't understand the type hints
         # `tuple[int, ...]` or `Sequence[int]`, so we have to use `list[int]`.
         nwp_init_hours: list[int] = (0, 6, 12, 18),  # type: ignore[assignment]
-        transfer_parallelism: int = 10,
-        max_files_per_nwp_variable: int = sys.maxsize,
+        transfer_parallelism: int = 64,
+        checkers: int = 32,
+        stats_logging_freq: str = "1m",
     ) -> None:
         """Restructure DWD GRIB files from FTP to a timestamped directory structure.
 
         Args:
-            dst_root: The destination root directory. e.g. for S3, the dst_root could be: 's3:bucket/foo/bar'
-            nwp_init_hours: All the ICON-EU NWP runs to transfer.
-            transfer_parallelism: Number of parallel transfers. DWD appears to limit the number of parallel
-                       transfers from one IP address to about 10.
-            max_files_per_nwp_variable: Optional limit on the number of files to transfer per NWP variable.
-                      This is useful for testing locally.
+            dst_root_path: The destination root directory. e.g. for S3, the dst_root could be: ':s3:bucket/foo/bar'
+            nwp_init_hours: The ICON-EU NWP model runs to transfer.
+            transfer_parallelism: Number of concurrent workers during the copy operation.
+                Each worker fetches a file from src_host, copies it to the destination, and waits for
+                the destination to acknowledge completion before fetching another file from the source.
+                When fetching from HTTPS and writing to object storage, this could be set arbitrarily
+                high, although setting it too high (>256?) might be detrimental to performance.
+            checkers: This number is passed to the `rclone --checkers` argument.
+                In the context of recursive file listing, it appears `checkers` controls the number of
+                directories that are listed in parallel. Note that more is not always better. For
+                example, on a small VM with only 2 CPUs, `rclone` maxes out the CPUs if `checkers` is
+                above 32, and this actually slows down file listing.
+                For more info, see the rclone docs: https://rclone.org/docs/#checkers-int
+            stats_logging_freq: The period between each stats log. e.g. "1m" to log stats every minute.
+                See https://rclone.org/docs/#stats-duration
         """
         # When running in prod, `secret` will be {'key': 'xxx', 'secret': 'xxxx'}.
         # When not running in prod, `secret` will be empty.
@@ -100,14 +109,17 @@ class DwdIconEuForecastDataset(
             s3_credentials_env_vars_for_rclone = None
 
         for nwp_init_hour in nwp_init_hours:
-            ftp_path = PurePosixPath(f"/weather/nwp/icon-eu/grib/{nwp_init_hour:02d}")
-            copy_files_from_dwd_ftp(
-                ftp_host="opendata.dwd.de",
-                ftp_path=ftp_path,
-                dst_root=PurePosixPath(dst_root),
-                env_vars=s3_credentials_env_vars_for_rclone,
+            src_root_path = PurePosixPath(
+                f"/weather/nwp/icon-eu/grib/{nwp_init_hour:02d}"
+            )
+            copy_files_from_dwd_https(
+                src_host="https://opendata.dwd.de",
+                src_root_path=src_root_path,
+                dst_root_path=PurePosixPath(dst_root_path),
                 transfer_parallelism=transfer_parallelism,
-                max_files_per_nwp_variable=max_files_per_nwp_variable,
+                checkers=checkers,
+                stats_logging_freq=stats_logging_freq,
+                env_vars=s3_credentials_env_vars_for_rclone,
             )
 
     def get_cli(self) -> typer.Typer:
