@@ -183,7 +183,6 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         # 10 as a minimum to ensure we have some buffer.
         num_years = max(2025 - self.append_dim_start.year + 15, 10)
         total_timedelta = pd.Timedelta(days=365 * num_years)
-        # Division of two Timedeltas returns a float
         result: float = total_timedelta / self.append_dim_frequency  # type: ignore[assignment]
         return int(result)
 

@@ -612,7 +612,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         return results
 
     def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
-        # xarray's __getitem__ with a list returns Dataset, but stubs are wrong
         ds: xr.Dataset = self.template_ds[[v.name for v in self.data_vars]]  # type: ignore[assignment]
         processing_region = self.get_processing_region()
         processing_region_ds = ds.isel({self.append_dim: processing_region})
