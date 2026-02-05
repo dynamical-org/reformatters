@@ -107,6 +107,7 @@ class DwdIconEuForecastDataset(
                 "RCLONE_S3_ACCESS_KEY_ID": secret["key"],
                 "RCLONE_S3_SECRET_ACCESS_KEY": secret["secret"],
                 "RCLONE_S3_REGION": "us-west-2",
+                "RCLONE_S3_FORCE_PATH_STYLE": "true",  # needed if bucket name has period or underscore (e.g. us-west-2.opendata.source.coop)
             }
         else:
             s3_credentials_env_vars_for_rclone = None
