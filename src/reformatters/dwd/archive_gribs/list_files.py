@@ -69,7 +69,7 @@ def list_files(
     """
     log.info("Listing files on '%s'...", path)
     cmd = (
-        "rclone",
+        "/usr/bin/rclone",
         "lsf",
         path,
         "--fast-list",

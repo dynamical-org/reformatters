@@ -21,7 +21,7 @@ def run_rclone_copyurl(
     csv_file = Path("copyurls.csv")
     csv_file.write_text(csv_of_files_to_transfer)
     cmd = (
-        "rclone",
+        "/usr/bin/rclone",
         "copyurl",  # https://rclone.org/commands/rclone_copyurl
         "--urls",
         str(csv_file),
