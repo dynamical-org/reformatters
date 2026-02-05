@@ -107,6 +107,9 @@ EOT
 # Copy the deadsnakes PPA sources file including embedded GPG key
 COPY --from=build /etc/apt/sources.list.d/deadsnakes-ubuntu-ppa-noble.sources /etc/apt/sources.list.d/
 
+# Copy rclone from official image (Noble's version is too old for `rclone copyurl --urls` flag)
+COPY --from=rclone/rclone:latest /usr/local/bin/rclone /usr/bin/rclone
+
 # Note how the runtime dependencies differ from build-time ones.
 # Notably, there is no uv either!
 RUN <<EOT
@@ -115,7 +118,6 @@ apt-get install -qyy \
     -o APT::Install-Suggests=false \
     python3.13 \
     libpython3.13 \
-    rclone \
 
 apt-get clean
 rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
