@@ -20,9 +20,9 @@ class DwdIconEuForecastDataset(
     template_config: DwdIconEuForecastTemplateConfig = DwdIconEuForecastTemplateConfig()
     region_job_class: type[DwdIconEuForecastRegionJob] = DwdIconEuForecastRegionJob
 
-    # The `grib_archive_path` must be in the format that `rclone` expects: `:s3:<bucket>/<path>`.
-    # Note that there is no double slash after `:s3:`.
-    # The leading colon tells `rclone` to create an on the fly rclone backend and use the environment variables we set.
+    # The `dynamical_grib_archive_rclone_root` must be in the format that `rclone` expects:
+    # `:s3:<bucket>/<path>`. Note that there is no double slash after `:s3:`. The leading colon
+    # tells `rclone` to create an on the fly rclone backend and use the env variables we set.
     dynamical_grib_archive_rclone_root: Final[str] = (
         ":s3:us-west-2.opendata.source.coop/dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/"
     )
@@ -69,7 +69,7 @@ class DwdIconEuForecastDataset(
 
     def archive_grib_files(
         self,
-        # It would've made more sense for `dst_root` to be a `PurePosixPath` but Typer doesn't
+        # It would've made more sense for `dst_root_path` to be a `PurePosixPath` but Typer doesn't
         # handle `PurePosixPath`, so we use a `str` to keep Typer happy.
         dst_root_path: str = dynamical_grib_archive_rclone_root,
         # The `type: ignore` on the line below is because Typer doesn't understand the type hints
