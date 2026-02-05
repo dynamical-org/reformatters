@@ -95,18 +95,18 @@ class NoaaGfsAnalysisTemplateConfig(NoaaGfsCommonTemplateConfig):
     @computed_field
     @property
     def data_vars(self) -> Sequence[NoaaDataVar]:
-        # ~16MB uncompressed, ~3.1MB compressed
+        # ~14MB uncompressed, ~2.7MB compressed
         var_chunks: dict[Dim, int] = {
-            "time": 1008,  # 42 days of 1-hourly data
-            "latitude": 64,  # 12 chunks over 721 pixels
-            "longitude": 64,  # 23 chunks over 1440 pixels
+            "time": 1440,  # 60 days of 1-hourly data
+            "latitude": 50,  # 15 chunks over 721 pixels
+            "longitude": 50,  # 29 chunks over 1440 pixels
         }
 
-        # ~1688MB uncompressed, ~338MB compressed
+        # ~879MB uncompressed, ~176MB compressed
         var_shards: dict[Dim, int] = {
-            "time": var_chunks["time"] * 3,  # 126 days per shard
-            "latitude": var_chunks["latitude"] * 6,  # 2 shards over 721 pixels
-            "longitude": var_chunks["longitude"] * 6,  # 4 shards over 1440 pixels
+            "time": var_chunks["time"],
+            "latitude": var_chunks["latitude"] * 8,  # 2 shards over 721 pixels
+            "longitude": var_chunks["longitude"] * 8,  # 4 shards over 1440 pixels
         }
 
         encoding_float32_default = Encoding(
