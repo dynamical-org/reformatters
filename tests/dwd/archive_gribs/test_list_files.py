@@ -21,7 +21,7 @@ def test_list_files_success(mock_run: MagicMock) -> None:
 
     assert result == [PurePosixPath("file1.txt"), PurePosixPath("file2.txt")]
     mock_run.assert_called_once()
-    assert "rclone" in mock_run.call_args[0][0]
+    assert "/usr/bin/rclone" in mock_run.call_args[0][0]
     assert "--checkers=4" in mock_run.call_args[0][0]
 
 

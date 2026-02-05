@@ -47,7 +47,7 @@ def test_run_rclone_copyurl(
     mock_unlink.assert_called_once()
 
     cmd = mock_run_cmd.call_args[0][0]
-    assert "rclone" in cmd
+    assert "/usr/bin/rclone" in cmd
     assert "copyurl" in cmd
     assert "--transfers=4" in cmd
     assert "--checkers=4" in cmd
