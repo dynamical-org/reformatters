@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import PurePosixPath
+from typing import Final
 
 import typer
 
@@ -22,7 +23,9 @@ class DwdIconEuForecastDataset(
     # The `grib_archive_path` must be in the format that `rclone` expects: `:s3:<bucket>/<path>`.
     # Note that there is no double slash after `:s3:`.
     # The leading colon tells `rclone` to create an on the fly rclone backend and use the environment variables we set.
-    grib_archive_path: str = ":s3:us-west-2.opendata.source.coop/dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/"
+    dynamical_grib_archive_rclone_root: Final[str] = (
+        ":s3:us-west-2.opendata.source.coop/dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/"
+    )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
@@ -68,7 +71,7 @@ class DwdIconEuForecastDataset(
         self,
         # It would've made more sense for `dst_root` to be a `PurePosixPath` but Typer doesn't
         # handle `PurePosixPath`, so we use a `str` to keep Typer happy.
-        dst_root_path: str = grib_archive_path,
+        dst_root_path: str = dynamical_grib_archive_rclone_root,
         # The `type: ignore` on the line below is because Typer doesn't understand the type hints
         # `tuple[int, ...]` or `Sequence[int]`, so we have to use `list[int]`.
         nwp_init_hours: list[int] = (0, 6, 12, 18),  # type: ignore[assignment]
