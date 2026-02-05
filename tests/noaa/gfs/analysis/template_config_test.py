@@ -99,8 +99,8 @@ def test_data_vars_have_correct_encoding() -> None:
 
     for var in data_vars:
         assert var.encoding.dtype == "float32"
-        assert var.encoding.chunks == (1008, 64, 64)
-        assert var.encoding.shards == (3024, 384, 384)
+        assert var.encoding.chunks == (1440, 50, 50)
+        assert var.encoding.shards == (1440, 400, 400)
 
 
 def test_data_vars_names() -> None:

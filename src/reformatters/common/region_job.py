@@ -540,11 +540,12 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             # Submit all download tasks to the executor
             download_futures = {}
             for data_var_group in data_var_groups:
+                data_var_names = [v.name for v in data_var_group]
                 source_file_coords = self.generate_source_file_coords(
                     processing_region_ds, data_var_group
                 )
                 download_future = download_executor.submit(
-                    self._download_processing_group, source_file_coords
+                    self._download_processing_group, source_file_coords, data_var_names
                 )
                 download_futures[download_future] = data_var_group
 
@@ -630,7 +631,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         ]
 
     def _download_processing_group(
-        self, source_file_coords: Sequence[SOURCE_FILE_COORD]
+        self,
+        source_file_coords: Sequence[SOURCE_FILE_COORD],
+        data_var_names: Sequence[str],
     ) -> list[SOURCE_FILE_COORD]:
         """
         Download specified source files in parallel.
@@ -665,6 +668,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
                 return updated_coord
 
+        log.info(f"Downloading {data_var_names} in {len(source_file_coords)} files...")
         with ThreadPoolExecutor(
             max_workers=self.download_parallelism
         ) as download_executor:
@@ -691,6 +695,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         # Index is used to maintain order of coords
         updated_coords: dict[int, SOURCE_FILE_COORD] = {}
 
+        log.info(f"Reading {data_var.name}...")
         with ThreadPoolExecutor(max_workers=self.read_parallelism) as executor:
             futures = {}
             for i, coord in enumerate(read_coords):
