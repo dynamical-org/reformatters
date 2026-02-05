@@ -41,11 +41,13 @@ class DateExtractionError(Exception):
     pass
 
 
+DWD_NWP_INIT_DATE_REGEX: Final[re.Pattern[str]] = re.compile(r"_(\d{10})(?=_)")
+
+
 def extract_nwp_init_datetime_from_grib_filename(
     grib_filename: str,
 ) -> datetime:
-    dwd_nwp_init_date_regex: Final[re.Pattern[str]] = re.compile(r"_(\d{10})(?=_)")
-    nwp_init_date_matches = dwd_nwp_init_date_regex.findall(grib_filename)
+    nwp_init_date_matches = DWD_NWP_INIT_DATE_REGEX.findall(grib_filename)
     if len(nwp_init_date_matches) == 0:
         raise DateExtractionError(f"No date found in file: {grib_filename}")
     elif len(nwp_init_date_matches) > 1:
