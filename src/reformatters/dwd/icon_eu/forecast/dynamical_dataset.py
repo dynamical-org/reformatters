@@ -20,7 +20,7 @@ class DwdIconEuForecastDataset(
     template_config: DwdIconEuForecastTemplateConfig = DwdIconEuForecastTemplateConfig()
     region_job_class: type[DwdIconEuForecastRegionJob] = DwdIconEuForecastRegionJob
 
-    # The `dynamical_grib_archive_rclone_root` must be in the format that `rclone` expects:
+    # `dynamical_grib_archive_rclone_root` must be in the format that `rclone` expects:
     # `:s3:<bucket>/<path>`. Note that there is no double slash after `:s3:`. The leading colon
     # tells `rclone` to create an on the fly rclone backend and use the env variables we set.
     dynamical_grib_archive_rclone_root: Final[str] = (
