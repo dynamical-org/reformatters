@@ -160,9 +160,24 @@ def compute_which_files_still_need_to_be_transferred(
     2. The destination path, from the NWP init datetime onwards.
 
     This is the format required by `rclone copyurls`.
+
+    Args
+        src_paths_starting_with_nwp_var: Paths must not start with a forwards slash.
+        files_already_on_dst:
+        src_host_and_root_path: Must not end with forwards slash.
     """
+    if src_host_and_root_path[-1] == "/":
+        raise ValueError(
+            f"src_host_and_root_path must not end with a slash. {src_host_and_root_path=}"
+        )
+
     csv_of_files_to_transfer: list[str] = []  # Each list item is one line of the CSV.
-    for src_path in src_paths_starting_with_nwp_var:
+    for i, src_path in enumerate(src_paths_starting_with_nwp_var):
+        if src_path.is_absolute():
+            raise ValueError(
+                "src_paths_starting_with_nwp_var must not start with a slash."
+                f" src_paths_starting_with_nwp_var[{i}]='{src_paths_starting_with_nwp_var}'"
+            )
         dst_path = convert_src_path_to_dst_path(src_path)
         if dst_path not in files_already_on_dst:
             full_src_path = f"{src_host_and_root_path}/{src_path}"
