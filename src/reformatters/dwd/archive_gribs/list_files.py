@@ -97,8 +97,10 @@ def list_files(
             log.info("Directory not found: '%s'", path)
             return []
         else:
-            _log_error_from_called_process_error(e)
-            raise
+            try:
+                _log_error_from_called_process_error(e)
+            finally:
+                raise
     else:
         if result.stderr:
             log.info("rclone stderr: %s", result.stderr)
