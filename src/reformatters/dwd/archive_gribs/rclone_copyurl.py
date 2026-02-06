@@ -26,6 +26,7 @@ def run_rclone_copyurl(
         "--urls",
         str(csv_file),
         str(dst_root_path),
+        "--s3-no-check-bucket",  # Workaround for reformatters issue #428
         # Performance:
         "--fast-list",
         f"--transfers={transfer_parallelism:d}",
