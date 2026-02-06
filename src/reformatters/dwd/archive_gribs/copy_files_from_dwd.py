@@ -100,7 +100,7 @@ def copy_files_from_dwd_https(
                 "RCLONE_S3_ACCESS_KEY_ID": "key",
                 "RCLONE_S3_SECRET_ACCESS_KEY": "secret",
                 "RCLONE_S3_REGION": "us-west-2",
-                "RCLONE_S3_FORCE_PATH_STYLE": "true",  # needed if bucket name has period or underscore
+                "RCLONE_S3_FORCE_PATH_STYLE": "false",
             }
     """
     # Check inputs:
