@@ -54,8 +54,15 @@ def grib_message_byte_ranges_from_index(
         else:
             raise ValueError(f"Unhandled grib lead/accumulation hours: {var.name}")
 
-        var_match_str = re.escape(
-            f"{init_time_str}:{var.internal_attrs.grib_element}:{var.internal_attrs.grib_index_level}:{lead_time_str}"
+        grib_elements = (
+            var.internal_attrs.grib_element,
+            *var.internal_attrs.grib_element_alternatives,
+        )
+        element_pattern = "|".join(re.escape(e) for e in grib_elements)
+        var_match_str = (
+            re.escape(f"{init_time_str}:")
+            + f"(?:{element_pattern})"
+            + re.escape(f":{var.internal_attrs.grib_index_level}:{lead_time_str}")
         )
         # The format of a NOAA grib index line is
         # variable number:byte offset start:init timestamp:element:level:lead time and accum:ensemble info
