@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from reformatters.common.pydantic import replace
 from reformatters.noaa.gefs.common_gefs_template_config import (
     get_shared_data_var_configs,
 )
@@ -245,3 +246,67 @@ def test_grib_index_hrrr_f08() -> None:
     assert all(isinstance(s, int) and s >= 0 for s in starts)
     assert all(isinstance(e, int) and e > 0 for e in ends)
     assert all(start < stop for start, stop in zip(starts, ends, strict=True))
+
+
+def test_grib_index_hrrr_grib_element_alternatives() -> None:
+    """Test that grib_element_alternatives matches when the primary element isn't in the index."""
+    idx_path = IDX_FIXTURES_DIR / "hrrr.t00z.wrfsfcf00.grib2.idx"
+
+    init_time = pd.Timestamp("2025-08-01T00")
+    lead_time = pd.Timedelta("0h")
+
+    cfg = NoaaHrrrForecast48HourTemplateConfig()
+    # The fixture has MSLMA. Switch the primary to PRMSL (not in index) with MSLMA as alternative.
+    mslma_var = next(
+        v for v in cfg.data_vars if v.internal_attrs.grib_element == "MSLMA"
+    )
+    prmsl_primary_var = replace(
+        mslma_var,
+        internal_attrs=replace(
+            mslma_var.internal_attrs,
+            grib_element="PRMSL",
+            grib_element_alternatives=("MSLMA",),
+        ),
+    )
+
+    starts, ends = grib_message_byte_ranges_from_index(
+        idx_path, [prmsl_primary_var], init_time, lead_time
+    )
+
+    assert len(starts) == 1
+    assert len(ends) == 1
+    # MSLMA is at byte offset 26433488 in the fixture
+    assert starts[0] == 26433488
+
+
+def test_grib_index_skips_missing_vars() -> None:
+    """Test that variables not present in the index are skipped instead of causing an error."""
+    idx_path = IDX_FIXTURES_DIR / "hrrr.t00z.wrfsfcf00.grib2.idx"
+
+    init_time = pd.Timestamp("2025-08-01T00")
+    lead_time = pd.Timedelta("0h")
+
+    cfg = NoaaHrrrForecast48HourTemplateConfig()
+    hour_0_vars = [v for v in cfg.data_vars if has_hour_0_values(v)]
+    assert len(hour_0_vars) > 1
+
+    # Add a var with a bogus element name that won't be in the index
+    bogus_var = replace(
+        hour_0_vars[0],
+        name="bogus_var",
+        internal_attrs=replace(
+            hour_0_vars[0].internal_attrs,
+            grib_element="BOGUS_ELEMENT",
+            grib_element_alternatives=(),
+        ),
+    )
+
+    data_vars_with_bogus = [hour_0_vars[0], bogus_var, hour_0_vars[1]]
+
+    starts, ends = grib_message_byte_ranges_from_index(
+        idx_path, data_vars_with_bogus, init_time, lead_time
+    )
+
+    # Bogus var skipped, so only 2 results instead of 3
+    assert len(starts) == 2
+    assert len(ends) == 2

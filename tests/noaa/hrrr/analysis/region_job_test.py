@@ -326,24 +326,22 @@ def test_download_and_read_all_variables(
     unavailable_var_names: set[str],
     tmp_path: Path,
 ) -> None:
-    """Integration test: download and read all available variables before and after the PRMSL→MSLMA switch."""
+    """Integration test: download and read all variables before and after the PRMSL→MSLMA switch."""
     config = NoaaHrrrAnalysisTemplateConfig()
-    available_vars = [
-        v for v in config.data_vars if v.name not in unavailable_var_names
-    ]
+    all_vars = list(config.data_vars)
 
     mock_ds = Mock()
     mock_ds.attrs = {"dataset_id": "noaa-hrrr-analysis"}
     region_job = NoaaHrrrAnalysisRegionJob.model_construct(
         tmp_store=tmp_path,
         template_ds=mock_ds,
-        data_vars=available_vars,
+        data_vars=all_vars,
         append_dim=config.append_dim,
         region=slice(0, 1),
         reformat_job_name="test",
     )
 
-    for source_group in NoaaHrrrAnalysisRegionJob.source_groups(available_vars):
+    for source_group in NoaaHrrrAnalysisRegionJob.source_groups(all_vars):
         is_hour_0 = has_hour_0_values(source_group[0])
         lead_time = pd.Timedelta("0h") if is_hour_0 else pd.Timedelta("1h")
         coord_init_time = init_time if is_hour_0 else init_time - pd.Timedelta("1h")
@@ -360,8 +358,12 @@ def test_download_and_read_all_variables(
         updated_coord = replace(coord, downloaded_path=downloaded_path)
 
         for var in source_group:
-            data = region_job.read_data(updated_coord, var)
-            assert data.shape == (1059, 1799), (
-                f"{var.name}: unexpected shape {data.shape}"
-            )
-            assert not np.all(np.isnan(data)), f"{var.name}: all NaN"
+            if var.name in unavailable_var_names:
+                with pytest.raises(AssertionError):
+                    region_job.read_data(updated_coord, var)
+            else:
+                data = region_job.read_data(updated_coord, var)
+                assert data.shape == (1059, 1799), (
+                    f"{var.name}: unexpected shape {data.shape}"
+                )
+                assert not np.all(np.isnan(data)), f"{var.name}: all NaN"

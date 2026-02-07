@@ -1,3 +1,4 @@
+import logging
 import re
 from collections.abc import Sequence
 from os import PathLike
@@ -7,6 +8,8 @@ import pandas as pd
 from reformatters.common.config_models import DataVar
 from reformatters.common.time_utils import whole_hours
 from reformatters.noaa.models import NoaaInternalAttrs
+
+log = logging.getLogger(__name__)
 
 
 def grib_message_byte_ranges_from_index(
@@ -75,9 +78,20 @@ def grib_message_byte_ranges_from_index(
             rf"(?:.*\n\d+:(\d+))?",  # end of line and wrap to capture next line's byte offset to get end byte (optional capture to handle last line of index)
             index_contents,
         )
-        assert len(matches) == 1, (
-            f"Expected exactly one match for {var.name}, found {matches}"
-        )
+        if len(matches) == 0:
+            log.exception(
+                "No match in GRIB index for %s, skipping",
+                var.name,
+            )
+            continue
+        # Pre-v3 HRRR has duplicate entries for some accumulation variables (APCP, WEASD).
+        # The duplicates are identical data, so we use the first match.
+        if len(matches) > 1:
+            log.warning(
+                "Multiple matches in GRIB index for %s, using first of %s",
+                var.name,
+                matches,
+            )
 
         start_match, end_match = matches[0]
         start = int(start_match)
