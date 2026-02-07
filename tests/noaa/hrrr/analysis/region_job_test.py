@@ -1,10 +1,12 @@
 from pathlib import Path
 from unittest.mock import Mock
 
+import numpy as np
 import pandas as pd
 import pytest
 
 from reformatters.common import template_utils
+from reformatters.common.pydantic import replace
 from reformatters.common.region_job import SourceFileStatus
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.noaa.hrrr.analysis.region_job import (
@@ -14,6 +16,7 @@ from reformatters.noaa.hrrr.analysis.region_job import (
 from reformatters.noaa.hrrr.analysis.template_config import (
     NoaaHrrrAnalysisTemplateConfig,
 )
+from reformatters.noaa.noaa_utils import has_hour_0_values
 
 
 @pytest.fixture
@@ -61,7 +64,7 @@ def test_region_job_generate_source_file_coords(
     template_config: NoaaHrrrAnalysisTemplateConfig,
 ) -> None:
     """Test source file coordinate generation."""
-    template_ds = template_config.get_template(pd.Timestamp("2018-09-16T03:00"))
+    template_ds = template_config.get_template(pd.Timestamp("2014-10-01T03:00"))
 
     test_ds = template_ds.isel(time=slice(0, 3))
 
@@ -124,7 +127,7 @@ def test_region_job_processing_region_buffered(
     template_config: NoaaHrrrAnalysisTemplateConfig,
 ) -> None:
     """Test that processing region is buffered by 1 step for deaccumulation (not at dataset start)."""
-    template_ds = template_config.get_template(pd.Timestamp("2018-09-16T05:00"))
+    template_ds = template_config.get_template(pd.Timestamp("2014-10-01T05:00"))
 
     test_ds = template_ds.isel(time=slice(0, 5))
 
@@ -148,7 +151,7 @@ def test_region_job_generate_source_file_coords_hour_0(
     template_config: NoaaHrrrAnalysisTemplateConfig,
 ) -> None:
     """Test that hour 0 variables use lead_time=0."""
-    template_ds = template_config.get_template(pd.Timestamp("2018-09-16T04:00"))
+    template_ds = template_config.get_template(pd.Timestamp("2014-10-01T04:00"))
 
     test_ds = template_ds.isel(time=slice(0, 4))
 
@@ -177,7 +180,7 @@ def test_region_job_generate_source_file_coords_hour_0(
     assert len(source_coords) == 3
 
     expected_init_times = pd.date_range(
-        "2018-09-16T01:00", "2018-09-16T03:00", freq="1h"
+        "2014-10-01T01:00", "2014-10-01T03:00", freq="1h"
     )
     for coord, expected_init_time in zip(
         source_coords, expected_init_times, strict=True
@@ -191,7 +194,7 @@ def test_region_job_generate_source_file_coords_hour_1(
     template_config: NoaaHrrrAnalysisTemplateConfig,
 ) -> None:
     """Test that non-hour 0 variables use lead_time=1."""
-    template_ds = template_config.get_template(pd.Timestamp("2018-09-16T04:00"))
+    template_ds = template_config.get_template(pd.Timestamp("2014-10-01T04:00"))
 
     test_ds = template_ds.isel(time=slice(0, 4))
 
@@ -218,7 +221,7 @@ def test_region_job_generate_source_file_coords_hour_1(
     assert len(source_coords) == 3
 
     expected_init_times = pd.date_range(
-        "2018-09-16T00:00", "2018-09-16T02:00", freq="1h"
+        "2014-10-01T00:00", "2014-10-01T02:00", freq="1h"
     )
 
     for coord, expected_init_time in zip(
@@ -247,9 +250,9 @@ def test_operational_update_jobs(
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
-        classmethod(lambda *args, **kwargs: pd.Timestamp("2018-09-16T06:34")),
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2014-10-01T06:34")),
     )
-    existing_ds = template_config.get_template(pd.Timestamp("2018-09-16T05:01"))
+    existing_ds = template_config.get_template(pd.Timestamp("2014-10-01T05:01"))
     template_utils.write_metadata(existing_ds, store_factory)
 
     jobs, template_ds = NoaaHrrrAnalysisRegionJob.operational_update_jobs(
@@ -261,7 +264,7 @@ def test_operational_update_jobs(
         reformat_job_name="test_job",
     )
 
-    assert template_ds.time.max() == pd.Timestamp("2018-09-16T06:00")
+    assert template_ds.time.max() == pd.Timestamp("2014-10-01T06:00")
 
     assert len(jobs) == 1
     for job in jobs:
@@ -273,7 +276,7 @@ def test_update_template_with_results(
     template_config: NoaaHrrrAnalysisTemplateConfig,
 ) -> None:
     """Test that update_template_with_results removes the last hour of data."""
-    template_ds = template_config.get_template(pd.Timestamp("2018-09-16T05:00"))
+    template_ds = template_config.get_template(pd.Timestamp("2014-10-01T05:00"))
 
     region_job = NoaaHrrrAnalysisRegionJob.model_construct(
         tmp_store=Mock(),
@@ -298,3 +301,67 @@ def test_update_template_with_results(
     assert len(result_ds.time) == len(template_ds.time) - 1
     assert result_ds.time[-1] == template_ds.time.values[-2]
     assert result_ds.time[0] == template_ds.time.values[0]
+
+
+# Variables not available before HRRRv3 (pre-2018-07-12)
+_PRE_V3_UNAVAILABLE = {
+    "downward_long_wave_radiation_flux_surface",
+    "relative_humidity_2m",
+}
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    ("init_time", "unavailable_var_names"),
+    [
+        # Pre-HRRRv3: uses PRMSL instead of MSLMA for mean sea level pressure, missing DLWRF and RH
+        (pd.Timestamp("2016-01-01T00:00"), _PRE_V3_UNAVAILABLE),
+        # Post-HRRRv3: all variables available, uses MSLMA
+        (pd.Timestamp("2024-01-01T00:00"), set()),
+    ],
+    ids=["pre-v3", "post-v3"],
+)
+def test_download_and_read_all_variables(
+    init_time: pd.Timestamp,
+    unavailable_var_names: set[str],
+    tmp_path: Path,
+) -> None:
+    """Integration test: download and read all available variables before and after the PRMSL→MSLMA switch."""
+    config = NoaaHrrrAnalysisTemplateConfig()
+    available_vars = [
+        v for v in config.data_vars if v.name not in unavailable_var_names
+    ]
+
+    mock_ds = Mock()
+    mock_ds.attrs = {"dataset_id": "noaa-hrrr-analysis"}
+    region_job = NoaaHrrrAnalysisRegionJob.model_construct(
+        tmp_store=tmp_path,
+        template_ds=mock_ds,
+        data_vars=available_vars,
+        append_dim=config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    for source_group in NoaaHrrrAnalysisRegionJob.source_groups(available_vars):
+        is_hour_0 = has_hour_0_values(source_group[0])
+        lead_time = pd.Timedelta("0h") if is_hour_0 else pd.Timedelta("1h")
+        coord_init_time = init_time if is_hour_0 else init_time - pd.Timedelta("1h")
+
+        coord = NoaaHrrrAnalysisSourceFileCoord(
+            init_time=coord_init_time,
+            lead_time=lead_time,
+            domain="conus",
+            file_type=source_group[0].internal_attrs.hrrr_file_type,
+            data_vars=source_group,
+        )
+
+        downloaded_path = region_job.download_file(coord)
+        updated_coord = replace(coord, downloaded_path=downloaded_path)
+
+        for var in source_group:
+            data = region_job.read_data(updated_coord, var)
+            assert data.shape == (1059, 1799), (
+                f"{var.name}: unexpected shape {data.shape}"
+            )
+            assert not np.all(np.isnan(data)), f"{var.name}: all NaN"

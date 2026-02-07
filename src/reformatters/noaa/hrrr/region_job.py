@@ -172,10 +172,14 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
         assert coord.downloaded_path is not None  # for type check, system guarantees it
         grib_description = data_var.internal_attrs.grib_description
 
-        grib_element = data_var.internal_attrs.grib_element
+        grib_elements = {
+            data_var.internal_attrs.grib_element,
+            *data_var.internal_attrs.grib_element_alternatives,
+        }
         # grib element has the accumulation window as a suffix in the grib file attributes, but not in the .idx file
         if (reset_freq := data_var.internal_attrs.window_reset_frequency) is not None:
-            grib_element = f"{grib_element}{whole_hours(reset_freq):02d}"
+            suffix = f"{whole_hours(reset_freq):02d}"
+            grib_elements = {f"{e}{suffix}" for e in grib_elements}
 
         with rasterio.open(coord.downloaded_path) as reader:
             matching_bands: list[int] = []
@@ -183,13 +187,13 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
                 rasterio_band_i = band_i + 1
                 if (
                     reader.descriptions[band_i] == grib_description
-                    and reader.tags(rasterio_band_i)["GRIB_ELEMENT"] == grib_element
+                    and reader.tags(rasterio_band_i)["GRIB_ELEMENT"] in grib_elements
                 ):
                     matching_bands.append(rasterio_band_i)
 
             assert len(matching_bands) == 1, (
                 f"Expected exactly 1 matching band, found {len(matching_bands)}: {matching_bands}. "
-                f"{grib_element=}, {grib_description=}, {coord.downloaded_path=}"
+                f"{grib_elements=}, {grib_description=}, {coord.downloaded_path=}"
             )
             rasterio_band_index = item(matching_bands)
 
