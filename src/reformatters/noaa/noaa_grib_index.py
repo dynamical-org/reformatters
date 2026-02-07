@@ -11,6 +11,11 @@ from reformatters.noaa.models import NoaaInternalAttrs
 
 log = logging.getLogger(__name__)
 
+# GRIB elements where duplicate index entries are known to contain identical data.
+# Verified: pre-v3 HRRR (2014-2016) has duplicate APCP entries that differ by at most
+# 13 cells out of 1.9M with max diff of 0.001 kg/m² (GRIB compression noise).
+_DUPLICATE_MATCH_ALLOWED_ELEMENTS: frozenset[str] = frozenset({"APCP"})
+
 
 def grib_message_byte_ranges_from_index(
     index_path: PathLike[str],
@@ -78,20 +83,10 @@ def grib_message_byte_ranges_from_index(
             rf"(?:.*\n\d+:(\d+))?",  # end of line and wrap to capture next line's byte offset to get end byte (optional capture to handle last line of index)
             index_contents,
         )
-        if len(matches) == 0:
-            log.exception(
-                "No match in GRIB index for %s, skipping",
-                var.name,
-            )
+        if len(matches) != 1 and not _handle_non_unique_match(
+            var.name, matches, grib_elements
+        ):
             continue
-        # Pre-v3 HRRR has duplicate entries for some accumulation variables (APCP, WEASD).
-        # The duplicates are identical data, so we use the first match.
-        if len(matches) > 1:
-            log.warning(
-                "Multiple matches in GRIB index for %s, using first of %s",
-                var.name,
-                matches,
-            )
 
         start_match, end_match = matches[0]
         start = int(start_match)
@@ -103,3 +98,26 @@ def grib_message_byte_ranges_from_index(
         ends.append(end)
 
     return starts, ends
+
+
+def _handle_non_unique_match(
+    var_name: str,
+    matches: list[tuple[str, str]],
+    grib_elements: tuple[str, ...],
+) -> bool:
+    """Handle non-unique GRIB index match. Returns True to use first match, False to skip."""
+    if len(matches) > 1 and set(grib_elements) & _DUPLICATE_MATCH_ALLOWED_ELEMENTS:
+        log.warning(
+            "Multiple matches in GRIB index for %s, using first of %s",
+            var_name,
+            matches,
+        )
+        return True
+
+    log.exception(
+        "Expected 1 match in GRIB index for %s, found %d: %s. Skipping.",
+        var_name,
+        len(matches),
+        matches,
+    )
+    return False
