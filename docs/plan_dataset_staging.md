@@ -24,11 +24,16 @@ Dots in the version are replaced with dashes in k8s resource names (DNS name con
 ### Setup (manual, one-time per staged version)
 
 1. Create a feature branch with the dataset changes (new version in template config, code changes, etc.)
-2. Open a PR against main. CI runs code quality checks.
-3. Once CI passes and review is complete, create the staging branch: `stage/{dataset_id}/v{version}`
-4. Merge the feature branch into the staging branch.
-5. Run a backfill into the new version's store (same manual process as for any new dataset version).
-6. Verify the backfill.
+2. Open a PR against main. CI runs code quality checks and code review happens here.
+3. Once CI passes and review is complete, push the feature branch to create the staging branch:
+   ```bash
+   git push origin my-feature:stage/noaa-gfs-forecast/v0.3.0
+   ```
+   This triggers the staging deploy workflow (see below).
+4. Run a backfill into the new version's store (same manual process as for any new dataset version).
+5. Verify the backfill.
+
+No branch protection on `stage/**` branches — operators can fast-forward merge or force push as the situation requires.
 
 ### Operational updates (automated)
 
@@ -39,11 +44,21 @@ Pushing to a `stage/**` branch triggers a GitHub Actions workflow that:
 3. Builds and pushes a Docker image (same multi-arch Depot build as main)
 4. Runs `uv run main deploy-staging --dataset-id {id} --version {version} --docker-image {tag}`
 
-The `deploy-staging` command validates and deploys (details below).
+The `deploy-staging` command validates and deploys (details below). The full test suite in step 1 is the quality gate — code review happens on PRs to main, not on the staging branch itself.
 
 ### Iterating on staging
 
-To update the staged version's code: merge new feature branches into the staging branch. Each push triggers the workflow above, rebuilding the image and updating the cronjobs.
+Push updated feature branches to the staging branch. Either merge locally or force push:
+```bash
+# Fast-forward merge
+git checkout stage/noaa-gfs-forecast/v0.3.0
+git merge another-feature
+git push
+
+# Or force push to replace entirely
+git push origin another-feature:stage/noaa-gfs-forecast/v0.3.0 --force
+```
+Each push triggers the workflow above, rebuilding the image and updating the cronjobs.
 
 ### Promoting to primary
 
