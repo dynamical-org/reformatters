@@ -29,14 +29,12 @@ class DwdIconEuForecastDataset(
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
-        # TODO(Jack): Instantiate and return `ReformatCronJob` and `ValidationCronJob`. See example.
-        suspend = True  # TODO(Jack): Remove when we're ready to run operationally!
         archive_grib_files_job = CronJob(
             command=["archive-grib-files"],
             workers_total=1,
             parallelism=1,
             name=f"{self.dataset_id}-archive-grib-files",
-            # We want the 00, 06, 12, and 18 ICON-EU runs. DWD's transfer to their FTP server starts
+            # We want the 00, 06, 12, and 18 ICON-EU runs. DWD's transfer to their http server starts
             # about 2 hours 15 mins after the init time, and finishes about 3 hours 45 minutes after
             # the init time. So, to avoid copying incomplete files, we fetch the files 4 hours after
             # each init. But note that, every time the cron job runs, the script checks all 4 NWP
@@ -44,16 +42,13 @@ class DwdIconEuForecastDataset(
             # script hasn't run for a while. It only takes 4 minutes to check an NWP run that we've
             # already transferred.
             schedule="0 0 4,10,16,22 * *",
-            # Copying 1 NWP run takes 45 minutes on a 1 Gbps internet connection. But, when this
-            # script first runs, or if it hasn't run for >6 hours, then it'll transfer up to 4 NWP runs.
             pod_active_deadline=timedelta(hours=3),
             image=image_tag,
             dataset_id=self.dataset_id,
-            cpu="3",
-            memory="7G",
-            ephemeral_storage="30G",
+            cpu="1.5",
+            memory="6G",
+            ephemeral_storage="1G",  # not used
             secret_names=self.store_factory.k8s_secret_names(),
-            suspend=suspend,
         )
         return [archive_grib_files_job]
 
