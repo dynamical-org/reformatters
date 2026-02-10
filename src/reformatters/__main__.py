@@ -184,12 +184,7 @@ app.command()(initialize_new_integration)
 for dataset in DYNAMICAL_DATASETS:
     app.add_typer(dataset.get_cli(), name=dataset.dataset_id)
 
-
-@app.command()
-def deploy(
-    docker_image: str | None = None,
-) -> None:
-    deploy_module.deploy_operational_resources(DYNAMICAL_DATASETS, docker_image)
+deploy_module.register_commands(app, DYNAMICAL_DATASETS)
 
 
 if __name__ == "__main__":
