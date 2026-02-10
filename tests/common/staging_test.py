@@ -1,10 +1,11 @@
 from datetime import timedelta
 
 import pytest
+from typer.testing import CliRunner
 
 from reformatters.common.kubernetes import ReformatCronJob
 from reformatters.common.staging import (
-    _MAX_K8S_NAME_LENGTH,
+    _MAX_KUBERNETES_NAME_LENGTH,
     rename_cronjob_for_staging,
     staging_branch_name,
     staging_cronjob_name,
@@ -72,7 +73,7 @@ class TestRenameCronjobForStaging:
         dataset_id = "ecmwf-ifs-ens-forecast-15-day-0-25-degree"
         cronjob = _make_cronjob(f"{dataset_id}-update")
         result = rename_cronjob_for_staging(cronjob, dataset_id, "0.3.0")
-        assert len(result.name) <= _MAX_K8S_NAME_LENGTH
+        assert len(result.name) <= _MAX_KUBERNETES_NAME_LENGTH
 
 
 class TestStagingCronjobNames:
@@ -90,3 +91,14 @@ class TestStagingBranchName:
             staging_branch_name("noaa-gfs-forecast", "0.3.0")
             == "stage/noaa-gfs-forecast/v0.3.0"
         )
+
+
+class TestDeployCommandsRegistered:
+    def test_deploy_commands_in_cli(self) -> None:
+        from reformatters.__main__ import app  # noqa: PLC0415
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["--help"])
+        assert "deploy " in result.output or "deploy\n" in result.output
+        assert "deploy-staging" in result.output
+        assert "cleanup-staging" in result.output

@@ -100,6 +100,6 @@ def register_commands(
         version: str,
         sentry_auth_token: str | None = None,
     ) -> None:
-        """Clean up staging resources: k8s cronjobs, Sentry monitors, and git branch."""
+        """Clean up staging resources: kubernetes cronjobs, Sentry monitors, and git branch."""
         staging.find_dataset(datasets, dataset_id)
         staging.cleanup_staging_resources(dataset_id, version, sentry_auth_token)

@@ -13,7 +13,7 @@ from reformatters.common.pydantic import replace
 
 log = get_logger(__name__)
 
-_MAX_K8S_NAME_LENGTH = 63
+_MAX_KUBERNETES_NAME_LENGTH = 63
 
 
 def staging_cronjob_name(dataset_id: str, version: str, suffix: str) -> str:
@@ -31,8 +31,8 @@ def rename_cronjob_for_staging(
     )
     suffix = cronjob.name.removeprefix(f"{dataset_id}-")
     new_name = staging_cronjob_name(dataset_id, version, suffix)
-    assert len(new_name) <= _MAX_K8S_NAME_LENGTH, (
-        f"Staging cronjob name {new_name!r} exceeds {_MAX_K8S_NAME_LENGTH} char k8s limit"
+    assert len(new_name) <= _MAX_KUBERNETES_NAME_LENGTH, (
+        f"Staging cronjob name {new_name!r} exceeds {_MAX_KUBERNETES_NAME_LENGTH} char kubernetes limit"
     )
     return replace(cronjob, name=new_name)
 
@@ -132,8 +132,8 @@ def cleanup_staging_resources(
     cronjob_names = staging_cronjob_names(dataset_id, version)
     branch = staging_branch_name(dataset_id, version)
 
-    # Delete k8s cronjobs
-    log.info(f"Deleting k8s cronjobs: {cronjob_names}")
+    # Delete kubernetes cronjobs
+    log.info(f"Deleting kubernetes cronjobs: {cronjob_names}")
     subprocess.run(  # noqa: S603
         ["/usr/bin/kubectl", "delete", "cronjob", *cronjob_names, "--ignore-not-found"],
         check=True,

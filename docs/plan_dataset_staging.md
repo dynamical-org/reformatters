@@ -8,16 +8,16 @@ Run operational updates of multiple versions of a dataset concurrently. This ena
 
 ## Linking convention
 
-A shared naming convention links git branches, docker images, k8s cronjobs, and dataset versions:
+A shared naming convention links git branches, docker images, kubernetes cronjobs, and dataset versions:
 
 | Component | Convention | Example |
 |---|---|---|
 | Git branch | `stage/{dataset_id}/v{version}` | `stage/noaa-gfs-forecast/v0.3.0` |
 | Docker image | `{repository}:{git_sha}` (same as main) | `ecr.../reformatters:abc123` |
-| K8s cronjobs | `staging-{dataset_id}-v{version_dashes}-{update\|validate}` | `staging-noaa-gfs-forecast-v0-3-0-update` |
+| Kubernetes cronjobs | `staging-{dataset_id}-v{version_dashes}-{update\|validate}` | `staging-noaa-gfs-forecast-v0-3-0-update` |
 | Store path | `{base_path}/{dataset_id}/v{version}.{ext}` (existing convention) | `s3://…/noaa-gfs-forecast/v0.3.0.zarr` |
 
-Dots in the version are replaced with dashes in k8s resource names (DNS name constraint).
+Dots in the version are replaced with dashes in kubernetes resource names (DNS name constraint).
 
 ## Workflow
 
@@ -116,7 +116,7 @@ Reuses existing infrastructure with minimal changes:
 3. Use `replace()` from `common/pydantic.py` to create copies with staging-prefixed names:
    - `{dataset_id}-update` → `staging-{dataset_id}-v{ver_dashes}-update`
    - `{dataset_id}-validate` → `staging-{dataset_id}-v{ver_dashes}-validate`
-4. Apply to k8s via `kubectl apply -f -` (same as `deploy_operational_resources`)
+4. Apply to kubernetes via `kubectl apply -f -` (same as `deploy_operational_resources`)
 
 #### Changes to `deploy.py`
 
@@ -144,7 +144,7 @@ uv run main cleanup-staging --dataset-id {id} --version {version}
 Run locally (requires kubectl and git access). Steps:
 
 1. **Validate** dataset_id exists in `DYNAMICAL_DATASETS`
-2. **Delete k8s cronjobs**:
+2. **Delete kubernetes cronjobs**:
    ```
    kubectl delete cronjob staging-{dataset_id}-v{ver_dashes}-update staging-{dataset_id}-v{ver_dashes}-validate
    ```
@@ -179,9 +179,9 @@ Store paths include the version (`v{version}.{extension}`), so a staging version
 
 Multiple versions of the same dataset hitting upstream APIs (NOAA, ECMWF, etc.) on the same schedule could increase load. Consider staggering the staging cronjob schedule by a few minutes. This could be done manually by adjusting the schedule in the dataset's `operational_kubernetes_resources` on the staging branch, or automatically by the staging deploy adding a small offset.
 
-### K8s name length
+### Kubernetes name length
 
-K8s resource names are limited to 63 characters. The staging prefix plus version consumes ~15 characters. The longest current dataset ID is `ecmwf-ifs-ens-forecast-15-day-0-25-degree` (42 chars). With staging: `staging-ecmwf-ifs-ens-forecast-15-day-0-25-degree-v0-3-0-update` = 63 chars. This is tight but fits. Worth adding a validation check in `deploy-staging` that asserts the generated name is <= 63 chars.
+Kubernetes resource names are limited to 63 characters. The staging prefix plus version consumes ~15 characters. The longest current dataset ID is `ecmwf-ifs-ens-forecast-15-day-0-25-degree` (42 chars). With staging: `staging-ecmwf-ifs-ens-forecast-15-day-0-25-degree-v0-3-0-update` = 63 chars. This is tight but fits. Worth adding a validation check in `deploy-staging` that asserts the generated name is <= 63 chars.
 
 ### Manual workflow dropdowns
 
@@ -197,7 +197,7 @@ If shared code in `common/` changes on main, the staging branch should pick up t
 
 ### Race conditions between main and staging deploys
 
-Main deploys ALL cronjobs. Staging deploys only the staged dataset's cronjobs. Since the cronjob names are different (production vs staging-prefixed), `kubectl apply` won't interfere. However, if main deploys at the same time as a staging deploy, there's no conflict because they're applying different k8s resources. The separate concurrency groups in GitHub Actions handle workflow-level serialization.
+Main deploys ALL cronjobs. Staging deploys only the staged dataset's cronjobs. Since the cronjob names are different (production vs staging-prefixed), `kubectl apply` won't interfere. However, if main deploys at the same time as a staging deploy, there's no conflict because they're applying different kubernetes resources. The separate concurrency groups in GitHub Actions handle workflow-level serialization.
 
 ### What main's deploy does NOT do
 
