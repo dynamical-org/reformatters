@@ -53,6 +53,7 @@ from pathlib import PurePosixPath
 from typing import Any
 
 from reformatters.common.logging import get_logger
+from reformatters.common.retry import retry
 
 from .list_files import (
     list_files_on_dst_for_all_nwp_runs_available_from_dwd,
@@ -119,19 +120,25 @@ def copy_files_from_dwd_https(
     else:
         full_env = None
 
-    src_paths_starting_with_nwp_var = list_grib_files_on_dwd_https(
-        http_url=src_host,
-        path=src_root_path,
-        checkers=checkers,
-        env_vars=full_env,
+    src_paths_starting_with_nwp_var = retry(
+        lambda: list_grib_files_on_dwd_https(
+            http_url=src_host,
+            path=src_root_path,
+            checkers=checkers,
+            env_vars=full_env,
+        ),
+        max_attempts=3,
     )
 
-    files_already_on_dst = list_files_on_dst_for_all_nwp_runs_available_from_dwd(
-        src_paths_starting_with_nwp_var=src_paths_starting_with_nwp_var,
-        src_root_path_ending_with_init_hour=src_root_path,
-        dst_root_path_without_init_dt=dst_root_path,
-        checkers=checkers,
-        env_vars=full_env,
+    files_already_on_dst = retry(
+        lambda: list_files_on_dst_for_all_nwp_runs_available_from_dwd(
+            src_paths_starting_with_nwp_var=src_paths_starting_with_nwp_var,
+            src_root_path_ending_with_init_hour=src_root_path,
+            dst_root_path_without_init_dt=dst_root_path,
+            checkers=checkers,
+            env_vars=full_env,
+        ),
+        max_attempts=3,
     )
 
     csv_of_files_to_transfer = compute_which_files_still_need_to_be_transferred(
@@ -140,13 +147,16 @@ def copy_files_from_dwd_https(
         src_host_and_root_path=f"{src_host}{src_root_path}",
     )
 
-    run_rclone_copyurl(
-        "\n".join(csv_of_files_to_transfer),
-        dst_root_path=dst_root_path,
-        transfer_parallelism=transfer_parallelism,
-        checkers=checkers,
-        env_vars=full_env,
-        stats_logging_freq=stats_logging_freq,
+    retry(
+        lambda: run_rclone_copyurl(
+            "\n".join(csv_of_files_to_transfer),
+            dst_root_path=dst_root_path,
+            transfer_parallelism=transfer_parallelism,
+            checkers=checkers,
+            env_vars=full_env,
+            stats_logging_freq=stats_logging_freq,
+        ),
+        max_attempts=2,
     )
 
 
