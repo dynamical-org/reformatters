@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import PurePosixPath
-from typing import Final
+from typing import Annotated, Final
 
 import typer
 
@@ -41,7 +41,7 @@ class DwdIconEuForecastDataset(
             # inits. This design helps to keep the code simple, especially when recovering if the
             # script hasn't run for a while. It only takes 4 minutes to check an NWP run that we've
             # already transferred.
-            schedule="0 0 4,10,16,22 * *",
+            schedule="0 4,10,16,22 * * *",
             pod_active_deadline=timedelta(hours=3),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -64,6 +64,7 @@ class DwdIconEuForecastDataset(
 
     def archive_grib_files(
         self,
+        reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
         # It would've made more sense for `dst_root_path` to be a `PurePosixPath` but Typer doesn't
         # handle `PurePosixPath`, so we use a `str` to keep Typer happy.
         dst_root_path: str = dynamical_grib_archive_rclone_root,
@@ -93,33 +94,34 @@ class DwdIconEuForecastDataset(
             stats_logging_freq: The period between each stats log. e.g. "1m" to log stats every minute.
                 See https://rclone.org/docs/#stats-duration
         """
-        # When running in prod, `secret` will be {'key': 'xxx', 'secret': 'xxxx'}.
-        # When not running in prod, `secret` will be empty.
-        secret = kubernetes.load_secret("source-coop-storage-options-key")
-        if secret:
-            s3_credentials_env_vars_for_rclone = {
-                "RCLONE_S3_PROVIDER": "AWS",
-                "RCLONE_S3_ACCESS_KEY_ID": secret["key"],
-                "RCLONE_S3_SECRET_ACCESS_KEY": secret["secret"],
-                "RCLONE_S3_REGION": "us-west-2",
-                "RCLONE_S3_FORCE_PATH_STYLE": "false",
-            }
-        else:
-            s3_credentials_env_vars_for_rclone = None
+        with self._monitor(CronJob, reformat_job_name):
+            # When running in prod, `secret` will be {'key': 'xxx', 'secret': 'xxxx'}.
+            # When not running in prod, `secret` will be empty.
+            secret = kubernetes.load_secret("source-coop-storage-options-key")
+            if secret:
+                s3_credentials_env_vars_for_rclone = {
+                    "RCLONE_S3_PROVIDER": "AWS",
+                    "RCLONE_S3_ACCESS_KEY_ID": secret["key"],
+                    "RCLONE_S3_SECRET_ACCESS_KEY": secret["secret"],
+                    "RCLONE_S3_REGION": "us-west-2",
+                    "RCLONE_S3_FORCE_PATH_STYLE": "false",
+                }
+            else:
+                s3_credentials_env_vars_for_rclone = None
 
-        for nwp_init_hour in nwp_init_hours:
-            src_root_path = PurePosixPath(
-                f"/weather/nwp/icon-eu/grib/{nwp_init_hour:02d}"
-            )
-            copy_files_from_dwd_https(
-                src_host="https://opendata.dwd.de",
-                src_root_path=src_root_path,
-                dst_root_path=PurePosixPath(dst_root_path),
-                transfer_parallelism=transfer_parallelism,
-                checkers=checkers,
-                stats_logging_freq=stats_logging_freq,
-                env_vars=s3_credentials_env_vars_for_rclone,
-            )
+            for nwp_init_hour in nwp_init_hours:
+                src_root_path = PurePosixPath(
+                    f"/weather/nwp/icon-eu/grib/{nwp_init_hour:02d}"
+                )
+                copy_files_from_dwd_https(
+                    src_host="https://opendata.dwd.de",
+                    src_root_path=src_root_path,
+                    dst_root_path=PurePosixPath(dst_root_path),
+                    transfer_parallelism=transfer_parallelism,
+                    checkers=checkers,
+                    stats_logging_freq=stats_logging_freq,
+                    env_vars=s3_credentials_env_vars_for_rclone,
+                )
 
     def get_cli(self) -> typer.Typer:
         """Create a CLI app with dataset commands."""

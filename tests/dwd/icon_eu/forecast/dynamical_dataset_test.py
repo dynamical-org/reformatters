@@ -4,8 +4,12 @@
 # import xarray as xr
 
 # from reformatters.common import validation
-# from reformatters.dwd.icon_eu.forecast.dynamical_dataset import DwdIconEuForecastDataset
-# from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+from reformatters.dwd.icon_eu.forecast.dynamical_dataset import DwdIconEuForecastDataset
+from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+
+
+def _dataset() -> DwdIconEuForecastDataset:
+    return DwdIconEuForecastDataset(primary_storage_config=NOOP_STORAGE_CONFIG)
 
 
 # @pytest.fixture
@@ -74,3 +78,10 @@
 #     validators = tuple(dataset.validators())
 #     assert len(validators) == 2
 #     assert all(isinstance(v, validation.DataValidator) for v in validators)
+
+
+def test_operational_kubernetes_resources_schedules_end_with_every_day() -> None:
+    dataset = _dataset()
+    cron_jobs = dataset.operational_kubernetes_resources("test-image-tag")
+    for cron_job in cron_jobs:
+        assert cron_job.schedule.endswith(" * * *")
