@@ -157,7 +157,6 @@ class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
     ) -> xr.Dataset:
         ds = super().update_template_with_results(process_results)
 
-        # Flatten the dictionary values into a list of coordinates
         all_coords = []
         for coord_list in process_results.values():
             all_coords.extend(coord_list)
