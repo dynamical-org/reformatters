@@ -1,6 +1,6 @@
 from collections.abc import Mapping
-from typing import Any, cast
 
+import numpy as np
 import pandas as pd
 import xarray as xr
 
@@ -9,7 +9,6 @@ from reformatters.common.region_job import CoordinateValueOrRange, SourceFileCoo
 from reformatters.common.types import Dim, Timedelta, Timestamp
 
 
-# --- Mock Class ---
 class MockSourceFileCoord(SourceFileCoord):
     init_time: Timestamp
     lead_time: Timedelta
@@ -18,18 +17,13 @@ class MockSourceFileCoord(SourceFileCoord):
         return {}
 
 
-# ------------------
-
-
 def test_update_ingested_forecast_length_simple() -> None:
-    # 1. Setup a dummy dataset
     init_times = [
         pd.Timestamp("2025-01-01 12:00"),
         pd.Timestamp("2025-01-01 18:00"),
     ]
 
-    # We use 'cast' to silence the strict type checker here
-    empty_deltas = pd.to_timedelta([pd.NaT, pd.NaT]).values
+    empty_deltas = np.array([pd.NaT, pd.NaT], dtype="timedelta64[ns]")
 
     ds = xr.Dataset(
         coords={
@@ -38,7 +32,6 @@ def test_update_ingested_forecast_length_simple() -> None:
         }
     )
 
-    # 2. Setup the Results
     coord1 = MockSourceFileCoord(
         init_time=pd.Timestamp("2025-01-01 12:00"),
         lead_time=pd.Timedelta(hours=6),
@@ -50,10 +43,8 @@ def test_update_ingested_forecast_length_simple() -> None:
 
     results = [coord1, coord2]
 
-    # 3. Run the function
     update_ingested_forecast_length(ds, results)
 
-    # 4. Check the answers
     assert ds["ingested_forecast_length"].sel(
         init_time="2025-01-01 12:00"
     ).values == pd.Timedelta(hours=6)
@@ -65,7 +56,6 @@ def test_update_ingested_forecast_length_simple() -> None:
 def test_update_ingested_forecast_length_update_existing() -> None:
     init_time = pd.Timestamp("2025-01-01 12:00")
 
-    # Start with 6 hours already recorded
     ds = xr.Dataset(
         coords={
             "init_time": [init_time],
