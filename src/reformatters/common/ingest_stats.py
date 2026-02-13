@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Protocol
 
 import xarray as xr
@@ -21,8 +21,8 @@ class HasTimeInfo(Protocol):
 
 def update_ingested_forecast_length(
     template_ds: xr.Dataset,
-    results_coords: Sequence[HasTimeInfo],
-) -> None:
+    results_coords: Mapping[str, Sequence[DeterministicForecastSourceFileCoord]],
+) -> xr.Dataset:
     """
     Updates the 'ingested_forecast_length' coordinate in the template dataset.
     """
@@ -30,15 +30,18 @@ def update_ingested_forecast_length(
 
     max_lead_per_init: dict[Timestamp, Timedelta] = {}
 
-    for coord in results_coords:
-        if (
-            coord.init_time not in max_lead_per_init
-            or coord.lead_time > max_lead_per_init[coord.init_time]
-        ):
-            max_lead_per_init[coord.init_time] = coord.lead_time
+    for coords_seq in results_coords.values():
+        for coord in coords_seq:
+            if (
+                coord.init_time not in max_lead_per_init
+                or coord.lead_time > max_lead_per_init[coord.init_time]
+            ):
+                max_lead_per_init[coord.init_time] = coord.lead_time
 
     for init_time, max_lead in max_lead_per_init.items():
         if init_time in template_ds.coords["init_time"]:
             template_ds["ingested_forecast_length"].loc[{"init_time": init_time}] = (
                 max_lead
             )
+
+    return template_ds
