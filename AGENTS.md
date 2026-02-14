@@ -133,7 +133,7 @@ then deterministically selects its subset. No coordinator or job queue is needed
 * Test: `uv run pytest`
 * Fast/unit tests: `uv run pytest -m "not slow"`
 * Single test: `uv run pytest tests/test_file.py::test_function_name`
-* Always run before commiting: `uv run ruff format && uv run ruff check --fix && uv run ty check`.
+* Important: always run all of these checks before committing, do not skip them: `uv run ruff format && uv run ruff check --fix && uv run ty check`.
 * Use `uv run ...` to run python commands in the environment, e.g. `uv run python -c "..."`, `uv run src/scripts/foo.py`. Do not call `python3` when working in this repo.
 
 ## Code Style
