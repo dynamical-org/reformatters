@@ -24,7 +24,9 @@ def staging_cronjob_name(dataset_id: str, version: str, suffix: str) -> str:
         if len(name) <= _MAX_KUBERNETES_NAME_LENGTH:
             return name
         trimmed_id = trimmed_id[:-1]
-    raise AssertionError("Could not fit staging cronjob name within kubernetes name limit")
+    raise AssertionError(
+        "Could not fit staging cronjob name within kubernetes name limit"
+    )
 
 
 def rename_cronjob_for_staging(
