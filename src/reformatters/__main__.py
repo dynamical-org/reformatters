@@ -192,5 +192,8 @@ def deploy(
     deploy_module.deploy_operational_resources(DYNAMICAL_DATASETS, docker_image)
 
 
+if not __debug__:
+    raise RuntimeError("This project relies on assert statements. Do not run with python -O.")
+
 if __name__ == "__main__":
     app()
