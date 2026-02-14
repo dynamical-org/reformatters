@@ -98,8 +98,16 @@ def register_commands(
     def cleanup_staging(
         dataset_id: str,
         version: str,
-        sentry_auth_token: str | None = None,
+        force: bool = False,
     ) -> None:
-        """Clean up staging resources: kubernetes cronjobs, Sentry monitors, and git branch."""
+        """Clean up staging resources: kubernetes cronjobs and git branch."""
         staging.find_dataset(datasets, dataset_id)
-        staging.cleanup_staging_resources(dataset_id, version, sentry_auth_token)
+        if not force:
+            cronjob_names = staging.staging_cronjob_names(dataset_id, version)
+            branch = staging.staging_branch_name(dataset_id, version)
+            log.info(
+                f"Will delete cronjobs {cronjob_names} and branch {branch}. "
+                "Run with --force to execute."
+            )
+            return
+        staging.cleanup_staging_resources(dataset_id, version)

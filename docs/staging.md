@@ -11,7 +11,7 @@ A naming convention links git branches, kubernetes cronjobs, and dataset version
 | Component | Convention | Example |
 |---|---|---|
 | Git branch | `stage/{dataset_id}/v{version}` | `stage/noaa-gfs-forecast/v0.3.0` |
-| Kubernetes cronjobs | `staging-{dataset_id}-v{version}-{update\|validate}` | `staging-noaa-gfs-forecast-v0-3-0-update` |
+| Kubernetes cronjobs | `stage-{dataset_id}-v{version}-{update\|validate}` | `stage-noaa-gfs-forecast-v0-3-0-update` |
 | Store path | `{base_path}/{dataset_id}/v{version}.{ext}` | `s3://…/noaa-gfs-forecast/v0.3.0.zarr` |
 
 Pushing to a `stage/**` branch triggers a GitHub Actions workflow that runs the full CI suite, builds a Docker image, and deploys cronjobs for only the named dataset.
@@ -74,28 +74,28 @@ When the staged version is ready:
 
 ## Clean up
 
-When a staged version is no longer needed:
+Preview what will be deleted:
 
 ```bash
 uv run main cleanup-staging --dataset-id noaa-gfs-forecast --version 0.3.0
 ```
 
-This deletes:
-- Kubernetes cronjobs (`staging-noaa-gfs-forecast-v0-3-0-update`, `staging-noaa-gfs-forecast-v0-3-0-validate`)
-- The remote git branch (`stage/noaa-gfs-forecast/v0.3.0`)
-
-To also delete Sentry cron monitors, pass a [Sentry auth token](https://docs.sentry.io/account/auth-tokens/):
+Then run with `--force` to execute:
 
 ```bash
-uv run main cleanup-staging --dataset-id noaa-gfs-forecast --version 0.3.0 --sentry-auth-token <token>
+uv run main cleanup-staging --dataset-id noaa-gfs-forecast --version 0.3.0 --force
 ```
 
-The dataset store is **not** deleted. Clean it up manually when ready.
+This deletes:
+- Kubernetes cronjobs (`stage-noaa-gfs-forecast-v0-3-0-update`, `stage-noaa-gfs-forecast-v0-3-0-validate`)
+- The remote git branch (`stage/noaa-gfs-forecast/v0.3.0`)
+
+The dataset store and Sentry cron monitors are **not** deleted. Clean them up manually when ready.
 
 ## Constraints
 
 - **One dataset per staging branch.** The branch name encodes a single dataset. To stage common code changes across multiple datasets, create separate staging branches from the same feature branch.
-- **Kubernetes name length.** Staging cronjob names must fit in 63 characters. This is validated at deploy time.
+- **Kubernetes name length.** Staging cronjob names must fit in 63 characters. Long dataset IDs are automatically trimmed to fit.
 - **Source data load.** Multiple versions hitting upstream APIs on the same schedule increases load. Consider staggering the staging schedule on the staging branch.
 - **Manual workflows.** The auto-generated manual GitHub workflows only list production cronjobs. Use `kubectl` directly for staging cronjobs.
 
@@ -103,5 +103,5 @@ The dataset store is **not** deleted. Clean it up manually when ready.
 
 ```
 uv run main deploy-staging --dataset-id <id> --version <version> --docker-image <tag>
-uv run main cleanup-staging --dataset-id <id> --version <version> [--sentry-auth-token <token>]
+uv run main cleanup-staging --dataset-id <id> --version <version> [--force]
 ```

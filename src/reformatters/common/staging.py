@@ -1,12 +1,11 @@
 import json
 import subprocess
-import urllib.error
-import urllib.request
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 from reformatters.common.dynamical_dataset import DynamicalDataset
+from reformatters.common.iterating import item
 from reformatters.common.kubernetes import CronJob
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import replace
@@ -17,34 +16,31 @@ _MAX_KUBERNETES_NAME_LENGTH = 63
 
 
 def staging_cronjob_name(dataset_id: str, version: str, suffix: str) -> str:
+    """Build a staging cronjob name, trimming dataset_id if needed to fit the kubernetes limit."""
     version_dashes = version.replace(".", "-")
-    return f"staging-{dataset_id}-v{version_dashes}-{suffix}"
+    trimmed_id = dataset_id
+    while trimmed_id:
+        name = f"stage-{trimmed_id}-v{version_dashes}-{suffix}"
+        if len(name) <= _MAX_KUBERNETES_NAME_LENGTH:
+            return name
+        trimmed_id = trimmed_id[:-1]
+    raise AssertionError("Could not fit staging cronjob name within kubernetes name limit")
 
 
 def rename_cronjob_for_staging(
     cronjob: CronJob, dataset_id: str, version: str
 ) -> CronJob:
     """Create a copy of a CronJob with a staging-prefixed name."""
-    # Cronjob names follow the pattern {dataset_id}-{suffix} (e.g. "noaa-gfs-forecast-update")
-    assert cronjob.name.startswith(f"{dataset_id}-"), (
-        f"Unexpected cronjob name {cronjob.name!r}, expected prefix {dataset_id!r}-"
-    )
+    assert cronjob.name.startswith(f"{dataset_id}-")
     suffix = cronjob.name.removeprefix(f"{dataset_id}-")
     new_name = staging_cronjob_name(dataset_id, version, suffix)
-    assert len(new_name) <= _MAX_KUBERNETES_NAME_LENGTH, (
-        f"Staging cronjob name {new_name!r} exceeds {_MAX_KUBERNETES_NAME_LENGTH} char kubernetes limit"
-    )
     return replace(cronjob, name=new_name)
 
 
 def find_dataset(
     datasets: Sequence[DynamicalDataset[Any, Any]], dataset_id: str
 ) -> DynamicalDataset[Any, Any]:
-    matches = [d for d in datasets if d.dataset_id == dataset_id]
-    assert len(matches) == 1, (
-        f"Dataset {dataset_id!r} not found. Available: {[d.dataset_id for d in datasets]}"
-    )
-    return matches[0]
+    return item(d for d in datasets if d.dataset_id == dataset_id)
 
 
 def validate_version_matches_template(
@@ -95,7 +91,6 @@ def validate_version_differs_from_main(
 
 
 def staging_cronjob_names(dataset_id: str, version: str) -> list[str]:
-    """Return the expected staging cronjob names for cleanup."""
     return [
         staging_cronjob_name(dataset_id, version, "update"),
         staging_cronjob_name(dataset_id, version, "validate"),
@@ -106,28 +101,9 @@ def staging_branch_name(dataset_id: str, version: str) -> str:
     return f"stage/{dataset_id}/v{version}"
 
 
-_SENTRY_ORG = "dynamical"
-_SENTRY_API_BASE = "https://sentry.io/api/0"
-
-
-def _delete_sentry_monitor(slug: str, auth_token: str) -> None:
-    url = f"{_SENTRY_API_BASE}/organizations/{_SENTRY_ORG}/monitors/{slug}/"
-    request = urllib.request.Request(url, method="DELETE")  # noqa: S310
-    request.add_header("Authorization", f"Bearer {auth_token}")
-    try:
-        urllib.request.urlopen(request)  # noqa: S310
-        log.info(f"Deleted Sentry monitor {slug}")
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            log.info(f"Sentry monitor {slug} not found, skipping")
-        else:
-            raise
-
-
 def cleanup_staging_resources(
     dataset_id: str,
     version: str,
-    sentry_auth_token: str | None,
 ) -> None:
     cronjob_names = staging_cronjob_names(dataset_id, version)
     branch = staging_branch_name(dataset_id, version)
@@ -138,16 +114,6 @@ def cleanup_staging_resources(
         ["/usr/bin/kubectl", "delete", "cronjob", *cronjob_names, "--ignore-not-found"],
         check=True,
     )
-
-    # Delete Sentry monitors
-    if sentry_auth_token:
-        for name in cronjob_names:
-            _delete_sentry_monitor(name, sentry_auth_token)
-    else:
-        log.info(
-            "No --sentry-auth-token provided, skipping Sentry monitor cleanup. "
-            f"Manually delete monitors: {cronjob_names}"
-        )
 
     # Delete git branch
     log.info(f"Deleting remote branch {branch}")
@@ -163,5 +129,6 @@ def cleanup_staging_resources(
         log.info(f"Could not delete branch {branch}: {result.stderr.strip()}")
 
     log.info(
-        "Cleanup complete. Dataset store was NOT deleted — clean up manually when ready."
+        "Cleanup complete. Dataset store and Sentry cron monitors were NOT deleted. "
+        f"Manually delete Sentry monitors: {cronjob_names}"
     )
