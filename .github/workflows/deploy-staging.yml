@@ -1,0 +1,137 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches: [ 'stage/**' ]
+
+# Per-branch concurrency so staging deploys don't block each other or main
+concurrency:
+  group: "deploy-staging-${{ github.ref_name }}"
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  IMAGE_TAG: "${{ secrets.DOCKER_REPOSITORY }}:${{ github.sha }}"
+
+jobs:
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: "Set up Python"
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: Install the project
+        run: uv sync --all-extras --dev --locked
+
+      - name: Install this project
+        run: "uv pip install -e ."
+
+      - name: Run Ruff
+        run: uv run ruff check --output-format=github
+
+      - name: Check code format
+        run: uv run ruff format --check
+
+      - name: Run ty
+        run: uv run ty check
+
+      - name: Run Pytest
+        run: uv run pytest -p no:sugar --verbose
+
+  deploy:
+    name: Deploy Staging
+    needs: quality
+    runs-on: ubuntu-24.04
+    environment: prod
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          # Fetch main so deploy-staging can compare versions via git show
+          fetch-depth: 0
+
+      - name: Parse branch name
+        id: parse
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          # Branch format: stage/{dataset_id}/v{version}
+          # Strip "stage/" prefix, then split on "/v"
+          WITHOUT_PREFIX="${BRANCH#stage/}"
+          DATASET_ID="${WITHOUT_PREFIX%/v*}"
+          VERSION="${WITHOUT_PREFIX##*/v}"
+
+          if [[ "$DATASET_ID" == "$VERSION" || -z "$DATASET_ID" || -z "$VERSION" ]]; then
+            echo "::error::Could not parse dataset_id and version from branch '${BRANCH}'. Expected format: stage/{dataset_id}/v{version}"
+            exit 1
+          fi
+
+          echo "dataset_id=${DATASET_ID}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Parsed dataset_id=${DATASET_ID}, version=${VERSION}"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: "Set up Python"
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: Install the project
+        run: uv sync --all-extras --dev
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@901a10e89ea615cf61f57ac05cecdf23e7de06d8 # v3
+        with:
+          version: 'latest'
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
+
+      - name: Set up Depot CLI
+        uses: depot/setup-action@b0b1ea4f69e92ebf5dea3f8713a1b0c37b2126a5 # v1
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # v2
+        id: login-ecr
+
+      - uses: depot/build-push-action@636daae76684e38c301daa0c5eca1c095b24e780 # v1
+        with:
+          project: ${{ secrets.DEPOT_PROJECT }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE_TAG }}
+          context: .
+          file: deploy/Dockerfile
+
+      - name: Deploy staging
+        run: >
+          uv run main deploy-staging
+          --dataset-id ${{ steps.parse.outputs.dataset_id }}
+          --version ${{ steps.parse.outputs.version }}
+          --docker-image ${{ env.IMAGE_TAG }}

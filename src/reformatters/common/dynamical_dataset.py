@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
@@ -483,9 +484,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         cron_jobs = self.operational_kubernetes_resources("placeholder-image-tag")
         cron_job = item(c for c in cron_jobs if isinstance(c, cron_type))
 
+        # Use the actual cronjob name from k8s env when available. This ensures
+        # staging cronjobs report to their own Sentry monitor, not production's.
+        monitor_slug = os.getenv("CRON_JOB_NAME") or cron_job.name
+
         def capture_checkin(status: Literal["ok", "in_progress", "error"]) -> None:
             sentry_sdk.crons.capture_checkin(
-                monitor_slug=cron_job.name,
+                monitor_slug=monitor_slug,
                 check_in_id=digest(reformat_job_name, length=32),
                 status=status,
                 monitor_config={
