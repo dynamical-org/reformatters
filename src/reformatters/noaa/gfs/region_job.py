@@ -13,6 +13,7 @@ from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import (
     http_download_to_disk,
 )
+from reformatters.common.ingest_stats import update_ingested_forecast_length
 from reformatters.common.iterating import digest, group_by
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
@@ -149,6 +150,13 @@ class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
         keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
         if isinstance(keep_mantissa_bits, int):
             round_float32_inplace(data_array.values, keep_mantissa_bits)
+
+    def update_template_with_results(
+        self,
+        process_results: Mapping[str, Sequence[NoaaGfsSourceFileCoord]],
+    ) -> xr.Dataset:
+        ds = super().update_template_with_results(process_results)
+        return update_ingested_forecast_length(ds, process_results)
 
     @classmethod
     def operational_update_jobs(

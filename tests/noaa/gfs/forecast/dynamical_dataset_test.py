@@ -182,6 +182,11 @@ def test_backfill_local_and_operational_update(
                 dtype="datetime64[ns]",
             ),
         )
+
+        assert updated_ds["ingested_forecast_length"].sel(
+            init_time="2021-05-01T12:00:00"
+        ).values == pd.Timedelta(hours=3)
+
         point_ds2 = updated_ds.sel(
             latitude=0,
             longitude=0,
