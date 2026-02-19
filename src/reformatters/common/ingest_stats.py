@@ -14,17 +14,16 @@ class DeterministicForecastSourceFileCoord(Protocol):
     lead_time: Timedelta
 
 
-class HasTimeInfo(Protocol):
-    init_time: Timestamp
-    lead_time: Timedelta
-
-
 def update_ingested_forecast_length(
     template_ds: xr.Dataset,
     results_coords: Mapping[str, Sequence[DeterministicForecastSourceFileCoord]],
 ) -> xr.Dataset:
     """
     Updates the 'ingested_forecast_length' coordinate in the template dataset.
+
+    The maximum processed lead time across all variables is set as the
+    ingested_forecast_length. This can hide the nuance of a specific variable
+    having fewer lead times processed than others.
     """
     assert "ingested_forecast_length" in template_ds.coords
 
@@ -39,9 +38,5 @@ def update_ingested_forecast_length(
                 max_lead_per_init[coord.init_time] = coord.lead_time
 
     for init_time, max_lead in max_lead_per_init.items():
-        if init_time in template_ds.coords["init_time"]:
-            template_ds["ingested_forecast_length"].loc[{"init_time": init_time}] = (
-                max_lead
-            )
-
+        template_ds["ingested_forecast_length"].loc[{"init_time": init_time}] = max_lead
     return template_ds

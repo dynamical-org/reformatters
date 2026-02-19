@@ -1,6 +1,5 @@
 from collections.abc import Mapping
 
-import numpy as np
 import pandas as pd
 import xarray as xr
 
@@ -23,7 +22,7 @@ def test_update_ingested_forecast_length_simple() -> None:
         pd.Timestamp("2025-01-01 18:00"),
     ]
 
-    empty_deltas = np.array([pd.NaT, pd.NaT], dtype="timedelta64[ns]")
+    empty_deltas = pd.to_timedelta([pd.NaT, pd.NaT]).to_numpy()  # type: ignore[call-overload]
 
     ds = xr.Dataset(
         coords={
@@ -41,9 +40,8 @@ def test_update_ingested_forecast_length_simple() -> None:
         lead_time=pd.Timedelta(hours=48),
     )
 
-    results = [coord1, coord2]
-
-    update_ingested_forecast_length(ds, results)
+    results = {"var1": [coord1, coord2]}
+    ds = update_ingested_forecast_length(ds, results)
 
     assert ds["ingested_forecast_length"].sel(
         init_time="2025-01-01 12:00"
@@ -68,7 +66,7 @@ def test_update_ingested_forecast_length_update_existing() -> None:
         lead_time=pd.Timedelta(hours=12),
     )
 
-    update_ingested_forecast_length(ds, [new_coord])
+    ds = update_ingested_forecast_length(ds, {"var1": [new_coord]})
 
     assert ds["ingested_forecast_length"].sel(
         init_time=init_time

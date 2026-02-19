@@ -156,14 +156,7 @@ class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
         process_results: Mapping[str, Sequence[NoaaGfsSourceFileCoord]],
     ) -> xr.Dataset:
         ds = super().update_template_with_results(process_results)
-
-        all_coords = []
-        for coord_list in process_results.values():
-            all_coords.extend(coord_list)
-
-        update_ingested_forecast_length(ds, all_coords)
-
-        return ds
+        return update_ingested_forecast_length(ds, process_results)
 
     @classmethod
     def operational_update_jobs(
