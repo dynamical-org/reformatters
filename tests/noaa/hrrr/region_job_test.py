@@ -636,7 +636,7 @@ def test_download_file_from_nomads_hrrr() -> None:
             file_type=file_type,
             data_vars=group,
         )
-        coord.downloaded_path = region_job.download_file(coord)
+        coord = replace(coord, downloaded_path=region_job.download_file(coord))
 
         for data_var in group:
             data = region_job.read_data(coord, data_var)

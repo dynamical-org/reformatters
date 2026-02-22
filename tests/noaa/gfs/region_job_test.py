@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from reformatters.common import template_utils
+from reformatters.common.pydantic import replace
 from reformatters.common.region_job import CoordinateValueOrRange
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.common.types import Dim
@@ -358,7 +359,7 @@ def test_download_file_from_nomads_gfs() -> None:
             lead_time=lead_time,
             data_vars=group,
         )
-        coord.downloaded_path = region_job.download_file(coord)
+        coord = replace(coord, downloaded_path=region_job.download_file(coord))
 
         for data_var in group:
             data = region_job.read_data(coord, data_var)
