@@ -427,7 +427,7 @@ def test_update_append_dim_start() -> None:
 def test_source_file_coord_get_url_nomads(
     template_config: NoaaHrrrCommonTemplateConfig,
 ) -> None:
-    """Test that get_url(nomads=True) returns a NOMADS URL with the same path as S3."""
+    """Test that get_url(source="nomads") returns a NOMADS URL with the same path as S3."""
     coord = NoaaHrrrSourceFileCoord(
         init_time=pd.Timestamp("2024-02-29T12:00"),
         lead_time=pd.Timedelta(hours=6),
@@ -440,11 +440,11 @@ def test_source_file_coord_get_url_nomads(
         == "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t12z.wrfsfcf06.grib2"
     )
     assert (
-        coord.get_url(nomads=False)
+        coord.get_url(source="s3")
         == "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t12z.wrfsfcf06.grib2"
     )
     assert (
-        coord.get_url(nomads=True)
+        coord.get_url(source="nomads")
         == "https://nomads.ncep.noaa.gov/pub/data/nccf/com/hrrr/prod/hrrr.20240229/conus/hrrr.t12z.wrfsfcf06.grib2"
     )
 
@@ -452,7 +452,7 @@ def test_source_file_coord_get_url_nomads(
 def test_source_file_coord_get_idx_url_nomads(
     template_config: NoaaHrrrCommonTemplateConfig,
 ) -> None:
-    """Test that get_idx_url(nomads=True) returns the NOMADS index URL."""
+    """Test that get_idx_url(source="nomads") returns the NOMADS index URL."""
     coord = NoaaHrrrSourceFileCoord(
         init_time=pd.Timestamp("2024-02-29T06:00"),
         lead_time=pd.Timedelta(hours=3),
@@ -461,11 +461,11 @@ def test_source_file_coord_get_idx_url_nomads(
         data_vars=template_config.data_vars,
     )
     assert (
-        coord.get_idx_url(nomads=True)
+        coord.get_idx_url(source="nomads")
         == "https://nomads.ncep.noaa.gov/pub/data/nccf/com/hrrr/prod/hrrr.20240229/conus/hrrr.t06z.wrfsfcf03.grib2.idx"
     )
     assert (
-        coord.get_idx_url(nomads=False)
+        coord.get_idx_url(source="s3")
         == "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t06z.wrfsfcf03.grib2.idx"
     )
 

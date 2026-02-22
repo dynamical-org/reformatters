@@ -1,6 +1,7 @@
 import warnings
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -48,12 +49,12 @@ class NoaaGfsSourceFileCoord(SourceFileCoord):
     lead_time: Timedelta
     data_vars: Sequence[NoaaDataVar]
 
-    def get_url(self, nomads: bool = False) -> str:
+    def get_url(self, source: Literal["s3", "nomads"] = "s3") -> str:
         init_date_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")
         lead_hours = whole_hours(self.lead_time)
         base_path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_hours:03d}"
-        if nomads:
+        if source == "nomads":
             return f"{GFS_NOMADS_BASE_URL}/{base_path}"
         return f"{GFS_S3_BASE_URL}/{base_path}"
 
@@ -64,9 +65,9 @@ class NoaaGfsSourceFileCoord(SourceFileCoord):
 def _gfs_download_from_source(
     dataset_id: str,
     coord: NoaaGfsSourceFileCoord,
-    nomads: bool,
+    source: Literal["s3", "nomads"],
 ) -> Path:
-    url = coord.get_url(nomads=nomads)
+    url = coord.get_url(source=source)
     idx_local_path = http_download_to_disk(f"{url}.idx", dataset_id)
     starts, ends = grib_message_byte_ranges_from_index(
         idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
@@ -95,10 +96,12 @@ class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
         """Download the file for the given coordinate and return the local path."""
         if coord.init_time >= pd.Timestamp.now() - NOMADS_RECENT_THRESHOLD:
             try:
-                return _gfs_download_from_source(self.dataset_id, coord, nomads=True)
+                return _gfs_download_from_source(
+                    self.dataset_id, coord, source="nomads"
+                )
             except (FileNotFoundError, PermissionDeniedError):
                 pass
-        return _gfs_download_from_source(self.dataset_id, coord, nomads=False)
+        return _gfs_download_from_source(self.dataset_id, coord, source="s3")
 
     def read_data(
         self,

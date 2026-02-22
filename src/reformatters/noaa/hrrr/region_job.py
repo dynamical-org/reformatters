@@ -1,5 +1,6 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -51,19 +52,19 @@ class NoaaHrrrSourceFileCoord(SourceFileCoord):
     file_type: NoaaHrrrFileType
     data_vars: Sequence[NoaaHrrrDataVar]
 
-    def get_url(self, nomads: bool = False) -> str:
+    def get_url(self, source: Literal["s3", "nomads"] = "s3") -> str:
         """Return the URL for this HRRR file."""
         lead_time_hours = whole_hours(self.lead_time)
         init_date_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")
         path = f"hrrr.{init_date_str}/{self.domain}/hrrr.t{init_hour_str}z.wrf{self.file_type}f{int(lead_time_hours):02d}.grib2"
-        if nomads:
+        if source == "nomads":
             return f"{HRRR_NOMADS_BASE_URL}/{path}"
         return f"{HRRR_S3_BASE_URL}/{path}"
 
-    def get_idx_url(self, nomads: bool = False) -> str:
+    def get_idx_url(self, source: Literal["s3", "nomads"] = "s3") -> str:
         """Return the URL for the GRIB index file."""
-        return f"{self.get_url(nomads=nomads)}.idx"
+        return f"{self.get_url(source=source)}.idx"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
         raise NotImplementedError  # depends on if the dataset is a forecast or analysis
@@ -72,9 +73,9 @@ class NoaaHrrrSourceFileCoord(SourceFileCoord):
 def _hrrr_download_from_source(
     dataset_id: str,
     coord: NoaaHrrrSourceFileCoord,
-    nomads: bool,
+    source: Literal["s3", "nomads"],
 ) -> Path:
-    idx_local_path = http_download_to_disk(coord.get_idx_url(nomads=nomads), dataset_id)
+    idx_local_path = http_download_to_disk(coord.get_idx_url(source=source), dataset_id)
     byte_range_starts, byte_range_ends = grib_message_byte_ranges_from_index(
         idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
     )
@@ -82,7 +83,7 @@ def _hrrr_download_from_source(
         f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)
     )
     return http_download_to_disk(
-        coord.get_url(nomads=nomads),
+        coord.get_url(source=source),
         dataset_id,
         byte_ranges=(byte_range_starts, byte_range_ends),
         local_path_suffix=f"-{vars_suffix}",
@@ -143,10 +144,12 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
         """Download a subset of variables from a HRRR file and return the local path."""
         if coord.init_time >= pd.Timestamp.now() - NOMADS_RECENT_THRESHOLD:
             try:
-                return _hrrr_download_from_source(self.dataset_id, coord, nomads=True)
+                return _hrrr_download_from_source(
+                    self.dataset_id, coord, source="nomads"
+                )
             except (FileNotFoundError, PermissionDeniedError):
                 pass
-        return _hrrr_download_from_source(self.dataset_id, coord, nomads=False)
+        return _hrrr_download_from_source(self.dataset_id, coord, source="s3")
 
     def read_data(
         self,

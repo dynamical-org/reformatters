@@ -189,7 +189,7 @@ def test_common_region_job_operational_update_jobs(
 
 
 def test_source_file_coord_get_url_nomads() -> None:
-    """Test that get_url(nomads=True) returns a NOMADS URL with the same path as S3."""
+    """Test that get_url(source="nomads") returns a NOMADS URL with the same path as S3."""
     coord = ConcreteSourceFileCoord(
         init_time=pd.Timestamp("2025-06-15T12:00"),
         lead_time=pd.Timedelta(hours=24),
@@ -200,11 +200,11 @@ def test_source_file_coord_get_url_nomads() -> None:
         == "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20250615/12/atmos/gfs.t12z.pgrb2.0p25.f024"
     )
     assert (
-        coord.get_url(nomads=False)
+        coord.get_url(source="s3")
         == "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20250615/12/atmos/gfs.t12z.pgrb2.0p25.f024"
     )
     assert (
-        coord.get_url(nomads=True)
+        coord.get_url(source="nomads")
         == "https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod/gfs.20250615/12/atmos/gfs.t12z.pgrb2.0p25.f024"
     )
 
