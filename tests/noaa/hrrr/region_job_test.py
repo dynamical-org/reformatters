@@ -7,10 +7,16 @@ import pytest
 import xarray as xr
 
 from reformatters.common.pydantic import replace
+from reformatters.noaa.hrrr.forecast_48_hour.region_job import (
+    NoaaHrrrForecast48HourRegionJob,
+    NoaaHrrrForecast48HourSourceFileCoord,
+)
 from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
     NoaaHrrrForecast48HourTemplateConfig,
 )
 from reformatters.noaa.hrrr.region_job import (
+    HRRR_NOMADS_BASE_URL,
+    HRRR_S3_BASE_URL,
     NoaaHrrrRegionJob,
     NoaaHrrrSourceFileCoord,
 )
@@ -418,3 +424,206 @@ def test_update_append_dim_start() -> None:
     result = NoaaHrrrRegionJob._update_append_dim_start(time_coord)
 
     assert result == pd.Timestamp("2024-01-01 09:00:00")
+
+
+def test_source_file_coord_get_url_nomads(
+    template_config: NoaaHrrrCommonTemplateConfig,
+) -> None:
+    """Test that get_url(nomads=True) returns a NOMADS URL with the same path as S3."""
+    coord = NoaaHrrrSourceFileCoord(
+        init_time=pd.Timestamp("2024-02-29T12:00"),
+        lead_time=pd.Timedelta(hours=6),
+        domain="conus",
+        file_type="sfc",
+        data_vars=template_config.data_vars,
+    )
+    s3_url = f"{HRRR_S3_BASE_URL}/hrrr.20240229/conus/hrrr.t12z.wrfsfcf06.grib2"
+    nomads_url = f"{HRRR_NOMADS_BASE_URL}/hrrr.20240229/conus/hrrr.t12z.wrfsfcf06.grib2"
+    assert coord.get_url() == s3_url
+    assert coord.get_url(nomads=False) == s3_url
+    assert coord.get_url(nomads=True) == nomads_url
+
+
+def test_source_file_coord_get_idx_url_nomads(
+    template_config: NoaaHrrrCommonTemplateConfig,
+) -> None:
+    """Test that get_idx_url(nomads=True) returns the NOMADS index URL."""
+    coord = NoaaHrrrSourceFileCoord(
+        init_time=pd.Timestamp("2024-02-29T06:00"),
+        lead_time=pd.Timedelta(hours=3),
+        domain="conus",
+        file_type="sfc",
+        data_vars=template_config.data_vars,
+    )
+    assert coord.get_idx_url(nomads=True) == (
+        f"{HRRR_NOMADS_BASE_URL}/hrrr.20240229/conus/hrrr.t06z.wrfsfcf03.grib2.idx"
+    )
+    assert coord.get_idx_url(nomads=False) == (
+        f"{HRRR_S3_BASE_URL}/hrrr.20240229/conus/hrrr.t06z.wrfsfcf03.grib2.idx"
+    )
+
+
+def _make_hrrr_region_job(
+    template_config: NoaaHrrrCommonTemplateConfig,
+) -> NoaaHrrrRegionJob:
+    return NoaaHrrrRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=Mock(),
+        data_vars=template_config.data_vars[:1],
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+
+def test_download_file_uses_s3_for_old_init_time(
+    template_config: NoaaHrrrCommonTemplateConfig,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that download_file uses S3 directly for init times older than the NOMADS threshold."""
+    fixed_now = pd.Timestamp("2025-01-15T12:00")
+    monkeypatch.setattr(
+        pd.Timestamp, "now", classmethod(lambda *args, **kwargs: fixed_now)
+    )
+    region_job = _make_hrrr_region_job(template_config)
+    monkeypatch.setattr(NoaaHrrrRegionJob, "dataset_id", "test-dataset-hrrr")
+
+    coord = NoaaHrrrSourceFileCoord(
+        init_time=fixed_now - pd.Timedelta(hours=24),  # old: > 18h threshold
+        lead_time=pd.Timedelta(hours=2),
+        domain="conus",
+        file_type="sfc",
+        data_vars=template_config.data_vars[:1],
+    )
+
+    mock_download = Mock(return_value=Mock())
+    monkeypatch.setattr(
+        "reformatters.noaa.hrrr.region_job.http_download_to_disk", mock_download
+    )
+    monkeypatch.setattr(
+        "reformatters.noaa.hrrr.region_job.grib_message_byte_ranges_from_index",
+        Mock(return_value=([0], [100])),
+    )
+
+    region_job.download_file(coord)
+
+    urls_called = [call.args[0] for call in mock_download.call_args_list]
+    assert all(HRRR_S3_BASE_URL in url for url in urls_called)
+    assert not any("nomads" in url for url in urls_called)
+
+
+def test_download_file_tries_nomads_first_for_recent_init_time(
+    template_config: NoaaHrrrCommonTemplateConfig,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that download_file tries NOMADS first for init times within 18h."""
+    fixed_now = pd.Timestamp("2025-01-15T12:00")
+    monkeypatch.setattr(
+        pd.Timestamp, "now", classmethod(lambda *args, **kwargs: fixed_now)
+    )
+    region_job = _make_hrrr_region_job(template_config)
+    monkeypatch.setattr(NoaaHrrrRegionJob, "dataset_id", "test-dataset-hrrr")
+
+    coord = NoaaHrrrSourceFileCoord(
+        init_time=fixed_now - pd.Timedelta(hours=6),  # recent: < 18h threshold
+        lead_time=pd.Timedelta(hours=2),
+        domain="conus",
+        file_type="sfc",
+        data_vars=template_config.data_vars[:1],
+    )
+
+    mock_data_path = Mock()
+    mock_download = Mock(return_value=mock_data_path)
+    monkeypatch.setattr(
+        "reformatters.noaa.hrrr.region_job.http_download_to_disk", mock_download
+    )
+    monkeypatch.setattr(
+        "reformatters.noaa.hrrr.region_job.grib_message_byte_ranges_from_index",
+        Mock(return_value=([0], [100])),
+    )
+
+    result = region_job.download_file(coord)
+
+    assert result == mock_data_path
+    first_url = mock_download.call_args_list[0].args[0]
+    assert HRRR_NOMADS_BASE_URL in first_url
+
+
+def test_download_file_falls_back_to_s3_when_nomads_fails(
+    template_config: NoaaHrrrCommonTemplateConfig,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that download_file falls back to S3 when NOMADS raises FileNotFoundError."""
+    fixed_now = pd.Timestamp("2025-01-15T12:00")
+    monkeypatch.setattr(
+        pd.Timestamp, "now", classmethod(lambda *args, **kwargs: fixed_now)
+    )
+    region_job = _make_hrrr_region_job(template_config)
+    monkeypatch.setattr(NoaaHrrrRegionJob, "dataset_id", "test-dataset-hrrr")
+
+    coord = NoaaHrrrSourceFileCoord(
+        init_time=fixed_now - pd.Timedelta(hours=6),  # recent
+        lead_time=pd.Timedelta(hours=2),
+        domain="conus",
+        file_type="sfc",
+        data_vars=template_config.data_vars[:1],
+    )
+
+    mock_s3_path = Mock()
+
+    def mock_download_side_effect(url: str, dataset_id: str, **kwargs: object) -> Mock:
+        if "nomads" in url:
+            raise FileNotFoundError(url)
+        return mock_s3_path
+
+    mock_download = Mock(side_effect=mock_download_side_effect)
+    monkeypatch.setattr(
+        "reformatters.noaa.hrrr.region_job.http_download_to_disk", mock_download
+    )
+    monkeypatch.setattr(
+        "reformatters.noaa.hrrr.region_job.grib_message_byte_ranges_from_index",
+        Mock(return_value=([0], [100])),
+    )
+
+    result = region_job.download_file(coord)
+
+    assert result == mock_s3_path
+    urls_called = [call.args[0] for call in mock_download.call_args_list]
+    assert any("nomads" in url for url in urls_called)
+    assert any(HRRR_S3_BASE_URL in url for url in urls_called)
+
+
+@pytest.mark.slow
+def test_download_file_from_nomads_hrrr() -> None:
+    """Download a recent HRRR init time from NOMADS and read all template variables."""
+    template_config = NoaaHrrrForecast48HourTemplateConfig()
+    # 6h-old init time is within the 18h NOMADS window and typically complete
+    init_time = (pd.Timestamp.now() - pd.Timedelta(hours=6)).floor("h")
+
+    region_job = NoaaHrrrForecast48HourRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_config.get_template(pd.Timestamp.now()),
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    # lead_time=2h: all vars (instant and accumulated) are present in the f02 GRIB file
+    lead_time = pd.Timedelta(hours=2)
+    for group in NoaaHrrrForecast48HourRegionJob.source_groups(
+        template_config.data_vars
+    ):
+        file_type = group[0].internal_attrs.hrrr_file_type
+        coord = NoaaHrrrForecast48HourSourceFileCoord(
+            init_time=init_time,
+            lead_time=lead_time,
+            domain="conus",
+            file_type=file_type,
+            data_vars=group,
+        )
+        coord.downloaded_path = region_job.download_file(coord)
+
+        for data_var in group:
+            data = region_job.read_data(coord, data_var)
+            assert not np.all(np.isnan(data)), f"All NaN values for {data_var.name}"

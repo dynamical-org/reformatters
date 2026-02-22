@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import rasterio
 import xarray as xr
+from obstore.exceptions import PermissionDeniedError
 from zarr.abc.store import Store
 
 from reformatters.common.binary_rounding import round_float32_inplace
@@ -33,6 +34,10 @@ from reformatters.noaa.models import NoaaDataVar
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
+NOMADS_RECENT_THRESHOLD = pd.Timedelta(hours=18)
+GFS_NOMADS_BASE_URL = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod"
+GFS_S3_BASE_URL = "https://noaa-gfs-bdp-pds.s3.amazonaws.com"
+
 log = get_logger(__name__)
 
 
@@ -43,15 +48,36 @@ class NoaaGfsSourceFileCoord(SourceFileCoord):
     lead_time: Timedelta
     data_vars: Sequence[NoaaDataVar]
 
-    def get_url(self) -> str:
+    def get_url(self, nomads: bool = False) -> str:
         init_date_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")
         lead_hours = whole_hours(self.lead_time)
         base_path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_hours:03d}"
-        return f"https://noaa-gfs-bdp-pds.s3.amazonaws.com/{base_path}"
+        if nomads:
+            return f"{GFS_NOMADS_BASE_URL}/{base_path}"
+        return f"{GFS_S3_BASE_URL}/{base_path}"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
         raise NotImplementedError("Subclasses must implement out_loc()")
+
+
+def _gfs_download_from_source(
+    dataset_id: str,
+    coord: NoaaGfsSourceFileCoord,
+    nomads: bool,
+) -> Path:
+    url = coord.get_url(nomads=nomads)
+    idx_local_path = http_download_to_disk(f"{url}.idx", dataset_id)
+    starts, ends = grib_message_byte_ranges_from_index(
+        idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
+    )
+    vars_suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=True))
+    return http_download_to_disk(
+        url,
+        dataset_id,
+        byte_ranges=(starts, ends),
+        local_path_suffix=f"-{vars_suffix}",
+    )
 
 
 class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
@@ -67,21 +93,12 @@ class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
 
     def download_file(self, coord: NoaaGfsSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
-        # Download grib index file
-        idx_url = f"{coord.get_url()}.idx"
-        idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
-
-        # Download the grib messages for the data vars in the coord using byte ranges
-        starts, ends = grib_message_byte_ranges_from_index(
-            idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
-        )
-        vars_suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=True))
-        return http_download_to_disk(
-            coord.get_url(),
-            self.dataset_id,
-            byte_ranges=(starts, ends),
-            local_path_suffix=f"-{vars_suffix}",
-        )
+        if coord.init_time >= pd.Timestamp.now() - NOMADS_RECENT_THRESHOLD:
+            try:
+                return _gfs_download_from_source(self.dataset_id, coord, nomads=True)
+            except (FileNotFoundError, PermissionDeniedError):
+                pass
+        return _gfs_download_from_source(self.dataset_id, coord, nomads=False)
 
     def read_data(
         self,
