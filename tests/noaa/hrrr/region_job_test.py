@@ -15,8 +15,6 @@ from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
     NoaaHrrrForecast48HourTemplateConfig,
 )
 from reformatters.noaa.hrrr.region_job import (
-    HRRR_NOMADS_BASE_URL,
-    HRRR_S3_BASE_URL,
     NoaaHrrrRegionJob,
     NoaaHrrrSourceFileCoord,
 )
@@ -437,11 +435,18 @@ def test_source_file_coord_get_url_nomads(
         file_type="sfc",
         data_vars=template_config.data_vars,
     )
-    s3_url = f"{HRRR_S3_BASE_URL}/hrrr.20240229/conus/hrrr.t12z.wrfsfcf06.grib2"
-    nomads_url = f"{HRRR_NOMADS_BASE_URL}/hrrr.20240229/conus/hrrr.t12z.wrfsfcf06.grib2"
-    assert coord.get_url() == s3_url
-    assert coord.get_url(nomads=False) == s3_url
-    assert coord.get_url(nomads=True) == nomads_url
+    assert (
+        coord.get_url()
+        == "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t12z.wrfsfcf06.grib2"
+    )
+    assert (
+        coord.get_url(nomads=False)
+        == "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t12z.wrfsfcf06.grib2"
+    )
+    assert (
+        coord.get_url(nomads=True)
+        == "https://nomads.ncep.noaa.gov/pub/data/nccf/com/hrrr/prod/hrrr.20240229/conus/hrrr.t12z.wrfsfcf06.grib2"
+    )
 
 
 def test_source_file_coord_get_idx_url_nomads(
@@ -455,11 +460,13 @@ def test_source_file_coord_get_idx_url_nomads(
         file_type="sfc",
         data_vars=template_config.data_vars,
     )
-    assert coord.get_idx_url(nomads=True) == (
-        f"{HRRR_NOMADS_BASE_URL}/hrrr.20240229/conus/hrrr.t06z.wrfsfcf03.grib2.idx"
+    assert (
+        coord.get_idx_url(nomads=True)
+        == "https://nomads.ncep.noaa.gov/pub/data/nccf/com/hrrr/prod/hrrr.20240229/conus/hrrr.t06z.wrfsfcf03.grib2.idx"
     )
-    assert coord.get_idx_url(nomads=False) == (
-        f"{HRRR_S3_BASE_URL}/hrrr.20240229/conus/hrrr.t06z.wrfsfcf03.grib2.idx"
+    assert (
+        coord.get_idx_url(nomads=False)
+        == "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t06z.wrfsfcf03.grib2.idx"
     )
 
 
@@ -508,8 +515,10 @@ def test_download_file_uses_s3_for_old_init_time(
     region_job.download_file(coord)
 
     urls_called = [call.args[0] for call in mock_download.call_args_list]
-    assert all(HRRR_S3_BASE_URL in url for url in urls_called)
-    assert not any("nomads" in url for url in urls_called)
+    assert all(
+        url.startswith("https://noaa-hrrr-bdp-pds.s3.amazonaws.com")
+        for url in urls_called
+    )
 
 
 def test_download_file_tries_nomads_first_for_recent_init_time(
@@ -545,8 +554,9 @@ def test_download_file_tries_nomads_first_for_recent_init_time(
     result = region_job.download_file(coord)
 
     assert result == mock_data_path
-    first_url = mock_download.call_args_list[0].args[0]
-    assert HRRR_NOMADS_BASE_URL in first_url
+    # NOMADS succeeds, so both idx and data calls go to NOMADS
+    urls_called = [call.args[0] for call in mock_download.call_args_list]
+    assert all(url.startswith("https://nomads.ncep.noaa.gov") for url in urls_called)
 
 
 def test_download_file_falls_back_to_s3_when_nomads_fails(
@@ -589,8 +599,12 @@ def test_download_file_falls_back_to_s3_when_nomads_fails(
 
     assert result == mock_s3_path
     urls_called = [call.args[0] for call in mock_download.call_args_list]
-    assert any("nomads" in url for url in urls_called)
-    assert any(HRRR_S3_BASE_URL in url for url in urls_called)
+    # NOMADS is tried first (idx fails), then S3 is used (idx + data)
+    assert urls_called[0].startswith("https://nomads.ncep.noaa.gov")
+    assert all(
+        url.startswith("https://noaa-hrrr-bdp-pds.s3.amazonaws.com")
+        for url in urls_called[1:]
+    )
 
 
 @pytest.mark.slow
@@ -626,4 +640,4 @@ def test_download_file_from_nomads_hrrr() -> None:
 
         for data_var in group:
             data = region_job.read_data(coord, data_var)
-            assert not np.all(np.isnan(data)), f"All NaN values for {data_var.name}"
+            assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"

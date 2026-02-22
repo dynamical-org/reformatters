@@ -16,8 +16,6 @@ from reformatters.noaa.gfs.forecast.region_job import (
 )
 from reformatters.noaa.gfs.forecast.template_config import NoaaGfsForecastTemplateConfig
 from reformatters.noaa.gfs.region_job import (
-    GFS_NOMADS_BASE_URL,
-    GFS_S3_BASE_URL,
     NoaaGfsCommonRegionJob,
     NoaaGfsSourceFileCoord,
 )
@@ -196,11 +194,18 @@ def test_source_file_coord_get_url_nomads() -> None:
         lead_time=pd.Timedelta(hours=24),
         data_vars=NoaaGfsForecastTemplateConfig().data_vars[:1],
     )
-    s3_url = f"{GFS_S3_BASE_URL}/gfs.20250615/12/atmos/gfs.t12z.pgrb2.0p25.f024"
-    nomads_url = f"{GFS_NOMADS_BASE_URL}/gfs.20250615/12/atmos/gfs.t12z.pgrb2.0p25.f024"
-    assert coord.get_url() == s3_url
-    assert coord.get_url(nomads=False) == s3_url
-    assert coord.get_url(nomads=True) == nomads_url
+    assert (
+        coord.get_url()
+        == "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20250615/12/atmos/gfs.t12z.pgrb2.0p25.f024"
+    )
+    assert (
+        coord.get_url(nomads=False)
+        == "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20250615/12/atmos/gfs.t12z.pgrb2.0p25.f024"
+    )
+    assert (
+        coord.get_url(nomads=True)
+        == "https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod/gfs.20250615/12/atmos/gfs.t12z.pgrb2.0p25.f024"
+    )
 
 
 def _make_gfs_region_job(
@@ -245,8 +250,10 @@ def test_download_file_uses_s3_for_old_init_time(
     region_job.download_file(coord)
 
     urls_called = [call.args[0] for call in mock_download.call_args_list]
-    assert all(GFS_S3_BASE_URL in url for url in urls_called)
-    assert not any("nomads" in url for url in urls_called)
+    assert all(
+        url.startswith("https://noaa-gfs-bdp-pds.s3.amazonaws.com")
+        for url in urls_called
+    )
 
 
 def test_download_file_tries_nomads_first_for_recent_init_time(
@@ -278,8 +285,9 @@ def test_download_file_tries_nomads_first_for_recent_init_time(
     result = region_job.download_file(coord)
 
     assert result == mock_data_path
-    first_url = mock_download.call_args_list[0].args[0]
-    assert GFS_NOMADS_BASE_URL in first_url
+    # NOMADS succeeds, so both idx and data calls go to NOMADS
+    urls_called = [call.args[0] for call in mock_download.call_args_list]
+    assert all(url.startswith("https://nomads.ncep.noaa.gov") for url in urls_called)
 
 
 def test_download_file_falls_back_to_s3_when_nomads_fails(
@@ -318,8 +326,12 @@ def test_download_file_falls_back_to_s3_when_nomads_fails(
 
     assert result == mock_s3_path
     urls_called = [call.args[0] for call in mock_download.call_args_list]
-    assert any("nomads" in url for url in urls_called)
-    assert any(GFS_S3_BASE_URL in url for url in urls_called)
+    # NOMADS is tried first (idx fails), then S3 is used (idx + data)
+    assert urls_called[0].startswith("https://nomads.ncep.noaa.gov")
+    assert all(
+        url.startswith("https://noaa-gfs-bdp-pds.s3.amazonaws.com")
+        for url in urls_called[1:]
+    )
 
 
 @pytest.mark.slow
@@ -350,4 +362,4 @@ def test_download_file_from_nomads_gfs() -> None:
 
         for data_var in group:
             data = region_job.read_data(coord, data_var)
-            assert not np.all(np.isnan(data)), f"All NaN values for {data_var.name}"
+            assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
