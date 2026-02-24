@@ -491,7 +491,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         def capture_checkin(status: Literal["ok", "in_progress", "error"]) -> None:
             sentry_sdk.crons.capture_checkin(
                 monitor_slug=monitor_slug,
-                check_in_id=digest(reformat_job_name, length=32),
+                check_in_id=digest([reformat_job_name], length=32),
                 status=status,
                 monitor_config={
                     "schedule": {"type": "crontab", "value": cron_job.schedule},

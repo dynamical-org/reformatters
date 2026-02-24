@@ -12,7 +12,9 @@ from reformatters.common.pydantic import replace
 
 log = get_logger(__name__)
 
-_MAX_KUBERNETES_NAME_LENGTH = 63
+# 63 is the kubernetes DNS label limit. We use 52 to leave room for the
+# CronJob controller's job name suffix (dash + up to 10-digit unix-minutes timestamp).
+_MAX_KUBERNETES_NAME_LENGTH = 52
 
 
 def staging_cronjob_name(dataset_id: str, version: str, suffix: str) -> str:

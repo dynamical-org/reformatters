@@ -86,8 +86,6 @@ class TestRenameCronjobForStaging:
         cronjob = _make_cronjob(f"{dataset_id}-update")
         result = rename_cronjob_for_staging(cronjob, dataset_id, "0.3.0")
         assert len(result.name) <= _MAX_KUBERNETES_NAME_LENGTH
-        # Should not have been trimmed
-        assert dataset_id in result.name
 
 
 class TestStagingCronjobNames:
