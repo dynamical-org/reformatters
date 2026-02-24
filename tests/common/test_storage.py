@@ -1,7 +1,10 @@
+from unittest.mock import MagicMock
+
 import icechunk
 import pytest
 import zarr
 import zarr.storage
+from icechunk.store import IcechunkStore
 
 from reformatters.common.config import Config, Env
 from reformatters.common.storage import (
@@ -9,6 +12,7 @@ from reformatters.common.storage import (
     StorageConfig,
     StoreFactory,
     _get_store_path,
+    commit_if_icechunk,
 )
 
 
@@ -159,3 +163,75 @@ def test_store_factory_returns_correct_store_types(
     assert len(replicas) == 2
     assert isinstance(replicas[0], icechunk.store.IcechunkStore)
     assert isinstance(replicas[1], zarr.storage.LocalStore)
+
+
+def test_commit_if_icechunk_commits_icechunk_stores() -> None:
+    mock_icechunk_store = MagicMock(spec=IcechunkStore)
+    mock_icechunk_store.session = MagicMock()
+
+    commit_if_icechunk("test message", mock_icechunk_store, [])
+
+    mock_icechunk_store.session.commit.assert_called_once()
+    _, kwargs = mock_icechunk_store.session.commit.call_args
+    assert kwargs["message"] == "test message"
+
+
+def test_commit_if_icechunk_commits_replicas_before_primary() -> None:
+    call_order: list[str] = []
+
+    mock_primary = MagicMock(spec=IcechunkStore)
+    mock_primary.session = MagicMock()
+    mock_primary.session.commit.side_effect = lambda **_kw: call_order.append("primary")
+
+    mock_replica = MagicMock(spec=IcechunkStore)
+    mock_replica.session = MagicMock()
+    mock_replica.session.commit.side_effect = lambda **_kw: call_order.append("replica")
+
+    commit_if_icechunk("msg", mock_primary, [mock_replica])
+
+    assert call_order == ["replica", "primary"]
+
+
+def test_commit_if_icechunk_skips_non_icechunk_stores() -> None:
+    non_icechunk_primary = MagicMock(spec=zarr.storage.LocalStore)
+    non_icechunk_replica = MagicMock(spec=zarr.storage.LocalStore)
+
+    # Should not raise even though neither store is Icechunk
+    commit_if_icechunk("msg", non_icechunk_primary, [non_icechunk_replica])
+
+    non_icechunk_primary.session = MagicMock()
+    assert (
+        not hasattr(non_icechunk_primary, "session")
+        or not non_icechunk_primary.session.commit.called
+    )
+
+
+def test_commit_if_icechunk_noop_for_empty_stores() -> None:
+    non_icechunk = MagicMock(spec=zarr.storage.LocalStore)
+    commit_if_icechunk("msg", non_icechunk, [])
+    # No assertions needed — just verify it does not raise
+
+
+def test_commit_if_icechunk_commits_multiple_replicas_before_primary() -> None:
+    call_order: list[str] = []
+
+    mock_primary = MagicMock(spec=IcechunkStore)
+    mock_primary.session = MagicMock()
+    mock_primary.session.commit.side_effect = lambda **_kw: call_order.append("primary")
+
+    mock_replica1 = MagicMock(spec=IcechunkStore)
+    mock_replica1.session = MagicMock()
+    mock_replica1.session.commit.side_effect = lambda **_kw: call_order.append(
+        "replica1"
+    )
+
+    mock_replica2 = MagicMock(spec=IcechunkStore)
+    mock_replica2.session = MagicMock()
+    mock_replica2.session.commit.side_effect = lambda **_kw: call_order.append(
+        "replica2"
+    )
+
+    commit_if_icechunk("msg", mock_primary, [mock_replica1, mock_replica2])
+
+    assert call_order.index("replica1") < call_order.index("primary")
+    assert call_order.index("replica2") < call_order.index("primary")
