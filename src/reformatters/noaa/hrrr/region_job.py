@@ -1,12 +1,11 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Literal
+from typing import Literal, assert_never
 
 import numpy as np
 import pandas as pd
 import rasterio
 import xarray as xr
-from obstore.exceptions import PermissionDeniedError
 from zarr.abc.store import Store
 
 from reformatters.common.binary_rounding import round_float32_inplace
@@ -58,9 +57,13 @@ class NoaaHrrrSourceFileCoord(SourceFileCoord):
         init_date_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")
         path = f"hrrr.{init_date_str}/{self.domain}/hrrr.t{init_hour_str}z.wrf{self.file_type}f{int(lead_time_hours):02d}.grib2"
-        if source == "nomads":
-            return f"{HRRR_NOMADS_BASE_URL}/{path}"
-        return f"{HRRR_S3_BASE_URL}/{path}"
+        match source:
+            case "nomads":
+                return f"{HRRR_NOMADS_BASE_URL}/{path}"
+            case "s3":
+                return f"{HRRR_S3_BASE_URL}/{path}"
+            case _ as unreachable:
+                assert_never(unreachable)
 
     def get_idx_url(self, source: Literal["s3", "nomads"] = "s3") -> str:
         """Return the URL for the GRIB index file."""
@@ -142,14 +145,9 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
 
     def download_file(self, coord: NoaaHrrrSourceFileCoord) -> Path:
         """Download a subset of variables from a HRRR file and return the local path."""
-        if coord.init_time >= pd.Timestamp.now() - NOMADS_RECENT_THRESHOLD:
-            try:
-                return _hrrr_download_from_source(
-                    self.dataset_id, coord, source="nomads"
-                )
-            except (FileNotFoundError, PermissionDeniedError):
-                pass
-        return _hrrr_download_from_source(self.dataset_id, coord, source="s3")
+        is_recent = coord.init_time >= pd.Timestamp.now() - NOMADS_RECENT_THRESHOLD
+        source = "nomads" if is_recent else "s3"
+        return _hrrr_download_from_source(self.dataset_id, coord, source=source)
 
     def read_data(
         self,

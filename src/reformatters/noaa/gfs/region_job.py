@@ -1,13 +1,12 @@
 import warnings
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Literal
+from typing import Literal, assert_never
 
 import numpy as np
 import pandas as pd
 import rasterio
 import xarray as xr
-from obstore.exceptions import PermissionDeniedError
 from zarr.abc.store import Store
 
 from reformatters.common.binary_rounding import round_float32_inplace
@@ -54,9 +53,13 @@ class NoaaGfsSourceFileCoord(SourceFileCoord):
         init_hour_str = self.init_time.strftime("%H")
         lead_hours = whole_hours(self.lead_time)
         base_path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_hours:03d}"
-        if source == "nomads":
-            return f"{GFS_NOMADS_BASE_URL}/{base_path}"
-        return f"{GFS_S3_BASE_URL}/{base_path}"
+        match source:
+            case "nomads":
+                return f"{GFS_NOMADS_BASE_URL}/{base_path}"
+            case "s3":
+                return f"{GFS_S3_BASE_URL}/{base_path}"
+            case _ as unreachable:
+                assert_never(unreachable)
 
     def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
         raise NotImplementedError("Subclasses must implement out_loc()")
@@ -93,15 +96,9 @@ class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
         return group_by(data_vars, has_hour_0_values)
 
     def download_file(self, coord: NoaaGfsSourceFileCoord) -> Path:
-        """Download the file for the given coordinate and return the local path."""
-        if coord.init_time >= pd.Timestamp.now() - NOMADS_RECENT_THRESHOLD:
-            try:
-                return _gfs_download_from_source(
-                    self.dataset_id, coord, source="nomads"
-                )
-            except (FileNotFoundError, PermissionDeniedError):
-                pass
-        return _gfs_download_from_source(self.dataset_id, coord, source="s3")
+        is_recent = coord.init_time >= pd.Timestamp.now() - NOMADS_RECENT_THRESHOLD
+        source = "nomads" if is_recent else "s3"
+        return _gfs_download_from_source(self.dataset_id, coord, source=source)
 
     def read_data(
         self,

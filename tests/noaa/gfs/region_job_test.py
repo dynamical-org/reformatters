@@ -291,50 +291,6 @@ def test_download_file_tries_nomads_first_for_recent_init_time(
     assert all(url.startswith("https://nomads.ncep.noaa.gov") for url in urls_called)
 
 
-def test_download_file_falls_back_to_s3_when_nomads_fails(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Test that download_file falls back to S3 when NOMADS raises FileNotFoundError."""
-    template_config = NoaaGfsForecastTemplateConfig()
-    fixed_now = pd.Timestamp("2025-01-15T12:00")
-    monkeypatch.setattr(
-        pd.Timestamp, "now", classmethod(lambda *args, **kwargs: fixed_now)
-    )
-    region_job = _make_gfs_region_job(template_config, fixed_now)
-    coord = NoaaGfsForecastSourceFileCoord(
-        init_time=fixed_now - pd.Timedelta(hours=6),  # recent
-        lead_time=pd.Timedelta(hours=6),
-        data_vars=template_config.data_vars[:1],
-    )
-
-    mock_s3_path = Mock()
-
-    def mock_download_side_effect(url: str, dataset_id: str, **kwargs: object) -> Mock:
-        if "nomads" in url:
-            raise FileNotFoundError(url)
-        return mock_s3_path
-
-    mock_download = Mock(side_effect=mock_download_side_effect)
-    monkeypatch.setattr(
-        "reformatters.noaa.gfs.region_job.http_download_to_disk", mock_download
-    )
-    monkeypatch.setattr(
-        "reformatters.noaa.gfs.region_job.grib_message_byte_ranges_from_index",
-        Mock(return_value=([0], [100])),
-    )
-
-    result = region_job.download_file(coord)
-
-    assert result == mock_s3_path
-    urls_called = [call.args[0] for call in mock_download.call_args_list]
-    # NOMADS is tried first (idx fails), then S3 is used (idx + data)
-    assert urls_called[0].startswith("https://nomads.ncep.noaa.gov")
-    assert all(
-        url.startswith("https://noaa-gfs-bdp-pds.s3.amazonaws.com")
-        for url in urls_called[1:]
-    )
-
-
 @pytest.mark.slow
 def test_download_file_from_nomads_gfs() -> None:
     """Download a recent GFS init time from NOMADS and read all template variables."""
