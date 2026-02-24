@@ -35,7 +35,6 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
-NOMADS_RECENT_THRESHOLD = pd.Timedelta(hours=18)
 HRRR_NOMADS_BASE_URL = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/hrrr/prod"
 HRRR_S3_BASE_URL = "https://noaa-hrrr-bdp-pds.s3.amazonaws.com"
 
@@ -126,7 +125,7 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
     def get_download_source(self, init_time: pd.Timestamp) -> Literal["s3", "nomads"]:
         return (
             "nomads"
-            if init_time >= pd.Timestamp.now() - NOMADS_RECENT_THRESHOLD
+            if init_time >= pd.Timestamp.now() - pd.Timedelta(hours=18)
             else "s3"
         )
 

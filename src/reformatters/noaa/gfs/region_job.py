@@ -34,7 +34,6 @@ from reformatters.noaa.models import NoaaDataVar
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
-NOMADS_RECENT_THRESHOLD = pd.Timedelta(hours=18)
 GFS_NOMADS_BASE_URL = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod"
 GFS_S3_BASE_URL = "https://noaa-gfs-bdp-pds.s3.amazonaws.com"
 
@@ -61,6 +60,9 @@ class NoaaGfsSourceFileCoord(SourceFileCoord):
             case _ as unreachable:
                 assert_never(unreachable)
 
+    def get_idx_url(self, source: Literal["s3", "nomads"] = "s3") -> str:
+        return f"{self.get_url(source=source)}.idx"
+
     def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
         raise NotImplementedError("Subclasses must implement out_loc()")
 
@@ -79,20 +81,21 @@ class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
     def get_download_source(self, init_time: pd.Timestamp) -> Literal["s3", "nomads"]:
         return (
             "nomads"
-            if init_time >= pd.Timestamp.now() - NOMADS_RECENT_THRESHOLD
+            if init_time >= pd.Timestamp.now() - pd.Timedelta(hours=18)
             else "s3"
         )
 
     def download_file(self, coord: NoaaGfsSourceFileCoord) -> Path:
         source = self.get_download_source(coord.init_time)
-        url = coord.get_url(source=source)
-        idx_local_path = http_download_to_disk(f"{url}.idx", self.dataset_id)
+        idx_local_path = http_download_to_disk(
+            coord.get_idx_url(source=source), self.dataset_id
+        )
         starts, ends = grib_message_byte_ranges_from_index(
             idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
         )
         vars_suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=True))
         return http_download_to_disk(
-            url,
+            coord.get_url(source=source),
             self.dataset_id,
             byte_ranges=(starts, ends),
             local_path_suffix=f"-{vars_suffix}",

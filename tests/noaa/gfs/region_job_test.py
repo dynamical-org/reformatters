@@ -209,6 +209,23 @@ def test_source_file_coord_get_url_nomads() -> None:
     )
 
 
+def test_source_file_coord_get_idx_url_nomads() -> None:
+    """Test that get_idx_url(source="nomads") returns the NOMADS index URL."""
+    coord = ConcreteSourceFileCoord(
+        init_time=pd.Timestamp("2025-06-15T06:00"),
+        lead_time=pd.Timedelta(hours=3),
+        data_vars=NoaaGfsForecastTemplateConfig().data_vars[:1],
+    )
+    assert (
+        coord.get_idx_url(source="nomads")
+        == "https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod/gfs.20250615/06/atmos/gfs.t06z.pgrb2.0p25.f003.idx"
+    )
+    assert (
+        coord.get_idx_url(source="s3")
+        == "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20250615/06/atmos/gfs.t06z.pgrb2.0p25.f003.idx"
+    )
+
+
 def _make_gfs_region_job(
     template_config: NoaaGfsForecastTemplateConfig,
     now: pd.Timestamp,
