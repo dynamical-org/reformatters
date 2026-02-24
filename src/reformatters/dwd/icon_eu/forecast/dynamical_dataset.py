@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import PurePosixPath
-from typing import Annotated, Final
+from typing import Annotated, ClassVar
 
 import typer
 
@@ -23,7 +23,7 @@ class DwdIconEuForecastDataset(
     # `dynamical_grib_archive_rclone_root` must be in the format that `rclone` expects:
     # `:s3:<bucket>/<path>`. Note that there is no double slash after `:s3:`. The leading colon
     # tells `rclone` to create an on the fly rclone backend and use the env variables we set.
-    dynamical_grib_archive_rclone_root: Final[str] = (
+    dynamical_grib_archive_rclone_root: ClassVar[str] = (
         ":s3:us-west-2.opendata.source.coop/dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/"
     )
 
