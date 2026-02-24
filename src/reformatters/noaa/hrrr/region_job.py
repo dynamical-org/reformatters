@@ -1,10 +1,13 @@
+import threading
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from typing import Literal, assert_never
 
 import numpy as np
 import pandas as pd
 import rasterio
 import xarray as xr
+from obstore.exceptions import GenericError
 from zarr.abc.store import Store
 
 from reformatters.common.binary_rounding import round_float32_inplace
@@ -17,6 +20,7 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
 )
+from reformatters.common.retry import retry
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     AppendDim,
@@ -36,6 +40,12 @@ from reformatters.noaa.noaa_utils import has_hour_0_values
 
 log = get_logger(__name__)
 
+type DownloadSource = Literal["s3", "nomads"]
+
+NOMADS_RECENCY_THRESHOLD = pd.Timedelta(hours=18)
+# Limit concurrent NOMADS requests to avoid overloading their servers
+_nomads_semaphore = threading.Semaphore(4)
+
 
 class NoaaHrrrSourceFileCoord(SourceFileCoord):
     """Source file coordinate for HRRR forecast data."""
@@ -46,17 +56,25 @@ class NoaaHrrrSourceFileCoord(SourceFileCoord):
     file_type: NoaaHrrrFileType
     data_vars: Sequence[NoaaHrrrDataVar]
 
-    def get_url(self) -> str:
+    def get_url(self, source: DownloadSource = "s3") -> str:
         """Return the URL for this HRRR file."""
         lead_time_hours = whole_hours(self.lead_time)
         init_date_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")
+        path = f"hrrr.{init_date_str}/{self.domain}/hrrr.t{init_hour_str}z.wrf{self.file_type}f{int(lead_time_hours):02d}.grib2"
+        match source:
+            case "nomads":
+                base = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/hrrr/prod"
+            case "s3":
+                base = "https://noaa-hrrr-bdp-pds.s3.amazonaws.com"
+            case _ as unreachable:
+                assert_never(unreachable)
 
-        return f"https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.{init_date_str}/{self.domain}/hrrr.t{init_hour_str}z.wrf{self.file_type}f{int(lead_time_hours):02d}.grib2"
+        return f"{base}/{path}"
 
-    def get_idx_url(self) -> str:
+    def get_idx_url(self, source: DownloadSource = "s3") -> str:
         """Return the URL for the GRIB index file."""
-        return f"{self.get_url()}.idx"
+        return f"{self.get_url(source=source)}.idx"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
         raise NotImplementedError  # depends on if the dataset is a forecast or analysis
@@ -112,24 +130,48 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
         )
         return jobs, template_ds
 
-    def download_file(self, coord: NoaaHrrrSourceFileCoord) -> Path:
-        """Download a subset of variables from a HRRR file and return the local path."""
-        idx_url = coord.get_idx_url()
-        idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
+    def get_download_source(self, init_time: pd.Timestamp) -> DownloadSource:
+        if init_time >= (pd.Timestamp.now() - NOMADS_RECENCY_THRESHOLD):
+            return "nomads"
+        else:
+            return "s3"
 
+    def _download_from_source(
+        self, coord: NoaaHrrrSourceFileCoord, source: DownloadSource
+    ) -> Path:
+        idx_local_path = http_download_to_disk(
+            coord.get_idx_url(source=source), self.dataset_id
+        )
         byte_range_starts, byte_range_ends = grib_message_byte_ranges_from_index(
             idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
         )
         vars_suffix = digest(
             f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)
         )
-
         return http_download_to_disk(
-            coord.get_url(),
+            coord.get_url(source=source),
             self.dataset_id,
             byte_ranges=(byte_range_starts, byte_range_ends),
             local_path_suffix=f"-{vars_suffix}",
         )
+
+    def download_file(self, coord: NoaaHrrrSourceFileCoord) -> Path:
+        """Download a subset of variables from a HRRR file and return the local path."""
+        source = self.get_download_source(coord.init_time)
+        if source == "nomads":
+            try:
+                return retry(
+                    lambda: self._nomads_download(coord),
+                    max_attempts=4,
+                    retryable_exceptions=(GenericError,),
+                )
+            except (FileNotFoundError, GenericError) as e:
+                log.info(f"NOMADS download failed ({e}), falling back to S3")
+        return self._download_from_source(coord, source="s3")
+
+    def _nomads_download(self, coord: NoaaHrrrSourceFileCoord) -> Path:
+        with _nomads_semaphore:
+            return self._download_from_source(coord, source="nomads")
 
     def read_data(
         self,
