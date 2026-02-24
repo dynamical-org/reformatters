@@ -29,8 +29,8 @@ class NoaaHrrrAnalysisDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             # Every 3 hours at 57 minutes past the hour.
-            # Data for forecast hour 0 is available 54 mins after init time on most issuances
-            # We could of course increase this to hourly
+            # HRRR f001 (last lead time used) available ~54m after init on NOMADS. +3 min buffer.
+            # We could of course increase this to hourly.
             schedule="57 */3 * * *",
             pod_active_deadline=timedelta(minutes=20),
             image=image_tag,
@@ -44,11 +44,9 @@ class NoaaHrrrAnalysisDataset(
 
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            # Run this 23 mins after the operational update, which is at 57 */3 * * *
-            # That is, at 57 + 23 = 80th min of the hour, which is 20 mins into the next hour.
-            # To get every third hour, but offset by +1 hr 20 min versus the main cron,
-            # we do "20 1-23/3 * * *"
-            schedule="20 1-23/3 * * *",
+            # 20m (pod_active_deadline) after reformat at :57 = :77 = :17 of the next hour.
+            # "17 1-23/3 * * *" gives 01:17, 04:17, 07:17, ... matching reformat at 00:57, 03:57, 06:57, ...
+            schedule="17 1-23/3 * * *",
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
