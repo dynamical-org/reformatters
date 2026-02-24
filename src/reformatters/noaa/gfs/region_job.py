@@ -65,25 +65,6 @@ class NoaaGfsSourceFileCoord(SourceFileCoord):
         raise NotImplementedError("Subclasses must implement out_loc()")
 
 
-def _gfs_download_from_source(
-    dataset_id: str,
-    coord: NoaaGfsSourceFileCoord,
-    source: Literal["s3", "nomads"],
-) -> Path:
-    url = coord.get_url(source=source)
-    idx_local_path = http_download_to_disk(f"{url}.idx", dataset_id)
-    starts, ends = grib_message_byte_ranges_from_index(
-        idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
-    )
-    vars_suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=True))
-    return http_download_to_disk(
-        url,
-        dataset_id,
-        byte_ranges=(starts, ends),
-        local_path_suffix=f"-{vars_suffix}",
-    )
-
-
 class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
     """Common RegionJob for GFS datasets."""
 
@@ -95,10 +76,27 @@ class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
         """Return groups of variables that can be downloaded from the same source file."""
         return group_by(data_vars, has_hour_0_values)
 
+    def get_download_source(self, init_time: pd.Timestamp) -> Literal["s3", "nomads"]:
+        return (
+            "nomads"
+            if init_time >= pd.Timestamp.now() - NOMADS_RECENT_THRESHOLD
+            else "s3"
+        )
+
     def download_file(self, coord: NoaaGfsSourceFileCoord) -> Path:
-        is_recent = coord.init_time >= pd.Timestamp.now() - NOMADS_RECENT_THRESHOLD
-        source = "nomads" if is_recent else "s3"
-        return _gfs_download_from_source(self.dataset_id, coord, source=source)
+        source = self.get_download_source(coord.init_time)
+        url = coord.get_url(source=source)
+        idx_local_path = http_download_to_disk(f"{url}.idx", self.dataset_id)
+        starts, ends = grib_message_byte_ranges_from_index(
+            idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
+        )
+        vars_suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=True))
+        return http_download_to_disk(
+            url,
+            self.dataset_id,
+            byte_ranges=(starts, ends),
+            local_path_suffix=f"-{vars_suffix}",
+        )
 
     def read_data(
         self,

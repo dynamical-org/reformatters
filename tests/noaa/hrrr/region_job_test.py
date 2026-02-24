@@ -483,26 +483,36 @@ def _make_hrrr_region_job(
     )
 
 
-def test_download_file_uses_s3_for_old_init_time(
+def test_get_download_source(
     template_config: NoaaHrrrCommonTemplateConfig,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test that download_file uses S3 directly for init times older than the NOMADS threshold."""
     fixed_now = pd.Timestamp("2025-01-15T12:00")
     monkeypatch.setattr(
         pd.Timestamp, "now", classmethod(lambda *args, **kwargs: fixed_now)
     )
     region_job = _make_hrrr_region_job(template_config)
-    monkeypatch.setattr(NoaaHrrrRegionJob, "dataset_id", "test-dataset-hrrr")
 
+    assert region_job.get_download_source(fixed_now - pd.Timedelta(hours=6)) == "nomads"
+    assert region_job.get_download_source(fixed_now - pd.Timedelta(hours=24)) == "s3"
+
+
+def test_download_file_uses_source_from_get_download_source(
+    template_config: NoaaHrrrCommonTemplateConfig,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    region_job = _make_hrrr_region_job(template_config)
+    monkeypatch.setattr(NoaaHrrrRegionJob, "dataset_id", "test-dataset-hrrr")
     coord = NoaaHrrrSourceFileCoord(
-        init_time=fixed_now - pd.Timedelta(hours=24),  # old: > 18h threshold
+        init_time=pd.Timestamp("2025-01-01"),
         lead_time=pd.Timedelta(hours=2),
         domain="conus",
         file_type="sfc",
         data_vars=template_config.data_vars[:1],
     )
-
+    monkeypatch.setattr(
+        NoaaHrrrRegionJob, "get_download_source", lambda self, t: "nomads"
+    )
     mock_download = Mock(return_value=Mock())
     monkeypatch.setattr(
         "reformatters.noaa.hrrr.region_job.http_download_to_disk", mock_download
@@ -514,47 +524,6 @@ def test_download_file_uses_s3_for_old_init_time(
 
     region_job.download_file(coord)
 
-    urls_called = [call.args[0] for call in mock_download.call_args_list]
-    assert all(
-        url.startswith("https://noaa-hrrr-bdp-pds.s3.amazonaws.com")
-        for url in urls_called
-    )
-
-
-def test_download_file_tries_nomads_first_for_recent_init_time(
-    template_config: NoaaHrrrCommonTemplateConfig,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Test that download_file tries NOMADS first for init times within 18h."""
-    fixed_now = pd.Timestamp("2025-01-15T12:00")
-    monkeypatch.setattr(
-        pd.Timestamp, "now", classmethod(lambda *args, **kwargs: fixed_now)
-    )
-    region_job = _make_hrrr_region_job(template_config)
-    monkeypatch.setattr(NoaaHrrrRegionJob, "dataset_id", "test-dataset-hrrr")
-
-    coord = NoaaHrrrSourceFileCoord(
-        init_time=fixed_now - pd.Timedelta(hours=6),  # recent: < 18h threshold
-        lead_time=pd.Timedelta(hours=2),
-        domain="conus",
-        file_type="sfc",
-        data_vars=template_config.data_vars[:1],
-    )
-
-    mock_data_path = Mock()
-    mock_download = Mock(return_value=mock_data_path)
-    monkeypatch.setattr(
-        "reformatters.noaa.hrrr.region_job.http_download_to_disk", mock_download
-    )
-    monkeypatch.setattr(
-        "reformatters.noaa.hrrr.region_job.grib_message_byte_ranges_from_index",
-        Mock(return_value=([0], [100])),
-    )
-
-    result = region_job.download_file(coord)
-
-    assert result == mock_data_path
-    # NOMADS succeeds, so both idx and data calls go to NOMADS
     urls_called = [call.args[0] for call in mock_download.call_args_list]
     assert all(url.startswith("https://nomads.ncep.noaa.gov") for url in urls_called)
 
