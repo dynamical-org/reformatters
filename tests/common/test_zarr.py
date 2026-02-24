@@ -1,13 +1,20 @@
 from pathlib import Path
 from unittest.mock import Mock, call
 
+import numpy as np
 import pytest
 import xarray as xr
+import zarr.storage
 from icechunk.store import IcechunkStore
 from zarr.abc.store import Store
 
 from reformatters.common import zarr as zarr_module
-from reformatters.common.zarr import copy_zarr_metadata
+from reformatters.common.zarr import (
+    assert_fill_values_set,
+    copy_data_var,
+    copy_zarr_metadata,
+    sync_to_store,
+)
 
 
 @pytest.fixture
@@ -142,3 +149,184 @@ def test_copy_zarr_metadata_noops_when_icechunk_only_and_no_icechunk_store(
     )
 
     assert mock_copy_metadata_files.call_count == 0
+
+
+# --- sync_to_store tests ---
+
+
+def test_sync_to_store_writes_bytes_to_store(tmp_path: Path) -> None:
+    store_dir = tmp_path / "test.zarr"
+    store = zarr.storage.LocalStore(store_dir, read_only=False)
+    data = b"test-bytes"
+    sync_to_store(store, "test/key", data)
+
+    # For a LocalStore, data is stored as files on disk
+    assert (store_dir / "test" / "key").read_bytes() == data
+
+
+def test_sync_to_store_overwrites_existing(tmp_path: Path) -> None:
+    store_dir = tmp_path / "test.zarr"
+    store = zarr.storage.LocalStore(store_dir, read_only=False)
+    sync_to_store(store, "key", b"original")
+    sync_to_store(store, "key", b"updated")
+
+    assert (store_dir / "key").read_bytes() == b"updated"
+
+
+# --- copy_data_var tests ---
+
+
+def test_copy_data_var_copies_chunks_to_primary(tmp_path: Path) -> None:
+    # Build a minimal tmp store directory with chunk files
+    tmp_store = tmp_path / "tmp.zarr"
+    data_var_name = "temperature_2m"
+    chunk_dir = tmp_store / data_var_name / "c" / "0"
+    chunk_dir.mkdir(parents=True)
+    chunk_file = chunk_dir / "0.0"
+    chunk_file.write_bytes(b"chunk-data")
+
+    primary_store = zarr.storage.LocalStore(tmp_path / "primary.zarr", read_only=False)
+
+    # Minimal template_ds with encoding that matches our directory structure
+    template_ds = xr.Dataset(
+        {
+            data_var_name: xr.Variable(
+                ("time", "lat"),
+                np.zeros((1, 1), dtype=np.float32),
+                encoding={"shards": (1, 1), "chunks": (1, 1)},
+            )
+        }
+    )
+
+    copy_data_var(
+        data_var_name,
+        slice(0, 1),
+        template_ds,
+        "time",
+        tmp_store,
+        primary_store,
+    )
+
+    # For a LocalStore, copied chunks are stored as files on disk
+    primary_store_dir = tmp_path / "primary.zarr"
+    assert (primary_store_dir / data_var_name / "c" / "0" / "0.0").exists()
+
+
+def test_copy_data_var_copies_to_replicas_before_primary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    call_order: list[str] = []
+
+    def fake_copy_chunks(tmp_store: Path, relative_dir: str, store: Store) -> None:
+        if store is mock_replica:
+            call_order.append("replica")
+        else:
+            call_order.append("primary")
+
+    monkeypatch.setattr(zarr_module, "_copy_data_var_chunks", fake_copy_chunks)
+
+    tmp_store = tmp_path / "tmp.zarr"
+    tmp_store.mkdir()
+
+    mock_primary = Mock(spec=Store)
+    mock_replica = Mock(spec=Store)
+
+    template_ds = xr.Dataset(
+        {
+            "temperature_2m": xr.Variable(
+                ("time", "lat"),
+                np.zeros((2, 2), dtype=np.float32),
+                encoding={"shards": (2, 2), "chunks": (2, 2)},
+            )
+        }
+    )
+
+    copy_data_var(
+        "temperature_2m",
+        slice(0, 2),
+        template_ds,
+        "time",
+        tmp_store,
+        mock_primary,
+        replica_stores=[mock_replica],
+    )
+
+    assert call_order == ["replica", "primary"]
+
+
+def test_copy_data_var_calls_progress_callback(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(zarr_module, "_copy_data_var_chunks", Mock())
+
+    tmp_store = tmp_path / "tmp.zarr"
+    tmp_store.mkdir()
+
+    callback_called = []
+
+    def callback() -> None:
+        callback_called.append(True)
+
+    template_ds = xr.Dataset(
+        {
+            "temperature_2m": xr.Variable(
+                ("time", "lat"),
+                np.zeros((1, 1), dtype=np.float32),
+                encoding={"shards": (1, 1), "chunks": (1, 1)},
+            )
+        }
+    )
+
+    copy_data_var(
+        "temperature_2m",
+        slice(0, 1),
+        template_ds,
+        "time",
+        tmp_store,
+        Mock(spec=Store),
+        track_progress_callback=callback,
+    )
+
+    assert len(callback_called) == 1
+
+
+# --- assert_fill_values_set tests ---
+
+
+def test_assert_fill_values_set_passes_for_dataset_with_fill_values() -> None:
+    ds = xr.Dataset(
+        {"var": xr.Variable(("x",), [1.0], encoding={"fill_value": np.nan})},
+        coords={"x": xr.Variable(("x",), [0], encoding={"fill_value": -1})},
+    )
+    assert_fill_values_set(ds)  # should not raise
+
+
+def test_assert_fill_values_set_raises_for_missing_var_fill_value() -> None:
+    ds = xr.Dataset(
+        {"var": xr.Variable(("x",), [1.0])},  # no fill_value in encoding
+        coords={"x": xr.Variable(("x",), [0], encoding={"fill_value": -1})},
+    )
+    with pytest.raises(AssertionError, match="var"):
+        assert_fill_values_set(ds)
+
+
+def test_assert_fill_values_set_raises_for_missing_coord_fill_value() -> None:
+    ds = xr.Dataset(
+        {"var": xr.Variable(("x",), [1.0], encoding={"fill_value": np.nan})},
+        coords={"x": xr.Variable(("x",), [0])},  # no fill_value in encoding
+    )
+    with pytest.raises(AssertionError, match="x"):
+        assert_fill_values_set(ds)
+
+
+def test_assert_fill_values_set_passes_for_data_array_with_fill_value() -> None:
+    da = xr.DataArray([1.0, 2.0], name="temperature")
+    da.encoding["fill_value"] = np.nan
+    assert_fill_values_set(da)  # should not raise
+
+
+def test_assert_fill_values_set_raises_for_data_array_missing_fill_value() -> None:
+    da = xr.DataArray([1.0, 2.0], name="temperature")
+    with pytest.raises(AssertionError, match="temperature"):
+        assert_fill_values_set(da)
