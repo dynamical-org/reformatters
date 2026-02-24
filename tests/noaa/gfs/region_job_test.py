@@ -241,7 +241,7 @@ def _make_gfs_region_job(
     )
 
 
-def test_get_download_source(monkeypatch: pytest.MonkeyPatch) -> None:
+def test__get_download_source(monkeypatch: pytest.MonkeyPatch) -> None:
     template_config = NoaaGfsForecastTemplateConfig()
     fixed_now = pd.Timestamp("2025-01-15T12:00")
     monkeypatch.setattr(
@@ -249,8 +249,10 @@ def test_get_download_source(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     region_job = _make_gfs_region_job(template_config, fixed_now)
 
-    assert region_job.get_download_source(fixed_now - pd.Timedelta(hours=6)) == "nomads"
-    assert region_job.get_download_source(fixed_now - pd.Timedelta(hours=24)) == "s3"
+    assert (
+        region_job._get_download_source(fixed_now - pd.Timedelta(hours=6)) == "nomads"
+    )
+    assert region_job._get_download_source(fixed_now - pd.Timedelta(hours=24)) == "s3"
 
 
 def test_download_file_uses_nomads_for_recent_data(
@@ -264,7 +266,7 @@ def test_download_file_uses_nomads_for_recent_data(
         data_vars=template_config.data_vars[:1],
     )
     monkeypatch.setattr(
-        NoaaGfsForecastRegionJob, "get_download_source", lambda self, t: "nomads"
+        NoaaGfsForecastRegionJob, "_get_download_source", lambda self, t: "nomads"
     )
     mock_download = Mock(return_value=Mock())
     monkeypatch.setattr(
@@ -281,10 +283,10 @@ def test_download_file_uses_nomads_for_recent_data(
     assert all(url.startswith("https://nomads.ncep.noaa.gov") for url in urls_called)
 
 
-def test_download_file_falls_back_to_s3_on_generic_error(
+def test_download_file_retries_nomads_on_generic_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test that download_file falls back to S3 when NOMADS raises GenericError (bare redirect)."""
+    """Test that download_file retries NOMADS 4 times on GenericError (bare redirect)."""
     template_config = NoaaGfsForecastTemplateConfig()
     region_job = _make_gfs_region_job(template_config, pd.Timestamp("2025-01-15T12:00"))
     coord = NoaaGfsForecastSourceFileCoord(
@@ -293,68 +295,29 @@ def test_download_file_falls_back_to_s3_on_generic_error(
         data_vars=template_config.data_vars[:1],
     )
     monkeypatch.setattr(
-        NoaaGfsForecastRegionJob, "get_download_source", lambda self, t: "nomads"
+        NoaaGfsForecastRegionJob, "_get_download_source", lambda self, t: "nomads"
     )
-    # Disable retry sleep for fast tests
     monkeypatch.setattr("reformatters.common.retry.time.sleep", lambda _: None)
 
-    s3_result = Mock()
-    nomads_call_count = 0
+    call_count = 0
 
     def mock_download_from_source(
         self: NoaaGfsCommonRegionJob,
         coord: NoaaGfsForecastSourceFileCoord,
         source: str,
     ) -> Path:
-        nonlocal nomads_call_count
-        if source == "nomads":
-            nomads_call_count += 1
-            raise GenericError("Received redirect without LOCATION")
-        return s3_result
+        nonlocal call_count
+        call_count += 1
+        raise GenericError("Received redirect without LOCATION")
 
     monkeypatch.setattr(
         NoaaGfsCommonRegionJob, "_download_from_source", mock_download_from_source
     )
 
-    result = region_job.download_file(coord)
+    with pytest.raises(GenericError):
+        region_job.download_file(coord)
 
-    assert result == s3_result
-    # Should have retried NOMADS 4 times before falling back
-    assert nomads_call_count == 4
-
-
-def test_download_file_falls_back_to_s3_on_file_not_found(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Test that download_file falls back to S3 when NOMADS raises FileNotFoundError."""
-    template_config = NoaaGfsForecastTemplateConfig()
-    region_job = _make_gfs_region_job(template_config, pd.Timestamp("2025-01-15T12:00"))
-    coord = NoaaGfsForecastSourceFileCoord(
-        init_time=pd.Timestamp("2025-01-01"),
-        lead_time=pd.Timedelta(hours=6),
-        data_vars=template_config.data_vars[:1],
-    )
-    monkeypatch.setattr(
-        NoaaGfsForecastRegionJob, "get_download_source", lambda self, t: "nomads"
-    )
-
-    s3_result = Mock()
-
-    def mock_download_from_source(
-        self: NoaaGfsCommonRegionJob,
-        coord: NoaaGfsForecastSourceFileCoord,
-        source: str,
-    ) -> Path:
-        if source == "nomads":
-            raise FileNotFoundError("Not found on NOMADS")
-        return s3_result
-
-    monkeypatch.setattr(
-        NoaaGfsCommonRegionJob, "_download_from_source", mock_download_from_source
-    )
-
-    result = region_job.download_file(coord)
-    assert result == s3_result
+    assert call_count == 4
 
 
 def test_download_file_skips_nomads_for_old_data(
@@ -369,7 +332,7 @@ def test_download_file_skips_nomads_for_old_data(
         data_vars=template_config.data_vars[:1],
     )
     monkeypatch.setattr(
-        NoaaGfsForecastRegionJob, "get_download_source", lambda self, t: "s3"
+        NoaaGfsForecastRegionJob, "_get_download_source", lambda self, t: "s3"
     )
 
     s3_result = Mock()

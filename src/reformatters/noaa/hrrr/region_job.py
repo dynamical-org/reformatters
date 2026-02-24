@@ -42,7 +42,6 @@ log = get_logger(__name__)
 
 type DownloadSource = Literal["s3", "nomads"]
 
-NOMADS_RECENCY_THRESHOLD = pd.Timedelta(hours=18)
 # Limit concurrent NOMADS requests to avoid overloading their servers
 _nomads_semaphore = threading.Semaphore(4)
 
@@ -130,8 +129,8 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
         )
         return jobs, template_ds
 
-    def get_download_source(self, init_time: pd.Timestamp) -> DownloadSource:
-        if init_time >= (pd.Timestamp.now() - NOMADS_RECENCY_THRESHOLD):
+    def _get_download_source(self, init_time: pd.Timestamp) -> DownloadSource:
+        if init_time >= (pd.Timestamp.now() - pd.Timedelta(hours=18)):
             return "nomads"
         else:
             return "s3"
@@ -157,21 +156,15 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
 
     def download_file(self, coord: NoaaHrrrSourceFileCoord) -> Path:
         """Download a subset of variables from a HRRR file and return the local path."""
-        source = self.get_download_source(coord.init_time)
+        source = self._get_download_source(coord.init_time)
         if source == "nomads":
-            try:
-                return retry(
-                    lambda: self._nomads_download(coord),
-                    max_attempts=4,
-                    retryable_exceptions=(GenericError,),
-                )
-            except (FileNotFoundError, GenericError) as e:
-                log.info(f"NOMADS download failed ({e}), falling back to S3")
-        return self._download_from_source(coord, source="s3")
 
-    def _nomads_download(self, coord: NoaaHrrrSourceFileCoord) -> Path:
-        with _nomads_semaphore:
-            return self._download_from_source(coord, source="nomads")
+            def attempt() -> Path:
+                with _nomads_semaphore:
+                    return self._download_from_source(coord, source="nomads")
+
+            return retry(attempt, max_attempts=4, retryable_exceptions=(GenericError,))
+        return self._download_from_source(coord, source=source)
 
     def read_data(
         self,

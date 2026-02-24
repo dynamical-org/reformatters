@@ -153,7 +153,7 @@ def test_backfill_local_and_operational_update(
         classmethod(lambda *args, **kwargs: pd.Timestamp("2021-05-01T14:00")),
     )
     monkeypatch.setattr(
-        dataset.region_job_class, "get_download_source", lambda self, init_time: "s3"
+        dataset.region_job_class, "_get_download_source", lambda self, init_time: "s3"
     )
     # Dataset updates always update all variables. For the test we hook into get_jobs to limit vars.
     orig_get_jobs = dataset.region_job_class.get_jobs
