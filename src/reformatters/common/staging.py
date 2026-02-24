@@ -21,7 +21,9 @@ def staging_cronjob_name(dataset_id: str, version: str, suffix: str) -> str:
     """Build a staging cronjob name, trimming dataset_id if needed to fit the kubernetes limit."""
     version_dashes = version.replace(".", "-")
     max_id_len = _MAX_KUBERNETES_NAME_LENGTH - len(f"stage--v{version_dashes}-{suffix}")
-    assert max_id_len > 0, "Version and suffix are too long to fit in kubernetes name limit"
+    assert max_id_len > 0, (
+        "Version and suffix are too long to fit in kubernetes name limit"
+    )
     return f"stage-{dataset_id[:max_id_len]}-v{version_dashes}-{suffix}"
 
 

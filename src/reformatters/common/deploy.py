@@ -101,7 +101,7 @@ def register_commands(
         force: bool = False,
     ) -> None:
         """Clean up staging resources: kubernetes cronjobs and git branch."""
-        staging.find_dataset(datasets, dataset_id)  # validates dataset_id is registered
+        staging.find_dataset(datasets, dataset_id)  # validate dataset_id
         if not force:
             cronjob_names = staging.staging_cronjob_names(dataset_id, version)
             branch = staging.staging_branch_name(dataset_id, version)
