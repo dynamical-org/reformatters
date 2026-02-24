@@ -34,10 +34,9 @@ from reformatters.noaa.models import NoaaDataVar
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
-GFS_NOMADS_BASE_URL = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod"
-GFS_S3_BASE_URL = "https://noaa-gfs-bdp-pds.s3.amazonaws.com"
-
 log = get_logger(__name__)
+
+type DownloadSource = Literal["s3", "nomads"]
 
 
 class NoaaGfsSourceFileCoord(SourceFileCoord):
@@ -47,20 +46,22 @@ class NoaaGfsSourceFileCoord(SourceFileCoord):
     lead_time: Timedelta
     data_vars: Sequence[NoaaDataVar]
 
-    def get_url(self, source: Literal["s3", "nomads"] = "s3") -> str:
+    def get_url(self, source: DownloadSource = "s3") -> str:
         init_date_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")
         lead_hours = whole_hours(self.lead_time)
-        base_path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_hours:03d}"
+        path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_hours:03d}"
         match source:
             case "nomads":
-                return f"{GFS_NOMADS_BASE_URL}/{base_path}"
+                base = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod"
             case "s3":
-                return f"{GFS_S3_BASE_URL}/{base_path}"
+                base = "https://noaa-gfs-bdp-pds.s3.amazonaws.com"
             case _ as unreachable:
                 assert_never(unreachable)
 
-    def get_idx_url(self, source: Literal["s3", "nomads"] = "s3") -> str:
+        return f"{base}/{path}"
+
+    def get_idx_url(self, source: DownloadSource = "s3") -> str:
         return f"{self.get_url(source=source)}.idx"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
@@ -78,12 +79,11 @@ class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
         """Return groups of variables that can be downloaded from the same source file."""
         return group_by(data_vars, has_hour_0_values)
 
-    def get_download_source(self, init_time: pd.Timestamp) -> Literal["s3", "nomads"]:
-        return (
-            "nomads"
-            if init_time >= pd.Timestamp.now() - pd.Timedelta(hours=18)
-            else "s3"
-        )
+    def get_download_source(self, init_time: pd.Timestamp) -> DownloadSource:
+        if init_time >= (pd.Timestamp.now() - pd.Timedelta(hours=18)):
+            return "nomads"
+        else:
+            return "s3"
 
     def download_file(self, coord: NoaaGfsSourceFileCoord) -> Path:
         source = self.get_download_source(coord.init_time)

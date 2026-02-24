@@ -35,10 +35,9 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
-HRRR_NOMADS_BASE_URL = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/hrrr/prod"
-HRRR_S3_BASE_URL = "https://noaa-hrrr-bdp-pds.s3.amazonaws.com"
-
 log = get_logger(__name__)
+
+type DownloadSource = Literal["s3", "nomads"]
 
 
 class NoaaHrrrSourceFileCoord(SourceFileCoord):
@@ -50,7 +49,7 @@ class NoaaHrrrSourceFileCoord(SourceFileCoord):
     file_type: NoaaHrrrFileType
     data_vars: Sequence[NoaaHrrrDataVar]
 
-    def get_url(self, source: Literal["s3", "nomads"] = "s3") -> str:
+    def get_url(self, source: DownloadSource = "s3") -> str:
         """Return the URL for this HRRR file."""
         lead_time_hours = whole_hours(self.lead_time)
         init_date_str = self.init_time.strftime("%Y%m%d")
@@ -58,13 +57,15 @@ class NoaaHrrrSourceFileCoord(SourceFileCoord):
         path = f"hrrr.{init_date_str}/{self.domain}/hrrr.t{init_hour_str}z.wrf{self.file_type}f{int(lead_time_hours):02d}.grib2"
         match source:
             case "nomads":
-                return f"{HRRR_NOMADS_BASE_URL}/{path}"
+                base = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/hrrr/prod"
             case "s3":
-                return f"{HRRR_S3_BASE_URL}/{path}"
+                base = "https://noaa-hrrr-bdp-pds.s3.amazonaws.com"
             case _ as unreachable:
                 assert_never(unreachable)
 
-    def get_idx_url(self, source: Literal["s3", "nomads"] = "s3") -> str:
+        return f"{base}/{path}"
+
+    def get_idx_url(self, source: DownloadSource = "s3") -> str:
         """Return the URL for the GRIB index file."""
         return f"{self.get_url(source=source)}.idx"
 
@@ -122,12 +123,11 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
         )
         return jobs, template_ds
 
-    def get_download_source(self, init_time: pd.Timestamp) -> Literal["s3", "nomads"]:
-        return (
-            "nomads"
-            if init_time >= pd.Timestamp.now() - pd.Timedelta(hours=18)
-            else "s3"
-        )
+    def get_download_source(self, init_time: pd.Timestamp) -> DownloadSource:
+        if init_time >= (pd.Timestamp.now() - pd.Timedelta(hours=18)):
+            return "nomads"
+        else:
+            return "s3"
 
     def download_file(self, coord: NoaaHrrrSourceFileCoord) -> Path:
         """Download a subset of variables from a HRRR file and return the local path."""
