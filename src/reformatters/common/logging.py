@@ -9,6 +9,8 @@ logging.basicConfig(
 )
 # Ensure timestamps are in UTC
 logging.Formatter.converter = time.gmtime
+# Silence httpx per-request INFO logs; warnings and errors still surface
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 _root_logger = logging.getLogger()
 
