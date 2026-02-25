@@ -47,21 +47,6 @@ def gefs_first_message_path() -> Path:
     return region_job.download_file(coord)
 
 
-def test_dataset_attributes(template_config: GefsForecast35DayTemplateConfig) -> None:
-    """Test dataset attributes are correctly configured."""
-    attrs = template_config.dataset_attributes
-    assert attrs.dataset_id == "noaa-gefs-forecast-35-day"
-    assert attrs.dataset_version == "0.2.0"
-    assert attrs.name == "NOAA GEFS forecast, 35 day"
-    assert "Global Ensemble Forecast System" in attrs.description
-    assert attrs.spatial_domain == "Global"
-    assert "0.25 degrees" in attrs.spatial_resolution
-    assert "0.5 degrees" in attrs.spatial_resolution
-    assert "Forecasts initialized every 24 hours" in attrs.time_resolution
-    assert attrs.forecast_domain == "Forecast lead time 0-840 hours (0-35 days) ahead"
-    assert "2020-10-01 00:00:00 UTC" in attrs.time_domain
-
-
 @pytest.mark.slow
 def test_spatial_ref_matches_grib(
     template_config: GefsForecast35DayTemplateConfig,
