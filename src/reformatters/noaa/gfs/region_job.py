@@ -1,3 +1,4 @@
+import functools
 import warnings
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -35,7 +36,11 @@ from reformatters.common.types import (
 )
 from reformatters.noaa.models import NoaaDataVar
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
-from reformatters.noaa.noaa_utils import has_hour_0_values
+from reformatters.noaa.noaa_utils import (
+    NOMADS_RETRY_STATUS_CODES,
+    has_hour_0_values,
+    nomads_rate_limiter,
+)
 
 log = get_logger(__name__)
 
@@ -92,7 +97,13 @@ class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
         self, coord: NoaaGfsSourceFileCoord, source: DownloadSource
     ) -> Path:
         download = (
-            httpx_download_to_disk if source == "nomads" else http_download_to_disk
+            functools.partial(
+                httpx_download_to_disk,
+                rate_limiter=nomads_rate_limiter,
+                retry_status_codes=NOMADS_RETRY_STATUS_CODES,
+            )
+            if source == "nomads"
+            else http_download_to_disk
         )
         idx_local_path = download(coord.get_idx_url(source=source), self.dataset_id)
         starts, ends = grib_message_byte_ranges_from_index(

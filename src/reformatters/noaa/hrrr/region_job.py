@@ -1,3 +1,4 @@
+import functools
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Literal, assert_never
@@ -35,7 +36,11 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
     NoaaHrrrFileType,
 )
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
-from reformatters.noaa.noaa_utils import has_hour_0_values
+from reformatters.noaa.noaa_utils import (
+    NOMADS_RETRY_STATUS_CODES,
+    has_hour_0_values,
+    nomads_rate_limiter,
+)
 
 log = get_logger(__name__)
 
@@ -135,7 +140,13 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
         self, coord: NoaaHrrrSourceFileCoord, source: DownloadSource
     ) -> Path:
         download = (
-            httpx_download_to_disk if source == "nomads" else http_download_to_disk
+            functools.partial(
+                httpx_download_to_disk,
+                rate_limiter=nomads_rate_limiter,
+                retry_status_codes=NOMADS_RETRY_STATUS_CODES,
+            )
+            if source == "nomads"
+            else http_download_to_disk
         )
         idx_local_path = download(coord.get_idx_url(source=source), self.dataset_id)
         byte_range_starts, byte_range_ends = grib_message_byte_ranges_from_index(
