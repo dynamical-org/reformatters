@@ -75,9 +75,9 @@ def register_commands(
 
     @app.command()
     def deploy_staging(
-        dataset_id: str = typer.Option(..., "--dataset-id"),
-        version: str = typer.Option(..., "--version"),
-        docker_image: str = typer.Option(..., "--docker-image"),
+        dataset_id: str,
+        version: str,
+        docker_image: str,
     ) -> None:
         """Deploy staging cronjobs for a single dataset version."""
         dataset = staging.find_dataset(datasets, dataset_id)
@@ -96,8 +96,8 @@ def register_commands(
 
     @app.command()
     def cleanup_staging(
-        dataset_id: str = typer.Option(..., "--dataset-id"),
-        version: str = typer.Option(..., "--version"),
+        dataset_id: str,
+        version: str,
         force: bool = False,
     ) -> None:
         """Clean up staging resources: kubernetes cronjobs and git branch."""

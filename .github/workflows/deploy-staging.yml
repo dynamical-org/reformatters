@@ -21,6 +21,7 @@ jobs:
     name: Code Quality
     runs-on: ubuntu-24.04
 
+    # Keep code-quality.yaml and these steps in sync
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
@@ -59,6 +60,7 @@ jobs:
     runs-on: ubuntu-24.04
     environment: prod
 
+    # Keep deploy-operational-updates.yaml and these steps in sync
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
@@ -132,6 +134,6 @@ jobs:
       - name: Deploy staging
         run: >
           uv run main deploy-staging
-          --dataset-id ${{ steps.parse.outputs.dataset_id }}
-          --version ${{ steps.parse.outputs.version }}
-          --docker-image ${{ env.IMAGE_TAG }}
+          ${{ steps.parse.outputs.dataset_id }}
+          ${{ steps.parse.outputs.version }}
+          ${{ env.IMAGE_TAG }}

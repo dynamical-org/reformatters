@@ -2,7 +2,7 @@ from datetime import timedelta
 
 import pytest
 
-from reformatters.common.kubernetes import ReformatCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.common.staging import (
     _MAX_KUBERNETES_NAME_LENGTH,
     rename_cronjob_for_staging,
@@ -12,8 +12,9 @@ from reformatters.common.staging import (
 )
 
 
-def _make_cronjob(name: str) -> ReformatCronJob:
-    return ReformatCronJob(
+def _make_cronjob(name: str) -> CronJob:
+    cls = ReformatCronJob if name.endswith("-update") else ValidationCronJob
+    return cls(
         name=name,
         schedule="0 * * * *",
         image="test:latest",
