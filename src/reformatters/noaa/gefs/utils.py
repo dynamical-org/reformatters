@@ -17,10 +17,8 @@ def _download_file_from_gefs_source(
     coord: GefsSourceFileCoord,
     index_url: str,
     source_url: str,
-    download: _DownloadFn | None = None,
+    download: _DownloadFn,
 ) -> Path:
-    if download is None:
-        download = http_download_to_disk
     idx_local_path = download(index_url, dataset_id)
 
     starts, ends = grib_message_byte_ranges_from_index(
@@ -42,7 +40,11 @@ def gefs_download_file(
     """Download file from GEFS source with retry and fallback to alternative source."""
     try:
         return _download_file_from_gefs_source(
-            dataset_id, coord, coord.get_index_url(), coord.get_url()
+            dataset_id,
+            coord,
+            coord.get_index_url(),
+            coord.get_url(),
+            download=http_download_to_disk,
         )
     except FileNotFoundError:
         # if init time is within the last 4 days, try to download from the fallback source (NOMADS)

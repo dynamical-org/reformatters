@@ -242,6 +242,7 @@ def httpx_download_to_disk(
     byte_ranges: tuple[Sequence[int], Sequence[int]] | None = None,
     local_path_suffix: str = "",
 ) -> Path:
+    """httpx based download which supports redirects and maintains cookies."""
     parsed_url = urlparse(url)
     local_path = get_local_path(dataset_id, parsed_url.path, local_path_suffix)
     local_path.parent.mkdir(parents=True, exist_ok=True)
