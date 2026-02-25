@@ -2,10 +2,10 @@ from collections.abc import Mapping
 from pathlib import Path
 from unittest.mock import Mock
 
+import httpx
 import numpy as np
 import pandas as pd
 import pytest
-from obstore.exceptions import GenericError
 
 from reformatters.common import template_utils
 from reformatters.common.pydantic import replace
@@ -270,7 +270,7 @@ def test_download_file_uses_nomads_for_recent_data(
     )
     mock_download = Mock(return_value=Mock())
     monkeypatch.setattr(
-        "reformatters.noaa.gfs.region_job.http_download_to_disk", mock_download
+        "reformatters.noaa.gfs.region_job.httpx_download_to_disk", mock_download
     )
     monkeypatch.setattr(
         "reformatters.noaa.gfs.region_job.grib_message_byte_ranges_from_index",
@@ -283,10 +283,10 @@ def test_download_file_uses_nomads_for_recent_data(
     assert all(url.startswith("https://nomads.ncep.noaa.gov") for url in urls_called)
 
 
-def test_download_file_retries_nomads_on_generic_error(
+def test_download_file_retries_nomads_on_http_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test that download_file retries NOMADS 4 times on GenericError (bare redirect)."""
+    """Test that download_file retries NOMADS 4 times on httpx.HTTPError."""
     template_config = NoaaGfsForecastTemplateConfig()
     region_job = _make_gfs_region_job(template_config, pd.Timestamp("2025-01-15T12:00"))
     coord = NoaaGfsForecastSourceFileCoord(
@@ -308,13 +308,13 @@ def test_download_file_retries_nomads_on_generic_error(
     ) -> Path:
         nonlocal call_count
         call_count += 1
-        raise GenericError("Received redirect without LOCATION")
+        raise httpx.ConnectError("connection failed")
 
     monkeypatch.setattr(
         NoaaGfsCommonRegionJob, "_download_from_source", mock_download_from_source
     )
 
-    with pytest.raises(GenericError):
+    with pytest.raises(httpx.ConnectError):
         region_job.download_file(coord)
 
     assert call_count == 4
