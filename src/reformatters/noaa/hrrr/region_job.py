@@ -43,7 +43,7 @@ log = get_logger(__name__)
 type DownloadSource = Literal["s3", "nomads"]
 
 # Limit concurrent NOMADS requests to avoid overloading their servers
-_nomads_semaphore = threading.Semaphore(4)
+_nomads_semaphore = threading.Semaphore(1)
 
 
 class NoaaHrrrSourceFileCoord(SourceFileCoord):
