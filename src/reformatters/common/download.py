@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import threading
 import time
 import uuid
 from collections.abc import Sequence
@@ -154,7 +155,28 @@ def _httpx_client() -> httpx.Client:
     )
 
 
-_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+class _RateLimiter:
+    """Enforces a maximum request rate with serialization via lock."""
+
+    def __init__(self, max_per_minute: int) -> None:
+        self._min_interval = 60.0 / max_per_minute
+        self._last_request_time = 0.0
+        self._lock = threading.Lock()
+
+    def wait(self) -> None:
+        with self._lock:
+            now = time.monotonic()
+            wait_time = self._min_interval - (now - self._last_request_time)
+            if wait_time > 0:
+                time.sleep(wait_time)
+            self._last_request_time = time.monotonic()
+
+
+# NOMADS rate limit is 120 requests/minute
+_nomads_rate_limiter = _RateLimiter(max_per_minute=120)
+
+# Retry on server errors, rate limits, and redirects (Akamai bot mitigation returns 302)
+_RETRYABLE_STATUS_CODES = {302, 429, 500, 502, 503, 504}
 _MAX_RETRIES = 16
 _INIT_BACKOFF_SECONDS = 1.0
 _MAX_BACKOFF_SECONDS = 16.0
@@ -180,6 +202,8 @@ def _httpx_get_with_retry(
             )
             jitter = rng.uniform(0.5, 1.5)
             time.sleep(backoff * jitter)
+
+        _nomads_rate_limiter.wait()
 
         try:
             response = client.get(url, headers=headers)
@@ -266,11 +290,9 @@ def httpx_download_to_disk(
             with open(temp_path, "wb") as f:
                 f.write(body)
         else:
-            # Stream full file to disk
-            with _httpx_client().stream("GET", url) as response:
-                response.raise_for_status()
-                with open(temp_path, "wb") as f:
-                    f.writelines(response.iter_bytes())
+            response = _httpx_get_with_retry(url)
+            with open(temp_path, "wb") as f:
+                f.write(response.content)
 
         temp_path.rename(local_path)
 
