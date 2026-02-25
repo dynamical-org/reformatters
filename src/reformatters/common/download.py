@@ -24,6 +24,15 @@ log = get_logger(__name__)
 
 DOWNLOAD_DIR = Path("data/download/")
 
+"""
+This module provides utilities for downloading files to disk over http,
+with support for retries, rate limiting, and auto-coallesced byte-range requests.
+
+The main functions which have (effectively) interchangeable interfaces are
+`http_download_to_disk` which uses obstore and
+`httpx_download_to_disk` which uses httpx and supports redirects and cookies.
+"""
+
 
 def download_to_disk(
     store: ObjectStore,
@@ -155,28 +164,33 @@ def _httpx_client() -> httpx.Client:
     )
 
 
-class _RateLimiter:
-    """Enforces a maximum request rate with serialization via lock."""
+class RateLimiter:
+    """Token bucket rate limiter. Allows bursting up to `burst` requests, then enforces max_per_minute."""
 
-    def __init__(self, max_per_minute: int) -> None:
-        self._min_interval = 60.0 / max_per_minute
-        self._last_request_time = 0.0
+    def __init__(self, max_per_minute: int, burst: int = 10) -> None:
+        self._rate = max_per_minute / 60.0  # tokens/second
+        self._burst = burst
+        self._tokens = float(burst)
+        self._last = time.monotonic()
         self._lock = threading.Lock()
 
     def wait(self) -> None:
         with self._lock:
             now = time.monotonic()
-            wait_time = self._min_interval - (now - self._last_request_time)
-            if wait_time > 0:
-                time.sleep(wait_time)
-            self._last_request_time = time.monotonic()
+            self._tokens = min(
+                self._burst, self._tokens + (now - self._last) * self._rate
+            )
+            self._last = now
+            if self._tokens >= 1.0:
+                self._tokens -= 1.0
+            else:
+                sleep_time = (1.0 - self._tokens) / self._rate
+                time.sleep(sleep_time)
+                self._tokens = 0.0
+                self._last = time.monotonic()
 
 
-# NOMADS rate limit is 120 requests/minute
-_nomads_rate_limiter = _RateLimiter(max_per_minute=120)
-
-# Retry on server errors, rate limits, and redirects (Akamai bot mitigation returns 302)
-_RETRYABLE_STATUS_CODES = {302, 429, 500, 502, 503, 504}
+_DEFAULT_RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
 _MAX_RETRIES = 16
 _INIT_BACKOFF_SECONDS = 1.0
 _MAX_BACKOFF_SECONDS = 16.0
@@ -186,6 +200,8 @@ _RETRY_TIMEOUT_SECONDS = 300.0
 def _httpx_get_with_retry(
     url: str,
     headers: dict[str, str] | None = None,
+    rate_limiter: RateLimiter | None = None,
+    retry_status_codes: set[int] = _DEFAULT_RETRY_STATUS_CODES,
 ) -> httpx.Response:
     client = _httpx_client()
     rng = np.random.default_rng()
@@ -203,7 +219,8 @@ def _httpx_get_with_retry(
             jitter = rng.uniform(0.5, 1.5)
             time.sleep(backoff * jitter)
 
-        _nomads_rate_limiter.wait()
+        if rate_limiter is not None:
+            rate_limiter.wait()
 
         try:
             response = client.get(url, headers=headers)
@@ -212,7 +229,7 @@ def _httpx_get_with_retry(
             log.warning(f"httpx transport error on attempt {attempt + 1}: {e}")
             continue
 
-        if response.status_code not in _RETRYABLE_STATUS_CODES:
+        if response.status_code not in retry_status_codes:
             response.raise_for_status()
             return response
 
@@ -265,6 +282,8 @@ def httpx_download_to_disk(
     dataset_id: str,
     byte_ranges: tuple[Sequence[int], Sequence[int]] | None = None,
     local_path_suffix: str = "",
+    rate_limiter: RateLimiter | None = None,
+    retry_status_codes: set[int] = _DEFAULT_RETRY_STATUS_CODES,
 ) -> Path:
     """httpx based download which supports redirects and maintains cookies."""
     parsed_url = urlparse(url)
@@ -278,7 +297,12 @@ def httpx_download_to_disk(
             # Build multi-range header. Ends from grib index are exclusive; HTTP Range is inclusive.
             range_specs = [f"{s}-{e - 1}" for s, e in zip(starts, ends, strict=True)]
             range_header = f"bytes={', '.join(range_specs)}"
-            response = _httpx_get_with_retry(url, headers={"Range": range_header})
+            response = _httpx_get_with_retry(
+                url,
+                headers={"Range": range_header},
+                rate_limiter=rate_limiter,
+                retry_status_codes=retry_status_codes,
+            )
 
             content_type = response.headers.get("content-type", "")
             if "multipart/byteranges" in content_type:
@@ -290,7 +314,9 @@ def httpx_download_to_disk(
             with open(temp_path, "wb") as f:
                 f.write(body)
         else:
-            response = _httpx_get_with_retry(url)
+            response = _httpx_get_with_retry(
+                url, rate_limiter=rate_limiter, retry_status_codes=retry_status_codes
+            )
             with open(temp_path, "wb") as f:
                 f.write(response.content)
 

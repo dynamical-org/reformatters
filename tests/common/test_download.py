@@ -305,7 +305,7 @@ def test_httpx_download_to_disk_builds_correct_range_header(tmp_path: Path) -> N
     captured_headers: list[dict[str, str] | None] = []
 
     def fake_get_with_retry(
-        url: str, headers: dict[str, str] | None = None
+        url: str, headers: dict[str, str] | None = None, **kwargs: object
     ) -> httpx.Response:
         captured_headers.append(headers)
         return _make_httpx_response(
