@@ -24,8 +24,7 @@ class GefsForecast35DayDataset(
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            # GEFS f384 last perturbed member available ~6h30m after 00z init on NOMADS. +3 min buffer.
-            schedule="33 6 * * *",
+            schedule="0 7 * * *",  # At 7:00 UTC every day.
             pod_active_deadline=timedelta(hours=3.5),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -37,7 +36,7 @@ class GefsForecast35DayDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="3 10 * * *",  # 3h30m (pod_active_deadline) after reformat at 06:33
+            schedule="30 11 * * *",  # At 11:30 UTC every day.
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
