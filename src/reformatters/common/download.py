@@ -167,7 +167,7 @@ def _httpx_client() -> httpx.Client:
 class RateLimiter:
     """Token bucket rate limiter. Allows bursting up to `burst` requests, then enforces max_per_minute."""
 
-    def __init__(self, max_per_minute: int, burst: int = 10) -> None:
+    def __init__(self, max_per_minute: int, burst: int = 1) -> None:
         self._rate = max_per_minute / 60.0  # tokens/second
         self._burst = burst
         self._tokens = float(burst)

@@ -2,7 +2,6 @@ from collections.abc import Mapping
 from pathlib import Path
 from unittest.mock import Mock
 
-import httpx
 import numpy as np
 import pandas as pd
 import pytest
@@ -241,23 +240,7 @@ def _make_gfs_region_job(
     )
 
 
-def test__get_download_source(monkeypatch: pytest.MonkeyPatch) -> None:
-    template_config = NoaaGfsForecastTemplateConfig()
-    fixed_now = pd.Timestamp("2025-01-15T12:00")
-    monkeypatch.setattr(
-        pd.Timestamp, "now", classmethod(lambda *args, **kwargs: fixed_now)
-    )
-    region_job = _make_gfs_region_job(template_config, fixed_now)
-
-    assert (
-        region_job._get_download_source(fixed_now - pd.Timedelta(hours=6)) == "nomads"
-    )
-    assert region_job._get_download_source(fixed_now - pd.Timedelta(hours=24)) == "s3"
-
-
-def test_download_file_uses_nomads_for_recent_data(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_download_file_tries_s3_first(monkeypatch: pytest.MonkeyPatch) -> None:
     template_config = NoaaGfsForecastTemplateConfig()
     region_job = _make_gfs_region_job(template_config, pd.Timestamp("2025-01-15T12:00"))
     coord = NoaaGfsForecastSourceFileCoord(
@@ -265,84 +248,15 @@ def test_download_file_uses_nomads_for_recent_data(
         lead_time=pd.Timedelta(hours=6),
         data_vars=template_config.data_vars[:1],
     )
-    monkeypatch.setattr(
-        NoaaGfsForecastRegionJob, "_get_download_source", lambda self, t: "nomads"
-    )
-    mock_download = Mock(return_value=Mock())
-    monkeypatch.setattr(
-        "reformatters.noaa.gfs.region_job.httpx_download_to_disk", mock_download
-    )
-    monkeypatch.setattr(
-        "reformatters.noaa.gfs.region_job.grib_message_byte_ranges_from_index",
-        Mock(return_value=([0], [100])),
-    )
-
-    region_job.download_file(coord)
-
-    urls_called = [call.args[0] for call in mock_download.call_args_list]
-    assert all(url.startswith("https://nomads.ncep.noaa.gov") for url in urls_called)
-
-
-def test_download_file_retries_nomads_on_http_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Test that download_file retries NOMADS 4 times on httpx.HTTPError."""
-    template_config = NoaaGfsForecastTemplateConfig()
-    region_job = _make_gfs_region_job(template_config, pd.Timestamp("2025-01-15T12:00"))
-    coord = NoaaGfsForecastSourceFileCoord(
-        init_time=pd.Timestamp("2025-01-01"),
-        lead_time=pd.Timedelta(hours=6),
-        data_vars=template_config.data_vars[:1],
-    )
-    monkeypatch.setattr(
-        NoaaGfsForecastRegionJob, "_get_download_source", lambda self, t: "nomads"
-    )
-    monkeypatch.setattr("reformatters.common.retry.time.sleep", lambda _: None)
-
-    call_count = 0
-
-    def mock_download_from_source(
-        self: NoaaGfsCommonRegionJob,
-        coord: NoaaGfsForecastSourceFileCoord,
-        source: str,
-    ) -> Path:
-        nonlocal call_count
-        call_count += 1
-        raise httpx.ConnectError("connection failed")
-
-    monkeypatch.setattr(
-        NoaaGfsCommonRegionJob, "_download_from_source", mock_download_from_source
-    )
-
-    with pytest.raises(httpx.ConnectError):
-        region_job.download_file(coord)
-
-    assert call_count == 4
-
-
-def test_download_file_skips_nomads_for_old_data(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Test that download_file goes directly to S3 for old data."""
-    template_config = NoaaGfsForecastTemplateConfig()
-    region_job = _make_gfs_region_job(template_config, pd.Timestamp("2025-01-15T12:00"))
-    coord = NoaaGfsForecastSourceFileCoord(
-        init_time=pd.Timestamp("2025-01-01"),
-        lead_time=pd.Timedelta(hours=6),
-        data_vars=template_config.data_vars[:1],
-    )
-    monkeypatch.setattr(
-        NoaaGfsForecastRegionJob, "_get_download_source", lambda self, t: "s3"
-    )
-
     s3_result = Mock()
+    sources_called: list[str] = []
 
     def mock_download_from_source(
         self: NoaaGfsCommonRegionJob,
         coord: NoaaGfsForecastSourceFileCoord,
         source: str,
     ) -> Path:
-        assert source == "s3"
+        sources_called.append(source)
         return s3_result
 
     monkeypatch.setattr(
@@ -351,6 +265,67 @@ def test_download_file_skips_nomads_for_old_data(
 
     result = region_job.download_file(coord)
     assert result == s3_result
+    assert sources_called == ["s3"]
+
+
+def test_download_file_falls_back_to_nomads_on_file_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    template_config = NoaaGfsForecastTemplateConfig()
+    region_job = _make_gfs_region_job(template_config, pd.Timestamp("2025-01-15T12:00"))
+    coord = NoaaGfsForecastSourceFileCoord(
+        init_time=pd.Timestamp("2025-01-01"),
+        lead_time=pd.Timedelta(hours=6),
+        data_vars=template_config.data_vars[:1],
+    )
+    nomads_result = Mock()
+
+    def mock_download_from_source(
+        self: NoaaGfsCommonRegionJob,
+        coord: NoaaGfsForecastSourceFileCoord,
+        source: str,
+    ) -> Path:
+        if source == "s3":
+            raise FileNotFoundError("not on s3")
+        return nomads_result
+
+    monkeypatch.setattr(
+        NoaaGfsCommonRegionJob, "_download_from_source", mock_download_from_source
+    )
+
+    result = region_job.download_file(coord)
+    assert result == nomads_result
+
+
+def test_download_file_nomads_fallback_uses_httpx(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """NOMADS fallback uses httpx_download_to_disk (not http_download_to_disk)."""
+    template_config = NoaaGfsForecastTemplateConfig()
+    region_job = _make_gfs_region_job(template_config, pd.Timestamp("2025-01-15T12:00"))
+    coord = NoaaGfsForecastSourceFileCoord(
+        init_time=pd.Timestamp("2025-01-01"),
+        lead_time=pd.Timedelta(hours=6),
+        data_vars=template_config.data_vars[:1],
+    )
+    monkeypatch.setattr(
+        "reformatters.noaa.gfs.region_job.http_download_to_disk",
+        Mock(side_effect=FileNotFoundError("not on s3")),
+    )
+    mock_httpx = Mock(return_value=Mock())
+    monkeypatch.setattr(
+        "reformatters.noaa.gfs.region_job.httpx_download_to_disk", mock_httpx
+    )
+    monkeypatch.setattr(
+        "reformatters.noaa.gfs.region_job.grib_message_byte_ranges_from_index",
+        Mock(return_value=([0], [100])),
+    )
+
+    region_job.download_file(coord)
+
+    urls_called = [call.args[0] for call in mock_httpx.call_args_list]
+    assert len(urls_called) > 0
+    assert all(url.startswith("https://nomads.ncep.noaa.gov") for url in urls_called)
 
 
 @pytest.mark.slow

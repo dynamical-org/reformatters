@@ -76,8 +76,11 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
         "now",
         classmethod(lambda *args, **kwargs: pd.Timestamp("2021-05-01T06:00")),
     )
+    orig_download_from_source = dataset.region_job_class._download_from_source  # ty: ignore[unresolved-attribute]
     monkeypatch.setattr(
-        dataset.region_job_class, "_get_download_source", lambda self, init_time: "s3"
+        dataset.region_job_class,
+        "_download_from_source",
+        lambda self, coord, source: orig_download_from_source(self, coord, "s3"),
     )
     orig_get_jobs = dataset.region_job_class.get_jobs
     monkeypatch.setattr(
