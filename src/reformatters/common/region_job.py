@@ -5,11 +5,13 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import suppress
 from copy import deepcopy
 from enum import Enum, auto
+from http import HTTPStatus
 from itertools import batched, chain, pairwise
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar, get_args
 
+import httpx
 import numpy as np
 import pandas as pd
 import pydantic
@@ -657,8 +659,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 if isinstance(append_dim_coord, slice):
                     append_dim_coord = append_dim_coord.start
                 two_days_ago = pd.Timestamp.now() - pd.Timedelta(hours=48)
+                is_not_found = isinstance(e, FileNotFoundError) or (
+                    isinstance(e, httpx.HTTPStatusError)
+                    and e.response.status_code
+                    in (HTTPStatus.FORBIDDEN, HTTPStatus.NOT_FOUND)
+                )
                 if (
-                    isinstance(e, FileNotFoundError)
+                    is_not_found
                     and isinstance(append_dim_coord, np.datetime64 | pd.Timestamp)
                     and append_dim_coord > two_days_ago
                 ):
