@@ -3,16 +3,16 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Literal, assert_never
 
+import httpx
 import numpy as np
 import pandas as pd
 import rasterio
 import xarray as xr
-from obstore.exceptions import GenericError
 from zarr.abc.store import Store
 
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
-from reformatters.common.download import http_download_to_disk
+from reformatters.common.download import http_download_to_disk, httpx_download_to_disk
 from reformatters.common.iterating import digest, group_by, item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
@@ -138,16 +138,17 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
     def _download_from_source(
         self, coord: NoaaHrrrSourceFileCoord, source: DownloadSource
     ) -> Path:
-        idx_local_path = http_download_to_disk(
-            coord.get_idx_url(source=source), self.dataset_id
+        download = (
+            httpx_download_to_disk if source == "nomads" else http_download_to_disk
         )
+        idx_local_path = download(coord.get_idx_url(source=source), self.dataset_id)
         byte_range_starts, byte_range_ends = grib_message_byte_ranges_from_index(
             idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
         )
         vars_suffix = digest(
             f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)
         )
-        return http_download_to_disk(
+        return download(
             coord.get_url(source=source),
             self.dataset_id,
             byte_ranges=(byte_range_starts, byte_range_ends),
@@ -163,7 +164,9 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
                 with _nomads_semaphore:
                     return self._download_from_source(coord, source="nomads")
 
-            return retry(attempt, max_attempts=4, retryable_exceptions=(GenericError,))
+            return retry(
+                attempt, max_attempts=4, retryable_exceptions=(httpx.HTTPError,)
+            )
         return self._download_from_source(coord, source=source)
 
     def read_data(
