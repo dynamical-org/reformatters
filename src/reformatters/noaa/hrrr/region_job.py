@@ -3,7 +3,6 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Literal, assert_never
 
-import httpx
 import numpy as np
 import pandas as pd
 import rasterio
@@ -20,7 +19,6 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
 )
-from reformatters.common.retry import retry
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     AppendDim,
@@ -130,12 +128,6 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
         )
         return jobs, template_ds
 
-    def _get_download_source(self, init_time: pd.Timestamp) -> DownloadSource:
-        if init_time >= (pd.Timestamp.now() - pd.Timedelta(hours=18)):
-            return "nomads"
-        else:
-            return "s3"
-
     def _download_from_source(
         self, coord: NoaaHrrrSourceFileCoord, source: DownloadSource
     ) -> Path:
@@ -164,14 +156,10 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
 
     def download_file(self, coord: NoaaHrrrSourceFileCoord) -> Path:
         """Download a subset of variables from a HRRR file and return the local path."""
-        source = self._get_download_source(coord.init_time)
-        if source == "nomads":
-            return retry(
-                lambda: self._download_from_source(coord, source="nomads"),
-                max_attempts=4,
-                retryable_exceptions=(httpx.HTTPError,),
-            )
-        return self._download_from_source(coord, source=source)
+        try:
+            return self._download_from_source(coord, source="s3")
+        except FileNotFoundError:
+            return self._download_from_source(coord, source="nomads")
 
     def read_data(
         self,
