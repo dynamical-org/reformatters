@@ -265,6 +265,7 @@ def test_cf_data_variables_have_standard_names_where_applicable(
         "categorical_rain_surface",
         "categorical_precipitation_type_surface",
         "composite_reflectivity",
+        "skin_temperature_surface",
         "soil_water_runoff",
         "qa",
     }

@@ -24,6 +24,7 @@ from reformatters.contrib.noaa.ndvi_cdr.analysis import (
 )
 from reformatters.contrib.uarizona.swann.analysis import UarizonaSwannAnalysisDataset
 from reformatters.dwd.icon_eu.forecast import DwdIconEuForecastDataset
+from reformatters.ecmwf.aifs.forecast import EcmwfAifsForecastDataset
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast15Day025DegreeDataset,
 )
@@ -125,6 +126,9 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         replica_storage_configs=[NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig()],
     ),
     # ECMWF
+    EcmwfAifsForecastDataset(
+        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
+    ),
     EcmwfIfsEnsForecast15Day025DegreeDataset(
         primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
         replica_storage_configs=[EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig()],
