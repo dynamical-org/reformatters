@@ -1,4 +1,3 @@
-import threading
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Literal, assert_never
@@ -41,9 +40,6 @@ from reformatters.noaa.noaa_utils import has_hour_0_values
 log = get_logger(__name__)
 
 type DownloadSource = Literal["s3", "nomads"]
-
-# Limit concurrent NOMADS requests to avoid overloading their servers
-_nomads_semaphore = threading.Semaphore(1)
 
 
 class NoaaHrrrSourceFileCoord(SourceFileCoord):
@@ -159,13 +155,10 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
         """Download a subset of variables from a HRRR file and return the local path."""
         source = self._get_download_source(coord.init_time)
         if source == "nomads":
-
-            def attempt() -> Path:
-                with _nomads_semaphore:
-                    return self._download_from_source(coord, source="nomads")
-
             return retry(
-                attempt, max_attempts=4, retryable_exceptions=(httpx.HTTPError,)
+                lambda: self._download_from_source(coord, source="nomads"),
+                max_attempts=4,
+                retryable_exceptions=(httpx.HTTPError,),
             )
         return self._download_from_source(coord, source=source)
 

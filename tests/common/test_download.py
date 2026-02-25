@@ -231,19 +231,10 @@ def _make_httpx_response(
 
 def test_httpx_download_to_disk_no_byte_ranges(tmp_path: Path) -> None:
     file_content = b"full file content here"
-
-    mock_response = Mock()
-    mock_response.status_code = 200
-    mock_response.raise_for_status = Mock()
-    mock_response.iter_bytes = Mock(return_value=iter([file_content]))
-    mock_response.__enter__ = Mock(return_value=mock_response)
-    mock_response.__exit__ = Mock(return_value=False)
-
-    mock_client = Mock()
-    mock_client.stream = Mock(return_value=mock_response)
+    response = _make_httpx_response(status_code=200, content=file_content)
 
     with (
-        patch.object(download_module, "_httpx_client", return_value=mock_client),
+        patch.object(download_module, "_httpx_get_with_retry", return_value=response),
         patch.object(download_module, "DOWNLOAD_DIR", tmp_path),
     ):
         result = httpx_download_to_disk(
