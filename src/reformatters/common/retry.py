@@ -4,13 +4,17 @@ from collections.abc import Callable
 import numpy as np
 
 
-def retry[T](func: Callable[[], T], max_attempts: int = 6) -> T:
+def retry[T](
+    func: Callable[[], T],
+    max_attempts: int = 6,
+    retryable_exceptions: tuple[type[Exception], ...] = (Exception,),
+) -> T:
     """Simple retry utility that sleeps for a short time between attempts."""
     last_exception = None
     for attempt in range(max_attempts):
         try:
             return func()
-        except Exception as e:  # noqa: BLE001
+        except retryable_exceptions as e:
             last_exception = e
             if attempt < max_attempts - 1:  # sleep unless we're out of attempts
                 rng = np.random.default_rng()

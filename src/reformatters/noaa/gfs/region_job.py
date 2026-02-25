@@ -1,11 +1,14 @@
+import threading
 import warnings
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from typing import Literal, assert_never
 
 import numpy as np
 import pandas as pd
 import rasterio
 import xarray as xr
+from obstore.exceptions import GenericError
 from zarr.abc.store import Store
 
 from reformatters.common.binary_rounding import round_float32_inplace
@@ -20,6 +23,7 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
 )
+from reformatters.common.retry import retry
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     AppendDim,
@@ -35,6 +39,11 @@ from reformatters.noaa.noaa_utils import has_hour_0_values
 
 log = get_logger(__name__)
 
+type DownloadSource = Literal["s3", "nomads"]
+
+# Limit concurrent NOMADS requests to avoid overloading their servers
+_nomads_semaphore = threading.Semaphore(4)
+
 
 class NoaaGfsSourceFileCoord(SourceFileCoord):
     """Coordinates of a single source file to process."""
@@ -43,12 +52,23 @@ class NoaaGfsSourceFileCoord(SourceFileCoord):
     lead_time: Timedelta
     data_vars: Sequence[NoaaDataVar]
 
-    def get_url(self) -> str:
+    def get_url(self, source: DownloadSource = "s3") -> str:
         init_date_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")
         lead_hours = whole_hours(self.lead_time)
-        base_path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_hours:03d}"
-        return f"https://noaa-gfs-bdp-pds.s3.amazonaws.com/{base_path}"
+        path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_hours:03d}"
+        match source:
+            case "nomads":
+                base = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod"
+            case "s3":
+                base = "https://noaa-gfs-bdp-pds.s3.amazonaws.com"
+            case _ as unreachable:
+                assert_never(unreachable)
+
+        return f"{base}/{path}"
+
+    def get_idx_url(self, source: DownloadSource = "s3") -> str:
+        return f"{self.get_url(source=source)}.idx"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
         raise NotImplementedError("Subclasses must implement out_loc()")
@@ -65,23 +85,39 @@ class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
         """Return groups of variables that can be downloaded from the same source file."""
         return group_by(data_vars, has_hour_0_values)
 
-    def download_file(self, coord: NoaaGfsSourceFileCoord) -> Path:
-        """Download the file for the given coordinate and return the local path."""
-        # Download grib index file
-        idx_url = f"{coord.get_url()}.idx"
-        idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
+    def _get_download_source(self, init_time: pd.Timestamp) -> DownloadSource:
+        if init_time >= (pd.Timestamp.now() - pd.Timedelta(hours=18)):
+            return "nomads"
+        else:
+            return "s3"
 
-        # Download the grib messages for the data vars in the coord using byte ranges
+    def _download_from_source(
+        self, coord: NoaaGfsSourceFileCoord, source: DownloadSource
+    ) -> Path:
+        idx_local_path = http_download_to_disk(
+            coord.get_idx_url(source=source), self.dataset_id
+        )
         starts, ends = grib_message_byte_ranges_from_index(
             idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
         )
         vars_suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=True))
         return http_download_to_disk(
-            coord.get_url(),
+            coord.get_url(source=source),
             self.dataset_id,
             byte_ranges=(starts, ends),
             local_path_suffix=f"-{vars_suffix}",
         )
+
+    def download_file(self, coord: NoaaGfsSourceFileCoord) -> Path:
+        source = self._get_download_source(coord.init_time)
+        if source == "nomads":
+
+            def attempt() -> Path:
+                with _nomads_semaphore:
+                    return self._download_from_source(coord, source="nomads")
+
+            return retry(attempt, max_attempts=4, retryable_exceptions=(GenericError,))
+        return self._download_from_source(coord, source=source)
 
     def read_data(
         self,

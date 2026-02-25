@@ -65,6 +65,7 @@ def http_store(base_url: str) -> obstore.store.HTTPStore:
     return obstore.store.HTTPStore.from_url(
         base_url,
         client_options={
+            "user_agent": "dynamical.org reformatters",
             "connect_timeout": "4 seconds",
             "timeout": "120 seconds",
         },
