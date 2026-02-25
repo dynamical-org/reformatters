@@ -44,7 +44,7 @@ class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
         """Dataset metadata attributes."""
         return DatasetAttributes(
             dataset_id="noaa-gefs-forecast-35-day",
-            dataset_version="0.2.0",
+            dataset_version="dev-quick",
             name="NOAA GEFS forecast, 35 day",
             description="Weather forecasts from the Global Ensemble Forecast System (GEFS) operated by NOAA NWS NCEP.",
             attribution="NOAA NWS NCEP GEFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
