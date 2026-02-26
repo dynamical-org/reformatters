@@ -142,7 +142,12 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
         )
         idx_local_path = download(coord.get_idx_url(source=source), self.dataset_id)
         byte_range_starts, byte_range_ends = grib_message_byte_ranges_from_index(
-            idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
+            idx_local_path,
+            coord.data_vars,
+            coord.init_time,
+            coord.lead_time,
+            # Pre-v3 HRRR (2014-2016) has duplicate APCP entries in the GRIB index
+            allowed_duplicate_elements=frozenset({"APCP"}),
         )
         vars_suffix = digest(
             f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)

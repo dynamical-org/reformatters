@@ -1,4 +1,3 @@
-import logging
 import re
 from collections.abc import Sequence
 from os import PathLike
@@ -9,12 +8,29 @@ from reformatters.common.config_models import DataVar
 from reformatters.common.time_utils import whole_hours
 from reformatters.noaa.models import NoaaInternalAttrs
 
-log = logging.getLogger(__name__)
 
-# GRIB elements where duplicate index entries are known to contain identical data.
-# Verified: pre-v3 HRRR (2014-2016) has duplicate APCP entries that differ by at most
-# 13 cells out of 1.9M with max diff of 0.001 kg/m² (GRIB compression noise).
-_DUPLICATE_MATCH_ALLOWED_ELEMENTS: frozenset[str] = frozenset({"APCP"})
+def _lead_time_str(var: DataVar[NoaaInternalAttrs], lead_hours: int) -> str:
+    if (reset_freq := var.internal_attrs.window_reset_frequency) is not None:
+        reset_hours = whole_hours(reset_freq)
+        diff = lead_hours % reset_hours
+        reset_hour = lead_hours - diff if diff != 0 else lead_hours - reset_hours
+
+        if var.internal_attrs.deaccumulate_to_rate:
+            step_type = "acc"
+        elif var.attrs.step_type == "avg":
+            step_type = "ave"  # yep
+        else:
+            step_type = var.attrs.step_type
+
+        if lead_hours == 0:
+            return f"0-0 day {step_type} fcst"
+        return f"{reset_hour}-{lead_hours} hour {step_type} fcst"
+
+    if lead_hours == 0:
+        return "anl"
+    if var.attrs.step_type == "instant":
+        return f"{lead_hours} hour fcst"
+    raise ValueError(f"Unhandled grib lead/accumulation hours: {var.name}")
 
 
 def grib_message_byte_ranges_from_index(
@@ -22,6 +38,7 @@ def grib_message_byte_ranges_from_index(
     data_vars: Sequence[DataVar[NoaaInternalAttrs]],
     init_time: pd.Timestamp,
     lead_time: pd.Timedelta,
+    allowed_duplicate_elements: frozenset[str] = frozenset(),
 ) -> tuple[list[int], list[int]]:
     """
     Parse byte ranges from GRIB index file for the given data variables.
@@ -37,30 +54,7 @@ def grib_message_byte_ranges_from_index(
     init_time_str = init_time.strftime("d=%Y%m%d%H")
 
     for var in data_vars:
-        # Handle how the lead time or accumulation time is included in the element name in the grib index file
-        if (reset_freq := var.internal_attrs.window_reset_frequency) is not None:
-            reset_hours = whole_hours(reset_freq)
-            diff = lead_hours % reset_hours
-            reset_hour = lead_hours - diff if diff != 0 else lead_hours - reset_hours
-
-            if var.internal_attrs.deaccumulate_to_rate:
-                step_type = "acc"
-            elif var.attrs.step_type == "avg":
-                step_type = "ave"  # yep
-            else:
-                step_type = var.attrs.step_type
-
-            if lead_hours == 0:
-                lead_time_str = f"0-0 day {step_type} fcst"
-            else:
-                lead_time_str = f"{reset_hour}-{lead_hours} hour {step_type} fcst"
-
-        elif lead_hours == 0:
-            lead_time_str = "anl"
-        elif var.attrs.step_type == "instant":
-            lead_time_str = f"{lead_hours} hour fcst"
-        else:
-            raise ValueError(f"Unhandled grib lead/accumulation hours: {var.name}")
+        lead_time_str = _lead_time_str(var, lead_hours)
 
         grib_elements = (
             var.internal_attrs.grib_element,
@@ -83,10 +77,12 @@ def grib_message_byte_ranges_from_index(
             rf"(?:.*\n\d+:(\d+))?",  # end of line and wrap to capture next line's byte offset to get end byte (optional capture to handle last line of index)
             index_contents,
         )
-        if len(matches) != 1 and not _handle_non_unique_match(
-            var.name, matches, grib_elements
-        ):
+        if len(matches) == 0:
             continue
+        if len(matches) > 1:
+            assert set(grib_elements) & allowed_duplicate_elements, (
+                f"Expected 1 match in GRIB index for {var.name}, found {len(matches)}: {matches}"
+            )
 
         start_match, end_match = matches[0]
         start = int(start_match)
@@ -97,27 +93,9 @@ def grib_message_byte_ranges_from_index(
         starts.append(start)
         ends.append(end)
 
-    return starts, ends
-
-
-def _handle_non_unique_match(
-    var_name: str,
-    matches: list[tuple[str, str]],
-    grib_elements: tuple[str, ...],
-) -> bool:
-    """Handle non-unique GRIB index match. Returns True to use first match, False to skip."""
-    if len(matches) > 1 and set(grib_elements) & _DUPLICATE_MATCH_ALLOWED_ELEMENTS:
-        log.warning(
-            "Multiple matches in GRIB index for %s, using first of %s",
-            var_name,
-            matches,
+    if not starts:
+        raise ValueError(
+            f"No GRIB index matches found for any of {[v.name for v in data_vars]}"
         )
-        return True
 
-    log.exception(
-        "Expected 1 match in GRIB index for %s, found %d: %s. Skipping.",
-        var_name,
-        len(matches),
-        matches,
-    )
-    return False
+    return starts, ends

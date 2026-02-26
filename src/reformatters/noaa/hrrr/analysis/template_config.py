@@ -38,7 +38,7 @@ class NoaaHrrrAnalysisTemplateConfig(NoaaHrrrCommonTemplateConfig):
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
             dataset_id="noaa-hrrr-analysis",
-            dataset_version="0.1.0",
+            dataset_version="0.2.0",
             name="NOAA HRRR analysis",
             description="Analysis data from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
             attribution="NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
