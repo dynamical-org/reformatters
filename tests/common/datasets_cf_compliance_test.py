@@ -265,7 +265,6 @@ def test_cf_data_variables_have_standard_names_where_applicable(
         "categorical_rain_surface",
         "categorical_precipitation_type_surface",
         "composite_reflectivity",
-        "skin_temperature_surface",
         "soil_water_runoff",
         "qa",
     }
@@ -419,6 +418,18 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     # while other datasets use CF-compliant meters.
     ("snow_depth", "units", "u-arizona-swann-analysis"),
     ("snow_water_equivalent", "units", "u-arizona-swann-analysis"),
+    # ECMWF AIFS uses ECMWF parameter names per CLAUDE.md conventions,
+    # while NOAA datasets use NOAA parameter names.
+    (
+        "precipitable_water_atmosphere",
+        "short_name",
+        "ecmwf-aifs-deterministic-forecast-15-day-0-25-degree",
+    ),
+    (
+        "precipitable_water_atmosphere",
+        "long_name",
+        "ecmwf-aifs-deterministic-forecast-15-day-0-25-degree",
+    ),
 }
 
 

@@ -17,31 +17,28 @@ class EcmwfAifsForecastDataset(
     region_job_class: type[EcmwfAifsForecastRegionJob] = EcmwfAifsForecastRegionJob
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        # AIFS publishes all lead times ~40-50 min before the nominal init time.
-        # The 18z forecast (last of the day) is available by ~17:15 UTC.
-        # Schedule update at 18:00 UTC to process all 4 daily inits.
         suspend = True
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="0 18 * * *",
+            schedule="25 /6 * * *",
             suspend=suspend,
-            pod_active_deadline=timedelta(hours=2),
+            pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
-            cpu="3",
-            memory="14G",
-            shared_memory="6G",
-            ephemeral_storage="30G",
+            cpu="3.5",
+            memory="7G",
+            shared_memory="1.5G",
+            ephemeral_storage="20G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="0 20 * * *",
+            schedule="55 /6 * * *",
             suspend=suspend,
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
-            cpu="0.5",
+            cpu="1.3",
             memory="7G",
             secret_names=self.store_factory.k8s_secret_names(),
         )

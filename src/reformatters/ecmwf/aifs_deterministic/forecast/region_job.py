@@ -1,7 +1,5 @@
 import itertools
-from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
-from os import PathLike
 from pathlib import Path
 from typing import ClassVar
 
@@ -12,7 +10,7 @@ import xarray as xr
 from zarr.abc.store import Store
 
 from reformatters.common.download import http_download_to_disk
-from reformatters.common.iterating import digest
+from reformatters.common.iterating import digest, group_by
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
@@ -29,6 +27,7 @@ from reformatters.common.types import (
     Timestamp,
 )
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
+from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
 from reformatters.ecmwf.ecmwf_utils import all_variables_available
 
 log = get_logger(__name__)
@@ -52,54 +51,15 @@ _PRECIP_ALT_GRIB_METADATA: dict[str, tuple[str, str]] = {
 }
 
 
-def _get_deterministic_byte_ranges(
-    index_local_path: PathLike[str],
-    data_vars: Sequence[EcmwfDataVar],
-) -> tuple[list[int], list[int]]:
-    """Get byte ranges for deterministic (non-ensemble) AIFS data from a GRIB index file."""
-    df = pd.read_json(index_local_path, lines=True)
-    df = df.set_index(["param", "levtype", "levelist"]).sort_index()
-
-    byte_range_starts: list[int] = []
-    byte_range_ends: list[int] = []
-    for data_var in data_vars:
-        level_selector = (
-            slice(None)
-            if np.isnan(level_value := data_var.internal_attrs.grib_index_level_value)
-            else level_value
-        )
-        row: pd.Series | pd.DataFrame = df.loc[
-            (
-                data_var.internal_attrs.grib_index_param,
-                data_var.internal_attrs.grib_index_level_type,
-                level_selector,
-            ),
-            ["_offset", "_length"],
-        ]
-        if isinstance(row, pd.DataFrame):
-            if len(row) == 1:
-                row = row.iloc[0]
-            else:
-                raise AssertionError(f"Expected exactly one match, but found: {row}")
-        assert isinstance(row, pd.Series)
-        start, length = row.values
-        byte_range_starts.append(int(start))
-        byte_range_ends.append(int(start + length))
-    return byte_range_starts, byte_range_ends
-
-
 class EcmwfAifsForecastSourceFileCoord(SourceFileCoord):
     init_time: Timestamp
     lead_time: Timedelta
-
-    # Should contain one element (see max_vars_per_download_group below)
     data_var_group: Sequence[EcmwfDataVar]
 
     s3_bucket_url: ClassVar[str] = "ecmwf-forecasts"
-    s3_region: ClassVar[str] = "eu-central-1"
 
     def _get_base_url(self) -> str:
-        base_url = f"https://{self.s3_bucket_url}.s3.{self.s3_region}.amazonaws.com"
+        base_url = f"https://{self.s3_bucket_url}.s3.eu-central-1.amazonaws.com"
 
         init_time_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")
@@ -130,23 +90,14 @@ class EcmwfAifsForecastSourceFileCoord(SourceFileCoord):
 class EcmwfAifsForecastRegionJob(
     RegionJob[EcmwfDataVar, EcmwfAifsForecastSourceFileCoord]
 ):
-    # Download one variable at a time for parallelism via byte-range requests
-    max_vars_per_download_group: ClassVar[int] = 1
+    max_vars_per_download_group: ClassVar[int] = 10
 
     @classmethod
     def source_groups(
         cls,
         data_vars: Sequence[EcmwfDataVar],
     ) -> Sequence[Sequence[EcmwfDataVar]]:
-        """Group variables by date_available so variables added on the same date are processed together."""
-        vars_by_date_available: dict[Timestamp | None, list[EcmwfDataVar]] = (
-            defaultdict(list)
-        )
-        for data_var in data_vars:
-            vars_by_date_available[data_var.internal_attrs.date_available].append(
-                data_var
-            )
-        return list(vars_by_date_available.values())
+        return group_by(data_vars, lambda v: v.internal_attrs.date_available)
 
     def generate_source_file_coords(
         self,
@@ -171,12 +122,10 @@ class EcmwfAifsForecastRegionJob(
         return coords
 
     def download_file(self, coord: EcmwfAifsForecastSourceFileCoord) -> Path:
-        # Download the GRIB index file
         idx_url = coord.get_index_url()
         idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
 
-        # Use the index to get byte ranges for the requested variables
-        byte_range_starts, byte_range_ends = _get_deterministic_byte_ranges(
+        byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(
             idx_local_path,
             coord.data_var_group,
         )
@@ -195,42 +144,31 @@ class EcmwfAifsForecastRegionJob(
         coord: EcmwfAifsForecastSourceFileCoord,
         data_var: EcmwfDataVar,
     ) -> ArrayFloat32:
+        expected_comment = data_var.internal_attrs.grib_comment
+        expected_description = data_var.internal_attrs.grib_description
+
+        alt = _PRECIP_ALT_GRIB_METADATA.get(data_var.internal_attrs.grib_index_param)
+        allowed_comments = {expected_comment}
+        allowed_descriptions = {expected_description}
+        if alt is not None:
+            allowed_comments.add(alt[0])
+            allowed_descriptions.add(alt[1])
+
         with rasterio.open(coord.downloaded_path) as reader:
-            assert reader.count == 1, f"Expected 1 band, found {reader.count}"
-            rasterio_band_index = 1
+            matching_bands: list[int] = []
+            for band_i in range(reader.count):
+                rasterio_band_i = band_i + 1
+                if (
+                    reader.tags(rasterio_band_i)["GRIB_COMMENT"] in allowed_comments
+                    and reader.descriptions[band_i] in allowed_descriptions
+                ):
+                    matching_bands.append(rasterio_band_i)
 
-            grib_comment = reader.tags(rasterio_band_index)["GRIB_COMMENT"]
-            grib_description = reader.descriptions[rasterio_band_index - 1]
-
-            expected_comment = data_var.internal_attrs.grib_comment
-            expected_description = data_var.internal_attrs.grib_description
-
-            alt = _PRECIP_ALT_GRIB_METADATA.get(
-                data_var.internal_attrs.grib_index_param
+            assert len(matching_bands) == 1, (
+                f"Expected exactly 1 matching band, found {len(matching_bands)}. "
+                f"{expected_comment=}, {expected_description=}, {coord.downloaded_path=}"
             )
-            if alt is not None:
-                alt_comment, alt_description = alt
-                assert grib_comment in (expected_comment, alt_comment), (
-                    f"{grib_comment=} not in ({expected_comment!r}, {alt_comment!r})"
-                )
-                assert grib_description in (expected_description, alt_description), (
-                    f"{grib_description=} not in ({expected_description!r}, {alt_description!r})"
-                )
-            else:
-                assert grib_comment == expected_comment, (
-                    f"{grib_comment=} != {expected_comment=}"
-                )
-                assert grib_description == expected_description, (
-                    f"{grib_description=} != {expected_description=}"
-                )
-
-            result: ArrayFloat32 = reader.read(
-                rasterio_band_index, out_dtype=np.float32
-            )
-            expected_shape = (721, 1440)
-            assert result.shape == expected_shape, (
-                f"Expected {expected_shape} shape, found {result.shape}"
-            )
+            result: ArrayFloat32 = reader.read(matching_bands[0], out_dtype=np.float32)
             return result
 
     @classmethod

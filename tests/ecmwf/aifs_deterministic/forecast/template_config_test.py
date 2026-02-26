@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 
-from reformatters.ecmwf.aifs.forecast.template_config import (
+from reformatters.common.iterating import item
+from reformatters.ecmwf.aifs_deterministic.forecast.template_config import (
     EcmwfAifsForecastTemplateConfig,
 )
 
@@ -27,6 +28,8 @@ def test_dimension_coordinates() -> None:
     assert len(lon) == 1440
     assert float(lon.min()) == -180.0
     assert float(lon.max()) == 179.75
+    assert float(item(np.unique(np.diff(lon)))) == 0.25
+    assert float(item(np.unique(np.diff(lat)))) == -0.25
 
 
 def test_data_vars_date_available() -> None:

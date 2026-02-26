@@ -30,7 +30,7 @@ class EcmwfAifsForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
     dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
     append_dim: AppendDim = "init_time"
     # Start from 2024-04-01 when PL u/v are available and the grid is regular 0.25 degree.
-    # Earlier data (2024-02-29 to 2024-03-13) uses a reduced Gaussian grid incompatible with rasterio.
+    # Earlier data (2024-02-29 to 2024-03-13) uses a reduced Gaussian grid.
     append_dim_start: Timestamp = pd.Timestamp("2024-04-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
 
@@ -38,11 +38,11 @@ class EcmwfAifsForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
     @property
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
-            dataset_id="ecmwf-aifs-forecast-15-day-0-25-degree",
+            dataset_id="ecmwf-aifs-deterministic-forecast-15-day-0-25-degree",
             dataset_version="0.1.0",
-            name="ECMWF AIFS Forecast, 15 day, 0.25 degree",
-            description="Weather forecasts from the ECMWF Artificial Intelligence Forecasting System (AIFS).",
-            attribution="ECMWF AIFS Forecast data processed by dynamical.org from ECMWF Open Data.",
+            name="ECMWF AIFS Deterministic Forecast, 15 day, 0.25 degree",
+            description="Weather forecasts from the ECMWF Artificial Intelligence Forecasting System (AIFS) deterministic model.",
+            attribution="ECMWF AIFS Deterministic Forecast data processed by dynamical.org from ECMWF Open Data.",
             spatial_domain="Global",
             spatial_resolution="0.25 degrees (~25km)",
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
@@ -539,24 +539,7 @@ class EcmwfAifsForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
                 ),
             ),
             EcmwfDataVar(
-                name="skin_temperature_surface",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="skt",
-                    long_name="Skin temperature",
-                    units="degree_Celsius",
-                    step_type="instant",
-                ),
-                internal_attrs=EcmwfInternalAttrs(
-                    grib_comment="Skin temperature [C]",
-                    grib_description='0[-] SFC="Ground or water surface"',
-                    grib_element="SKINT",
-                    grib_index_param="skt",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                ),
-            ),
-            EcmwfDataVar(
-                name="total_column_water_vapour_atmosphere",
+                name="precipitable_water_atmosphere",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="tcw",

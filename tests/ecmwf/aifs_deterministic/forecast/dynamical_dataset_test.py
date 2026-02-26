@@ -6,7 +6,9 @@ import pytest
 import xarray as xr
 
 from reformatters.common import validation
-from reformatters.ecmwf.aifs.forecast.dynamical_dataset import EcmwfAifsForecastDataset
+from reformatters.ecmwf.aifs_deterministic.forecast.dynamical_dataset import (
+    EcmwfAifsForecastDataset,
+)
 from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 
 
@@ -47,18 +49,18 @@ def test_backfill_local_and_operational_update(
         ds.init_time.values, [np.datetime64("2024-04-01T00:00:00")]
     )
 
-    t2m_actual = ds.sel(
-        init_time="2024-04-01T00:00:00", latitude=0, longitude=0
-    ).temperature_2m
-    # lead_time 0h and 6h should have data
-    assert t2m_actual.shape == (2,)
-    assert not np.all(np.isnan(t2m_actual.values))
+    point_ds = ds.sel(init_time="2024-04-01T00:00:00", latitude=0, longitude=0)
+    assert point_ds["temperature_2m"].shape == (2,)
+    assert not np.all(np.isnan(point_ds["temperature_2m"].values))
 
-    # precip at lead_time 0h should be NaN (zero placeholder), 6h should have data
-    precip_actual = ds.sel(
-        init_time="2024-04-01T00:00:00", latitude=0, longitude=0
-    ).precipitation_rate_surface
-    assert precip_actual.shape == (2,)
+    # Snapshot values at (init_time=0h, lead_time=6h, lat=0, lon=0) from 2024-04-01
+    point_6h = ds.sel(
+        init_time="2024-04-01T00:00:00", latitude=0, longitude=0, lead_time="6h"
+    )
+    assert float(point_6h["temperature_2m"]) == 28.75
+    assert float(point_6h["precipitation_rate_surface"]) == pytest.approx(
+        0.00164794921875
+    )
 
     # Operational update
     monkeypatch.setattr(

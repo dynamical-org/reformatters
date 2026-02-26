@@ -13,10 +13,10 @@ from reformatters.ecmwf.ecmwf_config_models import (
 def get_message_byte_ranges_from_index(
     index_local_path: PathLike[str],
     data_vars: Sequence[DataVar[EcmwfInternalAttrs]],
-    ensemble_member: int,
+    ensemble_member: int | None = None,
 ) -> tuple[list[int], list[int]]:
     """
-    Given an ECMWF grib index file, returns the byte ranges the given data var(s) & ensemble member can be found within.
+    Given an ECMWF grib index file, returns the byte ranges the given data var(s) can be found within.
 
     Returns
     -------
@@ -25,20 +25,30 @@ def get_message_byte_ranges_from_index(
     """
     byte_range_starts: list[int] = []
     byte_range_ends: list[int] = []
-    index_file_df = _parse_index_file(index_local_path)
+    index_file_df = _parse_index_file(
+        index_local_path, ensemble=ensemble_member is not None
+    )
     for data_var in data_vars:
         level_selector = (
             slice(None)
             if np.isnan(level_value := data_var.internal_attrs.grib_index_level_value)
             else level_value
         )
-        row: pd.Series | pd.DataFrame = index_file_df.loc[
-            (
+        if ensemble_member is not None:
+            loc_key = (
                 ensemble_member,
                 data_var.internal_attrs.grib_index_param,
                 data_var.internal_attrs.grib_index_level_type,
                 level_selector,
-            ),
+            )
+        else:
+            loc_key = (
+                data_var.internal_attrs.grib_index_param,
+                data_var.internal_attrs.grib_index_level_type,
+                level_selector,
+            )
+        row: pd.Series | pd.DataFrame = index_file_df.loc[
+            loc_key,
             ["_offset", "_length"],
         ]
         if isinstance(row, pd.DataFrame):
@@ -53,7 +63,9 @@ def get_message_byte_ranges_from_index(
     return byte_range_starts, byte_range_ends
 
 
-def _parse_index_file(index_local_path: PathLike[str]) -> pd.DataFrame:
+def _parse_index_file(
+    index_local_path: PathLike[str], *, ensemble: bool
+) -> pd.DataFrame:
     """
     Parses an ECMWF index file into a pandas dataframe containing that information.
 
@@ -64,16 +76,21 @@ def _parse_index_file(index_local_path: PathLike[str]) -> pd.DataFrame:
     -------
     pd.DataFrame
         DataFrame representing the index file.
-        Has a MultiIndex of (number, param) representing ensemble member & data variable short name.
-        Useful columns include: type (control/perturbed), _offset (start of byte window within grib file), _length (length of byte window)
-        Additional columns include: levtype (sfc/pl/sol/...), levelist, domain, date, time, step, expver, class, stream
+        Has a MultiIndex of (number, param, levtype, levelist) for ensemble data or
+        (param, levtype, levelist) for deterministic data.
     """
     df = pd.read_json(index_local_path, lines=True)
 
-    # Control members by default don't have "number" field. We fill with 0
-    df["number"] = df["number"].fillna(0).astype(int)
-    # Ensure that every row we filled with number=0 was indeed type "cf" (control forecast)
-    assert (df[df["number"] == 0]["type"] == "cf").all(), (
-        "Parsed row as control member that didn't have type='cf'"
-    )
-    return df.set_index(["number", "param", "levtype", "levelist"]).sort_index()
+    if "levelist" not in df.columns:
+        df["levelist"] = np.nan
+
+    if ensemble:
+        # Control members by default don't have "number" field. We fill with 0
+        df["number"] = df["number"].fillna(0).astype(int)
+        # Ensure that every row we filled with number=0 was indeed type "cf" (control forecast)
+        assert (df[df["number"] == 0]["type"] == "cf").all(), (
+            "Parsed row as control member that didn't have type='cf'"
+        )
+        return df.set_index(["number", "param", "levtype", "levelist"]).sort_index()
+
+    return df.set_index(["param", "levtype", "levelist"]).sort_index()
