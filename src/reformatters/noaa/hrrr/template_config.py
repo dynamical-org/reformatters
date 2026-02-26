@@ -360,6 +360,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     index_position=82,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     hrrr_file_type="sfc",
+                    hour_0_values_override=False,
                 ),
             ),
             NoaaHrrrDataVar(
@@ -398,6 +399,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     index_position=91,
                     keep_mantissa_bits="no-rounding",
                     hrrr_file_type="sfc",
+                    hour_0_values_override=False,
                 ),
             ),
             NoaaHrrrDataVar(
@@ -417,6 +419,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     index_position=90,
                     keep_mantissa_bits="no-rounding",
                     hrrr_file_type="sfc",
+                    hour_0_values_override=False,
                 ),
             ),
             NoaaHrrrDataVar(
@@ -436,6 +439,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     index_position=92,
                     keep_mantissa_bits="no-rounding",
                     hrrr_file_type="sfc",
+                    hour_0_values_override=False,
                 ),
             ),
             NoaaHrrrDataVar(
@@ -455,6 +459,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     index_position=93,
                     keep_mantissa_bits="no-rounding",
                     hrrr_file_type="sfc",
+                    hour_0_values_override=False,
                 ),
             ),
             NoaaHrrrDataVar(
