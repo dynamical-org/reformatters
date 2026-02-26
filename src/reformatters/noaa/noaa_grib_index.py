@@ -9,11 +9,36 @@ from reformatters.common.time_utils import whole_hours
 from reformatters.noaa.models import NoaaInternalAttrs
 
 
+def _lead_time_str(var: DataVar[NoaaInternalAttrs], lead_hours: int) -> str:
+    if (reset_freq := var.internal_attrs.window_reset_frequency) is not None:
+        reset_hours = whole_hours(reset_freq)
+        diff = lead_hours % reset_hours
+        reset_hour = lead_hours - diff if diff != 0 else lead_hours - reset_hours
+
+        if var.internal_attrs.deaccumulate_to_rate:
+            step_type = "acc"
+        elif var.attrs.step_type == "avg":
+            step_type = "ave"  # yep
+        else:
+            step_type = var.attrs.step_type
+
+        if lead_hours == 0:
+            return f"0-0 day {step_type} fcst"
+        return f"{reset_hour}-{lead_hours} hour {step_type} fcst"
+
+    if lead_hours == 0:
+        return "anl"
+    if var.attrs.step_type == "instant":
+        return f"{lead_hours} hour fcst"
+    raise ValueError(f"Unhandled grib lead/accumulation hours: {var.name}")
+
+
 def grib_message_byte_ranges_from_index(
     index_path: PathLike[str],
     data_vars: Sequence[DataVar[NoaaInternalAttrs]],
     init_time: pd.Timestamp,
     lead_time: pd.Timedelta,
+    allowed_duplicate_elements: frozenset[str] = frozenset(),
 ) -> tuple[list[int], list[int]]:
     """
     Parse byte ranges from GRIB index file for the given data variables.
@@ -29,33 +54,17 @@ def grib_message_byte_ranges_from_index(
     init_time_str = init_time.strftime("d=%Y%m%d%H")
 
     for var in data_vars:
-        # Handle how the lead time or accumulation time is included in the element name in the grib index file
-        if (reset_freq := var.internal_attrs.window_reset_frequency) is not None:
-            reset_hours = whole_hours(reset_freq)
-            diff = lead_hours % reset_hours
-            reset_hour = lead_hours - diff if diff != 0 else lead_hours - reset_hours
+        lead_time_str = _lead_time_str(var, lead_hours)
 
-            if var.internal_attrs.deaccumulate_to_rate:
-                step_type = "acc"
-            elif var.attrs.step_type == "avg":
-                step_type = "ave"  # yep
-            else:
-                step_type = var.attrs.step_type
-
-            if lead_hours == 0:
-                lead_time_str = f"0-0 day {step_type} fcst"
-            else:
-                lead_time_str = f"{reset_hour}-{lead_hours} hour {step_type} fcst"
-
-        elif lead_hours == 0:
-            lead_time_str = "anl"
-        elif var.attrs.step_type == "instant":
-            lead_time_str = f"{lead_hours} hour fcst"
-        else:
-            raise ValueError(f"Unhandled grib lead/accumulation hours: {var.name}")
-
-        var_match_str = re.escape(
-            f"{init_time_str}:{var.internal_attrs.grib_element}:{var.internal_attrs.grib_index_level}:{lead_time_str}"
+        grib_elements = (
+            var.internal_attrs.grib_element,
+            *var.internal_attrs.grib_element_alternatives,
+        )
+        element_pattern = "|".join(re.escape(e) for e in grib_elements)
+        var_match_str = (
+            re.escape(f"{init_time_str}:")
+            + f"(?:{element_pattern})"
+            + re.escape(f":{var.internal_attrs.grib_index_level}:{lead_time_str}")
         )
         # The format of a NOAA grib index line is
         # variable number:byte offset start:init timestamp:element:level:lead time and accum:ensemble info
@@ -68,9 +77,12 @@ def grib_message_byte_ranges_from_index(
             rf"(?:.*\n\d+:(\d+))?",  # end of line and wrap to capture next line's byte offset to get end byte (optional capture to handle last line of index)
             index_contents,
         )
-        assert len(matches) == 1, (
-            f"Expected exactly one match for {var.name}, found {matches}"
-        )
+        if len(matches) == 0:
+            continue
+        if len(matches) > 1:
+            assert set(grib_elements) & allowed_duplicate_elements, (
+                f"Expected 1 match in GRIB index for {var.name}, found {len(matches)}: {matches}"
+            )
 
         start_match, end_match = matches[0]
         start = int(start_match)
@@ -80,5 +92,10 @@ def grib_message_byte_ranges_from_index(
         end = int(end_match) if end_match else start + 10 * (2**30)
         starts.append(start)
         ends.append(end)
+
+    if not starts:
+        raise ValueError(
+            f"No GRIB index matches found for any of {[v.name for v in data_vars]}"
+        )
 
     return starts, ends

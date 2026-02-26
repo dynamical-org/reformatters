@@ -4,6 +4,8 @@ from reformatters.common.types import Timedelta
 
 class NoaaInternalAttrs(BaseInternalAttrs):
     grib_element: str
+    # Alternative GRIB element names that identify the same variable (e.g. PRMSL vs MSLMA)
+    grib_element_alternatives: tuple[str, ...] = ()
     grib_description: str
     grib_index_level: str
     index_position: int

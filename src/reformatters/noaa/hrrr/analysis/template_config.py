@@ -29,8 +29,8 @@ from reformatters.noaa.hrrr.template_config import NoaaHrrrCommonTemplateConfig
 class NoaaHrrrAnalysisTemplateConfig(NoaaHrrrCommonTemplateConfig):
     dims: tuple[Dim, ...] = ("time", "y", "x")
     append_dim: AppendDim = "time"
-    # Could go as early as 2018-07-13T12:00, but we start at 2018-09-16T00:00 to avoid a high rate of missing data in the first 2 months.
-    append_dim_start: Timestamp = pd.Timestamp("2018-09-16T00:00")
+    # HRRR operational start is 2014-09-30. We start at 2014-10-01 to skip the incomplete first day.
+    append_dim_start: Timestamp = pd.Timestamp("2014-10-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("1h")
 
     @computed_field
@@ -38,7 +38,7 @@ class NoaaHrrrAnalysisTemplateConfig(NoaaHrrrCommonTemplateConfig):
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
             dataset_id="noaa-hrrr-analysis",
-            dataset_version="0.1.0",
+            dataset_version="0.2.0",
             name="NOAA HRRR analysis",
             description="Analysis data from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
             attribution="NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
