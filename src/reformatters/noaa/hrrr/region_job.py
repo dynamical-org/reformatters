@@ -159,7 +159,9 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
         try:
             return self._download_from_source(coord, source="s3")
         except FileNotFoundError:
-            return self._download_from_source(coord, source="nomads")
+            if coord.init_time > (pd.Timestamp.now() - pd.Timedelta(hours=12)):
+                return self._download_from_source(coord, source="nomads")
+            raise
 
     def read_data(
         self,
