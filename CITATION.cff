@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use dynamical.org data, please cite as below."
+title: "dynamical.org reformatters"
+type: software
+doi: 10.5281/zenodo.18777399
+url: "https://dynamical.org"
+repository-code: "https://github.com/dynamical-org/reformatters"
+license: BSD-3-Clause
+authors:
+  - family-names: Keefe Sampson
+    given-names: Alden
+  - family-names: Moutenot
+    given-names: Marshall
+  - name: "dynamical.org contributors"
