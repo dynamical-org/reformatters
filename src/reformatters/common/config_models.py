@@ -159,6 +159,9 @@ class Coordinate(FrozenBaseModel):
 class BaseInternalAttrs(FrozenBaseModel):
     keep_mantissa_bits: int | Literal["no-rounding"]
     deaccumulate_to_rate: bool = False
+    # If None, defers to attrs.step_type. Useful when an instantaneous variable does not have hour 0 values.
+    # Access via has_hour_0_values(data_var), not directly.
+    hour_0_values_override: bool | None = None
 
 
 INTERNAL_ATTRS_co = TypeVar(
