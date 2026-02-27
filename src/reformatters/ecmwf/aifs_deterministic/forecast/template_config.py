@@ -42,7 +42,7 @@ class EcmwfAifsForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
             dataset_version="0.1.0",
             name="ECMWF AIFS Deterministic Forecast, 15 day, 0.25 degree",
             description="Weather forecasts from the ECMWF Artificial Intelligence Forecasting System (AIFS) deterministic model.",
-            attribution="ECMWF AIFS Deterministic Forecast data processed by dynamical.org from ECMWF Open Data.",
+            attribution="ECMWF AIFS deterministic forecast data processed by dynamical.org from ECMWF Open Data.",
             spatial_domain="Global",
             spatial_resolution="0.25 degrees (~25km)",
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
