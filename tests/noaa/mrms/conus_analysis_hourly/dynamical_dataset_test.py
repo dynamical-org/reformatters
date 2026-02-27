@@ -2,15 +2,12 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-from numpy.testing import assert_array_equal
+from numpy.testing import assert_allclose, assert_array_equal
 
 from reformatters.common import validation
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.noaa.mrms.conus_analysis_hourly.dynamical_dataset import (
     NoaaMrmsConusAnalysisHourlyDataset,
-)
-from reformatters.noaa.mrms.conus_analysis_hourly.template_config import (
-    NoaaMrmsConusAnalysisHourlyTemplateConfig,
 )
 from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 from tests.xarray_testing import assert_no_nulls
@@ -58,7 +55,7 @@ def test_backfill_local_and_operational_update(
     ]
 
     dataset.backfill_local(
-        append_dim_end=pd.Timestamp("2024-01-15T03:00"),
+        append_dim_end=pd.Timestamp("2024-01-15T02:00"),
         filter_start=test_start,
         filter_variable_names=filter_variable_names,
     )
@@ -68,28 +65,32 @@ def test_backfill_local_and_operational_update(
     )
     assert_array_equal(
         backfill_ds["time"],
-        pd.date_range("2024-01-15T00:00", "2024-01-15T02:00", freq="1h"),
+        pd.date_range("2024-01-15T00:00", "2024-01-15T01:00", freq="1h"),
     )
 
     # categorical_precipitation_type_surface is instant, no deaccumulation NaN
     assert_no_nulls(backfill_ds["categorical_precipitation_type_surface"])
 
     # precipitation_surface first timestep is NaN from deaccumulation
-    point = backfill_ds.isel(latitude=1750, longitude=3500)
+    point = backfill_ds.isel(latitude=1804, longitude=4231)
     assert np.isnan(point["precipitation_surface"].values[0])
     assert np.all(np.isfinite(point["precipitation_surface"].values[1:]))
 
-    # Snapshot at a specific point
-    print("SNAPSHOT precipitation_surface:", repr(point["precipitation_surface"].values))
-    print(
-        "SNAPSHOT categorical_precipitation_type_surface:",
-        repr(point["categorical_precipitation_type_surface"].values),
+    # Snapshot: snow (cat=3) with non-zero precipitation at this point
+    assert_allclose(
+        point["precipitation_surface"].values,
+        np.array([np.nan, 0.00019455], dtype=np.float32),
+        rtol=1e-4,
+    )
+    assert_array_equal(
+        point["categorical_precipitation_type_surface"].values,
+        np.array([3.0, 3.0], dtype=np.float32),
     )
 
     # Operational update adds one more hour
     dataset = make_dataset()
     _trimmed_get_template(dataset)
-    update_end = pd.Timestamp("2024-01-15T04:00")
+    update_end = pd.Timestamp("2024-01-15T03:00")
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
@@ -112,20 +113,21 @@ def test_backfill_local_and_operational_update(
 
     assert_array_equal(
         updated_ds["time"],
-        pd.date_range("2024-01-15T00:00", "2024-01-15T03:00", freq="1h"),
+        pd.date_range("2024-01-15T00:00", "2024-01-15T02:00", freq="1h"),
     )
 
-    updated_point = updated_ds.isel(latitude=1750, longitude=3500)
+    updated_point = updated_ds.isel(latitude=1804, longitude=4231)
     assert np.all(np.isfinite(updated_point["precipitation_surface"].values[1:]))
     assert_no_nulls(updated_point["categorical_precipitation_type_surface"])
 
-    print(
-        "SNAPSHOT updated precipitation_surface:",
-        repr(updated_point["precipitation_surface"].values),
+    assert_allclose(
+        updated_point["precipitation_surface"].values,
+        np.array([np.nan, 0.00019455, 0.00013924], dtype=np.float32),
+        rtol=1e-4,
     )
-    print(
-        "SNAPSHOT updated categorical_precipitation_type_surface:",
-        repr(updated_point["categorical_precipitation_type_surface"].values),
+    assert_array_equal(
+        updated_point["categorical_precipitation_type_surface"].values,
+        np.array([3.0, 3.0, 3.0], dtype=np.float32),
     )
 
 
