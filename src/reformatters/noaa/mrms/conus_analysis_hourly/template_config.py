@@ -56,7 +56,7 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
             dataset_id="noaa-mrms-conus-analysis-hourly",
-            dataset_version="0.1.0",
+            dataset_version="0.2.0",
             name="NOAA MRMS CONUS analysis, hourly",
             description="Hourly precipitation analysis from the Multi-Radar Multi-Sensor (MRMS) system operated by NOAA NWS NCEP.",
             attribution="NOAA NWS NCEP MRMS data processed by dynamical.org from NOAA NCEP, NOAA Open Data Dissemination and Iowa Mesonet archives.",
