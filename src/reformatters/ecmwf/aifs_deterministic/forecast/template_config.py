@@ -38,7 +38,7 @@ class EcmwfAifsForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
     @property
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
-            dataset_id="ecmwf-aifs-deterministic-forecast-15-day-0-25-degree",
+            dataset_id="ecmwf-aifs-deterministic-forecast",
             dataset_version="0.1.0",
             name="ECMWF AIFS Deterministic Forecast, 15 day, 0.25 degree",
             description="Weather forecasts from the ECMWF Artificial Intelligence Forecasting System (AIFS) deterministic model.",
