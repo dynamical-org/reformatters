@@ -149,7 +149,7 @@ Register your dataset in `__main__.py` with both a primary storage config and a 
 
 #### Integration test with snapshot values
 
-In `dynamical_dataset_test.py` create a test that runs `backfill_local` followed by `update` for a couple data variables. Include snapshot value assertions — check specific known values at specific coordinates (e.g. `assert float(point["temperature_2m"]) == 28.75`). Snapshot values catch silent regressions in data reading, unit conversion, or coordinate alignment that other tests miss.
+In `dynamical_dataset_test.py` create a test that runs `backfill_local` followed by `update` for a couple data variables and a minimal number of time steps, lead times and ensemble members. Include snapshot value assertions for every data variable that the test processes — check specific known values at specific coordinates (e.g. `assert_allclose(point["temperature_2m"].values, [28.75, 29.23])`). Snapshot values catch silent regressions in data reading, unit conversion, or coordinate alignment that other tests miss.
 
 ```bash
 uv run pytest tests/$DATASET_PATH/dynamical_dataset_test.py
