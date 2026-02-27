@@ -27,6 +27,8 @@ name: 'Manual: Create Job from CronJob'
         - noaa-hrrr-analysis-validate
         - noaa-hrrr-forecast-48-hour-update
         - noaa-hrrr-forecast-48-hour-validate
+        - noaa-mrms-conus-analysis-hourly-update
+        - noaa-mrms-conus-analysis-hourly-validate
         - noaa-ndvi-cdr-analysis-update
         - noaa-ndvi-cdr-analysis-validate
         - u-arizona-swann-analysis-update
