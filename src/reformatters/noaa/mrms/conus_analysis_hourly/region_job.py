@@ -188,8 +188,6 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
 
 def _decompress_gzip(gz_path: Path) -> Path:
     decompressed_path = gz_path.with_suffix("")
-    if decompressed_path.exists():
-        return decompressed_path
     with gzip.open(gz_path, "rb") as f_in, open(decompressed_path, "wb") as f_out:
         f_out.write(f_in.read())
     return decompressed_path
