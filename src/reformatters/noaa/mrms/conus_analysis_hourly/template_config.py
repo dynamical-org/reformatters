@@ -59,7 +59,7 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
             dataset_version="0.1.0",
             name="NOAA MRMS CONUS analysis, hourly",
             description="Hourly precipitation analysis from the Multi-Radar Multi-Sensor (MRMS) system operated by NOAA NWS NCEP.",
-            attribution="NOAA NWS NCEP MRMS data processed by dynamical.org from NOAA Open Data Dissemination and Iowa Mesonet archives.",
+            attribution="NOAA NWS NCEP MRMS data processed by dynamical.org from NOAA NCEP, NOAA Open Data Dissemination and Iowa Mesonet archives.",
             spatial_domain="Continental United States",
             spatial_resolution="0.01 degrees (~1km)",
             time_domain=f"{self.append_dim_start} UTC to Present",
