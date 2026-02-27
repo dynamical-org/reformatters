@@ -308,7 +308,7 @@ def test_download_and_read_precipitation(
 
     data = region_job.read_data(updated_coord, precip_var)
     assert data.shape == (3500, 7000)
-    assert not np.all(np.isnan(data))
+    assert np.all(np.isfinite(data))
 
 
 @pytest.mark.slow
@@ -339,7 +339,7 @@ def test_download_and_read_radar_only(tmp_path: Path) -> None:
 
     data = region_job.read_data(updated_coord, radar_var)
     assert data.shape == (3500, 7000)
-    assert not np.all(np.isnan(data))
+    assert np.all(np.isfinite(data))
 
 
 @pytest.mark.slow
@@ -372,4 +372,4 @@ def test_download_and_read_precip_flag(tmp_path: Path) -> None:
 
     data = region_job.read_data(updated_coord, ptype_var)
     assert data.shape == (3500, 7000)
-    assert not np.all(np.isnan(data))
+    assert np.all(np.isfinite(data))

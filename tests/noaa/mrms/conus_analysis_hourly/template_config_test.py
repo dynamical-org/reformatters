@@ -1,6 +1,16 @@
+from pathlib import Path
+from unittest.mock import Mock
+
 import numpy as np
 import pandas as pd
+import pytest
+import xarray as xr
 
+from reformatters.common.pydantic import replace
+from reformatters.noaa.mrms.conus_analysis_hourly.region_job import (
+    NoaaMrmsRegionJob,
+    NoaaMrmsSourceFileCoord,
+)
 from reformatters.noaa.mrms.conus_analysis_hourly.template_config import (
     MRMS_V12_START,
     NoaaMrmsConusAnalysisHourlyTemplateConfig,
@@ -127,3 +137,61 @@ def test_derive_coordinates_integration() -> None:
         == pd.date_range("2014-10-01T00:00", "2014-10-01T11:00", freq="1h")
     ).all()
     assert "spatial_ref" in template_ds.coords
+
+
+@pytest.mark.slow
+def test_source_file_coords_and_crs_match_template(tmp_path: Path) -> None:
+    """Download a real MRMS file and verify that its lat/lon coordinates and
+    CRS/spatial_ref attributes match the template."""
+    config = NoaaMrmsConusAnalysisHourlyTemplateConfig()
+    time = pd.Timestamp("2024-01-15T12:00")
+
+    precip_var = next(v for v in config.data_vars if v.name == "precipitation_surface")
+
+    mock_ds = Mock()
+    mock_ds.attrs = {"dataset_id": "noaa-mrms-conus-analysis-hourly"}
+    region_job = NoaaMrmsRegionJob.model_construct(
+        tmp_store=tmp_path,
+        template_ds=mock_ds,
+        data_vars=[precip_var],
+        append_dim=config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    coord = NoaaMrmsSourceFileCoord(
+        time=time,
+        product=precip_var.internal_attrs.mrms_product,
+        level=precip_var.internal_attrs.mrms_level,
+    )
+    coord = replace(coord, downloaded_path=region_job.download_file(coord))
+    assert coord.downloaded_path is not None
+
+    ds = xr.open_dataset(coord.downloaded_path, engine="rasterio")
+
+    # Verify lat/lon coordinates match template dimension_coordinates
+    dim_coords = config.dimension_coordinates()
+    np.testing.assert_allclose(
+        ds.y.values,
+        dim_coords["latitude"],
+        atol=1e-6,
+        err_msg="GRIB latitudes do not match template dimension_coordinates",
+    )
+    np.testing.assert_allclose(
+        ds.x.values,
+        dim_coords["longitude"],
+        atol=1e-6,
+        err_msg="GRIB longitudes do not match template dimension_coordinates",
+    )
+
+    # Verify CRS/spatial_ref attributes match template
+    spatial_ref_coord = next(c for c in config.coords if c.name == "spatial_ref")
+    template_attrs = spatial_ref_coord.attrs.model_dump(exclude_none=True)
+    file_attrs = dict(ds.spatial_ref.attrs)
+    common_keys = set(template_attrs) & set(file_attrs)
+    assert "spatial_ref" in common_keys
+    assert "crs_wkt" in common_keys
+    for key in common_keys:
+        assert file_attrs[key] == template_attrs[key], (
+            f"spatial_ref.{key}: file={file_attrs[key]!r} != template={template_attrs[key]!r}"
+        )
