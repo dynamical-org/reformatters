@@ -1,10 +1,10 @@
 {
   "attributes": {
-    "dataset_id": "ecmwf-aifs-deterministic-forecast-15-day-0-25-degree",
+    "dataset_id": "ecmwf-aifs-deterministic-forecast",
     "dataset_version": "0.1.0",
-    "name": "ECMWF AIFS Deterministic Forecast, 15 day, 0.25 degree",
+    "name": "ECMWF AIFS deterministic forecast",
     "description": "Weather forecasts from the ECMWF Artificial Intelligence Forecasting System (AIFS) deterministic model.",
-    "attribution": "ECMWF AIFS Deterministic Forecast data processed by dynamical.org from ECMWF Open Data.",
+    "attribution": "ECMWF AIFS deterministic forecast data processed by dynamical.org from ECMWF Open Data.",
     "spatial_domain": "Global",
     "spatial_resolution": "0.25 degrees (~25km)",
     "time_domain": "Forecasts initialized 2024-04-01 00:00:00 UTC to Present",
@@ -29,10 +29,10 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              28,
+              1,
               61,
-              384,
-              384
+              720,
+              720
             ]
           }
         },
@@ -48,10 +48,10 @@
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                4,
+                1,
                 61,
-                64,
-                64
+                240,
+                240
               ],
               "codecs": [
                 {
@@ -118,10 +118,10 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              28,
+              1,
               61,
-              384,
-              384
+              720,
+              720
             ]
           }
         },
@@ -137,10 +137,10 @@
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                4,
+                1,
                 61,
-                64,
-                64
+                240,
+                240
               ],
               "codecs": [
                 {
@@ -206,10 +206,10 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              28,
+              1,
               61,
-              384,
-              384
+              720,
+              720
             ]
           }
         },
@@ -225,10 +225,10 @@
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                4,
+                1,
                 61,
-                64,
-                64
+                240,
+                240
               ],
               "codecs": [
                 {
@@ -294,10 +294,10 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              28,
+              1,
               61,
-              384,
-              384
+              720,
+              720
             ]
           }
         },
@@ -313,10 +313,10 @@
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                4,
+                1,
                 61,
-                64,
-                64
+                240,
+                240
               ],
               "codecs": [
                 {
@@ -436,10 +436,10 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              28,
+              1,
               61,
-              384,
-              384
+              720,
+              720
             ]
           }
         },
@@ -455,10 +455,10 @@
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                4,
+                1,
                 61,
-                64,
-                64
+                240,
+                240
               ],
               "codecs": [
                 {
@@ -800,10 +800,10 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              28,
+              1,
               61,
-              384,
-              384
+              720,
+              720
             ]
           }
         },
@@ -819,10 +819,10 @@
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                4,
+                1,
                 61,
-                64,
-                64
+                240,
+                240
               ],
               "codecs": [
                 {
@@ -858,8 +858,8 @@
           }
         ],
         "attributes": {
-          "long_name": "Total column water",
-          "short_name": "tcw",
+          "long_name": "Precipitable water",
+          "short_name": "pwat",
           "standard_name": "atmosphere_mass_content_of_water_vapor",
           "units": "kg m-2",
           "step_type": "instant",
@@ -888,10 +888,10 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              28,
+              1,
               61,
-              384,
-              384
+              720,
+              720
             ]
           }
         },
@@ -907,10 +907,10 @@
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                4,
+                1,
                 61,
-                64,
-                64
+                240,
+                240
               ],
               "codecs": [
                 {
@@ -977,10 +977,10 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              28,
+              1,
               61,
-              384,
-              384
+              720,
+              720
             ]
           }
         },
@@ -996,10 +996,10 @@
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                4,
+                1,
                 61,
-                64,
-                64
+                240,
+                240
               ],
               "codecs": [
                 {
@@ -1065,10 +1065,10 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              28,
+              1,
               61,
-              384,
-              384
+              720,
+              720
             ]
           }
         },
@@ -1084,10 +1084,10 @@
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                4,
+                1,
                 61,
-                64,
-                64
+                240,
+                240
               ],
               "codecs": [
                 {
@@ -1202,10 +1202,10 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              28,
+              1,
               61,
-              384,
-              384
+              720,
+              720
             ]
           }
         },
@@ -1221,10 +1221,10 @@
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                4,
+                1,
                 61,
-                64,
-                64
+                240,
+                240
               ],
               "codecs": [
                 {
@@ -1290,10 +1290,10 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              28,
+              1,
               61,
-              384,
-              384
+              720,
+              720
             ]
           }
         },
@@ -1309,10 +1309,10 @@
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                4,
+                1,
                 61,
-                64,
-                64
+                240,
+                240
               ],
               "codecs": [
                 {
@@ -1436,10 +1436,10 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              28,
+              1,
               61,
-              384,
-              384
+              720,
+              720
             ]
           }
         },
@@ -1455,10 +1455,10 @@
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                4,
+                1,
                 61,
-                64,
-                64
+                240,
+                240
               ],
               "codecs": [
                 {
@@ -1524,10 +1524,10 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              28,
+              1,
               61,
-              384,
-              384
+              720,
+              720
             ]
           }
         },
@@ -1543,10 +1543,10 @@
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                4,
+                1,
                 61,
-                64,
-                64
+                240,
+                240
               ],
               "codecs": [
                 {
@@ -1612,10 +1612,10 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              28,
+              1,
               61,
-              384,
-              384
+              720,
+              720
             ]
           }
         },
@@ -1631,10 +1631,10 @@
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                4,
+                1,
                 61,
-                64,
-                64
+                240,
+                240
               ],
               "codecs": [
                 {
@@ -1700,10 +1700,10 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              28,
+              1,
               61,
-              384,
-              384
+              720,
+              720
             ]
           }
         },
@@ -1719,10 +1719,10 @@
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                4,
+                1,
                 61,
-                64,
-                64
+                240,
+                240
               ],
               "codecs": [
                 {

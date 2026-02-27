@@ -27,9 +27,8 @@ Before getting started, follow the brief setup steps in README.md > Local develo
 
 Before writing any code, identify the most similar existing dataset in the repo and use it as your primary reference. For example, if you're adding a new ECMWF forecast dataset, study the IFS ENS or AIFS implementations. Look at:
 
-- **Shared provider utilities** — check `src/reformatters/<provider>/` for shared modules (e.g., `ecmwf/ecmwf_grib_index.py`, `ecmwf/ecmwf_config_models.py`). Use these rather than writing your own.
-- **Common utilities** — check `src/reformatters/common/iterating.py` for helpers like `group_by`, `item`, `digest` before implementing equivalent logic.
-- **Variable names and metadata** — cross-reference variables that already exist in other datasets. If another dataset already has `temperature_2m` or `precipitable_water_atmosphere`, match those names and metadata exactly. Run `uv run pytest tests/common/datasets_cf_compliance_test.py -x` to catch naming inconsistencies early.
+- **Shared provider utilities** — check `src/reformatters/<provider>/` for shared modules (e.g., `ecmwf/ecmwf_grib_index.py`, `noaa/noaa_utils.py`). Use these rather than writing your own.
+- **Variable names and metadata** — cross-reference variables that already exist in other datasets. If another dataset already has an equivalent variable (e.g. `temperature_2m`), match those names and metadata exactly. Run `uv run pytest tests/common/datasets_cf_compliance_test.py -x` to catch naming inconsistencies early.
 - **Kubernetes resource values** — copy resource values (cpu, memory, shared_memory, ephemeral_storage) from a similar dataset rather than guessing. The chunk/shard layout tool (see below) reports a shared memory estimate you can use as a starting point.
 
 ### 0. Explore the source dataset
@@ -72,13 +71,7 @@ Work through `src/reformatters/$DATASET_PATH/template_config.py`, setting the at
 
 Providing an AI with 1) the example template config code to edit, 2) output of running `gdalinfo <example source data file>` and 3) any dataset documentation will help it give you a decent first implementation of your `TemplateConfig` subclass.
 
-#### Variable naming
-
-Variable names, units, short_name, long_name, and standard_name must be consistent across all datasets in the repo. Before defining a variable, search existing `template_config.py` files for the same physical quantity. If another dataset already defines `temperature_2m`, use the same name and metadata — don't rename based on how the source data labels it. CLAUDE.md has the full metadata conventions.
-
-#### Chunk and shard layout
-
-Run the [chunk/shard layout tool](./chunk_shard_layout_tool.md) in `--search` mode to find chunk and shard sizes — don't estimate by hand. The tool outputs ready-to-paste Python code for `var_chunks` and `var_shards`. Target compressed shard sizes of 100-600 MB. For forecast datasets, keep exactly 1 init_time per shard.
+Read the [chunk/shard layout tool](./chunk_shard_layout_tool.md) docs and use the tool to find chunk and shard sizes for your data variables.
 
 Using the information in the `TemplateConfig`, `reformatters` writes the Zarr metadata for your dataset to `src/reformatters/$DATASET_PATH/templates/latest.zarr`. Run this command in your terminal to create or update the template based on the your `TemplateConfig` subclass:
 
@@ -108,10 +101,6 @@ There are four required methods:
 
 There are a few optional, additional methods which are described in the example code. Implement them if required for your dataset, otherwise remove them to use the base class `RegionJob` implementations.
 
-Before writing download/read logic from scratch, check if the provider already has shared utilities you should use. For example, ECMWF datasets should use `ecmwf_grib_index.get_message_byte_ranges_from_index()` for byte-range downloads from GRIB index files, not a custom implementation. For `source_groups()`, use `group_by()` from `common.iterating`.
-
-If downloading files from an HTTP/S3 source that provides an index file, set `max_vars_per_download_group` to batch multiple variables per download (e.g. 5-10) rather than downloading one variable at a time. This reduces HTTP overhead significantly.
-
 #### RegionJob tests
 
 Write a unit test for each overridden method, mocking network calls. At minimum test:
@@ -120,8 +109,6 @@ Write a unit test for each overridden method, mocking network calls. At minimum 
 - `read_data` — correct band selection and dtype (mock the file reader)
 - `operational_update_jobs` — returns jobs with correct time range
 - `source_groups` — correct grouping if overridden
-
-Generally don't implement integration style tests that make network requests in your `region_job_test.py`, we'll do those in the `dynamical_dataset_test.py`.
 
 ```bash
 uv run pytest tests/$DATASET_PATH/region_job_test.py
@@ -145,7 +132,7 @@ Copy resource values (cpu, memory, shared_memory, ephemeral_storage, pod_active_
 
 #### Storage configuration
 
-Register your dataset in `__main__.py` with both a primary storage config and a replica. See existing entries in `DYNAMICAL_DATASETS` for the pattern. Create a provider-specific `IcechunkAwsOpenDataDatasetStorageConfig` subclass for the replica following the naming convention of existing ones.
+Follow conventions in `__main__.py` to register your dataset with primary and replica storage configs.
 
 #### Integration test with snapshot values
 
@@ -154,16 +141,6 @@ In `dynamical_dataset_test.py` create a test that runs `backfill_local` followed
 ```bash
 uv run pytest tests/$DATASET_PATH/dynamical_dataset_test.py
 ```
-
-### Pre-submission checks
-
-Before opening a PR, run these tests to catch cross-dataset issues:
-
-```bash
-uv run pytest tests/common/common_template_config_subclasses_test.py tests/common/datasets_cf_compliance_test.py
-```
-
-These verify that your template matches the on-disk Zarr, that variable metadata follows CF conventions, and that variable names/units are consistent with other datasets in the repo. Inconsistencies caught here are much easier to fix than after review.
 
 ### 6. Deploy
 

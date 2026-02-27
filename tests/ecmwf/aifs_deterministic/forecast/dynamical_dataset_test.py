@@ -57,9 +57,9 @@ def test_backfill_local_and_operational_update(
     point_6h = ds.sel(
         init_time="2024-04-01T00:00:00", latitude=0, longitude=0, lead_time="6h"
     )
-    assert float(point_6h["temperature_2m"]) == 28.75
-    assert float(point_6h["precipitation_rate_surface"]) == pytest.approx(
-        0.00164794921875
+    np.testing.assert_allclose(float(point_6h["temperature_2m"]), 28.75)
+    np.testing.assert_allclose(
+        float(point_6h["precipitation_rate_surface"]), 0.00164794921875
     )
 
     # Operational update
@@ -81,9 +81,17 @@ def test_backfill_local_and_operational_update(
         ),
     )
 
-    t2m_updated = updated_ds.sel(latitude=0, longitude=0).temperature_2m
-    assert t2m_updated.shape == (2, 2)  # 2 init_times x 2 lead_times
-    assert not np.all(np.isnan(t2m_updated.values))
+    # Snapshot complete temperature and precip values at the test point after update.
+    # Backfill values from init_time=00Z should be unchanged alongside new 06Z values.
+    point_updated = updated_ds.sel(latitude=0, longitude=0, lead_time="6h")
+    np.testing.assert_allclose(
+        point_updated["temperature_2m"].values,
+        [28.75, 29.5],  # [00Z backfill, 06Z update]
+    )
+    np.testing.assert_allclose(
+        point_updated["precipitation_rate_surface"].values,
+        [0.00164794921875, 0.000202178955078125],  # [00Z backfill, 06Z update]
+    )
 
 
 def test_operational_kubernetes_resources(

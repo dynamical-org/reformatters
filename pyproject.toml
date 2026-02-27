@@ -39,8 +39,7 @@ main = "reformatters.__main__:app"
 dev = [
     "boto3>=1.42.49",
     "cf-xarray>=0.10.10",
-    "ecmwf-api-client>=1.6.5",
-    "matplotlib~=3.9",
+"matplotlib~=3.9",
     "pandas-stubs~=2.2",
     "prek==0.3.0",
     "pyqt6>=6.7.1",
@@ -116,12 +115,6 @@ ignore = [
     "ARG001",  # unused function arg
     "ARG005",  # unused lambda arg
 ]
-"scripts/**/*.py" = [
-    "INP001",  # not a package
-    "T201",    # print is expected in CLI scripts
-    "S108",    # /tmp usage is fine for staging
-]
-
 [tool.ty.terminal]
 error-on-warning = true
 

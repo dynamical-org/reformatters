@@ -260,20 +260,20 @@ class EcmwfAifsForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
     @computed_field
     @property
     def data_vars(self) -> Sequence[EcmwfDataVar]:
-        # ~4MB uncompressed, ~0.8MB compressed
+        # ~13MB uncompressed, ~2.7MB compressed
         var_chunks: dict[Dim, int] = {
-            "init_time": 4,  # 1 day of 6-hourly data
+            "init_time": 1,
             "lead_time": 61,  # All lead times
-            "latitude": 64,  # 12 chunks over 721 pixels
-            "longitude": 64,  # 23 chunks over 1440 pixels
+            "latitude": 240,  # 4 chunks over 721 pixels
+            "longitude": 240,  # 6 chunks over 1440 pixels
         }
 
-        # ~961MB uncompressed, ~192MB compressed
+        # ~121MB uncompressed, ~24MB compressed
         var_shards: dict[Dim, int] = {
-            "init_time": var_chunks["init_time"] * 7,  # 7 days per shard
+            "init_time": var_chunks["init_time"],
             "lead_time": var_chunks["lead_time"],
-            "latitude": var_chunks["latitude"] * 6,  # 2 shards over 721 pixels
-            "longitude": var_chunks["longitude"] * 6,  # 4 shards over 1440 pixels
+            "latitude": var_chunks["latitude"] * 3,  # 2 shards over 721 pixels
+            "longitude": var_chunks["longitude"] * 3,  # 2 shards over 1440 pixels
         }
 
         encoding_float32_default = Encoding(
@@ -542,8 +542,8 @@ class EcmwfAifsForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
                 name="precipitable_water_atmosphere",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="tcw",
-                    long_name="Total column water",
+                    short_name="pwat",
+                    long_name="Precipitable water",
                     units="kg m-2",
                     step_type="instant",
                     standard_name="atmosphere_mass_content_of_water_vapor",
