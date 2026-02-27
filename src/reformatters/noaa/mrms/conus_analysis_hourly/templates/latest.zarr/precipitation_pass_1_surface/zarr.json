@@ -9,9 +9,9 @@
     "name": "regular",
     "configuration": {
       "chunk_shape": [
-        720,
-        1750,
-        1750
+        648,
+        700,
+        1400
       ]
     }
   },
@@ -27,9 +27,9 @@
       "name": "sharding_indexed",
       "configuration": {
         "chunk_shape": [
-          720,
-          175,
-          175
+          648,
+          100,
+          100
         ],
         "codecs": [
           {

@@ -182,17 +182,17 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
     @computed_field
     @property
     def data_vars(self) -> Sequence[NoaaMrmsDataVar]:
-        # ~84MB uncompressed, ~2.5MB compressed
+        # ~25MB uncompressed, ~1.2MB compressed
         var_chunks: dict[Dim, int] = {
-            "time": 720,  # 30 days of 1-hourly data
-            "latitude": 175,  # 20 chunks over 3500 pixels
-            "longitude": 175,  # 40 chunks over 7000 pixels
+            "time": 648,  # 27 days of 1-hourly data
+            "latitude": 100,  # 35 chunks over 3500 pixels
+            "longitude": 100,  # 70 chunks over 7000 pixels
         }
-        # ~8411MB uncompressed, ~252MB compressed
+        # ~2422MB uncompressed, ~121MB compressed
         var_shards: dict[Dim, int] = {
-            "time": var_chunks["time"],  # 139 shards over 100000 pixels
-            "latitude": var_chunks["latitude"] * 10,  # 2 shards over 3500 pixels
-            "longitude": var_chunks["longitude"] * 10,  # 4 shards over 7000 pixels
+            "time": var_chunks["time"],  # 155 shards over ~100000 pixels
+            "latitude": var_chunks["latitude"] * 7,  # 5 shards over 3500 pixels
+            "longitude": var_chunks["longitude"] * 14,  # 5 shards over 7000 pixels
         }
 
         encoding_float32_default = Encoding(
