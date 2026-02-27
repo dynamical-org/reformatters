@@ -41,17 +41,20 @@ class NoaaMrmsSourceFileCoord(SourceFileCoord):
     def get_url(self, source: DownloadSource = "s3") -> str:
         date_str = self.time.strftime("%Y%m%d")
         time_str = self.time.strftime("%Y%m%d-%H%M%S")
-        filename = f"MRMS_{self.product}_{self.level}_{time_str}.grib2.gz"
 
         match source:
             case "s3":
+                filename = f"MRMS_{self.product}_{self.level}_{time_str}.grib2.gz"
                 return f"https://noaa-mrms-pds.s3.amazonaws.com/CONUS/{self.product}_{self.level}/{date_str}/{filename}"
             case "iowa":
+                # Iowa Mesonet doesn't use the MRMS_ prefix in filenames
+                filename = f"{self.product}_{self.level}_{time_str}.grib2.gz"
                 year = self.time.strftime("%Y")
                 month = self.time.strftime("%m")
                 day = self.time.strftime("%d")
                 return f"https://mtarchive.geol.iastate.edu/{year}/{month}/{day}/mrms/ncep/{self.product}/{filename}"
             case "ncep":
+                filename = f"MRMS_{self.product}_{self.level}_{time_str}.grib2.gz"
                 return f"https://mrms.ncep.noaa.gov/2D/{self.product}/{filename}"
             case _ as unreachable:
                 assert_never(unreachable)

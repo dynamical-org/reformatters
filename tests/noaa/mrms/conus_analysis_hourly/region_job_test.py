@@ -53,7 +53,7 @@ def test_source_file_coord_get_url_iowa() -> None:
     assert url == (
         "https://mtarchive.geol.iastate.edu/2019/06/15/mrms/ncep/"
         "GaugeCorr_QPE_01H/"
-        "MRMS_GaugeCorr_QPE_01H_00.00_20190615-120000.grib2.gz"
+        "GaugeCorr_QPE_01H_00.00_20190615-120000.grib2.gz"
     )
 
 
