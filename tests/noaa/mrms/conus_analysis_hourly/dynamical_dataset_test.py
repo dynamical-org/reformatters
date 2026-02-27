@@ -9,6 +9,9 @@ from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.noaa.mrms.conus_analysis_hourly.dynamical_dataset import (
     NoaaMrmsConusAnalysisHourlyDataset,
 )
+from reformatters.noaa.mrms.conus_analysis_hourly.template_config import (
+    NoaaMrmsConusAnalysisHourlyTemplateConfig,
+)
 from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 from tests.xarray_testing import assert_no_nulls
 
@@ -33,7 +36,21 @@ def make_dataset() -> NoaaMrmsConusAnalysisHourlyDataset:
 def test_backfill_local_and_operational_update(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Wrap _get_template to trim the time dimension and reduce memory usage
+    test_start = pd.Timestamp("2024-01-15T00:00")
+
+    def _trimmed_get_template(
+        dataset: NoaaMrmsConusAnalysisHourlyDataset,
+    ) -> None:
+        orig = dataset._get_template
+        monkeypatch.setattr(
+            dataset,
+            "_get_template",
+            lambda end: orig(end).sel(time=slice(test_start, None)),
+        )
+
     dataset = make_dataset()
+    _trimmed_get_template(dataset)
 
     filter_variable_names = [
         "precipitation_surface",
@@ -41,8 +58,8 @@ def test_backfill_local_and_operational_update(
     ]
 
     dataset.backfill_local(
-        append_dim_end=pd.Timestamp("2024-01-15T02:00"),
-        filter_start=pd.Timestamp("2024-01-15T00:00"),
+        append_dim_end=pd.Timestamp("2024-01-15T03:00"),
+        filter_start=test_start,
         filter_variable_names=filter_variable_names,
     )
 
@@ -51,24 +68,32 @@ def test_backfill_local_and_operational_update(
     )
     assert_array_equal(
         backfill_ds["time"],
-        pd.date_range("2024-01-15T00:00", "2024-01-15T01:00", freq="1h"),
+        pd.date_range("2024-01-15T00:00", "2024-01-15T02:00", freq="1h"),
     )
 
     # categorical_precipitation_type_surface is instant, no deaccumulation NaN
     assert_no_nulls(backfill_ds["categorical_precipitation_type_surface"])
 
     # precipitation_surface first timestep is NaN from deaccumulation
-    point_ds = backfill_ds.isel(latitude=1750, longitude=3500)
-    assert np.isnan(point_ds["precipitation_surface"].values[0])
-    assert np.isfinite(point_ds["precipitation_surface"].values[1])
+    point = backfill_ds.isel(latitude=1750, longitude=3500)
+    assert np.isnan(point["precipitation_surface"].values[0])
+    assert np.all(np.isfinite(point["precipitation_surface"].values[1:]))
 
-    # Operational update
+    # Snapshot at a specific point
+    print("SNAPSHOT precipitation_surface:", repr(point["precipitation_surface"].values))
+    print(
+        "SNAPSHOT categorical_precipitation_type_surface:",
+        repr(point["categorical_precipitation_type_surface"].values),
+    )
+
+    # Operational update adds one more hour
     dataset = make_dataset()
-    append_dim_end = pd.Timestamp("2024-01-15T05:00")
+    _trimmed_get_template(dataset)
+    update_end = pd.Timestamp("2024-01-15T04:00")
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
-        classmethod(lambda *args, **kwargs: append_dim_end),
+        classmethod(lambda *args, **kwargs: update_end),
     )
     orig_get_jobs = dataset.region_job_class.get_jobs
     monkeypatch.setattr(
@@ -85,8 +110,23 @@ def test_backfill_local_and_operational_update(
         dataset.store_factory.primary_store(), chunks=None, decode_timedelta=True
     )
 
-    # Should extend beyond the backfill
-    assert updated_ds["time"].max() >= pd.Timestamp("2024-01-15T02:00")
+    assert_array_equal(
+        updated_ds["time"],
+        pd.date_range("2024-01-15T00:00", "2024-01-15T03:00", freq="1h"),
+    )
+
+    updated_point = updated_ds.isel(latitude=1750, longitude=3500)
+    assert np.all(np.isfinite(updated_point["precipitation_surface"].values[1:]))
+    assert_no_nulls(updated_point["categorical_precipitation_type_surface"])
+
+    print(
+        "SNAPSHOT updated precipitation_surface:",
+        repr(updated_point["precipitation_surface"].values),
+    )
+    print(
+        "SNAPSHOT updated categorical_precipitation_type_surface:",
+        repr(updated_point["categorical_precipitation_type_surface"].values),
+    )
 
 
 def test_operational_kubernetes_resources(
