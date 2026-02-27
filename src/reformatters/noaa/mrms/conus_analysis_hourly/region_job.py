@@ -129,9 +129,18 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
     ) -> ArrayFloat32:
         assert coord.downloaded_path is not None
         with rasterio.open(coord.downloaded_path) as reader:
-            assert reader.count == 1, (
-                f"Expected exactly 1 band, found {reader.count} in {coord.downloaded_path}"
-            )
+            if reader.count == 2 and coord.time < MRMS_V12_START:
+                # Some pre-v12 Iowa Mesonet files have a duplicate GRIB message with
+                # standard meteorological discipline (0) alongside the MRMS-specific one (209).
+                # Band 1 (discipline 209) is always the authoritative MRMS data.
+                band2_discipline = reader.tags(2).get("GRIB_DISCIPLINE", "")
+                assert band2_discipline == "0(Meteorological)", (
+                    f"Expected band 2 GRIB_DISCIPLINE '0(Meteorological)', found '{band2_discipline}' in {coord.downloaded_path}"
+                )
+            else:
+                assert reader.count == 1, (
+                    f"Expected exactly 1 band, found {reader.count} in {coord.downloaded_path}"
+                )
             result: ArrayFloat32 = reader.read(1, out_dtype=np.float32)
             return result
 
