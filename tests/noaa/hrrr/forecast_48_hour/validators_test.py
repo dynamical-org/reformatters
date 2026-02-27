@@ -73,3 +73,31 @@ def test_check_forecast_recent_nans_skips_lead_time_0_for_accumulations(
     result = validators.check_forecast_recent_nans(ds, max_nan_percent=0.5)
     # Should still pass because lead_time=0 is skipped for accumulations
     assert result.passed
+
+
+def test_check_forecast_recent_nans_skips_lead_time_0_for_expected_hour_0_nan_vars(
+    rng: np.random.Generator,
+) -> None:
+    """Test that lead_time=0 is skipped for instantaneous precip vars that have no hour 0 values."""
+    init_times = pd.date_range("2024-01-01", periods=4, freq="6h")
+    lead_times = pd.timedelta_range("0h", "48h", freq="1h")
+    x = np.arange(100)
+    y = np.arange(100)
+
+    ds = xr.Dataset(
+        {
+            "categorical_rain_surface": (
+                ["init_time", "lead_time", "y", "x"],
+                rng.standard_normal(
+                    (len(init_times), len(lead_times), len(y), len(x))
+                ).astype(np.float32),
+                {"step_type": "instant"},
+            ),
+        },
+        coords={"init_time": init_times, "lead_time": lead_times, "y": y, "x": x},
+    )
+    # Set lead_time=0 to all NaN (expected for this var)
+    ds["categorical_rain_surface"].values[-1, 0, :, :] = np.nan
+
+    result = validators.check_forecast_recent_nans(ds, max_nan_percent=0.5)
+    assert result.passed
