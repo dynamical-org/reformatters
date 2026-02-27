@@ -142,7 +142,7 @@ def test_precipitation_not_null_at_shard_boundary() -> None:
         config.append_dim_start + time_shard_size * config.append_dim_frequency
     )
 
-    assert time_shard_size == 2160
+    assert time_shard_size == 720
 
     dataset.backfill_local(
         append_dim_end=shard_2_start + pd.Timedelta(hours=3),

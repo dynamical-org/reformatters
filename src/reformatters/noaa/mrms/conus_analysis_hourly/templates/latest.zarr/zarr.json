@@ -26,9 +26,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              2160,
-              700,
-              700
+              720,
+              1750,
+              1750
             ]
           }
         },
@@ -44,7 +44,7 @@
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                72,
+                720,
                 175,
                 175
               ],
@@ -222,9 +222,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              2160,
-              700,
-              700
+              720,
+              1750,
+              1750
             ]
           }
         },
@@ -240,7 +240,7 @@
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                72,
+                720,
                 175,
                 175
               ],
@@ -307,9 +307,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              2160,
-              700,
-              700
+              720,
+              1750,
+              1750
             ]
           }
         },
@@ -325,7 +325,7 @@
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                72,
+                720,
                 175,
                 175
               ],
@@ -392,9 +392,9 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              2160,
-              700,
-              700
+              720,
+              1750,
+              1750
             ]
           }
         },
@@ -410,7 +410,7 @@
             "name": "sharding_indexed",
             "configuration": {
               "chunk_shape": [
-                72,
+                720,
                 175,
                 175
               ],
