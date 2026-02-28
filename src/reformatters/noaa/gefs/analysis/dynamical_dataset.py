@@ -16,8 +16,6 @@ class GefsAnalysisDataset(DynamicalDataset[GEFSDataVar, GefsAnalysisSourceFileCo
     template_config: GefsAnalysisTemplateConfig = GefsAnalysisTemplateConfig()
     region_job_class: type[GefsAnalysisRegionJob] = GefsAnalysisRegionJob
 
-    use_progress_tracker: bool = True
-
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
         operational_update_cron_job = ReformatCronJob(
