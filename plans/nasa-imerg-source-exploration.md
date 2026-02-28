@@ -217,22 +217,34 @@ available, otherwise missing).
 IMERG is a precipitation-only product. The standard variables (in the `Grid` HDF5 group)
 in V07 are:
 
-| Variable name | Level | Units | Available from | Notes |
-|---------------|-------|-------|----------------|-------|
-| `precipitation` | surface | mm/hr | V07 (renamed from `precipitationCal` in V06) | Primary variable; multi-satellite + gauge-calibrated (Final Run) or climatologically calibrated (Early/Late). **Use this.** |
-| `precipitationUncal` | surface | mm/hr | V07 | Multi-satellite without gauge calibration. Differs from `precipitation` only in Final Run. |
-| `HQprecipitation` | surface | mm/hr | all versions | Microwave-only (high quality passive microwave sensors). Has significant gaps. |
-| `IRprecipitation` | surface | mm/hr | all versions | IR-only geostationary estimate. Less reliable than HQ. |
-| `precipitationQualityIndex` | surface | — | V07 | Quality index 0–1. |
-| `HQobservationTime` | surface | minutes | all versions | Minutes into the half hour when the HQ microwave observation was made. |
-| `HQprecipSource` | surface | categorical | all versions | Which microwave sensor provided the HQ estimate. |
-| `IRkalmanFilterWeight` | surface | — | all versions | Weight of IR vs. microwave in the merged estimate. |
-| `probabilityLiquidPrecipitation` | surface | % | V07 | Probability that precipitation phase is liquid (not snow/ice). |
-| `randomError` | surface | mm/hr | all versions | Estimated random error of the precipitation estimate. |
+All variables are under the HDF5 `/Grid/` group. In V07, several secondary variables
+were moved into a `/Grid/Intermediate/` subgroup (see rename table below).
 
-**Variable renaming between V06 and V07**: The primary precipitation field was renamed
-from `precipitationCal` (V06) to `precipitation` (V07). Code targeting V06 files must
-handle both names or restrict to V07+ only.
+| HDF5 path (V07) | Level | Units | Notes |
+|-----------------|-------|-------|-------|
+| `Grid/precipitation` | surface | mm/hr | **Primary variable.** Multi-satellite + gauge-calibrated (Final) or climatologically calibrated (Early/Late). Was `precipitationCal` in V06. |
+| `Grid/randomError` | surface | mm/hr | Random error estimate for `precipitation`. |
+| `Grid/probabilityLiquidPrecipitation` | surface | % | Probability precipitation is liquid phase (not snow/ice). New in V07. |
+| `Grid/PrecipitationQualityIndex` | surface | — | Quality index 0–1. |
+| `Grid/Intermediate/precipitationUncal` | surface | mm/hr | Multi-satellite without gauge calibration. Differs from `precipitation` only in Final Run. |
+| `Grid/Intermediate/MWprecipitation` | surface | mm/hr | Microwave-only (was `HQprecipitation`). Has significant spatial gaps. |
+| `Grid/Intermediate/MWprecipSource` | surface | categorical | Which sensor provided the MW estimate (was `HQprecipSource`). |
+| `Grid/Intermediate/MWobservationTime` | surface | minutes | Time of MW observation within the half-hour (was `HQobservationTime`). |
+| `Grid/Intermediate/IRprecipitation` | surface | mm/hr | IR-only geostationary estimate. Less reliable. |
+| `Grid/Intermediate/IRinfluence` | surface | fraction | Weight of IR in the merged estimate (was `IRkalmanFilterWeight`). |
+
+**V06 → V07 variable renames:**
+
+| V06 path | V07 path |
+|----------|----------|
+| `Grid/precipitationCal` | `Grid/precipitation` |
+| `Grid/precipitationUncal` | `Grid/Intermediate/precipitationUncal` |
+| `Grid/HQprecipitation` | `Grid/Intermediate/MWprecipitation` |
+| `Grid/HQprecipSource` | `Grid/Intermediate/MWprecipSource` |
+| `Grid/HQobservationTime` | `Grid/Intermediate/MWobservationTime` |
+| `Grid/IRkalmanFilterWeight` | `Grid/Intermediate/IRinfluence` |
+
+Code targeting V06 files must handle both the old names and paths, or restrict to V07+ only.
 
 **Temporal availability changes**:
 - TRMM-era data (1998-01 to 2014-02): Reprocessed and available in V07B; uses
@@ -316,15 +328,21 @@ infrastructure.
 
 | Version | Release date | Notes |
 |---------|-------------|-------|
-| V03 | 2014 | Initial GPM IMERG release |
-| V04 | 2017 | Algorithm updates |
-| V05 | 2017 | Extended to TRMM era |
-| V06 | 2019-03 | Major update; extended to 2000-06 back to TRMM era (1998-01); `precipitationCal` as primary field |
-| V06B | 2019 | Bug fixes; primary operational version through mid-2023 |
-| V07 / V07B | 2023-07-07 | Current version. Primary field renamed `precipitation`. Gridding offset bug fixed. Early/Late updated to V07B. Final retrospective reprocessing completed ~Nov 2024. |
+| V03 | Early 2014 | Initial GPM IMERG release, GPM era only |
+| V04 | March 2016 | Improved GMI calibration, GPM era only |
+| V05 | ~2017–2018 | Accuracy improvements, first widespread research use |
+| V06A | March 2019 | First record spanning TRMM + GPM eras (2000-06 onward); retracted within days due to snow/ice masking bug |
+| V06B | March 2019 | Bug fix for snow/ice masking; primary operational version through mid-2023 |
+| V07A | July 7, 2023 | Current generation: gridding offset corrected, improved intercalibration, IR algorithm upgraded, removed frozen-surface PMW masking; primary field renamed `precipitation`. Early/Late updated first. |
+| V07B | January 2024 | Re-reprocessing of V07A to fix 162 orbits of defective GPROF estimates across all passive microwave satellites |
+| V07 Final RP | ~November 2024 | Retrospective reprocessing of Final Run to V07B completed |
 
 Only **V07B** data should be used. Older versions are superseded and NASA no longer
-maintains them.
+maintains them. V07 also supersedes the TRMM-era TMPA products (3B42, 3B43).
+
+**Known operational risk (2025):** DoD/FNMOC shut down F16, F17, F18 SSMIS data flow
+on June 30, 2025, removing 3 conically-scanning radiometers from the GPM constellation.
+This will reduce accuracy of all IMERG products from that date forward.
 
 ---
 
