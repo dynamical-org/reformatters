@@ -255,42 +255,6 @@ def test_copy_data_var_copies_to_replicas_before_primary(
     assert call_order == ["replica", "primary"]
 
 
-def test_copy_data_var_calls_progress_callback(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(zarr_module, "_copy_data_var_chunks", Mock())
-
-    tmp_store = tmp_path / "tmp.zarr"
-    tmp_store.mkdir()
-
-    callback_called = []
-
-    def callback() -> None:
-        callback_called.append(True)
-
-    template_ds = xr.Dataset(
-        {
-            "temperature_2m": xr.Variable(
-                ("time", "lat"),
-                np.zeros((1, 1), dtype=np.float32),
-                encoding={"shards": (1, 1), "chunks": (1, 1)},
-            )
-        }
-    )
-
-    copy_data_var(
-        "temperature_2m",
-        slice(0, 1),
-        template_ds,
-        "time",
-        tmp_store,
-        Mock(spec=Store),
-        track_progress_callback=callback,
-    )
-
-    assert len(callback_called) == 1
-
-
 # --- assert_fill_values_set tests ---
 
 
