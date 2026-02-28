@@ -130,8 +130,8 @@ def test_backfill_local_and_operational_update(
         pd.date_range("2024-01-15T00:00", "2024-01-15T01:00", freq="1h"),
     )
 
-    # Only the first spatial shard is written (lat < 1750, lon < 1750).
-    first_shard = backfill_ds.isel(latitude=slice(0, 1750), longitude=slice(0, 1750))
+    # Only the first spatial shard is written (lat < 700, lon < 1400).
+    first_shard = backfill_ds.isel(latitude=slice(0, 700), longitude=slice(0, 1400))
 
     # categorical_precipitation_type_surface is instant, no deaccumulation NaN
     assert_no_nulls(first_shard["categorical_precipitation_type_surface"])
