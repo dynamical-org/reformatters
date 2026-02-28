@@ -45,12 +45,12 @@ def index_file(tmp_path: Path) -> Path:
 
 
 def test_parse_index_file_returns_dataframe(index_file: Path) -> None:
-    df = _parse_index_file(index_file)
+    df = _parse_index_file(index_file, ensemble=True)
     assert isinstance(df, pd.DataFrame)
 
 
 def test_parse_index_file_fills_control_member_number_with_0(index_file: Path) -> None:
-    df = _parse_index_file(index_file)
+    df = _parse_index_file(index_file, ensemble=True)
     # Reset index to inspect values easily
     df_reset = df.reset_index()
     # Control member (type=cf) has no 'number' in the JSON; it should be filled with 0
@@ -59,18 +59,18 @@ def test_parse_index_file_fills_control_member_number_with_0(index_file: Path) -
 
 
 def test_parse_index_file_has_multiindex(index_file: Path) -> None:
-    df = _parse_index_file(index_file)
+    df = _parse_index_file(index_file, ensemble=True)
     assert df.index.names == ["number", "param", "levtype", "levelist"]
 
 
 def test_parse_index_file_contains_offset_and_length_columns(index_file: Path) -> None:
-    df = _parse_index_file(index_file)
+    df = _parse_index_file(index_file, ensemble=True)
     assert "_offset" in df.columns
     assert "_length" in df.columns
 
 
 def test_parse_index_file_correct_control_member_offset(index_file: Path) -> None:
-    df = _parse_index_file(index_file)
+    df = _parse_index_file(index_file, ensemble=True)
     row = df.loc[(0, "2t", "sfc", slice(None)), ["_offset", "_length"]]
     if isinstance(row, pd.DataFrame):
         row = row.iloc[0]
@@ -79,7 +79,7 @@ def test_parse_index_file_correct_control_member_offset(index_file: Path) -> Non
 
 
 def test_parse_index_file_correct_perturbed_member_offset(index_file: Path) -> None:
-    df = _parse_index_file(index_file)
+    df = _parse_index_file(index_file, ensemble=True)
     row = df.loc[(1, "2t", "sfc", slice(None)), ["_offset", "_length"]]
     if isinstance(row, pd.DataFrame):
         row = row.iloc[0]
