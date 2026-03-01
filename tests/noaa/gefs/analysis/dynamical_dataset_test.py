@@ -24,7 +24,7 @@ def test_operational_kubernetes_resources(dataset: GefsAnalysisDataset) -> None:
 
     # Check update job
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
-    assert update_cron_job.schedule == "0 0,6,12,18 * * *"  # Every 6 hours
+    assert update_cron_job.schedule == "51 3,9,15,21 * * *"
     assert update_cron_job.secret_names == dataset.store_factory.k8s_secret_names()
     assert update_cron_job.cpu == "14"
     assert update_cron_job.memory == "30G"
@@ -33,9 +33,7 @@ def test_operational_kubernetes_resources(dataset: GefsAnalysisDataset) -> None:
 
     # Check validation job
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    assert (
-        validation_cron_job.schedule == "10 0,6,12,18 * * *"
-    )  # 10 minutes after updates
+    assert validation_cron_job.schedule == "51 4,10,16,22 * * *"
     assert validation_cron_job.secret_names == dataset.store_factory.k8s_secret_names()
     assert validation_cron_job.cpu == "1.3"
     assert validation_cron_job.memory == "7G"
