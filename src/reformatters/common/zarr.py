@@ -88,7 +88,7 @@ def _copy_data_var_chunks(
     for file in tmp_store.glob(f"{relative_dir}**/*"):
         if not file.is_file():
             continue
-        key = str(file.relative_to(tmp_store))
+        key = file.relative_to(tmp_store).as_posix()
         sync_to_store(store, key, file.read_bytes())
 
 
@@ -151,7 +151,7 @@ def _copy_metadata_files(
     store: Store,
 ) -> None:
     for file in metadata_files:
-        relative_path = str(file.relative_to(tmp_store))
+        relative_path = file.relative_to(tmp_store).as_posix()
         sync_to_store(store, relative_path, file.read_bytes())
 
 
