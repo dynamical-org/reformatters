@@ -698,11 +698,19 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 index, coord = futures[future]
                 try:
                     data = future.result()
+                    # Clear result from the future to free the numpy array now
+                    # that it's been copied into the shared memory buffer.
+                    # Without this, as_completed holds all futures (and their
+                    # results) alive for the duration of the loop, roughly
+                    # doubling peak memory.
+                    future._result = None  # noqa: SLF001
                     out.loc[coord.out_loc()] = data
+                    del data
                     updated_coords[index] = replace(
                         coord, status=SourceFileStatus.Succeeded
                     )
                 except Exception:
+                    future._result = None  # noqa: SLF001
                     log.exception(f"Read failed {coord.downloaded_path}")
                     updated_coords[index] = replace(
                         coord, status=SourceFileStatus.ReadFailed
