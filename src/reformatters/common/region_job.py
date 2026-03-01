@@ -697,7 +697,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             for future in concurrent.futures.as_completed(futures):
                 index, coord = futures[future]
                 try:
-                    # as_completed retains futures and results; clear to avoid ~2x peak memory
                     out.loc[coord.out_loc()] = future.result()
                     updated_coords[index] = replace(
                         coord, status=SourceFileStatus.Succeeded
@@ -708,6 +707,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         coord, status=SourceFileStatus.ReadFailed
                     )
                 finally:
+                    # as_completed retains futures and results; clear to avoid ~2x peak memory
                     future._result = None  # noqa: SLF001
 
         sorted_updated_coords = [updated_coords[i] for i in sorted(updated_coords)]
