@@ -22,12 +22,14 @@ variables_option = typer.Option(
 start_date_option = typer.Option(
     None,
     "--start-date",
+    "--start",
     help="Scope analysis to times after this date",
 )
 
 end_date_option = typer.Option(
     None,
     "--end-date",
+    "--end",
     help="Scope analysis to times before this date",
 )
 
