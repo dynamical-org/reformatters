@@ -31,8 +31,8 @@ MRMS_V12_START = pd.Timestamp("2020-10-14T20:00")
 class NoaaMrmsInternalAttrs(BaseInternalAttrs):
     mrms_product: str
     mrms_product_pre_v12: str
-    mrms_fallback_products_pre_v12: tuple[str, ...]
-    mrms_fallback_products: tuple[str, ...]
+    mrms_fallback_products_pre_v12: tuple[str, ...] = ()
+    mrms_fallback_products: tuple[str, ...] = ()
     mrms_level: str
     # Product only available from this time onwards; earlier times emit NaN
     available_from: Timestamp | None = None
@@ -248,8 +248,6 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                 internal_attrs=NoaaMrmsInternalAttrs(
                     mrms_product="MultiSensor_QPE_01H_Pass1",
                     mrms_product_pre_v12="MultiSensor_QPE_01H_Pass1",
-                    mrms_fallback_products_pre_v12=(),
-                    mrms_fallback_products=(),
                     mrms_level="00.00",
                     available_from=MRMS_V12_START,
                     deaccumulate_to_rate=True,
@@ -271,8 +269,6 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                 internal_attrs=NoaaMrmsInternalAttrs(
                     mrms_product="RadarOnly_QPE_01H",
                     mrms_product_pre_v12="RadarOnly_QPE_01H",
-                    mrms_fallback_products_pre_v12=(),
-                    mrms_fallback_products=(),
                     mrms_level="00.00",
                     deaccumulate_to_rate=True,
                     window_reset_frequency=qpe_window_reset_frequency,
@@ -292,8 +288,6 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                 internal_attrs=NoaaMrmsInternalAttrs(
                     mrms_product="PrecipFlag",
                     mrms_product_pre_v12="PrecipFlag",
-                    mrms_fallback_products_pre_v12=(),
-                    mrms_fallback_products=(),
                     mrms_level="00.00",
                     keep_mantissa_bits="no-rounding",
                 ),
