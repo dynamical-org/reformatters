@@ -32,7 +32,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="14",
-            memory="120G",
+            memory="85G",
             shared_memory="71G",
             ephemeral_storage="60G",
             secret_names=self.store_factory.k8s_secret_names(),
