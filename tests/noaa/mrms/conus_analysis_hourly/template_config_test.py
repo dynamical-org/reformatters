@@ -114,6 +114,13 @@ def test_precipitation_surface_has_pre_v12_product() -> None:
     precip_var = next(v for v in config.data_vars if v.name == "precipitation_surface")
     assert precip_var.internal_attrs.mrms_product == "MultiSensor_QPE_01H_Pass2"
     assert precip_var.internal_attrs.mrms_product_pre_v12 == "GaugeCorr_QPE_01H"
+    assert precip_var.internal_attrs.mrms_fallback_products_pre_v12 == (
+        "RadarOnly_QPE_01H",
+    )
+    assert precip_var.internal_attrs.mrms_fallback_products == (
+        "MultiSensor_QPE_01H_Pass1",
+        "RadarOnly_QPE_01H",
+    )
 
 
 def test_categorical_precipitation_type_is_instant() -> None:
@@ -163,6 +170,7 @@ def test_source_file_coords_and_crs_match_template(tmp_path: Path) -> None:
         time=time,
         product=precip_var.internal_attrs.mrms_product,
         level=precip_var.internal_attrs.mrms_level,
+        fallback_products=precip_var.internal_attrs.mrms_fallback_products,
     )
     coord = replace(coord, downloaded_path=region_job.download_file(coord))
     assert coord.downloaded_path is not None
