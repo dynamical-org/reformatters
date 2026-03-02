@@ -30,9 +30,10 @@ MRMS_V12_START = pd.Timestamp("2020-10-14T20:00")
 
 class NoaaMrmsInternalAttrs(BaseInternalAttrs):
     mrms_product: str
-    # Pre-v12 product name on Iowa Mesonet (e.g. GaugeCorr_QPE_01H for precipitation_surface)
-    mrms_product_pre_v12: str | None = None
-    mrms_level: str = "00.00"
+    mrms_product_pre_v12: str
+    mrms_fallback_products_pre_v12: tuple[str, ...]
+    mrms_fallback_products: tuple[str, ...]
+    mrms_level: str
     # Product only available from this time onwards; earlier times emit NaN
     available_from: Timestamp | None = None
     # For deaccumulation: MRMS hourly QPE is a 1-hour fixed window accumulation
@@ -217,11 +218,17 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                     long_name="Precipitation rate",
                     units="kg m-2 s-1",
                     step_type="avg",
-                    comment="Average precipitation rate over the previous hour. Derived from MultiSensor_QPE_01H_Pass2 from October 2020, GaugeCorr_QPE_01H before. Units equivalent to mm/s.",
+                    comment="Average precipitation rate over the previous hour. Derived from MultiSensor_QPE_01H_Pass2 from October 2020, GaugeCorr_QPE_01H before. If primary product is unavailable, falls back to MultiSensor_QPE_01H_Pass1 and then RadarOnly_QPE_01H. Units equivalent to mm/s.",
                 ),
                 internal_attrs=NoaaMrmsInternalAttrs(
                     mrms_product="MultiSensor_QPE_01H_Pass2",
                     mrms_product_pre_v12="GaugeCorr_QPE_01H",
+                    mrms_fallback_products_pre_v12=("RadarOnly_QPE_01H",),
+                    mrms_fallback_products=(
+                        "MultiSensor_QPE_01H_Pass1",
+                        "RadarOnly_QPE_01H",
+                    ),
+                    mrms_level="00.00",
                     deaccumulate_to_rate=True,
                     window_reset_frequency=qpe_window_reset_frequency,
                     keep_mantissa_bits=default_keep_mantissa_bits,
@@ -240,6 +247,10 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                 ),
                 internal_attrs=NoaaMrmsInternalAttrs(
                     mrms_product="MultiSensor_QPE_01H_Pass1",
+                    mrms_product_pre_v12="MultiSensor_QPE_01H_Pass1",
+                    mrms_fallback_products_pre_v12=(),
+                    mrms_fallback_products=(),
+                    mrms_level="00.00",
                     available_from=MRMS_V12_START,
                     deaccumulate_to_rate=True,
                     window_reset_frequency=qpe_window_reset_frequency,
@@ -259,6 +270,10 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                 ),
                 internal_attrs=NoaaMrmsInternalAttrs(
                     mrms_product="RadarOnly_QPE_01H",
+                    mrms_product_pre_v12="RadarOnly_QPE_01H",
+                    mrms_fallback_products_pre_v12=(),
+                    mrms_fallback_products=(),
+                    mrms_level="00.00",
                     deaccumulate_to_rate=True,
                     window_reset_frequency=qpe_window_reset_frequency,
                     keep_mantissa_bits=default_keep_mantissa_bits,
@@ -276,6 +291,10 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                 ),
                 internal_attrs=NoaaMrmsInternalAttrs(
                     mrms_product="PrecipFlag",
+                    mrms_product_pre_v12="PrecipFlag",
+                    mrms_fallback_products_pre_v12=(),
+                    mrms_fallback_products=(),
+                    mrms_level="00.00",
                     keep_mantissa_bits="no-rounding",
                 ),
             ),

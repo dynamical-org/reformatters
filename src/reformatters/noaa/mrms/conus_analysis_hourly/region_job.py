@@ -13,6 +13,7 @@ from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.logging import get_logger
+from reformatters.common.pydantic import replace
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
     RegionJob,
@@ -36,7 +37,8 @@ type DownloadSource = Literal["iowa", "s3", "ncep"]
 class NoaaMrmsSourceFileCoord(SourceFileCoord):
     time: Timestamp
     product: str
-    level: str = "00.00"
+    level: str
+    fallback_products: tuple[str, ...]
 
     def get_url(self, source: DownloadSource = "s3") -> str:
         date_str = self.time.strftime("%Y%m%d")
@@ -81,6 +83,7 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[NoaaMrmsDataVar],
     ) -> Sequence[NoaaMrmsSourceFileCoord]:
+        assert len(data_var_group) == 1
         times = pd.to_datetime(processing_region_ds["time"].values)
         data_var = data_var_group[0]
         internal = data_var.internal_attrs
@@ -92,16 +95,19 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
                 continue
 
             # Use pre-v12 product name for times before v12 launch
-            if internal.mrms_product_pre_v12 is not None and time < MRMS_V12_START:
+            if time < MRMS_V12_START:
                 product = internal.mrms_product_pre_v12
+                fallback_products = internal.mrms_fallback_products_pre_v12
             else:
                 product = internal.mrms_product
+                fallback_products = internal.mrms_fallback_products
 
             coords.append(
                 NoaaMrmsSourceFileCoord(
                     time=time,
                     product=product,
                     level=internal.mrms_level,
+                    fallback_products=fallback_products,
                 )
             )
         return coords
@@ -113,14 +119,31 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
         return _decompress_gzip(gz_path)
 
     def download_file(self, coord: NoaaMrmsSourceFileCoord) -> Path:
-        if coord.time < MRMS_V12_START:
-            return self._download_from_source(coord, source="iowa")
-        try:
-            return self._download_from_source(coord, source="s3")
-        except FileNotFoundError:
-            if coord.time > (pd.Timestamp.now() - pd.Timedelta(hours=12)):
-                return self._download_from_source(coord, source="ncep")
-            raise
+        is_pre_v12 = coord.time < MRMS_V12_START
+        is_recent = coord.time > (pd.Timestamp.now() - pd.Timedelta(hours=12))
+
+        sources: tuple[DownloadSource, ...]
+        if is_pre_v12:
+            sources = ("iowa",)
+        elif is_recent:
+            sources = ("s3", "ncep")
+        else:
+            sources = ("s3",)
+
+        products = (coord.product, *coord.fallback_products)
+
+        last_exception: FileNotFoundError | None = None
+        for product in products:
+            for source in sources:
+                try:
+                    return self._download_from_source(
+                        replace(coord, product=product), source=source
+                    )
+                except FileNotFoundError as exc:
+                    last_exception = exc
+
+        assert last_exception is not None
+        raise last_exception
 
     def read_data(
         self,
@@ -130,18 +153,25 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
         assert coord.downloaded_path is not None
         with rasterio.open(coord.downloaded_path) as reader:
             if reader.count == 2 and coord.time < MRMS_V12_START:
-                # Some pre-v12 Iowa Mesonet files have a duplicate GRIB message with
-                # standard meteorological discipline (0) alongside the MRMS-specific one (209).
-                # Band 1 (discipline 209) is always the authoritative MRMS data.
-                band2_discipline = reader.tags(2).get("GRIB_DISCIPLINE", "")
-                assert band2_discipline == "0(Meteorological)", (
-                    f"Expected band 2 GRIB_DISCIPLINE '0(Meteorological)', found '{band2_discipline}' in {coord.downloaded_path}"
+                rasterio_band = next(
+                    (
+                        band
+                        for band in (1, 2)
+                        if reader.tags(band)
+                        .get("GRIB_DISCIPLINE", "")
+                        .startswith("209")
+                    ),
+                    None,
+                )
+                assert rasterio_band is not None, (
+                    f"Expected one band with GRIB_DISCIPLINE 209 in {coord.downloaded_path}"
                 )
             else:
                 assert reader.count == 1, (
                     f"Expected exactly 1 band, found {reader.count} in {coord.downloaded_path}"
                 )
-            result: ArrayFloat32 = reader.read(1, out_dtype=np.float32)
+                rasterio_band = 1
+            result: ArrayFloat32 = reader.read(rasterio_band, out_dtype=np.float32)
             return result
 
     def apply_data_transformations(

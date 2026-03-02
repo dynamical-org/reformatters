@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Self
 from unittest.mock import Mock
 
 import numpy as np
@@ -27,6 +28,8 @@ def test_source_file_coord_out_loc() -> None:
     coord = NoaaMrmsSourceFileCoord(
         time=pd.Timestamp("2024-01-15T12:00"),
         product="MultiSensor_QPE_01H_Pass2",
+        level="00.00",
+        fallback_products=(),
     )
     assert coord.out_loc() == {"time": pd.Timestamp("2024-01-15T12:00")}
 
@@ -35,6 +38,8 @@ def test_source_file_coord_get_url_s3() -> None:
     coord = NoaaMrmsSourceFileCoord(
         time=pd.Timestamp("2024-01-15T12:00"),
         product="MultiSensor_QPE_01H_Pass2",
+        level="00.00",
+        fallback_products=(),
     )
     url = coord.get_url(source="s3")
     assert url == (
@@ -48,6 +53,8 @@ def test_source_file_coord_get_url_iowa() -> None:
     coord = NoaaMrmsSourceFileCoord(
         time=pd.Timestamp("2019-06-15T12:00"),
         product="GaugeCorr_QPE_01H",
+        level="00.00",
+        fallback_products=(),
     )
     url = coord.get_url(source="iowa")
     assert url == (
@@ -61,6 +68,8 @@ def test_source_file_coord_get_url_ncep() -> None:
     coord = NoaaMrmsSourceFileCoord(
         time=pd.Timestamp("2024-01-15T23:00"),
         product="MultiSensor_QPE_01H_Pass2",
+        level="00.00",
+        fallback_products=(),
     )
     url = coord.get_url(source="ncep")
     assert url == (
@@ -105,6 +114,10 @@ def test_generate_source_file_coords_post_v12(
 
     assert len(coords) == 3
     assert all(c.product == "MultiSensor_QPE_01H_Pass2" for c in coords)
+    assert all(
+        c.fallback_products == ("MultiSensor_QPE_01H_Pass1", "RadarOnly_QPE_01H")
+        for c in coords
+    )
 
 
 def test_generate_source_file_coords_pre_v12(
@@ -133,6 +146,7 @@ def test_generate_source_file_coords_pre_v12(
     assert len(coords) == 3
     # Pre-v12 should use GaugeCorr_QPE_01H
     assert all(c.product == "GaugeCorr_QPE_01H" for c in coords)
+    assert all(c.fallback_products == ("RadarOnly_QPE_01H",) for c in coords)
 
 
 def test_generate_source_file_coords_pass_1_pre_v12_skipped(
@@ -160,6 +174,94 @@ def test_generate_source_file_coords_pass_1_pre_v12_skipped(
 
     # Pass 1 not available pre-v12, should have no coords
     assert len(coords) == 0
+
+
+def test_download_file_uses_fallback_products(monkeypatch: pytest.MonkeyPatch) -> None:
+    region_job = NoaaMrmsRegionJob.model_construct(
+        template_ds=Mock(),
+        data_vars=[],
+        append_dim="time",
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    attempts: list[tuple[str, str]] = []
+
+    def fake_download(coord: NoaaMrmsSourceFileCoord, source: str) -> Path:
+        attempts.append((coord.product, source))
+        if coord.product == "RadarOnly_QPE_01H" and source == "s3":
+            return Path("fake.grib2")
+        raise FileNotFoundError(coord.product)
+
+    monkeypatch.setattr(
+        pd.Timestamp, "now", classmethod(lambda *args: pd.Timestamp("2024-01-16T12:00"))
+    )
+    monkeypatch.setattr(region_job, "_download_from_source", fake_download)
+
+    path = region_job.download_file(
+        NoaaMrmsSourceFileCoord(
+            time=pd.Timestamp("2024-01-15T12:00"),
+            product="MultiSensor_QPE_01H_Pass2",
+            level="00.00",
+            fallback_products=("MultiSensor_QPE_01H_Pass1", "RadarOnly_QPE_01H"),
+        )
+    )
+
+    assert path == Path("fake.grib2")
+    assert attempts == [
+        ("MultiSensor_QPE_01H_Pass2", "s3"),
+        ("MultiSensor_QPE_01H_Pass1", "s3"),
+        ("RadarOnly_QPE_01H", "s3"),
+    ]
+
+
+def test_read_data_pre_v12_two_band_selects_discipline_209(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    region_job = NoaaMrmsRegionJob.model_construct(
+        template_ds=Mock(),
+        data_vars=[],
+        append_dim="time",
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    data = np.ones((2, 2), dtype=np.float32)
+
+    class FakeReader:
+        count = 2
+
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def tags(self, band: int) -> dict[str, str]:
+            return {
+                1: {"GRIB_DISCIPLINE": "0(Meteorological)"},
+                2: {"GRIB_DISCIPLINE": "209(Local)"},
+            }[band]
+
+        def read(self, band: int, out_dtype: np.dtype[np.float32]) -> np.ndarray:
+            assert out_dtype == np.float32
+            assert band == 2
+            return data
+
+    monkeypatch.setattr("rasterio.open", lambda *_args, **_kwargs: FakeReader())
+
+    result = region_job.read_data(
+        NoaaMrmsSourceFileCoord(
+            time=pd.Timestamp("2019-06-15T12:00"),
+            product="GaugeCorr_QPE_01H",
+            level="00.00",
+            fallback_products=(),
+            downloaded_path=Path("fake.grib2"),
+        ),
+        Mock(),
+    )
+
+    np.testing.assert_array_equal(result, data)
 
 
 @pytest.mark.parametrize(
@@ -301,6 +403,8 @@ def test_download_and_read_precipitation(
     coord = NoaaMrmsSourceFileCoord(
         time=time,
         product=expected_product,
+        level=precip_var.internal_attrs.mrms_level,
+        fallback_products=precip_var.internal_attrs.mrms_fallback_products,
     )
 
     downloaded_path = region_job.download_file(coord)
@@ -332,6 +436,8 @@ def test_download_and_read_radar_only(tmp_path: Path) -> None:
     coord = NoaaMrmsSourceFileCoord(
         time=pd.Timestamp("2024-01-15T12:00"),
         product="RadarOnly_QPE_01H",
+        level=radar_var.internal_attrs.mrms_level,
+        fallback_products=radar_var.internal_attrs.mrms_fallback_products,
     )
 
     downloaded_path = region_job.download_file(coord)
@@ -365,6 +471,8 @@ def test_download_and_read_precip_flag(tmp_path: Path) -> None:
     coord = NoaaMrmsSourceFileCoord(
         time=pd.Timestamp("2024-01-15T12:00"),
         product="PrecipFlag",
+        level=ptype_var.internal_attrs.mrms_level,
+        fallback_products=ptype_var.internal_attrs.mrms_fallback_products,
     )
 
     downloaded_path = region_job.download_file(coord)
