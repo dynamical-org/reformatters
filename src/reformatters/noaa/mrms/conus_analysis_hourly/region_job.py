@@ -11,7 +11,10 @@ from zarr.abc.store import Store
 
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
-from reformatters.common.download import http_download_to_disk
+from reformatters.common.download import (
+    http_download_to_disk,
+    s3_list_first_key_with_prefix,
+)
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import replace
 from reformatters.common.region_job import (
@@ -32,6 +35,8 @@ from .template_config import MRMS_V12_START, NoaaMrmsDataVar
 log = get_logger(__name__)
 
 type DownloadSource = Literal["iowa", "s3", "ncep"]
+
+_NOAA_MRMS_S3_BASE_URL = "https://noaa-mrms-pds.s3.amazonaws.com"
 
 
 class NoaaMrmsSourceFileCoord(SourceFileCoord):
@@ -115,7 +120,27 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
     def _download_from_source(
         self, coord: NoaaMrmsSourceFileCoord, source: DownloadSource
     ) -> Path:
-        gz_path = http_download_to_disk(coord.get_url(source=source), self.dataset_id)
+        try:
+            gz_path = http_download_to_disk(
+                coord.get_url(source=source), self.dataset_id
+            )
+        except FileNotFoundError:
+            # RadarOnly QPE is published at 2-min intervals. When the system starts late
+            # the exact HH:00:00 file is missing but a file at HH:MM:00 (MM > 0) exists.
+            # List the hour's directory and try the first file found.
+            if source != "s3" or not coord.product.startswith("RadarOnly_QPE_"):
+                raise
+            date_str = coord.time.strftime("%Y%m%d")
+            hour_str = coord.time.strftime("%Y%m%d-%H")
+            key_prefix = f"CONUS/{coord.product}_{coord.level}/{date_str}/MRMS_{coord.product}_{coord.level}_{hour_str}"
+            first_key = s3_list_first_key_with_prefix(
+                _NOAA_MRMS_S3_BASE_URL, key_prefix
+            )
+            if first_key is None:
+                raise
+            gz_path = http_download_to_disk(
+                f"{_NOAA_MRMS_S3_BASE_URL}/{first_key}", self.dataset_id
+            )
         return _decompress_gzip(gz_path)
 
     def download_file(self, coord: NoaaMrmsSourceFileCoord) -> Path:

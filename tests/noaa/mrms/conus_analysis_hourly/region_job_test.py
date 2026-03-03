@@ -1,16 +1,19 @@
+import gzip
 from pathlib import Path
 from typing import Self
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from reformatters.common import download as download_module
 from reformatters.common import template_utils
 from reformatters.common.pydantic import replace
 from reformatters.common.region_job import SourceFileStatus
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.noaa.mrms.conus_analysis_hourly.region_job import (
+    _NOAA_MRMS_S3_BASE_URL,
     NoaaMrmsRegionJob,
     NoaaMrmsSourceFileCoord,
 )
@@ -370,6 +373,120 @@ def test_update_template_with_results(
     result_ds = region_job.update_template_with_results(process_results)
 
     assert len(result_ds.time) == len(template_ds.time)
+
+
+_DEFAULT_RADAR_ONLY_TIME = pd.Timestamp("2021-09-16T22:00")
+
+
+def _make_region_job() -> NoaaMrmsRegionJob:
+    mock_ds = Mock()
+    mock_ds.attrs = {"dataset_id": "noaa-mrms-conus-analysis-hourly"}
+    return NoaaMrmsRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=mock_ds,
+        data_vars=[],
+        append_dim="time",
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+
+def _radar_only_coord(
+    time: pd.Timestamp = _DEFAULT_RADAR_ONLY_TIME,
+) -> NoaaMrmsSourceFileCoord:
+    return NoaaMrmsSourceFileCoord(
+        time=time,
+        product="RadarOnly_QPE_01H",
+        level="00.00",
+        fallback_products=(),
+    )
+
+
+def test_download_from_source_radaronly_falls_back_to_nearest_file_in_hour(
+    tmp_path: Path,
+) -> None:
+    region_job = _make_region_job()
+    coord = _radar_only_coord()
+
+    nearest_key = "CONUS/RadarOnly_QPE_01H_00.00/20210916/MRMS_RadarOnly_QPE_01H_00.00_20210916-220800.grib2.gz"
+    gz_path = tmp_path / "fake.grib2.gz"
+    with gzip.open(gz_path, "wb") as f:
+        f.write(b"data")
+
+    exact_url = coord.get_url(source="s3")
+    nearest_url = f"{_NOAA_MRMS_S3_BASE_URL}/{nearest_key}"
+
+    downloaded_paths: list[str] = []
+
+    def fake_http_download(url: str, dataset_id: str) -> Path:
+        downloaded_paths.append(url)
+        if url == exact_url:
+            raise FileNotFoundError(f"Not found: {url}")
+        return gz_path
+
+    decompressed_path = tmp_path / "fake.grib2"
+
+    with (
+        patch.object(download_module, "_httpx_get_with_retry") as mock_list,
+        patch(
+            "reformatters.noaa.mrms.conus_analysis_hourly.region_job.http_download_to_disk",
+            side_effect=fake_http_download,
+        ),
+    ):
+        mock_list.return_value = Mock(
+            text=f"<ListBucketResult><Contents><Key>{nearest_key}</Key></Contents></ListBucketResult>",
+            status_code=200,
+        )
+        result = region_job._download_from_source(coord, source="s3")
+
+    assert downloaded_paths == [exact_url, nearest_url]
+    assert result == decompressed_path
+
+
+def test_download_from_source_radaronly_reraises_when_no_files_in_hour(
+    tmp_path: Path,
+) -> None:
+    region_job = _make_region_job()
+    coord = _radar_only_coord()
+
+    with patch.object(download_module, "_httpx_get_with_retry") as mock_list:
+        mock_list.return_value = Mock(
+            text="<ListBucketResult></ListBucketResult>",
+            status_code=200,
+        )
+        with (
+            patch(
+                "reformatters.noaa.mrms.conus_analysis_hourly.region_job.http_download_to_disk",
+                side_effect=FileNotFoundError("Not found"),
+            ),
+            pytest.raises(FileNotFoundError),
+        ):
+            region_job._download_from_source(coord, source="s3")
+
+
+def test_download_from_source_multisensor_reraises_without_listing(
+    tmp_path: Path,
+) -> None:
+    region_job = _make_region_job()
+    coord = NoaaMrmsSourceFileCoord(
+        time=pd.Timestamp("2021-09-16T22:00"),
+        product="MultiSensor_QPE_01H_Pass2",
+        level="00.00",
+        fallback_products=(),
+    )
+
+    with (
+        patch.object(download_module, "_httpx_get_with_retry") as mock_list,
+        patch(
+            "reformatters.noaa.mrms.conus_analysis_hourly.region_job.http_download_to_disk",
+            side_effect=FileNotFoundError("Not found"),
+        ),
+        pytest.raises(FileNotFoundError),
+    ):
+        region_job._download_from_source(coord, source="s3")
+
+    # S3 listing should NOT be called for non-RadarOnly products
+    mock_list.assert_not_called()
 
 
 @pytest.mark.slow

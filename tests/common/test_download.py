@@ -16,6 +16,7 @@ from reformatters.common.download import (
     http_download_to_disk,
     http_store,
     httpx_download_to_disk,
+    s3_list_first_key_with_prefix,
     s3_store,
 )
 
@@ -432,3 +433,58 @@ def test_httpx_get_with_retry_raises_on_4xx() -> None:
         pytest.raises(httpx.HTTPStatusError),
     ):
         _httpx_get_with_retry("https://example.com/test")
+
+
+# --- s3_list_first_key_with_prefix tests ---
+
+
+def _make_s3_list_xml(keys: list[str]) -> str:
+    contents = "".join(f"<Contents><Key>{k}</Key></Contents>" for k in keys)
+    return f"<?xml version='1.0'?><ListBucketResult>{contents}</ListBucketResult>"
+
+
+def test_s3_list_first_key_with_prefix_returns_first_key() -> None:
+    xml = _make_s3_list_xml(["CONUS/RadarOnly/20210916/file-220800.grib2.gz"])
+    response = _make_httpx_response(status_code=200, content=xml.encode())
+
+    with patch.object(download_module, "_httpx_get_with_retry", return_value=response):
+        result = s3_list_first_key_with_prefix(
+            "https://noaa-mrms-pds.s3.amazonaws.com",
+            "CONUS/RadarOnly/20210916/file-22",
+        )
+
+    assert result == "CONUS/RadarOnly/20210916/file-220800.grib2.gz"
+
+
+def test_s3_list_first_key_with_prefix_returns_none_when_empty() -> None:
+    xml = _make_s3_list_xml([])
+    response = _make_httpx_response(status_code=200, content=xml.encode())
+
+    with patch.object(download_module, "_httpx_get_with_retry", return_value=response):
+        result = s3_list_first_key_with_prefix(
+            "https://noaa-mrms-pds.s3.amazonaws.com",
+            "CONUS/RadarOnly/20210916/file-22",
+        )
+
+    assert result is None
+
+
+def test_s3_list_first_key_with_prefix_uses_correct_list_url() -> None:
+    captured_urls: list[str] = []
+
+    def fake_get(url: str, **kwargs: object) -> httpx.Response:
+        captured_urls.append(url)
+        return _make_httpx_response(
+            status_code=200, content=_make_s3_list_xml([]).encode()
+        )
+
+    with patch.object(download_module, "_httpx_get_with_retry", fake_get):
+        s3_list_first_key_with_prefix(
+            "https://bucket.s3.amazonaws.com",
+            "some/key/prefix",
+        )
+
+    assert len(captured_urls) == 1
+    assert "list-type=2" in captured_urls[0]
+    assert "prefix=some%2Fkey%2Fprefix" in captured_urls[0]
+    assert "max-keys=1" in captured_urls[0]

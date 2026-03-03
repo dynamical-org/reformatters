@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import re
 import threading
 import time
 import uuid
@@ -9,7 +10,7 @@ from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import httpx
 import numpy as np
@@ -329,3 +330,11 @@ def httpx_download_to_disk(
         raise
 
     return local_path
+
+
+def s3_list_first_key_with_prefix(base_url: str, key_prefix: str) -> str | None:
+    """List S3 objects matching key_prefix and return the first key, or None if empty."""
+    list_url = f"{base_url}/?list-type=2&prefix={quote(key_prefix, safe='')}&max-keys=1"
+    response = _httpx_get_with_retry(list_url)
+    keys = re.findall(r"<Key>([^<]+)</Key>", response.text)
+    return keys[0] if keys else None
