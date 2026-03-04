@@ -114,7 +114,7 @@ def test_precipitation_surface_has_pre_v12_product() -> None:
     precip_var = next(v for v in config.data_vars if v.name == "precipitation_surface")
     assert precip_var.internal_attrs.mrms_product == "MultiSensor_QPE_01H_Pass2"
     assert precip_var.internal_attrs.mrms_product_pre_v12 == "GaugeCorr_QPE_01H"
-    assert precip_var.internal_attrs.mrms_fallback_products_pre_v12 == ()
+    assert precip_var.internal_attrs.mrms_fallback_products_pre_v12 == ("RadarOnly_QPE_01H",)
     assert precip_var.internal_attrs.mrms_fallback_products == (
         "MultiSensor_QPE_01H_Pass1",
         "RadarOnly_QPE_01H",

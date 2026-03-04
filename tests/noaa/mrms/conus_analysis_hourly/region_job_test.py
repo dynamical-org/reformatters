@@ -146,7 +146,7 @@ def test_generate_source_file_coords_pre_v12(
     assert len(coords) == 3
     # Pre-v12 should use GaugeCorr_QPE_01H
     assert all(c.product == "GaugeCorr_QPE_01H" for c in coords)
-    assert all(c.fallback_products == () for c in coords)
+    assert all(c.fallback_products == ("RadarOnly_QPE_01H",) for c in coords)
 
 
 def test_generate_source_file_coords_pass_1_pre_v12_skipped(
