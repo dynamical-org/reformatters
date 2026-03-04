@@ -22,7 +22,7 @@ def test_template_config_attrs() -> None:
 
     assert config.dims == ("time", "latitude", "longitude")
     assert config.append_dim == "time"
-    assert config.append_dim_start == pd.Timestamp("2014-10-01T00:00")
+    assert config.append_dim_start == pd.Timestamp("2014-11-01T00:00")
     assert config.append_dim_frequency == pd.Timedelta("1h")
 
 
@@ -114,9 +114,7 @@ def test_precipitation_surface_has_pre_v12_product() -> None:
     precip_var = next(v for v in config.data_vars if v.name == "precipitation_surface")
     assert precip_var.internal_attrs.mrms_product == "MultiSensor_QPE_01H_Pass2"
     assert precip_var.internal_attrs.mrms_product_pre_v12 == "GaugeCorr_QPE_01H"
-    assert precip_var.internal_attrs.mrms_fallback_products_pre_v12 == (
-        "RadarOnly_QPE_01H",
-    )
+    assert precip_var.internal_attrs.mrms_fallback_products_pre_v12 == ()
     assert precip_var.internal_attrs.mrms_fallback_products == (
         "MultiSensor_QPE_01H_Pass1",
         "RadarOnly_QPE_01H",
@@ -137,11 +135,11 @@ def test_categorical_precipitation_type_is_instant() -> None:
 
 def test_derive_coordinates_integration() -> None:
     config = NoaaMrmsConusAnalysisHourlyTemplateConfig()
-    template_ds = config.get_template(pd.Timestamp("2014-10-01T12:00"))
+    template_ds = config.get_template(pd.Timestamp("2014-11-01T12:00"))
 
     assert (
         template_ds.coords["time"]
-        == pd.date_range("2014-10-01T00:00", "2014-10-01T11:00", freq="1h")
+        == pd.date_range("2014-11-01T00:00", "2014-11-01T11:00", freq="1h")
     ).all()
     assert "spatial_ref" in template_ds.coords
 

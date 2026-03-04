@@ -47,9 +47,8 @@ class NoaaMrmsDataVar(DataVar[NoaaMrmsInternalAttrs]):
 class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar]):
     dims: tuple[Dim, ...] = ("time", "latitude", "longitude")
     append_dim: AppendDim = "time"
-    # MRMS became operational at NCEP in September 2014.
-    # Iowa Mesonet archive starts October 2014.
-    append_dim_start: Timestamp = pd.Timestamp("2014-10-01T00:00")
+    # Iowa Mesonet archive for MRMS starts November 2014.
+    append_dim_start: Timestamp = pd.Timestamp("2014-11-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("1h")
 
     @computed_field
@@ -223,7 +222,6 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                 internal_attrs=NoaaMrmsInternalAttrs(
                     mrms_product="MultiSensor_QPE_01H_Pass2",
                     mrms_product_pre_v12="GaugeCorr_QPE_01H",
-                    mrms_fallback_products_pre_v12=("RadarOnly_QPE_01H",),
                     mrms_fallback_products=(
                         "MultiSensor_QPE_01H_Pass1",
                         "RadarOnly_QPE_01H",
