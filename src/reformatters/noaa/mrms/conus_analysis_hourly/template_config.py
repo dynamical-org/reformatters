@@ -47,7 +47,7 @@ class NoaaMrmsDataVar(DataVar[NoaaMrmsInternalAttrs]):
 class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar]):
     dims: tuple[Dim, ...] = ("time", "latitude", "longitude")
     append_dim: AppendDim = "time"
-    # Iowa Mesonet archive for MRMS starts November 2014.
+    # Iowa Mesonet archive for MRMS has significant data availability November 2014 onwards.
     append_dim_start: Timestamp = pd.Timestamp("2014-11-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("1h")
 
