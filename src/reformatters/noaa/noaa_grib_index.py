@@ -10,6 +10,15 @@ from reformatters.noaa.models import NoaaInternalAttrs
 
 
 def _lead_time_str(var: DataVar[NoaaInternalAttrs], lead_hours: int) -> str:
+    if (
+        var.internal_attrs.grib_lead_time_is_running_total
+        or var.attrs.step_type == "accum"
+    ):
+        # Running total (non-resetting) accumulation since forecast start
+        if lead_hours % 24 == 0:
+            return f"0-{lead_hours // 24} day acc fcst"
+        return f"0-{lead_hours} hour acc fcst"
+
     if (reset_freq := var.internal_attrs.window_reset_frequency) is not None:
         reset_hours = whole_hours(reset_freq)
         diff = lead_hours % reset_hours
@@ -25,12 +34,6 @@ def _lead_time_str(var: DataVar[NoaaInternalAttrs], lead_hours: int) -> str:
         if lead_hours == 0:
             return f"0-0 day {step_type} fcst"
         return f"{reset_hour}-{lead_hours} hour {step_type} fcst"
-
-    if var.attrs.step_type == "accum":
-        # Running total (non-resetting) accumulation since forecast start
-        if lead_hours % 24 == 0:
-            return f"0-{lead_hours // 24} day acc fcst"
-        return f"0-{lead_hours} hour acc fcst"
 
     if lead_hours == 0:
         return "anl"

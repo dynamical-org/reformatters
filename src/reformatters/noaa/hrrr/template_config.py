@@ -580,7 +580,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
             ),
             NoaaHrrrDataVar(
-                name="snow_depth_surface",
+                name="snow_thickness_surface",
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="sde",
@@ -599,7 +599,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
             ),
             NoaaHrrrDataVar(
-                name="snow_cover_surface",
+                name="snow_area_fraction_surface",
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="snowc",
@@ -642,11 +642,10 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="asnow",
-                    standard_name="thickness_of_snowfall_amount",
-                    long_name="Total snowfall",
-                    units="m",
-                    step_type="accum",
-                    comment="Total snowfall accumulated since forecast initialization.",
+                    long_name="Total snowfall rate",
+                    units="m s-1",
+                    step_type="avg",
+                    comment="Average snowfall rate since the previous forecast step.",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="ASNOW",
@@ -654,6 +653,9 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     grib_index_level="surface",
                     index_position=65,
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    deaccumulate_to_rate=True,
+                    window_reset_frequency=pd.Timedelta.max,
+                    grib_lead_time_is_running_total=True,
                     hrrr_file_type="sfc",
                 ),
             ),

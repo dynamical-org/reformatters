@@ -1670,7 +1670,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "snow_cover_surface": {
+      "snow_area_fraction_surface": {
         "shape": [
           1,
           49,
@@ -1758,7 +1758,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "snow_depth_surface": {
+      "snow_thickness_surface": {
         "shape": [
           1,
           49,
@@ -2004,12 +2004,11 @@
           }
         ],
         "attributes": {
-          "long_name": "Total snowfall",
+          "long_name": "Total snowfall rate",
           "short_name": "asnow",
-          "standard_name": "thickness_of_snowfall_amount",
-          "units": "m",
-          "comment": "Total snowfall accumulated since forecast initialization.",
-          "step_type": "accum",
+          "units": "m s-1",
+          "comment": "Average snowfall rate since the previous forecast step.",
+          "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },

@@ -267,6 +267,8 @@ def test_cf_data_variables_have_standard_names_where_applicable(
         "composite_reflectivity",
         "soil_water_runoff",
         "qa",
+        # snowfall_surface is a snow depth rate (m s-1); CF has no standard name for this quantity
+        "snowfall_surface",
     }
 
     template_config = dataset.template_config
