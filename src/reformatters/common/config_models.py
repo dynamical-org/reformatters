@@ -159,6 +159,8 @@ class Coordinate(FrozenBaseModel):
 class BaseInternalAttrs(FrozenBaseModel):
     keep_mantissa_bits: int | Literal["no-rounding"]
     deaccumulate_to_rate: bool = False
+    # Multiply raw values by this factor after reading (e.g. 0.01 to convert percent to fraction)
+    scale_factor: float | None = None
     # If None, defers to attrs.step_type. Useful when an instantaneous variable does not have hour 0 values.
     # Access via has_hour_0_values(data_var), not directly.
     hour_0_values_override: bool | None = None

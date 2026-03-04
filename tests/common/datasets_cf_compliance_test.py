@@ -309,7 +309,6 @@ CF_UNITS_VARIANCES_ALLOWLIST: set[tuple[str, str]] = {
     ("cloud_area_fraction", "percent"),
     ("cloud_area_fraction_in_atmosphere_layer", "percent"),
     ("relative_humidity", "percent"),
-    ("surface_snow_area_fraction", "percent"),
     ("surface_snow_thickness", "mm"),
     ("lwe_thickness_of_surface_snow_amount", "mm"),
 }

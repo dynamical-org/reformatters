@@ -605,7 +605,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     short_name="snowc",
                     standard_name="surface_snow_area_fraction",
                     long_name="Snow cover",
-                    units="percent",
+                    units="1",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -614,6 +614,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     grib_index_level="surface",
                     index_position=69,
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    scale_factor=0.01,
                     hrrr_file_type="sfc",
                 ),
             ),

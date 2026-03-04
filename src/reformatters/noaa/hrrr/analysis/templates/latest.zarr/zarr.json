@@ -1460,7 +1460,7 @@
           "long_name": "Snow cover",
           "short_name": "snowc",
           "standard_name": "surface_snow_area_fraction",
-          "units": "percent",
+          "units": "1",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="

@@ -227,6 +227,9 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
                 # Log exception so we are notified if deaccumulation errors are larger than expected.
                 log.exception(f"Error deaccumulating {data_var.name}")
 
+        if (scale_factor := data_var.internal_attrs.scale_factor) is not None:
+            data_array.values *= np.float32(scale_factor)
+
         keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
         if isinstance(keep_mantissa_bits, int):
             round_float32_inplace(data_array.values, keep_mantissa_bits)
