@@ -655,7 +655,6 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     deaccumulate_to_rate=True,
                     window_reset_frequency=pd.Timedelta.max,
-                    grib_lead_time_is_running_total=True,
                     hrrr_file_type="sfc",
                 ),
             ),

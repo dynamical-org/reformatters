@@ -182,11 +182,10 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
             *data_var.internal_attrs.grib_element_alternatives,
         }
         # grib element has the accumulation window as a suffix in the grib file attributes, but not in the .idx file
-        # Running-total variables (e.g. ASNOW) don't get this suffix — they use local GRIB params
+        # Running-total variables (window_reset_frequency=pd.Timedelta.max, e.g. ASNOW) don't get this suffix
         if (
-            (reset_freq := data_var.internal_attrs.window_reset_frequency) is not None
-            and not data_var.internal_attrs.grib_lead_time_is_running_total
-        ):
+            reset_freq := data_var.internal_attrs.window_reset_frequency
+        ) is not None and reset_freq != pd.Timedelta.max:
             suffix = f"{whole_hours(reset_freq):02d}"
             grib_elements = {f"{e}{suffix}" for e in grib_elements}
 

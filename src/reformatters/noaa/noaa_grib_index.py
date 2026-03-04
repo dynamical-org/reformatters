@@ -11,7 +11,7 @@ from reformatters.noaa.models import NoaaInternalAttrs
 
 def _lead_time_str(var: DataVar[NoaaInternalAttrs], lead_hours: int) -> str:
     if (
-        var.internal_attrs.grib_lead_time_is_running_total
+        var.internal_attrs.window_reset_frequency == pd.Timedelta.max
         or var.attrs.step_type == "accum"
     ):
         # Running total (non-resetting) accumulation since forecast start
