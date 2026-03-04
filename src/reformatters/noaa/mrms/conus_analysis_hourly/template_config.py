@@ -47,9 +47,8 @@ class NoaaMrmsDataVar(DataVar[NoaaMrmsInternalAttrs]):
 class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar]):
     dims: tuple[Dim, ...] = ("time", "latitude", "longitude")
     append_dim: AppendDim = "time"
-    # MRMS became operational at NCEP in September 2014.
-    # Iowa Mesonet archive starts October 2014.
-    append_dim_start: Timestamp = pd.Timestamp("2014-10-01T00:00")
+    # Iowa Mesonet archive for MRMS has significant data availability November 2014 onwards.
+    append_dim_start: Timestamp = pd.Timestamp("2014-11-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("1h")
 
     @computed_field
@@ -57,7 +56,7 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
             dataset_id="noaa-mrms-conus-analysis-hourly",
-            dataset_version="0.2.0",
+            dataset_version="0.3.0",
             name="NOAA MRMS CONUS analysis, hourly",
             description="Hourly precipitation analysis from the Multi-Radar Multi-Sensor (MRMS) system operated by NOAA NWS NCEP.",
             attribution="NOAA NWS NCEP MRMS data processed by dynamical.org from NOAA NCEP, NOAA Open Data Dissemination and Iowa Mesonet archives.",

@@ -39,10 +39,20 @@ class NoaaMrmsSourceFileCoord(SourceFileCoord):
     product: str
     level: str
     fallback_products: tuple[str, ...]
+    # Only set for precipitation_surface timestamps in _PRECIPITATION_SURFACE_RADAR_ONLY_OVERRIDES.
+    # When set and product is RadarOnly_QPE_01H, get_url uses this timestamp instead of self.time.
+    radar_only_time_override: Timestamp | None = None
 
     def get_url(self, source: DownloadSource = "s3") -> str:
-        date_str = self.time.strftime("%Y%m%d")
-        time_str = self.time.strftime("%Y%m%d-%H%M%S")
+        if (
+            self.product == "RadarOnly_QPE_01H"
+            and self.radar_only_time_override is not None
+        ):
+            time = self.radar_only_time_override
+        else:
+            time = self.time
+        date_str = time.strftime("%Y%m%d")
+        time_str = time.strftime("%Y%m%d-%H%M%S")
 
         match source:
             case "s3":
@@ -51,9 +61,9 @@ class NoaaMrmsSourceFileCoord(SourceFileCoord):
             case "iowa":
                 # Iowa Mesonet doesn't use the MRMS_ prefix in filenames
                 filename = f"{self.product}_{self.level}_{time_str}.grib2.gz"
-                year = self.time.strftime("%Y")
-                month = self.time.strftime("%m")
-                day = self.time.strftime("%d")
+                year = time.strftime("%Y")
+                month = time.strftime("%m")
+                day = time.strftime("%d")
                 return f"https://mtarchive.geol.iastate.edu/{year}/{month}/{day}/mrms/ncep/{self.product}/{filename}"
             case "ncep":
                 filename = f"MRMS_{self.product}_{self.level}_{time_str}.grib2.gz"
@@ -102,12 +112,19 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
                 product = internal.mrms_product
                 fallback_products = internal.mrms_fallback_products
 
+            radar_only_time_override = None
+            if data_var.name == "precipitation_surface":
+                radar_only_time_override = (
+                    _PRECIPITATION_SURFACE_RADAR_ONLY_OVERRIDES.get(time)
+                )
+
             coords.append(
                 NoaaMrmsSourceFileCoord(
                     time=time,
                     product=product,
                     level=internal.mrms_level,
                     fallback_products=fallback_products,
+                    radar_only_time_override=radar_only_time_override,
                 )
             )
         return coords
@@ -226,6 +243,57 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
             filter_end=append_dim_end,
         )
         return jobs, template_ds
+
+
+# For precipitation_surface only: maps missing hourly timestamps to the RadarOnly file
+# timestamp to use as fallback. Pre-v12 entries use GaugeCorr as primary; when that
+# is absent, RadarOnly exists at the same timestamp on Iowa Mesonet. Post-v12 entries
+# use the nearest RadarOnly_QPE_01H 2-minute file within ±15min of the missing hour.
+_PRECIPITATION_SURFACE_RADAR_ONLY_OVERRIDES: dict[pd.Timestamp, pd.Timestamp] = {
+    # Pre-v12 (Iowa Mesonet): GaugeCorr absent for this period, RadarOnly at exact timestamp
+    pd.Timestamp("2014-11-03T18:00"): pd.Timestamp("2014-11-03T18:00"),
+    pd.Timestamp("2014-11-06T11:00"): pd.Timestamp("2014-11-06T11:00"),
+    pd.Timestamp("2014-11-11T06:00"): pd.Timestamp("2014-11-11T06:00"),
+    pd.Timestamp("2014-11-11T07:00"): pd.Timestamp("2014-11-11T07:00"),
+    pd.Timestamp("2014-11-11T08:00"): pd.Timestamp("2014-11-11T08:00"),
+    pd.Timestamp("2014-11-11T19:00"): pd.Timestamp("2014-11-11T19:00"),
+    pd.Timestamp("2014-11-15T12:00"): pd.Timestamp("2014-11-15T12:00"),
+    pd.Timestamp("2014-11-18T19:00"): pd.Timestamp("2014-11-18T19:00"),
+    pd.Timestamp("2014-11-18T20:00"): pd.Timestamp("2014-11-18T20:00"),
+    pd.Timestamp("2014-11-18T21:00"): pd.Timestamp("2014-11-18T21:00"),
+    pd.Timestamp("2014-11-20T06:00"): pd.Timestamp("2014-11-20T06:00"),
+    pd.Timestamp("2014-11-20T14:00"): pd.Timestamp("2014-11-20T14:00"),
+    pd.Timestamp("2014-11-20T19:00"): pd.Timestamp("2014-11-20T19:00"),
+    pd.Timestamp("2014-11-21T15:00"): pd.Timestamp("2014-11-21T15:00"),
+    pd.Timestamp("2014-11-30T04:00"): pd.Timestamp("2014-11-30T04:00"),
+    pd.Timestamp("2014-11-30T08:00"): pd.Timestamp("2014-11-30T08:00"),
+    pd.Timestamp("2014-11-30T10:00"): pd.Timestamp("2014-11-30T10:00"),
+    pd.Timestamp("2014-11-30T11:00"): pd.Timestamp("2014-11-30T11:00"),
+    pd.Timestamp("2014-11-30T12:00"): pd.Timestamp("2014-11-30T12:00"),
+    pd.Timestamp("2014-11-30T13:00"): pd.Timestamp("2014-11-30T13:00"),
+    pd.Timestamp("2014-12-02T08:00"): pd.Timestamp("2014-12-02T08:00"),
+    pd.Timestamp("2014-12-07T11:00"): pd.Timestamp("2014-12-07T11:00"),
+    pd.Timestamp("2014-12-07T21:00"): pd.Timestamp("2014-12-07T21:00"),
+    pd.Timestamp("2014-12-07T23:00"): pd.Timestamp("2014-12-07T23:00"),
+    pd.Timestamp("2014-12-08T04:00"): pd.Timestamp("2014-12-08T04:00"),
+    pd.Timestamp("2014-12-15T02:00"): pd.Timestamp("2014-12-15T02:00"),
+    # Post-v12 (S3): Pass2 and Pass1 absent; nearest RadarOnly_QPE_01H file within ±15min
+    pd.Timestamp("2021-03-03T21:00"): pd.Timestamp("2021-03-03T20:46"),
+    pd.Timestamp("2021-03-04T00:00"): pd.Timestamp("2021-03-04T00:10"),
+    pd.Timestamp("2021-03-14T02:00"): pd.Timestamp("2021-03-14T01:58"),
+    pd.Timestamp("2021-06-22T07:00"): pd.Timestamp("2021-06-22T06:58"),
+    pd.Timestamp("2021-07-02T08:00"): pd.Timestamp("2021-07-02T07:58"),
+    pd.Timestamp("2021-07-15T18:00"): pd.Timestamp("2021-07-15T17:48"),
+    pd.Timestamp("2021-07-15T19:00"): pd.Timestamp("2021-07-15T18:58"),
+    pd.Timestamp("2021-07-19T05:00"): pd.Timestamp("2021-07-19T04:58"),
+    pd.Timestamp("2021-09-16T22:00"): pd.Timestamp("2021-09-16T22:08"),
+    pd.Timestamp("2021-09-29T04:00"): pd.Timestamp("2021-09-29T03:54"),
+    pd.Timestamp("2022-02-28T15:00"): pd.Timestamp("2022-02-28T15:04"),
+    pd.Timestamp("2022-06-09T12:00"): pd.Timestamp("2022-06-09T11:58"),
+    pd.Timestamp("2023-07-24T15:00"): pd.Timestamp("2023-07-24T14:56"),
+    pd.Timestamp("2024-03-19T18:00"): pd.Timestamp("2024-03-19T17:50"),
+    pd.Timestamp("2024-03-19T19:00"): pd.Timestamp("2024-03-19T19:02"),
+}
 
 
 def _decompress_gzip(gz_path: Path) -> Path:
