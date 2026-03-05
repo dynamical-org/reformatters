@@ -26,8 +26,6 @@ def _lead_time_str(var: DataVar[NoaaInternalAttrs], lead_hours: int) -> str:
         else:
             step_type = var.attrs.step_type
 
-        if lead_hours == 0:
-            return f"0-0 day {step_type} fcst"
         if reset_hour == 0 and lead_hours % 24 == 0:
             return f"0-{lead_hours // 24} day {step_type} fcst"
         return f"{reset_hour}-{lead_hours} hour {step_type} fcst"
