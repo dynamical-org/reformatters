@@ -170,6 +170,7 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
         assert coord.downloaded_path is not None
         with rasterio.open(coord.downloaded_path) as reader:
             if reader.count == 2 and coord.time < MRMS_V12_START:
+                # A handful of pre v12 files have two messages within the same product, we want the grib discipline 209 message
                 rasterio_band = next(
                     (
                         band

@@ -54,7 +54,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
         return [operational_update_cron_job, validation_cron_job]
 
     def validators(self) -> Sequence[validation.DataValidator]:
-        max_expected_delay = timedelta(hours=5)
+        max_expected_delay = timedelta(hours=3, minutes=30)
         return (
             partial(
                 validation.check_analysis_current_data,

@@ -246,7 +246,7 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                 ),
                 internal_attrs=NoaaMrmsInternalAttrs(
                     mrms_product="MultiSensor_QPE_01H_Pass1",
-                    mrms_product_pre_v12="MultiSensor_QPE_01H_Pass1",
+                    mrms_product_pre_v12="unavailable-pre-v12",
                     mrms_level="00.00",
                     available_from=MRMS_V12_START,
                     deaccumulate_to_rate=True,
