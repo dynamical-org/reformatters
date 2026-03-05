@@ -52,6 +52,15 @@ def ecmwf_name_to_id(ecmwf_params: list[dict[str, Any]]) -> dict[str, int]:
 
 
 @pytest.fixture(scope="session")
+def ecmwf_shortname_to_names(ecmwf_params: list[dict[str, Any]]) -> dict[str, set[str]]:
+    """Map ECMWF shortnames to all long names that share that shortname."""
+    result: dict[str, set[str]] = {}
+    for p in ecmwf_params:
+        result.setdefault(p["shortname"], set()).add(p["name"])
+    return result
+
+
+@pytest.fixture(scope="session")
 def cf_standard_name_to_canonical_units() -> dict[str, str]:
     """
     Load the CF Standard Name Table from the local XML file.
@@ -311,8 +320,13 @@ CF_UNITS_VARIANCES_ALLOWLIST: set[tuple[str, str]] = {
     ("cloud_area_fraction", "percent"),
     ("cloud_area_fraction_in_atmosphere_layer", "percent"),
     ("relative_humidity", "percent"),
-    ("surface_snow_thickness", "mm"),
-    ("lwe_thickness_of_surface_snow_amount", "mm"),
+}
+
+# Dataset-specific unit variances: (standard_name, units, dataset_id)
+CF_UNITS_VARIANCES_DATASET_ALLOWLIST: set[tuple[str, str, str]] = {
+    # U Arizona SWANN uses mm for snow variables to match source data conventions
+    ("surface_snow_thickness", "mm", "u-arizona-swann-analysis"),
+    ("lwe_thickness_of_surface_snow_amount", "mm", "u-arizona-swann-analysis"),
 }
 
 
@@ -347,6 +361,12 @@ def test_cf_standard_names_and_units(
         canonical_units = cf_standard_name_to_canonical_units[standard_name]
 
         if (standard_name, units) in CF_UNITS_VARIANCES_ALLOWLIST:
+            continue
+        if (
+            standard_name,
+            units,
+            dataset.dataset_id,
+        ) in CF_UNITS_VARIANCES_DATASET_ALLOWLIST:
             continue
 
         assert units == canonical_units, (
@@ -593,7 +613,7 @@ ECMWF_SHORTNAME_EXEMPT: set[str] = {
 
 ECMWF_LONGNAME_EXEMPT: set[str] = {
     # Non-meteorological or dataset-specific variables
-    "normalized_difference_vegetation_index",
+    "Normalized Difference Vegetation Index (usable)",
     "quality_assurance",
     "Soil Moisture (AM)",
     "Soil Moisture (PM)",
@@ -694,4 +714,127 @@ def test_ecmwf_data_variable_longnames(
     assert not invalid_longnames, (
         f"Data variables with invalid ECMWF long_name in dataset '{dataset.dataset_id}':\n\n"
         + "\n\n".join(invalid_longnames)
+    )
+
+
+@pytest.mark.parametrize(
+    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+)
+def test_ecmwf_short_name_and_long_name_refer_to_same_parameter(
+    dataset: DynamicalDataset[Any, Any],
+    ecmwf_shortnames: set[str],
+    ecmwf_names: set[str],
+    ecmwf_shortname_to_names: dict[str, set[str]],
+    ecmwf_shortname_to_id: dict[str, int],
+) -> None:
+    """
+    Ensure that when both short_name and long_name are in the ECMWF parameter database,
+    the long_name is one of the names associated with that short_name in the ECMWF parameter database.
+    (Multiple ECMWF parameters may share the same shortname, so we check set membership.)
+    """
+    template_config = dataset.template_config
+
+    mismatches: list[str] = []
+
+    for var_config in template_config.data_vars:
+        short_name = var_config.attrs.short_name
+        long_name = var_config.attrs.long_name
+
+        if short_name in ECMWF_SHORTNAME_EXEMPT or long_name in ECMWF_LONGNAME_EXEMPT:
+            continue
+        if short_name not in ecmwf_shortnames or long_name not in ecmwf_names:
+            continue
+
+        names_for_shortname = ecmwf_shortname_to_names[short_name]
+        if long_name not in names_for_shortname:
+            param_id = ecmwf_shortname_to_id[short_name]
+            mismatches.append(
+                f"Variable '{var_config.name}' has short_name='{short_name}' "
+                f"(ECMWF long_names for this shortname: {sorted(names_for_shortname)}) "
+                f"but long_name='{long_name}'. They must refer to the same ECMWF parameter. "
+                f"See {ECMWF_PARAM_DB_URL}?id={param_id}"
+            )
+
+    assert not mismatches, (
+        f"Variables with mismatched ECMWF short_name/long_name in dataset '{dataset.dataset_id}':\n\n"
+        + "\n\n".join(mismatches)
+    )
+
+
+def test_short_name_and_long_name_are_bijective_across_datasets() -> None:
+    """
+    Ensure that short_name and long_name are used consistently across all datasets:
+    - Each short_name maps to exactly one long_name (and vice versa).
+
+    This prevents the same ECMWF parameter from appearing under different long_names,
+    or the same human-readable name from being assigned to different ECMWF shortnames.
+    """
+    short_name_to_long_names: dict[str, set[str]] = {}
+    long_name_to_short_names: dict[str, set[str]] = {}
+
+    for dataset in DYNAMICAL_DATASETS:
+        for var_config in dataset.template_config.data_vars:
+            short_name = var_config.attrs.short_name
+            long_name = var_config.attrs.long_name
+            short_name_to_long_names.setdefault(short_name, set()).add(long_name)
+            long_name_to_short_names.setdefault(long_name, set()).add(short_name)
+
+    conflicts: list[str] = []
+
+    for short_name, long_names in short_name_to_long_names.items():
+        if len(long_names) > 1:
+            conflicts.append(
+                f"short_name='{short_name}' is used with multiple long_names: {sorted(long_names)}"
+            )
+
+    for long_name, short_names in long_name_to_short_names.items():
+        if len(short_names) > 1:
+            conflicts.append(
+                f"long_name='{long_name}' is used with multiple short_names: {sorted(short_names)}"
+            )
+
+    assert not conflicts, (
+        "short_name/long_name are not bijective across datasets:\n\n"
+        + "\n\n".join(conflicts)
+    )
+
+
+def test_standard_name_consistent_with_short_name_and_long_name() -> None:
+    """
+    Ensure that whenever the same short_name or long_name is used across datasets,
+    the standard_name is also consistent.
+
+    This catches cases where the same physical variable is tagged with different
+    CF standard names in different datasets.
+    """
+    short_name_to_standard_names: dict[str, set[str | None]] = {}
+    long_name_to_standard_names: dict[str, set[str | None]] = {}
+
+    for dataset in DYNAMICAL_DATASETS:
+        for var_config in dataset.template_config.data_vars:
+            short_name = var_config.attrs.short_name
+            long_name = var_config.attrs.long_name
+            standard_name = var_config.attrs.standard_name
+            short_name_to_standard_names.setdefault(short_name, set()).add(
+                standard_name
+            )
+            long_name_to_standard_names.setdefault(long_name, set()).add(standard_name)
+
+    conflicts: list[str] = []
+
+    for short_name, standard_names in short_name_to_standard_names.items():
+        if len(standard_names) > 1:
+            conflicts.append(
+                f"short_name='{short_name}' is used with multiple standard_names: {sorted(str(s) for s in standard_names)}"
+            )
+
+    for long_name, standard_names in long_name_to_standard_names.items():
+        if len(standard_names) > 1:
+            conflicts.append(
+                f"long_name='{long_name}' is used with multiple standard_names: {sorted(str(s) for s in standard_names)}"
+            )
+
+    assert not conflicts, (
+        "standard_name is inconsistent with short_name/long_name across datasets:\n\n"
+        + "\n\n".join(conflicts)
     )

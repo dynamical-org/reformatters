@@ -1918,8 +1918,8 @@
         "attributes": {
           "long_name": "Snow depth water equivalent",
           "short_name": "sd",
-          "standard_name": "surface_snow_amount",
-          "units": "kg m-2",
+          "standard_name": "lwe_thickness_of_surface_snow_amount",
+          "units": "m",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2005,7 +2005,7 @@
         ],
         "attributes": {
           "long_name": "Total snowfall rate",
-          "short_name": "asnow",
+          "short_name": "tsrate",
           "units": "m s-1",
           "comment": "Average snowfall rate since the previous forecast step.",
           "step_type": "avg",

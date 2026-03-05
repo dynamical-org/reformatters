@@ -614,7 +614,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     grib_index_level="surface",
                     index_position=69,
                     keep_mantissa_bits=default_keep_mantissa_bits,
-                    scale_factor=0.01,
+                    scale_factor=0.01,  # percent to fraction
                     hrrr_file_type="sfc",
                 ),
             ),
@@ -623,9 +623,9 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="sd",
-                    standard_name="surface_snow_amount",
+                    standard_name="lwe_thickness_of_surface_snow_amount",
                     long_name="Snow depth water equivalent",
-                    units="kg m-2",
+                    units="m",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -635,13 +635,15 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     index_position=68,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     hrrr_file_type="sfc",
+                    # GRIB WEASD is in kg m-2; 1 kg m-2 = 0.001 m lwe
+                    scale_factor=0.001,
                 ),
             ),
             NoaaHrrrDataVar(
                 name="snowfall_surface",
                 encoding=encoding,
                 attrs=DataVarAttrs(
-                    short_name="asnow",
+                    short_name="tsrate",
                     long_name="Total snowfall rate",
                     units="m s-1",
                     step_type="avg",
