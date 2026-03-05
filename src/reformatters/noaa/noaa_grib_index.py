@@ -11,8 +11,9 @@ from reformatters.noaa.models import NoaaInternalAttrs
 
 def _lead_time_str(var: DataVar[NoaaInternalAttrs], lead_hours: int) -> str:
     if (reset_freq := var.internal_attrs.window_reset_frequency) is not None:
-        # Running totals (pd.Timedelta.max) always anchor at 0; windowed vars compute a rolling window
-        if reset_freq == pd.Timedelta.max:
+        # Running totals (pd.Timedelta.max) and lead_hours=0 always anchor at 0;
+        # windowed vars compute the start of the current accumulation window.
+        if reset_freq == pd.Timedelta.max or lead_hours == 0:
             reset_hour = 0
         else:
             reset_hours = whole_hours(reset_freq)
@@ -26,6 +27,9 @@ def _lead_time_str(var: DataVar[NoaaInternalAttrs], lead_hours: int) -> str:
         else:
             step_type = var.attrs.step_type
 
+        # GRIB indexes label accumulation windows using days when the span
+        # is expressible in whole days (e.g. "0-1 day acc fcst" for a 24h
+        # running total like ASNOW), and hours otherwise ("0-8 hour acc fcst").
         if reset_hour == 0 and lead_hours % 24 == 0:
             return f"0-{lead_hours // 24} day {step_type} fcst"
         return f"{reset_hour}-{lead_hours} hour {step_type} fcst"

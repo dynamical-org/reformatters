@@ -361,6 +361,20 @@ class TestLeadTimeStr:
         # At reset boundary (1h reset freq), reset_hour = lead_hours - reset_hours
         assert _lead_time_str(self.accum_var, lead_hours=1) == "0-1 hour acc fcst"
 
+    def test_running_total_uses_hours(self) -> None:
+        cfg = NoaaHrrrForecast48HourTemplateConfig()
+        running_total_var = next(
+            v for v in cfg.data_vars if v.name == "snowfall_surface"
+        )
+        assert _lead_time_str(running_total_var, lead_hours=8) == "0-8 hour acc fcst"
+
+    def test_running_total_uses_days_at_24h_boundary(self) -> None:
+        cfg = NoaaHrrrForecast48HourTemplateConfig()
+        running_total_var = next(
+            v for v in cfg.data_vars if v.name == "snowfall_surface"
+        )
+        assert _lead_time_str(running_total_var, lead_hours=24) == "0-1 day acc fcst"
+
     def test_unhandled_step_type_raises(self) -> None:
         var_with_avg = replace(
             self.instant_var,
