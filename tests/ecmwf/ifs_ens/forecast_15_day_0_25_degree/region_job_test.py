@@ -261,12 +261,11 @@ def test_operational_update_jobs(
 def test_download_file_from_ecmwf_open_data() -> None:
     """Download a recent ECMWF IFS ENS init time and read all template variables."""
     template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
-    # 1-day-old init time is complete and within the ECMWF Open Data retention window
-    init_time = (pd.Timestamp.now() - pd.Timedelta(days=1)).floor("24h")
+    init_time = pd.Timestamp("2026-01-01T00:00")
 
     region_job = EcmwfIfsEnsForecast15Day025DegreeRegionJob.model_construct(
         tmp_store=Mock(),
-        template_ds=template_config.get_template(pd.Timestamp.now()),
+        template_ds=template_config.get_template(init_time),
         data_vars=template_config.data_vars,
         append_dim=template_config.append_dim,
         region=slice(0, 1),
@@ -279,11 +278,6 @@ def test_download_file_from_ecmwf_open_data() -> None:
         template_config.data_vars
     ):
         for data_var in group:
-            if (
-                data_var.internal_attrs.date_available is not None
-                and init_time < data_var.internal_attrs.date_available
-            ):
-                continue
             coord = EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
                 init_time=init_time,
                 lead_time=lead_time,
