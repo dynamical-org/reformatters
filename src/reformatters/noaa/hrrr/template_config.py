@@ -561,7 +561,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
             ),
             NoaaHrrrDataVar(
-                name="wind_speed_of_gust_surface",
+                name="wind_gust_surface",
                 encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="gust",

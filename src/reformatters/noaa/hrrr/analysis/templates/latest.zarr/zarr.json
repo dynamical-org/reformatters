@@ -2008,7 +2008,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "wind_speed_of_gust_surface": {
+      "wind_gust_surface": {
         "shape": [
           1,
           1059,
