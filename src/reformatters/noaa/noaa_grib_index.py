@@ -30,8 +30,7 @@ def _lead_time_str(var: DataVar[NoaaInternalAttrs], lead_hours: int) -> str:
         # GRIB indexes label accumulation windows using days when the span
         # is expressible in whole days (e.g. "0-1 day acc fcst" for a 24h
         # running total like ASNOW), and hours otherwise ("0-8 hour acc fcst").
-        accum_window_is_whole_days = reset_hour == 0 and lead_hours % 24 == 0
-        if accum_window_is_whole_days:
+        if reset_hour == 0 and lead_hours % 24 == 0:
             return f"0-{lead_hours // 24} day {step_type} fcst"
         return f"{reset_hour}-{lead_hours} hour {step_type} fcst"
 
