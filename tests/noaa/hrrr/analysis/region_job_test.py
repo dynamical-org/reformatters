@@ -307,6 +307,7 @@ def test_update_template_with_results(
 _PRE_V3_UNAVAILABLE = {
     "downward_long_wave_radiation_flux_surface",
     "relative_humidity_2m",
+    "snowfall_surface",
 }
 
 

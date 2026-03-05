@@ -252,6 +252,37 @@ def test_grib_index_hrrr_f08() -> None:
     assert all(start < stop for start, stop in zip(starts, ends, strict=True))
 
 
+def test_grib_index_hrrr_f24() -> None:
+    """f24 uses day-based lead time strings (e.g. "0-1 day acc fcst") for running totals like ASNOW."""
+    idx_path = IDX_FIXTURES_DIR / "hrrr.t00z.wrfsfcf24.grib2.idx"
+
+    init_time = pd.Timestamp("2025-08-01T00")
+    lead_time = pd.Timedelta("24h")
+
+    cfg = NoaaHrrrForecast48HourTemplateConfig()
+    data_vars = list(cfg.data_vars)
+    assert len(data_vars) > 0
+
+    starts, ends = grib_message_byte_ranges_from_index(
+        idx_path, data_vars, init_time, lead_time
+    )
+
+    assert len(starts) == len(data_vars)
+    assert len(ends) == len(data_vars)
+    assert all(isinstance(s, int) and s >= 0 for s in starts)
+    assert all(isinstance(e, int) and e > 0 for e in ends)
+    assert all(start < stop for start, stop in zip(starts, ends, strict=True))
+
+    # Specifically assert that snowfall_surface (ASNOW, running total) is found.
+    # At f24 the real index uses "0-1 day acc fcst", not "0-24 hour acc fcst".
+    snowfall_var = next(v for v in cfg.data_vars if v.name == "snowfall_surface")
+    snow_starts, _snow_ends = grib_message_byte_ranges_from_index(
+        idx_path, [snowfall_var], init_time, lead_time
+    )
+    assert len(snow_starts) == 1
+    assert snow_starts[0] == 47181371
+
+
 def test_grib_index_hrrr_grib_element_alternatives() -> None:
     """Test that grib_element_alternatives matches when the primary element isn't in the index."""
     idx_path = IDX_FIXTURES_DIR / "hrrr.t00z.wrfsfcf00.grib2.idx"
@@ -360,6 +391,20 @@ class TestLeadTimeStr:
     def test_accum_at_reset_boundary(self) -> None:
         # At reset boundary (1h reset freq), reset_hour = lead_hours - reset_hours
         assert _lead_time_str(self.accum_var, lead_hours=1) == "0-1 hour acc fcst"
+
+    def test_running_total_uses_hours(self) -> None:
+        cfg = NoaaHrrrForecast48HourTemplateConfig()
+        running_total_var = next(
+            v for v in cfg.data_vars if v.name == "snowfall_surface"
+        )
+        assert _lead_time_str(running_total_var, lead_hours=8) == "0-8 hour acc fcst"
+
+    def test_running_total_uses_days_at_24h_boundary(self) -> None:
+        cfg = NoaaHrrrForecast48HourTemplateConfig()
+        running_total_var = next(
+            v for v in cfg.data_vars if v.name == "snowfall_surface"
+        )
+        assert _lead_time_str(running_total_var, lead_hours=24) == "0-1 day acc fcst"
 
     def test_unhandled_step_type_raises(self) -> None:
         var_with_avg = replace(

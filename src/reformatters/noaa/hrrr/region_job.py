@@ -182,7 +182,10 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
             *data_var.internal_attrs.grib_element_alternatives,
         }
         # grib element has the accumulation window as a suffix in the grib file attributes, but not in the .idx file
-        if (reset_freq := data_var.internal_attrs.window_reset_frequency) is not None:
+        # Running-total variables (window_reset_frequency=pd.Timedelta.max, e.g. ASNOW) don't get this suffix
+        if (
+            reset_freq := data_var.internal_attrs.window_reset_frequency
+        ) is not None and reset_freq != pd.Timedelta.max:
             suffix = f"{whole_hours(reset_freq):02d}"
             grib_elements = {f"{e}{suffix}" for e in grib_elements}
 
@@ -226,6 +229,9 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
             except ValueError:
                 # Log exception so we are notified if deaccumulation errors are larger than expected.
                 log.exception(f"Error deaccumulating {data_var.name}")
+
+        if (scale_factor := data_var.internal_attrs.scale_factor) is not None:
+            data_array.values *= np.float32(scale_factor)
 
         keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
         if isinstance(keep_mantissa_bits, int):

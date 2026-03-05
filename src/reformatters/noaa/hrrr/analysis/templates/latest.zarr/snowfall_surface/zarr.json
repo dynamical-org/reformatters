@@ -1,19 +1,17 @@
 {
   "shape": [
     1,
-    93,
-    657,
-    1377
+    1059,
+    1799
   ],
   "data_type": "float32",
   "chunk_grid": {
     "name": "regular",
     "configuration": {
       "chunk_shape": [
-        1,
-        93,
-        657,
-        1377
+        2160,
+        540,
+        450
       ]
     }
   },
@@ -29,10 +27,9 @@
       "name": "sharding_indexed",
       "configuration": {
         "chunk_shape": [
-          1,
-          93,
-          219,
-          153
+          2160,
+          45,
+          45
         ],
         "codecs": [
           {
@@ -68,20 +65,18 @@
     }
   ],
   "attributes": {
-    "long_name": "Medium cloud cover",
-    "short_name": "mcc",
-    "standard_name": "cloud_area_fraction_in_atmosphere_layer",
-    "units": "percent",
-    "comment": "Cloud Cover (400 - 800 hPa). Different agencies use different short_names for this same parameter: ECMWF: MCC; WMO GRIB table: MCDC.",
-    "step_type": "instant",
-    "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
+    "long_name": "Total snowfall rate",
+    "short_name": "tsrate",
+    "units": "m s-1",
+    "comment": "Average snowfall rate since the previous forecast step.",
+    "step_type": "avg",
+    "coordinates": "latitude longitude spatial_ref",
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [
-    "init_time",
-    "lead_time",
-    "latitude",
-    "longitude"
+    "time",
+    "y",
+    "x"
   ],
   "zarr_format": 3,
   "node_type": "array",
