@@ -255,6 +255,27 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                 ),
             ),
             NoaaMrmsDataVar(
+                name="precipitation_pass_2_surface",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="prate",
+                    standard_name="precipitation_flux",
+                    long_name="Precipitation rate",
+                    units="kg m-2 s-1",
+                    step_type="avg",
+                    comment="Average precipitation rate over the previous hour, pass 2 (higher latency, more gauges). Derived from MultiSensor_QPE_01H_Pass2. Available from October 2020 onward. Units equivalent to mm/s.",
+                ),
+                internal_attrs=NoaaMrmsInternalAttrs(
+                    mrms_product="MultiSensor_QPE_01H_Pass2",
+                    mrms_product_pre_v12="unavailable-pre-v12",
+                    mrms_level="00.00",
+                    available_from=MRMS_V12_START,
+                    deaccumulate_to_rate=True,
+                    window_reset_frequency=qpe_window_reset_frequency,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
+            NoaaMrmsDataVar(
                 name="precipitation_radar_only_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
