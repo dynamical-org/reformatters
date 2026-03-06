@@ -52,6 +52,13 @@ class NoaaMrmsConusAnalysisHourlyDataset(
 
     def validators(self) -> Sequence[validation.DataValidator]:
         max_expected_delay = timedelta(hours=3, minutes=30)
+        # Pass 1 and Pass 2 multi-sensor products have additional gauge-collection latency;
+        # radar-only and precipitation_surface (which falls back to radar) are always current.
+        lagged_vars = [
+            "precipitation_pass_1_surface",
+            "precipitation_pass_2_surface",
+            "categorical_precipitation_type_surface",
+        ]
         return (
             partial(
                 validation.check_analysis_current_data,
@@ -60,5 +67,13 @@ class NoaaMrmsConusAnalysisHourlyDataset(
             partial(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
+                max_nan_percentage=0,
+                exclude_vars=lagged_vars,
+            ),
+            partial(
+                validation.check_analysis_recent_nans,
+                max_expected_delay=max_expected_delay,
+                max_nan_percentage=50,
+                include_vars=lagged_vars,
             ),
         )
