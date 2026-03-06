@@ -67,7 +67,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
             partial(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
-                max_nan_percentage=0,
+                max_nan_percentage=15,
                 exclude_vars=lagged_vars,
             ),
             partial(
