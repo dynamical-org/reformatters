@@ -79,9 +79,36 @@ def test_backfill_local_and_operational_update(
         ),
     )
 
-    t2m_updated = updated_ds.sel(latitude=0, longitude=0).temperature_2m
+    updated_point = updated_ds.sel(latitude=0, longitude=0)
+
+    t2m_updated = updated_point.temperature_2m
     assert t2m_updated.shape == (2, 2)  # 2 init_times x 2 lead_times
-    assert not np.all(np.isnan(t2m_updated.values))
+
+    # Snapshot complete temperature and precip at test point after update.
+    # Backfill values (init_time=2024-04-01T00) should be unchanged.
+    t2m_expected = np.array(
+        [
+            # init_time=2024-04-01T00, lead_time=[0h, 6h]
+            [29.875, 28.75],
+            # init_time=2024-04-01T06, lead_time=[0h, 6h]
+            [28.5, 29.5],
+        ],
+        dtype=np.float32,
+    )
+    np.testing.assert_array_equal(t2m_updated, t2m_expected)
+
+    precip_expected = np.array(
+        [
+            # init_time=2024-04-01T00, lead_time=[0h, 6h]
+            [0.0, 0.00164795],
+            # init_time=2024-04-01T06, lead_time=[0h, 6h]
+            [0.0, 0.00020218],
+        ],
+        dtype=np.float32,
+    )
+    np.testing.assert_allclose(
+        updated_point.precipitation_surface.values, precip_expected, rtol=1e-4
+    )
 
 
 def test_operational_kubernetes_resources(
