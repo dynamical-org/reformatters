@@ -83,7 +83,7 @@ class EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
 class EcmwfAifsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
     """ECMWF AIFS in Icechunk on AWS Open Data."""
 
-    base_path: str = "s3://dynamical-ecmwf-aifs"
+    base_path: str = "s3://dynamical-ecmwf-aifs-deterministic"
     k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
     format: DatasetFormat = DatasetFormat.ICECHUNK
 

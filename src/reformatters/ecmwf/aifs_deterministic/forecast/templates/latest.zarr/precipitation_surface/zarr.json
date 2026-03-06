@@ -68,7 +68,7 @@
     }
   ],
   "attributes": {
-    "long_name": "Total precipitation rate",
+    "long_name": "Precipitation rate",
     "short_name": "prate",
     "standard_name": "precipitation_flux",
     "units": "kg m-2 s-1",

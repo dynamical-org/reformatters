@@ -44,10 +44,6 @@ _PRECIP_ALT_GRIB_METADATA: dict[str, tuple[str, str]] = {
         "Total precipitation rate [kg/(m^2*s)]",
         '0[-] SFC="Ground or water surface"',
     ),
-    "cp": (
-        "Convective precipitation rate [kg/(m^2*s)]",
-        '0[-] SFC="Ground or water surface"',
-    ),
 }
 
 
@@ -170,6 +166,14 @@ class EcmwfAifsForecastRegionJob(
             )
             result: ArrayFloat32 = reader.read(matching_bands[0], out_dtype=np.float32)
             return result
+
+    def apply_data_transformations(
+        self, data_array: xr.DataArray, data_var: EcmwfDataVar
+    ) -> None:
+        if data_var.internal_attrs.scale_factor is not None:
+            data_array *= data_var.internal_attrs.scale_factor
+
+        super().apply_data_transformations(data_array, data_var)
 
     @classmethod
     def operational_update_jobs(

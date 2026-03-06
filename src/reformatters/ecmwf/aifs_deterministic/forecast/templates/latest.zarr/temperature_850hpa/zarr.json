@@ -68,11 +68,10 @@
     }
   ],
   "attributes": {
-    "long_name": "Convective precipitation rate",
-    "short_name": "cprate",
-    "standard_name": "convective_precipitation_flux",
-    "units": "kg m-2 s-1",
-    "comment": "Instantaneous convective precipitation rate. Units equivalent to mm/s.",
+    "long_name": "Temperature",
+    "short_name": "t",
+    "standard_name": "air_temperature",
+    "units": "degree_Celsius",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

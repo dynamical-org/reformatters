@@ -68,10 +68,10 @@
     }
   ],
   "attributes": {
-    "long_name": "Total column water",
-    "short_name": "tcw",
-    "standard_name": "atmosphere_mass_content_of_water_vapor",
-    "units": "kg m-2",
+    "long_name": "Temperature",
+    "short_name": "t",
+    "standard_name": "air_temperature",
+    "units": "degree_Celsius",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

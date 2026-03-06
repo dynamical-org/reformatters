@@ -286,11 +286,32 @@ class EcmwfAifsForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
 
         default_keep_mantissa_bits = 7
 
-        # Surface variables available from 2025-02-26 are marked with date_available.
+        # Variables available only from 2025-02-26 are marked with date_available.
         # All variables listed here are available from 2024-04-01 (append_dim_start) unless noted.
         expanded_vars_date = pd.Timestamp("2025-02-26T00:00")
 
+        # Standard acceleration of gravity for geopotential → geopotential height conversion.
+        g = 9.80665
+
         return [
+            EcmwfDataVar(
+                name="pressure_surface",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="sp",
+                    long_name="Surface pressure",
+                    units="Pa",
+                    step_type="instant",
+                    standard_name="surface_air_pressure",
+                ),
+                internal_attrs=EcmwfInternalAttrs(
+                    grib_comment="Pressure [Pa]",
+                    grib_description='0[-] SFC="Ground or water surface"',
+                    grib_element="PRES",
+                    grib_index_param="sp",
+                    keep_mantissa_bits=11,
+                ),
+            ),
             EcmwfDataVar(
                 name="temperature_2m",
                 encoding=encoding_float32_default,
@@ -306,24 +327,6 @@ class EcmwfAifsForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
                     grib_description='2[m] HTGL="Specified height level above ground"',
                     grib_element="TMP",
                     grib_index_param="2t",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                ),
-            ),
-            EcmwfDataVar(
-                name="dew_point_temperature_2m",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="2d",
-                    long_name="2 metre dewpoint temperature",
-                    units="degree_Celsius",
-                    step_type="instant",
-                    standard_name="dew_point_temperature",
-                ),
-                internal_attrs=EcmwfInternalAttrs(
-                    grib_comment="Dew point temperature [C]",
-                    grib_description='2[m] HTGL="Specified height level above ground"',
-                    grib_element="DPT",
-                    grib_index_param="2d",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
@@ -369,9 +372,9 @@ class EcmwfAifsForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
                 attrs=DataVarAttrs(
                     short_name="100u",
                     long_name="100 metre U wind component",
+                    standard_name="eastward_wind",
                     units="m s-1",
                     step_type="instant",
-                    standard_name="eastward_wind",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
                     grib_comment="u-component of wind [m/s]",
@@ -402,14 +405,14 @@ class EcmwfAifsForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
                 ),
             ),
             EcmwfDataVar(
-                name="precipitation_rate_surface",
+                name="precipitation_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="prate",
-                    long_name="Total precipitation rate",
+                    standard_name="precipitation_flux",
+                    long_name="Precipitation rate",
                     units="kg m-2 s-1",
                     step_type="instant",
-                    standard_name="precipitation_flux",
                     comment="Instantaneous precipitation rate. Units equivalent to mm/s.",
                 ),
                 # Early GRIB master tables (v27) encode tp with generic product template codes.
@@ -424,55 +427,14 @@ class EcmwfAifsForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
                 ),
             ),
             EcmwfDataVar(
-                name="convective_precipitation_rate_surface",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="cprate",
-                    long_name="Convective precipitation rate",
-                    units="kg m-2 s-1",
-                    step_type="instant",
-                    standard_name="convective_precipitation_flux",
-                    comment="Instantaneous convective precipitation rate. Units equivalent to mm/s.",
-                ),
-                # Early GRIB master tables (v27) encode cp with generic product template codes.
-                # Later versions (v34+) use "Convective precipitation rate [kg/(m^2*s)]".
-                # We use the early form here; read_data handles both.
-                internal_attrs=EcmwfInternalAttrs(
-                    grib_comment="(prodType 0, cat 1, subcat 195) [-]",
-                    grib_description='2[-] SFC="Ground or water surface"',
-                    grib_element="unknown",
-                    grib_index_param="cp",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                ),
-            ),
-            EcmwfDataVar(
-                name="downward_short_wave_radiation_flux_surface",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="sdswrf",
-                    long_name="Surface downward short-wave radiation flux",
-                    units="W m-2",
-                    step_type="instant",
-                    standard_name="surface_downwelling_shortwave_flux_in_air",
-                ),
-                internal_attrs=EcmwfInternalAttrs(
-                    grib_comment="Downward short-wave radiation flux [W/(m^2)]",
-                    grib_description='0[-] SFC="Ground or water surface"',
-                    grib_element="DSWRF",
-                    grib_index_param="ssrd",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                    date_available=expanded_vars_date,
-                ),
-            ),
-            EcmwfDataVar(
                 name="downward_long_wave_radiation_flux_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="sdlwrf",
+                    standard_name="surface_downwelling_longwave_flux_in_air",
                     long_name="Surface downward long-wave radiation flux",
                     units="W m-2",
                     step_type="instant",
-                    standard_name="surface_downwelling_longwave_flux_in_air",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
                     grib_comment="Downward long-wave radiation flux [W/(m^2)]",
@@ -484,21 +446,22 @@ class EcmwfAifsForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
                 ),
             ),
             EcmwfDataVar(
-                name="pressure_surface",
+                name="downward_short_wave_radiation_flux_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="sp",
-                    long_name="Surface pressure",
-                    units="Pa",
+                    short_name="sdswrf",
+                    standard_name="surface_downwelling_shortwave_flux_in_air",
+                    long_name="Surface downward short-wave radiation flux",
+                    units="W m-2",
                     step_type="instant",
-                    standard_name="surface_air_pressure",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
-                    grib_comment="Pressure [Pa]",
+                    grib_comment="Downward short-wave radiation flux [W/(m^2)]",
                     grib_description='0[-] SFC="Ground or water surface"',
-                    grib_element="PRES",
-                    grib_index_param="sp",
-                    keep_mantissa_bits=11,
+                    grib_element="DSWRF",
+                    grib_index_param="ssrd",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    date_available=expanded_vars_date,
                 ),
             ),
             EcmwfDataVar(
@@ -520,6 +483,128 @@ class EcmwfAifsForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
                 ),
             ),
             EcmwfDataVar(
+                name="dew_point_temperature_2m",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="2d",
+                    long_name="2 metre dewpoint temperature",
+                    units="degree_Celsius",
+                    step_type="instant",
+                    standard_name="dew_point_temperature",
+                ),
+                internal_attrs=EcmwfInternalAttrs(
+                    grib_comment="Dew point temperature [C]",
+                    grib_description='2[m] HTGL="Specified height level above ground"',
+                    grib_element="DPT",
+                    grib_index_param="2d",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
+            EcmwfDataVar(
+                name="geopotential_height_500hpa",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="gh",
+                    long_name="Geopotential height",
+                    units="m",
+                    step_type="instant",
+                    standard_name="geopotential_height",
+                ),
+                internal_attrs=EcmwfInternalAttrs(
+                    grib_comment="Geopotential [(m^2)/(s^2)]",
+                    grib_description='50000[Pa] ISBL="Isobaric surface"',
+                    grib_element="HGT",
+                    grib_index_param="z",
+                    grib_index_level_type="pl",
+                    grib_index_level_value=500,
+                    # AIFS provides geopotential (m²/s²); divide by g to get geopotential height (m).
+                    scale_factor=1 / g,
+                    keep_mantissa_bits=11,
+                ),
+            ),
+            EcmwfDataVar(
+                name="geopotential_height_850hpa",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="gh",
+                    long_name="Geopotential height",
+                    units="m",
+                    step_type="instant",
+                    standard_name="geopotential_height",
+                ),
+                internal_attrs=EcmwfInternalAttrs(
+                    grib_comment="Geopotential [(m^2)/(s^2)]",
+                    grib_description='85000[Pa] ISBL="Isobaric surface"',
+                    grib_element="HGT",
+                    grib_index_param="z",
+                    grib_index_level_type="pl",
+                    grib_index_level_value=850,
+                    scale_factor=1 / g,
+                    keep_mantissa_bits=11,
+                ),
+            ),
+            EcmwfDataVar(
+                name="geopotential_height_925hpa",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="gh",
+                    long_name="Geopotential height",
+                    units="m",
+                    step_type="instant",
+                    standard_name="geopotential_height",
+                ),
+                internal_attrs=EcmwfInternalAttrs(
+                    grib_comment="Geopotential [(m^2)/(s^2)]",
+                    grib_description='92500[Pa] ISBL="Isobaric surface"',
+                    grib_element="HGT",
+                    grib_index_param="z",
+                    grib_index_level_type="pl",
+                    grib_index_level_value=925,
+                    scale_factor=1 / g,
+                    keep_mantissa_bits=11,
+                ),
+            ),
+            EcmwfDataVar(
+                name="temperature_850hpa",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="t",
+                    long_name="Temperature",
+                    units="degree_Celsius",
+                    step_type="instant",
+                    standard_name="air_temperature",
+                ),
+                internal_attrs=EcmwfInternalAttrs(
+                    grib_comment="Temperature [C]",
+                    grib_description='85000[Pa] ISBL="Isobaric surface"',
+                    grib_element="TMP",
+                    grib_index_param="t",
+                    grib_index_level_type="pl",
+                    grib_index_level_value=850,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
+            EcmwfDataVar(
+                name="temperature_925hpa",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="t",
+                    long_name="Temperature",
+                    units="degree_Celsius",
+                    step_type="instant",
+                    standard_name="air_temperature",
+                ),
+                internal_attrs=EcmwfInternalAttrs(
+                    grib_comment="Temperature [C]",
+                    grib_description='92500[Pa] ISBL="Isobaric surface"',
+                    grib_element="TMP",
+                    grib_index_param="t",
+                    grib_index_level_type="pl",
+                    grib_index_level_value=925,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
+            EcmwfDataVar(
                 name="total_cloud_cover_atmosphere",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -530,50 +615,13 @@ class EcmwfAifsForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
                     standard_name="cloud_area_fraction",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
+                    # AIFS provides tcc already in percent (unlike IFS ENS which uses 0-1 fraction).
                     grib_comment="Total cloud cover [%]",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_element="TCDC",
                     grib_index_param="tcc",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     date_available=expanded_vars_date,
-                ),
-            ),
-            EcmwfDataVar(
-                name="precipitable_water_atmosphere",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="tcw",
-                    long_name="Total column water",
-                    units="kg m-2",
-                    step_type="instant",
-                    standard_name="atmosphere_mass_content_of_water_vapor",
-                ),
-                internal_attrs=EcmwfInternalAttrs(
-                    grib_comment="Total column water [kg/m^2]",
-                    grib_description='0[-] SFC="Ground or water surface"',
-                    grib_element="TCWAT",
-                    grib_index_param="tcw",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                ),
-            ),
-            EcmwfDataVar(
-                name="geopotential_500hpa",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="z",
-                    long_name="Geopotential",
-                    units="m2 s-2",
-                    step_type="instant",
-                    standard_name="geopotential",
-                ),
-                internal_attrs=EcmwfInternalAttrs(
-                    grib_comment="Geopotential [(m^2)/(s^2)]",
-                    grib_description='50000[Pa] ISBL="Isobaric surface"',
-                    grib_element="GP",
-                    grib_index_param="z",
-                    grib_index_level_type="pl",
-                    grib_index_level_value=500,
-                    keep_mantissa_bits=11,
                 ),
             ),
         ]

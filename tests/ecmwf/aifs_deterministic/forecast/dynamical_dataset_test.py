@@ -21,7 +21,7 @@ def dataset() -> EcmwfAifsForecastDataset:
 def test_backfill_local_and_operational_update(
     monkeypatch: pytest.MonkeyPatch, dataset: EcmwfAifsForecastDataset
 ) -> None:
-    variables_to_check = ["temperature_2m", "precipitation_rate_surface"]
+    variables_to_check = ["temperature_2m", "precipitation_surface"]
     monkeypatch.setattr(
         type(dataset.template_config),
         "data_vars",
@@ -58,9 +58,7 @@ def test_backfill_local_and_operational_update(
         init_time="2024-04-01T00:00:00", latitude=0, longitude=0, lead_time="6h"
     )
     assert float(point_6h["temperature_2m"]) == 28.75
-    assert float(point_6h["precipitation_rate_surface"]) == pytest.approx(
-        0.00164794921875
-    )
+    assert float(point_6h["precipitation_surface"]) == pytest.approx(0.00164794921875)
 
     # Operational update
     monkeypatch.setattr(
