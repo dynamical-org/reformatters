@@ -32,7 +32,7 @@ from reformatters.common.types import (
 )
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
-from reformatters.ecmwf.ecmwf_utils import all_variables_available
+from reformatters.ecmwf.ecmwf_utils import all_variables_available, has_hour_0_values
 
 log = get_logger(__name__)
 
@@ -138,6 +138,11 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                 assert len(dates_available) == 1, (
                     f"Expected all variables in the group to have the same date_available, found {dates_available}"
                 )
+                continue
+
+            if not all(
+                has_hour_0_values(v) for v in data_var_group
+            ) and lead_time == np.timedelta64(0):
                 continue
 
             coord = EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
