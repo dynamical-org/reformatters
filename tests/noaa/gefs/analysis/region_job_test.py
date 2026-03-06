@@ -23,6 +23,7 @@ from reformatters.noaa.gefs.analysis.region_job import (
     GefsAnalysisRegionJob,
     GefsAnalysisSourceFileCoord,
 )
+from reformatters.noaa.gefs.analysis.template_config import GefsAnalysisTemplateConfig
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFSDataVar,
     GEFSInternalAttrs,
@@ -769,3 +770,71 @@ def test_download_file_fallback_permission_denied_converts_to_file_not_found(
     # Verify it's a FileNotFoundError with PermissionDeniedError as cause
     assert exc_info.value.__cause__ is not None
     assert isinstance(exc_info.value.__cause__, PermissionDeniedError)
+
+
+def _make_analysis_region_job(data_var: GEFSDataVar) -> GefsAnalysisRegionJob:
+    template_config = GefsAnalysisTemplateConfig()
+    return GefsAnalysisRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_config.get_template(pd.Timestamp.now()),
+        data_vars=[data_var],
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+
+def _geopotential_height_500hpa_var() -> GEFSDataVar:
+    return next(
+        dv
+        for dv in GefsAnalysisTemplateConfig().data_vars
+        if dv.name == "geopotential_height_500hpa"
+    )
+
+
+@pytest.mark.slow
+def test_download_and_read_geopotential_height_500hpa_current_archive() -> None:
+    """Verify 500 hPa geopotential height downloads and reads from current GEFS analysis archive (s-file)."""
+    data_var = _geopotential_height_500hpa_var()
+    region_job = _make_analysis_region_job(data_var)
+
+    coord = GefsAnalysisSourceFileCoord(
+        init_time=pd.Timestamp("2024-01-01T00:00"),
+        lead_time=pd.Timedelta(hours=6),
+        data_vars=[data_var],
+    )
+    coord = replace(coord, downloaded_path=region_job.download_file(coord))
+    data = region_job.read_data(coord, data_var)
+    assert np.all(np.isfinite(data))
+
+
+@pytest.mark.slow
+def test_download_and_read_geopotential_height_500hpa_pre_v12() -> None:
+    """Verify 500 hPa geopotential height downloads and reads from pre-GEFS v12 analysis period (a-file)."""
+    data_var = _geopotential_height_500hpa_var()
+    region_job = _make_analysis_region_job(data_var)
+
+    coord = GefsAnalysisSourceFileCoord(
+        init_time=pd.Timestamp("2020-06-01T00:00"),
+        lead_time=pd.Timedelta(hours=6),
+        data_vars=[data_var],
+    )
+    coord = replace(coord, downloaded_path=region_job.download_file(coord))
+    data = region_job.read_data(coord, data_var)
+    assert np.all(np.isfinite(data))
+
+
+@pytest.mark.slow
+def test_download_and_read_geopotential_height_500hpa_reforecast() -> None:
+    """Verify 500 hPa geopotential height downloads and reads from GEFS v12 reforecast analysis archive."""
+    data_var = _geopotential_height_500hpa_var()
+    region_job = _make_analysis_region_job(data_var)
+
+    coord = GefsAnalysisSourceFileCoord(
+        init_time=pd.Timestamp("2018-01-01T00:00"),
+        lead_time=pd.Timedelta(hours=24),
+        data_vars=[data_var],
+    )
+    coord = replace(coord, downloaded_path=region_job.download_file(coord))
+    data = region_job.read_data(coord, data_var)
+    assert np.all(np.isfinite(data))

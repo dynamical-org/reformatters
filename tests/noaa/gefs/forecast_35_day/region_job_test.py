@@ -22,6 +22,9 @@ from reformatters.noaa.gefs.forecast_35_day.region_job import (
     GefsForecast35DayRegionJob,
     GefsForecast35DaySourceFileCoord,
 )
+from reformatters.noaa.gefs.forecast_35_day.template_config import (
+    GefsForecast35DayTemplateConfig,
+)
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFSDataVar,
     GefsEnsembleSourceFileCoord,
@@ -704,3 +707,91 @@ def test_download_file_fallback_permission_denied_converts_to_file_not_found(
     # Verify it's a FileNotFoundError with PermissionDeniedError as cause
     assert exc_info.value.__cause__ is not None
     assert isinstance(exc_info.value.__cause__, PermissionDeniedError)
+
+
+def _make_forecast_region_job(data_var: GEFSDataVar) -> GefsForecast35DayRegionJob:
+    template_config = GefsForecast35DayTemplateConfig()
+    return GefsForecast35DayRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_config.get_template(pd.Timestamp.now()),
+        data_vars=[data_var],
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+
+def _geopotential_height_500hpa_var() -> GEFSDataVar:
+    return next(
+        dv
+        for dv in GefsForecast35DayTemplateConfig().data_vars
+        if dv.name == "geopotential_height_500hpa"
+    )
+
+
+@pytest.mark.slow
+def test_download_and_read_geopotential_height_500hpa_current_archive_s_file() -> None:
+    """Verify 500 hPa geopotential height downloads and reads from current GEFS archive s-file (lead <= 240h)."""
+    data_var = _geopotential_height_500hpa_var()
+    region_job = _make_forecast_region_job(data_var)
+
+    coord = GefsForecast35DaySourceFileCoord(
+        init_time=pd.Timestamp("2024-01-01T00:00"),
+        lead_time=pd.Timedelta(hours=6),
+        ensemble_member=0,
+        data_vars=[data_var],
+    )
+    coord = replace(coord, downloaded_path=region_job.download_file(coord))
+    data = region_job.read_data(coord, data_var)
+    assert np.all(np.isfinite(data))
+
+
+@pytest.mark.slow
+def test_download_and_read_geopotential_height_500hpa_current_archive_a_file() -> None:
+    """Verify 500 hPa geopotential height downloads and reads from current GEFS archive a-file (lead > 240h)."""
+    data_var = _geopotential_height_500hpa_var()
+    region_job = _make_forecast_region_job(data_var)
+
+    coord = GefsForecast35DaySourceFileCoord(
+        init_time=pd.Timestamp("2024-01-01T00:00"),
+        lead_time=pd.Timedelta(hours=252),
+        ensemble_member=0,
+        data_vars=[data_var],
+    )
+    coord = replace(coord, downloaded_path=region_job.download_file(coord))
+    data = region_job.read_data(coord, data_var)
+    assert np.all(np.isfinite(data))
+
+
+@pytest.mark.slow
+def test_download_and_read_geopotential_height_500hpa_pre_v12() -> None:
+    """Verify 500 hPa geopotential height downloads and reads from pre-GEFS v12 period (a-file)."""
+    data_var = _geopotential_height_500hpa_var()
+    region_job = _make_forecast_region_job(data_var)
+
+    coord = GefsForecast35DaySourceFileCoord(
+        init_time=pd.Timestamp("2020-06-01T00:00"),
+        lead_time=pd.Timedelta(hours=6),
+        ensemble_member=0,
+        data_vars=[data_var],
+    )
+    coord = replace(coord, downloaded_path=region_job.download_file(coord))
+    data = region_job.read_data(coord, data_var)
+    assert np.all(np.isfinite(data))
+
+
+@pytest.mark.slow
+def test_download_and_read_geopotential_height_500hpa_reforecast() -> None:
+    """Verify 500 hPa geopotential height downloads and reads from GEFS v12 reforecast archive."""
+    data_var = _geopotential_height_500hpa_var()
+    region_job = _make_forecast_region_job(data_var)
+
+    coord = GefsForecast35DaySourceFileCoord(
+        init_time=pd.Timestamp("2018-01-01T00:00"),
+        lead_time=pd.Timedelta(hours=24),
+        ensemble_member=0,
+        data_vars=[data_var],
+    )
+    coord = replace(coord, downloaded_path=region_job.download_file(coord))
+    data = region_job.read_data(coord, data_var)
+    assert np.all(np.isfinite(data))
