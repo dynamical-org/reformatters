@@ -475,6 +475,25 @@ def get_shared_data_var_configs(
             ),
         ),
         GEFSDataVar(
+            name="geopotential_height_500hpa",
+            encoding=encoding_float32,
+            attrs=DataVarAttrs(
+                short_name="gh",
+                long_name="Geopotential height",
+                units="m",
+                step_type="instant",
+                standard_name="geopotential_height",
+            ),
+            internal_attrs=GEFSInternalAttrs(
+                grib_element="HGT",
+                grib_description='500[mb] ISBL="Isobaric surface"',
+                grib_index_level="500 mb",
+                gefs_file_type="s+a",
+                index_position=34,
+                keep_mantissa_bits=11,
+            ),
+        ),
+        GEFSDataVar(
             name="downward_short_wave_radiation_flux_surface",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
