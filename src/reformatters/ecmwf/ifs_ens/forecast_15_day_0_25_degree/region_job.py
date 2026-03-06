@@ -127,6 +127,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             download/read performance by treating them separately and parallelizing.
         """
         coords = []
+        group_has_hour_0_values = item({has_hour_0_values(v) for v in data_var_group})
         for init_time, lead_time, ensemble_member in itertools.product(
             processing_region_ds["init_time"].values,
             processing_region_ds["lead_time"].values,
@@ -141,9 +142,6 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                 )
                 continue
 
-            group_has_hour_0_values = item(
-                {has_hour_0_values(v) for v in data_var_group}
-            )
             if not group_has_hour_0_values and lead_time == np.timedelta64(0):
                 continue
 
