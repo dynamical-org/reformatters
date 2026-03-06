@@ -721,38 +721,52 @@ def _make_forecast_region_job() -> GefsForecast35DayRegionJob:
     )
 
 
+# Variables not present in the GEFSv12 reforecast archive (file doesn't exist or not in GRIB index)
+_REFORECAST_MISSING_VARS = frozenset(
+    {
+        "relative_humidity_2m",
+        "pressure_reduced_to_mean_sea_level",
+        "categorical_snow_surface",
+        "categorical_ice_pellets_surface",
+        "categorical_freezing_rain_surface",
+        "categorical_rain_surface",
+        "percent_frozen_precipitation_surface",
+    }
+)
+
+# Variables not present in pre-v12 GEFS files (2020-01-01 to 2020-09-23)
+_PRE_V12_MISSING_VARS = frozenset(
+    {
+        "geopotential_height_cloud_ceiling",  # not in pre-v12 b-files
+    }
+)
+
+
 @pytest.mark.slow
 def test_download_and_read_all_vars_reforecast() -> None:
-    """Download and read all vars from GEFS v12 reforecast (2000-2019), one var per file.
-
-    Some vars don't exist in the reforecast archive and are skipped.
-    """
+    """Download and read all vars from GEFS v12 reforecast (2000-2019), one var per file."""
     template_config = GefsForecast35DayTemplateConfig()
     region_job = _make_forecast_region_job()
     init_time = pd.Timestamp("2018-01-01T00:00")
     lead_time = pd.Timedelta(hours=24)
     for group in GefsForecast35DayRegionJob.source_groups(template_config.data_vars):
         for data_var in group:
+            if data_var.name in _REFORECAST_MISSING_VARS:
+                continue
             coord = GefsForecast35DaySourceFileCoord(
                 init_time=init_time,
                 lead_time=lead_time,
                 ensemble_member=0,
                 data_vars=[data_var],
             )
-            try:
-                coord = replace(coord, downloaded_path=region_job.download_file(coord))
-                data = region_job.read_data(coord, data_var)
-            except (FileNotFoundError, ValueError, AssertionError):
-                continue  # Some vars don't exist in the reforecast archive
+            coord = replace(coord, downloaded_path=region_job.download_file(coord))
+            data = region_job.read_data(coord, data_var)
             assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
 
 
 @pytest.mark.slow
 def test_download_and_read_all_vars_pre_v12() -> None:
-    """Download and read all vars from pre-GEFS v12 period (2020-01-01 to 2020-09-23).
-
-    Some vars (e.g. cloud ceiling HGT) aren't in pre-v12 files and are skipped.
-    """
+    """Download and read all vars from pre-GEFS v12 period (2020-01-01 to 2020-09-23)."""
     template_config = GefsForecast35DayTemplateConfig()
     region_job = _make_forecast_region_job()
     init_time = pd.Timestamp("2020-06-01T00:00")
@@ -766,10 +780,9 @@ def test_download_and_read_all_vars_pre_v12() -> None:
         )
         coord = replace(coord, downloaded_path=region_job.download_file(coord))
         for data_var in group:
-            try:
-                data = region_job.read_data(coord, data_var)
-            except (ValueError, AssertionError):
-                continue  # Some vars aren't in pre-v12 files
+            if data_var.name in _PRE_V12_MISSING_VARS:
+                continue
+            data = region_job.read_data(coord, data_var)
             assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
 
 
