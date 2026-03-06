@@ -1,4 +1,5 @@
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
@@ -23,6 +24,7 @@ from reformatters.noaa.gefs.analysis.region_job import (
     GefsAnalysisRegionJob,
     GefsAnalysisSourceFileCoord,
 )
+from reformatters.noaa.gefs.analysis.template_config import GefsAnalysisTemplateConfig
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFSDataVar,
     GEFSInternalAttrs,
@@ -769,3 +771,122 @@ def test_download_file_fallback_permission_denied_converts_to_file_not_found(
     # Verify it's a FileNotFoundError with PermissionDeniedError as cause
     assert exc_info.value.__cause__ is not None
     assert isinstance(exc_info.value.__cause__, PermissionDeniedError)
+
+
+def _make_analysis_region_job() -> GefsAnalysisRegionJob:
+    template_config = GefsAnalysisTemplateConfig()
+    return GefsAnalysisRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_config.get_template(pd.Timestamp.now()),
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+
+# Variables not present in the GEFSv12 reforecast archive (file doesn't exist or not in GRIB index)
+_REFORECAST_MISSING_VARS = frozenset(
+    {
+        "relative_humidity_2m",
+        "pressure_reduced_to_mean_sea_level",
+        "categorical_snow_surface",
+        "categorical_ice_pellets_surface",
+        "categorical_freezing_rain_surface",
+        "categorical_rain_surface",
+        "percent_frozen_precipitation_surface",
+    }
+)
+
+# Variables not present in pre-v12 GEFS files (2020-01-01 to 2020-09-23)
+_PRE_V12_MISSING_VARS = frozenset(
+    {
+        "geopotential_height_cloud_ceiling",  # not in pre-v12 b-files
+    }
+)
+
+
+@pytest.mark.slow
+def test_download_and_read_all_vars_reforecast() -> None:
+    """Download and read all vars from GEFS v12 reforecast (2000-2019), one var per file.
+
+    Analysis source_groups returns all vars in one group; we iterate one var at a time
+    to match how the reforecast is accessed (one file per variable).
+    """
+    template_config = GefsAnalysisTemplateConfig()
+    region_job = _make_analysis_region_job()
+    init_time = pd.Timestamp("2018-01-01T00:00")
+    lead_time = pd.Timedelta(hours=24)
+    data_vars = [
+        dv
+        for dv in template_config.data_vars
+        if dv.name not in _REFORECAST_MISSING_VARS
+    ]
+
+    def _download_and_check(data_var: GEFSDataVar) -> None:
+        coord = GefsAnalysisSourceFileCoord(
+            init_time=init_time,
+            lead_time=lead_time,
+            data_vars=[data_var],
+        )
+        coord = replace(coord, downloaded_path=region_job.download_file(coord))
+        data = region_job.read_data(coord, data_var)
+        assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
+
+    with ThreadPoolExecutor() as pool:
+        list(pool.map(_download_and_check, data_vars))
+
+
+@pytest.mark.slow
+def test_download_and_read_all_vars_pre_v12() -> None:
+    """Download and read all vars from pre-GEFS v12 period (2020-01-01 to 2020-09-23).
+
+    Analysis source_groups returns all vars in one group; we iterate one var at a time
+    to match actual processing (max_vars_per_download_group=1).
+    """
+    template_config = GefsAnalysisTemplateConfig()
+    region_job = _make_analysis_region_job()
+    init_time = pd.Timestamp("2020-06-01T00:00")
+    lead_time = pd.Timedelta(hours=6)
+    data_vars = [
+        dv for dv in template_config.data_vars if dv.name not in _PRE_V12_MISSING_VARS
+    ]
+
+    def _download_and_check(data_var: GEFSDataVar) -> None:
+        coord = GefsAnalysisSourceFileCoord(
+            init_time=init_time,
+            lead_time=lead_time,
+            data_vars=[data_var],
+        )
+        coord = replace(coord, downloaded_path=region_job.download_file(coord))
+        data = region_job.read_data(coord, data_var)
+        assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
+
+    with ThreadPoolExecutor() as pool:
+        list(pool.map(_download_and_check, data_vars))
+
+
+@pytest.mark.slow
+def test_download_and_read_all_vars_current_early_lead() -> None:
+    """Download and read all vars from current GEFS analysis archive (s-files, lead = 6h).
+
+    Analysis source_groups returns all vars in one group; we iterate one var at a time
+    to match actual processing (max_vars_per_download_group=1).
+    """
+    template_config = GefsAnalysisTemplateConfig()
+    region_job = _make_analysis_region_job()
+    init_time = pd.Timestamp("2024-01-01T00:00")
+    lead_time = pd.Timedelta(hours=6)
+
+    def _download_and_check(data_var: GEFSDataVar) -> None:
+        coord = GefsAnalysisSourceFileCoord(
+            init_time=init_time,
+            lead_time=lead_time,
+            data_vars=[data_var],
+        )
+        coord = replace(coord, downloaded_path=region_job.download_file(coord))
+        data = region_job.read_data(coord, data_var)
+        assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
+
+    with ThreadPoolExecutor() as pool:
+        list(pool.map(_download_and_check, template_config.data_vars))
