@@ -50,16 +50,15 @@ def test_region_job_source_groups() -> None:
     groups = EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_groups(
         template_config.data_vars
     )
-    assert len(groups) == 3
-    # Main group: vars with no date_available (available since dataset start)
+    assert len(groups) == 4
+    # Main group: vars with no date_available (available since dataset start), all with hour 0 values
     assert len(groups[0]) == 16
-    # wind_gust_10m is available from 2024-11-13 (same as categorical_precipitation_type_surface)
-    assert {v.name for v in groups[1]} == {
-        "categorical_precipitation_type_surface",
-        "wind_gust_10m",
-    }
+    # categorical_precipitation_type_surface is instant (has hour 0) and available from 2024-11-13
+    assert item(groups[1]).name == "categorical_precipitation_type_surface"
+    # wind_gust_10m is max-window (no hour 0) and available from 2024-11-13
+    assert item(groups[2]).name == "wind_gust_10m"
     # total_cloud_cover_atmosphere is available from 2025-11-21
-    assert item(groups[2]).name == "total_cloud_cover_atmosphere"
+    assert item(groups[3]).name == "total_cloud_cover_atmosphere"
 
 
 def test_region_job_generate_source_file_coords() -> None:
@@ -83,7 +82,7 @@ def test_region_job_generate_source_file_coords() -> None:
     groups = EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_groups(
         template_config.data_vars
     )
-    # We are grouping by date_available, so we should get 3 groups
+    # We are grouping by date_available and has_hour_0_values, so we should get 4 groups
     group_0_source_file_coords = region_job.generate_source_file_coords(
         processing_region_ds, groups[0]
     )
@@ -94,15 +93,20 @@ def test_region_job_generate_source_file_coords() -> None:
     group_1_source_file_coords = region_job.generate_source_file_coords(
         processing_region_ds, groups[1]
     )
-    # group 1 has two vars (categorical_precipitation_type_surface and wind_gust_10m),
-    # both available from 2024-11-13. Nov 12 is skipped, so 2 init times x 2 members.
-    # lead_time=0h is also skipped because wind_gust_10m (step_type="max") has no hour 0 value,
-    # leaving 11 lead times (3h through 33h) of the 12 in the slice.
-    assert len(group_1_source_file_coords) == 2 * 2 * 11
-    assert {v.name for v in group_1_source_file_coords[0].data_var_group} == {
-        "categorical_precipitation_type_surface",
-        "wind_gust_10m",
-    }
+    # group 1 has categorical_precipitation_type_surface (instant, has hour 0) available from
+    # 2024-11-13. Nov 12 is skipped, so 2 init times x 2 members x 12 lead times = 48.
+    assert len(group_1_source_file_coords) == 2 * 2 * 12
+    assert item(group_1_source_file_coords[0].data_var_group).name == (
+        "categorical_precipitation_type_surface"
+    )
+
+    group_2_source_file_coords = region_job.generate_source_file_coords(
+        processing_region_ds, groups[2]
+    )
+    # group 2 has wind_gust_10m (max-window, no hour 0) available from 2024-11-13.
+    # Nov 12 is skipped, and lead_time=0h is excluded, so 2 * 2 * 11 = 44.
+    assert len(group_2_source_file_coords) == 2 * 2 * 11
+    assert item(group_2_source_file_coords[0].data_var_group).name == "wind_gust_10m"
 
 
 def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
