@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from io import StringIO
 from pathlib import Path
 from unittest.mock import Mock
@@ -10,6 +11,7 @@ from reformatters.common import template_utils
 from reformatters.common.iterating import item
 from reformatters.common.pydantic import replace
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
+from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job import (
     EcmwfIfsEnsForecast15Day025DegreeRegionJob,
     EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord,
@@ -284,17 +286,23 @@ def test_download_file_from_ecmwf_open_data() -> None:
         lead_time=slice(0, 2),  # 0h and 3h
         ensemble_member=slice(0, 1),
     )
-    for group in EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_groups(
-        template_config.data_vars
-    ):
-        for data_var in group:
-            for source_coord in region_job.generate_source_file_coords(
-                test_ds, [data_var]
-            ):
-                downloaded_coord = replace(
-                    source_coord, downloaded_path=region_job.download_file(source_coord)
-                )
-                data = region_job.read_data(downloaded_coord, data_var)
-                assert np.all(np.isfinite(data)), (
-                    f"Non-finite values for {data_var.name} at lead_time={source_coord.lead_time}"
-                )
+
+    def check_data_var(data_var: EcmwfDataVar) -> None:
+        for source_coord in region_job.generate_source_file_coords(test_ds, [data_var]):
+            downloaded_coord = replace(
+                source_coord, downloaded_path=region_job.download_file(source_coord)
+            )
+            data = region_job.read_data(downloaded_coord, data_var)
+            assert np.all(np.isfinite(data)), (
+                f"Non-finite values for {data_var.name} at lead_time={source_coord.lead_time}"
+            )
+
+    all_data_vars = [
+        data_var
+        for group in EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_groups(
+            template_config.data_vars
+        )
+        for data_var in group
+    ]
+    with ThreadPoolExecutor() as executor:
+        list(executor.map(check_data_var, all_data_vars))
