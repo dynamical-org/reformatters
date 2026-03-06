@@ -1,6 +1,6 @@
 ---
 name: Add [variable(s)] to [dataset(s)]
-about: Checklist for adding a new data variables to an existing datasets
+about: Checklist for adding a new data variables to existing datasets
 labels: ""
 assignees: ""
 ---
