@@ -772,69 +772,73 @@ def test_download_file_fallback_permission_denied_converts_to_file_not_found(
     assert isinstance(exc_info.value.__cause__, PermissionDeniedError)
 
 
-def _make_analysis_region_job(data_var: GEFSDataVar) -> GefsAnalysisRegionJob:
+def _make_analysis_region_job() -> GefsAnalysisRegionJob:
     template_config = GefsAnalysisTemplateConfig()
     return GefsAnalysisRegionJob.model_construct(
         tmp_store=Mock(),
         template_ds=template_config.get_template(pd.Timestamp.now()),
-        data_vars=[data_var],
+        data_vars=template_config.data_vars,
         append_dim=template_config.append_dim,
         region=slice(0, 1),
         reformat_job_name="test",
     )
 
 
-def _geopotential_height_500hpa_var() -> GEFSDataVar:
-    return next(
-        dv
-        for dv in GefsAnalysisTemplateConfig().data_vars
-        if dv.name == "geopotential_height_500hpa"
-    )
+@pytest.mark.slow
+def test_download_and_read_all_vars_reforecast() -> None:
+    """Download and read all vars from GEFS v12 reforecast (2000-2019), one var per file."""
+    template_config = GefsAnalysisTemplateConfig()
+    region_job = _make_analysis_region_job()
+    init_time = pd.Timestamp("2018-01-01T00:00")
+    lead_time = pd.Timedelta(hours=24)
+    for group in GefsAnalysisRegionJob.source_groups(template_config.data_vars):
+        for data_var in group:
+            coord = GefsAnalysisSourceFileCoord(
+                init_time=init_time,
+                lead_time=lead_time,
+                data_vars=[data_var],
+            )
+            try:
+                coord = replace(coord, downloaded_path=region_job.download_file(coord))
+            except FileNotFoundError:
+                continue  # Some vars don't exist in the reforecast archive
+            data = region_job.read_data(coord, data_var)
+            assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
 
 
 @pytest.mark.slow
-def test_download_and_read_geopotential_height_500hpa_current_archive() -> None:
-    """Verify 500 hPa geopotential height downloads and reads from current GEFS analysis archive (s-file)."""
-    data_var = _geopotential_height_500hpa_var()
-    region_job = _make_analysis_region_job(data_var)
-
-    coord = GefsAnalysisSourceFileCoord(
-        init_time=pd.Timestamp("2024-01-01T00:00"),
-        lead_time=pd.Timedelta(hours=6),
-        data_vars=[data_var],
-    )
-    coord = replace(coord, downloaded_path=region_job.download_file(coord))
-    data = region_job.read_data(coord, data_var)
-    assert np.all(np.isfinite(data))
-
-
-@pytest.mark.slow
-def test_download_and_read_geopotential_height_500hpa_pre_v12() -> None:
-    """Verify 500 hPa geopotential height downloads and reads from pre-GEFS v12 analysis period (a-file)."""
-    data_var = _geopotential_height_500hpa_var()
-    region_job = _make_analysis_region_job(data_var)
-
-    coord = GefsAnalysisSourceFileCoord(
-        init_time=pd.Timestamp("2020-06-01T00:00"),
-        lead_time=pd.Timedelta(hours=6),
-        data_vars=[data_var],
-    )
-    coord = replace(coord, downloaded_path=region_job.download_file(coord))
-    data = region_job.read_data(coord, data_var)
-    assert np.all(np.isfinite(data))
+def test_download_and_read_all_vars_pre_v12() -> None:
+    """Download and read all vars from pre-GEFS v12 period (2020-01-01 to 2020-09-23)."""
+    template_config = GefsAnalysisTemplateConfig()
+    region_job = _make_analysis_region_job()
+    init_time = pd.Timestamp("2020-06-01T00:00")
+    lead_time = pd.Timedelta(hours=6)
+    for group in GefsAnalysisRegionJob.source_groups(template_config.data_vars):
+        coord = GefsAnalysisSourceFileCoord(
+            init_time=init_time,
+            lead_time=lead_time,
+            data_vars=group,
+        )
+        coord = replace(coord, downloaded_path=region_job.download_file(coord))
+        for data_var in group:
+            data = region_job.read_data(coord, data_var)
+            assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
 
 
 @pytest.mark.slow
-def test_download_and_read_geopotential_height_500hpa_reforecast() -> None:
-    """Verify 500 hPa geopotential height downloads and reads from GEFS v12 reforecast analysis archive."""
-    data_var = _geopotential_height_500hpa_var()
-    region_job = _make_analysis_region_job(data_var)
-
-    coord = GefsAnalysisSourceFileCoord(
-        init_time=pd.Timestamp("2018-01-01T00:00"),
-        lead_time=pd.Timedelta(hours=24),
-        data_vars=[data_var],
-    )
-    coord = replace(coord, downloaded_path=region_job.download_file(coord))
-    data = region_job.read_data(coord, data_var)
-    assert np.all(np.isfinite(data))
+def test_download_and_read_all_vars_current_early_lead() -> None:
+    """Download and read all vars from current GEFS analysis archive (s-files, lead = 6h)."""
+    template_config = GefsAnalysisTemplateConfig()
+    region_job = _make_analysis_region_job()
+    init_time = pd.Timestamp("2024-01-01T00:00")
+    lead_time = pd.Timedelta(hours=6)
+    for group in GefsAnalysisRegionJob.source_groups(template_config.data_vars):
+        coord = GefsAnalysisSourceFileCoord(
+            init_time=init_time,
+            lead_time=lead_time,
+            data_vars=group,
+        )
+        coord = replace(coord, downloaded_path=region_job.download_file(coord))
+        for data_var in group:
+            data = region_job.read_data(coord, data_var)
+            assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"

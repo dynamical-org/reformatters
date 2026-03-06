@@ -486,10 +486,10 @@ def get_shared_data_var_configs(
             ),
             internal_attrs=GEFSInternalAttrs(
                 grib_element="HGT",
-                grib_description='500[mb] ISBL="Isobaric surface"',
+                grib_description='50000[Pa] ISBL="Isobaric surface"',
                 grib_index_level="500 mb",
-                gefs_file_type="s+a",
-                index_position=34,
+                gefs_file_type="a",
+                index_position=31,
                 keep_mantissa_bits=11,
             ),
         ),
