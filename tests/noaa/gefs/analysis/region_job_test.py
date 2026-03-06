@@ -1,4 +1,5 @@
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
@@ -816,9 +817,13 @@ def test_download_and_read_all_vars_reforecast() -> None:
     region_job = _make_analysis_region_job()
     init_time = pd.Timestamp("2018-01-01T00:00")
     lead_time = pd.Timedelta(hours=24)
-    for data_var in template_config.data_vars:
-        if data_var.name in _REFORECAST_MISSING_VARS:
-            continue
+    data_vars = [
+        dv
+        for dv in template_config.data_vars
+        if dv.name not in _REFORECAST_MISSING_VARS
+    ]
+
+    def _download_and_check(data_var: GEFSDataVar) -> None:
         coord = GefsAnalysisSourceFileCoord(
             init_time=init_time,
             lead_time=lead_time,
@@ -827,6 +832,9 @@ def test_download_and_read_all_vars_reforecast() -> None:
         coord = replace(coord, downloaded_path=region_job.download_file(coord))
         data = region_job.read_data(coord, data_var)
         assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
+
+    with ThreadPoolExecutor() as pool:
+        list(pool.map(_download_and_check, data_vars))
 
 
 @pytest.mark.slow
@@ -840,9 +848,11 @@ def test_download_and_read_all_vars_pre_v12() -> None:
     region_job = _make_analysis_region_job()
     init_time = pd.Timestamp("2020-06-01T00:00")
     lead_time = pd.Timedelta(hours=6)
-    for data_var in template_config.data_vars:
-        if data_var.name in _PRE_V12_MISSING_VARS:
-            continue
+    data_vars = [
+        dv for dv in template_config.data_vars if dv.name not in _PRE_V12_MISSING_VARS
+    ]
+
+    def _download_and_check(data_var: GEFSDataVar) -> None:
         coord = GefsAnalysisSourceFileCoord(
             init_time=init_time,
             lead_time=lead_time,
@@ -851,6 +861,9 @@ def test_download_and_read_all_vars_pre_v12() -> None:
         coord = replace(coord, downloaded_path=region_job.download_file(coord))
         data = region_job.read_data(coord, data_var)
         assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
+
+    with ThreadPoolExecutor() as pool:
+        list(pool.map(_download_and_check, data_vars))
 
 
 @pytest.mark.slow
@@ -864,7 +877,8 @@ def test_download_and_read_all_vars_current_early_lead() -> None:
     region_job = _make_analysis_region_job()
     init_time = pd.Timestamp("2024-01-01T00:00")
     lead_time = pd.Timedelta(hours=6)
-    for data_var in template_config.data_vars:
+
+    def _download_and_check(data_var: GEFSDataVar) -> None:
         coord = GefsAnalysisSourceFileCoord(
             init_time=init_time,
             lead_time=lead_time,
@@ -873,3 +887,6 @@ def test_download_and_read_all_vars_current_early_lead() -> None:
         coord = replace(coord, downloaded_path=region_job.download_file(coord))
         data = region_job.read_data(coord, data_var)
         assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
+
+    with ThreadPoolExecutor() as pool:
+        list(pool.map(_download_and_check, template_config.data_vars))

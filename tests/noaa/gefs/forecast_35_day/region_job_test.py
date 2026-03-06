@@ -1,4 +1,5 @@
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
@@ -721,79 +722,21 @@ def _make_forecast_region_job() -> GefsForecast35DayRegionJob:
     )
 
 
-# Variables not present in the GEFSv12 reforecast archive (file doesn't exist or not in GRIB index)
-_REFORECAST_MISSING_VARS = frozenset(
-    {
-        "relative_humidity_2m",
-        "pressure_reduced_to_mean_sea_level",
-        "categorical_snow_surface",
-        "categorical_ice_pellets_surface",
-        "categorical_freezing_rain_surface",
-        "categorical_rain_surface",
-        "percent_frozen_precipitation_surface",
-    }
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "lead_time",
+    [
+        pd.Timedelta(hours=6),  # s-files (lead <= 240h)
+        pd.Timedelta(hours=252),  # a/b-files (lead > 240h)
+    ],
 )
-
-# Variables not present in pre-v12 GEFS files (2020-01-01 to 2020-09-23)
-_PRE_V12_MISSING_VARS = frozenset(
-    {
-        "geopotential_height_cloud_ceiling",  # not in pre-v12 b-files
-    }
-)
-
-
-@pytest.mark.slow
-def test_download_and_read_all_vars_reforecast() -> None:
-    """Download and read all vars from GEFS v12 reforecast (2000-2019), one var per file."""
-    template_config = GefsForecast35DayTemplateConfig()
-    region_job = _make_forecast_region_job()
-    init_time = pd.Timestamp("2018-01-01T00:00")
-    lead_time = pd.Timedelta(hours=24)
-    for group in GefsForecast35DayRegionJob.source_groups(template_config.data_vars):
-        for data_var in group:
-            if data_var.name in _REFORECAST_MISSING_VARS:
-                continue
-            coord = GefsForecast35DaySourceFileCoord(
-                init_time=init_time,
-                lead_time=lead_time,
-                ensemble_member=0,
-                data_vars=[data_var],
-            )
-            coord = replace(coord, downloaded_path=region_job.download_file(coord))
-            data = region_job.read_data(coord, data_var)
-            assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
-
-
-@pytest.mark.slow
-def test_download_and_read_all_vars_pre_v12() -> None:
-    """Download and read all vars from pre-GEFS v12 period (2020-01-01 to 2020-09-23)."""
-    template_config = GefsForecast35DayTemplateConfig()
-    region_job = _make_forecast_region_job()
-    init_time = pd.Timestamp("2020-06-01T00:00")
-    lead_time = pd.Timedelta(hours=6)
-    for group in GefsForecast35DayRegionJob.source_groups(template_config.data_vars):
-        coord = GefsForecast35DaySourceFileCoord(
-            init_time=init_time,
-            lead_time=lead_time,
-            ensemble_member=0,
-            data_vars=group,
-        )
-        coord = replace(coord, downloaded_path=region_job.download_file(coord))
-        for data_var in group:
-            if data_var.name in _PRE_V12_MISSING_VARS:
-                continue
-            data = region_job.read_data(coord, data_var)
-            assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
-
-
-@pytest.mark.slow
-def test_download_and_read_all_vars_current_early_lead() -> None:
-    """Download and read all vars from current GEFS archive at early lead time (s-files, lead <= 240h)."""
+def test_download_and_read_all_vars_current(lead_time: pd.Timedelta) -> None:
+    """Download and read all vars from current GEFS archive at early and later lead times."""
     template_config = GefsForecast35DayTemplateConfig()
     region_job = _make_forecast_region_job()
     init_time = pd.Timestamp("2024-01-01T00:00")
-    lead_time = pd.Timedelta(hours=6)
-    for group in GefsForecast35DayRegionJob.source_groups(template_config.data_vars):
+
+    def _download_and_check(group: list[GEFSDataVar]) -> None:
         coord = GefsForecast35DaySourceFileCoord(
             init_time=init_time,
             lead_time=lead_time,
@@ -805,22 +748,6 @@ def test_download_and_read_all_vars_current_early_lead() -> None:
             data = region_job.read_data(coord, data_var)
             assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
 
-
-@pytest.mark.slow
-def test_download_and_read_all_vars_current_later_lead() -> None:
-    """Download and read all vars from current GEFS archive at later lead time (a/b-files, lead > 240h)."""
-    template_config = GefsForecast35DayTemplateConfig()
-    region_job = _make_forecast_region_job()
-    init_time = pd.Timestamp("2024-01-01T00:00")
-    lead_time = pd.Timedelta(hours=252)
-    for group in GefsForecast35DayRegionJob.source_groups(template_config.data_vars):
-        coord = GefsForecast35DaySourceFileCoord(
-            init_time=init_time,
-            lead_time=lead_time,
-            ensemble_member=0,
-            data_vars=group,
-        )
-        coord = replace(coord, downloaded_path=region_job.download_file(coord))
-        for data_var in group:
-            data = region_job.read_data(coord, data_var)
-            assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
+    groups = list(GefsForecast35DayRegionJob.source_groups(template_config.data_vars))
+    with ThreadPoolExecutor() as pool:
+        list(pool.map(_download_and_check, groups))

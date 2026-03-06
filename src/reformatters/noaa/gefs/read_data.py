@@ -91,7 +91,14 @@ def read_rasterio(
 
             result: Array2D[np.float32]
             match true_gefs_file_type:
-                case "a" | "b":
+                case "s":
+                    # Confirm the arguments we use to resample 1.0/0.5 degree data
+                    # to 0.25 degree grid below match the source 0.25 degree data.
+                    assert reader.shape == out_spatial_shape
+                    assert reader.transform == out_transform
+                    assert reader.crs.to_dict() == out_crs
+                    return reader.read(rasterio_band_index, out_dtype=np.float32)
+                case "a" | "b" | "reforecast":
                     # Interpolate 1.0/0.5 degree data to the 0.25 degree grid.
                     # Every 2nd (0.5 deg) or every 4th (1.0 deg) 0.25 degree pixel's center aligns exactly
                     # with a 1.0/0.5 degree pixel's center.
@@ -102,6 +109,11 @@ def read_rasterio(
                     # Note: having the .read() call interpolate gives very slightly shifted results
                     # so we pay for an extra memory allocation and use reproject to do the interpolation instead.
                     raw = reader.read(rasterio_band_index, out_dtype=np.float32)
+                    if reader.shape == out_spatial_shape:
+                        # Some reforecast files are already 0.25° - no reprojection needed.
+                        assert reader.transform == out_transform
+                        assert reader.crs.to_dict() == out_crs
+                        return raw
                     result, _ = rasterio.warp.reproject(
                         raw,
                         np.full(out_spatial_shape, np.nan, dtype=np.float32),
@@ -116,27 +128,5 @@ def read_rasterio(
                         step = 2 if is_v12(coord.init_time) else 4
                         assert np.array_equal(raw, result[::step, ::step])
                     return result
-                case "s" | "reforecast":
-                    raw = reader.read(rasterio_band_index, out_dtype=np.float32)
-                    if reader.shape != out_spatial_shape:
-                        # Some reforecast files (e.g. pressure-level variables) are 0.5°
-                        # and require reprojection to the 0.25° output grid.
-                        result, _ = rasterio.warp.reproject(
-                            raw,
-                            np.full(out_spatial_shape, np.nan, dtype=np.float32),
-                            src_transform=reader.transform,
-                            src_crs=reader.crs,
-                            dst_transform=out_transform,
-                            dst_crs=out_crs,
-                            resampling=rasterio.warp.Resampling.bilinear,
-                        )
-                        if not Config.is_prod:
-                            assert np.array_equal(raw, result[::2, ::2])
-                        return result
-                    # Confirm the arguments we use to resample 1.0/0.5 degree data
-                    # to 0.25 degree grid above match the source 0.25 degree data.
-                    assert reader.transform == out_transform
-                    assert reader.crs.to_dict() == out_crs
-                    return raw
                 case _ as unreachable:
                     assert_never(unreachable)
