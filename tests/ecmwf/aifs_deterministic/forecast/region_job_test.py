@@ -5,6 +5,7 @@ from unittest.mock import Mock
 import numpy as np
 import pandas as pd
 import pytest
+import xarray as xr
 
 from reformatters.common import template_utils
 from reformatters.common.iterating import item
@@ -234,6 +235,109 @@ def test_read_data_multi_band(monkeypatch: pytest.MonkeyPatch) -> None:
     assert np.array_equal(result, test_data)
     # Should read band 2 (dew point), not band 1 (temperature)
     rasterio_reader.read.assert_called_once_with(2, out_dtype=np.float32)
+
+
+def test_apply_data_transformations_scale_factor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """scale_factor is applied in-place, converting geopotential (m²/s²) to height (m)."""
+    config = EcmwfAifsForecastTemplateConfig()
+    region_job = EcmwfAifsForecastRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=Mock(),
+        data_vars=config.data_vars,
+        append_dim=config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    gh500_var = item(
+        v for v in config.data_vars if v.name == "geopotential_height_500hpa"
+    )
+    assert gh500_var.internal_attrs.scale_factor is not None
+
+    raw_z = 49000.0  # m²/s² (geopotential at ~500 hPa)
+    data = np.full((1, 2, 721, 1440), raw_z, dtype=np.float32)
+    data_array = xr.DataArray(
+        data,
+        dims=("init_time", "lead_time", "latitude", "longitude"),
+    )
+
+    region_job.apply_data_transformations(data_array, gh500_var)
+
+    expected_gh = raw_z * gh500_var.internal_attrs.scale_factor
+    # float32 precision limits accuracy to ~1m at typical geopotential heights
+    np.testing.assert_allclose(data_array.values, expected_gh, atol=1.0)
+
+
+def test_apply_data_transformations_no_scale_factor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Variables without scale_factor are not modified."""
+    config = EcmwfAifsForecastTemplateConfig()
+    region_job = EcmwfAifsForecastRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=Mock(),
+        data_vars=config.data_vars,
+        append_dim=config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    t2m_var = item(v for v in config.data_vars if v.name == "temperature_2m")
+    assert t2m_var.internal_attrs.scale_factor is None
+
+    raw_value = 25.0
+    data = np.full((1, 2, 721, 1440), raw_value, dtype=np.float32)
+    data_array = xr.DataArray(
+        data,
+        dims=("init_time", "lead_time", "latitude", "longitude"),
+    )
+
+    region_job.apply_data_transformations(data_array, t2m_var)
+
+    np.testing.assert_array_equal(data_array.values, raw_value)
+
+
+def test_read_data_alt_precip_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    """tp variable can be read using alt GRIB metadata (table v34+)."""
+    config = EcmwfAifsForecastTemplateConfig()
+    region_job = EcmwfAifsForecastRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=Mock(),
+        data_vars=config.data_vars,
+        append_dim=config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    precip_var = item(v for v in config.data_vars if v.name == "precipitation_surface")
+    coord = EcmwfAifsForecastSourceFileCoord(
+        init_time=pd.Timestamp("2024-04-01"),
+        lead_time=pd.Timedelta("6h"),
+        data_var_group=[precip_var],
+        downloaded_path=Path("fake/path.grib2"),
+    )
+
+    rasterio_reader = Mock()
+    rasterio_reader.__enter__ = Mock(return_value=rasterio_reader)
+    rasterio_reader.__exit__ = Mock(return_value=False)
+    rasterio_reader.count = 1
+    # Use the v34+ alt description instead of the early form
+    rasterio_reader.descriptions = ['0[-] SFC="Ground or water surface"']
+    rasterio_reader.tags = Mock(
+        return_value={"GRIB_COMMENT": "Total precipitation rate [kg/(m^2*s)]"}
+    )
+    test_data = np.ones((721, 1440), dtype=np.float32) * 0.001
+    rasterio_reader.read = Mock(return_value=test_data)
+    monkeypatch.setattr(
+        "reformatters.ecmwf.aifs_deterministic.forecast.region_job.rasterio.open",
+        Mock(return_value=rasterio_reader),
+    )
+
+    result = region_job.read_data(coord, precip_var)
+    assert np.array_equal(result, test_data)
+    rasterio_reader.read.assert_called_once_with(1, out_dtype=np.float32)
 
 
 def test_operational_update_jobs(
