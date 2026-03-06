@@ -1,0 +1,24 @@
+{
+  "title": "dynamical.org reformatters",
+  "description": "Data pipeline that produces the dynamical.org catalog of analysis-ready weather data in Zarr v3 / Icechunk format.",
+  "license": "BSD-3-Clause",
+  "upload_type": "software",
+  "creators": [
+    {"name": "Keefe Sampson, Alden"},
+    {"name": "Moutenot, Marshall"},
+    {"name": "dynamical.org contributors"}
+  ],
+  "keywords": [
+    "weather",
+    "zarr",
+    "climate",
+    "open-data"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://dynamical.org",
+      "relation": "isDocumentedBy",
+      "resource_type": "other"
+    }
+  ]
+}

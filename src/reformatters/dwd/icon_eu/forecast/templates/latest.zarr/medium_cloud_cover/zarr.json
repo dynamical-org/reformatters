@@ -69,7 +69,7 @@
   ],
   "attributes": {
     "long_name": "Medium cloud cover",
-    "short_name": "clcm",
+    "short_name": "mcc",
     "standard_name": "cloud_area_fraction_in_atmosphere_layer",
     "units": "percent",
     "comment": "Cloud Cover (400 - 800 hPa). Different agencies use different short_names for this same parameter: ECMWF: MCC; WMO GRIB table: MCDC.",

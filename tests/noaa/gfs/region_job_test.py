@@ -2,10 +2,12 @@ from collections.abc import Mapping
 from pathlib import Path
 from unittest.mock import Mock
 
+import numpy as np
 import pandas as pd
 import pytest
 
 from reformatters.common import template_utils
+from reformatters.common.pydantic import replace
 from reformatters.common.region_job import CoordinateValueOrRange
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.common.types import Dim
@@ -184,3 +186,206 @@ def test_common_region_job_operational_update_jobs(
     for job in jobs:
         assert isinstance(job, NoaaGfsForecastRegionJob)
         assert job.data_vars == template_config.data_vars
+
+
+def test_source_file_coord_get_url_nomads() -> None:
+    """Test that get_url(source="nomads") returns a NOMADS URL with the same path as S3."""
+    coord = ConcreteSourceFileCoord(
+        init_time=pd.Timestamp("2025-06-15T12:00"),
+        lead_time=pd.Timedelta(hours=24),
+        data_vars=NoaaGfsForecastTemplateConfig().data_vars[:1],
+    )
+    assert (
+        coord.get_url()
+        == "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20250615/12/atmos/gfs.t12z.pgrb2.0p25.f024"
+    )
+    assert (
+        coord.get_url(source="s3")
+        == "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20250615/12/atmos/gfs.t12z.pgrb2.0p25.f024"
+    )
+    assert (
+        coord.get_url(source="nomads")
+        == "https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod/gfs.20250615/12/atmos/gfs.t12z.pgrb2.0p25.f024"
+    )
+
+
+def test_source_file_coord_get_idx_url_nomads() -> None:
+    """Test that get_idx_url(source="nomads") returns the NOMADS index URL."""
+    coord = ConcreteSourceFileCoord(
+        init_time=pd.Timestamp("2025-06-15T06:00"),
+        lead_time=pd.Timedelta(hours=3),
+        data_vars=NoaaGfsForecastTemplateConfig().data_vars[:1],
+    )
+    assert (
+        coord.get_idx_url(source="nomads")
+        == "https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod/gfs.20250615/06/atmos/gfs.t06z.pgrb2.0p25.f003.idx"
+    )
+    assert (
+        coord.get_idx_url(source="s3")
+        == "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20250615/06/atmos/gfs.t06z.pgrb2.0p25.f003.idx"
+    )
+
+
+def _make_gfs_region_job(
+    template_config: NoaaGfsForecastTemplateConfig,
+    now: pd.Timestamp,
+) -> NoaaGfsForecastRegionJob:
+    return NoaaGfsForecastRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_config.get_template(now),
+        data_vars=template_config.data_vars[:1],
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+
+def test_download_file_tries_s3_first(monkeypatch: pytest.MonkeyPatch) -> None:
+    template_config = NoaaGfsForecastTemplateConfig()
+    region_job = _make_gfs_region_job(template_config, pd.Timestamp("2025-01-15T12:00"))
+    coord = NoaaGfsForecastSourceFileCoord(
+        init_time=pd.Timestamp("2025-01-01"),
+        lead_time=pd.Timedelta(hours=6),
+        data_vars=template_config.data_vars[:1],
+    )
+    s3_result = Mock()
+    sources_called: list[str] = []
+
+    def mock_download_from_source(
+        self: NoaaGfsCommonRegionJob,
+        coord: NoaaGfsForecastSourceFileCoord,
+        source: str,
+    ) -> Path:
+        sources_called.append(source)
+        return s3_result
+
+    monkeypatch.setattr(
+        NoaaGfsCommonRegionJob, "_download_from_source", mock_download_from_source
+    )
+
+    result = region_job.download_file(coord)
+    assert result == s3_result
+    assert sources_called == ["s3"]
+
+
+def test_download_file_falls_back_to_nomads_for_recent_init_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    template_config = NoaaGfsForecastTemplateConfig()
+    now = pd.Timestamp.now()
+    region_job = _make_gfs_region_job(template_config, now)
+    recent_init_time = now.floor("6h")
+    coord = NoaaGfsForecastSourceFileCoord(
+        init_time=recent_init_time,
+        lead_time=pd.Timedelta(hours=6),
+        data_vars=template_config.data_vars[:1],
+    )
+    nomads_result = Mock()
+
+    def mock_download_from_source(
+        self: NoaaGfsCommonRegionJob,
+        coord: NoaaGfsForecastSourceFileCoord,
+        source: str,
+    ) -> Path:
+        if source == "s3":
+            raise FileNotFoundError("not on s3")
+        return nomads_result
+
+    monkeypatch.setattr(
+        NoaaGfsCommonRegionJob, "_download_from_source", mock_download_from_source
+    )
+
+    result = region_job.download_file(coord)
+    assert result == nomads_result
+
+
+def test_download_file_raises_for_old_init_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    template_config = NoaaGfsForecastTemplateConfig()
+    region_job = _make_gfs_region_job(template_config, pd.Timestamp("2025-01-15T12:00"))
+    coord = NoaaGfsForecastSourceFileCoord(
+        init_time=pd.Timestamp("2020-01-01"),
+        lead_time=pd.Timedelta(hours=6),
+        data_vars=template_config.data_vars[:1],
+    )
+
+    def mock_download_from_source(
+        self: NoaaGfsCommonRegionJob,
+        coord: NoaaGfsForecastSourceFileCoord,
+        source: str,
+    ) -> Path:
+        if source == "s3":
+            raise FileNotFoundError("not on s3")
+        return Mock()
+
+    monkeypatch.setattr(
+        NoaaGfsCommonRegionJob, "_download_from_source", mock_download_from_source
+    )
+
+    with pytest.raises(FileNotFoundError, match="not on s3"):
+        region_job.download_file(coord)
+
+
+def test_download_file_nomads_fallback_uses_httpx(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """NOMADS fallback uses httpx_download_to_disk (not http_download_to_disk)."""
+    template_config = NoaaGfsForecastTemplateConfig()
+    now = pd.Timestamp.now()
+    region_job = _make_gfs_region_job(template_config, now)
+    recent_init_time = now.floor("6h")
+    coord = NoaaGfsForecastSourceFileCoord(
+        init_time=recent_init_time,
+        lead_time=pd.Timedelta(hours=6),
+        data_vars=template_config.data_vars[:1],
+    )
+    monkeypatch.setattr(
+        "reformatters.noaa.gfs.region_job.http_download_to_disk",
+        Mock(side_effect=FileNotFoundError("not on s3")),
+    )
+    mock_httpx = Mock(return_value=Mock())
+    monkeypatch.setattr(
+        "reformatters.noaa.gfs.region_job.httpx_download_to_disk", mock_httpx
+    )
+    monkeypatch.setattr(
+        "reformatters.noaa.gfs.region_job.grib_message_byte_ranges_from_index",
+        Mock(return_value=([0], [100])),
+    )
+
+    region_job.download_file(coord)
+
+    urls_called = [call.args[0] for call in mock_httpx.call_args_list]
+    assert len(urls_called) > 0
+    assert all(url.startswith("https://nomads.ncep.noaa.gov") for url in urls_called)
+
+
+@pytest.mark.slow
+def test_download_file_from_nomads_gfs() -> None:
+    """Download a recent GFS init time from NOMADS and read all template variables."""
+    template_config = NoaaGfsForecastTemplateConfig()
+    # 6h-old init time is within the 18h NOMADS window and typically complete
+    init_time = (pd.Timestamp.now() - pd.Timedelta(hours=6)).floor("6h")
+
+    region_job = NoaaGfsForecastRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_config.get_template(pd.Timestamp.now()),
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    # lead_time=6h: all vars (instant and accumulated) are present in the f006 GRIB file
+    lead_time = pd.Timedelta(hours=6)
+    for group in NoaaGfsForecastRegionJob.source_groups(template_config.data_vars):
+        coord = NoaaGfsForecastSourceFileCoord(
+            init_time=init_time,
+            lead_time=lead_time,
+            data_vars=group,
+        )
+        coord = replace(coord, downloaded_path=region_job.download_file(coord))
+
+        for data_var in group:
+            data = region_job.read_data(coord, data_var)
+            assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"

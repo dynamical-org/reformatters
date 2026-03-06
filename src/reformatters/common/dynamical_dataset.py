@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
@@ -31,7 +32,6 @@ from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.storage import StorageConfig, StoreFactory, get_local_tmp_store
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike
-from reformatters.common.update_progress_tracker import UpdateProgressTracker
 from reformatters.common.zarr import copy_zarr_metadata
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
@@ -48,8 +48,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     primary_storage_config: StorageConfig
     replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
-
-    use_progress_tracker: bool = False
 
     @computed_field
     @property
@@ -168,18 +166,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     icechunk_only=True,
                 )
 
-                progress_tracker = None
-                if self.use_progress_tracker:
-                    progress_tracker = UpdateProgressTracker(
-                        reformat_job_name,
-                        job.region.start,
-                        self.store_factory,
-                    )
-
                 process_results = job.process(
                     primary_store=primary_store,
                     replica_stores=replica_stores,
-                    progress_tracker=progress_tracker,
                 )
                 updated_template = job.update_template_with_results(process_results)
                 # overwrite the tmp store metadata with updated template
@@ -196,9 +185,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     primary_store,
                     replica_stores,
                 )
-
-                if progress_tracker is not None:
-                    progress_tracker.close()
 
         log.info(
             f"Operational update complete. Wrote to primary store: {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()} replicas"
@@ -387,26 +373,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
             template_utils.write_metadata(region_job.template_ds, region_job.tmp_store)
 
-            progress_tracker = None
-            if self.use_progress_tracker:
-                progress_tracker = UpdateProgressTracker(
-                    reformat_job_name,
-                    region_job.region.start,
-                    self.store_factory,
-                )
-
-            region_job.process(
-                primary_store, replica_stores, progress_tracker=progress_tracker
-            )
+            region_job.process(primary_store, replica_stores)
 
             storage.commit_if_icechunk(
                 f"Backfill completed at {pd.Timestamp.now(tz='UTC').isoformat()}",
                 primary_store,
                 replica_stores,
             )
-
-            if progress_tracker is not None:
-                progress_tracker.close()
 
     def validate_dataset(
         self,
@@ -483,10 +456,14 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         cron_jobs = self.operational_kubernetes_resources("placeholder-image-tag")
         cron_job = item(c for c in cron_jobs if isinstance(c, cron_type))
 
+        # Use the actual cronjob name from k8s env when available. This ensures
+        # staging cronjobs report to their own Sentry monitor, not production's.
+        monitor_slug = os.getenv("CRON_JOB_NAME") or cron_job.name
+
         def capture_checkin(status: Literal["ok", "in_progress", "error"]) -> None:
             sentry_sdk.crons.capture_checkin(
-                monitor_slug=cron_job.name,
-                check_in_id=digest(reformat_job_name, length=32),
+                monitor_slug=monitor_slug,
+                check_in_id=digest([reformat_job_name], length=32),
                 status=status,
                 monitor_config={
                     "schedule": {"type": "crontab", "value": cron_job.schedule},

@@ -1,4 +1,7 @@
 # dynamical.org reformatters
+
+[![DOI](https://zenodo.org/badge/859043226.svg)](https://doi.org/10.5281/zenodo.18777399)
+
 Reformat weather datasets into zarr.
 
 Browse the datasets produced by this repo at https://dynamical.org/catalog/.

@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from pathlib import Path
 
 import xarray as xr
@@ -47,7 +47,6 @@ def copy_data_var(
     tmp_store: Path,
     primary_store: Store,
     replica_stores: Iterable[Store] = (),
-    track_progress_callback: Callable[[], None] | None = None,
 ) -> None:
     dim_index = template_ds[data_var_name].dims.index(append_dim)
     append_dim_shard_size = template_ds[data_var_name].encoding["shards"][dim_index]
@@ -71,9 +70,6 @@ def copy_data_var(
     log.info(
         f"Done copying data var chunks to primary store ({primary_store}) for {relative_dir}."
     )
-
-    if track_progress_callback is not None:
-        track_progress_callback()
 
     try:
         # Delete data to free disk space.

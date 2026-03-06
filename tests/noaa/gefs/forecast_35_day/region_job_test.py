@@ -369,29 +369,34 @@ def test_download_file_fallback(
     mock_index_path.read_text.return_value = "ignored"
     mock_data_path = Mock()
 
-    primary_index_url = coord.get_index_url()
     fallback_url = coord.get_fallback_url()
     fallback_index_url = coord.get_index_url(fallback=True)
 
     call_count = 0
 
-    def mock_download_side_effect(url: str, dataset_id: str, **kwargs: object) -> Mock:
+    # Primary source (http_download_to_disk) fails with FileNotFoundError
+    def mock_primary_download(url: str, dataset_id: str, **kwargs: object) -> Mock:
         nonlocal call_count
         call_count += 1
-        # Primary source fails with FileNotFoundError
-        if url == primary_index_url:
-            raise FileNotFoundError(f"Primary index not found: {url}")
-        # Fallback source succeeds
+        raise FileNotFoundError(f"Primary index not found: {url}")
+
+    # Fallback source (httpx_download_to_disk for NOMADS) succeeds
+    def mock_fallback_download(url: str, dataset_id: str, **kwargs: object) -> Mock:
+        nonlocal call_count
+        call_count += 1
         if url == fallback_index_url:
             return mock_index_path
         if url == fallback_url:
             return mock_data_path
-        raise AssertionError(f"Unexpected URL: {url}")
+        raise AssertionError(f"Unexpected fallback URL: {url}")
 
-    mock_download = Mock(side_effect=mock_download_side_effect)
     monkeypatch.setattr(
         "reformatters.noaa.gefs.utils.http_download_to_disk",
-        mock_download,
+        Mock(side_effect=mock_primary_download),
+    )
+    monkeypatch.setattr(
+        "reformatters.noaa.gefs.utils.httpx_download_to_disk",
+        Mock(side_effect=mock_fallback_download),
     )
 
     mock_grib_message_byte_ranges_from_index = Mock(
@@ -408,12 +413,6 @@ def test_download_file_fallback(
 
     # Should have called: primary index (failed) + fallback index + fallback data
     assert call_count == 3
-
-    # Verify fallback URLs were used
-    calls = mock_download.call_args_list
-    assert calls[0][0][0] == primary_index_url  # First tried primary
-    assert calls[1][0][0] == fallback_index_url  # Then fallback index
-    assert calls[2][0][0] == fallback_url  # Then fallback data
 
 
 def test_download_file_no_fallback_for_old_data(
@@ -687,22 +686,15 @@ def test_download_file_fallback_permission_denied_converts_to_file_not_found(
         data_vars=data_vars,
     )
 
-    primary_index_url = coord.get_index_url()
-    fallback_index_url = coord.get_index_url(fallback=True)
-
-    def mock_download_side_effect(url: str, dataset_id: str, **kwargs: object) -> Mock:
-        # Primary source fails with FileNotFoundError
-        if url == primary_index_url:
-            raise FileNotFoundError(f"Primary index not found: {url}")
-        # Fallback source fails with PermissionDeniedError
-        if url == fallback_index_url:
-            raise PermissionDeniedError("Permission denied")
-        raise AssertionError(f"Unexpected URL: {url}")
-
-    mock_download = Mock(side_effect=mock_download_side_effect)
+    # Primary source fails with FileNotFoundError
     monkeypatch.setattr(
         "reformatters.noaa.gefs.utils.http_download_to_disk",
-        mock_download,
+        Mock(side_effect=FileNotFoundError("Primary index not found")),
+    )
+    # Fallback source (NOMADS via httpx) fails with PermissionDeniedError
+    monkeypatch.setattr(
+        "reformatters.noaa.gefs.utils.httpx_download_to_disk",
+        Mock(side_effect=PermissionDeniedError("Permission denied")),
     )
 
     # Should raise FileNotFoundError (not PermissionDeniedError)

@@ -1,5 +1,7 @@
+import functools
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from typing import Literal, assert_never
 
 import numpy as np
 import pandas as pd
@@ -9,7 +11,7 @@ from zarr.abc.store import Store
 
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
-from reformatters.common.download import http_download_to_disk
+from reformatters.common.download import http_download_to_disk, httpx_download_to_disk
 from reformatters.common.iterating import digest, group_by, item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
@@ -32,9 +34,15 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
     NoaaHrrrFileType,
 )
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
-from reformatters.noaa.noaa_utils import has_hour_0_values
+from reformatters.noaa.noaa_utils import (
+    NOMADS_RETRY_STATUS_CODES,
+    has_hour_0_values,
+    nomads_rate_limiter,
+)
 
 log = get_logger(__name__)
+
+type DownloadSource = Literal["s3", "nomads"]
 
 
 class NoaaHrrrSourceFileCoord(SourceFileCoord):
@@ -46,17 +54,25 @@ class NoaaHrrrSourceFileCoord(SourceFileCoord):
     file_type: NoaaHrrrFileType
     data_vars: Sequence[NoaaHrrrDataVar]
 
-    def get_url(self) -> str:
+    def get_url(self, source: DownloadSource = "s3") -> str:
         """Return the URL for this HRRR file."""
         lead_time_hours = whole_hours(self.lead_time)
         init_date_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")
+        path = f"hrrr.{init_date_str}/{self.domain}/hrrr.t{init_hour_str}z.wrf{self.file_type}f{int(lead_time_hours):02d}.grib2"
+        match source:
+            case "nomads":
+                base = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/hrrr/prod"
+            case "s3":
+                base = "https://noaa-hrrr-bdp-pds.s3.amazonaws.com"
+            case _ as unreachable:
+                assert_never(unreachable)
 
-        return f"https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.{init_date_str}/{self.domain}/hrrr.t{init_hour_str}z.wrf{self.file_type}f{int(lead_time_hours):02d}.grib2"
+        return f"{base}/{path}"
 
-    def get_idx_url(self) -> str:
+    def get_idx_url(self, source: DownloadSource = "s3") -> str:
         """Return the URL for the GRIB index file."""
-        return f"{self.get_url()}.idx"
+        return f"{self.get_url(source=source)}.idx"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
         raise NotImplementedError  # depends on if the dataset is a forecast or analysis
@@ -112,24 +128,45 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
         )
         return jobs, template_ds
 
-    def download_file(self, coord: NoaaHrrrSourceFileCoord) -> Path:
-        """Download a subset of variables from a HRRR file and return the local path."""
-        idx_url = coord.get_idx_url()
-        idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
-
+    def _download_from_source(
+        self, coord: NoaaHrrrSourceFileCoord, source: DownloadSource
+    ) -> Path:
+        download = (
+            functools.partial(
+                httpx_download_to_disk,
+                rate_limiter=nomads_rate_limiter,
+                retry_status_codes=NOMADS_RETRY_STATUS_CODES,
+            )
+            if source == "nomads"
+            else http_download_to_disk
+        )
+        idx_local_path = download(coord.get_idx_url(source=source), self.dataset_id)
         byte_range_starts, byte_range_ends = grib_message_byte_ranges_from_index(
-            idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
+            idx_local_path,
+            coord.data_vars,
+            coord.init_time,
+            coord.lead_time,
+            # Pre-v3 HRRR (2014-2016) has duplicate APCP entries in the GRIB index
+            allowed_duplicate_elements=frozenset({"APCP"}),
         )
         vars_suffix = digest(
             f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)
         )
-
-        return http_download_to_disk(
-            coord.get_url(),
+        return download(
+            coord.get_url(source=source),
             self.dataset_id,
             byte_ranges=(byte_range_starts, byte_range_ends),
             local_path_suffix=f"-{vars_suffix}",
         )
+
+    def download_file(self, coord: NoaaHrrrSourceFileCoord) -> Path:
+        """Download a subset of variables from a HRRR file and return the local path."""
+        try:
+            return self._download_from_source(coord, source="s3")
+        except FileNotFoundError:
+            if coord.init_time > (pd.Timestamp.now() - pd.Timedelta(hours=12)):
+                return self._download_from_source(coord, source="nomads")
+            raise
 
     def read_data(
         self,
@@ -140,10 +177,17 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
         assert coord.downloaded_path is not None  # for type check, system guarantees it
         grib_description = data_var.internal_attrs.grib_description
 
-        grib_element = data_var.internal_attrs.grib_element
+        grib_elements = {
+            data_var.internal_attrs.grib_element,
+            *data_var.internal_attrs.grib_element_alternatives,
+        }
         # grib element has the accumulation window as a suffix in the grib file attributes, but not in the .idx file
-        if (reset_freq := data_var.internal_attrs.window_reset_frequency) is not None:
-            grib_element = f"{grib_element}{whole_hours(reset_freq):02d}"
+        # Running-total variables (window_reset_frequency=pd.Timedelta.max, e.g. ASNOW) don't get this suffix
+        if (
+            reset_freq := data_var.internal_attrs.window_reset_frequency
+        ) is not None and reset_freq != pd.Timedelta.max:
+            suffix = f"{whole_hours(reset_freq):02d}"
+            grib_elements = {f"{e}{suffix}" for e in grib_elements}
 
         with rasterio.open(coord.downloaded_path) as reader:
             matching_bands: list[int] = []
@@ -151,13 +195,13 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
                 rasterio_band_i = band_i + 1
                 if (
                     reader.descriptions[band_i] == grib_description
-                    and reader.tags(rasterio_band_i)["GRIB_ELEMENT"] == grib_element
+                    and reader.tags(rasterio_band_i)["GRIB_ELEMENT"] in grib_elements
                 ):
                     matching_bands.append(rasterio_band_i)
 
             assert len(matching_bands) == 1, (
                 f"Expected exactly 1 matching band, found {len(matching_bands)}: {matching_bands}. "
-                f"{grib_element=}, {grib_description=}, {coord.downloaded_path=}"
+                f"{grib_elements=}, {grib_description=}, {coord.downloaded_path=}"
             )
             rasterio_band_index = item(matching_bands)
 
@@ -185,6 +229,9 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
             except ValueError:
                 # Log exception so we are notified if deaccumulation errors are larger than expected.
                 log.exception(f"Error deaccumulating {data_var.name}")
+
+        if (scale_factor := data_var.internal_attrs.scale_factor) is not None:
+            data_array.values *= np.float32(scale_factor)
 
         keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
         if isinstance(keep_mantissa_bits, int):

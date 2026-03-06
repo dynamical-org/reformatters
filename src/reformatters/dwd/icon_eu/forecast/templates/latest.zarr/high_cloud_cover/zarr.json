@@ -69,7 +69,7 @@
   ],
   "attributes": {
     "long_name": "High cloud cover",
-    "short_name": "clch",
+    "short_name": "hcc",
     "standard_name": "cloud_area_fraction_in_atmosphere_layer",
     "units": "percent",
     "comment": "Cloud Cover (0 - 400 hPa). Different agencies use different short_names for this same parameter: ECMWF: HCC; WMO GRIB table: HCDC.",

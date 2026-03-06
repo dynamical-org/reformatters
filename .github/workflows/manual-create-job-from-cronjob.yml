@@ -11,6 +11,8 @@ name: 'Manual: Create Job from CronJob'
         type: choice
         options:
         - dwd-icon-eu-forecast-archive-grib-files
+        - ecmwf-aifs-deterministic-forecast-update
+        - ecmwf-aifs-deterministic-forecast-validate
         - ecmwf-ifs-ens-forecast-15-day-0-25-degree-update
         - ecmwf-ifs-ens-forecast-15-day-0-25-degree-validate
         - nasa-smap-level3-36km-v9-update
@@ -27,6 +29,8 @@ name: 'Manual: Create Job from CronJob'
         - noaa-hrrr-analysis-validate
         - noaa-hrrr-forecast-48-hour-update
         - noaa-hrrr-forecast-48-hour-validate
+        - noaa-mrms-conus-analysis-hourly-update
+        - noaa-mrms-conus-analysis-hourly-validate
         - noaa-ndvi-cdr-analysis-update
         - noaa-ndvi-cdr-analysis-validate
         - u-arizona-swann-analysis-update

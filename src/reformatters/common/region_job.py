@@ -5,11 +5,13 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import suppress
 from copy import deepcopy
 from enum import Enum, auto
+from http import HTTPStatus
 from itertools import batched, chain, pairwise
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar, get_args
 
+import httpx
 import numpy as np
 import pandas as pd
 import pydantic
@@ -34,7 +36,6 @@ from reformatters.common.types import (
     Dim,
     Timestamp,
 )
-from reformatters.common.update_progress_tracker import UpdateProgressTracker
 from reformatters.common.zarr import copy_data_var
 
 log = get_logger(__name__)
@@ -491,8 +492,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         self,
         primary_store: Store,
         replica_stores: list[Store],
-        *,
-        progress_tracker: UpdateProgressTracker | None = None,
     ) -> Mapping[str, Sequence[SOURCE_FILE_COORD]]:
         """
         Orchestrate the full region job processing pipeline.
@@ -514,13 +513,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         processing_region_ds, output_region_ds = self._get_region_datasets()
 
-        if progress_tracker is not None:
-            data_vars_to_process: Sequence[DATA_VAR] = progress_tracker.get_unprocessed(
-                self.data_vars
-            )  # type: ignore[assignment]
-            data_var_groups = self.source_groups(data_vars_to_process)
-        else:
-            data_var_groups = self.source_groups(self.data_vars)
+        data_var_groups = self.source_groups(self.data_vars)
         if self.max_vars_per_download_group is not None:
             data_var_groups = self._maybe_split_groups(
                 data_var_groups, self.max_vars_per_download_group
@@ -583,11 +576,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         write_executor,
                     )
 
-                    def track_progress_callback(data_var: DATA_VAR = data_var) -> None:
-                        if progress_tracker is None:
-                            return
-                        progress_tracker.record_completion(data_var.name)
-
                     upload_futures.append(
                         upload_executor.submit(
                             copy_data_var,
@@ -598,7 +586,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                             self.tmp_store,
                             primary_store,
                             replica_stores=replica_stores,
-                            track_progress_callback=track_progress_callback,
                         )
                     )
 
@@ -657,8 +644,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 if isinstance(append_dim_coord, slice):
                     append_dim_coord = append_dim_coord.start
                 two_days_ago = pd.Timestamp.now() - pd.Timedelta(hours=48)
+                is_not_found = isinstance(e, FileNotFoundError) or (
+                    isinstance(e, httpx.HTTPStatusError)
+                    and e.response.status_code
+                    in (HTTPStatus.FORBIDDEN, HTTPStatus.NOT_FOUND)
+                )
                 if (
-                    isinstance(e, FileNotFoundError)
+                    is_not_found
                     and isinstance(append_dim_coord, np.datetime64 | pd.Timestamp)
                     and append_dim_coord > two_days_ago
                 ):
@@ -705,8 +697,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             for future in concurrent.futures.as_completed(futures):
                 index, coord = futures[future]
                 try:
-                    data = future.result()
-                    out.loc[coord.out_loc()] = data
+                    out.loc[coord.out_loc()] = future.result()
                     updated_coords[index] = replace(
                         coord, status=SourceFileStatus.Succeeded
                     )
@@ -715,6 +706,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     updated_coords[index] = replace(
                         coord, status=SourceFileStatus.ReadFailed
                     )
+                finally:
+                    # as_completed retains futures and results; clear to avoid ~2x peak memory
+                    future._result = None  # noqa: SLF001
 
         sorted_updated_coords = [updated_coords[i] for i in sorted(updated_coords)]
         return sorted_updated_coords

@@ -41,6 +41,9 @@ from reformatters.noaa.hrrr.analysis.dynamical_dataset import (
 from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
     NoaaHrrrForecast48HourDataset,
 )
+from reformatters.noaa.mrms.conus_analysis_hourly.dynamical_dataset import (
+    NoaaMrmsConusAnalysisHourlyDataset,
+)
 
 faulthandler.enable()
 
@@ -81,6 +84,14 @@ class EcmwfAifsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
     """ECMWF AIFS in Icechunk on AWS Open Data."""
 
     base_path: str = "s3://dynamical-ecmwf-aifs"
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
+class NoaaMrmsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
+    """NOAA MRMS in Icechunk on AWS Open Data."""
+
+    base_path: str = "s3://dynamical-noaa-mrms"
     k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
     format: DatasetFormat = DatasetFormat.ICECHUNK
 
@@ -133,14 +144,18 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
         replica_storage_configs=[NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig()],
     ),
-    # ECMWF
-    EcmwfAifsForecastDataset(
+    NoaaMrmsConusAnalysisHourlyDataset(
         primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[EcmwfAifsIcechunkAwsOpenDataDatasetStorageConfig()],
+        replica_storage_configs=[NoaaMrmsIcechunkAwsOpenDataDatasetStorageConfig()],
     ),
+    # ECMWF
     EcmwfIfsEnsForecast15Day025DegreeDataset(
         primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
         replica_storage_configs=[EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig()],
+    ),
+    EcmwfAifsForecastDataset(
+        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
+        replica_storage_configs=[EcmwfAifsIcechunkAwsOpenDataDatasetStorageConfig()],
     ),
     # DWD
     DwdIconEuForecastDataset(
@@ -197,12 +212,7 @@ app.command()(initialize_new_integration)
 for dataset in DYNAMICAL_DATASETS:
     app.add_typer(dataset.get_cli(), name=dataset.dataset_id)
 
-
-@app.command()
-def deploy(
-    docker_image: str | None = None,
-) -> None:
-    deploy_module.deploy_operational_resources(DYNAMICAL_DATASETS, docker_image)
+deploy_module.register_commands(app, DYNAMICAL_DATASETS)
 
 
 if not __debug__:

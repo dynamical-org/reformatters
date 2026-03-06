@@ -1,6 +1,8 @@
+import functools
 import warnings
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from typing import Literal, assert_never
 
 import numpy as np
 import pandas as pd
@@ -12,6 +14,7 @@ from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import (
     http_download_to_disk,
+    httpx_download_to_disk,
 )
 from reformatters.common.iterating import digest, group_by
 from reformatters.common.logging import get_logger
@@ -31,9 +34,15 @@ from reformatters.common.types import (
 )
 from reformatters.noaa.models import NoaaDataVar
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
-from reformatters.noaa.noaa_utils import has_hour_0_values
+from reformatters.noaa.noaa_utils import (
+    NOMADS_RETRY_STATUS_CODES,
+    has_hour_0_values,
+    nomads_rate_limiter,
+)
 
 log = get_logger(__name__)
+
+type DownloadSource = Literal["s3", "nomads"]
 
 
 class NoaaGfsSourceFileCoord(SourceFileCoord):
@@ -43,12 +52,23 @@ class NoaaGfsSourceFileCoord(SourceFileCoord):
     lead_time: Timedelta
     data_vars: Sequence[NoaaDataVar]
 
-    def get_url(self) -> str:
+    def get_url(self, source: DownloadSource = "s3") -> str:
         init_date_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")
         lead_hours = whole_hours(self.lead_time)
-        base_path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_hours:03d}"
-        return f"https://noaa-gfs-bdp-pds.s3.amazonaws.com/{base_path}"
+        path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.pgrb2.0p25.f{lead_hours:03d}"
+        match source:
+            case "nomads":
+                base = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod"
+            case "s3":
+                base = "https://noaa-gfs-bdp-pds.s3.amazonaws.com"
+            case _ as unreachable:
+                assert_never(unreachable)
+
+        return f"{base}/{path}"
+
+    def get_idx_url(self, source: DownloadSource = "s3") -> str:
+        return f"{self.get_url(source=source)}.idx"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
         raise NotImplementedError("Subclasses must implement out_loc()")
@@ -65,23 +85,37 @@ class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
         """Return groups of variables that can be downloaded from the same source file."""
         return group_by(data_vars, has_hour_0_values)
 
-    def download_file(self, coord: NoaaGfsSourceFileCoord) -> Path:
-        """Download the file for the given coordinate and return the local path."""
-        # Download grib index file
-        idx_url = f"{coord.get_url()}.idx"
-        idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
-
-        # Download the grib messages for the data vars in the coord using byte ranges
+    def _download_from_source(
+        self, coord: NoaaGfsSourceFileCoord, source: DownloadSource
+    ) -> Path:
+        download = (
+            functools.partial(
+                httpx_download_to_disk,
+                rate_limiter=nomads_rate_limiter,
+                retry_status_codes=NOMADS_RETRY_STATUS_CODES,
+            )
+            if source == "nomads"
+            else http_download_to_disk
+        )
+        idx_local_path = download(coord.get_idx_url(source=source), self.dataset_id)
         starts, ends = grib_message_byte_ranges_from_index(
             idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
         )
         vars_suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=True))
-        return http_download_to_disk(
-            coord.get_url(),
+        return download(
+            coord.get_url(source=source),
             self.dataset_id,
             byte_ranges=(starts, ends),
             local_path_suffix=f"-{vars_suffix}",
         )
+
+    def download_file(self, coord: NoaaGfsSourceFileCoord) -> Path:
+        try:
+            return self._download_from_source(coord, source="s3")
+        except FileNotFoundError:
+            if coord.init_time > (pd.Timestamp.now() - pd.Timedelta(hours=12)):
+                return self._download_from_source(coord, source="nomads")
+            raise
 
     def read_data(
         self,

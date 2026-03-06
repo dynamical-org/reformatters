@@ -585,6 +585,190 @@
         "node_type": "array",
         "storage_transformers": []
       },
+      "geopotential_height_850hpa": {
+        "shape": [
+          1,
+          85,
+          51,
+          721,
+          1440
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              85,
+              51,
+              320,
+              320
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                1,
+                85,
+                51,
+                32,
+                32
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Geopotential height",
+          "short_name": "gh",
+          "standard_name": "geopotential_height",
+          "units": "m",
+          "step_type": "instant",
+          "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "ensemble_member",
+          "latitude",
+          "longitude"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "geopotential_height_925hpa": {
+        "shape": [
+          1,
+          85,
+          51,
+          721,
+          1440
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              85,
+              51,
+              320,
+              320
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                1,
+                85,
+                51,
+                32,
+                32
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Geopotential height",
+          "short_name": "gh",
+          "standard_name": "geopotential_height",
+          "units": "m",
+          "step_type": "instant",
+          "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "ensemble_member",
+          "latitude",
+          "longitude"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
       "ingested_forecast_length": {
         "shape": [
           1
@@ -1279,6 +1463,282 @@
         "node_type": "array",
         "storage_transformers": []
       },
+      "temperature_850hpa": {
+        "shape": [
+          1,
+          85,
+          51,
+          721,
+          1440
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              85,
+              51,
+              320,
+              320
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                1,
+                85,
+                51,
+                32,
+                32
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Temperature",
+          "short_name": "t",
+          "standard_name": "air_temperature",
+          "units": "degree_Celsius",
+          "step_type": "instant",
+          "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "ensemble_member",
+          "latitude",
+          "longitude"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "temperature_925hpa": {
+        "shape": [
+          1,
+          85,
+          51,
+          721,
+          1440
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              85,
+              51,
+              320,
+              320
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                1,
+                85,
+                51,
+                32,
+                32
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Temperature",
+          "short_name": "t",
+          "standard_name": "air_temperature",
+          "units": "degree_Celsius",
+          "step_type": "instant",
+          "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "ensemble_member",
+          "latitude",
+          "longitude"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "total_cloud_cover_atmosphere": {
+        "shape": [
+          1,
+          85,
+          51,
+          721,
+          1440
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              85,
+              51,
+              320,
+              320
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                1,
+                85,
+                51,
+                32,
+                32
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Total Cloud Cover",
+          "short_name": "tcc",
+          "standard_name": "cloud_area_fraction",
+          "units": "percent",
+          "step_type": "instant",
+          "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "ensemble_member",
+          "latitude",
+          "longitude"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
       "valid_time": {
         "shape": [
           1,
@@ -1332,6 +1792,98 @@
         "dimension_names": [
           "init_time",
           "lead_time"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "wind_gust_10m": {
+        "shape": [
+          1,
+          85,
+          51,
+          721,
+          1440
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              85,
+              51,
+              320,
+              320
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                1,
+                85,
+                51,
+                32,
+                32
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Maximum 10 metre wind gust since previous post-processing",
+          "short_name": "10fg",
+          "standard_name": "wind_speed_of_gust",
+          "units": "m s-1",
+          "step_type": "max",
+          "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "ensemble_member",
+          "latitude",
+          "longitude"
         ],
         "zarr_format": 3,
         "node_type": "array",

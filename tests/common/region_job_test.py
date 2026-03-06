@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Sequence
 from itertools import batched, pairwise
 from pathlib import Path
@@ -5,6 +6,7 @@ from typing import ClassVar
 
 import dask
 import dask.array
+import httpx
 import numpy as np
 import pandas as pd
 import pytest
@@ -995,3 +997,107 @@ class TestSingleShardEdgeCases:
             single_shard_ds, filter_contains=[pd.Timestamp("2025-01-01 00:30")]
         )
         assert regions == []
+
+
+def _make_http_status_error(status_code: int) -> httpx.HTTPStatusError:
+    return httpx.HTTPStatusError(
+        message=f"Client error '{status_code}'",
+        request=httpx.Request("GET", "https://example.com/file"),
+        response=httpx.Response(status_code),
+    )
+
+
+class TestDownloadErrorLogging:
+    """Test that download errors for recent files use quiet logging for expected errors."""
+
+    def _make_job(self, time: pd.Timestamp) -> ExampleRegionJob:
+        template_ds = _create_template_ds(num_vars=1, num_time=48)
+        template_ds = template_ds.assign_coords(
+            time=pd.date_range(time, freq="h", periods=48)
+        )
+        return ExampleRegionJob(
+            tmp_store=get_local_tmp_store(),
+            template_ds=template_ds,
+            data_vars=[ExampleDataVar(name="var0")],
+            append_dim="time",
+            region=slice(0, 12),
+            reformat_job_name="test-job",
+        )
+
+    def _download_and_get_log_levels(
+        self,
+        job: ExampleRegionJob,
+        error: Exception,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> list[int]:
+        monkeypatch.setattr(
+            ExampleRegionJob,
+            "download_file",
+            lambda self, coord: (_ for _ in ()).throw(error),
+        )
+        coord = ExampleSourceFileCoords(
+            time=pd.Timestamp(job.template_ds.time.values[0])
+        )
+        with caplog.at_level(logging.DEBUG, logger="reformatters.common.region_job"):
+            job._download_processing_group([coord], ["var0"])
+        return [
+            r.levelno
+            for r in caplog.records
+            if r.name == "reformatters.common.region_job"
+            and r.message != "Downloading ['var0'] in 1 files..."
+        ]
+
+    def test_httpx_404_recent_logs_info(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        job = self._make_job(pd.Timestamp.now() - pd.Timedelta(hours=1))
+        levels = self._download_and_get_log_levels(
+            job, _make_http_status_error(404), monkeypatch, caplog
+        )
+        assert levels == [logging.INFO]
+
+    def test_httpx_403_recent_logs_info(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        job = self._make_job(pd.Timestamp.now() - pd.Timedelta(hours=1))
+        levels = self._download_and_get_log_levels(
+            job, _make_http_status_error(403), monkeypatch, caplog
+        )
+        assert levels == [logging.INFO]
+
+    def test_httpx_500_recent_logs_exception(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        job = self._make_job(pd.Timestamp.now() - pd.Timedelta(hours=1))
+        levels = self._download_and_get_log_levels(
+            job, _make_http_status_error(500), monkeypatch, caplog
+        )
+        assert levels == [logging.ERROR]
+
+    def test_httpx_404_old_logs_exception(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        job = self._make_job(pd.Timestamp.now() - pd.Timedelta(days=5))
+        levels = self._download_and_get_log_levels(
+            job, _make_http_status_error(404), monkeypatch, caplog
+        )
+        assert levels == [logging.ERROR]
+
+    def test_file_not_found_recent_logs_info(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        job = self._make_job(pd.Timestamp.now() - pd.Timedelta(hours=1))
+        levels = self._download_and_get_log_levels(
+            job, FileNotFoundError("missing"), monkeypatch, caplog
+        )
+        assert levels == [logging.INFO]
+
+    def test_file_not_found_old_logs_exception(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        job = self._make_job(pd.Timestamp.now() - pd.Timedelta(days=5))
+        levels = self._download_and_get_log_levels(
+            job, FileNotFoundError("missing"), monkeypatch, caplog
+        )
+        assert levels == [logging.ERROR]
