@@ -7,8 +7,6 @@ assignees: ""
 
 [Documentation](https://github.com/dynamical-org/reformatters/blob/main/docs/add_new_variable.md)
 
-## Checklist
-
 - [ ] PR
 - [ ] Run operational update to expand dataset variables
 - [ ] Backfill new variable(s)
