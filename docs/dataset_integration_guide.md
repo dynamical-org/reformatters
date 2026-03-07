@@ -63,7 +63,9 @@ Work through `src/reformatters/$DATASET_PATH/template_config.py`, setting the at
 
 Providing an AI with 1) the example template config code to edit, 2) output of running `gdalinfo <example source data file>` and 3) any dataset documentation will help it give you a decent first implementation of your `TemplateConfig` subclass.
 
-Use the [chunk/shard layout tool](./chunk_shard_layout_tool.md) to find chunk and shard sizes for your data variables.
+#### Chunk and shard layout
+
+Read the [chunk/shard layout tool](./chunk_shard_layout_tool.md) docs and use the tool to find chunk and shard sizes for your data variables.
 
 Using the information in the `TemplateConfig`, `reformatters` writes the Zarr metadata for your dataset to `src/reformatters/$DATASET_PATH/templates/latest.zarr`. Run this command in your terminal to create or update the template based on the your `TemplateConfig` subclass:
 
@@ -93,7 +95,14 @@ There are four required methods:
 
 There are a few optional, additional methods which are described in the example code. Implement them if required for your dataset, otherwise remove them to use the base class `RegionJob` implementations.
 
-Write a test or two for any custom logic you've created. Generally don't implement integration style tests that make network requests in your `region_job_test.py`, we'll do those in the `dynamical_dataset_test.py`.
+#### RegionJob tests
+
+Write a unit test for each overridden method, mocking network calls. At minimum test:
+- `generate_source_file_coords` — correct count and structure of coords for a small template slice
+- `download_file` — correct URL construction and byte ranges (mock the HTTP call)
+- `read_data` — correct band selection and dtype (mock the file reader)
+- `operational_update_jobs` — returns jobs with correct time range
+- `source_groups` — correct grouping if overridden
 
 ```bash
 uv run pytest tests/$DATASET_PATH/region_job_test.py
@@ -111,7 +120,23 @@ Reformatting locally can be slow. Choosing an `<append_dim_end>` not long after 
 
 To operationalize your dataset and have the `update` and `validate` Kubernetes cron jobs be deployed automatically by GitHub CI, implement the two methods in `src/reformatters/$DATASET_PATH/dynamical_dataset.py`.
 
-In `dynamical_dataset_test.py` create a test that runs `backfill_local` followed by `update` for a couple data variables.
+#### Kubernetes resource values
+
+Kubernetes resource values:
+  - shared memory: Round the value calculated in the chunk/shard size tool output up to the nearest half GB.
+  - memory: 1.5x shared memory.
+  - cpu: the number of spatial dimension shards - 1 to account for k8s headroom. e.g. if 2 latitude shards * 4 longitude shards = 8, choose 7 cpu to schedule on an 8 cpu node.
+  - ephemeral_storage: 20GB is a good starting point.
+
+The update cron schedule should run shortly after the source data is expected to be available and the validate cron should run at `update cron start + update pod_active_deadline`.
+
+#### Storage configuration
+
+Follow the storage configuration conventions in `__main__.py`.
+
+#### Integration test with snapshot values
+
+In `dynamical_dataset_test.py` create a test that runs `backfill_local` followed by `update` for a couple data variables and a minimal number of time steps, lead times and ensemble members. Include snapshot value assertions for every data variable that the test processes — check specific known values at specific coordinates (e.g. `assert_allclose(point["temperature_2m"].values, [28.75, 29.23])`). Snapshot values catch silent regressions in data reading, unit conversion, or coordinate alignment that other tests miss.
 
 ```bash
 uv run pytest tests/$DATASET_PATH/dynamical_dataset_test.py

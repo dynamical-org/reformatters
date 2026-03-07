@@ -11,6 +11,8 @@ name: 'Manual: Create Job from CronJob'
         type: choice
         options:
         - dwd-icon-eu-forecast-archive-grib-files
+        - ecmwf-aifs-deterministic-forecast-update
+        - ecmwf-aifs-deterministic-forecast-validate
         - ecmwf-ifs-ens-forecast-15-day-0-25-degree-update
         - ecmwf-ifs-ens-forecast-15-day-0-25-degree-validate
         - nasa-smap-level3-36km-v9-update

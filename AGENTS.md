@@ -39,6 +39,9 @@ docs/                        # Documentation
 deploy/                      # Docker and kubernetes configs
 ```
 
+- **Shared provider utilities** Check `src/reformatters/<provider>/` for shared modules (e.g., `ecmwf/ecmwf_grib_index.py`, `noaa/noaa_utils.py`).
+- **Common utilities** Look for relevant utilities in `src/reformatters/common/` before implementing equivalent logic. An incomplete list: `download.py` (`http_download_to_disk`), `iterating.py` (`group_by`, `item`, `digest`), `logging.py` (`get_logger`), `pydantic.py` (`replace`, `FrozenBaseModel`), `retry.py`, `time_utils.py` (`whole_hours`).
+
 ## Core classes
 
 Integrating a dataset requires subclassing three base classes. For a step by step walkthrough, see [docs/dataset_integration_guide.md](docs/dataset_integration_guide.md) and for complete details of what and how subclassers should implement see the commented templates in `src/reformatters/example/{dynamical_dataset|template_config|region_job}.py`.
@@ -58,7 +61,7 @@ Run these tests after updating a template: `uv run pytest tests/common/common_te
 #### Metadata conventions
 Metadata attributes for variables and coordinates must follow CF Conventions.
 The `standard_name` and `units` fields must match CF definitions if one exists for that variable; if one doesn't, use SI `units` and leave `standard_name` unset.
-Use ECMWF variable name for `long_name` and ECMWF short name for `short_name`.
+Use ECMWF variable name for `long_name` and ECMWF short name for `short_name`.  When adding a variable, search to see if another dataset already has an equivalent variable (e.g. `temperature_2m`), match those names and metadata exactly.
 
 
 ### RegionJob
