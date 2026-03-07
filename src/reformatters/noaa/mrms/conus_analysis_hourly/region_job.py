@@ -228,7 +228,10 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
     ]:
         existing_ds = xr.open_zarr(primary_store, chunks=None, decode_timedelta=True)
         ds_max_time = existing_ds[append_dim].max().item()
-        append_dim_start = pd.Timestamp(ds_max_time)
+        # Start 3 hours before the dataset's latest timestamp so precipitation_surface
+        # (which falls back to radar-only when pass_2 is unavailable) gets reprocessed
+        # and overwritten with pass_2 data once it becomes available (~60-min latency).
+        append_dim_start = pd.Timestamp(ds_max_time) - pd.Timedelta(hours=3)
 
         append_dim_end = pd.Timestamp.now()
         template_ds = get_template_fn(append_dim_end)
