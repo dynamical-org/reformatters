@@ -1,4 +1,5 @@
 import gzip
+import uuid
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Literal, assert_never
@@ -205,6 +206,9 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
                     data_array,
                     dim="time",
                     reset_frequency=data_var.internal_attrs.window_reset_frequency,
+                    # ~6.2% of MRMS pixels have -3.0 no-data sentinel (over-ocean/no-coverage areas)
+                    # which becomes invalid after deaccumulation
+                    expected_invalid_fraction=0.07,
                 )
             except ValueError:
                 log.exception(f"Error deaccumulating {data_var.name}")
@@ -302,6 +306,12 @@ _PRECIPITATION_SURFACE_RADAR_ONLY_OVERRIDES: dict[pd.Timestamp, pd.Timestamp] = 
 
 def _decompress_gzip(gz_path: Path) -> Path:
     decompressed_path = gz_path.with_suffix("")
-    with gzip.open(gz_path, "rb") as f_in, open(decompressed_path, "wb") as f_out:
+    # Atomic write to avoid races when multiple variable groups decompress the same file
+    temp_path = decompressed_path.with_name(
+        f"{decompressed_path.name}.{uuid.uuid4().hex[:8]}"
+    )
+    with gzip.open(gz_path, "rb") as f_in, open(temp_path, "wb") as f_out:
         f_out.write(f_in.read())
+    temp_path.rename(decompressed_path)
+    gz_path.unlink(missing_ok=True)
     return decompressed_path

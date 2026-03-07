@@ -21,6 +21,7 @@ def deaccumulate_to_rates_inplace(
     reset_frequency: pd.Timedelta,
     skip_step: Array1D[np.bool] | None = None,
     invalid_below_threshold_rate: float = PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
+    expected_invalid_fraction: float = 0.0,
 ) -> xr.DataArray:
     """
     Convert accumulated values to per-second rates in place.
@@ -31,6 +32,11 @@ def deaccumulate_to_rates_inplace(
         reset_frequency: Frequency at which the accumulation resets (eg 6 hours for GEFS and GFS)
         skip_step: Array of booleans indicating whether to skip the step. Values in skipped
             steps are left unchanged and the deaccumulation acts as if they are not present.
+        invalid_below_threshold_rate: Threshold below which values are considered invalid
+        expected_invalid_fraction: Fraction of values expected to be invalid (set to NaN)
+            after deaccumulation. For example, MRMS data has ~6% no-data sentinel values
+            that become invalid after deaccumulation. Only raises ValueError if the actual
+            invalid fraction exceeds this expected amount.
     """
     assert data_array.attrs["units"] in VALID_OUTPUT_UNITS_FOR_DEACCUMULATION, (
         "Output units must be a per-second rate"
@@ -62,9 +68,21 @@ def deaccumulate_to_rates_inplace(
         np.prod(data_array.shape[time_dim_index + 1 :] or 1),
     )
 
-    _deaccumulate_to_rates_numba(
+    negative_count, clamped_count = _deaccumulate_to_rates_numba(
         values, seconds, reset_after, skip_step, invalid_below_threshold_rate
     )
+
+    invalid_fraction = negative_count / values.size
+    if invalid_fraction > expected_invalid_fraction:
+        raise ValueError(
+            f"Found {negative_count} values ({invalid_fraction:.1%}) below threshold, "
+            f"expected at most {expected_invalid_fraction:.1%}"
+        )
+    clamped_fraction = clamped_count / values.size
+    if clamped_fraction > 0.05:
+        raise ValueError(
+            f"Over 5% ({clamped_count} total, {clamped_fraction:.1%}) values were clamped to 0"
+        )
 
     return data_array
 
@@ -76,23 +94,18 @@ def _deaccumulate_to_rates_numba(
     reset_after: Array1D[np.bool],
     skip_step: Array1D[np.bool],
     invalid_below_threshold_rate: float,
-) -> None:
+) -> tuple[int, int]:
     """
     Convert accumulated values to per-second rates, mutating `values` in place.
 
     Accumulations should only go up. If they go down a tiny bit,
     most likely due to numerical precision issues, we clamp to 0.
     If they go down to a *rate* that is less than `invalid_below_threshold`,
-    this sets the value to NaN and raises an error.
+    this sets the value to NaN.
+
+    Returns (negative_count, clamped_count) for the caller to decide whether to raise.
 
     Parallel processing is done over the leading dimension of values.
-
-    Args:
-        values: Array to modify in place. Must be 3D with accumulation dimension as the *middle* dimension
-        seconds: 1D array of seconds since forecast start or a reference time
-        reset_after: 1D array of booleans where True indicates the accumulation resets after the current step
-        skip_step: 1D array of booleans where True indicates the step should be skipped
-        invalid_below_threshold_rate: Threshold below which values are considered invalid
     """
     assert values.ndim == 3
     assert seconds.ndim == 1
@@ -137,7 +150,7 @@ def _deaccumulate_to_rates_numba(
 
                 # Accumulations should only go up
                 # If they go down a tiny bit, clamp to 0
-                # If they go down more, set to NaN and then raise
+                # If they go down more, set to NaN
                 if sequence[t] < 0:
                     if sequence[t] > invalid_below_threshold_rate:
                         clamped_count += 1
@@ -146,7 +159,4 @@ def _deaccumulate_to_rates_numba(
                         negative_count += 1
                         sequence[t] = np.nan
 
-    if negative_count > 0:
-        raise ValueError(f"Found {negative_count} values below threshold")
-    if clamped_count / values.size > 0.05:
-        raise ValueError(f"Over 5% ({clamped_count} total) values were clamped to 0")
+    return negative_count, clamped_count
