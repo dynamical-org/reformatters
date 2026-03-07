@@ -416,6 +416,72 @@ def test_download_and_read_precipitation(
 
 
 @pytest.mark.slow
+def test_download_and_read_pass_1(tmp_path: Path) -> None:
+    config = NoaaMrmsConusAnalysisHourlyTemplateConfig()
+    pass1_var = next(
+        v for v in config.data_vars if v.name == "precipitation_pass_1_surface"
+    )
+
+    mock_ds = Mock()
+    mock_ds.attrs = {"dataset_id": "noaa-mrms-conus-analysis-hourly"}
+    region_job = NoaaMrmsRegionJob.model_construct(
+        tmp_store=tmp_path,
+        template_ds=mock_ds,
+        data_vars=[pass1_var],
+        append_dim=config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    coord = NoaaMrmsSourceFileCoord(
+        time=pd.Timestamp("2024-01-15T12:00"),
+        product=pass1_var.internal_attrs.mrms_product,
+        level=pass1_var.internal_attrs.mrms_level,
+        fallback_products=pass1_var.internal_attrs.mrms_fallback_products,
+    )
+
+    downloaded_path = region_job.download_file(coord)
+    updated_coord = replace(coord, downloaded_path=downloaded_path)
+
+    data = region_job.read_data(updated_coord, pass1_var)
+    assert data.shape == (3500, 7000)
+    assert np.all(np.isfinite(data))
+
+
+@pytest.mark.slow
+def test_download_and_read_pass_2(tmp_path: Path) -> None:
+    config = NoaaMrmsConusAnalysisHourlyTemplateConfig()
+    pass2_var = next(
+        v for v in config.data_vars if v.name == "precipitation_pass_2_surface"
+    )
+
+    mock_ds = Mock()
+    mock_ds.attrs = {"dataset_id": "noaa-mrms-conus-analysis-hourly"}
+    region_job = NoaaMrmsRegionJob.model_construct(
+        tmp_store=tmp_path,
+        template_ds=mock_ds,
+        data_vars=[pass2_var],
+        append_dim=config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    coord = NoaaMrmsSourceFileCoord(
+        time=pd.Timestamp("2024-01-15T12:00"),
+        product=pass2_var.internal_attrs.mrms_product,
+        level=pass2_var.internal_attrs.mrms_level,
+        fallback_products=pass2_var.internal_attrs.mrms_fallback_products,
+    )
+
+    downloaded_path = region_job.download_file(coord)
+    updated_coord = replace(coord, downloaded_path=downloaded_path)
+
+    data = region_job.read_data(updated_coord, pass2_var)
+    assert data.shape == (3500, 7000)
+    assert np.all(np.isfinite(data))
+
+
+@pytest.mark.slow
 def test_download_and_read_radar_only(tmp_path: Path) -> None:
     config = NoaaMrmsConusAnalysisHourlyTemplateConfig()
     radar_var = next(

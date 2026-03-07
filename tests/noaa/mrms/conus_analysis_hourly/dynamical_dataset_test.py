@@ -113,8 +113,6 @@ def test_backfill_local_and_operational_update(
 
     filter_variable_names = [
         "precipitation_surface",
-        "precipitation_pass_1_surface",
-        "precipitation_pass_2_surface",
         "categorical_precipitation_type_surface",
     ]
 
@@ -138,16 +136,10 @@ def test_backfill_local_and_operational_update(
     # categorical_precipitation_type_surface is instant, no deaccumulation NaN
     assert_no_nulls(first_shard["categorical_precipitation_type_surface"])
 
-    # precipitation_surface, pass1, pass2 first timestep NaN from deaccumulation
+    # precipitation_surface first timestep NaN from deaccumulation
     point = backfill_ds.isel(latitude=622, longitude=817)
     assert np.isnan(point["precipitation_surface"].values[0])
     assert np.all(np.isfinite(point["precipitation_surface"].values[1:]))
-
-    assert np.isnan(point["precipitation_pass_1_surface"].values[0])
-    assert np.isfinite(point["precipitation_pass_1_surface"].values[1])
-
-    assert np.isnan(point["precipitation_pass_2_surface"].values[0])
-    assert np.isfinite(point["precipitation_pass_2_surface"].values[1])
 
     # Snapshot: snow (cat=3) with non-zero precipitation at this point
     assert_allclose(
@@ -194,8 +186,6 @@ def test_backfill_local_and_operational_update(
     updated_point = updated_ds.isel(latitude=622, longitude=817)
     # All non-first timesteps have valid precipitation (including shard boundary)
     assert np.all(np.isfinite(updated_point["precipitation_surface"].values[1:]))
-    assert np.all(np.isfinite(updated_point["precipitation_pass_1_surface"].values[1:]))
-    assert np.all(np.isfinite(updated_point["precipitation_pass_2_surface"].values[1:]))
     assert_no_nulls(updated_point["categorical_precipitation_type_surface"])
 
     assert_allclose(
