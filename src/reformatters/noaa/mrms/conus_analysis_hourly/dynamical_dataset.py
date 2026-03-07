@@ -52,8 +52,11 @@ class NoaaMrmsConusAnalysisHourlyDataset(
 
     def validators(self) -> Sequence[validation.DataValidator]:
         max_expected_delay = timedelta(hours=3, minutes=30)
-        # Pass 1 and Pass 2 multi-sensor products have additional gauge-collection latency;
-        # radar-only, categorical, and precipitation_surface (which falls back to radar) are always current.
+        # Pass 1 and Pass 2 have gauge-collection latency (~60 min); all other vars are always current.
+        gauge_latency_vars = [
+            "precipitation_pass_1_surface",
+            "precipitation_pass_2_surface",
+        ]
         return (
             partial(
                 validation.check_analysis_current_data,
@@ -68,11 +71,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # categorical (PrecipFlag) is radar-derived with no gauge latency, similar coverage to radar_only.
                 max_nan_percentage=35,
                 spatial_sampling="quarter",
-                include_vars=[
-                    "precipitation_surface",
-                    "precipitation_radar_only_surface",
-                    "categorical_precipitation_type_surface",
-                ],
+                exclude_vars=gauge_latency_vars,
             ),
             partial(
                 validation.check_analysis_recent_nans,
@@ -81,9 +80,6 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # timestamps is 100% NaN due to gauge-collection latency, rest are ~6%).
                 max_nan_percentage=40,
                 spatial_sampling="quarter",
-                include_vars=[
-                    "precipitation_pass_1_surface",
-                    "precipitation_pass_2_surface",
-                ],
+                include_vars=gauge_latency_vars,
             ),
         )
