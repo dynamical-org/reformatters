@@ -54,11 +54,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
         max_expected_delay = timedelta(hours=3, minutes=30)
         # Pass 1 and Pass 2 multi-sensor products have additional gauge-collection latency;
         # radar-only and precipitation_surface (which falls back to radar) are always current.
-        lagged_vars = [
-            "precipitation_pass_1_surface",
-            "precipitation_pass_2_surface",
-            "categorical_precipitation_type_surface",
-        ]
+        # pass_2 has very high latency and is typically 100% NaN right after an update.
         return (
             partial(
                 validation.check_analysis_current_data,
@@ -67,13 +63,23 @@ class NoaaMrmsConusAnalysisHourlyDataset(
             partial(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
-                max_nan_percentage=15,
-                exclude_vars=lagged_vars,
+                # precipitation_surface worst-case quarter-sampled NaN is ~30% (most recent
+                # timestamp falls back to radar-only with ~34% structural coverage gaps).
+                # radar_only excluded: its structural NaN is captured via precipitation_surface's fallback.
+                max_nan_percentage=35,
+                spatial_sampling="quarter",
+                include_vars=["precipitation_surface"],
             ),
             partial(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
+                # pass_1 worst-case quarter-sampled NaN is ~46% (most recent timestamp unavailable).
+                # pass_2 excluded: has very high latency and is typically 100% NaN right after an update.
                 max_nan_percentage=50,
-                include_vars=lagged_vars,
+                spatial_sampling="quarter",
+                include_vars=[
+                    "precipitation_pass_1_surface",
+                    "categorical_precipitation_type_surface",
+                ],
             ),
         )
