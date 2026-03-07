@@ -200,14 +200,17 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
             log.info(
                 f"Converting {data_var.name} from accumulations to rates along time"
             )
-            deaccumulate_to_rates_inplace(
-                data_array,
-                dim="time",
-                reset_frequency=data_var.internal_attrs.window_reset_frequency,
-                # ~6.2% of MRMS pixels have -3.0 no-data sentinel (over-ocean/no-coverage areas)
-                # which becomes invalid after deaccumulation
-                expected_invalid_fraction=0.07,
-            )
+            try:
+                deaccumulate_to_rates_inplace(
+                    data_array,
+                    dim="time",
+                    reset_frequency=data_var.internal_attrs.window_reset_frequency,
+                    # ~6.2% of MRMS pixels have -3.0 no-data sentinel (over-ocean/no-coverage areas)
+                    # which becomes invalid after deaccumulation
+                    expected_invalid_fraction=0.07,
+                )
+            except ValueError:
+                log.exception(f"Error deaccumulating {data_var.name}")
 
         keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
         if isinstance(keep_mantissa_bits, int):
