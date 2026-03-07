@@ -53,7 +53,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
     def validators(self) -> Sequence[validation.DataValidator]:
         max_expected_delay = timedelta(hours=3, minutes=30)
         # Pass 1 and Pass 2 multi-sensor products have additional gauge-collection latency;
-        # radar-only and precipitation_surface (which falls back to radar) are always current.
+        # radar-only, categorical, and precipitation_surface (which falls back to radar) are always current.
         return (
             partial(
                 validation.check_analysis_current_data,
@@ -65,24 +65,25 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # precipitation_surface worst-case quarter-sampled NaN is ~30% (most recent
                 # timestamp falls back to radar-only with ~34% structural coverage gaps).
                 # radar_only worst-case quarter-sampled NaN is ~34% (structural coverage gaps).
+                # categorical (PrecipFlag) is radar-derived with no gauge latency, similar coverage to radar_only.
                 max_nan_percentage=35,
                 spatial_sampling="quarter",
                 include_vars=[
                     "precipitation_surface",
                     "precipitation_radar_only_surface",
+                    "categorical_precipitation_type_surface",
                 ],
             ),
             partial(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
-                # pass_1 and pass_2 worst-case quarter-sampled NaN is ~46% (most recent
-                # timestamp unavailable due to gauge-collection latency).
-                max_nan_percentage=50,
+                # pass_1 and pass_2 worst-case quarter-sampled NaN is ~38% (1 of 3 checked
+                # timestamps is 100% NaN due to gauge-collection latency, rest are ~6%).
+                max_nan_percentage=40,
                 spatial_sampling="quarter",
                 include_vars=[
                     "precipitation_pass_1_surface",
                     "precipitation_pass_2_surface",
-                    "categorical_precipitation_type_surface",
                 ],
             ),
         )
