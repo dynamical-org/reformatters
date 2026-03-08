@@ -521,6 +521,14 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         results: dict[str, Sequence[SOURCE_FILE_COORD]] = {}
         upload_futures: list[Any] = []
+        # Collect all downloaded coords to clean up after all groups are processed.
+        # Cleanup must happen after the entire loop, not per-group, because with pipeline
+        # parallelism the next group's download runs concurrently with the current group's
+        # processing. When multiple groups download the same file (e.g. precipitation_surface
+        # and precipitation_pass_2_surface both use MultiSensor_QPE_01H_Pass2), per-group
+        # cleanup would delete files that a later group has already re-downloaded and needs
+        # to read, causing ReadFailed and all-NaN output.
+        all_downloaded_coords: list[Sequence[SOURCE_FILE_COORD]] = []
 
         with (
             make_shared_buffer(processing_region_ds) as shared_buffer,
@@ -547,6 +555,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 data_var_group = download_futures[download_future]
                 source_file_coords = download_future.result()
                 log.info(f"Downloaded: {[v.name for v in data_var_group]}")
+                all_downloaded_coords.append(source_file_coords)
 
                 # Process one data variable at a time to ensure a single user of
                 # the shared buffer at a time and to reduce peak memory usage
@@ -591,7 +600,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
                     results[data_var.name] = data_var_source_file_coords
 
-                self._cleanup_local_files(source_file_coords)  # after _group_ is done
+        for source_file_coords in all_downloaded_coords:
+            self._cleanup_local_files(source_file_coords)
 
         for future in concurrent.futures.as_completed(upload_futures):
             if (e := future.exception()) is not None:
