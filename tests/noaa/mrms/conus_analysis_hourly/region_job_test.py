@@ -187,7 +187,7 @@ def test_download_file_uses_fallback_products(monkeypatch: pytest.MonkeyPatch) -
 
     attempts: list[tuple[str, str]] = []
 
-    def fake_download(coord: NoaaMrmsSourceFileCoord, source: str) -> Path:
+    def fake_download(coord: NoaaMrmsSourceFileCoord, source: str, local_path_suffix: str = "") -> Path:
         attempts.append((coord.product, source))
         if coord.product == "RadarOnly_QPE_01H" and source == "s3":
             return Path("fake.grib2")

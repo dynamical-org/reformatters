@@ -139,7 +139,9 @@ class DwdIconEuForecastRegionJob(
             for lead_time in lead_times
         ]
 
-    def download_file(self, coord: DwdIconEuForecastSourceFileCoord) -> Path:
+    def download_file(
+        self, coord: DwdIconEuForecastSourceFileCoord, local_path_suffix: str = ""  # noqa: ARG002
+    ) -> Path:
         """Download the file for the given coordinate and return the local path.
 
         Downloads the `.grib.bz2` file and returns its local `Path`.

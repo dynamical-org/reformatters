@@ -79,7 +79,9 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoords]):
             for t in processing_region_ds[self.append_dim].values
         ]
 
-    def download_file(self, coord: ExampleSourceFileCoords) -> Path:
+    def download_file(
+        self, coord: ExampleSourceFileCoords, local_path_suffix: str = ""  # noqa: ARG002
+    ) -> Path:
         if coord.time == pd.Timestamp("2025-01-01T00"):
             raise FileNotFoundError()  # simulate a missing file
         return Path("testfile")
@@ -1034,7 +1036,7 @@ class TestDownloadErrorLogging:
         monkeypatch.setattr(
             ExampleRegionJob,
             "download_file",
-            lambda self, coord: (_ for _ in ()).throw(error),
+            lambda self, coord, local_path_suffix="": (_ for _ in ()).throw(error),
         )
         coord = ExampleSourceFileCoords(
             time=pd.Timestamp(job.template_ds.time.values[0])

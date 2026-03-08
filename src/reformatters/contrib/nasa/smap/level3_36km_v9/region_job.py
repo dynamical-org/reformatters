@@ -56,7 +56,9 @@ class NasaSmapLevel336KmV9RegionJob(
             for time in processing_region_ds["time"].values
         ]
 
-    def download_file(self, coord: NasaSmapLevel336KmV9SourceFileCoord) -> Path:
+    def download_file(
+        self, coord: NasaSmapLevel336KmV9SourceFileCoord, local_path_suffix: str = ""  # noqa: ARG002
+    ) -> Path:
         """Download the file for the given coordinate and return the local path."""
         url = coord.get_url()
         relative_path = urlparse(url).path

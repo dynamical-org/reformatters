@@ -140,7 +140,9 @@ class GefsAnalysisRegionJob(RegionJob[GEFSDataVar, GefsAnalysisSourceFileCoord])
         ]
         return ensemble_coords
 
-    def download_file(self, coord: GefsAnalysisSourceFileCoord) -> Path:
+    def download_file(
+        self, coord: GefsAnalysisSourceFileCoord, local_path_suffix: str = ""  # noqa: ARG002
+    ) -> Path:
         """Download the source file for the given coordinate."""
         # Download grib index file
         return gefs_download_file(self.dataset_id, coord)

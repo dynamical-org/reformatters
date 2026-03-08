@@ -155,7 +155,9 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         return coords
 
     def download_file(
-        self, coord: EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord
+        self,
+        coord: EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord,
+        local_path_suffix: str = "",  # noqa: ARG002
     ) -> Path:
         """Download the file for the given coordinate and return the local path."""
         # Download grib index file

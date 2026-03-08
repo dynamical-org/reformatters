@@ -131,7 +131,9 @@ class NoaaNdviCdrAnalysisRegionJob(
             if (timestamp := pd.Timestamp(t)) in urls_by_time
         ]
 
-    def download_file(self, coord: NoaaNdviCdrAnalysisSourceFileCoord) -> Path:
+    def download_file(
+        self, coord: NoaaNdviCdrAnalysisSourceFileCoord, local_path_suffix: str = ""  # noqa: ARG002
+    ) -> Path:
         """Download the file for the given coordinate and return the local path."""
         url = coord.get_url()
         parsed_url = urlparse(url)

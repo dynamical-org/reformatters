@@ -85,7 +85,9 @@ class GefsForecast35DayRegionJob(
             for ensemble_member in processing_region_ds["ensemble_member"].values
         ]
 
-    def download_file(self, coord: GefsForecast35DaySourceFileCoord) -> Path:
+    def download_file(
+        self, coord: GefsForecast35DaySourceFileCoord, local_path_suffix: str = ""  # noqa: ARG002
+    ) -> Path:
         """Download the source file for the given coordinate."""
         return gefs_download_file(self.dataset_id, coord)
 

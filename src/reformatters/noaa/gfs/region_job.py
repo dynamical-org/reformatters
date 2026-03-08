@@ -109,7 +109,9 @@ class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
             local_path_suffix=f"-{vars_suffix}",
         )
 
-    def download_file(self, coord: NoaaGfsSourceFileCoord) -> Path:
+    def download_file(
+        self, coord: NoaaGfsSourceFileCoord, local_path_suffix: str = ""  # noqa: ARG002
+    ) -> Path:
         try:
             return self._download_from_source(coord, source="s3")
         except FileNotFoundError:
