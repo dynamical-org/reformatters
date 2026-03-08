@@ -42,6 +42,7 @@ dev = [
     "matplotlib~=3.9",
     "pandas-stubs~=2.2",
     "prek==0.3.0",
+    "pyarrow>=23.0.1",
     "pyqt6>=6.7.1",
     "pytest~=8.4",
     "pytest-sugar~=1.0",
