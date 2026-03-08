@@ -26,7 +26,7 @@ from reformatters.common.zarr import (
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, EcmwfInternalAttrs
 
 
-class EcmwfAifsForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
+class EcmwfAifsDeterministicForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
     dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
     append_dim: AppendDim = "init_time"
     # Start from 2024-04-01 when PL u/v are available and the grid is regular 0.25 degree.
