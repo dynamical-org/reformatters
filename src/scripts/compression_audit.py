@@ -12,6 +12,7 @@ Usage:
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import os
 from datetime import UTC, datetime
@@ -49,10 +50,10 @@ def _get_non_contrib_datasets() -> list[DynamicalDataset[Any, Any]]:
     return [d for d in DYNAMICAL_DATASETS if "contrib" not in d.__class__.__module__]
 
 
-def _shard_shape_as_tuple(shards: tuple[int, ...] | int) -> tuple[int, ...]:
-    if isinstance(shards, int):
-        return (shards,)
-    return shards
+def _as_tuple(value: tuple[int, ...] | int) -> tuple[int, ...]:
+    if isinstance(value, int):
+        return (value,)
+    return value
 
 
 def _collect_dataset(
@@ -70,9 +71,13 @@ def _collect_dataset(
         assert data_var.encoding.shards is not None, (
             f"{dataset_id}/{data_var.name} has no shard encoding"
         )
-        shard_shape = _shard_shape_as_tuple(data_var.encoding.shards)
+        shard_shape = _as_tuple(data_var.encoding.shards)
+        chunk_shape = _as_tuple(data_var.encoding.chunks)
         dtype_size = DTYPE_SIZES[data_var.encoding.dtype]
         uncompressed_shard_bytes = math.prod(shard_shape) * dtype_size
+        chunks_per_shard = math.prod(
+            s // c for s, c in zip(shard_shape, chunk_shape, strict=True)
+        )
 
         var_prefix = f"{zarr_prefix}/{data_var.name}/c"
         print(f"  Listing shards for {data_var.name}...", end="", flush=True)
@@ -96,6 +101,8 @@ def _collect_dataset(
                 "data_var": data_var.name,
                 "compression_fraction_bin_start": float(bin_edges[i]),
                 "count": int(counts[i]),
+                "uncompressed_shard_bytes": uncompressed_shard_bytes,
+                "chunks_per_shard": chunks_per_shard,
             }
             for i in range(NUM_BINS)
             if counts[i] > 0
@@ -134,25 +141,35 @@ def collect(
     return parquet_path
 
 
-def _expand_histogram(df: pd.DataFrame) -> np.ndarray[Any, np.dtype[np.float64]]:
-    """Expand histogram bin counts back to individual fraction values (bin midpoints)."""
+BYTES_PER_MB = 1024 * 1024
+
+STAT_NAMES = ("min", "q0.1", "median", "mean", "q0.9", "max")
+
+
+@dataclasses.dataclass
+class ExpandedMetrics:
+    compression_fraction: np.ndarray[Any, np.dtype[np.float64]]
+    compressed_shard_mb: np.ndarray[Any, np.dtype[np.float64]]
+    compressed_chunk_mb: np.ndarray[Any, np.dtype[np.float64]]
+
+
+def _expand_histogram(df: pd.DataFrame) -> ExpandedMetrics:
+    """Expand histogram bin counts back to individual values (bin midpoints)."""
     bin_width = 1.0 / NUM_BINS
     midpoints = df["compression_fraction_bin_start"].to_numpy() + bin_width / 2
     counts = df["count"].to_numpy().astype(int)
-    return np.repeat(midpoints, counts)
+    uncompressed = df["uncompressed_shard_bytes"].to_numpy(dtype=np.float64)
+    chunks_per = df["chunks_per_shard"].to_numpy(dtype=np.float64)
+
+    fractions = np.repeat(midpoints, counts)
+    shard_mb = np.repeat(midpoints * uncompressed / BYTES_PER_MB, counts)
+    chunk_mb = np.repeat(midpoints * uncompressed / chunks_per / BYTES_PER_MB, counts)
+    return ExpandedMetrics(fractions, shard_mb, chunk_mb)
 
 
 def _compute_stats(values: np.ndarray[Any, np.dtype[np.float64]]) -> dict[str, float]:
     if len(values) == 0:
-        return {
-            "min": float("nan"),
-            "q0.1": float("nan"),
-            "median": float("nan"),
-            "mean": float("nan"),
-            "q0.9": float("nan"),
-            "max": float("nan"),
-            "count": 0,
-        }
+        return {name: float("nan") for name in STAT_NAMES} | {"count": 0}
     return {
         "min": float(np.min(values)),
         "q0.1": float(np.quantile(values, 0.1)),
@@ -164,27 +181,46 @@ def _compute_stats(values: np.ndarray[Any, np.dtype[np.float64]]) -> dict[str, f
     }
 
 
+def _compute_all_stats(metrics: ExpandedMetrics) -> dict[str, dict[str, float]]:
+    return {
+        "compression_fraction": _compute_stats(metrics.compression_fraction),
+        "compressed_shard_mb": _compute_stats(metrics.compressed_shard_mb),
+        "compressed_chunk_mb": _compute_stats(metrics.compressed_chunk_mb),
+    }
+
+
+_VLINE_STYLES: dict[str, tuple[str, str]] = {
+    "min": ("red", "--"),
+    "q0.1": ("orange", ":"),
+    "median": ("green", "-"),
+    "mean": ("blue", "-."),
+    "q0.9": ("orange", ":"),
+    "max": ("red", "--"),
+}
+
+
 def _plot_histogram(
     values: np.ndarray[Any, np.dtype[np.float64]],
     title: str,
+    xlabel: str,
     output_path: Path,
     stats: dict[str, float],
+    *,
+    hist_range: tuple[float, float] | None = None,
 ) -> None:
     fig, ax = plt.subplots(figsize=(10, 5))
-    ax.hist(values, bins=100, range=(0, 1), edgecolor="black", linewidth=0.3)
-    ax.set_xlabel("Compression Fraction (compressed / uncompressed)")
+    ax.hist(
+        values,
+        bins=100,
+        range=hist_range or (float(np.min(values)), float(np.max(values))),
+        edgecolor="black",
+        linewidth=0.3,
+    )
+    ax.set_xlabel(xlabel)
     ax.set_ylabel("Count")
     ax.set_title(title)
 
-    stat_lines = {
-        "min": ("red", "--"),
-        "q0.1": ("orange", ":"),
-        "median": ("green", "-"),
-        "mean": ("blue", "-."),
-        "q0.9": ("orange", ":"),
-        "max": ("red", "--"),
-    }
-    for stat_name, (color, linestyle) in stat_lines.items():
+    for stat_name, (color, linestyle) in _VLINE_STYLES.items():
         val = stats[stat_name]
         if not np.isnan(val):
             ax.axvline(
@@ -201,27 +237,74 @@ def _plot_histogram(
     plt.close(fig)
 
 
-def _print_stats(label: str, stats: dict[str, float]) -> None:
-    count = stats.get("count", 0)
+def _plot_metrics(
+    metrics: ExpandedMetrics,
+    all_stats: dict[str, dict[str, float]],
+    title_prefix: str,
+    path_prefix: Path,
+) -> list[str]:
+    """Plot histograms for all three metrics. Returns markdown image lines."""
+    md: list[str] = []
+    for metric_key, xlabel, suffix in (
+        ("compression_fraction", "Compression Fraction", "fraction"),
+        ("compressed_shard_mb", "Compressed Shard Size (MB)", "shard_mb"),
+        ("compressed_chunk_mb", "Avg Compressed Chunk Size (MB)", "chunk_mb"),
+    ):
+        values = getattr(metrics, metric_key)
+        if len(values) == 0:
+            continue
+        hist_range = (0.0, 1.0) if metric_key == "compression_fraction" else None
+        png_path = path_prefix.parent / f"{path_prefix.name}_{suffix}.png"
+        _plot_histogram(
+            values,
+            f"{title_prefix} — {xlabel}",
+            xlabel,
+            png_path,
+            all_stats[metric_key],
+            hist_range=hist_range,
+        )
+        md.append(f"![{title_prefix} {suffix}]({png_path.name})\n")
+    return md
+
+
+def _print_stats(label: str, all_stats: dict[str, dict[str, float]]) -> None:
+    s = all_stats["compression_fraction"]
+    count = s.get("count", 0)
     print(
-        f"{label}: min={stats['min']:.4f} q0.1={stats['q0.1']:.4f} "
-        f"median={stats['median']:.4f} mean={stats['mean']:.4f} "
-        f"q0.9={stats['q0.9']:.4f} max={stats['max']:.4f} (n={count})"
+        f"{label}: fraction min={s['min']:.4f} median={s['median']:.4f} "
+        f"mean={s['mean']:.4f} max={s['max']:.4f} (n={count})"
     )
 
 
-def _stats_table(stats_list: list[dict[str, Any]]) -> str:
+def _stats_table(
+    stats_list: list[dict[str, Any]], metric_key: str, fmt: str = ".4f"
+) -> str:
     lines = [
         "| Facet | Min | Q0.1 | Median | Mean | Q0.9 | Max | Count |",
         "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
-    lines.extend(
-        f"| {s['facet']} | {s['min']:.4f} | {s['q0.1']:.4f} | "
-        f"{s['median']:.4f} | {s['mean']:.4f} | {s['q0.9']:.4f} | "
-        f"{s['max']:.4f} | {int(s['count'])} |"
-        for s in stats_list
-    )
+    for entry in stats_list:
+        s = entry[metric_key]
+        lines.append(
+            f"| {entry['facet']} | {s['min']:{fmt}} | {s['q0.1']:{fmt}} | "
+            f"{s['median']:{fmt}} | {s['mean']:{fmt}} | {s['q0.9']:{fmt}} | "
+            f"{s['max']:{fmt}} | {int(s['count'])} |"
+        )
     return "\n".join(lines)
+
+
+def _all_stats_tables(stats_list: list[dict[str, Any]]) -> str:
+    sections = [
+        ("Compression Fraction", "compression_fraction", ".4f"),
+        ("Compressed Shard Size (MB)", "compressed_shard_mb", ".4f"),
+        ("Avg Compressed Chunk Size (MB)", "compressed_chunk_mb", ".4f"),
+    ]
+    parts: list[str] = []
+    for heading, key, fmt in sections:
+        parts.append(f"**{heading}**\n")
+        parts.append(_stats_table(stats_list, key, fmt))
+        parts.append("")
+    return "\n".join(parts)
 
 
 def _report_overall(
@@ -229,16 +312,15 @@ def _report_overall(
     png_dir: Path,
     report_lines: list[str],
 ) -> None:
-    values = _expand_histogram(df)
-    stats = _compute_stats(values)
-    labeled = {"facet": "overall", **stats}
-    _print_stats("Overall", stats)
-    _plot_histogram(
-        values, "Overall Compression Fractions", png_dir / "overall.png", stats
-    )
+    metrics = _expand_histogram(df)
+    all_stats = _compute_all_stats(metrics)
+    labeled = {"facet": "overall", **all_stats}
+    _print_stats("Overall", all_stats)
     report_lines.append("## Overall\n")
-    report_lines.append(_stats_table([labeled]))
-    report_lines.append("\n![Overall](overall.png)\n")
+    report_lines.append(_all_stats_tables([labeled]))
+    report_lines.extend(
+        _plot_metrics(metrics, all_stats, "Overall", png_dir / "overall")
+    )
 
 
 def _report_by_dataset(
@@ -250,16 +332,18 @@ def _report_by_dataset(
     dataset_stats: list[dict[str, Any]] = []
     for dataset_id in sorted(df["dataset_id"].unique()):
         sub = df[df["dataset_id"] == dataset_id]
-        values = _expand_histogram(sub)
-        stats = _compute_stats(values)
-        labeled = {"facet": dataset_id, **stats}
+        metrics = _expand_histogram(sub)
+        all_stats = _compute_all_stats(metrics)
+        labeled = {"facet": dataset_id, **all_stats}
         dataset_stats.append(labeled)
-        _print_stats(f"Dataset: {dataset_id}", stats)
-        png_name = f"dataset_{dataset_id}.png"
-        _plot_histogram(values, f"Compression: {dataset_id}", png_dir / png_name, stats)
+        _print_stats(f"Dataset: {dataset_id}", all_stats)
         report_lines.append(f"### {dataset_id}\n")
-        report_lines.append(_stats_table([labeled]))
-        report_lines.append(f"\n![{dataset_id}]({png_name})\n")
+        report_lines.append(_all_stats_tables([labeled]))
+        report_lines.extend(
+            _plot_metrics(
+                metrics, all_stats, dataset_id, png_dir / f"dataset_{dataset_id}"
+            )
+        )
 
 
 def _report_by_var(
@@ -270,15 +354,15 @@ def _report_by_var(
     report_lines.append("## By Data Variable\n")
     for var_name in sorted(df["data_var"].unique()):
         sub = df[df["data_var"] == var_name]
-        values = _expand_histogram(sub)
-        stats = _compute_stats(values)
-        labeled = {"facet": var_name, **stats}
-        _print_stats(f"Variable: {var_name}", stats)
-        png_name = f"var_{var_name}.png"
-        _plot_histogram(values, f"Compression: {var_name}", png_dir / png_name, stats)
+        metrics = _expand_histogram(sub)
+        all_stats = _compute_all_stats(metrics)
+        labeled = {"facet": var_name, **all_stats}
+        _print_stats(f"Variable: {var_name}", all_stats)
         report_lines.append(f"### {var_name}\n")
-        report_lines.append(_stats_table([labeled]))
-        report_lines.append(f"\n![{var_name}]({png_name})\n")
+        report_lines.append(_all_stats_tables([labeled]))
+        report_lines.extend(
+            _plot_metrics(metrics, all_stats, var_name, png_dir / f"var_{var_name}")
+        )
 
 
 def _report_by_pair(
@@ -289,20 +373,25 @@ def _report_by_pair(
     report_lines.append("## By (Dataset, Data Variable)\n")
     pair_stats: list[dict[str, Any]] = []
     for (dataset_id, var_name), sub in df.groupby(["dataset_id", "data_var"]):
-        values = _expand_histogram(sub)
-        stats = _compute_stats(values)
-        labeled = {"facet": f"{dataset_id} / {var_name}", **stats}
+        metrics = _expand_histogram(sub)
+        all_stats = _compute_all_stats(metrics)
+        labeled = {"facet": f"{dataset_id} / {var_name}", **all_stats}
         pair_stats.append(labeled)
-        _print_stats(f"{dataset_id} / {var_name}", stats)
-        png_name = f"pair_{dataset_id}_{var_name}.png"
-        _plot_histogram(values, f"{dataset_id} / {var_name}", png_dir / png_name, stats)
+        _print_stats(f"{dataset_id} / {var_name}", all_stats)
+        _plot_metrics(
+            metrics,
+            all_stats,
+            f"{dataset_id} / {var_name}",
+            png_dir / f"pair_{dataset_id}_{var_name}",
+        )
 
-    report_lines.append(_stats_table(pair_stats))
+    report_lines.append(_all_stats_tables(pair_stats))
     report_lines.append("\n### Individual Histograms\n")
     for (dataset_id, var_name), _ in df.groupby(["dataset_id", "data_var"]):
-        png_name = f"pair_{dataset_id}_{var_name}.png"
         report_lines.append(f"#### {dataset_id} / {var_name}\n")
-        report_lines.append(f"![{dataset_id}/{var_name}]({png_name})\n")
+        for suffix in ("fraction", "shard_mb", "chunk_mb"):
+            png_name = f"pair_{dataset_id}_{var_name}_{suffix}.png"
+            report_lines.append(f"![{dataset_id}/{var_name} {suffix}]({png_name})\n")
 
 
 @app.command()
