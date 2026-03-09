@@ -30,6 +30,7 @@ def test_source_file_coord_out_loc() -> None:
         product="MultiSensor_QPE_01H_Pass2",
         level="00.00",
         fallback_products=(),
+        data_var_name="precipitation_pass_2_surface",
     )
     assert coord.out_loc() == {"time": pd.Timestamp("2024-01-15T12:00")}
 
@@ -40,6 +41,7 @@ def test_source_file_coord_get_url_s3() -> None:
         product="MultiSensor_QPE_01H_Pass2",
         level="00.00",
         fallback_products=(),
+        data_var_name="precipitation_pass_2_surface",
     )
     url = coord.get_url(source="s3")
     assert url == (
@@ -55,6 +57,7 @@ def test_source_file_coord_get_url_iowa() -> None:
         product="GaugeCorr_QPE_01H",
         level="00.00",
         fallback_products=(),
+        data_var_name="precipitation_surface",
     )
     url = coord.get_url(source="iowa")
     assert url == (
@@ -70,6 +73,7 @@ def test_source_file_coord_get_url_ncep() -> None:
         product="MultiSensor_QPE_01H_Pass2",
         level="00.00",
         fallback_products=(),
+        data_var_name="precipitation_pass_2_surface",
     )
     url = coord.get_url(source="ncep")
     assert url == (
@@ -204,6 +208,7 @@ def test_download_file_uses_fallback_products(monkeypatch: pytest.MonkeyPatch) -
             product="MultiSensor_QPE_01H_Pass2",
             level="00.00",
             fallback_products=("MultiSensor_QPE_01H_Pass1", "RadarOnly_QPE_01H"),
+            data_var_name="precipitation_surface",
         )
     )
 
@@ -213,6 +218,54 @@ def test_download_file_uses_fallback_products(monkeypatch: pytest.MonkeyPatch) -
         ("MultiSensor_QPE_01H_Pass1", "s3"),
         ("RadarOnly_QPE_01H", "s3"),
     ]
+
+
+def test_download_from_source_uses_var_name_suffix(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    mock_ds = Mock()
+    mock_ds.attrs = {"dataset_id": "noaa-mrms-conus-analysis-hourly"}
+    region_job = NoaaMrmsRegionJob.model_construct(
+        tmp_store=tmp_path,
+        template_ds=mock_ds,
+        data_vars=[],
+        append_dim="time",
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    captured: dict[str, str] = {}
+    fake_gz = tmp_path / "fake.grib2.gz_precipitation_pass_2_surface"
+    fake_gz.touch()
+
+    def fake_http_download(
+        url: str, dataset_id: str, local_path_suffix: str = ""
+    ) -> Path:
+        captured["local_path_suffix"] = local_path_suffix
+        return fake_gz
+
+    def fake_decompress(gz_path: Path, local_path_suffix: str = "") -> Path:
+        return tmp_path / "fake.grib2_precipitation_pass_2_surface"
+
+    monkeypatch.setattr(
+        "reformatters.noaa.mrms.conus_analysis_hourly.region_job.http_download_to_disk",
+        fake_http_download,
+    )
+    monkeypatch.setattr(
+        "reformatters.noaa.mrms.conus_analysis_hourly.region_job._decompress_gzip",
+        fake_decompress,
+    )
+
+    coord = NoaaMrmsSourceFileCoord(
+        time=pd.Timestamp("2024-01-15T12:00"),
+        product="MultiSensor_QPE_01H_Pass2",
+        level="00.00",
+        fallback_products=(),
+        data_var_name="precipitation_pass_2_surface",
+    )
+    region_job._download_from_source(coord, source="s3")
+
+    assert captured["local_path_suffix"] == "_precipitation_pass_2_surface"
 
 
 def test_read_data_pre_v12_two_band_selects_discipline_209(
@@ -256,6 +309,7 @@ def test_read_data_pre_v12_two_band_selects_discipline_209(
             product="GaugeCorr_QPE_01H",
             level="00.00",
             fallback_products=(),
+            data_var_name="precipitation_surface",
             downloaded_path=Path("fake.grib2"),
         ),
         Mock(),
@@ -405,6 +459,7 @@ def test_download_and_read_precipitation(
         product=expected_product,
         level=precip_var.internal_attrs.mrms_level,
         fallback_products=precip_var.internal_attrs.mrms_fallback_products,
+        data_var_name=precip_var.name,
     )
 
     downloaded_path = region_job.download_file(coord)
@@ -438,6 +493,7 @@ def test_download_and_read_pass_1(tmp_path: Path) -> None:
         product=pass1_var.internal_attrs.mrms_product,
         level=pass1_var.internal_attrs.mrms_level,
         fallback_products=pass1_var.internal_attrs.mrms_fallback_products,
+        data_var_name=pass1_var.name,
     )
 
     downloaded_path = region_job.download_file(coord)
@@ -471,6 +527,7 @@ def test_download_and_read_pass_2(tmp_path: Path) -> None:
         product=pass2_var.internal_attrs.mrms_product,
         level=pass2_var.internal_attrs.mrms_level,
         fallback_products=pass2_var.internal_attrs.mrms_fallback_products,
+        data_var_name=pass2_var.name,
     )
 
     downloaded_path = region_job.download_file(coord)
@@ -504,6 +561,7 @@ def test_download_and_read_radar_only(tmp_path: Path) -> None:
         product="RadarOnly_QPE_01H",
         level=radar_var.internal_attrs.mrms_level,
         fallback_products=radar_var.internal_attrs.mrms_fallback_products,
+        data_var_name=radar_var.name,
     )
 
     downloaded_path = region_job.download_file(coord)
@@ -539,6 +597,7 @@ def test_download_and_read_precip_flag(tmp_path: Path) -> None:
         product="PrecipFlag",
         level=ptype_var.internal_attrs.mrms_level,
         fallback_products=ptype_var.internal_attrs.mrms_fallback_products,
+        data_var_name=ptype_var.name,
     )
 
     downloaded_path = region_job.download_file(coord)

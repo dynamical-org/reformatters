@@ -40,6 +40,7 @@ class NoaaMrmsSourceFileCoord(SourceFileCoord):
     product: str
     level: str
     fallback_products: tuple[str, ...]
+    data_var_name: str
     # Only set for precipitation_surface timestamps in _PRECIPITATION_SURFACE_RADAR_ONLY_OVERRIDES.
     # When set and product is RadarOnly_QPE_01H, get_url uses this timestamp instead of self.time.
     radar_only_time_override: Timestamp | None = None
@@ -125,6 +126,7 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
                     product=product,
                     level=internal.mrms_level,
                     fallback_products=fallback_products,
+                    data_var_name=data_var.name,
                     radar_only_time_override=radar_only_time_override,
                 )
             )
@@ -133,8 +135,13 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
     def _download_from_source(
         self, coord: NoaaMrmsSourceFileCoord, source: DownloadSource
     ) -> Path:
-        gz_path = http_download_to_disk(coord.get_url(source=source), self.dataset_id)
-        return _decompress_gzip(gz_path)
+        local_path_suffix = f"_{coord.data_var_name}"
+        gz_path = http_download_to_disk(
+            coord.get_url(source=source),
+            self.dataset_id,
+            local_path_suffix=local_path_suffix,
+        )
+        return _decompress_gzip(gz_path, local_path_suffix)
 
     def download_file(self, coord: NoaaMrmsSourceFileCoord) -> Path:
         is_pre_v12 = coord.time < MRMS_V12_START
@@ -304,9 +311,11 @@ _PRECIPITATION_SURFACE_RADAR_ONLY_OVERRIDES: dict[pd.Timestamp, pd.Timestamp] = 
 }
 
 
-def _decompress_gzip(gz_path: Path) -> Path:
-    decompressed_path = gz_path.with_suffix("")
-    # Atomic write to avoid races when multiple variable groups decompress the same file
+def _decompress_gzip(gz_path: Path, local_path_suffix: str = "") -> Path:
+    # gz_path.with_suffix("") strips the last extension (.gz or .gz_<suffix>),
+    # then we append local_path_suffix to make the decompressed path unique per variable group.
+    base = gz_path.with_suffix("")
+    decompressed_path = base.with_name(base.name + local_path_suffix)
     temp_path = decompressed_path.with_name(
         f"{decompressed_path.name}.{uuid.uuid4().hex[:8]}"
     )
