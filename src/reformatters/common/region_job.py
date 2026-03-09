@@ -591,7 +591,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
                     results[data_var.name] = data_var_source_file_coords
 
-                self._cleanup_local_files(source_file_coords)
+                self._cleanup_local_files(source_file_coords)  # after _group_ is done
 
         for future in concurrent.futures.as_completed(upload_futures):
             if (e := future.exception()) is not None:
