@@ -57,6 +57,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
             "precipitation_pass_1_surface",
             "precipitation_pass_2_surface",
         ]
+        radar_only_var = ["precipitation_radar_only_surface"]
         return (
             partial(
                 validation.check_analysis_current_data,
@@ -71,7 +72,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # categorical (PrecipFlag) is radar-derived with no gauge latency, similar coverage to radar_only.
                 max_nan_percentage=35,
                 spatial_sampling="quarter",
-                exclude_vars=gauge_latency_vars,
+                exclude_vars=gauge_latency_vars + radar_only_var,
             ),
             partial(
                 validation.check_analysis_recent_nans,
@@ -81,5 +82,14 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 max_nan_percentage=40,
                 spatial_sampling="quarter",
                 include_vars=gauge_latency_vars,
+            ),
+            partial(
+                validation.check_analysis_recent_nans,
+                max_expected_delay=max_expected_delay,
+                # Radar only is ~%34 nan always. With quarter sampling this can get as high as 62.2%.
+                # It is available at all timestamps.
+                max_nan_percentage=63,
+                spatial_sampling="quarter",
+                include_vars=radar_only_var,
             ),
         )
