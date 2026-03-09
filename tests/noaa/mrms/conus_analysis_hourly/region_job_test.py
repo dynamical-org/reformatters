@@ -30,6 +30,7 @@ def test_source_file_coord_out_loc() -> None:
         product="MultiSensor_QPE_01H_Pass2",
         level="00.00",
         fallback_products=(),
+        data_var_name="precipitation_pass_2_surface",
     )
     assert coord.out_loc() == {"time": pd.Timestamp("2024-01-15T12:00")}
 
@@ -40,6 +41,7 @@ def test_source_file_coord_get_url_s3() -> None:
         product="MultiSensor_QPE_01H_Pass2",
         level="00.00",
         fallback_products=(),
+        data_var_name="precipitation_pass_2_surface",
     )
     url = coord.get_url(source="s3")
     assert url == (
@@ -55,6 +57,7 @@ def test_source_file_coord_get_url_iowa() -> None:
         product="GaugeCorr_QPE_01H",
         level="00.00",
         fallback_products=(),
+        data_var_name="precipitation_surface",
     )
     url = coord.get_url(source="iowa")
     assert url == (
@@ -70,6 +73,7 @@ def test_source_file_coord_get_url_ncep() -> None:
         product="MultiSensor_QPE_01H_Pass2",
         level="00.00",
         fallback_products=(),
+        data_var_name="precipitation_pass_2_surface",
     )
     url = coord.get_url(source="ncep")
     assert url == (
@@ -204,6 +208,7 @@ def test_download_file_uses_fallback_products(monkeypatch: pytest.MonkeyPatch) -
             product="MultiSensor_QPE_01H_Pass2",
             level="00.00",
             fallback_products=("MultiSensor_QPE_01H_Pass1", "RadarOnly_QPE_01H"),
+            data_var_name="precipitation_surface",
         )
     )
 
@@ -304,6 +309,7 @@ def test_read_data_pre_v12_two_band_selects_discipline_209(
             product="GaugeCorr_QPE_01H",
             level="00.00",
             fallback_products=(),
+            data_var_name="precipitation_surface",
             downloaded_path=Path("fake.grib2"),
         ),
         Mock(),
@@ -453,6 +459,7 @@ def test_download_and_read_precipitation(
         product=expected_product,
         level=precip_var.internal_attrs.mrms_level,
         fallback_products=precip_var.internal_attrs.mrms_fallback_products,
+        data_var_name=precip_var.name,
     )
 
     downloaded_path = region_job.download_file(coord)
@@ -486,6 +493,7 @@ def test_download_and_read_pass_1(tmp_path: Path) -> None:
         product=pass1_var.internal_attrs.mrms_product,
         level=pass1_var.internal_attrs.mrms_level,
         fallback_products=pass1_var.internal_attrs.mrms_fallback_products,
+        data_var_name=pass1_var.name,
     )
 
     downloaded_path = region_job.download_file(coord)
@@ -519,6 +527,7 @@ def test_download_and_read_pass_2(tmp_path: Path) -> None:
         product=pass2_var.internal_attrs.mrms_product,
         level=pass2_var.internal_attrs.mrms_level,
         fallback_products=pass2_var.internal_attrs.mrms_fallback_products,
+        data_var_name=pass2_var.name,
     )
 
     downloaded_path = region_job.download_file(coord)
@@ -552,6 +561,7 @@ def test_download_and_read_radar_only(tmp_path: Path) -> None:
         product="RadarOnly_QPE_01H",
         level=radar_var.internal_attrs.mrms_level,
         fallback_products=radar_var.internal_attrs.mrms_fallback_products,
+        data_var_name=radar_var.name,
     )
 
     downloaded_path = region_job.download_file(coord)
@@ -587,6 +597,7 @@ def test_download_and_read_precip_flag(tmp_path: Path) -> None:
         product="PrecipFlag",
         level=ptype_var.internal_attrs.mrms_level,
         fallback_products=ptype_var.internal_attrs.mrms_fallback_products,
+        data_var_name=ptype_var.name,
     )
 
     downloaded_path = region_job.download_file(coord)

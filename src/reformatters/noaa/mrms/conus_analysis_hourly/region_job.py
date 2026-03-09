@@ -40,7 +40,7 @@ class NoaaMrmsSourceFileCoord(SourceFileCoord):
     product: str
     level: str
     fallback_products: tuple[str, ...]
-    data_var_name: str = ""
+    data_var_name: str
     # Only set for precipitation_surface timestamps in _PRECIPITATION_SURFACE_RADAR_ONLY_OVERRIDES.
     # When set and product is RadarOnly_QPE_01H, get_url uses this timestamp instead of self.time.
     radar_only_time_override: Timestamp | None = None
@@ -135,7 +135,7 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
     def _download_from_source(
         self, coord: NoaaMrmsSourceFileCoord, source: DownloadSource
     ) -> Path:
-        local_path_suffix = f"_{coord.data_var_name}" if coord.data_var_name else ""
+        local_path_suffix = f"_{coord.data_var_name}"
         gz_path = http_download_to_disk(
             coord.get_url(source=source),
             self.dataset_id,
