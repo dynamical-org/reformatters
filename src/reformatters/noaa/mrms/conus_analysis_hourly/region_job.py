@@ -40,6 +40,7 @@ class NoaaMrmsSourceFileCoord(SourceFileCoord):
     product: str
     level: str
     fallback_products: tuple[str, ...]
+    data_var_name: str = ""
     # Only set for precipitation_surface timestamps in _PRECIPITATION_SURFACE_RADAR_ONLY_OVERRIDES.
     # When set and product is RadarOnly_QPE_01H, get_url uses this timestamp instead of self.time.
     radar_only_time_override: Timestamp | None = None
@@ -125,17 +126,16 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
                     product=product,
                     level=internal.mrms_level,
                     fallback_products=fallback_products,
+                    data_var_name=data_var.name,
                     radar_only_time_override=radar_only_time_override,
                 )
             )
         return coords
 
     def _download_from_source(
-        self,
-        coord: NoaaMrmsSourceFileCoord,
-        source: DownloadSource,
-        local_path_suffix: str = "",
+        self, coord: NoaaMrmsSourceFileCoord, source: DownloadSource
     ) -> Path:
+        local_path_suffix = f"_{coord.data_var_name}" if coord.data_var_name else ""
         gz_path = http_download_to_disk(
             coord.get_url(source=source),
             self.dataset_id,
@@ -143,9 +143,7 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
         )
         return _decompress_gzip(gz_path, local_path_suffix)
 
-    def download_file(
-        self, coord: NoaaMrmsSourceFileCoord, local_path_suffix: str = ""
-    ) -> Path:
+    def download_file(self, coord: NoaaMrmsSourceFileCoord) -> Path:
         is_pre_v12 = coord.time < MRMS_V12_START
         is_recent = coord.time > (pd.Timestamp.now() - pd.Timedelta(hours=12))
 
@@ -164,9 +162,7 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
             for source in sources:
                 try:
                     return self._download_from_source(
-                        replace(coord, product=product),
-                        source=source,
-                        local_path_suffix=local_path_suffix,
+                        replace(coord, product=product), source=source
                     )
                 except FileNotFoundError as exc:
                     last_exception = exc

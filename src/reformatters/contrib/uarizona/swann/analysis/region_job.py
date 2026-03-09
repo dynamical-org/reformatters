@@ -121,9 +121,7 @@ class UarizonaSwannAnalysisRegionJob(
         times = processing_region_ds["time"].values
         return [UarizonaSwannAnalysisSourceFileCoord(time=t) for t in times]
 
-    def download_file(
-        self, coord: UarizonaSwannAnalysisSourceFileCoord, local_path_suffix: str = ""  # noqa: ARG002
-    ) -> Path:
+    def download_file(self, coord: UarizonaSwannAnalysisSourceFileCoord) -> Path:
         while True:
             try:
                 return http_download_to_disk(coord.get_url(), self.dataset_id)

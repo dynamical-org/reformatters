@@ -159,9 +159,7 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
             local_path_suffix=f"-{vars_suffix}",
         )
 
-    def download_file(
-        self, coord: NoaaHrrrSourceFileCoord, local_path_suffix: str = ""  # noqa: ARG002
-    ) -> Path:
+    def download_file(self, coord: NoaaHrrrSourceFileCoord) -> Path:
         """Download a subset of variables from a HRRR file and return the local path."""
         try:
             return self._download_from_source(coord, source="s3")

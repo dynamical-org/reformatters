@@ -187,7 +187,7 @@ def test_download_file_uses_fallback_products(monkeypatch: pytest.MonkeyPatch) -
 
     attempts: list[tuple[str, str]] = []
 
-    def fake_download(coord: NoaaMrmsSourceFileCoord, source: str, local_path_suffix: str = "") -> Path:
+    def fake_download(coord: NoaaMrmsSourceFileCoord, source: str) -> Path:
         attempts.append((coord.product, source))
         if coord.product == "RadarOnly_QPE_01H" and source == "s3":
             return Path("fake.grib2")
@@ -213,6 +213,54 @@ def test_download_file_uses_fallback_products(monkeypatch: pytest.MonkeyPatch) -
         ("MultiSensor_QPE_01H_Pass1", "s3"),
         ("RadarOnly_QPE_01H", "s3"),
     ]
+
+
+def test_download_from_source_uses_var_name_suffix(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    mock_ds = Mock()
+    mock_ds.attrs = {"dataset_id": "noaa-mrms-conus-analysis-hourly"}
+    region_job = NoaaMrmsRegionJob.model_construct(
+        tmp_store=tmp_path,
+        template_ds=mock_ds,
+        data_vars=[],
+        append_dim="time",
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    captured: dict[str, str] = {}
+    fake_gz = tmp_path / "fake.grib2.gz_precipitation_pass_2_surface"
+    fake_gz.touch()
+
+    def fake_http_download(
+        url: str, dataset_id: str, local_path_suffix: str = ""
+    ) -> Path:
+        captured["local_path_suffix"] = local_path_suffix
+        return fake_gz
+
+    def fake_decompress(gz_path: Path, local_path_suffix: str = "") -> Path:
+        return tmp_path / "fake.grib2_precipitation_pass_2_surface"
+
+    monkeypatch.setattr(
+        "reformatters.noaa.mrms.conus_analysis_hourly.region_job.http_download_to_disk",
+        fake_http_download,
+    )
+    monkeypatch.setattr(
+        "reformatters.noaa.mrms.conus_analysis_hourly.region_job._decompress_gzip",
+        fake_decompress,
+    )
+
+    coord = NoaaMrmsSourceFileCoord(
+        time=pd.Timestamp("2024-01-15T12:00"),
+        product="MultiSensor_QPE_01H_Pass2",
+        level="00.00",
+        fallback_products=(),
+        data_var_name="precipitation_pass_2_surface",
+    )
+    region_job._download_from_source(coord, source="s3")
+
+    assert captured["local_path_suffix"] == "_precipitation_pass_2_surface"
 
 
 def test_read_data_pre_v12_two_band_selects_discipline_209(

@@ -103,9 +103,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
             "Return a sequence of SourceFileCoord objects, one for each source file required to process the data covered by processing_region_ds."
         )
 
-    def download_file(
-        self, coord: ExampleSourceFileCoord, local_path_suffix: str = ""
-    ) -> Path:
+    def download_file(self, coord: ExampleSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
         # return http_download_to_disk(coord.get_url(), self.dataset_id)
         raise NotImplementedError(
