@@ -66,11 +66,10 @@ class NoaaMrmsConusAnalysisHourlyDataset(
             partial(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
-                # precipitation_surface worst-case quarter-sampled NaN is ~30% (most recent
+                # precipitation_surface worst-case quarter-sampled NaN is ~36% (most recent
                 # timestamp falls back to radar-only with ~34% structural coverage gaps).
-                # radar_only worst-case quarter-sampled NaN is ~34% (structural coverage gaps).
                 # categorical (PrecipFlag) is radar-derived with no gauge latency, similar coverage to radar_only.
-                max_nan_percentage=35,
+                max_nan_percentage=40,
                 spatial_sampling="quarter",
                 exclude_vars=gauge_latency_vars + radar_only_var,
             ),
