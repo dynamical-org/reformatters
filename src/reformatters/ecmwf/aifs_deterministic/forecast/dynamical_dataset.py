@@ -6,21 +6,28 @@ from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 
-from .region_job import EcmwfAifsForecastRegionJob, EcmwfAifsForecastSourceFileCoord
-from .template_config import EcmwfAifsForecastTemplateConfig
+from .region_job import (
+    EcmwfAifsDeterministicForecastRegionJob,
+    EcmwfAifsDeterministicForecastSourceFileCoord,
+)
+from .template_config import EcmwfAifsDeterministicForecastTemplateConfig
 
 
-class EcmwfAifsForecastDataset(
-    DynamicalDataset[EcmwfDataVar, EcmwfAifsForecastSourceFileCoord]
+class EcmwfAifsDeterministicForecastDataset(
+    DynamicalDataset[EcmwfDataVar, EcmwfAifsDeterministicForecastSourceFileCoord]
 ):
-    template_config: EcmwfAifsForecastTemplateConfig = EcmwfAifsForecastTemplateConfig()
-    region_job_class: type[EcmwfAifsForecastRegionJob] = EcmwfAifsForecastRegionJob
+    template_config: EcmwfAifsDeterministicForecastTemplateConfig = (
+        EcmwfAifsDeterministicForecastTemplateConfig()
+    )
+    region_job_class: type[EcmwfAifsDeterministicForecastRegionJob] = (
+        EcmwfAifsDeterministicForecastRegionJob
+    )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         suspend = True
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="25 /6 * * *",
+            schedule="25 */6 * * *",
             suspend=suspend,
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
@@ -33,7 +40,7 @@ class EcmwfAifsForecastDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="55 /6 * * *",
+            schedule="55 */6 * * *",
             suspend=suspend,
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,

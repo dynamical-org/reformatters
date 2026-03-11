@@ -1,1 +1,3 @@
-from .dynamical_dataset import EcmwfAifsForecastDataset as EcmwfAifsForecastDataset
+from .dynamical_dataset import (
+    EcmwfAifsDeterministicForecastDataset as EcmwfAifsDeterministicForecastDataset,
+)

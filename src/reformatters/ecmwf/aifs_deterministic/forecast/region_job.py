@@ -47,7 +47,7 @@ _PRECIP_ALT_GRIB_METADATA: dict[str, tuple[str, str]] = {
 }
 
 
-class EcmwfAifsForecastSourceFileCoord(SourceFileCoord):
+class EcmwfAifsDeterministicForecastSourceFileCoord(SourceFileCoord):
     init_time: Timestamp
     lead_time: Timedelta
     data_var_group: Sequence[EcmwfDataVar]
@@ -83,8 +83,8 @@ class EcmwfAifsForecastSourceFileCoord(SourceFileCoord):
         }
 
 
-class EcmwfAifsForecastRegionJob(
-    RegionJob[EcmwfDataVar, EcmwfAifsForecastSourceFileCoord]
+class EcmwfAifsDeterministicForecastRegionJob(
+    RegionJob[EcmwfDataVar, EcmwfAifsDeterministicForecastSourceFileCoord]
 ):
     max_vars_per_download_group: ClassVar[int] = 10
 
@@ -99,7 +99,7 @@ class EcmwfAifsForecastRegionJob(
         self,
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[EcmwfDataVar],
-    ) -> Sequence[EcmwfAifsForecastSourceFileCoord]:
+    ) -> Sequence[EcmwfAifsDeterministicForecastSourceFileCoord]:
         coords = []
         for init_time, lead_time in itertools.product(
             processing_region_ds["init_time"].values,
@@ -109,7 +109,7 @@ class EcmwfAifsForecastRegionJob(
                 continue
 
             coords.append(
-                EcmwfAifsForecastSourceFileCoord(
+                EcmwfAifsDeterministicForecastSourceFileCoord(
                     init_time=init_time,
                     lead_time=lead_time,
                     data_var_group=data_var_group,
@@ -117,7 +117,9 @@ class EcmwfAifsForecastRegionJob(
             )
         return coords
 
-    def download_file(self, coord: EcmwfAifsForecastSourceFileCoord) -> Path:
+    def download_file(
+        self, coord: EcmwfAifsDeterministicForecastSourceFileCoord
+    ) -> Path:
         idx_url = coord.get_index_url()
         idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
 
@@ -137,7 +139,7 @@ class EcmwfAifsForecastRegionJob(
 
     def read_data(
         self,
-        coord: EcmwfAifsForecastSourceFileCoord,
+        coord: EcmwfAifsDeterministicForecastSourceFileCoord,
         data_var: EcmwfDataVar,
     ) -> ArrayFloat32:
         expected_comment = data_var.internal_attrs.grib_comment
@@ -185,7 +187,9 @@ class EcmwfAifsForecastRegionJob(
         all_data_vars: Sequence[EcmwfDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence["RegionJob[EcmwfDataVar, EcmwfAifsForecastSourceFileCoord]"],
+        Sequence[
+            "RegionJob[EcmwfDataVar, EcmwfAifsDeterministicForecastSourceFileCoord]"
+        ],
         xr.Dataset,
     ]:
         existing_ds = xr.open_zarr(primary_store, chunks=None)

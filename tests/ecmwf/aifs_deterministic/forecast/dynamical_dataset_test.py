@@ -7,19 +7,21 @@ import xarray as xr
 
 from reformatters.common import validation
 from reformatters.ecmwf.aifs_deterministic.forecast.dynamical_dataset import (
-    EcmwfAifsForecastDataset,
+    EcmwfAifsDeterministicForecastDataset,
 )
 from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 
 
 @pytest.fixture
-def dataset() -> EcmwfAifsForecastDataset:
-    return EcmwfAifsForecastDataset(primary_storage_config=NOOP_STORAGE_CONFIG)
+def dataset() -> EcmwfAifsDeterministicForecastDataset:
+    return EcmwfAifsDeterministicForecastDataset(
+        primary_storage_config=NOOP_STORAGE_CONFIG
+    )
 
 
 @pytest.mark.slow
 def test_backfill_local_and_operational_update(
-    monkeypatch: pytest.MonkeyPatch, dataset: EcmwfAifsForecastDataset
+    monkeypatch: pytest.MonkeyPatch, dataset: EcmwfAifsDeterministicForecastDataset
 ) -> None:
     variables_to_check = ["temperature_2m", "precipitation_surface"]
     monkeypatch.setattr(
@@ -112,7 +114,7 @@ def test_backfill_local_and_operational_update(
 
 
 def test_operational_kubernetes_resources(
-    dataset: EcmwfAifsForecastDataset,
+    dataset: EcmwfAifsDeterministicForecastDataset,
 ) -> None:
     cron_jobs = dataset.operational_kubernetes_resources("test-image-tag")
 
@@ -128,7 +130,7 @@ def test_operational_kubernetes_resources(
     ]
 
 
-def test_validators(dataset: EcmwfAifsForecastDataset) -> None:
+def test_validators(dataset: EcmwfAifsDeterministicForecastDataset) -> None:
     validators = tuple(dataset.validators())
     assert len(validators) == 2
     assert all(isinstance(v, validation.DataValidator) for v in validators)
