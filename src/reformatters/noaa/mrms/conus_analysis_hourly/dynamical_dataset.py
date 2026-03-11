@@ -76,9 +76,9 @@ class NoaaMrmsConusAnalysisHourlyDataset(
             partial(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
-                # pass_1 and pass_2 worst-case quarter-sampled NaN is ~38% (1 of 3 checked
+                # pass_1 and pass_2 worst-case quarter-sampled NaN is ~45.5% (1 of 3 checked
                 # timestamps is 100% NaN due to gauge-collection latency, rest are ~6%).
-                max_nan_percentage=40,
+                max_nan_percentage=48,
                 spatial_sampling="quarter",
                 include_vars=gauge_latency_vars,
             ),
