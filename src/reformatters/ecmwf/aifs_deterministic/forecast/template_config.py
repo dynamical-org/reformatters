@@ -264,15 +264,15 @@ class EcmwfAifsDeterministicForecastTemplateConfig(TemplateConfig[EcmwfDataVar])
         var_chunks: dict[Dim, int] = {
             "init_time": 1,
             "lead_time": 61,  # All lead times
-            "latitude": 240,  # 4 chunks over 721 pixels
+            "latitude": 241,  # 3 chunks over 721 pixels
             "longitude": 240,  # 6 chunks over 1440 pixels
         }
 
-        # ~241MB uncompressed, ~48MB compressed
+        # ~242MB uncompressed, ~48MB compressed
         var_shards: dict[Dim, int] = {
             "init_time": var_chunks["init_time"],
             "lead_time": var_chunks["lead_time"],
-            "latitude": var_chunks["latitude"] * 3,  # 2 shards over 721 pixels
+            "latitude": var_chunks["latitude"] * 3,  # 1 shard over 721 pixels
             "longitude": var_chunks["longitude"] * 6,  # 1 shard over 1440 pixels
         }
 
