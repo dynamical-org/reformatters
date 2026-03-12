@@ -14,6 +14,10 @@ from reformatters.common.config_models import (
     Encoding,
     StatisticsApproximate,
 )
+from reformatters.common.deaccumulation import (
+    PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
+    RADIATION_INVALID_BELOW_THRESHOLD,
+)
 from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
     TemplateConfig,
@@ -412,8 +416,8 @@ class EcmwfAifsDeterministicForecastTemplateConfig(TemplateConfig[EcmwfDataVar])
                     standard_name="precipitation_flux",
                     long_name="Precipitation rate",
                     units="kg m-2 s-1",
-                    step_type="instant",
-                    comment="Instantaneous precipitation rate. Units equivalent to mm/s.",
+                    step_type="avg",
+                    comment="Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",
                 ),
                 # Early GRIB master tables (v27) encode tp with generic product template codes.
                 # Later versions (v34+) use "Total precipitation rate [kg/(m^2*s)]".
@@ -424,6 +428,9 @@ class EcmwfAifsDeterministicForecastTemplateConfig(TemplateConfig[EcmwfDataVar])
                     grib_element="unknown",
                     grib_index_param="tp",
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    deaccumulate_to_rate=True,
+                    window_reset_frequency=pd.Timedelta.max,
+                    deaccumulation_invalid_below_threshold_rate=PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
                 ),
             ),
             EcmwfDataVar(
@@ -434,7 +441,7 @@ class EcmwfAifsDeterministicForecastTemplateConfig(TemplateConfig[EcmwfDataVar])
                     standard_name="surface_downwelling_longwave_flux_in_air",
                     long_name="Surface downward long-wave radiation flux",
                     units="W m-2",
-                    step_type="instant",
+                    step_type="avg",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
                     grib_comment="Downward long-wave radiation flux [W/(m^2)]",
@@ -443,6 +450,9 @@ class EcmwfAifsDeterministicForecastTemplateConfig(TemplateConfig[EcmwfDataVar])
                     grib_index_param="strd",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     date_available=expanded_vars_date,
+                    deaccumulate_to_rate=True,
+                    window_reset_frequency=pd.Timedelta.max,
+                    deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
                 ),
             ),
             EcmwfDataVar(
@@ -453,7 +463,7 @@ class EcmwfAifsDeterministicForecastTemplateConfig(TemplateConfig[EcmwfDataVar])
                     standard_name="surface_downwelling_shortwave_flux_in_air",
                     long_name="Surface downward short-wave radiation flux",
                     units="W m-2",
-                    step_type="instant",
+                    step_type="avg",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
                     grib_comment="Downward short-wave radiation flux [W/(m^2)]",
@@ -462,6 +472,9 @@ class EcmwfAifsDeterministicForecastTemplateConfig(TemplateConfig[EcmwfDataVar])
                     grib_index_param="ssrd",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     date_available=expanded_vars_date,
+                    deaccumulate_to_rate=True,
+                    window_reset_frequency=pd.Timedelta.max,
+                    deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
                 ),
             ),
             EcmwfDataVar(

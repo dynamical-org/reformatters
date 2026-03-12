@@ -9,6 +9,7 @@ import rasterio
 import xarray as xr
 from zarr.abc.store import Store
 
+from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import digest, group_by
 from reformatters.common.logging import get_logger
@@ -173,6 +174,24 @@ class EcmwfAifsDeterministicForecastRegionJob(
     ) -> None:
         if data_var.internal_attrs.scale_factor is not None:
             data_array *= data_var.internal_attrs.scale_factor
+
+        if data_var.internal_attrs.deaccumulate_to_rate:
+            reset_freq = data_var.internal_attrs.window_reset_frequency
+            deaccumulation_invalid_below_threshold_rate = (
+                data_var.internal_attrs.deaccumulation_invalid_below_threshold_rate
+            )
+            assert deaccumulation_invalid_below_threshold_rate is not None
+            assert reset_freq is not None
+
+            try:
+                deaccumulate_to_rates_inplace(
+                    data_array,
+                    dim="lead_time",
+                    reset_frequency=reset_freq,
+                    invalid_below_threshold_rate=deaccumulation_invalid_below_threshold_rate,
+                )
+            except ValueError:
+                log.exception(f"Error deaccumulating {data_var.name}")
 
         super().apply_data_transformations(data_array, data_var)
 

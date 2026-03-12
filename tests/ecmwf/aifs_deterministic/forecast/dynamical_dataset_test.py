@@ -60,7 +60,9 @@ def test_backfill_local_and_operational_update(
         init_time="2024-04-01T00:00:00", latitude=0, longitude=0, lead_time="6h"
     )
     assert float(point_6h["temperature_2m"]) == 28.75
-    assert float(point_6h["precipitation_surface"]) == pytest.approx(0.00164794921875)
+    assert float(point_6h["precipitation_surface"]) == pytest.approx(
+        7.59027898311615e-08
+    )
 
     # Operational update
     monkeypatch.setattr(
@@ -102,9 +104,9 @@ def test_backfill_local_and_operational_update(
     precip_expected = np.array(
         [
             # init_time=2024-04-01T00, lead_time=[0h, 6h]
-            [0.0, 0.00164795],
+            [np.nan, 7.590279e-08],
             # init_time=2024-04-01T06, lead_time=[0h, 6h]
-            [0.0, 0.00020218],
+            [np.nan, 9.371433e-09],
         ],
         dtype=np.float32,
     )
