@@ -99,8 +99,16 @@ def _check_var_nan_percentage(
     """Check NaN percentage for a single variable. Returns error message if excessive NaNs found."""
     da = ds[var_name].isel(isel).load()
 
-    # skip lead_time=0 for accumulations
-    if da.attrs["step_type"] != "instant":
+    # skip lead_time=0 for accumulations and precip vars that don't have hour 0 values but are instantaneous
+    expected_hour_0_nans = [
+        "precipitation_surface",
+        "categorical_freezing_rain_surface",
+        "categorical_ice_pellets_surface",
+        "categorical_rain_surface",
+        "categorical_snow_surface",
+        "percent_frozen_precipitation_surface",
+    ]
+    if da.attrs["step_type"] != "instant" or var_name in expected_hour_0_nans:
         da = da.isel(lead_time=slice(1, None))
 
     nan_percentage = float(da.isnull().mean().item()) * 100

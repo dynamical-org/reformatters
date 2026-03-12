@@ -7,14 +7,13 @@ from typing import Any, Literal, assert_never
 from urllib.parse import urlparse
 from uuid import uuid4
 
-import fsspec
 import icechunk
 import xarray as xr
 import zarr
 import zarr.abc.store
 import zarr.storage
 from icechunk.store import IcechunkStore
-from pydantic import Field, computed_field, field_validator
+from pydantic import Field, computed_field
 from zarr.abc.store import Store
 
 from reformatters.common import kubernetes
@@ -58,20 +57,6 @@ class StoreFactory(FrozenBaseModel):
     dataset_id: str
     template_config_version: str
 
-    @field_validator("primary_storage_config")
-    @classmethod
-    def validate_primary_storage_not_icechunk(cls, v: StorageConfig) -> StorageConfig:
-        # Currently, we do not support icechunk stores for the primary store.
-        # This is because the format for the cloud storage credentials does not match
-        # the storage_options format that we pass to fsspec in primary_store_fsspec_filesystem.
-        #
-        # To support this, we will need to add a translation helper to be able to initialize
-        # the icechunk storage with the stored secrets and also to initialize the fsspec filesystem
-        # with those same values.
-        if v.format == DatasetFormat.ICECHUNK:
-            raise ValueError("Primary storage config cannot be set to Icechunk format.")
-        return v
-
     @computed_field
     @property
     def version(self) -> str:
@@ -113,26 +98,6 @@ class StoreFactory(FrozenBaseModel):
 
     def mode(self) -> Literal["w", "w-"]:
         return "w" if self.version == "dev" else "w-"
-
-    def primary_store_fsspec_filesystem(
-        self,
-    ) -> tuple[fsspec.spec.AbstractFileSystem, str]:
-        """Returns a concrete filesystem implementation and relative path.
-
-        The filesystem type depends on the store_path (e.g., LocalFileSystem
-        for file://, S3FileSystem for s3://, etc.).
-        """
-        store_path = _get_store_path(
-            self.dataset_id,
-            self.version,
-            self.primary_storage_config,
-        )
-        storage_options = self.primary_storage_config.load_storage_options()
-
-        fs, relative_path = fsspec.core.url_to_fs(store_path, **storage_options)
-        assert isinstance(fs, fsspec.spec.AbstractFileSystem)
-
-        return fs, relative_path
 
     def all_stores_exist(self) -> bool:
         """Check if all stores exist."""

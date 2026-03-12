@@ -40,6 +40,9 @@ from reformatters.noaa.hrrr.analysis.dynamical_dataset import (
 from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
     NoaaHrrrForecast48HourDataset,
 )
+from reformatters.noaa.mrms.conus_analysis_hourly.dynamical_dataset import (
+    NoaaMrmsConusAnalysisHourlyDataset,
+)
 
 faulthandler.enable()
 
@@ -72,6 +75,14 @@ class EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
     """ECMWF IFS Ens in Icechunk on AWS Open Data."""
 
     base_path: str = "s3://dynamical-ecmwf-ifs-ens"
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
+class NoaaMrmsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
+    """NOAA MRMS in Icechunk on AWS Open Data."""
+
+    base_path: str = "s3://dynamical-noaa-mrms"
     k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
     format: DatasetFormat = DatasetFormat.ICECHUNK
 
@@ -123,6 +134,10 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     NoaaHrrrAnalysisDataset(
         primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
         replica_storage_configs=[NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig()],
+    ),
+    NoaaMrmsConusAnalysisHourlyDataset(
+        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
+        replica_storage_configs=[NoaaMrmsIcechunkAwsOpenDataDatasetStorageConfig()],
     ),
     # ECMWF
     EcmwfIfsEnsForecast15Day025DegreeDataset(

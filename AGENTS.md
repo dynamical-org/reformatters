@@ -146,3 +146,4 @@ then deterministically selects its subset. No coordinator or job queue is needed
 * Follow ty type checking. If you need to add an ignore, ignore a specific check like `# ty: ignore[specific]`. Always annotate types on all function arguments and return types.
 * Follow ruff format
 * Test each module with pytest
+* Log don't print: `from reformatters.common.logging import get_logger` and `log = get_logger(__name__)`

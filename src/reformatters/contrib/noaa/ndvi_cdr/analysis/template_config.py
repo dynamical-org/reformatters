@@ -241,7 +241,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="ndvi_raw",
-                    long_name="normalized_difference_vegetation_index",
+                    long_name="Normalized Difference Vegetation Index",
                     standard_name="normalized_difference_vegetation_index",
                     units="1",
                     step_type="instant",
@@ -262,7 +262,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="ndvi_usable",
-                    long_name="normalized_difference_vegetation_index",
+                    long_name="Normalized Difference Vegetation Index (usable)",
                     standard_name="normalized_difference_vegetation_index",
                     units="1",
                     step_type="instant",

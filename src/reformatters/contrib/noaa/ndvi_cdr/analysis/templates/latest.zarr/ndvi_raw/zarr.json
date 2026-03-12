@@ -65,7 +65,7 @@
     }
   ],
   "attributes": {
-    "long_name": "normalized_difference_vegetation_index",
+    "long_name": "Normalized Difference Vegetation Index",
     "short_name": "ndvi_raw",
     "standard_name": "normalized_difference_vegetation_index",
     "units": "1",

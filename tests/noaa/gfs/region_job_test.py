@@ -268,13 +268,15 @@ def test_download_file_tries_s3_first(monkeypatch: pytest.MonkeyPatch) -> None:
     assert sources_called == ["s3"]
 
 
-def test_download_file_falls_back_to_nomads_on_file_not_found(
+def test_download_file_falls_back_to_nomads_for_recent_init_time(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     template_config = NoaaGfsForecastTemplateConfig()
-    region_job = _make_gfs_region_job(template_config, pd.Timestamp("2025-01-15T12:00"))
+    now = pd.Timestamp.now()
+    region_job = _make_gfs_region_job(template_config, now)
+    recent_init_time = now.floor("6h")
     coord = NoaaGfsForecastSourceFileCoord(
-        init_time=pd.Timestamp("2025-01-01"),
+        init_time=recent_init_time,
         lead_time=pd.Timedelta(hours=6),
         data_vars=template_config.data_vars[:1],
     )
@@ -297,14 +299,44 @@ def test_download_file_falls_back_to_nomads_on_file_not_found(
     assert result == nomads_result
 
 
+def test_download_file_raises_for_old_init_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    template_config = NoaaGfsForecastTemplateConfig()
+    region_job = _make_gfs_region_job(template_config, pd.Timestamp("2025-01-15T12:00"))
+    coord = NoaaGfsForecastSourceFileCoord(
+        init_time=pd.Timestamp("2020-01-01"),
+        lead_time=pd.Timedelta(hours=6),
+        data_vars=template_config.data_vars[:1],
+    )
+
+    def mock_download_from_source(
+        self: NoaaGfsCommonRegionJob,
+        coord: NoaaGfsForecastSourceFileCoord,
+        source: str,
+    ) -> Path:
+        if source == "s3":
+            raise FileNotFoundError("not on s3")
+        return Mock()
+
+    monkeypatch.setattr(
+        NoaaGfsCommonRegionJob, "_download_from_source", mock_download_from_source
+    )
+
+    with pytest.raises(FileNotFoundError, match="not on s3"):
+        region_job.download_file(coord)
+
+
 def test_download_file_nomads_fallback_uses_httpx(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """NOMADS fallback uses httpx_download_to_disk (not http_download_to_disk)."""
     template_config = NoaaGfsForecastTemplateConfig()
-    region_job = _make_gfs_region_job(template_config, pd.Timestamp("2025-01-15T12:00"))
+    now = pd.Timestamp.now()
+    region_job = _make_gfs_region_job(template_config, now)
+    recent_init_time = now.floor("6h")
     coord = NoaaGfsForecastSourceFileCoord(
-        init_time=pd.Timestamp("2025-01-01"),
+        init_time=recent_init_time,
         lead_time=pd.Timedelta(hours=6),
         data_vars=template_config.data_vars[:1],
     )

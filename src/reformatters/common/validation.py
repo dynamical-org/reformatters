@@ -155,6 +155,8 @@ def check_analysis_recent_nans(  # noqa: PLR0912
     max_expected_delay: timedelta = timedelta(hours=12),
     max_nan_percentage: float = 5,
     spatial_sampling: Literal["random", "quarter"] = "random",
+    include_vars: Sequence[str] | None = None,
+    exclude_vars: Sequence[str] | None = None,
 ) -> ValidationResult:
     """Check for NaN values in the most recent day of data. Fails if more than max_nan_percentage of sampled data is NaN."""
 
@@ -198,6 +200,10 @@ def check_analysis_recent_nans(  # noqa: PLR0912
 
     problem_vars = []
     for var_name, da in sample_ds.data_vars.items():
+        if include_vars is not None and var_name not in include_vars:
+            continue
+        if exclude_vars is not None and var_name in exclude_vars:
+            continue
         nan_percentage = da.isnull().mean().compute() * 100
         if nan_percentage > max_nan_percentage:
             problem_vars.append((var_name, nan_percentage))

@@ -244,7 +244,7 @@ def test_deaccumulate_1d_3_and_6_hour_small_accumulation_decreases() -> None:
     )
 
     with pytest.raises(
-        ValueError, match="Over 5% \\(1 total\\) values were clamped to 0"
+        ValueError, match=r"Over 5% \(1 total, 33.3%\) values were clamped to 0"
     ):
         deaccumulate_to_rates_inplace(
             data_array, dim="lead_time", reset_frequency=reset_frequency
@@ -270,7 +270,7 @@ def test_deaccumulate_1d_3_and_6_hour_large_accumulation_decreases() -> None:
         attrs={"units": "mm s-1"},
     )
 
-    with pytest.raises(ValueError, match="Found 1 values below threshold"):
+    with pytest.raises(ValueError, match=r"Found 1 values .* below threshold"):
         deaccumulate_to_rates_inplace(
             data_array, dim="lead_time", reset_frequency=reset_frequency
         )
@@ -538,7 +538,7 @@ def test_custom_deaccumulate_invalid_threshold_rate(
     )
 
     if should_raise:
-        with pytest.raises(ValueError, match="Found 1 values below threshold"):
+        with pytest.raises(ValueError, match=r"Found 1 values .* below threshold"):
             deaccumulate_to_rates_inplace(
                 data_array,
                 dim="lead_time",
@@ -739,6 +739,75 @@ def test_deaccumulate_float64_input() -> None:
         rtol=1e-6,
         equal_nan=True,
     )
+
+
+def test_deaccumulate_expected_invalid_fraction_suppresses_error() -> None:
+    """When expected_invalid_fraction covers the actual invalid fraction, no error is raised."""
+    reset_frequency = pd.Timedelta(hours=6)
+    sec = float(SECONDS_PER_HOUR)
+
+    values = [
+        {"lt": 0, "in": np.nan, "out": np.nan},
+        {"lt": 3, "in": 2 * sec * 3, "out": 2.0},
+        {"lt": 6, "in": 1 * sec * 3, "out": np.nan},  # large negative → NaN (1 of 3 = 33%)
+    ]  # fmt: off
+
+    lead_times = pd.to_timedelta([step["lt"] for step in values], unit="h")
+    data = np.array([step["in"] for step in values], dtype=np.float32)
+    expected = np.array([step["out"] for step in values], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        data,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "mm s-1"},
+    )
+
+    # Without expected_invalid_fraction, this raises
+    with pytest.raises(ValueError, match="below threshold"):
+        deaccumulate_to_rates_inplace(
+            data_array.copy(), dim="lead_time", reset_frequency=reset_frequency
+        )
+
+    # With sufficient expected_invalid_fraction, it succeeds
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="lead_time",
+        reset_frequency=reset_frequency,
+        expected_invalid_fraction=0.34,
+    )
+    np.testing.assert_equal(result.values, expected)
+
+
+def test_deaccumulate_expected_invalid_fraction_still_raises_when_exceeded() -> None:
+    """When actual invalid fraction exceeds expected_invalid_fraction, error is still raised."""
+    reset_frequency = pd.Timedelta(hours=6)
+    sec = float(SECONDS_PER_HOUR)
+
+    values = [
+        {"lt": 0, "in": np.nan, "out": np.nan},
+        {"lt": 3, "in": 2 * sec * 3, "out": 2.0},
+        {"lt": 6, "in": 1 * sec * 3, "out": np.nan},  # large negative → NaN (1 of 3 = 33%)
+    ]  # fmt: off
+
+    lead_times = pd.to_timedelta([step["lt"] for step in values], unit="h")
+    data = np.array([step["in"] for step in values], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        data,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "mm s-1"},
+    )
+
+    # expected_invalid_fraction too low → still raises
+    with pytest.raises(ValueError, match=r"expected at most 10\.0%"):
+        deaccumulate_to_rates_inplace(
+            data_array,
+            dim="lead_time",
+            reset_frequency=reset_frequency,
+            expected_invalid_fraction=0.10,
+        )
 
 
 def test_deaccumulate_non_reset_aligned_first_step_nan() -> None:

@@ -91,7 +91,14 @@ def read_rasterio(
 
             result: Array2D[np.float32]
             match true_gefs_file_type:
-                case "a" | "b":
+                case "s":
+                    # Confirm the arguments we use to resample 1.0/0.5 degree data
+                    # to 0.25 degree grid below match the source 0.25 degree data.
+                    assert reader.shape == out_spatial_shape
+                    assert reader.transform == out_transform
+                    assert reader.crs.to_dict() == out_crs
+                    return reader.read(rasterio_band_index, out_dtype=np.float32)
+                case "a" | "b" | "reforecast":
                     # Interpolate 1.0/0.5 degree data to the 0.25 degree grid.
                     # Every 2nd (0.5 deg) or every 4th (1.0 deg) 0.25 degree pixel's center aligns exactly
                     # with a 1.0/0.5 degree pixel's center.
@@ -102,6 +109,11 @@ def read_rasterio(
                     # Note: having the .read() call interpolate gives very slightly shifted results
                     # so we pay for an extra memory allocation and use reproject to do the interpolation instead.
                     raw = reader.read(rasterio_band_index, out_dtype=np.float32)
+                    if reader.shape == out_spatial_shape:
+                        # Some reforecast files are already 0.25° - no reprojection needed.
+                        assert reader.transform == out_transform
+                        assert reader.crs.to_dict() == out_crs
+                        return raw
                     result, _ = rasterio.warp.reproject(
                         raw,
                         np.full(out_spatial_shape, np.nan, dtype=np.float32),
@@ -115,18 +127,6 @@ def read_rasterio(
                         # Because the pixel centers are aligned we exactly retain the source data
                         step = 2 if is_v12(coord.init_time) else 4
                         assert np.array_equal(raw, result[::step, ::step])
-                    return result
-                case "s" | "reforecast":
-                    # Confirm the arguments we use to resample 1.0/0.5 degree data
-                    # to 0.25 degree grid above match the source 0.25 degree data.
-                    assert reader.shape == out_spatial_shape
-                    assert reader.transform == out_transform
-                    assert reader.crs.to_dict() == out_crs
-
-                    result = reader.read(
-                        rasterio_band_index,
-                        out_dtype=np.float32,
-                    )
                     return result
                 case _ as unreachable:
                     assert_never(unreachable)

@@ -1,4 +1,5 @@
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
@@ -21,6 +22,9 @@ from reformatters.common.storage import (
 from reformatters.noaa.gefs.forecast_35_day.region_job import (
     GefsForecast35DayRegionJob,
     GefsForecast35DaySourceFileCoord,
+)
+from reformatters.noaa.gefs.forecast_35_day.template_config import (
+    GefsForecast35DayTemplateConfig,
 )
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFSDataVar,
@@ -704,3 +708,46 @@ def test_download_file_fallback_permission_denied_converts_to_file_not_found(
     # Verify it's a FileNotFoundError with PermissionDeniedError as cause
     assert exc_info.value.__cause__ is not None
     assert isinstance(exc_info.value.__cause__, PermissionDeniedError)
+
+
+def _make_forecast_region_job() -> GefsForecast35DayRegionJob:
+    template_config = GefsForecast35DayTemplateConfig()
+    return GefsForecast35DayRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_config.get_template(pd.Timestamp.now()),
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "lead_time",
+    [
+        pd.Timedelta(hours=6),  # s-files (lead <= 240h)
+        pd.Timedelta(hours=252),  # a/b-files (lead > 240h)
+    ],
+)
+def test_download_and_read_all_vars_current(lead_time: pd.Timedelta) -> None:
+    """Download and read all vars from current GEFS archive at early and later lead times."""
+    template_config = GefsForecast35DayTemplateConfig()
+    region_job = _make_forecast_region_job()
+    init_time = pd.Timestamp("2024-01-01T00:00")
+
+    def _download_and_check(group: list[GEFSDataVar]) -> None:
+        coord = GefsForecast35DaySourceFileCoord(
+            init_time=init_time,
+            lead_time=lead_time,
+            ensemble_member=0,
+            data_vars=group,
+        )
+        coord = replace(coord, downloaded_path=region_job.download_file(coord))
+        for data_var in group:
+            data = region_job.read_data(coord, data_var)
+            assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
+
+    groups = list(GefsForecast35DayRegionJob.source_groups(template_config.data_vars))
+    with ThreadPoolExecutor() as pool:
+        list(pool.map(_download_and_check, groups))

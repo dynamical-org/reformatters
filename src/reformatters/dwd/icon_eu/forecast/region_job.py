@@ -207,6 +207,9 @@ class DwdIconEuForecastRegionJob(
                 # Log exception so we are notified if deaccumulation errors are larger than expected.
                 log.exception(f"Error deaccumulating {data_var.name}")
 
+        if (scale_factor := data_var.internal_attrs.scale_factor) is not None:
+            data_array.values *= np.float32(scale_factor)
+
         super().apply_data_transformations(data_array, data_var)
 
     def update_template_with_results(

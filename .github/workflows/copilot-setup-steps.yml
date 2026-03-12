@@ -34,10 +34,5 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
-      - name: Install GDAL
-        run: |
-          sudo apt-get update -qy
-          sudo apt-get install -qy -o APT::Install-Suggests=false gdal-bin
-
       - name: Install prek hooks
         run: uv run prek install

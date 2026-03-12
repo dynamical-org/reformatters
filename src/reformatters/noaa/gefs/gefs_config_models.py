@@ -60,6 +60,7 @@ GEFS_REFORECAST_LEVELS_SHORT = {
     "2 m above ground": "2m",
     "10 m above ground": "hgt",
     "100 m above ground": "hgt",
+    "500 mb": "pres_abv700mb",
 }
 GEFS_REFORECAST_GRIB_ELEMENT_RENAME = {
     "PRMSL": "PRES",  # In the reforecast, PRMSL is PRES with level "mean sea level"

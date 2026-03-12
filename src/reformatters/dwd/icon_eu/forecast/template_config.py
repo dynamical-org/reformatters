@@ -39,6 +39,7 @@ class DwdIconEuInternalAttrs(BaseInternalAttrs):
 
     variable_name_in_filename: str
     window_reset_frequency: Timedelta | None = None
+    scale_factor: float | None = None
 
 
 class DwdIconEuDataVar(DataVar[DwdIconEuInternalAttrs]):
@@ -372,12 +373,11 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 name="convective_available_potential_energy",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="cape_con",
+                    short_name="cape",
                     standard_name="atmosphere_convective_available_potential_energy",
                     long_name="Convective available potential energy",
                     units="J kg-1",
                     step_type="instant",
-                    comment="Convective available potential energy",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="cape_con",
@@ -388,7 +388,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 name="high_cloud_cover",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="clch",
+                    short_name="hcc",
                     standard_name="cloud_area_fraction_in_atmosphere_layer",
                     long_name="High cloud cover",
                     units="percent",
@@ -407,7 +407,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 name="low_cloud_cover",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="clcl",
+                    short_name="lcc",
                     standard_name="cloud_area_fraction_in_atmosphere_layer",
                     long_name="Low cloud cover",
                     units="percent",
@@ -426,7 +426,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 name="medium_cloud_cover",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="clcm",
+                    short_name="mcc",
                     standard_name="cloud_area_fraction_in_atmosphere_layer",
                     long_name="Medium cloud cover",
                     units="percent",
@@ -445,7 +445,7 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 name="total_cloud_cover",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="clct",
+                    short_name="tcc",
                     standard_name="cloud_area_fraction",
                     long_name="Total Cloud Cover",
                     units="percent",
@@ -617,15 +617,16 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     short_name="sd",
                     standard_name="lwe_thickness_of_surface_snow_amount",
                     long_name="Snow depth water equivalent",
-                    units="mm",
+                    units="m",
                     step_type="instant",
                     comment=(
-                        "Snow depth water equivalent in mm (kg/m2)."
-                        " Set to 0 above water surfaces and snow-free land points."
+                        "Set to 0 above water surfaces and snow-free land points."
                     ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="w_snow",
+                    # Source GRIB is in kg m-2 (= mm lwe); convert to m
+                    scale_factor=0.001,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
