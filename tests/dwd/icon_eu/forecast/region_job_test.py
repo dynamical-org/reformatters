@@ -1,6 +1,4 @@
-from io import BytesIO
 from pathlib import Path
-from typing import Final
 from unittest.mock import Mock
 
 import numpy as np
@@ -22,11 +20,11 @@ from reformatters.dwd.icon_eu.forecast.template_config import (
     DwdIconEuInternalAttrs,
 )
 
-BASE_FILENAME: Final[str] = (
+BASE_FILENAME = (
     "icon-eu_europe_regular-lat-lon_single-level_2000010100_000_T_2M.grib2.bz2"
 )
-SOURCE_CO_OP_URL: Final[str] = (
-    "https://source.coop/dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/2000-01-01T00Z/t_2m/"
+SOURCE_CO_OP_URL = (
+    "https://data.source.coop/dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/2000-01-01T00/t_2m/"
     + BASE_FILENAME
 )
 
@@ -46,7 +44,6 @@ def t_2m_data_var() -> DwdIconEuDataVar:
             long_name="2 metre temperature",
             units="degree_Celsius",
             step_type="instant",
-            comment="Temperature at 2m above ground, averaged over all tiles of a grid point.",
             standard_name="air_temperature",
         ),
         internal_attrs=DwdIconEuInternalAttrs(
@@ -73,7 +70,6 @@ def region_job() -> DwdIconEuForecastRegionJob:
     template_ds = template_config.get_template(
         end_time=template_config.append_dim_start + template_config.append_dim_frequency
     )
-    # use `model_construct` to skip pydantic validation so we can pass mock stores
     return DwdIconEuForecastRegionJob.model_construct(
         tmp_store=Mock(),
         template_ds=template_ds,
@@ -104,6 +100,25 @@ def test_source_file_coord_get_variable_name_in_filename(
     assert source_file_coord.variable_name_in_filename == "t_2m"
 
 
+def test_source_file_coord_out_loc(
+    source_file_coord: DwdIconEuForecastSourceFileCoord,
+) -> None:
+    out_loc = source_file_coord.out_loc()
+    assert out_loc == {
+        "init_time": pd.Timestamp("2000-01-01T00:00"),
+        "lead_time": pd.Timedelta(0),
+    }
+
+
+def test_region_job_source_groups() -> None:
+    template_config = DwdIconEuForecastTemplateConfig()
+    groups = DwdIconEuForecastRegionJob.source_groups(template_config.data_vars)
+    # Each variable gets its own group (one var per GRIB file)
+    assert len(groups) == len(template_config.data_vars)
+    for group in groups:
+        assert len(group) == 1
+
+
 def test_region_job_generate_source_file_coords(
     region_job: DwdIconEuForecastRegionJob,
 ) -> None:
@@ -114,7 +129,7 @@ def test_region_job_generate_source_file_coords(
         processing_region_ds, template_config.data_vars[:1]
     )
 
-    # 1 init_time x 1 variables x 93 time steps
+    # 1 init_time x 93 lead times
     assert len(source_file_coords) == 93
 
 
@@ -132,59 +147,40 @@ def test_region_job_download_file(
     region_job.download_file(source_file_coord)
 
     url, dataset_id = download_to_disk_mock.call_args[0]
-
     assert url == SOURCE_CO_OP_URL
     assert dataset_id == "dwd-icon-eu-forecast"
 
 
-def test_region_job_read_data(
+def test_region_job_download_file_fallback(
     region_job: DwdIconEuForecastRegionJob,
     source_file_coord: DwdIconEuForecastSourceFileCoord,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    source_file_coord = replace(
-        source_file_coord, downloaded_path=Path("/fake/path.grib2.bz2")
-    )
+    call_count = 0
 
-    # Mock bz2.open to return a BytesIO with some dummy grib data
-    dummy_grib_data = b"dummy grib data"
-    monkeypatch.setattr("bz2.open", Mock(return_value=BytesIO(dummy_grib_data)))
-
-    # Mock rasterio/MemoryFile
-    rasterio_reader = Mock()
-    rasterio_reader.__enter__ = Mock(return_value=rasterio_reader)
-    rasterio_reader.__exit__ = Mock(return_value=False)
-    rasterio_reader.count = 1
-    test_data = np.ones((100, 100), dtype=np.float32)
-    rasterio_reader.read = Mock(return_value=test_data)
-
-    mock_memory_file = Mock()
-    mock_memory_file.__enter__ = Mock(return_value=mock_memory_file)
-    mock_memory_file.__exit__ = Mock(return_value=False)
-    mock_memory_file.open = Mock(return_value=rasterio_reader)
+    def mock_download(url: str, dataset_id: str) -> Path:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise FileNotFoundError("not found")
+        return Path("/fake/fallback.grib2.bz2")
 
     monkeypatch.setattr(
-        "reformatters.dwd.icon_eu.forecast.region_job.MemoryFile",
-        Mock(return_value=mock_memory_file),
+        "reformatters.dwd.icon_eu.forecast.region_job.http_download_to_disk",
+        mock_download,
     )
 
-    result = region_job.read_data(source_file_coord, source_file_coord.data_var)
-
-    # Verify the result
-    assert np.array_equal(result, test_data)
-    assert result.shape == (100, 100)
-    assert result.dtype == np.float32
-
-    rasterio_reader.read.assert_called_once_with(indexes=1, out_dtype=np.float32)
+    result = region_job.download_file(source_file_coord)
+    assert result == Path("/fake/fallback.grib2.bz2")
+    assert call_count == 2
 
 
-def test_region_job_apply_data_transformations(
+def test_region_job_apply_data_transformations_deaccumulation(
     region_job: DwdIconEuForecastRegionJob,
     t_2m_data_var: DwdIconEuDataVar,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Test deaccumulation
-    t_2m_data_var = replace(
+    data_var = replace(
         t_2m_data_var,
         internal_attrs=replace(
             t_2m_data_var.internal_attrs,
@@ -202,8 +198,26 @@ def test_region_job_apply_data_transformations(
         mock_deaccum,
     )
 
-    region_job.apply_data_transformations(data_array, t_2m_data_var)
+    region_job.apply_data_transformations(data_array, data_var)
     mock_deaccum.assert_called_once()
+
+
+def test_region_job_apply_data_transformations_scale_factor(
+    region_job: DwdIconEuForecastRegionJob,
+    t_2m_data_var: DwdIconEuDataVar,
+) -> None:
+    data_var = replace(
+        t_2m_data_var,
+        internal_attrs=replace(
+            t_2m_data_var.internal_attrs,
+            scale_factor=0.001,
+        ),
+    )
+    data = np.array([1000.0, 2000.0, 3000.0], dtype=np.float32)
+    data_array = xr.DataArray(data.copy(), dims=["x"])
+
+    region_job.apply_data_transformations(data_array, data_var)
+    np.testing.assert_allclose(data_array.values, [1.0, 2.0, 3.0])
 
 
 def test_operational_update_jobs(
@@ -220,15 +234,10 @@ def test_operational_update_jobs(
         template_config_version="test-version",
     )
 
-    # Set current time
     now = pd.Timestamp("2026-05-02T15:48")
     monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *args, **kwargs: now))
 
-    # Set the append_dim_start for the update
-    # Use a template_ds as a lightweight way to create a mock dataset with a known max append dim coordinate
-    existing_ds_end_time = pd.Timestamp(
-        "2026-05-01T00:01"
-    )  # 00z will be max existing init time
+    existing_ds_end_time = pd.Timestamp("2026-05-01T00:01")
     existing_ds = template_config.get_template(end_time=existing_ds_end_time)
     template_utils.write_metadata(existing_ds, store_factory)
 
@@ -242,7 +251,40 @@ def test_operational_update_jobs(
     )
 
     assert template_ds.init_time.max() == pd.Timestamp("2026-05-02T12:00")
-    assert len(jobs) == 7  # NWP runs: 2026-05-01T00, 06, 12, 18; 2026-05-02T00, 06, 12
+    assert len(jobs) == 7  # 2026-05-01T00 through 2026-05-02T12
     for job in jobs:
         assert isinstance(job, DwdIconEuForecastRegionJob)
         assert job.data_vars == template_config.data_vars
+
+
+@pytest.mark.slow
+def test_download_and_read_all_variables() -> None:
+    """Download a real ICON-EU GRIB file and read all template variables."""
+    template_config = DwdIconEuForecastTemplateConfig()
+    # Use a recent init time from the Source Co-Op archive
+    init_time = (pd.Timestamp.now() - pd.Timedelta(hours=12)).floor("6h")
+
+    region_job = DwdIconEuForecastRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_config.get_template(pd.Timestamp.now()),
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    lead_time = pd.Timedelta(hours=1)
+
+    for data_var in template_config.data_vars:
+        coord = DwdIconEuForecastSourceFileCoord(
+            init_time=init_time,
+            lead_time=lead_time,
+            data_var=data_var,
+        )
+        coord = replace(coord, downloaded_path=region_job.download_file(coord))
+
+        data = region_job.read_data(coord, data_var)
+        assert data.shape == (657, 1377), (
+            f"Unexpected shape for {data_var.name}: {data.shape}"
+        )
+        assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
