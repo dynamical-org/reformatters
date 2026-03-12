@@ -84,13 +84,16 @@ def _parse_index_file(
     if "levelist" not in df.columns:
         df["levelist"] = np.nan
 
+    index_cols = ["param", "levtype", "levelist"]
+
     if ensemble:
+        index_cols = ["number", *index_cols]
+
         # Control members by default don't have "number" field. We fill with 0
         df["number"] = df["number"].fillna(0).astype(int)
         # Ensure that every row we filled with number=0 was indeed type "cf" (control forecast)
         assert (df[df["number"] == 0]["type"] == "cf").all(), (
             "Parsed row as control member that didn't have type='cf'"
         )
-        return df.set_index(["number", "param", "levtype", "levelist"]).sort_index()
 
-    return df.set_index(["param", "levtype", "levelist"]).sort_index()
+    return df.set_index(index_cols).sort_index()
