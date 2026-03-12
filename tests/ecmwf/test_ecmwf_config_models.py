@@ -1,18 +1,24 @@
 from typing import Literal
 
+import pandas as pd
 import pytest
 
 from reformatters.common.config_models import DataVarAttrs, Encoding
 from reformatters.common.zarr import BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE
-from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, EcmwfInternalAttrs
-from reformatters.ecmwf.ecmwf_utils import has_hour_0_values
+from reformatters.ecmwf.ecmwf_config_models import (
+    EcmwfDataVar,
+    EcmwfInternalAttrs,
+    has_hour_0_values,
+    vars_available,
+)
 
 StepType = Literal["instant", "accum", "avg", "min", "max"]
 
 
 def _make_data_var(
-    step_type: StepType,
+    step_type: StepType = "instant",
     hour_0_values_override: bool | None = None,
+    date_available: pd.Timestamp | None = None,
 ) -> EcmwfDataVar:
     return EcmwfDataVar(
         name="test_var",
@@ -36,8 +42,45 @@ def _make_data_var(
             grib_index_param="test",
             keep_mantissa_bits=7,
             hour_0_values_override=hour_0_values_override,
+            date_available=date_available,
         ),
     )
+
+
+# --- vars_available ---
+
+
+def test_vars_available_true_when_no_date_available() -> None:
+    group = [_make_data_var(), _make_data_var()]
+    assert vars_available(group, pd.Timestamp("2020-01-01")) is True
+
+
+def test_vars_available_true_when_init_time_on_date_available() -> None:
+    date = pd.Timestamp("2020-06-01")
+    group = [_make_data_var(date_available=date)]
+    assert vars_available(group, date) is True
+
+
+def test_vars_available_true_when_init_time_after_date_available() -> None:
+    group = [_make_data_var(date_available=pd.Timestamp("2020-06-01"))]
+    assert vars_available(group, pd.Timestamp("2021-01-01")) is True
+
+
+def test_vars_available_false_when_init_time_before_date_available() -> None:
+    group = [_make_data_var(date_available=pd.Timestamp("2020-06-01"))]
+    assert vars_available(group, pd.Timestamp("2020-01-01")) is False
+
+
+def test_vars_available_raises_on_mixed_date_available() -> None:
+    group = [
+        _make_data_var(date_available=pd.Timestamp("2020-01-01")),
+        _make_data_var(date_available=pd.Timestamp("2020-06-01")),
+    ]
+    with pytest.raises(ValueError, match="multiple"):
+        vars_available(group, pd.Timestamp("2021-01-01"))
+
+
+# --- has_hour_0_values ---
 
 
 @pytest.mark.parametrize("step_type", ["instant", "avg", "accum"])
