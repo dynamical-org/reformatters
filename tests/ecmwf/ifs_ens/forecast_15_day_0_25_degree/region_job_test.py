@@ -115,7 +115,7 @@ def test_region_job_generate_source_file_coords() -> None:
 
 def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
     template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
-    template_ds = template_config.get_template(pd.Timestamp("2024-02-02"))
+    template_ds = template_config.get_template(pd.Timestamp("2024-04-02"))
 
     region_job = EcmwfIfsEnsForecast15Day025DegreeRegionJob.model_construct(
         tmp_store=Mock(),
@@ -126,7 +126,7 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
         reformat_job_name="test",
     )
     source_file_coord = EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
-        init_time=pd.Timestamp("2024-02-01"),
+        init_time=pd.Timestamp("2024-04-01"),
         lead_time=pd.Timedelta("3h"),
         data_var_group=[
             var for var in template_config.data_vars if var.name == "temperature_2m"
@@ -135,13 +135,13 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     example_grib_index = """
-{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levelist": "500", "levtype": "pl", "number": "2", "param": "gh", "_offset": 674936844, "_length": 393429}
-{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "3", "levtype": "sfc", "param": "2t", "_offset": 0, "_length": 665525}
-{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "3", "levtype": "sfc", "param": "10u", "_offset": 3773626, "_length": 665525}
-{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "3", "levtype": "sfc", "param": "10u", "_offset": 665525, "_length": 888917}
-{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levtype": "sfc", "number": "1", "param": "2t", "_offset": 1554442, "_length": 664922}
-{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levtype": "sfc", "number": "2", "param": "2t", "_offset": 2219364, "_length": 664716}
-{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levtype": "sfc", "number": "1", "param": "10u", "_offset": 2884080, "_length": 889546}
+{"domain": "g", "date": "20240401", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levelist": "500", "levtype": "pl", "number": "2", "param": "gh", "_offset": 674936844, "_length": 393429}
+{"domain": "g", "date": "20240401", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "3", "levtype": "sfc", "param": "2t", "_offset": 0, "_length": 665525}
+{"domain": "g", "date": "20240401", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "3", "levtype": "sfc", "param": "10u", "_offset": 3773626, "_length": 665525}
+{"domain": "g", "date": "20240401", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "3", "levtype": "sfc", "param": "10u", "_offset": 665525, "_length": 888917}
+{"domain": "g", "date": "20240401", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levtype": "sfc", "number": "1", "param": "2t", "_offset": 1554442, "_length": 664922}
+{"domain": "g", "date": "20240401", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levtype": "sfc", "number": "2", "param": "2t", "_offset": 2219364, "_length": 664716}
+{"domain": "g", "date": "20240401", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levtype": "sfc", "number": "1", "param": "10u", "_offset": 2884080, "_length": 889546}
 """
     mock_index_df = pd.read_json(StringIO(example_grib_index), lines=True)
     monkeypatch.setattr(
@@ -165,7 +165,7 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert (
         url
-        == "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20240201/00z/0p25/enfo/20240201000000-3h-enfo-ef.grib2"
+        == "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20240401/00z/ifs/0p25/enfo/20240401000000-3h-enfo-ef.grib2"
     )
     assert dataset_id == "ecmwf-ifs-ens-forecast-15-day-0-25-degree"
     assert (

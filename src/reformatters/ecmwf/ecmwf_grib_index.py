@@ -14,6 +14,8 @@ def get_message_byte_ranges_from_index(
     index_local_path: PathLike[str],
     data_vars: Sequence[DataVar[EcmwfInternalAttrs]],
     ensemble_member: int,
+    *,
+    step: int | None = None,
 ) -> tuple[list[int], list[int]]:
     """
     Given an ECMWF grib index file, returns the byte ranges the given data var(s) & ensemble member can be found within.
@@ -25,17 +27,26 @@ def get_message_byte_ranges_from_index(
     """
     byte_range_starts: list[int] = []
     byte_range_ends: list[int] = []
-    index_file_df = _parse_index_file(index_local_path)
+    index_file_df = _parse_index_file(index_local_path, step=step)
     for data_var in data_vars:
         level_selector = (
             slice(None)
             if np.isnan(level_value := data_var.internal_attrs.grib_index_level_value)
             else level_value
         )
+        # Use MARS param name when filtering by step (MARS source)
+        if (
+            step is not None
+            and data_var.internal_attrs.mars_grib_index_param is not None
+        ):
+            param = data_var.internal_attrs.mars_grib_index_param
+        else:
+            param = data_var.internal_attrs.grib_index_param
+
         row: pd.Series | pd.DataFrame = index_file_df.loc[
             (
                 ensemble_member,
-                data_var.internal_attrs.grib_index_param,
+                param,
                 data_var.internal_attrs.grib_index_level_type,
                 level_selector,
             ),
@@ -53,12 +64,20 @@ def get_message_byte_ranges_from_index(
     return byte_range_starts, byte_range_ends
 
 
-def _parse_index_file(index_local_path: PathLike[str]) -> pd.DataFrame:
+def _parse_index_file(
+    index_local_path: PathLike[str], *, step: int | None = None
+) -> pd.DataFrame:
     """
     Parses an ECMWF index file into a pandas dataframe containing that information.
 
     For an example snippet of the contents of an index file, see:
         tests/ecmwf/ifs_ens/forecast_15_day_0_25_degree/region_job_test.py::test_region_job_download_file
+
+    Parameters
+    ----------
+    step : int | None
+        If provided, filter the index to only rows matching this forecast step.
+        MARS indexes contain all steps in one file, so this is needed for MARS sources.
 
     Returns
     -------
@@ -70,10 +89,19 @@ def _parse_index_file(index_local_path: PathLike[str]) -> pd.DataFrame:
     """
     df = pd.read_json(index_local_path, lines=True)
 
-    # Control members by default don't have "number" field. We fill with 0
-    df["number"] = df["number"].fillna(0).astype(int)
+    if step is not None:
+        df = df[df["step"] == step]
+
+    # Control-only indexes (e.g. MARS cf_sfc) may not have a "number" column at all
+    if "number" not in df.columns:
+        df["number"] = 0
+    else:
+        df["number"] = df["number"].fillna(0).astype(int)
     # Ensure that every row we filled with number=0 was indeed type "cf" (control forecast)
     assert (df[df["number"] == 0]["type"] == "cf").all(), (
         "Parsed row as control member that didn't have type='cf'"
     )
+    # levelist may be absent for surface-only indexes
+    if "levelist" not in df.columns:
+        df["levelist"] = np.nan
     return df.set_index(["number", "param", "levtype", "levelist"]).sort_index()
