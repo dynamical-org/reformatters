@@ -27,12 +27,14 @@ def test_source_file_coord_url_before_path_change() -> None:
         lead_time=pd.Timedelta("6h"),
         data_var_group=list(config.data_vars[:1]),
     )
-    url = coord.get_url()
-    assert "/aifs/0p25/oper/" in url
-    assert "20240701120000-6h-oper-fc.grib2" in url
-
-    idx_url = coord.get_index_url()
-    assert idx_url.endswith(".index")
+    assert coord.get_url() == (
+        "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
+        "/20240701/12z/aifs/0p25/oper/20240701120000-6h-oper-fc.grib2"
+    )
+    assert coord.get_index_url() == (
+        "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
+        "/20240701/12z/aifs/0p25/oper/20240701120000-6h-oper-fc.index"
+    )
 
 
 def test_source_file_coord_url_after_path_change() -> None:
@@ -42,9 +44,41 @@ def test_source_file_coord_url_after_path_change() -> None:
         lead_time=pd.Timedelta("12h"),
         data_var_group=list(config.data_vars[:1]),
     )
-    url = coord.get_url()
-    assert "/aifs-single/0p25/oper/" in url
-    assert "20250226000000-12h-oper-fc.grib2" in url
+    assert coord.get_url() == (
+        "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
+        "/20250226/00z/aifs-single/0p25/oper/20250226000000-12h-oper-fc.grib2"
+    )
+    assert coord.get_index_url() == (
+        "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
+        "/20250226/00z/aifs-single/0p25/oper/20250226000000-12h-oper-fc.index"
+    )
+
+
+def test_source_file_coord_url_00z_init() -> None:
+    config = EcmwfAifsDeterministicForecastTemplateConfig()
+    coord = EcmwfAifsDeterministicForecastSourceFileCoord(
+        init_time=pd.Timestamp("2024-10-15T00:00"),
+        lead_time=pd.Timedelta("24h"),
+        data_var_group=list(config.data_vars[:1]),
+    )
+    assert coord.get_url() == (
+        "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
+        "/20241015/00z/aifs/0p25/oper/20241015000000-24h-oper-fc.grib2"
+    )
+
+
+def test_source_file_coord_url_day_before_path_change() -> None:
+    """The day before the path change should still use 'aifs'."""
+    config = EcmwfAifsDeterministicForecastTemplateConfig()
+    coord = EcmwfAifsDeterministicForecastSourceFileCoord(
+        init_time=AIFS_SINGLE_PATH_CHANGE_DATE - pd.Timedelta("12h"),
+        lead_time=pd.Timedelta("6h"),
+        data_var_group=list(config.data_vars[:1]),
+    )
+    assert coord.get_url() == (
+        "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
+        "/20250225/12z/aifs/0p25/oper/20250225120000-6h-oper-fc.grib2"
+    )
 
 
 def test_source_file_coord_out_loc() -> None:

@@ -38,7 +38,6 @@ main = "reformatters.__main__:app"
 
 [dependency-groups]
 dev = [
-    "boto3>=1.42.49",
     "cf-xarray>=0.10.10",
     "matplotlib~=3.9",
     "pandas-stubs~=2.2",
