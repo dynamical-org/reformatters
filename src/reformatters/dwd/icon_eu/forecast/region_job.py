@@ -45,9 +45,9 @@ class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
 
     def get_url(self) -> str:
         """Return URL to .grib2.bz2 files on Dynamical.org's public archive of ICON-EU hosted on Source Co-Op."""
-        init_time_str = self.init_time.strftime("%Y-%m-%dT%HZ")
+        init_time_str = self.init_time.strftime("%Y-%m-%dT%H")
         return (
-            "https://source.coop/dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/"
+            "https://data.source.coop/dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/"
             f"{init_time_str}/{self.variable_name_in_filename}/"
         ) + self._get_basename()
 
@@ -211,59 +211,6 @@ class DwdIconEuForecastRegionJob(
             data_array.values *= np.float32(scale_factor)
 
         super().apply_data_transformations(data_array, data_var)
-
-    def update_template_with_results(
-        self, process_results: Mapping[str, Sequence[DwdIconEuForecastSourceFileCoord]]
-    ) -> xr.Dataset:
-        """Update template dataset based on processing results. This method is called during
-        operational updates.
-
-        Subclasses should implement this method to apply dataset-specific adjustments
-        based on the processing results. Examples include:
-        - Trimming dataset along append_dim to only include successfully processed data
-        - Loading existing coordinate values from the primary store and updating them based on results
-        - Updating metadata based on what was actually processed vs what was planned
-
-        The default implementation trims along append_dim to end at the most recent successfully
-        processed coordinate (timestamp).
-
-        Parameters
-        ----------
-        process_results : Mapping[str, Sequence[DwdIconEuForecastSourceFileCoord]]
-            Mapping from variable names to their source file coordinates with final processing status.
-
-        Returns
-        -------
-        xr.Dataset
-            Updated template dataset reflecting the actual processing results.
-        """
-        # The super() implementation looks like this:
-        #
-        # max_append_dim_processed = max(
-        #     (
-        #         c.out_loc()[self.append_dim]
-        #         for c in chain.from_iterable(process_results.values())
-        #         if c.status == SourceFileStatus.Succeeded
-        #     ),
-        #     default=None,
-        # )
-        # if max_append_dim_processed is None:
-        #     # No data was processed, trim the template to stop before this job's region
-        #     # This is using isel's exclusive slice end behavior
-        #     return self.template_ds.isel(
-        #         {self.append_dim: slice(None, self.region.start)}
-        #     )
-        # else:
-        #     return self.template_ds.sel(
-        #         {self.append_dim: slice(None, max_append_dim_processed)}
-        #     )
-        #
-        # If you like the above behavior, skip implementing this method.
-        # If you need to customize the behavior, implement this method.
-
-        raise NotImplementedError(
-            "Subclasses implement update_template_with_results() with dataset-specific logic"
-        )
 
     @classmethod
     def operational_update_jobs(

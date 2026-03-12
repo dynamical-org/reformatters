@@ -39,6 +39,8 @@ main = "reformatters.__main__:app"
 [dependency-groups]
 dev = [
     "cf-xarray>=0.10.10",
+    "cfgrib>=0.9.15.1",
+    "eccodes>=2.46.0",
     "matplotlib~=3.9",
     "pandas-stubs~=2.2",
     "prek==0.3.0",
