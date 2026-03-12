@@ -1,4 +1,5 @@
 import gzip
+import uuid
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Literal, assert_never
@@ -39,6 +40,7 @@ class NoaaMrmsSourceFileCoord(SourceFileCoord):
     product: str
     level: str
     fallback_products: tuple[str, ...]
+    data_var_name: str
     # Only set for precipitation_surface timestamps in _PRECIPITATION_SURFACE_RADAR_ONLY_OVERRIDES.
     # When set and product is RadarOnly_QPE_01H, get_url uses this timestamp instead of self.time.
     radar_only_time_override: Timestamp | None = None
@@ -124,6 +126,7 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
                     product=product,
                     level=internal.mrms_level,
                     fallback_products=fallback_products,
+                    data_var_name=data_var.name,
                     radar_only_time_override=radar_only_time_override,
                 )
             )
@@ -132,8 +135,13 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
     def _download_from_source(
         self, coord: NoaaMrmsSourceFileCoord, source: DownloadSource
     ) -> Path:
-        gz_path = http_download_to_disk(coord.get_url(source=source), self.dataset_id)
-        return _decompress_gzip(gz_path)
+        local_path_suffix = f"_{coord.data_var_name}"
+        gz_path = http_download_to_disk(
+            coord.get_url(source=source),
+            self.dataset_id,
+            local_path_suffix=local_path_suffix,
+        )
+        return _decompress_gzip(gz_path, local_path_suffix)
 
     def download_file(self, coord: NoaaMrmsSourceFileCoord) -> Path:
         is_pre_v12 = coord.time < MRMS_V12_START
@@ -205,6 +213,9 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
                     data_array,
                     dim="time",
                     reset_frequency=data_var.internal_attrs.window_reset_frequency,
+                    # ~6.2% of MRMS pixels have -3.0 no-data sentinel (over-ocean/no-coverage areas)
+                    # which becomes invalid after deaccumulation
+                    expected_invalid_fraction=0.07,
                 )
             except ValueError:
                 log.exception(f"Error deaccumulating {data_var.name}")
@@ -228,7 +239,10 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
     ]:
         existing_ds = xr.open_zarr(primary_store, chunks=None, decode_timedelta=True)
         ds_max_time = existing_ds[append_dim].max().item()
-        append_dim_start = pd.Timestamp(ds_max_time)
+        # Start 3 hours before the dataset's latest timestamp so precipitation_surface
+        # (which falls back to radar-only when pass_2 is unavailable) gets reprocessed
+        # and overwritten with pass_2 data once it becomes available (~60-min latency).
+        append_dim_start = pd.Timestamp(ds_max_time) - pd.Timedelta(hours=3)
 
         append_dim_end = pd.Timestamp.now()
         template_ds = get_template_fn(append_dim_end)
@@ -297,8 +311,16 @@ _PRECIPITATION_SURFACE_RADAR_ONLY_OVERRIDES: dict[pd.Timestamp, pd.Timestamp] = 
 }
 
 
-def _decompress_gzip(gz_path: Path) -> Path:
-    decompressed_path = gz_path.with_suffix("")
-    with gzip.open(gz_path, "rb") as f_in, open(decompressed_path, "wb") as f_out:
+def _decompress_gzip(gz_path: Path, local_path_suffix: str = "") -> Path:
+    # gz_path.with_suffix("") strips the last extension (.gz or .gz_<suffix>),
+    # then we append local_path_suffix to make the decompressed path unique per variable group.
+    base = gz_path.with_suffix("")
+    decompressed_path = base.with_name(base.name + local_path_suffix)
+    temp_path = decompressed_path.with_name(
+        f"{decompressed_path.name}.{uuid.uuid4().hex[:8]}"
+    )
+    with gzip.open(gz_path, "rb") as f_in, open(temp_path, "wb") as f_out:
         f_out.write(f_in.read())
+    temp_path.rename(decompressed_path)
+    gz_path.unlink(missing_ok=True)
     return decompressed_path

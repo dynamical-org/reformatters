@@ -172,6 +172,7 @@ def test_source_file_coords_and_crs_match_template(tmp_path: Path) -> None:
         product=precip_var.internal_attrs.mrms_product,
         level=precip_var.internal_attrs.mrms_level,
         fallback_products=precip_var.internal_attrs.mrms_fallback_products,
+        data_var_name=precip_var.name,
     )
     coord = replace(coord, downloaded_path=region_job.download_file(coord))
     assert coord.downloaded_path is not None

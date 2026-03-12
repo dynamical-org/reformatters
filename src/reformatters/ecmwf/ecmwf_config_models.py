@@ -54,3 +54,16 @@ def vars_available(
     """Check if a group of vars (which must share the same date_available) are available at init_time."""
     date_available = item({v.internal_attrs.date_available for v in data_var_group})
     return date_available is None or date_available <= init_time
+
+
+def has_hour_0_values(data_var: EcmwfDataVar) -> bool:
+    """Returns True if this variable has a value at lead_time=0h.
+
+    ECMWF avg/accum variables (e.g. total precipitation, radiation) include a 0h
+    accumulation of 0 in the GRIB, so they do have hour 0 values. Only "max" and "min"
+    step_type variables are absent at lead_time=0h since they represent the extremum
+    since the previous post-processing step, which doesn't exist at initialization time.
+    """
+    if data_var.internal_attrs.hour_0_values_override is not None:
+        return data_var.internal_attrs.hour_0_values_override
+    return data_var.attrs.step_type not in ("max", "min")

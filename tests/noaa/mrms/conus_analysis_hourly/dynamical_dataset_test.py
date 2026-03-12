@@ -136,7 +136,7 @@ def test_backfill_local_and_operational_update(
     # categorical_precipitation_type_surface is instant, no deaccumulation NaN
     assert_no_nulls(first_shard["categorical_precipitation_type_surface"])
 
-    # precipitation_surface first timestep is NaN from deaccumulation
+    # precipitation_surface first timestep NaN from deaccumulation
     point = backfill_ds.isel(latitude=622, longitude=817)
     assert np.isnan(point["precipitation_surface"].values[0])
     assert np.all(np.isfinite(point["precipitation_surface"].values[1:]))
@@ -216,5 +216,5 @@ def test_operational_kubernetes_resources(
 
 def test_validators(dataset: NoaaMrmsConusAnalysisHourlyDataset) -> None:
     validators = tuple(dataset.validators())
-    assert len(validators) == 2
+    assert len(validators) == 4
     assert all(isinstance(v, validation.DataValidator) for v in validators)

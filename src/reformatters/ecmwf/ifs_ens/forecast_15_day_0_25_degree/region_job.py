@@ -14,7 +14,7 @@ from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import (
     http_download_to_disk,
 )
-from reformatters.common.iterating import digest
+from reformatters.common.iterating import digest, item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
@@ -30,7 +30,11 @@ from reformatters.common.types import (
     Timedelta,
     Timestamp,
 )
-from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, vars_available
+from reformatters.ecmwf.ecmwf_config_models import (
+    EcmwfDataVar,
+    has_hour_0_values,
+    vars_available,
+)
 from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
 
 log = get_logger(__name__)
@@ -104,12 +108,13 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         data_vars: Sequence[EcmwfDataVar],
     ) -> Sequence[Sequence[EcmwfDataVar]]:
         """Return groups of variables, where all variables in a group can be retrieved from the same source file."""
-        vars_by_date_available = defaultdict(list)
+        vars_by_key: defaultdict[tuple[object, bool], list[EcmwfDataVar]] = defaultdict(
+            list
+        )
         for data_var in data_vars:
-            vars_by_date_available[data_var.internal_attrs.date_available].append(
-                data_var
-            )
-        return list(vars_by_date_available.values())
+            key = (data_var.internal_attrs.date_available, has_hour_0_values(data_var))
+            vars_by_key[key].append(data_var)
+        return list(vars_by_key.values())
 
     def generate_source_file_coords(
         self,
@@ -125,12 +130,16 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             download/read performance by treating them separately and parallelizing.
         """
         coords = []
+        group_has_hour_0_values = item({has_hour_0_values(v) for v in data_var_group})
         for init_time, lead_time, ensemble_member in itertools.product(
             processing_region_ds["init_time"].values,
             processing_region_ds["lead_time"].values,
             processing_region_ds["ensemble_member"].values,
         ):
             if not vars_available(data_var_group, init_time):
+                continue
+
+            if not group_has_hour_0_values and lead_time == np.timedelta64(0):
                 continue
 
             coord = EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
