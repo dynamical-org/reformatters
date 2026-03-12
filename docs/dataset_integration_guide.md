@@ -149,6 +149,37 @@ Notes
 - You can also run each validation plot individually, see `uv run src/scripts/validation/plots.py --help`.
 - You can add additional `--variable` flags if side by side plots help add context (e.g. show solar radiation alongside cloud cover).
 
+## Test coverage
+
+Each dataset integration should include tests for the three core modules. Use existing datasets (e.g. HRRR, ICON-EU) as references.
+
+### `template_config_test.py`
+- Spatial coordinates: ranges, resolution, grid sizes
+- Template attributes: dims, append_dim, frequency, variable names
+- Dimension coordinates: lead time structure, expected counts
+- Variable metadata: required attrs (encoding, step_type, internal_attrs)
+- Coordinate configs: all expected coordinates present
+- Derived coordinates: e.g. valid_time computation
+- Spatial reference: CRS matches source data
+- Dataset attributes: dataset_id, version, spatial domain
+
+These are also covered by the shared tests in `tests/common/common_template_config_subclasses_test.py` and `tests/common/datasets_cf_compliance_test.py`.
+
+### `region_job_test.py`
+- Source file coord URL generation (primary and fallback)
+- Source file coord variable name extraction and output location mapping
+- Source groups: correct grouping of variables per source file
+- Source file coord generation: correct count for a region
+- File download: mocked primary and fallback paths
+- Data transformations: deaccumulation, scale factors, unit conversions
+- Operational update jobs: correct job count and types
+- **Slow test**: download a real source file and read all variables, asserting shape and finite values
+
+### `dynamical_dataset_test.py`
+- **Slow test**: backfill local followed by operational update, with snapshot-style value assertions (assert_array_equal / assert_allclose on specific points)
+- Kubernetes resources: correct cron job count, names, schedules, and secrets
+- Validators: correct count and types
+
 ## 8. Update dataset catalog documentation
 
 Update the dataset catalog docs on `dynamical.org` by adding entries into the `catalog.js`, rebuilding (`npm run build`), and merging updates to main in `https://github.com/dynamical-org/dynamical.org`.

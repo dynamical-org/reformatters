@@ -49,8 +49,7 @@ class DwdIconEuDataVar(DataVar[DwdIconEuInternalAttrs]):
 class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
     dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
     append_dim: AppendDim = "init_time"
-    # TODO(@JackKelly): Update `append_dim_start` when we actual deploy operationally.
-    append_dim_start: Timestamp = pd.Timestamp("2026-01-21T00:00")
+    append_dim_start: Timestamp = pd.Timestamp("2026-02-10T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
 
     @computed_field
@@ -627,6 +626,51 @@ class DwdIconEuForecastTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     variable_name_in_filename="w_snow",
                     # Source GRIB is in kg m-2 (= mm lwe); convert to m
                     scale_factor=0.001,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
+            DwdIconEuDataVar(
+                name="dew_point_temperature_2m",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="2d",
+                    standard_name="dew_point_temperature",
+                    long_name="2 metre dewpoint temperature",
+                    units="degree_Celsius",
+                    step_type="instant",
+                ),
+                internal_attrs=DwdIconEuInternalAttrs(
+                    variable_name_in_filename="td_2m",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
+            DwdIconEuDataVar(
+                name="pressure_surface",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="sp",
+                    standard_name="surface_air_pressure",
+                    long_name="Surface pressure",
+                    units="Pa",
+                    step_type="instant",
+                ),
+                internal_attrs=DwdIconEuInternalAttrs(
+                    variable_name_in_filename="ps",
+                    keep_mantissa_bits=10,
+                ),
+            ),
+            DwdIconEuDataVar(
+                name="precipitable_water_atmosphere",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="pwat",
+                    standard_name="atmosphere_mass_content_of_water_vapor",
+                    long_name="Precipitable water",
+                    units="kg m-2",
+                    step_type="instant",
+                ),
+                internal_attrs=DwdIconEuInternalAttrs(
+                    variable_name_in_filename="tqv",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
