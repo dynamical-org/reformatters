@@ -41,6 +41,11 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
     window_reset_frequency: Timedelta | None = pd.Timedelta.max
     deaccumulation_invalid_below_threshold_rate: float | None = None
 
+    # MARS archive overrides — only needed where the archive differs from open data.
+    # MARS stores geopotential (z, m²/s²) not geopotential height (gh, gpm).
+    mars_grib_index_param: str | None = None
+    mars_read_scale_factor: float | None = None
+
 
 class EcmwfDataVar(DataVar[EcmwfInternalAttrs]):
     pass
