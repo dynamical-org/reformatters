@@ -26,9 +26,8 @@ from reformatters.common.types import (
     Timedelta,
     Timestamp,
 )
-from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
+from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, vars_available
 from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
-from reformatters.ecmwf.ecmwf_utils import all_variables_available
 
 log = get_logger(__name__)
 
@@ -52,10 +51,8 @@ class EcmwfAifsDeterministicForecastSourceFileCoord(SourceFileCoord):
     lead_time: Timedelta
     data_var_group: Sequence[EcmwfDataVar]
 
-    s3_bucket_url: ClassVar[str] = "ecmwf-forecasts"
-
     def _get_base_url(self) -> str:
-        base_url = f"https://{self.s3_bucket_url}.s3.eu-central-1.amazonaws.com"
+        root_url = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
 
         init_time_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")
@@ -68,7 +65,7 @@ class EcmwfAifsDeterministicForecastSourceFileCoord(SourceFileCoord):
 
         directory_path = f"{init_time_str}/{init_hour_str}z/{model_dir}/0p25/oper"
         filename = f"{init_time_str}{init_hour_str}0000-{lead_time_hour_str}h-oper-fc"
-        return f"{base_url}/{directory_path}/{filename}"
+        return f"{root_url}/{directory_path}/{filename}"
 
     def get_url(self) -> str:
         return self._get_base_url() + ".grib2"
@@ -105,7 +102,7 @@ class EcmwfAifsDeterministicForecastRegionJob(
             processing_region_ds["init_time"].values,
             processing_region_ds["lead_time"].values,
         ):
-            if not all_variables_available(data_var_group, init_time):
+            if not vars_available(data_var_group, init_time):
                 continue
 
             coords.append(
@@ -145,12 +142,14 @@ class EcmwfAifsDeterministicForecastRegionJob(
         expected_comment = data_var.internal_attrs.grib_comment
         expected_description = data_var.internal_attrs.grib_description
 
-        alt = _PRECIP_ALT_GRIB_METADATA.get(data_var.internal_attrs.grib_index_param)
+        alt_metadata = _PRECIP_ALT_GRIB_METADATA.get(
+            data_var.internal_attrs.grib_index_param
+        )
         allowed_comments = {expected_comment}
         allowed_descriptions = {expected_description}
-        if alt is not None:
-            allowed_comments.add(alt[0])
-            allowed_descriptions.add(alt[1])
+        if alt_metadata is not None:
+            allowed_comments.add(alt_metadata[0])
+            allowed_descriptions.add(alt_metadata[1])
 
         with rasterio.open(coord.downloaded_path) as reader:
             matching_bands: list[int] = []

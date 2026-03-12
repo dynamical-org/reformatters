@@ -30,9 +30,8 @@ from reformatters.common.types import (
     Timedelta,
     Timestamp,
 )
-from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
+from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, vars_available
 from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
-from reformatters.ecmwf.ecmwf_utils import all_variables_available
 
 log = get_logger(__name__)
 
@@ -131,13 +130,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             processing_region_ds["lead_time"].values,
             processing_region_ds["ensemble_member"].values,
         ):
-            if not all_variables_available(data_var_group, init_time):
-                dates_available = {
-                    v.internal_attrs.date_available for v in data_var_group
-                }
-                assert len(dates_available) == 1, (
-                    f"Expected all variables in the group to have the same date_available, found {dates_available}"
-                )
+            if not vars_available(data_var_group, init_time):
                 continue
 
             coord = EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(

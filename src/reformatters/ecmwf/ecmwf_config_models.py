@@ -1,8 +1,10 @@
+from collections.abc import Sequence
 from typing import Literal
 
 import pandas as pd
 
 from reformatters.common.config_models import BaseInternalAttrs, DataVar
+from reformatters.common.iterating import item
 from reformatters.common.types import Timedelta, Timestamp
 
 
@@ -44,3 +46,11 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
 
 class EcmwfDataVar(DataVar[EcmwfInternalAttrs]):
     pass
+
+
+def vars_available(
+    data_var_group: Sequence[EcmwfDataVar], init_time: Timestamp
+) -> bool:
+    """Check if a group of vars (which must share the same date_available) are available at init_time."""
+    date_available = item({v.internal_attrs.date_available for v in data_var_group})
+    return date_available is None or date_available <= init_time
