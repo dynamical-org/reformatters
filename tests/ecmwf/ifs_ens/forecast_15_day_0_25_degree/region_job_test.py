@@ -1,11 +1,15 @@
+import json
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from io import StringIO
 from pathlib import Path
 from unittest.mock import Mock
 
 import numpy as np
+import obstore
 import pandas as pd
 import pytest
+import rasterio
 
 from reformatters.common import template_utils
 from reformatters.common.iterating import item
@@ -310,3 +314,130 @@ def test_download_file_from_ecmwf_open_data() -> None:
     ]
     with ThreadPoolExecutor() as executor:
         list(executor.map(check_data_var, all_data_vars))
+
+
+MARS_STAGING_BUCKET = "us-west-2.opendata.source.coop"
+MARS_STAGING_PREFIX = "dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens"
+MARS_STAGING_REGION = "us-west-2"
+
+# MARS archives geopotential (z) not geopotential height (gh)
+MARS_PARAM_MAP: dict[str, str] = {"gh": "z"}
+
+
+def _mars_request_type(levtype: str, ensemble_member: int) -> str:
+    if levtype == "sfc":
+        if ensemble_member == 0:
+            return "cf_sfc"
+        return "pf_sfc_0" if ensemble_member <= 25 else "pf_sfc_1"
+    return "cf_pl" if ensemble_member == 0 else "pf_pl"
+
+
+def _parse_mars_index(raw: bytes) -> list[dict[str, object]]:
+    """Parse a MARS staging index, handling both old (JSON array) and new (JSON-lines) formats.
+
+    Normalizes field names to the open data convention (_offset, _length, levtype=sfc/pl, levelist).
+    """
+    text = raw.decode().strip()
+    if text.startswith("["):
+        entries: list[dict[str, object]] = json.loads(text)
+    else:
+        entries = [json.loads(line) for line in text.splitlines() if line.strip()]
+
+    # Normalize old-format field names if present
+    levtype_map = {"surface": "sfc", "isobaricInhPa": "pl"}
+    for e in entries:
+        if "offset" in e and "_offset" not in e:
+            e["_offset"] = int(e.pop("offset"))
+        if "length" in e and "_length" not in e:
+            e["_length"] = int(e.pop("length"))
+        if "level" in e and "levelist" not in e:
+            e["levelist"] = e.pop("level")
+        if "levtype" in e:
+            e["levtype"] = levtype_map.get(str(e["levtype"]), e["levtype"])
+    return entries
+
+
+def _read_mars_grib_message(
+    store: obstore.store.S3Store,
+    date: str,
+    request_type: str,
+    index: list[dict[str, object]],
+    param: str,
+    step: int,
+    level: int,
+) -> np.ndarray[tuple[int, int], np.dtype[np.float32]]:
+    level_key = "levelist" if level != 0 else None
+    matches = [
+        e
+        for e in index
+        if e["param"] == param
+        and e["step"] == step
+        and (level_key is None or e.get(level_key) == level)
+    ]
+    assert len(matches) == 1, (
+        f"Expected 1 index match for {param}/step={step}/level={level}, got {len(matches)}"
+    )
+    entry = matches[0]
+    offset = int(entry["_offset"])  # ty: ignore[invalid-argument-type]
+    length = int(entry["_length"])  # ty: ignore[invalid-argument-type]
+
+    grib_path = f"{MARS_STAGING_PREFIX}/{date}/{request_type}.grib"
+    data = obstore.get_ranges(store, grib_path, starts=[offset], ends=[offset + length])
+
+    with tempfile.NamedTemporaryFile(suffix=".grib") as f:
+        f.write(bytes(data[0]))
+        f.flush()
+        with rasterio.open(f.name) as reader:
+            assert reader.count == 1
+            result: np.ndarray[tuple[int, int], np.dtype[np.float32]] = reader.read(
+                1, out_dtype=np.float32
+            )
+            return result
+
+
+@pytest.mark.slow
+def test_read_mars_staging_data() -> None:
+    """Validate MARS-staged GRIB data on source.coop is readable and has expected shape/values."""
+    template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
+
+    test_date = "2016-03-08"
+    test_step = 3
+    test_member = 0
+
+    store = obstore.store.S3Store(
+        MARS_STAGING_BUCKET, region=MARS_STAGING_REGION, skip_signature=True
+    )
+
+    index_cache: dict[str, list[dict[str, object]]] = {}
+
+    def get_index(request_type: str) -> list[dict[str, object]]:
+        if request_type not in index_cache:
+            idx_path = f"{MARS_STAGING_PREFIX}/{test_date}/{request_type}.grib.idx"
+            raw = obstore.get(store, idx_path).bytes()
+            index_cache[request_type] = _parse_mars_index(bytes(raw))
+        return index_cache[request_type]
+
+    for data_var in template_config.data_vars:
+        levtype = data_var.internal_attrs.grib_index_level_type
+        mars_param = MARS_PARAM_MAP.get(
+            data_var.internal_attrs.grib_index_param,
+            data_var.internal_attrs.grib_index_param,
+        )
+        mars_level = (
+            int(data_var.internal_attrs.grib_index_level_value)
+            if not np.isnan(data_var.internal_attrs.grib_index_level_value)
+            else 0
+        )
+        request_type = _mars_request_type(levtype, test_member)
+        index = get_index(request_type)
+
+        result = _read_mars_grib_message(
+            store, test_date, request_type, index, mars_param, test_step, mars_level
+        )
+
+        assert result.shape == (721, 1440), (
+            f"{data_var.name}: expected shape (721, 1440), got {result.shape}"
+        )
+        assert np.all(np.isfinite(result)), (
+            f"{data_var.name}: has non-finite values at step={test_step}"
+        )
