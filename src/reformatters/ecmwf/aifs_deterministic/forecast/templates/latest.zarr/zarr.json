@@ -10,7 +10,7 @@
     "time_domain": "Forecasts initialized 2024-04-01 00:00:00 UTC to Present",
     "time_resolution": "Forecasts initialized every 6 hours",
     "forecast_domain": "Forecast lead time 0-360 hours (0-15 days) ahead",
-    "forecast_resolution": "Forecast step 6 hourly"
+    "forecast_resolution": "6 hourly"
   },
   "zarr_format": 3,
   "consolidated_metadata": {

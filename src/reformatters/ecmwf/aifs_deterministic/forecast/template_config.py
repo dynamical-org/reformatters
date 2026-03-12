@@ -48,7 +48,7 @@ class EcmwfAifsDeterministicForecastTemplateConfig(TemplateConfig[EcmwfDataVar])
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
             time_resolution=f"Forecasts initialized every {self.append_dim_frequency.total_seconds() / 3600:.0f} hours",
             forecast_domain="Forecast lead time 0-360 hours (0-15 days) ahead",
-            forecast_resolution="Forecast step 6 hourly",
+            forecast_resolution="6 hourly",
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
