@@ -51,11 +51,12 @@ class DwdIconEuForecastDataset(
             secret_names=self.store_factory.k8s_secret_names(),
         )
 
-        # ICON-EU runs at 00, 06, 12, 18 UTC. Data is available ~4h after init.
-        # We schedule the reformat ~4.5h after each init to give the archive job time to complete.
+        # ICON-EU runs at 00, 06, 12, 18 UTC. Data is available on DWD's server ~3h45m after init.
+        # We schedule the reformat at 4h after init. The archive job may not have finished copying
+        # to Source Co-Op yet, in which case download_file falls back to reading directly from DWD.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="30 4,10,16,22 * * *",
+            schedule="15 4,10,16,22 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -68,7 +69,7 @@ class DwdIconEuForecastDataset(
 
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="15 5,11,17,23 * * *",
+            schedule="0 5,11,17,23 * * *",
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
