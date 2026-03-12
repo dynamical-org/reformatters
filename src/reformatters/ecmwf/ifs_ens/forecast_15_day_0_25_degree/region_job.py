@@ -12,7 +12,10 @@ from zarr.abc.store import Store
 
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import (
+    download_to_disk,
+    get_local_path,
     http_download_to_disk,
+    s3_store,
 )
 from reformatters.common.iterating import digest, item
 from reformatters.common.logging import get_logger
@@ -41,6 +44,22 @@ from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_ind
 log = get_logger(__name__)
 
 
+MARS_OPEN_DATA_CUTOVER = pd.Timestamp("2024-04-01T00:00")
+
+MARS_STAGING_BUCKET = "s3://us-west-2.opendata.source.coop"
+MARS_STAGING_PREFIX = "dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens"
+MARS_STAGING_REGION = "us-west-2"
+
+
+def _mars_request_type(levtype: str, ensemble_member: int) -> str:
+    """Map a level type and ensemble member to the MARS request type used in source.coop file paths."""
+    if levtype == "sfc":
+        if ensemble_member == 0:
+            return "cf_sfc"
+        return "pf_sfc_0" if ensemble_member <= 25 else "pf_sfc_1"
+    return "cf_pl" if ensemble_member == 0 else "pf_pl"
+
+
 class EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(SourceFileCoord):
     """Coordinates of a single source file to process.
 
@@ -60,6 +79,9 @@ class EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(SourceFileCoord):
 
     s3_bucket_url: ClassVar[str] = "ecmwf-forecasts"
     s3_region: ClassVar[str] = "eu-central-1"
+
+    def is_mars_source(self) -> bool:
+        return self.init_time < MARS_OPEN_DATA_CUTOVER
 
     def _get_base_url(self) -> str:
         base_url = f"https://{self.s3_bucket_url}.s3.{self.s3_region}.amazonaws.com"
@@ -82,6 +104,24 @@ class EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(SourceFileCoord):
 
     def get_index_url(self) -> str:
         return self._get_base_url() + ".index"
+
+    def mars_request_types(self) -> set[str]:
+        """Distinct MARS request types needed for all data vars in this coord."""
+        return {
+            _mars_request_type(
+                v.internal_attrs.grib_index_level_type, self.ensemble_member
+            )
+            for v in self.data_var_group
+        }
+
+    def _mars_date_str(self) -> str:
+        return self.init_time.strftime("%Y-%m-%d")
+
+    def mars_grib_s3_path(self, request_type: str) -> str:
+        return f"{MARS_STAGING_PREFIX}/{self._mars_date_str()}/{request_type}.grib"
+
+    def mars_index_s3_path(self, request_type: str) -> str:
+        return f"{MARS_STAGING_PREFIX}/{self._mars_date_str()}/{request_type}.grib.idx"
 
     def out_loc(
         self,
@@ -156,6 +196,13 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         self, coord: EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord
     ) -> Path:
         """Download the file for the given coordinate and return the local path."""
+        if coord.is_mars_source():
+            return self._download_mars_file(coord)
+        return self._download_open_data_file(coord)
+
+    def _download_open_data_file(
+        self, coord: EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord
+    ) -> Path:
         # Download grib index file
         idx_url = coord.get_index_url()
         idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
@@ -177,6 +224,49 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             local_path_suffix=f"-{suffix}",
         )
 
+    def _download_mars_file(
+        self, coord: EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord
+    ) -> Path:
+        store = s3_store(MARS_STAGING_BUCKET, MARS_STAGING_REGION, skip_signature=True)
+        step = whole_hours(coord.lead_time)
+
+        # MARS files are organized by request type; collect byte ranges across all needed types
+        all_byte_range_starts: list[int] = []
+        all_byte_range_ends: list[int] = []
+        # All data vars in a coord share the same request type (same level type + same member)
+        request_type = item(coord.mars_request_types())
+
+        # Download MARS index
+        idx_s3_path = coord.mars_index_s3_path(request_type)
+        idx_local_path = get_local_path(self.dataset_id, idx_s3_path)
+        download_to_disk(store, idx_s3_path, idx_local_path, overwrite_existing=False)
+
+        byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(
+            idx_local_path,
+            coord.data_var_group,
+            coord.ensemble_member,
+            step=step,
+        )
+        all_byte_range_starts.extend(byte_range_starts)
+        all_byte_range_ends.extend(byte_range_ends)
+
+        suffix = digest(
+            f"{s}-{e}"
+            for s, e in zip(all_byte_range_starts, all_byte_range_ends, strict=True)
+        )
+        grib_s3_path = coord.mars_grib_s3_path(request_type)
+        local_path = get_local_path(
+            self.dataset_id, grib_s3_path, local_path_suffix=f"-{suffix}"
+        )
+        download_to_disk(
+            store,
+            grib_s3_path,
+            local_path,
+            byte_ranges=(all_byte_range_starts, all_byte_range_ends),
+            overwrite_existing=True,
+        )
+        return local_path
+
     def read_data(
         self,
         coord: EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord,
@@ -189,22 +279,25 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             assert reader.count == 1, "Expected only one band per downloaded file"
             rasterio_band_index = 1
 
-            grib_comment = reader.tags(rasterio_band_index)["GRIB_COMMENT"]
-            grib_description = reader.descriptions[rasterio_band_index - 1]
+            # MARS GRIBs have different comment/description metadata than open data,
+            # so we only validate these fields for open data sources.
+            if not coord.is_mars_source():
+                grib_comment = reader.tags(rasterio_band_index)["GRIB_COMMENT"]
+                grib_description = reader.descriptions[rasterio_band_index - 1]
 
-            if data_var.name == "categorical_precipitation_type_surface":
-                # ECMWF occasionally adds new values in the reserved range.
-                # Check the first 6 categories that shouldn't change.
-                assert (
-                    grib_comment[:100] == data_var.internal_attrs.grib_comment[:100]
-                ), f"{grib_comment=} != {data_var.internal_attrs.grib_comment=}"
-            else:
-                assert grib_comment == data_var.internal_attrs.grib_comment, (
-                    f"{grib_comment=} != {data_var.internal_attrs.grib_comment=}"
+                if data_var.name == "categorical_precipitation_type_surface":
+                    # ECMWF occasionally adds new values in the reserved range.
+                    # Check the first 6 categories that shouldn't change.
+                    assert (
+                        grib_comment[:100] == data_var.internal_attrs.grib_comment[:100]
+                    ), f"{grib_comment=} != {data_var.internal_attrs.grib_comment=}"
+                else:
+                    assert grib_comment == data_var.internal_attrs.grib_comment, (
+                        f"{grib_comment=} != {data_var.internal_attrs.grib_comment=}"
+                    )
+                assert grib_description == data_var.internal_attrs.grib_description, (
+                    f"{grib_description=} != {data_var.internal_attrs.grib_description}"
                 )
-            assert grib_description == data_var.internal_attrs.grib_description, (
-                f"{grib_description=} != {data_var.internal_attrs.grib_description}"
-            )
 
             result: ArrayFloat32 = reader.read(
                 rasterio_band_index, out_dtype=np.float32
@@ -213,6 +306,13 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             assert result.shape == expected_shape, (
                 f"Expected {expected_shape} shape, found {result.shape}"
             )
+
+            if (
+                coord.is_mars_source()
+                and data_var.internal_attrs.mars_read_scale_factor is not None
+            ):
+                result = result * data_var.internal_attrs.mars_read_scale_factor
+
             return result
 
     def apply_data_transformations(

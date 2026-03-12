@@ -583,6 +583,8 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_index_level_type="pl",
                     grib_index_level_value=500,
                     keep_mantissa_bits=11,
+                    mars_grib_index_param="z",
+                    mars_read_scale_factor=1 / 9.80665,
                 ),
             ),
             EcmwfDataVar(
@@ -603,6 +605,8 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_index_level_type="pl",
                     grib_index_level_value=850,
                     keep_mantissa_bits=11,
+                    mars_grib_index_param="z",
+                    mars_read_scale_factor=1 / 9.80665,
                 ),
             ),
             EcmwfDataVar(
@@ -623,6 +627,8 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_index_level_type="pl",
                     grib_index_level_value=925,
                     keep_mantissa_bits=11,
+                    mars_grib_index_param="z",
+                    mars_read_scale_factor=1 / 9.80665,
                 ),
             ),
             EcmwfDataVar(

@@ -172,3 +172,62 @@ def test_validators(dataset: EcmwfIfsEnsForecast15Day025DegreeDataset) -> None:
     validators = tuple(dataset.validators())
     assert len(validators) == 2
     assert all(isinstance(v, validation.DataValidator) for v in validators)
+
+
+@pytest.mark.slow
+def test_backfill_local_mars_source(
+    monkeypatch: pytest.MonkeyPatch, dataset: EcmwfIfsEnsForecast15Day025DegreeDataset
+) -> None:
+    """Run the full backfill pipeline on MARS-archived data from source.coop.
+
+    This test mirrors test_backfill_local_and_operational_update but uses a pre-2024-04-01
+    init time so data is fetched from the MARS staging bucket instead of ECMWF open data.
+    """
+    variables_to_check = ["temperature_2m", "precipitation_surface"]
+    monkeypatch.setattr(
+        type(dataset.template_config),
+        "data_vars",
+        [
+            var
+            for var in dataset.template_config.data_vars
+            if var.name in variables_to_check
+        ],
+    )
+
+    # Move append_dim_start before the MARS test date (frozen model, so bypass via __dict__)
+    object.__setattr__(
+        dataset.template_config, "append_dim_start", pd.Timestamp("2016-03-08T00:00")
+    )
+
+    orig_get_template = dataset.template_config.get_template
+
+    monkeypatch.setattr(
+        type(dataset.template_config),
+        "get_template",
+        lambda self, end_time: orig_get_template(end_time).sel(
+            lead_time=slice("0h", "6h"), ensemble_member=slice(0, 1)
+        )[variables_to_check],
+    )
+    dataset.backfill_local(append_dim_end=pd.Timestamp("2016-03-09T00:00:00"))
+
+    ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
+    np.testing.assert_array_equal(
+        ds.init_time.values, [np.datetime64("2016-03-08T00:00:00")]
+    )
+
+    # temperature_2m: check shape and finite values at a sample point
+    t2m = ds.sel(
+        init_time="2016-03-08T00:00:00", latitude=0, longitude=0
+    ).temperature_2m
+    assert t2m.shape == (3, 2)  # 3 lead times x 2 ensemble members
+    assert np.all(np.isfinite(t2m.values))
+
+    # precipitation_surface: NaN at lead_time=0, finite and non-negative at later times
+    precip = ds.sel(
+        init_time="2016-03-08T00:00:00", latitude=0, longitude=0
+    ).precipitation_surface
+    assert precip.shape == (3, 2)
+    assert np.all(np.isnan(precip.sel(lead_time="0h").values))
+    later_precip = precip.sel(lead_time=slice("3h", "6h")).values
+    assert np.all(np.isfinite(later_precip))
+    assert np.all(later_precip >= 0)
