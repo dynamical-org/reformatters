@@ -463,40 +463,29 @@ The key insight: `to_icechunk(append_dim="init_time")` handles *both* virtual ar
 
 Dataset has dims `(init_time, lead_time, y, x)`. All init_times have complete lead_time coverage except the latest one, which only has the first 12 hours of a 48-hour forecast. Now 18 hours are available and we want to write the 6 new hours.
 
-### Challenge: Icechunk append is strictly additive along one dimension
+### Zarr's hypercube model makes this straightforward
 
-`to_icechunk(append_dim=...)` **appends** — it grows the dataset along the append dimension. It doesn't support writing into existing positions or filling holes in non-append dimensions.
+Zarr datasets are hypercubes — all arrays share the same dimension extents. When we append a new init_time (even with only 12 of 48 lead times available), the data variable arrays are extended to `(n_init+1, 48, lat, lon)`. Chunks for lead times 12-47 simply don't exist yet and return `fill_value` on read. There's no explicit "pre-allocation" — the hypercube shape implies the slots exist, and missing chunks are fill values by definition.
 
-For our scenario, the lead_time dimension is *not* the append dimension (init_time is). The 12→18 hour fill-in is writing new data into *existing* positions along lead_time for an *existing* init_time. This is a **region write**, not an append.
+So the question is just: **how do we write virtual references into existing chunk positions** when the remaining lead times become available?
 
-### Approach: Use zarr's direct chunk writing via the Icechunk store
+### Approach 1: `set_virtual_ref` on individual chunks
 
-Icechunk exposes a zarr v3 store interface. We can write individual chunks directly:
+Icechunk's store exposes a `set_virtual_ref` API to place virtual chunk references at specific chunk keys:
 
 ```python
-import zarr
-
 session = repo.writable_session("main")
 store = session.store
 
-# Open the zarr group
-root = zarr.open_group(store, mode="r+")
-
 # For each new lead time (hours 12-17), write the virtual reference
-# into the correct position in the existing array
+# into the correct chunk position
 for var_name in data_var_names:
-    arr = root[var_name]
-    # arr has shape (n_init_times, n_lead_times, ny, nx)
-
-    # Write new data at the last init_time, lead_time indices 12-17
-    init_idx = -1  # last init_time
-    for lt_idx, lead_hour in enumerate(range(12, 18)):
-        # For virtual references, we need to set the chunk manifest directly
-        # This requires using the icechunk set_virtual_ref API
-        chunk_key = f"{var_name}/c/{init_idx}/{lt_idx + 12}/0/0"
+    for lt_idx in range(12, 18):
+        # Chunk key follows zarr v3 convention: array_name/c/dim0/dim1/.../dimN
+        chunk_key = f"{var_name}/c/{init_idx}/{lt_idx}/0/0"
         store.set_virtual_ref(
             chunk_key,
-            location=grib_url_for_lead_hour[lead_hour],
+            location=grib_url_for_lead_hour[lt_idx],
             offset=byte_offset,
             length=byte_length,
         )
@@ -504,9 +493,11 @@ for var_name in data_var_names:
 session.commit("Fill lead times 12-17 for latest init_time")
 ```
 
-### Alternative approach: region write via VirtualiZarr
+This is the most direct approach — we're placing GRIB byte-range references into the exact chunk slots that were previously empty (returning fill_value).
 
-VirtualiZarr has experimental `region` support for `to_icechunk`:
+### Approach 2: `to_icechunk(region=...)` via VirtualiZarr
+
+VirtualiZarr has experimental `region` support for `to_icechunk`, providing a higher-level API:
 
 ```python
 # Build virtual dataset for just the new lead times (hours 12-17)
@@ -528,41 +519,36 @@ vds_new.virtualize.to_icechunk(
 session.commit("Fill lead times 12-17 for latest init_time")
 ```
 
-### Practical approach: pre-allocate with fill values
-
-A simpler pattern that avoids partial writes: **always allocate the full lead_time extent** when appending a new init_time, even if not all lead times are available yet.
+### The full workflow
 
 ```python
-# When a new init_time first appears (with only 12 hours available):
+# 1. New init_time arrives with 12h of forecast data available
 vds_12h = build_virtual_dataset(init_ts, lead_hours=range(0, 12))
-
-# Pad to full 48-hour extent with fill values
-# The missing lead times (12-47) will have fill_value (NaN)
-full_lead_times = np.arange(0, 48)
-vds_full = vds_12h.reindex(lead_time=full_lead_times, fill_value=np.nan)
-
+# Append along init_time — zarr hypercube extends all arrays to include
+# the new init_time. Lead time slots 12-47 are implicitly empty (fill_value).
 session = repo.writable_session("main")
-vds_full.virtualize.to_icechunk(session.store, append_dim="init_time")
+vds_12h.virtualize.to_icechunk(session.store, append_dim="init_time")
 session.commit(f"Add init_time={init_ts} (12h available)")
 
-# Later, when hours 12-17 become available:
+# 2. Later, hours 12-17 become available — fill in the empty slots
 vds_new_hours = build_virtual_dataset(init_ts, lead_hours=range(12, 18))
-
-# Use region write or direct chunk API to fill in the gaps
 session = repo.writable_session("main")
-# ... write new chunks at the correct positions
+# Use region write or set_virtual_ref to place refs in existing positions
+vds_new_hours.virtualize.to_icechunk(
+    session.store,
+    region={"init_time": slice(-1, None), "lead_time": slice(12, 18)},
+)
 session.commit(f"Fill lead times 12-17 for init_time={init_ts}")
 ```
 
-This mirrors our rechunked dataset behavior: the `init_time` dimension grows with each append (new forecast cycle), and `ingested_forecast_length` tracks how much of each forecast has been filled in.
+This matches our rechunked dataset pattern: `init_time` grows via append, and `ingested_forecast_length` tracks how much of each forecast has been filled in.
 
 ### Summary of partial write options
 
 | Approach | Pros | Cons |
 |---|---|---|
 | `set_virtual_ref` on individual chunks | Fine-grained control, no overhead | Low-level API, must manage chunk keys manually |
-| `to_icechunk(region=...)` | High-level, works with xarray | Experimental, may not work with virtual references |
-| Pre-allocate + fill later | Simple mental model, matches current architecture | Two commits per init_time, initial read returns NaN for missing hours |
+| `to_icechunk(region=...)` | High-level, works with xarray | Experimental, may not work with virtual references yet |
 
 ## Integration considerations for this repo
 
