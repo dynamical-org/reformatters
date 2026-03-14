@@ -7,9 +7,9 @@ point to byte ranges within remote GRIB2 files on S3, decoded at read time
 by GribberishCodec. Coordinate arrays are stored as real (non-virtual) data.
 
 Phases demonstrated:
-1. Initialize and backfill (3 init times, 7 lead times each)
-2. Update: add a new init time
-3. Update: add 2 new lead times to a previously incomplete init time
+1. Initialize and backfill 3 init times with all lead times
+2. Resize the dataset to add a 4th init time, fill 3 of its lead times
+3. Fill in 2 more lead times for the 4th init time
 """
 
 import shutil
@@ -294,13 +294,37 @@ def report_dataset_state(repo: icechunk.Repository, label: str) -> None:
     ds.close()
 
 
-def backfill_init_times(
-    repo: icechunk.Repository,
-    init_times_all: pd.DatetimeIndex,
-    lead_times_all: pd.TimedeltaIndex,
+def resize_init_time_dimension(
+    store: icechunk.IcechunkStore,
+    new_init_time: pd.Timestamp,
+    new_init_time_count: int,
+    lead_time_count: int,
     data_vars: list[NoaaDataVar],
 ) -> None:
-    """Phase 1: Initialize metadata and backfill 3 init times (3rd partial)."""
+    """Grow the init_time dimension by one, updating coordinate and data arrays."""
+    root = zarr.open_group(store, mode="r+")
+
+    # Resize and append to the init_time coordinate array
+    init_time_arr = root["init_time"]
+    assert isinstance(init_time_arr, zarr.Array)
+    init_time_arr.resize((new_init_time_count,))
+    new_value = int((new_init_time - pd.Timestamp("1970-01-01")).total_seconds())
+    init_time_arr[new_init_time_count - 1] = new_value
+
+    # Resize all data variable arrays
+    for var in data_vars:
+        arr = root[var.name]
+        assert isinstance(arr, zarr.Array)
+        arr.resize((new_init_time_count, lead_time_count, N_LAT, N_LON))
+
+
+def backfill_init_times(
+    repo: icechunk.Repository,
+    backfill_init_times_idx: pd.DatetimeIndex,
+    lead_times: pd.TimedeltaIndex,
+    data_vars: list[NoaaDataVar],
+) -> None:
+    """Phase 1: Initialize metadata and backfill 3 init times with all lead times."""
     log.info("\n%s", "=" * 60)
     log.info("PHASE 1: Initialize and backfill")
     log.info("=" * 60)
@@ -308,94 +332,99 @@ def backfill_init_times(
     session = repo.writable_session("main")
     store = session.store
 
-    initialize_zarr_metadata(store, init_times_all, lead_times_all, data_vars)
+    initialize_zarr_metadata(store, backfill_init_times_idx, lead_times, data_vars)
     log.info("Zarr metadata written")
 
-    for init_idx in range(2):
-        init_time = init_times_all[init_idx]
+    for init_idx, init_time in enumerate(backfill_init_times_idx):
         log.info(f"Backfilling init_time={init_time} (all lead times)")
-        for lt_idx, lead_time in enumerate(lead_times_all):
+        for lt_idx, lead_time in enumerate(lead_times):
             byte_ranges = download_and_parse_index(init_time, lead_time, data_vars)
             set_virtual_refs_for_file(
                 store, init_time, lead_time, init_idx, lt_idx, data_vars, byte_ranges
             )
 
-    # 3rd init time: only lead times 0-4h (incomplete)
-    init_idx = 2
-    init_time = init_times_all[init_idx]
-    incomplete_lead_times = lead_times_all[:5]
-    log.info(f"Backfilling init_time={init_time} (partial: lead times 0-4h only)")
-    for lt_idx, lead_time in enumerate(incomplete_lead_times):
-        byte_ranges = download_and_parse_index(init_time, lead_time, data_vars)
-        set_virtual_refs_for_file(
-            store, init_time, lead_time, init_idx, lt_idx, data_vars, byte_ranges
-        )
-
-    snapshot_id = session.commit(
-        "Phase 1: Initialize and backfill 3 init times (3rd partial)"
-    )
+    snapshot_id = session.commit("Phase 1: Initialize and backfill 3 init times")
     log.info(f"Phase 1 committed: {snapshot_id}")
     report_dataset_state(repo, "After Phase 1 (backfill)")
 
 
 def add_new_init_time(
     repo: icechunk.Repository,
-    init_times_all: pd.DatetimeIndex,
-    lead_times_all: pd.TimedeltaIndex,
+    new_init_time: pd.Timestamp,
+    new_init_time_idx: int,
+    lead_times: pd.TimedeltaIndex,
+    partial_lead_times: pd.TimedeltaIndex,
     data_vars: list[NoaaDataVar],
 ) -> None:
-    """Phase 2: Add a new (4th) init time with all lead times."""
+    """Phase 2: Resize the dataset to add a 4th init time, fill 3 of its lead times."""
     log.info("\n%s", "=" * 60)
-    log.info("PHASE 2: Add new init time")
+    log.info("PHASE 2: Add new init time (partial)")
     log.info("=" * 60)
 
     session = repo.writable_session("main")
     store = session.store
 
-    init_idx = 3
-    init_time = init_times_all[init_idx]
-    log.info(f"Adding init_time={init_time} (all lead times)")
-    for lt_idx, lead_time in enumerate(lead_times_all):
-        byte_ranges = download_and_parse_index(init_time, lead_time, data_vars)
+    resize_init_time_dimension(
+        store, new_init_time, new_init_time_idx + 1, len(lead_times), data_vars
+    )
+    log.info(f"Resized dataset: init_time dimension is now {new_init_time_idx + 1}")
+
+    log.info(
+        f"Adding init_time={new_init_time} (lead times {partial_lead_times[0]}-{partial_lead_times[-1]})"
+    )
+    for lead_time in partial_lead_times:
+        lt_idx_raw = lead_times.get_loc(lead_time)
+        assert isinstance(lt_idx_raw, int)
+        byte_ranges = download_and_parse_index(new_init_time, lead_time, data_vars)
         set_virtual_refs_for_file(
-            store, init_time, lead_time, init_idx, lt_idx, data_vars, byte_ranges
+            store,
+            new_init_time,
+            lead_time,
+            new_init_time_idx,
+            lt_idx_raw,
+            data_vars,
+            byte_ranges,
         )
 
-    snapshot_id = session.commit("Phase 2: Add 4th init time")
+    snapshot_id = session.commit("Phase 2: Add 4th init time with partial lead times")
     log.info(f"Phase 2 committed: {snapshot_id}")
-    report_dataset_state(repo, "After Phase 2 (new init time)")
+    report_dataset_state(repo, "After Phase 2 (new init time, partial)")
 
 
 def fill_missing_lead_times(
     repo: icechunk.Repository,
-    init_times_all: pd.DatetimeIndex,
-    lead_times_all: pd.TimedeltaIndex,
+    init_time: pd.Timestamp,
+    init_time_idx: int,
+    lead_times: pd.TimedeltaIndex,
+    missing_lead_times: pd.TimedeltaIndex,
     data_vars: list[NoaaDataVar],
 ) -> None:
-    """Phase 3: Fill in lead times 5h and 6h for the previously incomplete 3rd init time."""
+    """Phase 3: Fill in remaining lead times for the 4th init time."""
     log.info("\n%s", "=" * 60)
-    log.info("PHASE 3: Add lead times to incomplete init time")
+    log.info("PHASE 3: Fill missing lead times")
     log.info("=" * 60)
 
     session = repo.writable_session("main")
     store = session.store
 
-    init_idx = 2
-    init_time = init_times_all[init_idx]
-    missing_lead_times = lead_times_all[5:]
     log.info(
         f"Filling in lead times {missing_lead_times.tolist()} for init_time={init_time}"
     )
     for lead_time in missing_lead_times:
-        lt_idx_raw = lead_times_all.get_loc(lead_time)
+        lt_idx_raw = lead_times.get_loc(lead_time)
         assert isinstance(lt_idx_raw, int)
-        lt_idx = lt_idx_raw
         byte_ranges = download_and_parse_index(init_time, lead_time, data_vars)
         set_virtual_refs_for_file(
-            store, init_time, lead_time, init_idx, lt_idx, data_vars, byte_ranges
+            store,
+            init_time,
+            lead_time,
+            init_time_idx,
+            lt_idx_raw,
+            data_vars,
+            byte_ranges,
         )
 
-    snapshot_id = session.commit("Phase 3: Fill missing lead times for 3rd init time")
+    snapshot_id = session.commit("Phase 3: Fill remaining lead times for 4th init time")
     log.info(f"Phase 3 committed: {snapshot_id}")
     report_dataset_state(repo, "After Phase 3 (fill missing lead times)")
 
@@ -403,15 +432,34 @@ def fill_missing_lead_times(
 def run_prototype() -> None:
     data_vars = get_prototype_data_vars()
     log.info(f"Prototype variables: {[v.name for v in data_vars]}")
-    log.info(f"Init times: {INIT_TIMES.tolist()}")
+    log.info(f"All init times: {INIT_TIMES.tolist()}")
     log.info(f"Lead times: {LEAD_TIMES.tolist()}")
 
     output_dir = OUTPUT_DIR
     repo = create_repository(output_dir)
 
-    backfill_init_times(repo, INIT_TIMES, LEAD_TIMES, data_vars)
-    add_new_init_time(repo, INIT_TIMES, LEAD_TIMES, data_vars)
-    fill_missing_lead_times(repo, INIT_TIMES, LEAD_TIMES, data_vars)
+    # Phase 1: Backfill first 3 init times with all lead times
+    backfill_init_times(repo, INIT_TIMES[:3], LEAD_TIMES, data_vars)
+
+    # Phase 2: Resize to add 4th init time, fill only first 3 lead times (0h-2h)
+    add_new_init_time(
+        repo,
+        INIT_TIMES[3],
+        new_init_time_idx=3,
+        lead_times=LEAD_TIMES,
+        partial_lead_times=LEAD_TIMES[:3],
+        data_vars=data_vars,
+    )
+
+    # Phase 3: Fill in lead times 3h-4h for the 4th init time
+    fill_missing_lead_times(
+        repo,
+        init_time=INIT_TIMES[3],
+        init_time_idx=3,
+        lead_times=LEAD_TIMES,
+        missing_lead_times=LEAD_TIMES[3:5],
+        data_vars=data_vars,
+    )
 
     log.info("\n%s", "=" * 60)
     log.info("Snapshot history")
