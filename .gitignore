@@ -170,3 +170,6 @@ depot.json
 
 # Temporary files created when copying files from DWD's HTTPS server
 copyurls.csv
+
+# Prototype output artifacts
+prototype_output/
