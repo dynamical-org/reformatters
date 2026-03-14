@@ -449,10 +449,10 @@ ds_old = xr.open_zarr(
 `GribberishCodec` is a zarr v3 `ArrayBytesCodec` registered under the name `"gribberish"`. Key details:
 
 - **Read-only**: `encode()` raises `NotImplementedError`. This is fine for virtual datasets (we never write GRIB data, only references to it).
-- **`var` parameter** controls decoding: `var='latitude'` or `var='longitude'` extracts spatial coordinates via `.latlng()`. Any other string extracts the data array via `parse_grib_array()`.
+- **`var` parameter is not used at read time** (except for the special `latitude`/`longitude` cases which extract spatial coords via `.latlng()`). For all data variables, the codec calls `parse_grib_array(chunk_bytes, 0)` which simply decodes whatever GRIB message is in the byte range — it doesn't match on the variable name. This means the codec decodes whatever bytes `set_virtual_ref` points to, and GRIB element renaming by the data provider (e.g. NOAA renaming `prmsl` → `msla`) is handled entirely at write time in our `.idx` parsing logic, not in the codec.
 - **Output dtype**: Always `float64`. Each GRIB message is decoded to a float64 numpy array.
 - **Whole-message fetch**: The entire GRIB message (byte range) must be fetched to decode any variable from it. No partial reads within a message.
-- **One variable per message**: Each GRIB message contains one field. The codec extracts it by name.
+- **One variable per message**: Each GRIB message contains one field. The codec decodes whatever data is in it.
 
 ### Comparison to existing rechunked dataset structure
 
