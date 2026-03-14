@@ -140,6 +140,64 @@ S3 GRIB files — no weather data is stored locally. The repository contains onl
 For comparison, the same data stored as float32 arrays would be:
 `3 vars x 4 init_times x 7 lead_times x 721 lat x 1440 lon x 4 bytes = ~350 MB`
 
+## Reading the dataset
+
+Open the repository from disk as a new reader — no knowledge of how it was
+created, just the path and the S3 virtual container config:
+
+```python
+import icechunk
+import xarray as xr
+
+storage = icechunk.local_filesystem_storage(str(repo_path))
+config = icechunk.RepositoryConfig.default()
+s3_store_cfg = icechunk.s3_store(region="us-east-1")
+container = icechunk.VirtualChunkContainer("s3://noaa-gfs-bdp-pds/", s3_store_cfg)
+config.set_virtual_chunk_container(container)
+
+repo = icechunk.Repository.open(
+    storage,
+    config=config,
+    authorize_virtual_chunk_access=icechunk.containers_credentials(
+        {"s3://noaa-gfs-bdp-pds/": icechunk.s3_anonymous_credentials()}
+    ),
+)
+session = repo.readonly_session(branch="main")
+ds = xr.open_zarr(session.store, consolidated=False)
+```
+
+Selecting a variable and calling `.values` triggers the S3 fetch and
+GribberishCodec decode. Each chunk fetches one GRIB message (~1 MB compressed).
+
+### Global stats
+
+```
+temperature_2m[init_time=0, lead_time=0h] shape=(721, 1440) dtype=float32
+  min=219.73  max=310.59  mean=277.13
+```
+
+### Point samples (init_time=2026-03-10 00:00Z, lead_time=0h)
+
+| Location | temperature_2m (K) | pressure_surface (Pa) | wind_u_10m (m/s) |
+|---|---|---|---|
+| New York ~40.7N, 74.0W | 274.1 | 100930 | -2.3 |
+| London ~51.5N, 0.1W | 274.8 | 101700 | 6.4 |
+| Tokyo ~35.7N, 139.75E | 290.0 | 101760 | -3.5 |
+| Sydney ~33.9S, 151.2E | 292.7 | 101640 | 2.2 |
+
+### Partially-filled init time
+
+```
+4th init time (2026-03-10 18:00Z), lead_time=1h, New York:
+  temperature_2m=276.3K  pressure_surface=101020Pa
+
+4th init time, lead_time=6h (unfilled):
+  temperature_2m=nan (NaN = unfilled chunk)
+```
+
+Unfilled chunks return NaN automatically — the reader does not need to know
+which lead times have been populated.
+
 ## Observations
 
 1. **Write speed**: Setting virtual references is extremely fast (~1s per phase) since only byte offsets are recorded, not actual data.

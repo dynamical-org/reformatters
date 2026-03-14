@@ -429,6 +429,97 @@ def fill_missing_lead_times(
     report_dataset_state(repo, "After Phase 3 (fill missing lead times)")
 
 
+def read_dataset_as_new_reader(repo_path: Path) -> None:
+    """Open the repository from scratch as a reader would and pull out real values."""
+    log.info("\n%s", "=" * 60)
+    log.info("READER: Opening repository fresh from disk")
+    log.info("=" * 60)
+
+    # -- This is the code a reader would use --
+    storage = icechunk.local_filesystem_storage(str(repo_path))
+    config = icechunk.RepositoryConfig.default()
+    s3_store_cfg = icechunk.s3_store(region="us-east-1")
+    container = icechunk.VirtualChunkContainer(S3_VIRTUAL_PREFIX, s3_store_cfg)
+    config.set_virtual_chunk_container(container)
+
+    repo = icechunk.Repository.open(
+        storage,
+        config=config,
+        authorize_virtual_chunk_access=icechunk.containers_credentials(
+            {S3_VIRTUAL_PREFIX: icechunk.s3_anonymous_credentials()}
+        ),
+    )
+    session = repo.readonly_session(branch="main")
+    ds = xr.open_zarr(session.store, consolidated=False)
+    # -- End reader code --
+
+    log.info(f"Dataset: {ds}")
+    log.info(f"Dimensions: {dict(ds.sizes)}")
+
+    # Pull real values from a populated chunk
+    # temperature_2m at init_time=2026-03-10 00:00, lead_time=0h
+    t2m = ds["temperature_2m"].isel(init_time=0, lead_time=0)
+    t2m_values = t2m.values  # triggers S3 fetch + gribberish decode
+    log.info(
+        f"\ntemperature_2m[init_time=0, lead_time=0h] "
+        f"shape={t2m_values.shape} dtype={t2m_values.dtype}"
+    )
+    log.info(
+        f"  min={np.nanmin(t2m_values):.2f}  max={np.nanmax(t2m_values):.2f}  "
+        f"mean={np.nanmean(t2m_values):.2f}"
+    )
+
+    # A few point samples across the globe
+    sample_points = [
+        ("New York ~40.7N, 74.0W", {"latitude": 40.75, "longitude": -74.0}),
+        ("London ~51.5N, 0.1W", {"latitude": 51.5, "longitude": -0.25}),
+        ("Tokyo ~35.7N, 139.75E", {"latitude": 35.75, "longitude": 139.75}),
+        ("Sydney ~33.9S, 151.2E", {"latitude": -33.75, "longitude": 151.25}),
+    ]
+
+    log.info("\nPoint samples at init_time=2026-03-10 00:00Z, lead_time=0h:")
+    sel = ds.sel(init_time=ds["init_time"][0], lead_time=ds["lead_time"][0])
+    for label, coords in sample_points:
+        point = sel.sel(**coords, method="nearest")
+        t2m_val = float(point["temperature_2m"].values)
+        sp_val = float(point["pressure_surface"].values)
+        u10_val = float(point["wind_u_10m"].values)
+        log.info(
+            f"  {label}: "
+            f"temperature_2m={t2m_val:.1f}K  "
+            f"pressure_surface={sp_val:.0f}Pa  "
+            f"wind_u_10m={u10_val:.1f}m/s"
+        )
+
+    # Show a value from the partially-filled 4th init time (populated lead time)
+    log.info("\nPoint sample from 4th init time (partial), lead_time=1h, New York:")
+    point = ds.sel(
+        init_time=ds["init_time"][3],
+        lead_time=ds["lead_time"][1],
+        latitude=40.75,
+        longitude=-74.0,
+        method="nearest",
+    )
+    log.info(
+        f"  temperature_2m={float(point['temperature_2m'].values):.1f}K  "
+        f"pressure_surface={float(point['pressure_surface'].values):.0f}Pa"
+    )
+
+    # Show a value from an unfilled lead time (should be NaN)
+    log.info("\nPoint sample from 4th init time, lead_time=6h (unfilled):")
+    point = ds.sel(
+        init_time=ds["init_time"][3],
+        lead_time=ds["lead_time"][6],
+        latitude=40.75,
+        longitude=-74.0,
+        method="nearest",
+    )
+    t2m_unfilled = float(point["temperature_2m"].values)
+    log.info(f"  temperature_2m={t2m_unfilled} (NaN = unfilled chunk)")
+
+    ds.close()
+
+
 def run_prototype() -> None:
     data_vars = get_prototype_data_vars()
     log.info(f"Prototype variables: {[v.name for v in data_vars]}")
@@ -470,6 +561,9 @@ def run_prototype() -> None:
     total_size = sum(f.stat().st_size for f in output_dir.rglob("*") if f.is_file())
     log.info(f"\nOn-disk repository size: {total_size / 1024:.1f} KB")
     log.info("(Data variable chunks are virtual references to S3, not stored locally)")
+
+    # Demonstrate reading from the repo as a fresh reader
+    read_dataset_as_new_reader(output_dir)
 
 
 if __name__ == "__main__":
