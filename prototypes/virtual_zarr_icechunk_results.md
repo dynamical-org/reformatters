@@ -278,6 +278,292 @@ ds_old = xr.open_zarr(
 # ds_old has lead_time: 3 (pre-append state)
 ```
 
+---
+
+## Deep dive: GribberishCodec vs repo template structure
+
+### How GribberishCodec works internally
+
+`GribberishCodec` is a zarr v3 `ArrayBytesCodec` registered under the name `"gribberish"`. Key details:
+
+- **Read-only**: `encode()` raises `NotImplementedError`. This is fine for virtual datasets (we never write GRIB data, only references to it).
+- **`var` parameter** controls decoding: `var='latitude'` or `var='longitude'` extracts spatial coordinates via `.latlng()`. Any other string extracts the data array via `parse_grib_array()`.
+- **Output dtype**: Always `float64`. Each GRIB message is decoded to a float64 numpy array.
+- **Whole-message fetch**: The entire GRIB message (byte range) must be fetched to decode any variable from it. No partial reads within a message.
+- **One variable per message**: Each GRIB message contains one field. The codec extracts it by name.
+
+### Comparison to existing rechunked dataset structure
+
+Our rechunked GFS forecast dataset uses:
+
+| Aspect | Rechunked dataset | Virtual GRIB dataset |
+|---|---|---|
+| **Dimensions** | `(init_time, lead_time, latitude, longitude)` | Achievable — we control dims when building ManifestArrays |
+| **Append dim** | `init_time` | Achievable — `to_icechunk(append_dim="init_time")` |
+| **Data dtype** | `float32` | `float64` (GribberishCodec always decodes to float64) |
+| **Data codecs** | `sharding_indexed` → `bytes` + `blosc(zstd, level 3)` | `GribberishCodec` only (no sharding, no compression control) |
+| **Chunk shape** | `(1, 105, 121, 121)` inside `(1, 210, 726, 726)` shards | One chunk = one GRIB message = `(1, 721, 1440)` for GFS 0.25° |
+| **Coord dtype** | `int64` (seconds since epoch) | Computed & written directly as numpy arrays |
+| **Coord codecs** | `bytes` + `blosc(zstd, level 3)` | Standard zarr codecs (not virtual) |
+| **fill_value** | `0.0` | `NaN` (configurable) |
+| **CF attributes** | Full: standard_name, long_name, units, step_type, etc. | We set these ourselves when building the dataset |
+| **Variable names** | CF-style (e.g. `temperature_2m`) | We rename from GRIB names (e.g. `tmp` → `temperature_2m`) |
+| **Derived coords** | `valid_time` (2D: init_time × lead_time), `ingested_forecast_length`, `expected_forecast_length`, `spatial_ref` | `valid_time` achievable; other derived coords written as normal arrays |
+
+### What we can match
+
+1. **Dimensions and dim names** — Fully achievable. We construct the ManifestArrays with whatever `dimension_names` we want.
+
+2. **Variable names and CF attributes** — Fully achievable. We rename variables and set `standard_name`, `long_name`, `units`, `step_type` etc. before writing to Icechunk.
+
+3. **Coordinate arrays** — Fully achievable. Coordinates like `init_time`, `lead_time`, `latitude`, `longitude`, `valid_time`, `spatial_ref` are all written as normal (non-virtual) arrays into Icechunk. We compute `valid_time = init_time + lead_time` ourselves.
+
+4. **Dataset-level attributes** — Fully achievable. We can set `dataset_id`, `dataset_version`, `description`, etc.
+
+5. **Append along init_time** — Achievable with `to_icechunk(append_dim="init_time")`.
+
+### Where there are gaps
+
+1. **Data dtype mismatch** — GribberishCodec always returns `float64`. Our rechunked datasets use `float32`. This doubles memory usage on read. Options:
+   - Accept the overhead (virtual datasets prioritize availability over performance anyway)
+   - Contribute a `dtype` option to gribberish upstream
+   - Add a post-read cast codec in the pipeline (not currently possible in zarr v3 codec chain without a custom codec)
+
+2. **No sharding** — GRIB messages are one field per message, so each chunk = one full spatial grid `(721, 1440)` for GFS. Our rechunked datasets use `(121, 121)` inner chunks inside `(726, 726)` shards. This means:
+   - **Spatial subsetting is expensive**: Reading a small region fetches the entire global grid (~8 MB for float64), vs ~60 KB for a single chunk in the rechunked dataset.
+   - This is the fundamental tradeoff of virtual datasets — you get the source file's chunking.
+
+3. **No compression control** — Data is stored in GRIB2 compression (JPEG2000, simple packing, etc.). Can't apply zstd/blosc. Read performance depends on the GRIB compression used by the data provider.
+
+4. **No bit-rounding/mantissa truncation** — Our rechunked datasets use `keep_mantissa_bits` to reduce data size. Virtual datasets serve the original precision.
+
+5. **No deaccumulation** — Our rechunked pipeline converts accumulation fields (e.g. total precipitation) to rates via `deaccumulate_to_rate`. GribberishCodec serves raw values. Deaccumulation would need to happen at read time (a user-side transform) or in a wrapping codec.
+
+6. **`ingested_forecast_length` / `expected_forecast_length`** — These are repo-specific derived coordinates tracking how much of a forecast has been ingested. They'd need to be computed and written as normal arrays, identical to how `valid_time` is handled.
+
+### Summary: virtual datasets as a complement, not a replacement
+
+Virtual GRIB datasets can match the *metadata structure* (dims, coords, attributes, variable names) of our rechunked datasets almost exactly. The gaps are all in *data encoding and access patterns*:
+- No spatial sharding (whole-grid reads)
+- float64 instead of float32
+- No compression control
+- No derived transformations (deaccumulation, etc.)
+
+This confirms the "fast path" role: virtual datasets provide immediate access to new data with the right metadata shape, while rechunked datasets provide optimized read performance.
+
+## Mixed storage: zstd-compressed coords + GRIB data vars
+
+### Can we mix storage types in one Icechunk dataset?
+
+**Yes.** Icechunk stores each array independently. Within a single dataset:
+- **Coordinate arrays** (init_time, lead_time, latitude, longitude, valid_time, spatial_ref) are written as normal zarr arrays with standard codecs (bytes + blosc/zstd). These are small and stored directly in Icechunk.
+- **Data variables** (temperature_2m, wind_u_10m, etc.) are virtual references to GRIB byte ranges, decoded by GribberishCodec at read time.
+
+This happens naturally in the prototype — when we `assign_coords()` with numpy arrays and then call `to_icechunk()`, the coordinates are stored as native zarr chunks while the ManifestArray-backed data variables are stored as virtual references.
+
+```python
+# Coordinates: normal numpy arrays → stored as native zarr with default codecs
+vds = vds.assign_coords(
+    init_time=np.array([init_ts], dtype="datetime64[ns]"),
+    lead_time=lead_time_values,   # timedelta64
+    valid_time=(("init_time", "lead_time"), valid_time_2d),  # 2D derived coord
+    latitude=lat_array,
+    longitude=lon_array,
+)
+
+# Data variables: ManifestArray → stored as virtual references with GribberishCodec
+# (already constructed with ManifestArray + GribberishCodec)
+
+# Write to Icechunk — both types coexist in the same store
+session = repo.writable_session("main")
+vds.virtualize.to_icechunk(session.store)
+session.commit("Mixed storage: native coords + virtual GRIB data")
+```
+
+When reading back:
+```python
+ds = xr.open_zarr(store, consolidated=False)
+# ds.coords["latitude"]  → loaded from native zarr (zstd-compressed)
+# ds["temperature_2m"]   → lazy dask array, reads GRIB via GribberishCodec
+```
+
+### Encoding control for coordinates
+
+To control coordinate encoding (e.g., force int64 seconds-since-epoch for timestamps, blosc/zstd compression), set encoding before writing:
+
+```python
+# Before calling to_icechunk, encode time coordinates as int64
+init_time_seconds = (init_ts - pd.Timestamp("1970-01-01")) // pd.Timedelta("1s")
+vds = vds.assign_coords(
+    init_time=xr.Variable(
+        "init_time",
+        np.array([init_time_seconds], dtype="int64"),
+        attrs={
+            "units": "seconds since 1970-01-01 00:00:00",
+            "calendar": "proleptic_gregorian",
+            "standard_name": "forecast_reference_time",
+        },
+    ),
+)
+```
+
+This approach matches the encoding used by our rechunked datasets (int64 seconds since epoch with blosc/zstd).
+
+## Updating non-GRIB coordinates (e.g. `init_time`, `valid_time`)
+
+### The problem
+
+When appending a new init_time to the dataset, we need to:
+1. Add virtual references for the GRIB data (ManifestArrays)
+2. Update coordinate arrays that aren't in the GRIB files: `init_time`, `valid_time`, `ingested_forecast_length`, etc.
+
+### The solution
+
+Coordinates are normal zarr arrays in Icechunk. When building the virtual dataset for a new init_time, we include both:
+
+```python
+def build_dataset_for_init_time(init_ts, grib_urls, lead_hours):
+    """Build a complete virtual dataset for one init_time, ready for append."""
+
+    # 1. Build virtual ManifestArrays for each data variable from GRIB files
+    data_vars = {}
+    for url, lead_h in zip(grib_urls, lead_hours):
+        var_refs = scan_grib_variables(url, target_vars)
+        for var_name, info in var_refs.items():
+            # Build ManifestArray with shape (1, 1, nlat, nlon) for this lead time
+            # ... (as shown in Step 1b above)
+            pass
+
+    # Concat along lead_time to get shape (1, n_lead, nlat, nlon)
+    # ...
+
+    # 2. Compute and assign coordinate arrays (non-virtual, stored directly)
+    lead_time_ns = np.array([pd.Timedelta(hours=h) for h in lead_hours])
+    valid_times = np.array([init_ts + pd.Timedelta(hours=h) for h in lead_hours])
+
+    vds = vds.assign_coords(
+        init_time=("init_time", [init_ts]),
+        lead_time=("lead_time", lead_time_ns),
+        valid_time=(("init_time", "lead_time"), valid_times.reshape(1, -1)),
+    )
+
+    return vds
+
+# Append to existing dataset
+session = repo.writable_session("main")
+vds_new.virtualize.to_icechunk(session.store, append_dim="init_time")
+session.commit(f"Add init_time={init_ts}")
+```
+
+The key insight: `to_icechunk(append_dim="init_time")` handles *both* virtual arrays (data vars) and native arrays (coordinates) in the same append operation. The init_time coordinate array grows by one element, the valid_time 2D array grows by one row, and the data variable ManifestArrays grow along the init_time dimension.
+
+## Partial writes: filling in missing lead times
+
+### Scenario
+
+Dataset has dims `(init_time, lead_time, y, x)`. All init_times have complete lead_time coverage except the latest one, which only has the first 12 hours of a 48-hour forecast. Now 18 hours are available and we want to write the 6 new hours.
+
+### Challenge: Icechunk append is strictly additive along one dimension
+
+`to_icechunk(append_dim=...)` **appends** — it grows the dataset along the append dimension. It doesn't support writing into existing positions or filling holes in non-append dimensions.
+
+For our scenario, the lead_time dimension is *not* the append dimension (init_time is). The 12→18 hour fill-in is writing new data into *existing* positions along lead_time for an *existing* init_time. This is a **region write**, not an append.
+
+### Approach: Use zarr's direct chunk writing via the Icechunk store
+
+Icechunk exposes a zarr v3 store interface. We can write individual chunks directly:
+
+```python
+import zarr
+
+session = repo.writable_session("main")
+store = session.store
+
+# Open the zarr group
+root = zarr.open_group(store, mode="r+")
+
+# For each new lead time (hours 12-17), write the virtual reference
+# into the correct position in the existing array
+for var_name in data_var_names:
+    arr = root[var_name]
+    # arr has shape (n_init_times, n_lead_times, ny, nx)
+
+    # Write new data at the last init_time, lead_time indices 12-17
+    init_idx = -1  # last init_time
+    for lt_idx, lead_hour in enumerate(range(12, 18)):
+        # For virtual references, we need to set the chunk manifest directly
+        # This requires using the icechunk set_virtual_ref API
+        chunk_key = f"{var_name}/c/{init_idx}/{lt_idx + 12}/0/0"
+        store.set_virtual_ref(
+            chunk_key,
+            location=grib_url_for_lead_hour[lead_hour],
+            offset=byte_offset,
+            length=byte_length,
+        )
+
+session.commit("Fill lead times 12-17 for latest init_time")
+```
+
+### Alternative approach: region write via VirtualiZarr
+
+VirtualiZarr has experimental `region` support for `to_icechunk`:
+
+```python
+# Build virtual dataset for just the new lead times (hours 12-17)
+vds_new = build_virtual_dataset_for_lead_times(
+    init_ts=latest_init_time,
+    lead_hours=range(12, 18),
+)
+# vds_new has shape: init_time=1, lead_time=6, lat=721, lon=1440
+
+# Write into a specific region of the existing dataset
+session = repo.writable_session("main")
+vds_new.virtualize.to_icechunk(
+    session.store,
+    region={
+        "init_time": slice(-1, None),      # last init_time
+        "lead_time": slice(12, 18),         # lead times 12-17
+    },
+)
+session.commit("Fill lead times 12-17 for latest init_time")
+```
+
+### Practical approach: pre-allocate with fill values
+
+A simpler pattern that avoids partial writes: **always allocate the full lead_time extent** when appending a new init_time, even if not all lead times are available yet.
+
+```python
+# When a new init_time first appears (with only 12 hours available):
+vds_12h = build_virtual_dataset(init_ts, lead_hours=range(0, 12))
+
+# Pad to full 48-hour extent with fill values
+# The missing lead times (12-47) will have fill_value (NaN)
+full_lead_times = np.arange(0, 48)
+vds_full = vds_12h.reindex(lead_time=full_lead_times, fill_value=np.nan)
+
+session = repo.writable_session("main")
+vds_full.virtualize.to_icechunk(session.store, append_dim="init_time")
+session.commit(f"Add init_time={init_ts} (12h available)")
+
+# Later, when hours 12-17 become available:
+vds_new_hours = build_virtual_dataset(init_ts, lead_hours=range(12, 18))
+
+# Use region write or direct chunk API to fill in the gaps
+session = repo.writable_session("main")
+# ... write new chunks at the correct positions
+session.commit(f"Fill lead times 12-17 for init_time={init_ts}")
+```
+
+This mirrors our rechunked dataset behavior: the `init_time` dimension grows with each append (new forecast cycle), and `ingested_forecast_length` tracks how much of each forecast has been filled in.
+
+### Summary of partial write options
+
+| Approach | Pros | Cons |
+|---|---|---|
+| `set_virtual_ref` on individual chunks | Fine-grained control, no overhead | Low-level API, must manage chunk keys manually |
+| `to_icechunk(region=...)` | High-level, works with xarray | Experimental, may not work with virtual references |
+| Pre-allocate + fill later | Simple mental model, matches current architecture | Two commits per init_time, initial read returns NaN for missing hours |
+
 ## Integration considerations for this repo
 
 ### How this could fit alongside rechunked datasets
@@ -297,6 +583,8 @@ Virtual datasets could serve as a "fast path" companion to the fully rechunked z
 - **Source file durability**: Virtual datasets break if source files are moved or deleted. NODD data rotates off after ~10 days for real-time products.
 - **No compression control**: Data is read in whatever compression the source file uses - can't optimize for zarr-specific codecs like zstd or blosc.
 - **Append dimension choice**: The append dimension must exist at write time and match between initial write and subsequent appends. Both datasets must have the same structure for non-append dimensions.
+- **float64 output**: GribberishCodec always returns float64, doubling memory vs our float32 rechunked datasets.
+- **No data transformations**: Deaccumulation, unit conversion, bit-rounding all happen at read time with virtual datasets (if at all). The rechunked pipeline handles these at write time.
 
 ### Relevant icechunk configuration for S3
 
