@@ -2,9 +2,11 @@
 
 Prototype exploring virtual zarr datasets backed by Icechunk, using GFS-like weather data.
 
-**Libraries**: virtualizarr 2.4.0, icechunk 1.1.15, xarray 2026.x, zarr 3.1.3
+**Libraries**: virtualizarr 2.4.0, icechunk 1.1.15, xarray 2026.x, zarr 3.1.3, gribberish 0.29.0
 
-**Script**: [`prototypes/virtual_zarr_icechunk.py`](virtual_zarr_icechunk.py)
+**Scripts**:
+- [`prototypes/virtual_zarr_icechunk.py`](virtual_zarr_icechunk.py) — NetCDF4 approach (full pipeline demo)
+- [`prototypes/virtual_grib_gribberish.py`](virtual_grib_gribberish.py) — Direct GRIB approach using gribberish
 
 ## Overview
 
@@ -12,13 +14,19 @@ Virtual zarr datasets store *references* (byte ranges) to data in existing files
 
 ## Key findings
 
-### GRIB limitation
+### GRIB: kerchunk doesn't work, but gribberish does
 
-GRIB files cannot be directly virtualized with VirtualiZarr + zarr v3 today. The kerchunk GRIB scanner (`kerchunk.grib2.scan_grib`) works and produces reference dicts, but these references use a `numcodecs.grib` codec that is not available in the zarr v3 codec pipeline. This means:
+**kerchunk** (`kerchunk.grib2.scan_grib`) scans GRIB files and produces reference dicts, but these use a `numcodecs.grib` codec not available in zarr v3. VirtualiZarr rejects these references.
 
-- **kerchunk scanning works**: successfully scans GFS GRIB files on S3, finds all 696+ messages per file, filters to specific variables
-- **VirtualiZarr rejects the references**: the `numcodecs.grib` codec is not registered in zarr v3
-- **Workaround**: convert GRIB to NetCDF4/HDF5 first, then virtualize. This is what the prototype does. In production, source data on object storage in HDF5/NetCDF4 format can be virtualized directly.
+**[gribberish](https://github.com/mpiannucci/gribberish)** solves this. It provides `gribberish.zarr.GribberishCodec`, a proper zarr v3 `ArrayBytesCodec` that decodes raw GRIB2 messages. The pipeline:
+
+1. Use gribberish's low-level API to scan GRIB → byte offsets per message
+2. Build VirtualiZarr `ManifestArray` objects with `GribberishCodec` as the codec
+3. Write to Icechunk with `vds.virtualize.to_icechunk(store)`
+
+This enables **direct GRIB virtualization without any format conversion**.
+
+Note: gribberish also has a `gribberish.kerchunk` module with `scan_gribberish()`, but it uses a numcodecs v2 codec class that is incompatible with zarr v3. The manual ManifestArray approach using `gribberish.zarr.GribberishCodec` is needed until `scan_gribberish` is updated for zarr v3, or a native VirtualiZarr GRIB parser is added ([VirtualiZarr #312](https://github.com/zarr-developers/VirtualiZarr/issues/312)).
 
 ### What works well
 
@@ -82,6 +90,69 @@ Data variables:
 ```
 
 Note the `ManifestArray` data type - no actual data is loaded, only byte-range references.
+
+### Step 1b: Direct GRIB virtualization with gribberish
+
+For GRIB files, use gribberish to scan byte offsets and build ManifestArrays with the zarr v3 GribberishCodec:
+
+```python
+import fsspec
+import numpy as np
+from gribberish import parse_grib_dataset
+from gribberish.kerchunk.mapper import _split_file
+from gribberish.zarr.codec import GribberishCodec
+from virtualizarr.manifests import ManifestArray, ChunkManifest
+from virtualizarr.manifests.utils import create_v3_array_metadata
+
+url = "s3://noaa-gfs-bdp-pds/gfs.20260313/00/atmos/gfs.t00z.pgrb2.0p25.f000"
+
+# Scan GRIB file for byte offsets
+var_refs = {}
+with fsspec.open(url, "rb", anon=True) as f:
+    for offset, size, data in _split_file(f):
+        dataset = parse_grib_dataset(data, encode_coords=True)
+        var_name = next(iter(dataset["data_vars"]))
+        var_data = dataset["data_vars"][var_name]
+        var_refs[var_name] = {
+            "offset": offset, "size": size,
+            "shape": tuple(var_data["values"]["shape"]),
+            "dims": var_data["dims"], "attrs": var_data["attrs"],
+        }
+
+# Build ManifestArray with GribberishCodec for each variable
+for var_name, info in var_refs.items():
+    manifest = ChunkManifest.from_arrays(
+        paths=np.array([url], dtype=np.dtypes.StringDType()),
+        offsets=np.array([info["offset"]], dtype=np.uint64),
+        lengths=np.array([info["size"]], dtype=np.uint64),
+    )
+    metadata = create_v3_array_metadata(
+        shape=info["shape"], chunk_shape=info["shape"],
+        data_type=np.dtype("float64"),
+        codecs=[GribberishCodec(var=var_name).to_dict()],
+        fill_value=np.nan, attributes=info["attrs"],
+        dimension_names=info["dims"],
+    )
+    marr = ManifestArray(metadata=metadata, chunkmanifest=manifest)
+    # ... add to xr.Dataset as xr.Variable(info["dims"], marr)
+```
+
+**Result** (6 surface variables from real GFS GRIB on S3):
+```
+<xarray.Dataset> Size: 50MB
+Dimensions:  (time: 1, latitude: 721, longitude: 1440)
+Data variables:
+    prmsl    (time, latitude, longitude) float64 8MB ManifestArray<shape=(1, 721, 1440)>
+    ugrd     (time, latitude, longitude) float64 8MB ManifestArray<shape=(1, 721, 1440)>
+    vgrd     (time, latitude, longitude) float64 8MB ManifestArray<shape=(1, 721, 1440)>
+    gust     (time, latitude, longitude) float64 8MB ManifestArray<shape=(1, 721, 1440)>
+    tmp      (time, latitude, longitude) float64 8MB ManifestArray<shape=(1, 721, 1440)>
+    dpt      (time, latitude, longitude) float64 8MB ManifestArray<shape=(1, 721, 1440)>
+
+Codecs for 'tmp': (GribberishCodec(var='tmp'),)
+```
+
+Each ManifestArray points to a byte range in the original GRIB file on S3. The GribberishCodec (Rust-based) decodes the GRIB2 message at read time.
 
 ### Step 2: Store in Icechunk
 
@@ -221,7 +292,7 @@ Virtual datasets could serve as a "fast path" companion to the fully rechunked z
 
 ### Limitations to consider
 
-- **GRIB codec gap**: GRIB files can't be virtualized directly with zarr v3 today. Need HDF5/NetCDF4 source files or a conversion step. This is the biggest blocker for directly virtualizing NOAA NODD GRIB archives.
+- **GRIB virtualization requires gribberish**: kerchunk's GRIB scanner uses `numcodecs.grib` (zarr v2 only). Direct GRIB virtualization works via [gribberish](https://github.com/mpiannucci/gribberish)'s zarr v3 `GribberishCodec`, but requires manually building ManifestArrays (no high-level `open_virtual_dataset` parser yet — tracked in [VirtualiZarr #312](https://github.com/zarr-developers/VirtualiZarr/issues/312)).
 - **Read performance**: Virtual references read data from the original files, which may not be optimally chunked for the access patterns users want. This is the core reason rechunking exists.
 - **Source file durability**: Virtual datasets break if source files are moved or deleted. NODD data rotates off after ~10 days for real-time products.
 - **No compression control**: Data is read in whatever compression the source file uses - can't optimize for zarr-specific codecs like zstd or blosc.
