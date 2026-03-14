@@ -27,11 +27,17 @@ Virtual GRIB datasets can be built using just icechunk + zarr + GRIB index files
 
 Create the zarr structure in icechunk with the right metadata. No data is written — just array definitions, fixed coordinates, and attributes.
 
+This can reuse our existing `TemplateConfig` subclasses almost entirely. The template config already defines all dimensions, variable names, CF attributes, coordinate arrays, and dataset-level metadata. Each `DataVar`'s `internal_attrs.grib_element` provides the GRIB variable name mapping. The only differences for virtual datasets are the codecs (GribberishCodec instead of sharding+blosc+zstd), chunk shape (one GRIB message per chunk), and dtype (float64 from GribberishCodec).
+
 ```python
 import zarr
-import numpy as np
 import icechunk
 from gribberish.zarr.codec import GribberishCodec
+
+# Reuse existing template config — it already has all dims, coords, attrs, var definitions
+from reformatters.noaa.gfs.forecast.template_config import GFSForecastTemplateConfig
+
+template_config = GFSForecastTemplateConfig()
 
 # Create icechunk repo with virtual chunk container for NOAA S3
 storage = icechunk.s3_storage(bucket="our-icechunk-bucket", prefix="virtual-gfs/", region="us-east-1")
@@ -44,58 +50,64 @@ repo = icechunk.Repository.create(storage, config)
 session = repo.writable_session("main")
 root = zarr.open_group(session.store, mode="w")
 
-# Data variable arrays — shape starts at 0 along init_time, grows with each update.
-# One chunk = one GRIB message = one (lead_time, lat, lon) slice.
-# GribberishCodec is the read-side codec; we never write GRIB data, only references.
-var_mapping = {
-    "temperature_2m": "tmp",        # dataset var name → GRIB var name
-    "wind_u_10m": "ugrd",
-    "wind_v_10m": "vgrd",
-    # ...
-}
-for var_name, grib_var in var_mapping.items():
+# Data variable arrays — reuse names, attrs from template config.
+# Swap encoding: GribberishCodec instead of sharding+blosc+zstd,
+# one chunk per GRIB message, float64 output.
+spatial_shape = (template_config.dims["latitude"], template_config.dims["longitude"])
+n_lead_times = template_config.dims["lead_time"]
+
+for data_var in template_config.data_vars:
+    grib_var = data_var.internal_attrs.grib_element  # e.g. "TMP", "UGRD"
     root.create_array(
-        var_name,
-        shape=(0, n_lead_times, n_lat, n_lon),
-        chunk_shape=(1, 1, n_lat, n_lon),
+        data_var.name,
+        shape=(0, n_lead_times, *spatial_shape),
+        chunk_shape=(1, 1, *spatial_shape),
         dtype="float64",
         codecs=[GribberishCodec(var=grib_var).to_dict()],
         fill_value=float("nan"),
-        dimension_names=["init_time", "lead_time", "latitude", "longitude"],
-        attributes={
-            "standard_name": "air_temperature",
-            "long_name": "2 metre temperature",
-            "units": "K",
-            "step_type": "instant",
-        },
+        dimension_names=list(template_config.dims.keys()),
+        attributes=data_var.attrs.model_dump(exclude_none=True),  # CF attrs from template
     )
 
-# Fixed coordinates (written once, never change)
-root.create_array("latitude", data=lat_values, dimension_names=["latitude"],
-                  attributes={"units": "degrees_north", "standard_name": "latitude"})
-root.create_array("longitude", data=lon_values, dimension_names=["longitude"],
-                  attributes={"units": "degrees_east", "standard_name": "longitude"})
-root.create_array("lead_time", data=lead_time_seconds, dtype="int64",
-                  dimension_names=["lead_time"],
-                  attributes={"units": "seconds", "standard_name": "forecast_period"})
+# Coordinates — reuse from template config's dimension_coordinates() and coord definitions.
+# Fixed coordinates (written once)
+dim_coords = template_config.dimension_coordinates()
+for coord in template_config.coords:
+    if coord.name in ("latitude", "longitude", "lead_time"):
+        root.create_array(
+            coord.name,
+            data=dim_coords[coord.name],
+            dtype=coord.encoding.dtype,
+            dimension_names=[coord.name],
+            attributes=coord.attrs.model_dump(exclude_none=True),
+        )
 
 # Growable coordinates (start empty, grow with init_time)
-root.create_array("init_time", shape=(0,), chunk_shape=(chunk_size,), dtype="int64",
-                  dimension_names=["init_time"],
-                  attributes={"units": "seconds since 1970-01-01", "calendar": "proleptic_gregorian"})
-root.create_array("valid_time", shape=(0, n_lead_times), chunk_shape=(chunk_size, n_lead_times),
-                  dtype="int64", dimension_names=["init_time", "lead_time"],
-                  attributes={"units": "seconds since 1970-01-01", "calendar": "proleptic_gregorian"})
+for coord in template_config.coords:
+    if coord.name == "init_time":
+        root.create_array(
+            "init_time", shape=(0,),
+            chunk_shape=(template_config.append_dim_coordinate_chunk_size(),),
+            dtype=coord.encoding.dtype,
+            dimension_names=["init_time"],
+            attributes=coord.attrs.model_dump(exclude_none=True),
+        )
+    elif coord.name == "valid_time":
+        root.create_array(
+            "valid_time", shape=(0, n_lead_times),
+            chunk_shape=(template_config.append_dim_coordinate_chunk_size(), n_lead_times),
+            dtype=coord.encoding.dtype,
+            dimension_names=["init_time", "lead_time"],
+            attributes=coord.attrs.model_dump(exclude_none=True),
+        )
 
-# Dataset-level attributes
-root.attrs.update({
-    "dataset_id": "noaa-gfs-forecast-virtual",
-    "Conventions": "CF-1.7",
-    "description": "Virtual GFS forecast dataset backed by GRIB references",
-})
+# Dataset-level attributes — also from template config
+root.attrs.update(template_config.dataset_attributes.model_dump(exclude_none=True))
 
 session.commit("Initialize virtual GFS dataset")
 ```
+
+This shares all variable names, CF attributes (`standard_name`, `long_name`, `units`, `step_type`), coordinate definitions, dimension structure, and dataset metadata with the rechunked dataset. The only virtual-specific code is the codec and chunk shape.
 
 ### Update (runs on each new data arrival)
 
