@@ -2,11 +2,161 @@
 
 Prototype exploring virtual zarr datasets backed by Icechunk, using GFS-like weather data.
 
-**Libraries**: virtualizarr 2.4.0, icechunk 1.1.15, xarray 2026.x, zarr 3.1.3, gribberish 0.29.0
+**Libraries**: icechunk 1.1.15, zarr 3.1.3, gribberish 0.29.0 (read-side codec only), xarray 2026.x
 
 **Scripts**:
 - [`prototypes/virtual_zarr_icechunk.py`](virtual_zarr_icechunk.py) — NetCDF4 approach (full pipeline demo)
 - [`prototypes/virtual_grib_gribberish.py`](virtual_grib_gribberish.py) — Direct GRIB approach using gribberish
+
+## Proposed pipeline
+
+Virtual GRIB datasets can be built using just icechunk + zarr + GRIB index files. No VirtualiZarr or gribberish needed at write time — gribberish is only the read-side codec that zarr uses to decode GRIB bytes when someone reads the data.
+
+### Write-time dependencies
+
+- **icechunk**: store + version control
+- **zarr**: array metadata (shape, dtype, codecs, attributes)
+- **GRIB `.idx` files**: small text files published by NOAA alongside every GRIB, containing variable names + byte offsets + lengths
+
+### Read-time dependencies
+
+- **icechunk + zarr**: serves chunks
+- **gribberish**: `GribberishCodec` (zarr v3 `ArrayBytesCodec`) decodes GRIB bytes on read
+
+### One-time setup
+
+Create the zarr structure in icechunk with the right metadata. No data is written — just array definitions, fixed coordinates, and attributes.
+
+```python
+import zarr
+import numpy as np
+import icechunk
+from gribberish.zarr.codec import GribberishCodec
+
+# Create icechunk repo with virtual chunk container for NOAA S3
+storage = icechunk.s3_storage(bucket="our-icechunk-bucket", prefix="virtual-gfs/", region="us-east-1")
+config = icechunk.RepositoryConfig.default()
+config.set_virtual_chunk_container(
+    icechunk.VirtualChunkContainer("s3://noaa-gfs-bdp-pds/", icechunk.s3_store(region="us-east-1"))
+)
+repo = icechunk.Repository.create(storage, config)
+
+session = repo.writable_session("main")
+root = zarr.open_group(session.store, mode="w")
+
+# Data variable arrays — shape starts at 0 along init_time, grows with each update.
+# One chunk = one GRIB message = one (lead_time, lat, lon) slice.
+# GribberishCodec is the read-side codec; we never write GRIB data, only references.
+var_mapping = {
+    "temperature_2m": "tmp",        # dataset var name → GRIB var name
+    "wind_u_10m": "ugrd",
+    "wind_v_10m": "vgrd",
+    # ...
+}
+for var_name, grib_var in var_mapping.items():
+    root.create_array(
+        var_name,
+        shape=(0, n_lead_times, n_lat, n_lon),
+        chunk_shape=(1, 1, n_lat, n_lon),
+        dtype="float64",
+        codecs=[GribberishCodec(var=grib_var).to_dict()],
+        fill_value=float("nan"),
+        dimension_names=["init_time", "lead_time", "latitude", "longitude"],
+        attributes={
+            "standard_name": "air_temperature",
+            "long_name": "2 metre temperature",
+            "units": "K",
+            "step_type": "instant",
+        },
+    )
+
+# Fixed coordinates (written once, never change)
+root.create_array("latitude", data=lat_values, dimension_names=["latitude"],
+                  attributes={"units": "degrees_north", "standard_name": "latitude"})
+root.create_array("longitude", data=lon_values, dimension_names=["longitude"],
+                  attributes={"units": "degrees_east", "standard_name": "longitude"})
+root.create_array("lead_time", data=lead_time_seconds, dtype="int64",
+                  dimension_names=["lead_time"],
+                  attributes={"units": "seconds", "standard_name": "forecast_period"})
+
+# Growable coordinates (start empty, grow with init_time)
+root.create_array("init_time", shape=(0,), chunk_shape=(chunk_size,), dtype="int64",
+                  dimension_names=["init_time"],
+                  attributes={"units": "seconds since 1970-01-01", "calendar": "proleptic_gregorian"})
+root.create_array("valid_time", shape=(0, n_lead_times), chunk_shape=(chunk_size, n_lead_times),
+                  dtype="int64", dimension_names=["init_time", "lead_time"],
+                  attributes={"units": "seconds since 1970-01-01", "calendar": "proleptic_gregorian"})
+
+# Dataset-level attributes
+root.attrs.update({
+    "dataset_id": "noaa-gfs-forecast-virtual",
+    "Conventions": "CF-1.7",
+    "description": "Virtual GFS forecast dataset backed by GRIB references",
+})
+
+session.commit("Initialize virtual GFS dataset")
+```
+
+### Update (runs on each new data arrival)
+
+Parse GRIB `.idx` files for byte offsets and place virtual references. Resize only if there's a new init_time.
+
+```python
+session = repo.writable_session("main")
+root = zarr.open_group(session.store, mode="r+")
+
+# --- Resize if new init_time ---
+if is_new_init_time:
+    init_idx = root["init_time"].shape[0]  # index of the new init_time
+    new_n = init_idx + 1
+
+    # Resize every array that has init_time as a dimension
+    for name in root:
+        arr = root[name]
+        if "init_time" in (arr.metadata.dimension_names or []):
+            new_shape = list(arr.shape)
+            new_shape[arr.metadata.dimension_names.index("init_time")] = new_n
+            arr.resize(tuple(new_shape))
+
+    # Update coordinate arrays
+    root["init_time"][init_idx] = int(init_ts.timestamp())
+    root["valid_time"][init_idx, :] = [
+        int((init_ts + lead_td).timestamp()) for lead_td in lead_timedeltas
+    ]
+else:
+    init_idx = ...  # existing init_time index
+
+# --- Place virtual refs from .idx files ---
+# .idx files are small text files (~100KB) with lines like:
+#   1:0:d=2026031300:TMP:2 m above ground:anl:
+#   2:385212:d=2026031300:RH:2 m above ground:anl:
+# Each line gives: message_number:byte_offset:metadata
+# Byte length = next message's offset - this message's offset
+
+for lt_idx, lead_hour in enumerate(lead_hours_to_update):
+    grib_url = f"s3://noaa-gfs-bdp-pds/gfs.{date}/{init_hour}/atmos/gfs.t{init_hour}z.pgrb2.0p25.f{lead_hour:03d}"
+    idx_entries = parse_idx_file(grib_url + ".idx")  # → {grib_var: (offset, length)}
+
+    for var_name, grib_var in var_mapping.items():
+        offset, length = idx_entries[grib_var]
+        session.store.set_virtual_ref(
+            f"{var_name}/c/{init_idx}/{lt_idx}/0/0",
+            grib_url,
+            offset=offset,
+            length=length,
+        )
+
+session.commit(f"Add GFS {init_ts}")
+```
+
+### What this gives us
+
+- **Write path**: parse `.idx` text files + `set_virtual_ref` calls. No GRIB data access, no scanning. Fast.
+- **Read path**: `xr.open_zarr(store)` returns a lazy dataset. Reads go through icechunk → fetch GRIB byte range from S3 → GribberishCodec decodes → numpy array.
+- **Partial fills**: If only 12 of 48 lead times are available, set refs for those 12. The rest return `fill_value` (NaN). When more arrive, set refs for the new ones. No resize needed.
+- **Version control**: Every commit is a snapshot. Time travel to any previous state.
+
+---
 
 ## Overview
 
