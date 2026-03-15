@@ -10,13 +10,13 @@ from reformatters.common import template_utils
 from reformatters.common.config_models import DataVarAttrs, Encoding
 from reformatters.common.pydantic import replace
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
-from reformatters.dwd.icon_eu.forecast.region_job import (
-    DwdIconEuForecastRegionJob,
-    DwdIconEuForecastSourceFileCoord,
+from reformatters.dwd.icon_eu.forecast_5_day.region_job import (
+    DwdIconEuForecast5DayRegionJob,
+    DwdIconEuForecast5DaySourceFileCoord,
 )
-from reformatters.dwd.icon_eu.forecast.template_config import (
+from reformatters.dwd.icon_eu.forecast_5_day.template_config import (
     DwdIconEuDataVar,
-    DwdIconEuForecastTemplateConfig,
+    DwdIconEuForecast5DayTemplateConfig,
     DwdIconEuInternalAttrs,
 )
 
@@ -56,8 +56,8 @@ def t_2m_data_var() -> DwdIconEuDataVar:
 @pytest.fixture
 def source_file_coord(
     t_2m_data_var: DwdIconEuDataVar,
-) -> DwdIconEuForecastSourceFileCoord:
-    return DwdIconEuForecastSourceFileCoord(
+) -> DwdIconEuForecast5DaySourceFileCoord:
+    return DwdIconEuForecast5DaySourceFileCoord(
         init_time=pd.Timestamp("2000-01-01T00:00"),
         lead_time=pd.Timedelta(0),
         data_var=t_2m_data_var,
@@ -65,12 +65,12 @@ def source_file_coord(
 
 
 @pytest.fixture
-def region_job() -> DwdIconEuForecastRegionJob:
-    template_config = DwdIconEuForecastTemplateConfig()
+def region_job() -> DwdIconEuForecast5DayRegionJob:
+    template_config = DwdIconEuForecast5DayTemplateConfig()
     template_ds = template_config.get_template(
         end_time=template_config.append_dim_start + template_config.append_dim_frequency
     )
-    return DwdIconEuForecastRegionJob.model_construct(
+    return DwdIconEuForecast5DayRegionJob.model_construct(
         tmp_store=Mock(),
         template_ds=template_ds,
         data_vars=template_config.data_vars,
@@ -81,13 +81,13 @@ def region_job() -> DwdIconEuForecastRegionJob:
 
 
 def test_source_file_coord_get_url(
-    source_file_coord: DwdIconEuForecastSourceFileCoord,
+    source_file_coord: DwdIconEuForecast5DaySourceFileCoord,
 ) -> None:
     assert source_file_coord.get_url() == SOURCE_CO_OP_URL
 
 
 def test_source_file_coord_get_fallback_url(
-    source_file_coord: DwdIconEuForecastSourceFileCoord,
+    source_file_coord: DwdIconEuForecast5DaySourceFileCoord,
 ) -> None:
     dir_name = "https://opendata.dwd.de/weather/nwp/icon-eu/grib/00/t_2m/"
     expected = dir_name + BASE_FILENAME
@@ -95,13 +95,13 @@ def test_source_file_coord_get_fallback_url(
 
 
 def test_source_file_coord_get_variable_name_in_filename(
-    source_file_coord: DwdIconEuForecastSourceFileCoord,
+    source_file_coord: DwdIconEuForecast5DaySourceFileCoord,
 ) -> None:
     assert source_file_coord.variable_name_in_filename == "t_2m"
 
 
 def test_source_file_coord_out_loc(
-    source_file_coord: DwdIconEuForecastSourceFileCoord,
+    source_file_coord: DwdIconEuForecast5DaySourceFileCoord,
 ) -> None:
     out_loc = source_file_coord.out_loc()
     assert out_loc == {
@@ -111,8 +111,8 @@ def test_source_file_coord_out_loc(
 
 
 def test_region_job_source_groups() -> None:
-    template_config = DwdIconEuForecastTemplateConfig()
-    groups = DwdIconEuForecastRegionJob.source_groups(template_config.data_vars)
+    template_config = DwdIconEuForecast5DayTemplateConfig()
+    groups = DwdIconEuForecast5DayRegionJob.source_groups(template_config.data_vars)
     # Each variable gets its own group (one var per GRIB file)
     assert len(groups) == len(template_config.data_vars)
     for group in groups:
@@ -120,9 +120,9 @@ def test_region_job_source_groups() -> None:
 
 
 def test_region_job_generate_source_file_coords(
-    region_job: DwdIconEuForecastRegionJob,
+    region_job: DwdIconEuForecast5DayRegionJob,
 ) -> None:
-    template_config = DwdIconEuForecastTemplateConfig()
+    template_config = DwdIconEuForecast5DayTemplateConfig()
     processing_region_ds, _ = region_job._get_region_datasets()
 
     source_file_coords = region_job.generate_source_file_coords(
@@ -134,13 +134,13 @@ def test_region_job_generate_source_file_coords(
 
 
 def test_region_job_download_file(
-    region_job: DwdIconEuForecastRegionJob,
-    source_file_coord: DwdIconEuForecastSourceFileCoord,
+    region_job: DwdIconEuForecast5DayRegionJob,
+    source_file_coord: DwdIconEuForecast5DaySourceFileCoord,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     download_to_disk_mock = Mock()
     monkeypatch.setattr(
-        "reformatters.dwd.icon_eu.forecast.region_job.http_download_to_disk",
+        "reformatters.dwd.icon_eu.forecast_5_day.region_job.http_download_to_disk",
         download_to_disk_mock,
     )
 
@@ -148,12 +148,12 @@ def test_region_job_download_file(
 
     url, dataset_id = download_to_disk_mock.call_args[0]
     assert url == SOURCE_CO_OP_URL
-    assert dataset_id == "dwd-icon-eu-forecast"
+    assert dataset_id == "dwd-icon-eu-forecast-5-day"
 
 
 def test_region_job_download_file_fallback(
-    region_job: DwdIconEuForecastRegionJob,
-    source_file_coord: DwdIconEuForecastSourceFileCoord,
+    region_job: DwdIconEuForecast5DayRegionJob,
+    source_file_coord: DwdIconEuForecast5DaySourceFileCoord,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     call_count = 0
@@ -166,7 +166,7 @@ def test_region_job_download_file_fallback(
         return Path("/fake/fallback.grib2.bz2")
 
     monkeypatch.setattr(
-        "reformatters.dwd.icon_eu.forecast.region_job.http_download_to_disk",
+        "reformatters.dwd.icon_eu.forecast_5_day.region_job.http_download_to_disk",
         mock_download,
     )
 
@@ -176,7 +176,7 @@ def test_region_job_download_file_fallback(
 
 
 def test_region_job_apply_data_transformations_deaccumulation(
-    region_job: DwdIconEuForecastRegionJob,
+    region_job: DwdIconEuForecast5DayRegionJob,
     t_2m_data_var: DwdIconEuDataVar,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -194,7 +194,7 @@ def test_region_job_apply_data_transformations_deaccumulation(
 
     mock_deaccum = Mock()
     monkeypatch.setattr(
-        "reformatters.dwd.icon_eu.forecast.region_job.deaccumulate_to_rates_inplace",
+        "reformatters.dwd.icon_eu.forecast_5_day.region_job.deaccumulate_to_rates_inplace",
         mock_deaccum,
     )
 
@@ -203,7 +203,7 @@ def test_region_job_apply_data_transformations_deaccumulation(
 
 
 def test_region_job_apply_data_transformations_scale_factor(
-    region_job: DwdIconEuForecastRegionJob,
+    region_job: DwdIconEuForecast5DayRegionJob,
     t_2m_data_var: DwdIconEuDataVar,
 ) -> None:
     data_var = replace(
@@ -224,7 +224,7 @@ def test_operational_update_jobs(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    template_config = DwdIconEuForecastTemplateConfig()
+    template_config = DwdIconEuForecast5DayTemplateConfig()
     store_factory = StoreFactory(
         primary_storage_config=StorageConfig(
             base_path=str(tmp_path / "prod"),
@@ -241,7 +241,7 @@ def test_operational_update_jobs(
     existing_ds = template_config.get_template(end_time=existing_ds_end_time)
     template_utils.write_metadata(existing_ds, store_factory)
 
-    jobs, template_ds = DwdIconEuForecastRegionJob.operational_update_jobs(
+    jobs, template_ds = DwdIconEuForecast5DayRegionJob.operational_update_jobs(
         primary_store=store_factory.primary_store(),
         tmp_store=tmp_path / "tmp.zarr",
         get_template_fn=template_config.get_template,
@@ -253,18 +253,18 @@ def test_operational_update_jobs(
     assert template_ds.init_time.max() == pd.Timestamp("2026-05-02T12:00")
     assert len(jobs) == 7  # 2026-05-01T00 through 2026-05-02T12
     for job in jobs:
-        assert isinstance(job, DwdIconEuForecastRegionJob)
+        assert isinstance(job, DwdIconEuForecast5DayRegionJob)
         assert job.data_vars == template_config.data_vars
 
 
 @pytest.mark.slow
 def test_download_and_read_all_variables() -> None:
     """Download a real ICON-EU GRIB file and read all template variables."""
-    template_config = DwdIconEuForecastTemplateConfig()
+    template_config = DwdIconEuForecast5DayTemplateConfig()
     # Use a recent init time from the Source Co-Op archive
     init_time = (pd.Timestamp.now() - pd.Timedelta(hours=12)).floor("6h")
 
-    region_job = DwdIconEuForecastRegionJob.model_construct(
+    region_job = DwdIconEuForecast5DayRegionJob.model_construct(
         tmp_store=Mock(),
         template_ds=template_config.get_template(pd.Timestamp.now()),
         data_vars=template_config.data_vars,
@@ -276,7 +276,7 @@ def test_download_and_read_all_variables() -> None:
     lead_time = pd.Timedelta(hours=1)
 
     for data_var in template_config.data_vars:
-        coord = DwdIconEuForecastSourceFileCoord(
+        coord = DwdIconEuForecast5DaySourceFileCoord(
             init_time=init_time,
             lead_time=lead_time,
             data_var=data_var,

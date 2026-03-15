@@ -5,13 +5,13 @@ import pandas as pd
 import rioxarray  # noqa: F401
 from pyproj import CRS
 
-from reformatters.dwd.icon_eu.forecast.template_config import (
-    DwdIconEuForecastTemplateConfig,
+from reformatters.dwd.icon_eu.forecast_5_day.template_config import (
+    DwdIconEuForecast5DayTemplateConfig,
 )
 
 
 def test_spatial_coordinates() -> None:
-    template_config = DwdIconEuForecastTemplateConfig()
+    template_config = DwdIconEuForecast5DayTemplateConfig()
     ds = template_config.get_template(
         template_config.append_dim_start + pd.Timedelta(days=10)
     )
@@ -36,7 +36,7 @@ def test_spatial_coordinates() -> None:
 
 
 def test_template_config_attrs() -> None:
-    config = DwdIconEuForecastTemplateConfig()
+    config = DwdIconEuForecast5DayTemplateConfig()
 
     assert config.dims == ("init_time", "lead_time", "latitude", "longitude")
     assert config.append_dim == "init_time"
@@ -59,7 +59,7 @@ def test_template_config_attrs() -> None:
 
 
 def test_dimension_coordinates() -> None:
-    config = DwdIconEuForecastTemplateConfig()
+    config = DwdIconEuForecast5DayTemplateConfig()
     dim_coords = config.dimension_coordinates()
 
     assert "init_time" in dim_coords
@@ -84,7 +84,7 @@ def test_dimension_coordinates() -> None:
 
 
 def test_template_variables_have_required_attrs() -> None:
-    config = DwdIconEuForecastTemplateConfig()
+    config = DwdIconEuForecast5DayTemplateConfig()
 
     for var in config.data_vars:
         assert var.name
@@ -97,7 +97,7 @@ def test_template_variables_have_required_attrs() -> None:
 
 
 def test_coordinate_configs() -> None:
-    config = DwdIconEuForecastTemplateConfig()
+    config = DwdIconEuForecast5DayTemplateConfig()
     coords = config.coords
 
     coord_names = [coord.name for coord in coords]
@@ -118,7 +118,7 @@ def test_coordinate_configs() -> None:
 
 
 def test_derive_coordinates() -> None:
-    config = DwdIconEuForecastTemplateConfig()
+    config = DwdIconEuForecast5DayTemplateConfig()
     template_ds = config.get_template(config.append_dim_start + pd.Timedelta(days=10))
 
     assert (
@@ -129,7 +129,7 @@ def test_derive_coordinates() -> None:
 
 
 def test_get_template_spatial_ref() -> None:
-    template_config = DwdIconEuForecastTemplateConfig()
+    template_config = DwdIconEuForecast5DayTemplateConfig()
     ds = template_config.get_template(
         template_config.append_dim_start + pd.Timedelta(days=10)
     )
@@ -159,9 +159,9 @@ def test_get_template_spatial_ref() -> None:
 
 
 def test_dataset_attributes() -> None:
-    config = DwdIconEuForecastTemplateConfig()
+    config = DwdIconEuForecast5DayTemplateConfig()
     attrs = config.dataset_attributes
-    assert attrs.dataset_id == "dwd-icon-eu-forecast"
+    assert attrs.dataset_id == "dwd-icon-eu-forecast-5-day"
     assert attrs.dataset_version == "0.1.0"
     assert "Europe" in attrs.spatial_domain
     assert "0.0625" in attrs.spatial_resolution

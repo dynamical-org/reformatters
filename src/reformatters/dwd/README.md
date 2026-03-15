@@ -32,10 +32,10 @@ sudo ln -s /snap/bin/rclone /usr/bin/rclone
 ```
 
 You can test locally like this:
-`uv run main dwd-icon-eu-forecast archive-grib-files --dst-root-path=/local/path`
+`uv run main dwd-icon-eu-forecast-5-day archive-grib-files --dst-root-path=/local/path`
 
 To test uploading to a cloud bucket, `--dst-root-path` can start with `rclone` remote, in the form
 `--dst-root-path=remote:path`
 
 For command line arguments that allow you to limit the number of files downloaded, see 
-`uv run main dwd-icon-eu-forecast archive-grib-files --help`
+`uv run main dwd-icon-eu-forecast-5-day archive-grib-files --help`

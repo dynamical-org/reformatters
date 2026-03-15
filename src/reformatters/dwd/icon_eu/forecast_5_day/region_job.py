@@ -33,7 +33,7 @@ from .template_config import DwdIconEuDataVar
 log = get_logger(__name__)
 
 
-class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
+class DwdIconEuForecast5DaySourceFileCoord(SourceFileCoord):
     """Coordinates of a single source file to process.
 
     Note that, unlike NOAA's NWPs, ICON-EU is published as one GRIB2 file per variable.
@@ -88,8 +88,8 @@ class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
         return self.data_var.internal_attrs.variable_name_in_filename
 
 
-class DwdIconEuForecastRegionJob(
-    RegionJob[DwdIconEuDataVar, DwdIconEuForecastSourceFileCoord]
+class DwdIconEuForecast5DayRegionJob(
+    RegionJob[DwdIconEuDataVar, DwdIconEuForecast5DaySourceFileCoord]
 ):
     @classmethod
     def source_groups(
@@ -110,7 +110,7 @@ class DwdIconEuForecastRegionJob(
         self,
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[DwdIconEuDataVar],
-    ) -> Sequence[DwdIconEuForecastSourceFileCoord]:
+    ) -> Sequence[DwdIconEuForecast5DaySourceFileCoord]:
         """Return a sequence of coords, one for each source file required to process the data
         covered by processing_region_ds.
 
@@ -130,7 +130,7 @@ class DwdIconEuForecastRegionJob(
         assert len(lead_times) > 0
 
         return [
-            DwdIconEuForecastSourceFileCoord(
+            DwdIconEuForecast5DaySourceFileCoord(
                 init_time=init_time,
                 lead_time=lead_time,
                 data_var=data_var,
@@ -139,7 +139,7 @@ class DwdIconEuForecastRegionJob(
             for lead_time in lead_times
         ]
 
-    def download_file(self, coord: DwdIconEuForecastSourceFileCoord) -> Path:
+    def download_file(self, coord: DwdIconEuForecast5DaySourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path.
 
         Downloads the `.grib.bz2` file and returns its local `Path`.
@@ -156,7 +156,7 @@ class DwdIconEuForecastRegionJob(
 
     def read_data(
         self,
-        coord: DwdIconEuForecastSourceFileCoord,
+        coord: DwdIconEuForecast5DaySourceFileCoord,
         data_var: DwdIconEuDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
@@ -222,7 +222,7 @@ class DwdIconEuForecastRegionJob(
         all_data_vars: Sequence[DwdIconEuDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence["RegionJob[DwdIconEuDataVar, DwdIconEuForecastSourceFileCoord]"],
+        Sequence["RegionJob[DwdIconEuDataVar, DwdIconEuForecast5DaySourceFileCoord]"],
         xr.Dataset,
     ]:
         """Return the sequence of RegionJob instances necessary to update the dataset from its
@@ -258,7 +258,7 @@ class DwdIconEuForecastRegionJob(
 
         Returns
         -------
-        Sequence[RegionJob[DwdIconEuDataVar, DwdIconEuForecastSourceFileCoord]]
+        Sequence[RegionJob[DwdIconEuDataVar, DwdIconEuForecast5DaySourceFileCoord]]
             RegionJob instances that need processing for operational updates.
         xr.Dataset
             The template_ds for the operational update.

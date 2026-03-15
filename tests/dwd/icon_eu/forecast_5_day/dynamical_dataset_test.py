@@ -6,20 +6,20 @@ from numpy.testing import assert_array_equal
 
 from reformatters.common import validation
 from reformatters.common.storage import DatasetFormat, StorageConfig
-from reformatters.dwd.icon_eu.forecast.dynamical_dataset import (
-    DwdIconEuForecastDataset,
+from reformatters.dwd.icon_eu.forecast_5_day.dynamical_dataset import (
+    DwdIconEuForecast5DayDataset,
 )
 from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 from tests.xarray_testing import assert_no_nulls
 
 
 @pytest.fixture
-def dataset() -> DwdIconEuForecastDataset:
+def dataset() -> DwdIconEuForecast5DayDataset:
     return _make_dataset()
 
 
-def _make_dataset() -> DwdIconEuForecastDataset:
-    return DwdIconEuForecastDataset(
+def _make_dataset() -> DwdIconEuForecast5DayDataset:
+    return DwdIconEuForecast5DayDataset(
         primary_storage_config=NOOP_STORAGE_CONFIG,
         replica_storage_configs=[
             StorageConfig(
@@ -145,7 +145,7 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_operational_kubernetes_resources(
-    dataset: DwdIconEuForecastDataset,
+    dataset: DwdIconEuForecast5DayDataset,
 ) -> None:
     cron_jobs = list(dataset.operational_kubernetes_resources("test-image-tag"))
 
@@ -164,7 +164,7 @@ def test_operational_kubernetes_resources(
     assert len(validation_cron_job.secret_names) > 0
 
 
-def test_validators(dataset: DwdIconEuForecastDataset) -> None:
+def test_validators(dataset: DwdIconEuForecast5DayDataset) -> None:
     validators = tuple(dataset.validators())
     assert len(validators) == 2
     assert all(isinstance(v, validation.DataValidator) for v in validators)
