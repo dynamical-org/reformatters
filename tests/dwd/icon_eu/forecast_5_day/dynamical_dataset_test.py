@@ -143,6 +143,25 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
         space_subset_ds[["precipitation_surface"]].sel(lead_time=slice("1h", None))
     )
 
+    # Snapshot-style value assertions at a specific point after update
+    update_init_time = pd.Timestamp("2026-02-10T06:00")
+    point_ds = (
+        updated_ds.sel(init_time=update_init_time)
+        .isel(latitude=300, longitude=700)
+        .sel(lead_time=slice("0h", "1h"))
+    )
+    assert_array_equal(
+        point_ds["temperature_2m"].values, np.array([-6.125, -5.625], dtype=np.float32)
+    )
+    np.testing.assert_allclose(
+        point_ds["precipitation_surface"].values,
+        np.array([np.nan, 2.0302832e-07], dtype=np.float32),
+    )
+    assert_array_equal(
+        point_ds["dew_point_temperature_2m"].values,
+        np.array([-7.46875, -6.9375], dtype=np.float32),
+    )
+
 
 def test_operational_kubernetes_resources(
     dataset: DwdIconEuForecast5DayDataset,
