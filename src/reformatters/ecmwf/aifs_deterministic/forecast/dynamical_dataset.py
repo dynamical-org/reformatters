@@ -27,7 +27,7 @@ class EcmwfAifsDeterministicForecastDataset(
         suspend = True
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="25 */6 * * *",
+            schedule="21 */6 * * *",
             suspend=suspend,
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
@@ -40,7 +40,7 @@ class EcmwfAifsDeterministicForecastDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="55 */6 * * *",
+            schedule="51 */6 * * *",
             suspend=suspend,
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
