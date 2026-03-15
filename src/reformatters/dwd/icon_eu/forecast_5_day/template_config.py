@@ -58,7 +58,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
         return DatasetAttributes(
             dataset_id="dwd-icon-eu-forecast-5-day",
             dataset_version="0.1.0",
-            name="DWD ICON-EU Forecast 5 Day",
+            name="DWD ICON-EU Forecast, 5 Day",
             description=(
                 "High-resolution weather forecasts for Europe from the ICON-EU model operated by"
                 " Deutscher Wetterdienst (DWD)."
