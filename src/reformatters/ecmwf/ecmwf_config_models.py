@@ -10,36 +10,24 @@ from reformatters.common.types import Timedelta, Timestamp
 
 
 class EcmwfInternalAttrs(BaseInternalAttrs):
-    """
-    Variable specific attributes used internally to drive processing.
-    Not written to the dataset.
+    """Variable specific attributes used internally to drive processing. Not written to the dataset."""
 
-    Functional fields:
-        window_reset_frequency: for resetting deaccumulation windows
-        grib_index_param: The short name of the param as it exists in the index file. Does not map to any names in the grib.
-        grib_index_param_lead_time_overrides: At certain lead time ranges ECMWF uses different
-            param names in the index file for the same variable. E.g. "10fg3" instead of "10fg"
-            at lead times 93h-144h. Each tuple is (start_lead_time, end_lead_time, override_param).
-        grib_comment: Description of the param as it exists in the grib.
-
-    Additional informational fields, not currently used in processing:
-        grib_element: should be the short name of the param within the grib, but sometimes "unknown"
-        grib_description:  description of the level, not the variable
-    """
-
+    # The short name of the param as it exists in the index file. Does not map to any names in the grib.
     grib_index_param: str
-    # At certain lead time ranges ECMWF uses different param names in the index file
-    # for the same variable. E.g. "10fg3" instead of "10fg" at lead times 93h-144h.
+    # ECMWF sometimes uses different param names in the index at certain lead time ranges.
     # Each tuple is (start_lead_time, end_lead_time, override_param).
     grib_index_param_lead_time_overrides: tuple[
         tuple[Timedelta, Timedelta, str], ...
     ] = ()
+    # Description of the param as it exists in the grib.
     grib_comment: str
 
     grib_index_level_type: Literal["sfc", "pl"] = "sfc"  # surface or pressure level
     grib_index_level_value: float = float("nan")
 
-    # additional informational metadata, not currently used in processing:
+    # Informational metadata, not used in processing.
+    # grib_element: short name of the param within the grib, but sometimes "unknown"
+    # grib_description: description of the level, not the variable
     grib_element: str
     grib_description: str
 
