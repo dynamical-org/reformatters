@@ -25,7 +25,7 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
     grib_index_level_type: Literal["sfc", "pl"] = "sfc"  # surface or pressure level
     grib_index_level_value: float = float("nan")
 
-    # Informational metadata, not used in processing.
+    # Grib attributes used to select correct message
     # grib_element: short name of the param within the grib, but sometimes "unknown"
     # grib_description: description of the level, not the variable
     grib_element: str
