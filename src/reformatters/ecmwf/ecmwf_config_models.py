@@ -19,7 +19,7 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
         grib_index_param: The short name of the param as it exists in the index file. Does not map to any names in the grib.
         grib_index_param_lead_time_overrides: At certain lead time ranges ECMWF uses different
             param names in the index file for the same variable. E.g. "10fg3" instead of "10fg"
-            at lead times 93h-144h. Keys are slices of lead_time, values are the param name to use.
+            at lead times 93h-144h. Each tuple is (start_lead_time, end_lead_time, override_param).
         grib_comment: Description of the param as it exists in the grib.
 
     Additional informational fields, not currently used in processing:
