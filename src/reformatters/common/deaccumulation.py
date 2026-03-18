@@ -22,6 +22,7 @@ def deaccumulate_to_rates_inplace(
     skip_step: Array1D[np.bool] | None = None,
     invalid_below_threshold_rate: float = PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
     expected_invalid_fraction: float = 0.0,
+    expected_clamp_fraction: float = 0.05,
 ) -> xr.DataArray:
     """
     Convert accumulated values to per-second rates in place.
@@ -37,6 +38,9 @@ def deaccumulate_to_rates_inplace(
             after deaccumulation. For example, MRMS data has ~6% no-data sentinel values
             that become invalid after deaccumulation. Only raises ValueError if the actual
             invalid fraction exceeds this expected amount.
+        expected_clamp_fraction: Fraction of values expected to be clamped to 0 (small
+            negative rates from lossy compression artifacts). Raises ValueError if actual
+            clamped fraction exceeds this.
     """
     assert data_array.attrs["units"] in VALID_OUTPUT_UNITS_FOR_DEACCUMULATION, (
         "Output units must be a per-second rate"
@@ -68,20 +72,20 @@ def deaccumulate_to_rates_inplace(
         np.prod(data_array.shape[time_dim_index + 1 :] or 1),
     )
 
-    negative_count, clamped_count = _deaccumulate_to_rates_numba(
+    invalid_negative_count, clamped_count = _deaccumulate_to_rates_numba(
         values, seconds, reset_after, skip_step, invalid_below_threshold_rate
     )
 
-    invalid_fraction = negative_count / values.size
+    invalid_fraction = invalid_negative_count / values.size
     if invalid_fraction > expected_invalid_fraction:
         raise ValueError(
-            f"Found {negative_count} values ({invalid_fraction:.1%}) below threshold, "
+            f"Found {invalid_negative_count} values ({invalid_fraction:.1%}) below threshold, "
             f"expected at most {expected_invalid_fraction:.1%}"
         )
     clamped_fraction = clamped_count / values.size
-    if clamped_fraction > 0.05:
+    if clamped_fraction > expected_clamp_fraction:
         raise ValueError(
-            f"Over 5% ({clamped_count} total, {clamped_fraction:.1%}) values were clamped to 0"
+            f"Over {expected_clamp_fraction:.0%} ({clamped_count} total, {clamped_fraction:.1%}) values were clamped to 0"
         )
 
     return data_array
@@ -103,7 +107,7 @@ def _deaccumulate_to_rates_numba(
     If they go down to a *rate* that is less than `invalid_below_threshold`,
     this sets the value to NaN.
 
-    Returns (negative_count, clamped_count) for the caller to decide whether to raise.
+    Returns (invalid_negative_count, clamped_count) for the caller to decide whether to raise.
 
     Parallel processing is done over the leading dimension of values.
     """
@@ -117,7 +121,7 @@ def _deaccumulate_to_rates_numba(
 
     n_lead_times = values.shape[1]
 
-    negative_count = 0
+    invalid_negative_count = 0
     clamped_count = 0
 
     for i in prange(values.shape[0]):  # ty: ignore[not-iterable]
@@ -156,7 +160,7 @@ def _deaccumulate_to_rates_numba(
                         clamped_count += 1
                         sequence[t] = 0
                     else:
-                        negative_count += 1
+                        invalid_negative_count += 1
                         sequence[t] = np.nan
 
-    return negative_count, clamped_count
+    return invalid_negative_count, clamped_count

@@ -213,9 +213,7 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
                     data_array,
                     dim="time",
                     reset_frequency=data_var.internal_attrs.window_reset_frequency,
-                    # ~6.2% of MRMS pixels have -3.0 no-data sentinel (over-ocean/no-coverage areas)
-                    # which becomes invalid after deaccumulation
-                    expected_invalid_fraction=0.07,
+                    expected_invalid_fraction=data_var.internal_attrs.expected_invalid_fraction,
                 )
             except ValueError:
                 log.exception(f"Error deaccumulating {data_var.name}")
