@@ -680,6 +680,9 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_description='10[m] HTGL="Specified height level above ground"',
                     grib_element="GUST",
                     grib_index_param="10fg",
+                    grib_index_param_lead_time_overrides=(
+                        (pd.Timedelta("93h"), pd.Timedelta("144h"), "10fg3"),
+                    ),
                     keep_mantissa_bits=6,
                     date_available=pd.Timestamp("2024-11-13T00:00"),
                 ),

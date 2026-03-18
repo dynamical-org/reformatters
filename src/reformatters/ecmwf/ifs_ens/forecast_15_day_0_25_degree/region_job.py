@@ -33,6 +33,7 @@ from reformatters.common.types import (
 from reformatters.ecmwf.ecmwf_config_models import (
     EcmwfDataVar,
     has_hour_0_values,
+    resolve_grib_index_params,
     vars_available,
 )
 from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
@@ -160,9 +161,10 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
 
         # Download the grib messages for the data vars in the coord using byte ranges
+        data_vars = resolve_grib_index_params(coord.data_var_group, coord.lead_time)
         byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(
             idx_local_path,
-            coord.data_var_group,
+            data_vars,
             coord.ensemble_member,
         )
         suffix = digest(
