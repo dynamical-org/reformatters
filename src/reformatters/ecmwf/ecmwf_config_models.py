@@ -5,6 +5,7 @@ import pandas as pd
 
 from reformatters.common.config_models import BaseInternalAttrs, DataVar
 from reformatters.common.iterating import item
+from reformatters.common.pydantic import replace
 from reformatters.common.types import Timedelta, Timestamp
 
 
@@ -16,6 +17,9 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
     Functional fields:
         window_reset_frequency: for resetting deaccumulation windows
         grib_index_param: The short name of the param as it exists in the index file. Does not map to any names in the grib.
+        grib_index_param_lead_time_overrides: At certain lead time ranges ECMWF uses different
+            param names in the index file for the same variable. E.g. "10fg3" instead of "10fg"
+            at lead times 93h-144h. Keys are slices of lead_time, values are the param name to use.
         grib_comment: Description of the param as it exists in the grib.
 
     Additional informational fields, not currently used in processing:
@@ -24,6 +28,12 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
     """
 
     grib_index_param: str
+    # At certain lead time ranges ECMWF uses different param names in the index file
+    # for the same variable. E.g. "10fg3" instead of "10fg" at lead times 93h-144h.
+    # Each tuple is (start_lead_time, end_lead_time, override_param).
+    grib_index_param_lead_time_overrides: tuple[
+        tuple[Timedelta, Timedelta, str], ...
+    ] = ()
     grib_comment: str
 
     grib_index_level_type: Literal["sfc", "pl"] = "sfc"  # surface or pressure level
@@ -54,6 +64,31 @@ def vars_available(
     """Check if a group of vars (which must share the same date_available) are available at init_time."""
     date_available = item({v.internal_attrs.date_available for v in data_var_group})
     return date_available is None or date_available <= init_time
+
+
+def _resolve_grib_index_param(
+    data_var: EcmwfDataVar, lead_time: Timedelta
+) -> EcmwfDataVar:
+    for (
+        start,
+        end,
+        param_override,
+    ) in data_var.internal_attrs.grib_index_param_lead_time_overrides:
+        if start <= lead_time <= end:
+            return replace(
+                data_var,
+                internal_attrs=replace(
+                    data_var.internal_attrs, grib_index_param=param_override
+                ),
+            )
+    return data_var
+
+
+def resolve_grib_index_params(
+    data_vars: Sequence[EcmwfDataVar], lead_time: Timedelta
+) -> Sequence[EcmwfDataVar]:
+    """Return data_vars with grib_index_param adjusted for lead_time-specific overrides."""
+    return [_resolve_grib_index_param(v, lead_time) for v in data_vars]
 
 
 def has_hour_0_values(data_var: EcmwfDataVar) -> bool:
