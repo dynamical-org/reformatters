@@ -251,6 +251,67 @@ def test_deaccumulate_1d_3_and_6_hour_small_accumulation_decreases() -> None:
         )
 
 
+def test_deaccumulate_expected_clamp_fraction_suppresses_error() -> None:
+    """When expected_clamp_fraction covers the actual clamp fraction, no error is raised."""
+    reset_frequency = pd.Timedelta(hours=6)
+
+    values = [
+        {"lt": 0, "in": np.nan, "out": np.nan},
+        {"lt": 3, "in": 4. , "out": 4.0 / (3 * SECONDS_PER_HOUR)},
+        {"lt": 6, "in": 3.9, "out": 0.0},  # small negative accumulation clamped to 0
+    ]  # fmt: off
+
+    lead_times = pd.to_timedelta([step["lt"] for step in values], unit="h")
+    data = np.array([step["in"] for step in values], dtype=np.float32)
+    expected = np.array([step["out"] for step in values], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        data,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "mm s-1"},
+    )
+
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="lead_time",
+        reset_frequency=reset_frequency,
+        expected_clamp_fraction=0.34,
+    )
+    np.testing.assert_equal(result.values, expected)
+
+
+def test_deaccumulate_expected_clamp_fraction_still_raises_when_exceeded() -> None:
+    """When actual clamp fraction exceeds expected_clamp_fraction, error is still raised."""
+    reset_frequency = pd.Timedelta(hours=6)
+
+    values = [
+        {"lt": 0, "in": 0., "out": 0.},
+        {"lt": 3, "in": 4. , "out": 4.0 / (3 * SECONDS_PER_HOUR)},
+        {"lt": 6, "in": 3.9, "out": 0.0},  # small negative accumulation clamped to 0 (1 of 3 = 33%)
+    ]  # fmt: off
+
+    lead_times = pd.to_timedelta([step["lt"] for step in values], unit="h")
+    data = np.array([step["in"] for step in values], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        data,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "mm s-1"},
+    )
+
+    with pytest.raises(
+        ValueError, match=r"Over 10% \(1 total, 33.3%\) values were clamped to 0"
+    ):
+        deaccumulate_to_rates_inplace(
+            data_array,
+            dim="lead_time",
+            reset_frequency=reset_frequency,
+            expected_clamp_fraction=0.10,
+        )
+
+
 def test_deaccumulate_1d_3_and_6_hour_large_accumulation_decreases() -> None:
     reset_frequency = pd.Timedelta(hours=6)
 
