@@ -24,7 +24,8 @@ BASE_FILENAME = (
     "icon-eu_europe_regular-lat-lon_single-level_2000010100_000_T_2M.grib2.bz2"
 )
 SOURCE_CO_OP_URL = (
-    "https://data.source.coop/dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/2000-01-01T00/t_2m/"
+    "https://s3-us-west-2.amazonaws.com/us-west-2.opendata.source.coop/"
+    "dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/2000-01-01T00/t_2m/"
     + BASE_FILENAME
 )
 
@@ -261,12 +262,11 @@ def test_operational_update_jobs(
 def test_download_and_read_all_variables() -> None:
     """Download a real ICON-EU GRIB file and read all template variables."""
     template_config = DwdIconEuForecast5DayTemplateConfig()
-    # Use a recent init time from the Source Co-Op archive
-    init_time = (pd.Timestamp.now() - pd.Timedelta(hours=12)).floor("6h")
+    init_time = pd.Timestamp("2026-03-01T00:00")
 
     region_job = DwdIconEuForecast5DayRegionJob.model_construct(
         tmp_store=Mock(),
-        template_ds=template_config.get_template(pd.Timestamp.now()),
+        template_ds=template_config.get_template(init_time + pd.Timedelta(days=1)),
         data_vars=template_config.data_vars,
         append_dim=template_config.append_dim,
         region=slice(0, 1),

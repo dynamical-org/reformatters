@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import xarray as xr
-from obstore.exceptions import GenericError
+from obstore.exceptions import GenericError, PermissionDeniedError
 from rasterio.io import MemoryFile
 from zarr.abc.store import Store
 
@@ -47,7 +47,8 @@ class DwdIconEuForecast5DaySourceFileCoord(SourceFileCoord):
         """Return URL to .grib2.bz2 files on Dynamical.org's public archive of ICON-EU hosted on Source Co-Op."""
         init_time_str = self.init_time.strftime("%Y-%m-%dT%H")
         return (
-            "https://data.source.coop/dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/"
+            "https://s3-us-west-2.amazonaws.com/us-west-2.opendata.source.coop/"
+            "dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/"
             f"{init_time_str}/{self.variable_name_in_filename}/"
         ) + self._get_basename()
 
@@ -147,7 +148,7 @@ class DwdIconEuForecast5DayRegionJob(
         url = coord.get_url()
         try:
             bz2_file_path = http_download_to_disk(url, self.dataset_id)
-        except (FileNotFoundError, GenericError) as e:
+        except (FileNotFoundError, GenericError, PermissionDeniedError) as e:
             log.debug(f"Failed to download '{url}': {e}")
             fallback_url = coord.get_fallback_url()
             log.debug(f"Attempting to download from {fallback_url=}")
