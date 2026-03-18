@@ -26,10 +26,8 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
     grib_index_level_value: float = float("nan")
 
     # Grib attributes used to select correct message
-    # grib_element: short name of the param within the grib, but sometimes "unknown"
-    # grib_description: description of the level, not the variable
-    grib_element: str
-    grib_description: str
+    grib_element: str  # short name of the param within the grib, sometimes "unknown"
+    grib_description: str  # description of the level, not the variable
 
     scale_factor: float | None = None
 
