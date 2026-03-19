@@ -38,6 +38,7 @@ class NoaaMrmsInternalAttrs(BaseInternalAttrs):
     available_from: Timestamp | None = None
     # For deaccumulation: MRMS hourly QPE is a 1-hour fixed window accumulation
     window_reset_frequency: Timedelta | None = None
+    expected_invalid_fraction: float = 0.07
 
 
 class NoaaMrmsDataVar(DataVar[NoaaMrmsInternalAttrs]):
@@ -293,6 +294,7 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                     deaccumulate_to_rate=True,
                     window_reset_frequency=qpe_window_reset_frequency,
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    expected_invalid_fraction=0.35,
                 ),
             ),
             NoaaMrmsDataVar(

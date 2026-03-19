@@ -30,9 +30,13 @@ from reformatters.common.types import (
     Timedelta,
     Timestamp,
 )
-from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
+from reformatters.ecmwf.ecmwf_config_models import (
+    EcmwfDataVar,
+    has_hour_0_values,
+    resolve_grib_index_params,
+    vars_available,
+)
 from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
-from reformatters.ecmwf.ecmwf_utils import all_variables_available, has_hour_0_values
 
 log = get_logger(__name__)
 
@@ -133,13 +137,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             processing_region_ds["lead_time"].values,
             processing_region_ds["ensemble_member"].values,
         ):
-            if not all_variables_available(data_var_group, init_time):
-                dates_available = {
-                    v.internal_attrs.date_available for v in data_var_group
-                }
-                assert len(dates_available) == 1, (
-                    f"Expected all variables in the group to have the same date_available, found {dates_available}"
-                )
+            if not vars_available(data_var_group, init_time):
                 continue
 
             if not group_has_hour_0_values and lead_time == np.timedelta64(0):
@@ -163,9 +161,10 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
 
         # Download the grib messages for the data vars in the coord using byte ranges
+        data_vars = resolve_grib_index_params(coord.data_var_group, coord.lead_time)
         byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(
             idx_local_path,
-            coord.data_var_group,
+            data_vars,
             coord.ensemble_member,
         )
         suffix = digest(
@@ -247,6 +246,8 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                     dim="lead_time",
                     reset_frequency=reset_freq,
                     invalid_below_threshold_rate=deaccumulation_invalid_below_threshold_rate,
+                    # Short wave radiation sees 5-7% clamped due to lossy grib2 compression
+                    expected_clamp_fraction=0.08,
                 )
             except ValueError:
                 log.exception(f"Error deaccumulating {data_var.name}")

@@ -282,13 +282,14 @@ def test_download_file_from_ecmwf_open_data() -> None:
         reformat_job_name="test",
     )
 
-    # Test over lead_times [0h, 3h] to catch bugs where variables are missing from the
-    # index at certain lead times (e.g. 10fg/wind_gust is absent at lead_time=0h since
-    # it is a max-window variable with no prior post-processing step at t=0).
-    test_ds = full_template.isel(
-        init_time=slice(-1, None),
-        lead_time=slice(0, 2),  # 0h and 3h
-        ensemble_member=slice(0, 1),
+    # Test over lead_times [0h, 3h, 96h] to catch bugs where variables are missing from
+    # the index at certain lead times. In particular:
+    # - 0h: max-window variables (e.g. 10fg/wind_gust) are absent
+    # - 96h: ECMWF uses explicitly-windowed param names (e.g. "10fg3" instead of "10fg")
+    test_ds = full_template.sel(
+        init_time=slice(init_time, None),
+        lead_time=[pd.Timedelta("0h"), pd.Timedelta("3h"), pd.Timedelta("96h")],
+        ensemble_member=[0],
     )
 
     def check_data_var(data_var: EcmwfDataVar) -> None:

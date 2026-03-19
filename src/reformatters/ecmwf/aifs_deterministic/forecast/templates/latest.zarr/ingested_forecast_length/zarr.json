@@ -1,0 +1,54 @@
+{
+  "shape": [
+    1
+  ],
+  "data_type": "int64",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        23360
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": -1,
+  "codecs": [
+    {
+      "name": "bytes",
+      "configuration": {
+        "endian": "little"
+      }
+    },
+    {
+      "name": "blosc",
+      "configuration": {
+        "typesize": 8,
+        "cname": "zstd",
+        "clevel": 3,
+        "shuffle": "shuffle",
+        "blocksize": 0
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Ingested forecast length",
+    "statistics_approximate": {
+      "min": "0 days 00:00:00",
+      "max": "15 days 00:00:00"
+    },
+    "dtype": "timedelta64[ns]",
+    "units": "seconds"
+  },
+  "dimension_names": [
+    "init_time"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}
