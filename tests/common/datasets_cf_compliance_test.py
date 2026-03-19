@@ -317,6 +317,7 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "categorical_freezing_rain_surface",
     "categorical_rain_surface",
     "categorical_precipitation_type_surface",
+    "flash_qpe_ffg_max_surface",
     "composite_reflectivity",
     "soil_water_runoff",
     "qa",
@@ -452,6 +453,8 @@ ECMWF_SHORTNAME_EXEMPT: set[str] = {
     # HRRR 80m wind (no ECMWF equivalent)
     "80u",
     "80v",
+    # NOAA MRMS FLASH system (no ECMWF equivalent)
+    "FLASH_QPE_FFGMAX",
 }
 
 ECMWF_LONGNAME_EXEMPT: set[str] = {
@@ -466,6 +469,8 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     # HRRR 80m wind (no ECMWF equivalent)
     "80 metre U wind component",
     "80 metre V wind component",
+    # NOAA MRMS FLASH system (no ECMWF equivalent)
+    "FLASH QPE-to-FFG ratio maximum",
 }
 
 

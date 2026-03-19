@@ -81,7 +81,7 @@ def test_data_vars() -> None:
     config = NoaaMrmsConusAnalysisHourlyTemplateConfig()
     data_vars = config.data_vars
 
-    assert len(data_vars) == 5
+    assert len(data_vars) == 6
 
     names = [v.name for v in data_vars]
     assert "precipitation_surface" in names
@@ -89,6 +89,7 @@ def test_data_vars() -> None:
     assert "precipitation_pass_2_surface" in names
     assert "precipitation_radar_only_surface" in names
     assert "categorical_precipitation_type_surface" in names
+    assert "flash_qpe_ffg_max_surface" in names
 
 
 def test_precipitation_vars_configured_for_deaccumulation() -> None:
