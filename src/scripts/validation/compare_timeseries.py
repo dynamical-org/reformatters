@@ -22,7 +22,7 @@ from scripts.validation.utils import (
 
 log = get_logger(__name__)
 
-zarr.config.set({"async.concurrency": 128})
+zarr.config.set({"async.concurrency": 32})
 
 GEFS_ANALYSIS_URL = "https://data.dynamical.org/noaa/gefs/analysis/latest.zarr"
 

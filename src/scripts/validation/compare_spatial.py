@@ -20,7 +20,7 @@ from scripts.validation.utils import (
 
 log = get_logger(__name__)
 
-zarr.config.set({"async.concurrency": 128})
+zarr.config.set({"async.concurrency": 32})
 
 GEFS_ANALYSIS_URL = "https://data.dynamical.org/noaa/gefs/analysis/latest.zarr"
 
@@ -107,6 +107,18 @@ def create_comparison_plot(  # noqa: PLR0915 PLR0912
             reference_ds,
             time,
         )
+
+    # Downsample high-resolution spatial data for plotting efficiency
+    max_plot_dim = 1000
+    strides: dict[str, int] = {}
+    for dim in ("latitude", "longitude", "y", "x"):
+        if dim in ds.dims and ds.sizes[dim] > max_plot_dim:
+            strides[dim] = ds.sizes[dim] // max_plot_dim
+    if strides:
+        ds = ds.isel(
+            {dim: slice(None, None, stride) for dim, stride in strides.items()}
+        )
+        log.info(f"Downsampled validation data with strides {strides} for plotting")
 
     # Format timestamps for titles (done once for all variables)
     if is_forecast:
