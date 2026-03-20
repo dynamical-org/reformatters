@@ -166,10 +166,10 @@
           }
         ],
         "attributes": {
-          "long_name": "FLASH QPE-to-FFG ratio maximum",
+          "long_name": "FLASH QPE-to-FFG percentage maximum",
           "short_name": "FLASH_QPE_FFGMAX",
-          "units": "1",
-          "comment": "Maximum ratio of Quantitative Precipitation Estimate (QPE) to Flash Flood Guidance (FFG) from the FLASH system. Dimensionless ratio where values > 1 indicate QPE exceeds FFG. Available from October 2020 onward.",
+          "units": "percent",
+          "comment": "Maximum percentage of Quantitative Precipitation Estimate (QPE) to Flash Flood Guidance (FFG) from the FLASH system. Percentage where values > 100 indicate QPE exceeds FFG. Available from October 2020 onward.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
