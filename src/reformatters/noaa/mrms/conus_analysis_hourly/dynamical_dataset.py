@@ -58,6 +58,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
             "precipitation_pass_2_surface",
         ]
         radar_only_var = ["precipitation_radar_only_surface"]
+        flash_var = ["flash_qpe_ffg_max_surface"]
         return (
             partial(
                 validation.check_analysis_current_data,
@@ -71,7 +72,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # categorical (PrecipFlag) is radar-derived with no gauge latency, similar coverage to radar_only.
                 max_nan_percentage=40,
                 spatial_sampling="quarter",
-                exclude_vars=gauge_latency_vars + radar_only_var,
+                exclude_vars=gauge_latency_vars + radar_only_var + flash_var,
             ),
             partial(
                 validation.check_analysis_recent_nans,
@@ -90,5 +91,14 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 max_nan_percentage=63,
                 spatial_sampling="quarter",
                 include_vars=radar_only_var,
+            ),
+            partial(
+                validation.check_analysis_recent_nans,
+                max_expected_delay=max_expected_delay,
+                # FLASH QPE/FFG ratio has ~64% structural NaN (outside radar/FFG coverage).
+                # With quarter sampling this can reach ~68%.
+                max_nan_percentage=70,
+                spatial_sampling="quarter",
+                include_vars=flash_var,
             ),
         )
