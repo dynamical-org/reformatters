@@ -470,7 +470,7 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     "80 metre U wind component",
     "80 metre V wind component",
     # NOAA MRMS FLASH system (no ECMWF equivalent)
-    "FLASH QPE-to-FFG ratio maximum",
+    "FLASH QPE-to-FFG percentage maximum",
 }
 
 

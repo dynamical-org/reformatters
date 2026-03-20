@@ -321,10 +321,10 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="FLASH_QPE_FFGMAX",
-                    long_name="FLASH QPE-to-FFG ratio maximum",
-                    units="1",
+                    long_name="FLASH QPE-to-FFG percentage maximum",
+                    units="percent",
                     step_type="instant",
-                    comment="Maximum ratio of Quantitative Precipitation Estimate (QPE) to Flash Flood Guidance (FFG) from the FLASH system. Dimensionless ratio where values > 1 indicate QPE exceeds FFG. Available from October 2020 onward.",
+                    comment="Maximum percentage of Quantitative Precipitation Estimate (QPE) to Flash Flood Guidance (FFG) from the FLASH system. Percentage where values > 100 indicate QPE exceeds FFG. Available from October 2020 onward.",
                 ),
                 internal_attrs=NoaaMrmsInternalAttrs(
                     mrms_product="FLASH_QPE_FFGMAX",
