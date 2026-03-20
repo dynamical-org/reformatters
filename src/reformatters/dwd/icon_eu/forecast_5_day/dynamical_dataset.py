@@ -63,6 +63,7 @@ class DwdIconEuForecast5DayDataset(
         # may not have finished copying to Source Co-Op yet, in which case download_file falls back
         # to reading directly from DWD.
         operational_update_cron_job = ReformatCronJob(
+            suspend=True,
             name=f"{self.dataset_id}-update",
             schedule="48 3,9,15,21 * * *",
             pod_active_deadline=timedelta(minutes=15),
@@ -76,6 +77,7 @@ class DwdIconEuForecast5DayDataset(
         )
 
         validation_cron_job = ValidationCronJob(
+            suspend=True,
             name=f"{self.dataset_id}-validate",
             schedule="3 4,10,16,22 * * *",
             pod_active_deadline=timedelta(minutes=10),
