@@ -407,6 +407,110 @@ def test_validate_dataset_calls_validators(
     )
 
 
+class ExampleDatasetWithThreeCronJobs(
+    DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]
+):
+    """A dataset with an extra base CronJob, like DWD ICON-EU's archive-grib-files."""
+
+    template_config: ExampleConfig = ExampleConfig()
+    region_job_class: type[ExampleRegionJob] = ExampleRegionJob
+    primary_storage_config: ExampleDatasetStorageConfig = ExampleDatasetStorageConfig()
+
+    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
+        return [
+            CronJob(
+                command=["archive-grib-files"],
+                workers_total=1,
+                parallelism=1,
+                name=f"{self.dataset_id}-archive",
+                schedule="0 4 * * *",
+                pod_active_deadline=timedelta(hours=3),
+                image=image_tag,
+                dataset_id=self.dataset_id,
+                cpu="1",
+                memory="1G",
+                ephemeral_storage="1G",
+                secret_names=self.store_factory.k8s_secret_names(),
+            ),
+            ReformatCronJob(
+                name=f"{self.dataset_id}-update",
+                schedule="0 0 * * *",
+                pod_active_deadline=timedelta(minutes=30),
+                image=image_tag,
+                dataset_id=self.dataset_id,
+                cpu="1",
+                memory="1G",
+                shared_memory="1G",
+                ephemeral_storage="1G",
+                secret_names=self.store_factory.k8s_secret_names(),
+            ),
+            ValidationCronJob(
+                name=f"{self.dataset_id}-validate",
+                schedule="0 1 * * *",
+                pod_active_deadline=timedelta(minutes=30),
+                image=image_tag,
+                dataset_id=self.dataset_id,
+                cpu="1",
+                memory="1G",
+                shared_memory="1G",
+                ephemeral_storage="1G",
+                secret_names=self.store_factory.k8s_secret_names(),
+            ),
+        ]
+
+
+def test_monitor_with_cron_job_name_filters_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When multiple cron jobs match a type (e.g. all are CronJob subclasses),
+    cron_job_name disambiguates."""
+    monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
+    mock_capture = Mock()
+    monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", mock_capture)
+
+    dataset = ExampleDatasetWithThreeCronJobs()
+
+    # Without cron_job_name, filtering by base CronJob matches all 3 → should fail
+    with (
+        pytest.raises(ValueError, match="Expected exactly one item, got multiple"),
+        dataset._monitor(CronJob, "job-name"),
+    ):
+        pass
+
+    # With cron_job_name, it narrows to exactly one
+    with dataset._monitor(
+        CronJob, "job-name", cron_job_name=f"{dataset.dataset_id}-archive"
+    ):
+        pass
+
+    statuses = [c.kwargs["status"] for c in mock_capture.call_args_list]
+    assert statuses == ["in_progress", "ok"]
+
+    # Verify the monitor used the archive job's schedule
+    call_kwargs = mock_capture.call_args_list[0].kwargs
+    assert call_kwargs["monitor_config"]["schedule"]["value"] == "0 4 * * *"
+
+
+def test_monitor_with_cron_job_name_still_filters_by_type(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """cron_job_name and cron_type are both applied."""
+    monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
+    mock_capture = Mock()
+    monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", mock_capture)
+
+    dataset = ExampleDatasetWithThreeCronJobs()
+
+    # ReformatCronJob filter with the update name should work
+    with dataset._monitor(
+        ReformatCronJob, "job-name", cron_job_name=f"{dataset.dataset_id}-update"
+    ):
+        pass
+
+    statuses = [c.kwargs["status"] for c in mock_capture.call_args_list]
+    assert statuses == ["in_progress", "ok"]
+
+
 def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
 

@@ -132,7 +132,11 @@ class DwdIconEuForecast5DayDataset(
             stats_logging_freq: The period between each stats log. e.g. "1m" to log stats every minute.
                 See https://rclone.org/docs/#stats-duration
         """
-        with self._monitor(CronJob, reformat_job_name):
+        with self._monitor(
+            CronJob,
+            reformat_job_name,
+            cron_job_name=f"{self.dataset_id}-archive-grib-files",
+        ):
             # When running in prod, `secret` will be {'key': 'xxx', 'secret': 'xxxx'}.
             # When not running in prod, `secret` will be empty.
             secret = kubernetes.load_secret("source-coop-storage-options-key")
