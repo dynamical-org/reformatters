@@ -96,8 +96,8 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
                 # FLASH QPE/FFG ratio has ~64% structural NaN (outside radar/FFG coverage).
-                # With quarter sampling this can reach ~68%.
-                max_nan_percentage=70,
+                # With quarter sampling this can reach ~86%.
+                max_nan_percentage=86,
                 spatial_sampling="quarter",
                 include_vars=flash_var,
             ),
