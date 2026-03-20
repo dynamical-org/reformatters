@@ -7,18 +7,25 @@ import typer
 
 from reformatters.common import kubernetes, validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.dwd.archive_gribs.copy_files_from_dwd import copy_files_from_dwd_https
 
-from .region_job import DwdIconEuForecastRegionJob, DwdIconEuForecastSourceFileCoord
-from .template_config import DwdIconEuDataVar, DwdIconEuForecastTemplateConfig
+from .region_job import (
+    DwdIconEuForecast5DayRegionJob,
+    DwdIconEuForecast5DaySourceFileCoord,
+)
+from .template_config import DwdIconEuDataVar, DwdIconEuForecast5DayTemplateConfig
 
 
-class DwdIconEuForecastDataset(
-    DynamicalDataset[DwdIconEuDataVar, DwdIconEuForecastSourceFileCoord]
+class DwdIconEuForecast5DayDataset(
+    DynamicalDataset[DwdIconEuDataVar, DwdIconEuForecast5DaySourceFileCoord]
 ):
-    template_config: DwdIconEuForecastTemplateConfig = DwdIconEuForecastTemplateConfig()
-    region_job_class: type[DwdIconEuForecastRegionJob] = DwdIconEuForecastRegionJob
+    template_config: DwdIconEuForecast5DayTemplateConfig = (
+        DwdIconEuForecast5DayTemplateConfig()
+    )
+    region_job_class: type[DwdIconEuForecast5DayRegionJob] = (
+        DwdIconEuForecast5DayRegionJob
+    )
 
     # `dynamical_grib_archive_rclone_root` must be in the format that `rclone` expects:
     # `:s3:<bucket>/<path>`. Note that there is no double slash after `:s3:`. The leading colon
@@ -50,16 +57,47 @@ class DwdIconEuForecastDataset(
             ephemeral_storage="1G",  # not used
             secret_names=self.store_factory.k8s_secret_names(),
         )
-        return [archive_grib_files_job]
+
+        # ICON-EU runs at 00, 06, 12, 18 UTC. DWD's complete forecast is available ~3h45m after
+        # init. We schedule the reformat 3 minutes after that (3h48m after init). The archive job
+        # may not have finished copying to Source Co-Op yet, in which case download_file falls back
+        # to reading directly from DWD.
+        operational_update_cron_job = ReformatCronJob(
+            suspend=True,
+            name=f"{self.dataset_id}-update",
+            schedule="48 3,9,15,21 * * *",
+            pod_active_deadline=timedelta(minutes=15),
+            image=image_tag,
+            dataset_id=self.dataset_id,
+            cpu="3",
+            memory="14G",
+            shared_memory="400M",
+            ephemeral_storage="30G",
+            secret_names=self.store_factory.k8s_secret_names(),
+        )
+
+        validation_cron_job = ValidationCronJob(
+            suspend=True,
+            name=f"{self.dataset_id}-validate",
+            schedule="3 4,10,16,22 * * *",
+            pod_active_deadline=timedelta(minutes=10),
+            image=image_tag,
+            dataset_id=self.dataset_id,
+            cpu="0.7",
+            memory="3.5G",
+            secret_names=self.store_factory.k8s_secret_names(),
+        )
+
+        return [
+            archive_grib_files_job,
+            operational_update_cron_job,
+            validation_cron_job,
+        ]
 
     def validators(self) -> Sequence[validation.DataValidator]:
-        """Return a sequence of DataValidators to run on this dataset."""
-        # return (
-        #     validation.check_analysis_current_data,
-        #     validation.check_analysis_recent_nans,
-        # )
-        raise NotImplementedError(
-            f"Implement `validators` on {self.__class__.__name__}"
+        return (
+            validation.check_forecast_current_data,
+            validation.check_forecast_recent_nans,
         )
 
     def archive_grib_files(

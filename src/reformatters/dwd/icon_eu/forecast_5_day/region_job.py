@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import xarray as xr
-from obstore.exceptions import GenericError
+from obstore.exceptions import GenericError, PermissionDeniedError
 from rasterio.io import MemoryFile
 from zarr.abc.store import Store
 
@@ -33,7 +33,7 @@ from .template_config import DwdIconEuDataVar
 log = get_logger(__name__)
 
 
-class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
+class DwdIconEuForecast5DaySourceFileCoord(SourceFileCoord):
     """Coordinates of a single source file to process.
 
     Note that, unlike NOAA's NWPs, ICON-EU is published as one GRIB2 file per variable.
@@ -45,9 +45,10 @@ class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
 
     def get_url(self) -> str:
         """Return URL to .grib2.bz2 files on Dynamical.org's public archive of ICON-EU hosted on Source Co-Op."""
-        init_time_str = self.init_time.strftime("%Y-%m-%dT%HZ")
+        init_time_str = self.init_time.strftime("%Y-%m-%dT%H")
         return (
-            "https://source.coop/dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/"
+            "https://s3-us-west-2.amazonaws.com/us-west-2.opendata.source.coop/"
+            "dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/"
             f"{init_time_str}/{self.variable_name_in_filename}/"
         ) + self._get_basename()
 
@@ -88,8 +89,8 @@ class DwdIconEuForecastSourceFileCoord(SourceFileCoord):
         return self.data_var.internal_attrs.variable_name_in_filename
 
 
-class DwdIconEuForecastRegionJob(
-    RegionJob[DwdIconEuDataVar, DwdIconEuForecastSourceFileCoord]
+class DwdIconEuForecast5DayRegionJob(
+    RegionJob[DwdIconEuDataVar, DwdIconEuForecast5DaySourceFileCoord]
 ):
     @classmethod
     def source_groups(
@@ -110,7 +111,7 @@ class DwdIconEuForecastRegionJob(
         self,
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[DwdIconEuDataVar],
-    ) -> Sequence[DwdIconEuForecastSourceFileCoord]:
+    ) -> Sequence[DwdIconEuForecast5DaySourceFileCoord]:
         """Return a sequence of coords, one for each source file required to process the data
         covered by processing_region_ds.
 
@@ -130,7 +131,7 @@ class DwdIconEuForecastRegionJob(
         assert len(lead_times) > 0
 
         return [
-            DwdIconEuForecastSourceFileCoord(
+            DwdIconEuForecast5DaySourceFileCoord(
                 init_time=init_time,
                 lead_time=lead_time,
                 data_var=data_var,
@@ -139,7 +140,7 @@ class DwdIconEuForecastRegionJob(
             for lead_time in lead_times
         ]
 
-    def download_file(self, coord: DwdIconEuForecastSourceFileCoord) -> Path:
+    def download_file(self, coord: DwdIconEuForecast5DaySourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path.
 
         Downloads the `.grib.bz2` file and returns its local `Path`.
@@ -147,7 +148,7 @@ class DwdIconEuForecastRegionJob(
         url = coord.get_url()
         try:
             bz2_file_path = http_download_to_disk(url, self.dataset_id)
-        except (FileNotFoundError, GenericError) as e:
+        except (FileNotFoundError, GenericError, PermissionDeniedError) as e:
             log.debug(f"Failed to download '{url}': {e}")
             fallback_url = coord.get_fallback_url()
             log.debug(f"Attempting to download from {fallback_url=}")
@@ -156,7 +157,7 @@ class DwdIconEuForecastRegionJob(
 
     def read_data(
         self,
-        coord: DwdIconEuForecastSourceFileCoord,
+        coord: DwdIconEuForecast5DaySourceFileCoord,
         data_var: DwdIconEuDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
@@ -212,59 +213,6 @@ class DwdIconEuForecastRegionJob(
 
         super().apply_data_transformations(data_array, data_var)
 
-    def update_template_with_results(
-        self, process_results: Mapping[str, Sequence[DwdIconEuForecastSourceFileCoord]]
-    ) -> xr.Dataset:
-        """Update template dataset based on processing results. This method is called during
-        operational updates.
-
-        Subclasses should implement this method to apply dataset-specific adjustments
-        based on the processing results. Examples include:
-        - Trimming dataset along append_dim to only include successfully processed data
-        - Loading existing coordinate values from the primary store and updating them based on results
-        - Updating metadata based on what was actually processed vs what was planned
-
-        The default implementation trims along append_dim to end at the most recent successfully
-        processed coordinate (timestamp).
-
-        Parameters
-        ----------
-        process_results : Mapping[str, Sequence[DwdIconEuForecastSourceFileCoord]]
-            Mapping from variable names to their source file coordinates with final processing status.
-
-        Returns
-        -------
-        xr.Dataset
-            Updated template dataset reflecting the actual processing results.
-        """
-        # The super() implementation looks like this:
-        #
-        # max_append_dim_processed = max(
-        #     (
-        #         c.out_loc()[self.append_dim]
-        #         for c in chain.from_iterable(process_results.values())
-        #         if c.status == SourceFileStatus.Succeeded
-        #     ),
-        #     default=None,
-        # )
-        # if max_append_dim_processed is None:
-        #     # No data was processed, trim the template to stop before this job's region
-        #     # This is using isel's exclusive slice end behavior
-        #     return self.template_ds.isel(
-        #         {self.append_dim: slice(None, self.region.start)}
-        #     )
-        # else:
-        #     return self.template_ds.sel(
-        #         {self.append_dim: slice(None, max_append_dim_processed)}
-        #     )
-        #
-        # If you like the above behavior, skip implementing this method.
-        # If you need to customize the behavior, implement this method.
-
-        raise NotImplementedError(
-            "Subclasses implement update_template_with_results() with dataset-specific logic"
-        )
-
     @classmethod
     def operational_update_jobs(
         cls,
@@ -275,7 +223,7 @@ class DwdIconEuForecastRegionJob(
         all_data_vars: Sequence[DwdIconEuDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence["RegionJob[DwdIconEuDataVar, DwdIconEuForecastSourceFileCoord]"],
+        Sequence["RegionJob[DwdIconEuDataVar, DwdIconEuForecast5DaySourceFileCoord]"],
         xr.Dataset,
     ]:
         """Return the sequence of RegionJob instances necessary to update the dataset from its
@@ -311,7 +259,7 @@ class DwdIconEuForecastRegionJob(
 
         Returns
         -------
-        Sequence[RegionJob[DwdIconEuDataVar, DwdIconEuForecastSourceFileCoord]]
+        Sequence[RegionJob[DwdIconEuDataVar, DwdIconEuForecast5DaySourceFileCoord]]
             RegionJob instances that need processing for operational updates.
         xr.Dataset
             The template_ds for the operational update.
