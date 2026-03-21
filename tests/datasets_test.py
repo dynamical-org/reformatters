@@ -1,13 +1,3 @@
-"""Tests for dataset registry integrity, CLI wiring, and operational configuration.
-
-These tests catch issues that could break production cronjobs or corrupt datasets:
-- Missing or broken CLI commands that cronjobs rely on
-- Datasets missing required operational methods
-- Duplicate dataset IDs causing routing issues
-- CronJob commands that don't match actual CLI commands
-- Broken imports or misconfigured typer commands
-"""
-
 from typing import Any
 
 import pytest
