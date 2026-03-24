@@ -1,3 +1,6 @@
+from pathlib import PurePosixPath
+from unittest.mock import Mock, call, patch
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -187,3 +190,69 @@ def test_validators(dataset: DwdIconEuForecast5DayDataset) -> None:
     validators = tuple(dataset.validators())
     assert len(validators) == 2
     assert all(isinstance(v, validation.DataValidator) for v in validators)
+
+
+def test_archive_grib_files_calls_copy_for_each_init_hour(
+    dataset: DwdIconEuForecast5DayDataset,
+) -> None:
+    mock_copy = Mock()
+    with (
+        patch(
+            "reformatters.dwd.icon_eu.forecast_5_day.dynamical_dataset.copy_files_from_dwd_https",
+            mock_copy,
+        ),
+        patch(
+            "reformatters.dwd.icon_eu.forecast_5_day.dynamical_dataset.kubernetes.load_secret",
+            return_value={},
+        ),
+    ):
+        dataset.archive_grib_files(reformat_job_name="test")
+
+    assert mock_copy.call_count == 4
+    for i, init_hour in enumerate([0, 6, 12, 18]):
+        call_kwargs = mock_copy.call_args_list[i]
+        assert call_kwargs == call(
+            src_host="https://opendata.dwd.de",
+            src_root_path=PurePosixPath(f"/weather/nwp/icon-eu/grib/{init_hour:02d}"),
+            dst_root_path=PurePosixPath(dataset.dynamical_grib_archive_rclone_root),
+            transfer_parallelism=64,
+            checkers=32,
+            stats_logging_freq="1m",
+            env_vars=None,
+        )
+
+
+def test_archive_grib_files_passes_s3_credentials(
+    dataset: DwdIconEuForecast5DayDataset,
+) -> None:
+    mock_copy = Mock()
+    secret = {"key": "test-key", "secret": "test-secret"}
+    with (
+        patch(
+            "reformatters.dwd.icon_eu.forecast_5_day.dynamical_dataset.copy_files_from_dwd_https",
+            mock_copy,
+        ),
+        patch(
+            "reformatters.dwd.icon_eu.forecast_5_day.dynamical_dataset.kubernetes.load_secret",
+            return_value=secret,
+        ),
+    ):
+        dataset.archive_grib_files(reformat_job_name="test")
+
+    # All calls should include S3 credentials
+    for c in mock_copy.call_args_list:
+        env_vars = c.kwargs["env_vars"]
+        assert env_vars is not None
+        assert env_vars["RCLONE_S3_ACCESS_KEY_ID"] == "test-key"
+        assert env_vars["RCLONE_S3_SECRET_ACCESS_KEY"] == "test-secret"  # noqa: S105
+        assert env_vars["RCLONE_S3_PROVIDER"] == "AWS"
+
+
+def test_get_cli_has_archive_command(
+    dataset: DwdIconEuForecast5DayDataset,
+) -> None:
+    cli = dataset.get_cli()
+    callback_names = [
+        getattr(cmd.callback, "__name__", None) for cmd in cli.registered_commands
+    ]
+    assert "archive_grib_files" in callback_names

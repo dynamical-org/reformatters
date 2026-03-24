@@ -192,24 +192,23 @@ class DwdIconEuForecast5DayRegionJob(
             The data variable metadata object, which may contain transformation parameters.
         """
 
+        if (scale_factor := data_var.internal_attrs.scale_factor) is not None:
+            data_array.values *= scale_factor
+
         if data_var.internal_attrs.deaccumulate_to_rate:
             assert data_var.internal_attrs.window_reset_frequency is not None
-            deaccum_dim = "lead_time" if "lead_time" in data_array.dims else "time"
             log.info(
-                f"Converting {data_var.name} from accumulations to rates along {deaccum_dim}"
+                f"Converting {data_var.name} from accumulations to rates along lead_time"
             )
             try:
                 deaccumulate_to_rates_inplace(
                     data_array,
-                    dim=deaccum_dim,
+                    dim="lead_time",
                     reset_frequency=data_var.internal_attrs.window_reset_frequency,
                 )
             except ValueError:
                 # Log exception so we are notified if deaccumulation errors are larger than expected.
                 log.exception(f"Error deaccumulating {data_var.name}")
-
-        if (scale_factor := data_var.internal_attrs.scale_factor) is not None:
-            data_array.values *= np.float32(scale_factor)
 
         super().apply_data_transformations(data_array, data_var)
 
@@ -226,45 +225,8 @@ class DwdIconEuForecast5DayRegionJob(
         Sequence["RegionJob[DwdIconEuDataVar, DwdIconEuForecast5DaySourceFileCoord]"],
         xr.Dataset,
     ]:
-        """Return the sequence of RegionJob instances necessary to update the dataset from its
-        current state to include the latest available data.
-
-        Also return the template_ds, expanded along append_dim through the end of the data to
-        process. The dataset returned here may extend beyond the available data at the source, in
-        which case `update_template_with_results` will trim the dataset to the actual data
-        processed.
-
-        The exact logic is dataset-specific, but it generally follows this pattern:
-        1. Figure out the range of time to process: append_dim_start (inclusive) and append_dim_end (exclusive)
-            a. Read existing data from the primary store to determine what's already processed
-            b. Optionally identify recent incomplete/non-final data for reprocessing
-        2. Call get_template_fn(append_dim_end) to get the template_ds
-        3. Create RegionJob instances by calling cls.get_jobs(..., filter_start=append_dim_start)
-
-        Parameters
-        ----------
-        primary_store : Store
-            The primary store to read existing data from and write updates to.
-        tmp_store : Path
-            The temporary Zarr store to write into while processing.
-        get_template_fn : Callable[[DatetimeLike], xr.Dataset]
-            Function to get the template_ds for the operational update.
-        append_dim : AppendDim
-            The dimension along which data is appended (e.g., "time").
-        all_data_vars : Sequence[DwdIconEuDataVar]
-            Sequence of all data variable configs for this dataset.
-        reformat_job_name : str
-            The name of the reformatting job, used for progress tracking.
-            This is often the name of the Kubernetes job, or "local".
-
-        Returns
-        -------
-        Sequence[RegionJob[DwdIconEuDataVar, DwdIconEuForecast5DaySourceFileCoord]]
-            RegionJob instances that need processing for operational updates.
-        xr.Dataset
-            The template_ds for the operational update.
-        """
-        existing_ds = xr.open_zarr(primary_store)
+        """Return RegionJob instances to update the dataset from its current state to the latest available data."""
+        existing_ds = xr.open_zarr(primary_store, chunks=None)
         append_dim_start = existing_ds[append_dim].max()
         append_dim_end = pd.Timestamp.now()
         template_ds = get_template_fn(append_dim_end)
