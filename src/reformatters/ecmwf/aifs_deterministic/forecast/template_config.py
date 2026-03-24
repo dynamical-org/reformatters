@@ -48,7 +48,7 @@ class EcmwfAifsDeterministicForecastTemplateConfig(TemplateConfig[EcmwfDataVar])
             description="Weather forecasts from the ECMWF Artificial Intelligence Forecasting System (AIFS) deterministic model.",
             attribution="ECMWF AIFS deterministic forecast data processed by dynamical.org from ECMWF Open Data.",
             spatial_domain="Global",
-            spatial_resolution="0.25 degrees (~25km)",
+            spatial_resolution="0.25 degrees (~20km)",
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
             time_resolution=f"Forecasts initialized every {self.append_dim_frequency.total_seconds() / 3600:.0f} hours",
             forecast_domain="Forecast lead time 0-360 hours (0-15 days) ahead",

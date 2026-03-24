@@ -21,7 +21,7 @@ def template_config(monkeypatch: pytest.MonkeyPatch) -> NoaaHrrrCommonTemplateCo
         description="Test dataset.",
         attribution="Test.",
         spatial_domain="CONUS",
-        spatial_resolution="3km",
+        spatial_resolution="3 km",
         time_domain="Test",
         time_resolution="1h",
     )

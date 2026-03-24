@@ -10,6 +10,16 @@ from reformatters.common.types import TimedeltaUnits, TimestampUnits
 
 type AttributeStr = Annotated[str, pydantic.Field(pattern=r"^[A-Z0-9].*[^.]$")]
 type Sentence = Annotated[str, pydantic.Field(pattern=r"^[A-Z].*\.$")]
+type SpatialResolution = Literal[
+    "0.01 degrees (~1km)",
+    "0.05 degrees (~5km)",
+    "0.0625 degrees (~7km)",
+    "0.25 degrees (~20km)",
+    "0-240 hours: 0.25 degrees (~20km), 243-840 hours: 0.5 degrees (~40km)",
+    "3 km",
+    "4 km",
+    "36 km",
+]
 
 
 class DatasetAttributes(FrozenBaseModel):
@@ -19,7 +29,7 @@ class DatasetAttributes(FrozenBaseModel):
     description: Sentence
     attribution: Sentence
     spatial_domain: AttributeStr
-    spatial_resolution: AttributeStr
+    spatial_resolution: SpatialResolution
     time_domain: AttributeStr
     time_resolution: AttributeStr
     forecast_domain: AttributeStr | None = None
