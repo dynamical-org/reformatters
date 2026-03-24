@@ -606,3 +606,41 @@ def test_download_and_read_precip_flag(tmp_path: Path) -> None:
     data = region_job.read_data(updated_coord, ptype_var)
     assert data.shape == (3500, 7000)
     assert np.all(np.isfinite(data))
+
+
+@pytest.mark.slow
+def test_download_and_read_flash_qpe_ffg_max(tmp_path: Path) -> None:
+    config = NoaaMrmsConusAnalysisHourlyTemplateConfig()
+    flash_var = next(
+        v for v in config.data_vars if v.name == "flash_qpe_ffg_max_surface"
+    )
+
+    mock_ds = Mock()
+    mock_ds.attrs = {"dataset_id": "noaa-mrms-conus-analysis-hourly"}
+    region_job = NoaaMrmsRegionJob.model_construct(
+        tmp_store=tmp_path,
+        template_ds=mock_ds,
+        data_vars=[flash_var],
+        append_dim=config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    coord = NoaaMrmsSourceFileCoord(
+        time=pd.Timestamp("2024-01-15T12:00"),
+        product="FLASH_QPE_FFGMAX",
+        level=flash_var.internal_attrs.mrms_level,
+        fallback_products=flash_var.internal_attrs.mrms_fallback_products,
+        data_var_name=flash_var.name,
+    )
+
+    downloaded_path = region_job.download_file(coord)
+    updated_coord = replace(coord, downloaded_path=downloaded_path)
+
+    data = region_job.read_data(updated_coord, flash_var)
+    assert data.shape == (3500, 7000)
+    # Source uses -999 as nodata sentinel, read_data replaces with NaN.
+    # ~64% of pixels are outside radar/FFG coverage.
+    nan_fraction = np.isnan(data).sum() / data.size
+    assert 0.55 < nan_fraction < 0.75
+    assert np.all(np.isfinite(data[~np.isnan(data)]))

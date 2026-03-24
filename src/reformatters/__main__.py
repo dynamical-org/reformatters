@@ -23,7 +23,7 @@ from reformatters.contrib.noaa.ndvi_cdr.analysis import (
     NoaaNdviCdrAnalysisDataset,
 )
 from reformatters.contrib.uarizona.swann.analysis import UarizonaSwannAnalysisDataset
-from reformatters.dwd.icon_eu.forecast import DwdIconEuForecastDataset
+from reformatters.dwd.icon_eu.forecast_5_day import DwdIconEuForecast5DayDataset
 from reformatters.ecmwf.aifs_deterministic.forecast import (
     EcmwfAifsDeterministicForecastDataset,
 )
@@ -162,7 +162,7 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         ],
     ),
     # DWD
-    DwdIconEuForecastDataset(
+    DwdIconEuForecast5DayDataset(
         primary_storage_config=SourceCoopZarrDatasetStorageConfig()
     ),
     # Contrib

@@ -216,5 +216,5 @@ def test_operational_kubernetes_resources(
 
 def test_validators(dataset: NoaaMrmsConusAnalysisHourlyDataset) -> None:
     validators = tuple(dataset.validators())
-    assert len(validators) == 4
+    assert len(validators) == 5
     assert all(isinstance(v, validation.DataValidator) for v in validators)

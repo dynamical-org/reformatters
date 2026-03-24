@@ -447,14 +447,19 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         self,
         cron_type: type[CronJob],
         reformat_job_name: str,
+        cron_job_name: str | None = None,
     ) -> Iterator[None]:
         # Don't require operational_kubernetes_resources to be defined unless sentry reporting is enabled
         if not Config.is_sentry_enabled:
             yield
             return
 
+        # Find the cron job that matches the type (and name if provided). There should be exactly one.
         cron_jobs = self.operational_kubernetes_resources("placeholder-image-tag")
-        cron_job = item(c for c in cron_jobs if isinstance(c, cron_type))
+        if cron_job_name:
+            cron_jobs = (c for c in cron_jobs if c.name == cron_job_name)
+        cron_jobs = (c for c in cron_jobs if isinstance(c, cron_type))
+        cron_job = item(cron_jobs)
 
         # Use the actual cronjob name from k8s env when available. This ensures
         # staging cronjobs report to their own Sentry monitor, not production's.

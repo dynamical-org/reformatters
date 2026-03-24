@@ -15,7 +15,7 @@ from scripts.validation.utils import (
 
 log = get_logger(__name__)
 
-zarr.config.set({"async.concurrency": 128})
+zarr.config.set({"async.concurrency": 32})
 
 
 def report_nulls(

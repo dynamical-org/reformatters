@@ -173,7 +173,7 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
     def read_data(
         self,
         coord: NoaaMrmsSourceFileCoord,
-        data_var: NoaaMrmsDataVar,  # noqa: ARG002
+        data_var: NoaaMrmsDataVar,
     ) -> ArrayFloat32:
         assert coord.downloaded_path is not None
         with rasterio.open(coord.downloaded_path) as reader:
@@ -198,7 +198,12 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
                 )
                 rasterio_band = 1
             result: ArrayFloat32 = reader.read(rasterio_band, out_dtype=np.float32)
-            return result
+
+        nodata_sentinel = data_var.internal_attrs.nodata_sentinel
+        if nodata_sentinel is not None:
+            result[result == nodata_sentinel] = np.nan
+
+        return result
 
     def apply_data_transformations(
         self, data_array: xr.DataArray, data_var: NoaaMrmsDataVar
