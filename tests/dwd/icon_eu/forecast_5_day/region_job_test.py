@@ -1,3 +1,4 @@
+import bz2
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -5,6 +6,9 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+from obstore.exceptions import GenericError
+from rasterio.io import MemoryFile
+from rasterio.transform import from_bounds
 
 from reformatters.common import template_utils
 from reformatters.common.config_models import DataVarAttrs, Encoding
@@ -181,12 +185,13 @@ def test_region_job_apply_data_transformations_deaccumulation(
     t_2m_data_var: DwdIconEuDataVar,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    reset_freq = pd.Timedelta(hours=1)
     data_var = replace(
         t_2m_data_var,
         internal_attrs=replace(
             t_2m_data_var.internal_attrs,
             deaccumulate_to_rate=True,
-            window_reset_frequency=pd.Timedelta(hours=1),
+            window_reset_frequency=reset_freq,
         ),
     )
     times = pd.date_range("2000-01-01", periods=3, freq="1h")
@@ -200,7 +205,11 @@ def test_region_job_apply_data_transformations_deaccumulation(
     )
 
     region_job.apply_data_transformations(data_array, data_var)
-    mock_deaccum.assert_called_once()
+    mock_deaccum.assert_called_once_with(
+        data_array,
+        dim="lead_time",
+        reset_frequency=reset_freq,
+    )
 
 
 def test_region_job_apply_data_transformations_scale_factor(
@@ -256,6 +265,118 @@ def test_operational_update_jobs(
     for job in jobs:
         assert isinstance(job, DwdIconEuForecast5DayRegionJob)
         assert job.data_vars == template_config.data_vars
+
+
+def test_region_job_download_file_both_fail(
+    region_job: DwdIconEuForecast5DayRegionJob,
+    source_file_coord: DwdIconEuForecast5DaySourceFileCoord,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def mock_download(url: str, dataset_id: str) -> Path:
+        raise FileNotFoundError("not found")
+
+    monkeypatch.setattr(
+        "reformatters.dwd.icon_eu.forecast_5_day.region_job.http_download_to_disk",
+        mock_download,
+    )
+
+    with pytest.raises(FileNotFoundError):
+        region_job.download_file(source_file_coord)
+
+
+def test_region_job_download_file_fallback_on_generic_error(
+    region_job: DwdIconEuForecast5DayRegionJob,
+    source_file_coord: DwdIconEuForecast5DaySourceFileCoord,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    call_count = 0
+
+    def mock_download(url: str, dataset_id: str) -> Path:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise GenericError("generic obstore error")
+        return Path("/fake/fallback.grib2.bz2")
+
+    monkeypatch.setattr(
+        "reformatters.dwd.icon_eu.forecast_5_day.region_job.http_download_to_disk",
+        mock_download,
+    )
+
+    result = region_job.download_file(source_file_coord)
+    assert result == Path("/fake/fallback.grib2.bz2")
+    assert call_count == 2
+
+
+def test_region_job_read_data(
+    region_job: DwdIconEuForecast5DayRegionJob,
+    t_2m_data_var: DwdIconEuDataVar,
+    tmp_path: Path,
+) -> None:
+    height, width = 657, 1377
+    transform = from_bounds(-23.5, 29.5, 62.5, 70.5, width, height)
+    data = np.random.default_rng(42).random((height, width)).astype(np.float32)
+
+    with MemoryFile() as memfile:
+        with memfile.open(
+            driver="GTiff",
+            height=height,
+            width=width,
+            count=1,
+            dtype="float32",
+            transform=transform,
+        ) as dst:
+            dst.write(data, 1)
+        tiff_bytes = memfile.read()
+
+    bz2_path = tmp_path / "test.grib2.bz2"
+    bz2_path.write_bytes(bz2.compress(tiff_bytes))
+
+    coord = DwdIconEuForecast5DaySourceFileCoord(
+        init_time=pd.Timestamp("2000-01-01T00:00"),
+        lead_time=pd.Timedelta(0),
+        data_var=t_2m_data_var,
+    )
+    coord = replace(coord, downloaded_path=bz2_path)
+
+    result = region_job.read_data(coord, t_2m_data_var)
+    assert result.shape == (height, width)
+    assert result.dtype == np.float32
+    np.testing.assert_array_equal(result, data)
+
+
+def test_region_job_read_data_multi_band_raises(
+    region_job: DwdIconEuForecast5DayRegionJob,
+    t_2m_data_var: DwdIconEuDataVar,
+    tmp_path: Path,
+) -> None:
+    height, width = 10, 10
+    transform = from_bounds(0, 0, 1, 1, width, height)
+
+    with MemoryFile() as memfile:
+        with memfile.open(
+            driver="GTiff",
+            height=height,
+            width=width,
+            count=2,  # Two bands — should trigger assertion
+            dtype="float32",
+            transform=transform,
+        ) as dst:
+            dst.write(np.ones((2, height, width), dtype=np.float32))
+        tiff_bytes = memfile.read()
+
+    bz2_path = tmp_path / "test_multi.grib2.bz2"
+    bz2_path.write_bytes(bz2.compress(tiff_bytes))
+
+    coord = DwdIconEuForecast5DaySourceFileCoord(
+        init_time=pd.Timestamp("2000-01-01T00:00"),
+        lead_time=pd.Timedelta(0),
+        data_var=t_2m_data_var,
+    )
+    coord = replace(coord, downloaded_path=bz2_path)
+
+    with pytest.raises(AssertionError, match="Expected exactly 1 element"):
+        region_job.read_data(coord, t_2m_data_var)
 
 
 @pytest.mark.slow
