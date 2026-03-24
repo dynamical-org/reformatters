@@ -88,7 +88,7 @@ class TestDatasetAttributes:
             description="A test dataset for unit tests.",
             attribution="Test attribution source.",
             spatial_domain="Global",
-            spatial_resolution="0.25 degree",
+            spatial_resolution="0.25 degrees (~20km)",
             time_domain="2020-01-01 to present",
             time_resolution="1 hour",
         )
@@ -103,7 +103,7 @@ class TestDatasetAttributes:
                 description="A test dataset.",
                 attribution="Test attribution.",
                 spatial_domain="Global",
-                spatial_resolution="0.25 degree",
+                spatial_resolution="0.25 degrees (~20km)",
                 time_domain="2020-01-01 to present",
                 time_resolution="1 hour",
             )
