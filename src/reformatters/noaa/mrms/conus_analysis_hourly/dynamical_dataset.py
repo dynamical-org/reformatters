@@ -59,13 +59,6 @@ class NoaaMrmsConusAnalysisHourlyDataset(
         ]
         radar_only_var = ["precipitation_radar_only_surface"]
         flash_var = ["flash_qpe_ffg_max_surface"]
-        # v12-only vars excluded from the general check (they are 100% NaN pre-v12)
-        v12_only_vars = [
-            "rotation_track_60min_0_2km",
-            "rotation_track_60min_3_6km",
-            "azimuthal_shear_0_2km",
-            "azimuthal_shear_3_6km",
-        ]
         return (
             partial(
                 validation.check_analysis_current_data,
@@ -76,13 +69,11 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 max_expected_delay=max_expected_delay,
                 # precipitation_surface worst-case quarter-sampled NaN is ~36% (most recent
                 # timestamp falls back to radar-only with ~34% structural coverage gaps).
-                # categorical (PrecipFlag) is radar-derived with no gauge latency, similar coverage to radar_only.
+                # categorical (PrecipFlag) and rotation/shear vars are radar-derived with
+                # no gauge latency and ~0% structural NaN.
                 max_nan_percentage=40,
                 spatial_sampling="quarter",
-                exclude_vars=gauge_latency_vars
-                + radar_only_var
-                + flash_var
-                + v12_only_vars,
+                exclude_vars=gauge_latency_vars + radar_only_var + flash_var,
             ),
             partial(
                 validation.check_analysis_recent_nans,
@@ -110,14 +101,5 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 max_nan_percentage=86,
                 spatial_sampling="quarter",
                 include_vars=flash_var,
-            ),
-            partial(
-                validation.check_analysis_recent_nans,
-                max_expected_delay=max_expected_delay,
-                # Rotation track and azimuthal shear have ~0% structural NaN.
-                # With quarter sampling expect low NaN.
-                max_nan_percentage=10,
-                spatial_sampling="quarter",
-                include_vars=v12_only_vars,
             ),
         )
