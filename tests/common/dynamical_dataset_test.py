@@ -67,7 +67,7 @@ class ExampleSourceFileCoord(SourceFileCoord):
 
 
 class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
-    max_vars_per_backfill_job: ClassVar[int] = 2
+    max_vars_per_job: ClassVar[int] = 2
 
 
 class ExampleConfig(TemplateConfig[ExampleDataVar]):
@@ -131,7 +131,7 @@ def test_dynamical_dataset_methods_exist() -> None:
         "update_template",
         "backfill_kubernetes",
         "backfill_local",
-        "process_backfill_region_jobs",
+        "backfill",
         "update",
         "validate_dataset",
     ]
@@ -160,7 +160,7 @@ def test_update_template(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_update_template.assert_called_once()
 
 
-def test_process_backfill_region_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_backfill(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_job0 = Mock()
     mock_job0.summary = lambda: "job0-summary"
     mock_job1 = Mock()
@@ -177,22 +177,10 @@ def test_process_backfill_region_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
     )
-    mock_job0.process = Mock(
-        return_value=(
-            {},
-            dataset.store_factory.primary_store(),
-            dataset.store_factory.replica_stores(),
-        )
-    )
-    mock_job1.process = Mock(
-        return_value=(
-            {},
-            dataset.store_factory.primary_store(),
-            dataset.store_factory.replica_stores(),
-        )
-    )
+    mock_job0.process = Mock(return_value={})
+    mock_job1.process = Mock(return_value={})
 
-    dataset.process_backfill_region_jobs(
+    dataset.backfill(
         pd.Timestamp("2000-01-02"),
         "test-job-name",
         worker_index=0,
@@ -216,11 +204,11 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
         "get_template",
         lambda self, end: xr.Dataset(attrs={"cool": "weather"}),
     )
-    process_backfill_region_jobs_mock = Mock()
+    backfill_mock = Mock()
     monkeypatch.setattr(
         ExampleDataset,
-        "process_backfill_region_jobs",
-        process_backfill_region_jobs_mock,
+        "backfill",
+        backfill_mock,
     )
 
     dataset = ExampleDataset(
@@ -249,13 +237,7 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
 
     monkeypatch.setattr(storage, "_get_store_path", _get_store_path)
 
-    mock_job0.process = Mock(
-        side_effect=lambda *args, **kwargs: (
-            {},
-            dataset.store_factory.primary_store(),
-            dataset.store_factory.replica_stores(),
-        )
-    )
+    mock_job0.process = Mock(return_value={})
     dataset.backfill_local(pd.Timestamp("2000-01-02"))
 
     assert (
@@ -267,7 +249,7 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
             "replica store should have the same metadata as the primary store"
         )
 
-    process_backfill_region_jobs_mock.assert_called_once_with(
+    backfill_mock.assert_called_once_with(
         pd.Timestamp("2000-01-02"),
         worker_index=0,
         workers_total=1,
@@ -325,10 +307,7 @@ def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     # workers_total = ceil(5/2) == 3
     assert '"completions": 3' in input_str
     # Command and filters
-    assert (
-        '"example-dataset", "process-backfill-region-jobs", "2025-01-01T00:00:00'
-        in input_str
-    )
+    assert '"example-dataset", "backfill", "2025-01-01T00:00:00' in input_str
     assert "--filter-start=2000-01-01T00:00:00" in input_str
     assert "--filter-end=2020-01-01T00:00:00" in input_str
     assert "--filter-variable-names=a" in input_str
@@ -601,7 +580,7 @@ def test_backfill_kubernetes_overwrite_existing_flag(
     )
     monkeypatch.setattr(
         ExampleDataset,
-        "process_backfill_region_jobs",
+        "backfill",
         Mock(),
     )
     mock_write_metadata = Mock()
@@ -692,7 +671,7 @@ def test_backfill_local_fails_in_wrong_environment(
 ) -> None:
     monkeypatch.setattr(Config, "env", env)
     monkeypatch.setattr(template_utils, "write_metadata", Mock())
-    monkeypatch.setattr(DynamicalDataset, "process_backfill_region_jobs", Mock())
+    monkeypatch.setattr(DynamicalDataset, "backfill", Mock())
     monkeypatch.setattr(
         DynamicalDataset, "_get_template", Mock(return_value=xr.Dataset())
     )

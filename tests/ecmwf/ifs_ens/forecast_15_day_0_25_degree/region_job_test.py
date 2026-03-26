@@ -257,12 +257,16 @@ def test_operational_update_jobs(
     )
 
     assert template_ds.init_time.max() == pd.Timestamp("2024-05-02T00:00")
-    assert (
-        len(jobs) == 2
-    )  # We reprocess the last forecast for May 1st and also process for May 2nd
+    # We reprocess the last forecast for May 1st and also process for May 2nd (2 regions).
+    # With max_vars_per_job=1, each variable gets its own job per region.
+    n_regions = 2
+    n_vars = len(template_config.data_vars)
+    assert len(jobs) == n_regions * n_vars
     for job in jobs:
         assert isinstance(job, EcmwfIfsEnsForecast15Day025DegreeRegionJob)
-        assert job.data_vars == template_config.data_vars
+    all_job_vars = {v.name for job in jobs for v in job.data_vars}
+    expected_vars = {v.name for v in template_config.data_vars}
+    assert all_job_vars == expected_vars
 
 
 @pytest.mark.slow
