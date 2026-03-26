@@ -215,7 +215,12 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
 
         downsample = data_var.internal_attrs.source_grid_downsample
         if downsample > 1:
-            result = result[::downsample, ::downsample]
+            h, w = result.shape
+            result = (
+                result.reshape(h // downsample, downsample, w // downsample, downsample)
+                .mean(axis=(1, 3))
+                .astype(np.float32)
+            )
 
         return result
 
