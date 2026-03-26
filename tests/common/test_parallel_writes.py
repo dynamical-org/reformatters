@@ -10,11 +10,13 @@ import dask
 import dask.array
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
 import zarr
 from icechunk.store import IcechunkStore
 from pydantic import computed_field
 
+from reformatters.common import storage as storage_module
 from reformatters.common import template_utils
 from reformatters.common.config_models import (
     BaseInternalAttrs,
@@ -444,11 +446,80 @@ class TestIcechunkParallelWrites:
             )
 
         # Temp branch should be cleaned up
-        repos = dataset.store_factory.icechunk_repos()
+        repos = dataset.store_factory.icechunk_repos(sort="primary-first")
         assert len(repos) == 1
         _, repo = repos[0]
         branches = list(repo.list_branches())
         assert branches == ["main"]
+
+
+class TestReplicaParallelWrites:
+    """Test parallel writes with primary + replica icechunk stores."""
+
+    def test_two_worker_backfill_with_replica(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Use config base_path directly so primary and replica get different local paths
+        monkeypatch.setattr(
+            storage_module,
+            "_get_store_path",
+            lambda dataset_id, version, config: (
+                f"{config.base_path}/{dataset_id}/v{version}"
+                f".{'icechunk' if config.format == DatasetFormat.ICECHUNK else 'zarr'}"
+            ),
+        )
+        dataset = ParallelDataset(
+            primary_storage_config=StorageConfig(
+                base_path=str(tmp_path / "primary"), format=DatasetFormat.ICECHUNK
+            ),
+            replica_storage_configs=[
+                StorageConfig(
+                    base_path=str(tmp_path / "replica"), format=DatasetFormat.ICECHUNK
+                ),
+            ],
+        )
+        # Init both stores
+        for store in [
+            dataset.store_factory.primary_store(writable=True),
+            *dataset.store_factory.replica_stores(writable=True),
+        ]:
+            assert isinstance(store, IcechunkStore)
+            zarr.open_group(store, mode="w", attributes={"initialized": True})
+            store.session.commit(message="init")
+
+        template_ds = _create_template_ds(num_time=2)
+        all_jobs = ParallelRegionJob.get_jobs(
+            tmp_store=dataset._tmp_store(),
+            template_ds=template_ds,
+            append_dim="time",
+            all_data_vars=ParallelTemplateConfig().data_vars,
+            reformat_job_name="test",
+        )
+
+        for worker_index in range(2):
+            dataset._process_region_jobs(
+                all_jobs=all_jobs,
+                worker_index=worker_index,
+                workers_total=2,
+                reformat_job_name="test",
+                template_ds=template_ds,
+                tmp_store=dataset._tmp_store(),
+                update_template_with_results=False,
+            )
+
+        # Both primary and replica should have all data
+        for store in [
+            dataset.store_factory.primary_store(),
+            *dataset.store_factory.replica_stores(),
+        ]:
+            result = xr.open_zarr(store)
+            assert result.sizes["time"] == 2
+            for var in ["var0", "var1", "var2", "var3"]:
+                assert np.all(result[var].values == 1.0)
+
+        # Temp branches cleaned up on both repos
+        for _role, repo in dataset.store_factory.icechunk_repos(sort="primary-first"):
+            assert list(repo.list_branches()) == ["main"]
 
 
 class TestResultsAggregation:

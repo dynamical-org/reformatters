@@ -113,8 +113,10 @@ class StoreFactory(FrozenBaseModel):
                 return False
         return True
 
-    def icechunk_repos(self) -> list[tuple[str, icechunk.Repository]]:
-        """Returns (role, Repository) for each icechunk store. Primary first, then replicas."""
+    def icechunk_repos(
+        self, *, sort: Literal["primary-first", "primary-last"]
+    ) -> list[tuple[str, icechunk.Repository]]:
+        """Returns (role, Repository) for each icechunk store in the specified order."""
         repos: list[tuple[str, icechunk.Repository]] = []
         all_configs = [
             ("primary", self.primary_storage_config),
@@ -131,10 +133,17 @@ class StoreFactory(FrozenBaseModel):
             if config.format != DatasetFormat.ICECHUNK:
                 continue
             store_path = _get_store_path(self.dataset_id, self.version, config)
-            storage = _get_icechunk_storage(store_path, config)
-            repo = icechunk.Repository.open_or_create(storage)
+            ic_storage = _get_icechunk_storage(store_path, config)
+            repo = icechunk.Repository.open_or_create(ic_storage)
             repos.append((role, repo))
-        return repos
+
+        match sort:
+            case "primary-first":
+                return sorted(repos, key=lambda r: r[0] != "primary")
+            case "primary-last":
+                return sorted(repos, key=lambda r: r[0] == "primary")
+            case _ as unreachable:
+                assert_never(unreachable)
 
     def _coordination_base_path(self) -> str:
         if Config.is_prod:

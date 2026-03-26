@@ -371,7 +371,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             f"This is {worker_index = }, {workers_total = }, {len(my_jobs)} jobs, {jobs_summary}"
         )
 
-        icechunk_repos = self.store_factory.icechunk_repos()
+        icechunk_repos = self.store_factory.icechunk_repos(sort="primary-first")
         has_icechunk = len(icechunk_repos) > 0
 
         # ── SETUP / WAIT ─────────────────────────────────────────────
@@ -558,10 +558,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         # on the temp branch from _parallel_setup — we only need to update the metadata files.
         # Process replicas before primary so primary (which drives future work) is last to update.
         # Only runs when setup created a temp branch (branch_name != "main").
-        icechunk_repos = self.store_factory.icechunk_repos()
         branch_name = setup_info.get("branch_name", "main")
         if branch_name != "main":
-            replicas_first = sorted(icechunk_repos, key=lambda r: r[0] == "primary")
+            replicas_first = self.store_factory.icechunk_repos(sort="primary-last")
             # First pass: commit final metadata and reset main on each repo.
             # If a previous attempt already reset main for a repo, skip it.
             for role, repo in replicas_first:
