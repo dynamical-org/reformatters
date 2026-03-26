@@ -347,10 +347,10 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="RotationTrack60min",
-                    long_name="Rotation track 0-2 km AGL 60-minute",
+                    long_name="Rotation track 0-2 km above ground level 60-minute",
                     units="s-1",
                     step_type="max",
-                    comment="Maximum low-level (0-2 km AGL) azimuthal shear track over the previous 60 minutes. Derived from RotationTrack60min. Available from October 2020 onward. Source data in 0.001/s scaled to SI.",
+                    comment="Maximum low-level (0-2 km above ground level) azimuthal shear track over the previous 60 minutes. Derived from RotationTrack60min. Available from October 2020 onward. Source data in 0.001/s scaled to SI.",
                 ),
                 internal_attrs=NoaaMrmsInternalAttrs(
                     mrms_product="RotationTrack60min",
@@ -367,10 +367,10 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="RotationTrackML60min",
-                    long_name="Rotation track 3-6 km AGL 60-minute",
+                    long_name="Rotation track 3-6 km above ground level 60-minute",
                     units="s-1",
                     step_type="max",
-                    comment="Maximum mid-level (3-6 km AGL) azimuthal shear track over the previous 60 minutes. Derived from RotationTrackML60min. Available from October 2020 onward. Source data in 0.001/s scaled to SI.",
+                    comment="Maximum mid-level (3-6 km above ground level) azimuthal shear track over the previous 60 minutes. Derived from RotationTrackML60min. Available from October 2020 onward. Source data in 0.001/s scaled to SI.",
                 ),
                 internal_attrs=NoaaMrmsInternalAttrs(
                     mrms_product="RotationTrackML60min",
@@ -387,10 +387,10 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="MergedAzShear0to2kmAGL",
-                    long_name="Azimuthal shear 0-2 km AGL",
+                    long_name="Azimuthal shear 0-2 km above ground level",
                     units="s-1",
                     step_type="instant",
-                    comment="Instantaneous azimuthal shear in the 0-2 km AGL layer. Derived from MergedAzShear_0-2kmAGL. Available from October 2020 onward. Source data in 0.001/s scaled to SI.",
+                    comment="Instantaneous azimuthal shear in the 0-2 km above ground level layer. Derived from MergedAzShear_0-2kmAGL. Available from October 2020 onward. Source data in 0.001/s scaled to SI.",
                 ),
                 internal_attrs=NoaaMrmsInternalAttrs(
                     mrms_product="MergedAzShear_0-2kmAGL",
@@ -408,10 +408,10 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="MergedAzShear3to6kmAGL",
-                    long_name="Azimuthal shear 3-6 km AGL",
+                    long_name="Azimuthal shear 3-6 km above ground level",
                     units="s-1",
                     step_type="instant",
-                    comment="Instantaneous azimuthal shear in the 3-6 km AGL layer. Derived from MergedAzShear_3-6kmAGL. Available from October 2020 onward. Source data in 0.001/s scaled to SI.",
+                    comment="Instantaneous azimuthal shear in the 3-6 km above ground level layer. Derived from MergedAzShear_3-6kmAGL. Available from October 2020 onward. Source data in 0.001/s scaled to SI.",
                 ),
                 internal_attrs=NoaaMrmsInternalAttrs(
                     mrms_product="MergedAzShear_3-6kmAGL",

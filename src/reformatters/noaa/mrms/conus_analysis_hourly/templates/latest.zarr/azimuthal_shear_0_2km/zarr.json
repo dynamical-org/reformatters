@@ -65,10 +65,10 @@
     }
   ],
   "attributes": {
-    "long_name": "Azimuthal shear 0-2 km AGL",
+    "long_name": "Azimuthal shear 0-2 km above ground level",
     "short_name": "MergedAzShear0to2kmAGL",
     "units": "s-1",
-    "comment": "Instantaneous azimuthal shear in the 0-2 km AGL layer. Derived from MergedAzShear_0-2kmAGL. Available from October 2020 onward. Source data in 0.001/s scaled to SI.",
+    "comment": "Instantaneous azimuthal shear in the 0-2 km above ground level layer. Derived from MergedAzShear_0-2kmAGL. Available from October 2020 onward. Source data in 0.001/s scaled to SI.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

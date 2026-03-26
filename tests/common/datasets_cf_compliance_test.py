@@ -482,10 +482,10 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     # NOAA MRMS FLASH system (no ECMWF equivalent)
     "FLASH QPE-to-FFG percentage maximum",
     # NOAA MRMS radar-derived rotation/shear products (no ECMWF equivalent)
-    "Rotation track 0-2 km AGL 60-minute",
-    "Rotation track 3-6 km AGL 60-minute",
-    "Azimuthal shear 0-2 km AGL",
-    "Azimuthal shear 3-6 km AGL",
+    "Rotation track 0-2 km above ground level 60-minute",
+    "Rotation track 3-6 km above ground level 60-minute",
+    "Azimuthal shear 0-2 km above ground level",
+    "Azimuthal shear 3-6 km above ground level",
 }
 
 
