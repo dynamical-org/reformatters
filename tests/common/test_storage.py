@@ -305,7 +305,7 @@ class TestIcechunkRepos:
             dataset_id="test-dataset",
             template_config_version="v1.0",
         )
-        repos = factory.icechunk_repos()
+        repos = factory.icechunk_repos(sort="primary-first")
         assert len(repos) == 1
         assert repos[0][0] == "replica-0"
 
@@ -317,7 +317,7 @@ class TestIcechunkRepos:
             dataset_id="test-dataset",
             template_config_version="v1.0",
         )
-        assert factory.icechunk_repos() == []
+        assert factory.icechunk_repos(sort="primary-first") == []
 
     def test_primary_comes_first(self) -> None:
         factory = StoreFactory(
@@ -332,7 +332,7 @@ class TestIcechunkRepos:
             dataset_id="test-dataset",
             template_config_version="v1.0",
         )
-        repos = factory.icechunk_repos()
+        repos = factory.icechunk_repos(sort="primary-first")
         assert len(repos) == 2
         assert repos[0][0] == "primary"
         assert repos[1][0] == "replica-0"
@@ -354,7 +354,7 @@ class TestBranchSupport:
         snapshot = store.session.commit(message="init")
 
         # Create a branch at the current snapshot
-        repo = factory.icechunk_repos()[0][1]
+        repo = factory.icechunk_repos(sort="primary-first")[0][1]
         repo.create_branch("test-branch", snapshot)
 
         # Open on the new branch
