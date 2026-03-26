@@ -45,7 +45,6 @@ log = get_logger(__name__)
 
 
 class _SetupInfo(TypedDict, total=False):
-    branch_name: str
     repo_snapshots: dict[str, str]
 
 
@@ -373,25 +372,25 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         icechunk_repos = self.store_factory.icechunk_repos(sort="primary-first")
         has_icechunk = len(icechunk_repos) > 0
+        branch_name = f"_job_{reformat_job_name}" if has_icechunk else "main"
 
         # ── SETUP / WAIT ─────────────────────────────────────────────
         setup_info = self._parallel_setup(
             is_first,
             workers_total,
             reformat_job_name,
+            branch_name,
             template_ds,
             tmp_store,
             icechunk_repos,
         )
-        branch_name = setup_info.get("branch_name", "main")
 
         # ── GET STORES AND PROCESS JOBS ───────────────────────────────
-        icechunk_branch = branch_name if has_icechunk else "main"
         primary_store = self.store_factory.primary_store(
-            writable=True, branch=icechunk_branch
+            writable=True, branch=branch_name
         )
         replica_stores = self.store_factory.replica_stores(
-            writable=True, branch=icechunk_branch
+            writable=True, branch=branch_name
         )
 
         all_results: dict[str, Sequence[SOURCE_FILE_COORD]] = {}
@@ -425,6 +424,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 all_jobs=all_jobs,
                 merged_results=merged_results,
                 reformat_job_name=reformat_job_name,
+                branch_name=branch_name,
                 template_ds=template_ds,
                 tmp_store=tmp_store,
                 setup_info=setup_info,
@@ -437,6 +437,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         is_first: bool,
         workers_total: int,
         reformat_job_name: str,
+        branch_name: str,
         template_ds: xr.Dataset,
         tmp_store: Path,
         icechunk_repos: list[tuple[str, Any]],
@@ -451,8 +452,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             # This expands the dataset on the temp branch while readers on "main" are unaffected.
             # Branch name is deterministic so worker 0 retries reuse the same branch.
             if has_icechunk:
-                branch_name = f"_job_{reformat_job_name}"
-                setup_info["branch_name"] = branch_name
                 setup_info["repo_snapshots"] = {}
                 for role, repo in icechunk_repos:
                     snapshot = repo.lookup_branch("main")
@@ -539,6 +538,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         all_jobs: Sequence[RegionJob[DATA_VAR, SourceFileCoord]],
         merged_results: Mapping[str, Sequence[SOURCE_FILE_COORD]],
         reformat_job_name: str,
+        branch_name: str,
         template_ds: xr.Dataset,
         tmp_store: Path,
         setup_info: _SetupInfo,
@@ -557,8 +557,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         # Uses copy_zarr_metadata (not write_metadata) because the zarr arrays already exist
         # on the temp branch from _parallel_setup — we only need to update the metadata files.
         # Process replicas before primary so primary (which drives future work) is last to update.
-        # Only runs when setup created a temp branch (branch_name != "main").
-        branch_name = setup_info.get("branch_name", "main")
         if branch_name != "main":
             replicas_first = self.store_factory.icechunk_repos(sort="primary-last")
             # First pass: commit final metadata and reset main on each repo.
