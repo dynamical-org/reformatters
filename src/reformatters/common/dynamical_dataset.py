@@ -393,13 +393,14 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             writable=True, branch=branch_name
         )
 
-        all_results: dict[str, Sequence[SOURCE_FILE_COORD]] = {}
+        all_results: dict[str, list[SOURCE_FILE_COORD]] = {}
         for job in my_jobs:
             template_utils.write_metadata(job.template_ds, job.tmp_store)
             results = job.process(
                 primary_store=primary_store, replica_stores=replica_stores
             )
-            all_results.update(results)
+            for var_name, coords in results.items():
+                all_results.setdefault(var_name, []).extend(coords)
 
         storage.commit_if_icechunk(
             f"Worker {worker_index} at {pd.Timestamp.now(tz='UTC').isoformat()}",
@@ -407,7 +408,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             replica_stores,
         )
 
-        # ── WRITE RESULTS ─────────────────────────────────────────────
+        # ── WRITE RESULTS & FINALIZE ──────────────────────────────────
         if workers_total > 1:
             self.store_factory.write_coordination_file(
                 reformat_job_name,
@@ -415,11 +416,14 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 pickle.dumps(all_results),
             )
 
-        # ── FINALIZE (last worker) ────────────────────────────────────
         if is_last:
-            merged_results = self._collect_results(
-                all_results, reformat_job_name, workers_total
-            )
+            if update_template_with_results:
+                merged_results = self._collect_results(
+                    all_results, reformat_job_name, workers_total
+                )
+            else:
+                self._wait_for_workers(reformat_job_name, workers_total)
+                merged_results = {}
             self._finalize(
                 all_jobs=all_jobs,
                 merged_results=merged_results,
@@ -486,7 +490,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
             if workers_total > 1:
                 self.store_factory.write_coordination_file(
-                    reformat_job_name, "setup/ready.pkl", pickle.dumps(setup_info)
+                    reformat_job_name,
+                    "setup/ready.json",
+                    json.dumps(setup_info).encode(),
                 )
             return setup_info
 
@@ -497,7 +503,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             ):
                 log.info("Waiting for worker 0 to complete setup...")
                 time.sleep(5)
-            return pickle.loads(  # noqa: S301
+            return json.loads(
                 self.store_factory.read_all_coordination_files(
                     reformat_job_name, "setup"
                 )[0]
@@ -505,15 +511,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         return _SetupInfo()
 
-    def _collect_results(
-        self,
-        local_results: dict[str, Sequence[SOURCE_FILE_COORD]],
-        reformat_job_name: str,
-        workers_total: int,
-    ) -> Mapping[str, Sequence[SOURCE_FILE_COORD]]:
-        if workers_total == 1:
-            return local_results
-
+    def _wait_for_workers(self, reformat_job_name: str, workers_total: int) -> None:
+        if workers_total <= 1:
+            return
         # Poll until all workers write results. Rely on kubernetes pod_active_deadline for timeout.
         while (
             len(
@@ -526,11 +526,23 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             log.info("Waiting for all workers to complete...")
             time.sleep(10)
 
-        merged: dict[str, Sequence[SOURCE_FILE_COORD]] = {}
+    def _collect_results(
+        self,
+        local_results: dict[str, list[SOURCE_FILE_COORD]],
+        reformat_job_name: str,
+        workers_total: int,
+    ) -> Mapping[str, Sequence[SOURCE_FILE_COORD]]:
+        if workers_total == 1:
+            return local_results
+
+        self._wait_for_workers(reformat_job_name, workers_total)
+
+        merged: dict[str, list[SOURCE_FILE_COORD]] = {}
         for data in self.store_factory.read_all_coordination_files(
             reformat_job_name, "results"
         ):
-            merged.update(pickle.loads(data))  # noqa: S301
+            for var_name, coords in pickle.loads(data).items():  # noqa: S301
+                merged.setdefault(var_name, []).extend(coords)
         return merged
 
     def _finalize(
