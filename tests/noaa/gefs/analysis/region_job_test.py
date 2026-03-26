@@ -116,9 +116,9 @@ def example_data_vars() -> list[GEFSDataVar]:
     ]
 
 
-def test_max_vars_per_backfill_job() -> None:
-    """Test max_vars_per_backfill_job is correctly set."""
-    assert GefsAnalysisRegionJob.max_vars_per_backfill_job == 1
+def test_max_vars_per_job() -> None:
+    """Test max_vars_per_job is correctly set."""
+    assert GefsAnalysisRegionJob.max_vars_per_job == 1
 
 
 def test_get_processing_region(
@@ -567,7 +567,6 @@ def test_operational_update_jobs(
             # Verify get_jobs was called with correct parameters
             mock_get_jobs.assert_called_once()
             call_args = mock_get_jobs.call_args
-            assert call_args.kwargs["kind"] == "operational-update"
             assert call_args.kwargs["tmp_store"] == tmp_store_path
             assert call_args.kwargs["append_dim"] == "time"
             assert call_args.kwargs["all_data_vars"] == example_data_vars

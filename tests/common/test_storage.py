@@ -1,3 +1,4 @@
+import pickle
 from unittest.mock import MagicMock
 
 import icechunk
@@ -235,3 +236,140 @@ def test_commit_if_icechunk_commits_multiple_replicas_before_primary() -> None:
 
     assert call_order.index("replica1") < call_order.index("primary")
     assert call_order.index("replica2") < call_order.index("primary")
+
+
+def _local_factory(
+    tmp_path: str, fmt: DatasetFormat = DatasetFormat.ZARR3
+) -> StoreFactory:
+    return StoreFactory(
+        primary_storage_config=StorageConfig(base_path=str(tmp_path), format=fmt),
+        dataset_id="test-dataset",
+        template_config_version="v1.0",
+    )
+
+
+class TestCoordinationFiles:
+    def test_write_and_read_round_trip(self, tmp_path: str) -> None:
+        factory = _local_factory(tmp_path)
+        factory.write_coordination_file(
+            "test-job", "results/worker-0.pkl", pickle.dumps({"a": 1})
+        )
+        factory.write_coordination_file(
+            "test-job", "results/worker-1.pkl", pickle.dumps({"b": 2})
+        )
+
+        files = factory.read_all_coordination_files("test-job", "results")
+        assert len(files) == 2
+        results = [pickle.loads(f) for f in files]  # noqa: S301
+        assert {"a": 1} in results
+        assert {"b": 2} in results
+
+    def test_read_returns_empty_when_no_files(self, tmp_path: str) -> None:
+        factory = _local_factory(tmp_path)
+        assert factory.read_all_coordination_files("test-job", "results") == []
+
+    def test_prefix_filtering(self, tmp_path: str) -> None:
+        factory = _local_factory(tmp_path)
+        factory.write_coordination_file("test-job", "setup/ready.pkl", b"ready")
+        factory.write_coordination_file("test-job", "results/worker-0.pkl", b"data")
+
+        assert len(factory.read_all_coordination_files("test-job", "setup")) == 1
+        assert len(factory.read_all_coordination_files("test-job", "results")) == 1
+
+    def test_clear_removes_all_files(self, tmp_path: str) -> None:
+        factory = _local_factory(tmp_path)
+        factory.write_coordination_file("test-job", "results/worker-0.pkl", b"data")
+        factory.write_coordination_file("test-job", "setup/ready.pkl", b"ready")
+
+        factory.clear_coordination_files("test-job")
+
+        assert factory.read_all_coordination_files("test-job", "results") == []
+        assert factory.read_all_coordination_files("test-job", "setup") == []
+
+    def test_clear_noop_when_no_files(self, tmp_path: str) -> None:
+        factory = _local_factory(tmp_path)
+        factory.clear_coordination_files("test-job")  # should not raise
+
+
+class TestIcechunkRepos:
+    def test_returns_repos_for_icechunk_stores_only(self) -> None:
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/primary", format=DatasetFormat.ZARR3
+            ),
+            replica_storage_configs=[
+                StorageConfig(
+                    base_path="s3://bucket/replica", format=DatasetFormat.ICECHUNK
+                ),
+            ],
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+        )
+        repos = factory.icechunk_repos()
+        assert len(repos) == 1
+        assert repos[0][0] == "replica-0"
+
+    def test_returns_empty_for_zarr3_only(self) -> None:
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/primary", format=DatasetFormat.ZARR3
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+        )
+        assert factory.icechunk_repos() == []
+
+    def test_primary_comes_first(self) -> None:
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/primary", format=DatasetFormat.ICECHUNK
+            ),
+            replica_storage_configs=[
+                StorageConfig(
+                    base_path="s3://bucket/replica", format=DatasetFormat.ICECHUNK
+                ),
+            ],
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+        )
+        repos = factory.icechunk_repos()
+        assert len(repos) == 2
+        assert repos[0][0] == "primary"
+        assert repos[1][0] == "replica-0"
+
+
+class TestBranchSupport:
+    def test_icechunk_store_opens_on_specified_branch(self) -> None:
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/data", format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+        )
+        # Create the store with some data so we can commit
+        store = factory.primary_store(writable=True)
+        assert isinstance(store, IcechunkStore)
+        zarr.open_group(store, mode="w", attributes={"init": True})
+        snapshot = store.session.commit(message="init")
+
+        # Create a branch at the current snapshot
+        repo = factory.icechunk_repos()[0][1]
+        repo.create_branch("test-branch", snapshot)
+
+        # Open on the new branch
+        branch_store = factory.primary_store(writable=True, branch="test-branch")
+        assert isinstance(branch_store, IcechunkStore)
+        assert branch_store.session.branch == "test-branch"
+
+    def test_zarr3_store_ignores_branch_parameter(self) -> None:
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/data", format=DatasetFormat.ZARR3
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+        )
+        # Should not raise even with a non-main branch
+        store = factory.primary_store(writable=True, branch="some-branch")
+        assert isinstance(store, zarr.storage.LocalStore)

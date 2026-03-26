@@ -38,7 +38,7 @@ class GefsForecast35DayRegionJob(
 ):
     """RegionJob for GEFS Forecast 35-Day dataset processing."""
 
-    max_vars_per_backfill_job = 3
+    max_vars_per_job = 3
 
     @classmethod
     def source_groups(
@@ -154,7 +154,6 @@ class GefsForecast35DayRegionJob(
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
-            kind="operational-update",
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=append_dim,

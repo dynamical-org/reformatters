@@ -45,7 +45,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     # so it's more efficient to do separate windowed downloads & reads for each
     # variable that we can parallelize.
     max_vars_per_download_group: ClassVar[int] = 1
-    max_vars_per_backfill_job: ClassVar[int] = 1
+    max_vars_per_job: ClassVar[int] = 1
 
     @classmethod
     def source_groups(
@@ -256,7 +256,6 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
-            kind="operational-update",
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=append_dim,
