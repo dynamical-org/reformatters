@@ -303,6 +303,10 @@ def test_read_data_pre_v12_two_band_selects_discipline_209(
 
     monkeypatch.setattr("rasterio.open", lambda *_args, **_kwargs: FakeReader())
 
+    data_var_mock = Mock()
+    data_var_mock.internal_attrs.nodata_sentinel = None
+    data_var_mock.internal_attrs.source_grid_downsample = 1
+
     result = region_job.read_data(
         NoaaMrmsSourceFileCoord(
             time=pd.Timestamp("2019-06-15T12:00"),
@@ -312,7 +316,7 @@ def test_read_data_pre_v12_two_band_selects_discipline_209(
             data_var_name="precipitation_surface",
             downloaded_path=Path("fake.grib2"),
         ),
-        Mock(),
+        data_var_mock,
     )
 
     np.testing.assert_array_equal(result, data)

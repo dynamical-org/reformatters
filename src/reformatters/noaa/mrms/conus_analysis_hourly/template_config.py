@@ -41,6 +41,12 @@ class NoaaMrmsInternalAttrs(BaseInternalAttrs):
     expected_invalid_fraction: float = 0.07
     # Source files use this value instead of NaN for missing/out-of-coverage pixels
     nodata_sentinel: float | None = None
+    # Multiply source data by this factor to convert to SI units
+    source_units_scale_factor: float | None = None
+    # Downsample source grid by this factor (e.g. 2 for 0.005° → 0.01°)
+    source_grid_downsample: int = 1
+    # Source files have approximate timestamps (e.g. 2-min products, not exact hours)
+    uses_approximate_timestamps: bool = False
 
 
 class NoaaMrmsDataVar(DataVar[NoaaMrmsInternalAttrs]):
@@ -334,6 +340,88 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     expected_invalid_fraction=0.65,
                     nodata_sentinel=-999.0,
+                ),
+            ),
+            NoaaMrmsDataVar(
+                name="rotation_track_60min_0_2km",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="RotationTrack60min",
+                    long_name="Rotation track 0-2 km AGL 60-minute",
+                    units="s-1",
+                    step_type="max",
+                    comment="Maximum low-level (0-2 km AGL) azimuthal shear track over the previous 60 minutes. Derived from RotationTrack60min. Available from October 2020 onward. Source data in 0.001/s scaled to SI.",
+                ),
+                internal_attrs=NoaaMrmsInternalAttrs(
+                    mrms_product="RotationTrack60min",
+                    mrms_product_pre_v12="unavailable-pre-v12",
+                    mrms_level="00.50",
+                    available_from=MRMS_V12_START,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    source_units_scale_factor=0.001,
+                    source_grid_downsample=2,
+                ),
+            ),
+            NoaaMrmsDataVar(
+                name="rotation_track_60min_3_6km",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="RotationTrackML60min",
+                    long_name="Rotation track 3-6 km AGL 60-minute",
+                    units="s-1",
+                    step_type="max",
+                    comment="Maximum mid-level (3-6 km AGL) azimuthal shear track over the previous 60 minutes. Derived from RotationTrackML60min. Available from October 2020 onward. Source data in 0.001/s scaled to SI.",
+                ),
+                internal_attrs=NoaaMrmsInternalAttrs(
+                    mrms_product="RotationTrackML60min",
+                    mrms_product_pre_v12="unavailable-pre-v12",
+                    mrms_level="00.50",
+                    available_from=MRMS_V12_START,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    source_units_scale_factor=0.001,
+                    source_grid_downsample=2,
+                ),
+            ),
+            NoaaMrmsDataVar(
+                name="azimuthal_shear_0_2km",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="MergedAzShear0to2kmAGL",
+                    long_name="Azimuthal shear 0-2 km AGL",
+                    units="s-1",
+                    step_type="instant",
+                    comment="Instantaneous azimuthal shear in the 0-2 km AGL layer. Derived from MergedAzShear_0-2kmAGL. Available from October 2020 onward. Source data in 0.001/s scaled to SI.",
+                ),
+                internal_attrs=NoaaMrmsInternalAttrs(
+                    mrms_product="MergedAzShear_0-2kmAGL",
+                    mrms_product_pre_v12="unavailable-pre-v12",
+                    mrms_level="00.50",
+                    available_from=MRMS_V12_START,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    source_units_scale_factor=0.001,
+                    source_grid_downsample=2,
+                    uses_approximate_timestamps=True,
+                ),
+            ),
+            NoaaMrmsDataVar(
+                name="azimuthal_shear_3_6km",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="MergedAzShear3to6kmAGL",
+                    long_name="Azimuthal shear 3-6 km AGL",
+                    units="s-1",
+                    step_type="instant",
+                    comment="Instantaneous azimuthal shear in the 3-6 km AGL layer. Derived from MergedAzShear_3-6kmAGL. Available from October 2020 onward. Source data in 0.001/s scaled to SI.",
+                ),
+                internal_attrs=NoaaMrmsInternalAttrs(
+                    mrms_product="MergedAzShear_3-6kmAGL",
+                    mrms_product_pre_v12="unavailable-pre-v12",
+                    mrms_level="00.50",
+                    available_from=MRMS_V12_START,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    source_units_scale_factor=0.001,
+                    source_grid_downsample=2,
+                    uses_approximate_timestamps=True,
                 ),
             ),
         ]

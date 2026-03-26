@@ -1,9 +1,11 @@
 import gzip
 import uuid
+import xml.etree.ElementTree as ET
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Literal, assert_never
 
+import httpx
 import numpy as np
 import pandas as pd
 import rasterio
@@ -44,6 +46,8 @@ class NoaaMrmsSourceFileCoord(SourceFileCoord):
     # Only set for precipitation_surface timestamps in _PRECIPITATION_SURFACE_RADAR_ONLY_OVERRIDES.
     # When set and product is RadarOnly_QPE_01H, get_url uses this timestamp instead of self.time.
     radar_only_time_override: Timestamp | None = None
+    # Source files have approximate timestamps (e.g. 2-min products not at exact hours)
+    uses_approximate_timestamps: bool = False
 
     def get_url(self, source: DownloadSource = "s3") -> str:
         if (
@@ -128,6 +132,7 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
                     fallback_products=fallback_products,
                     data_var_name=data_var.name,
                     radar_only_time_override=radar_only_time_override,
+                    uses_approximate_timestamps=internal.uses_approximate_timestamps,
                 )
             )
         return coords
@@ -135,9 +140,14 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
     def _download_from_source(
         self, coord: NoaaMrmsSourceFileCoord, source: DownloadSource
     ) -> Path:
+        if coord.uses_approximate_timestamps and source == "s3":
+            url = _find_nearest_s3_url(coord)
+        else:
+            url = coord.get_url(source=source)
+
         local_path_suffix = f"_{coord.data_var_name}"
         gz_path = http_download_to_disk(
-            coord.get_url(source=source),
+            url,
             self.dataset_id,
             local_path_suffix=local_path_suffix,
         )
@@ -203,6 +213,10 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
         if nodata_sentinel is not None:
             result[result == nodata_sentinel] = np.nan
 
+        downsample = data_var.internal_attrs.source_grid_downsample
+        if downsample > 1:
+            result = result[::downsample, ::downsample]
+
         return result
 
     def apply_data_transformations(
@@ -222,6 +236,10 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
                 )
             except ValueError:
                 log.exception(f"Error deaccumulating {data_var.name}")
+
+        scale_factor = data_var.internal_attrs.source_units_scale_factor
+        if scale_factor is not None:
+            data_array.values *= scale_factor
 
         keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
         if isinstance(keep_mantissa_bits, int):
@@ -261,6 +279,29 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
             filter_end=append_dim_end,
         )
         return jobs, template_ds
+
+
+_S3_LIST_NS = "http://s3.amazonaws.com/doc/2006-03-01/"
+
+
+def _find_nearest_s3_url(coord: NoaaMrmsSourceFileCoord) -> str:
+    """Find the S3 URL of the file closest to the target hour for 2-minute products."""
+    date_str = coord.time.strftime("%Y%m%d")
+    hour_str = coord.time.strftime("%H")
+    prefix = f"CONUS/{coord.product}_{coord.level}/{date_str}/MRMS_{coord.product}_{coord.level}_{date_str}-{hour_str}00"
+    list_url = f"https://noaa-mrms-pds.s3.amazonaws.com/?list-type=2&prefix={prefix}&max-keys=1"
+
+    response = httpx.get(list_url, timeout=30)
+    response.raise_for_status()
+
+    root = ET.fromstring(response.content)  # noqa: S314 trusted S3 API response
+    key = root.findtext(f".//{{{_S3_LIST_NS}}}Key")
+    if key is None:
+        raise FileNotFoundError(
+            f"No S3 files found near {coord.time} for {coord.product}"
+        )
+
+    return f"https://noaa-mrms-pds.s3.amazonaws.com/{key}"
 
 
 # For precipitation_surface only: maps missing hourly timestamps to the RadarOnly file

@@ -323,6 +323,11 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "qa",
     # snowfall_surface is a snow depth rate (m s-1); CF has no standard name for this quantity
     "snowfall_surface",
+    # MRMS radar-derived products have no CF standard names
+    "rotation_track_60min_0_2km",
+    "rotation_track_60min_3_6km",
+    "azimuthal_shear_0_2km",
+    "azimuthal_shear_3_6km",
 }
 
 # (standard_name, units) pairs that are intentionally non-canonical but allowed for all datasets.
@@ -455,6 +460,11 @@ ECMWF_SHORTNAME_EXEMPT: set[str] = {
     "80v",
     # NOAA MRMS FLASH system (no ECMWF equivalent)
     "FLASH_QPE_FFGMAX",
+    # NOAA MRMS radar-derived rotation/shear products (no ECMWF equivalent)
+    "RotationTrack60min",
+    "RotationTrackML60min",
+    "MergedAzShear0to2kmAGL",
+    "MergedAzShear3to6kmAGL",
 }
 
 ECMWF_LONGNAME_EXEMPT: set[str] = {
@@ -471,6 +481,11 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     "80 metre V wind component",
     # NOAA MRMS FLASH system (no ECMWF equivalent)
     "FLASH QPE-to-FFG percentage maximum",
+    # NOAA MRMS radar-derived rotation/shear products (no ECMWF equivalent)
+    "Rotation track 0-2 km AGL 60-minute",
+    "Rotation track 3-6 km AGL 60-minute",
+    "Azimuthal shear 0-2 km AGL",
+    "Azimuthal shear 3-6 km AGL",
 }
 
 
