@@ -9,7 +9,7 @@ from http import HTTPStatus
 from itertools import batched, chain, pairwise
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar, get_args
+from typing import Annotated, Any, ClassVar, Generic, TypeVar, get_args
 
 import httpx
 import numpy as np
@@ -21,7 +21,7 @@ from zarr.abc.store import Store
 
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config_models import DataVar
-from reformatters.common.iterating import dimension_slices, get_worker_jobs
+from reformatters.common.iterating import dimension_slices
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel, replace
 from reformatters.common.shared_memory_utils import (
@@ -118,9 +118,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     region: Annotated[slice, AfterValidator(region_slice)]
     reformat_job_name: str
 
-    # Limit the number of variables processed in each backfill job if set.
+    # Limit the number of variables processed in each job if set.
     # Rule of thumb: leave unset unless a job takes > 15 minutes.
-    max_vars_per_backfill_job: ClassVar[int | None] = None
+    max_vars_per_job: ClassVar[int | None] = None
 
     # Limit the number of variables processed in each download group if set.
     # If value is less than len(data_vars), downloading, reading/recompressing, and writing steps
@@ -338,14 +338,11 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     @classmethod
     def get_jobs(
         cls,
-        kind: Literal["backfill", "operational-update"],
         tmp_store: Path,
         template_ds: xr.Dataset,
         append_dim: AppendDim,
         all_data_vars: Sequence[DATA_VAR],
         reformat_job_name: str,
-        worker_index: int = 0,
-        workers_total: int = 1,
         filter_start: Timestamp | None = None,
         filter_end: Timestamp | None = None,
         filter_contains: list[Timestamp] | None = None,
@@ -353,9 +350,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> Sequence["RegionJob[DATA_VAR, SOURCE_FILE_COORD]"]:
         """
         Return a sequence of RegionJob instances to process.
-
-        If `workers_total` and `worker_index` are provided the returned jobs are
-        filtered to only include jobs which should be processed by `worker_index`.
 
         If any of the `filter_*` arguments are provided, the returned jobs are filtered
         to only include jobs which intersect all provided filters. Complete jobs are always
@@ -376,10 +370,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         reformat_job_name : str
             The name of the reformatting job, used for progress tracking.
             This is often the name of the Kubernetes job, or "local".
-        worker_index : int, default 0
-            Index of the current worker (0-indexed).
-        workers_total : int, default 1
-            Total number of workers processing jobs in parallel.
         filter_start : Timestamp | None, default None
             Keep shards where max(shard_coords) >= filter_start. Inclusive.
         filter_end : Timestamp | None, default None
@@ -393,7 +383,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         Returns
         -------
         Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
-            RegionJob instances assigned to this worker.
+            All RegionJob instances matching the filters. Worker partitioning
+            is handled by the caller via get_worker_jobs.
         """
 
         # Data variables -- filter and group
@@ -405,23 +396,15 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         else:
             data_vars = all_data_vars
 
-        # If kind == "operational-update" we need all variables in one job
-        # so we don't extend the dataset before all variables are processed.
-        # If kind == "backfill" it can be useful to make smaller jobs for more parallelism
-        # and granular progress tracking at the kubernetes job level.
-        if kind == "backfill" and cls.max_vars_per_backfill_job is not None:
-            # split by source groups first as those are efficient groupings
+        if cls.max_vars_per_job is not None:
+            # Split by source groups first as those are efficient groupings,
+            # then split further to create smaller jobs for parallelism.
             data_var_groups = cls.source_groups(data_vars)
             data_var_groups = cls._maybe_split_groups(
-                data_var_groups, cls.max_vars_per_backfill_job
+                data_var_groups, cls.max_vars_per_job
             )
         else:
-            # In operational update we must have all variables in one job.
-            # In backfill without max_vars_per_backfill_job set we also want all variables in one job.
             data_var_groups = [data_vars]
-
-        if kind == "operational-update":
-            assert len(data_var_groups) == 1
 
         # Regions along append dimension
         regions = dimension_slices(template_ds, append_dim, kind="shards")
@@ -486,7 +469,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             for region in regions
             for data_var_group in data_var_groups
         ]
-        return get_worker_jobs(all_jobs, worker_index, workers_total)
+        return all_jobs
 
     def process(
         self,

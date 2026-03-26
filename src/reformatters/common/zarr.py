@@ -98,6 +98,7 @@ def copy_zarr_metadata(
     primary_store: Store,
     replica_stores: Iterable[Store] = (),
     icechunk_only: bool = False,
+    zarr3_only: bool = False,
 ) -> None:
     """
     Copy the metadata and coordinate label arrays from the temporary store to the primary and replica stores.
@@ -109,6 +110,8 @@ def copy_zarr_metadata(
     if we try to write data that does not match the shape specified in the metadata. This is safe to do so, however,
     because in the Icechunk case, data is not available to readers until we commit the Icechunk writable session.
     """
+    assert not (icechunk_only and zarr3_only)
+
     metadata_files: list[Path] = []
 
     # The coordinate label arrays must be copied before the metadata.
@@ -120,14 +123,15 @@ def copy_zarr_metadata(
     metadata_files.append(tmp_store / "zarr.json")
     metadata_files.extend(tmp_store.glob("*/zarr.json"))
 
+    def _should_skip(store: Store) -> bool:
+        is_icechunk = isinstance(store, IcechunkStore)
+        return (icechunk_only and not is_icechunk) or (zarr3_only and is_icechunk)
+
     # It is important that we copy metadata to replica stores first
     # Since the primary store is our reference store (to determine what data we have and what needs to be written)
     # we only want to update its metadata once we are sure the replicas are up to date.
     for replica_store in replica_stores:
-        if icechunk_only and not isinstance(replica_store, IcechunkStore):
-            log.info(
-                f"Skipping metadata copy to replica store ({replica_store}) because it is not an IcechunkStore and icechunk_only is True"
-            )
+        if _should_skip(replica_store):
             continue
 
         log.info(
@@ -135,10 +139,7 @@ def copy_zarr_metadata(
         )
         _copy_metadata_files(metadata_files, tmp_store, replica_store)
 
-    if icechunk_only and not isinstance(primary_store, IcechunkStore):
-        log.info(
-            f"Skipping metadata copy to primary store ({primary_store}) because it is not an IcechunkStore and icechunk_only is True"
-        )
+    if _should_skip(primary_store):
         return
 
     log.info(f"Copying metadata to primary store ({primary_store}) from {tmp_store}")
