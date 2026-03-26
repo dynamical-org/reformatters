@@ -68,7 +68,7 @@
     "long_name": "Azimuthal shear 3-6 km above ground level",
     "short_name": "MergedAzShear3to6kmAGL",
     "units": "s-1",
-    "comment": "Instantaneous azimuthal shear in the 3-6 km above ground level layer. Derived from MergedAzShear_3-6kmAGL. Available from October 2020 onward. Source data in 0.001/s scaled to SI.",
+    "comment": "Instantaneous azimuthal shear in the 3-6 km above ground level layer. Derived from MergedAzShear_3-6kmAGL. Available from October 2020 onward.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

@@ -68,7 +68,7 @@
     "long_name": "Rotation track 0-2 km above ground level 60-minute",
     "short_name": "RotationTrack60min",
     "units": "s-1",
-    "comment": "Maximum low-level (0-2 km above ground level) azimuthal shear track over the previous 60 minutes. Derived from RotationTrack60min. Available from October 2020 onward. Source data in 0.001/s scaled to SI.",
+    "comment": "Maximum low-level (0-2 km above ground level) azimuthal shear track over the previous 60 minutes. Derived from RotationTrack60min. Available from October 2020 onward.",
     "step_type": "max",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="
