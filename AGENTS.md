@@ -35,13 +35,14 @@ src/reformatters/
 └── example/                 # Template for new integrations
 
 tests/                       # Mirrors src/ structure
-docs/                        # Documentation
-├── dataset_integration_guide.md         # Integrate new datasets (TemplateConfig, RegionJob, DynamicalDataset)
-├── source_data_exploration_guide.md     # Explore/document source dataset structure before integration
-├── add_new_variable.md                  # Add new variable to existing dataset
-├── staging.md                           # Run concurrent dataset versions for testing/legacy support
-├── chunk_shard_layout_tool.md           # Zarr V3 chunk/shard layout optimizer
-└── ops_card.md                          # Operations: monitoring, troubleshooting, manual dataset updates
+docs/
+├── dataset_integration_guide.md  # Step-by-step new dataset walkthrough
+├── parallel_processing.md        # How parallel writes coordinate across workers
+├── add_new_variable.md           # Adding variables to existing datasets
+├── chunk_shard_layout_tool.md    # Tool for designing chunk/shard layouts
+├── source_data_exploration_guide.md  # Exploring source datasets
+├── ops_card.md                   # Operational runbook
+└── staging.md                    # Staging environment setup
 deploy/                      # Docker and kubernetes configs
 ├── Dockerfile               # Container image for reformatter jobs
 └── aws/                     # nodepool.yaml, create_new_aws_open_data_bucket.sh
@@ -114,17 +115,17 @@ Run via `uv run main`.
 
 ## Parallelization model
 
-Kubernetes indexed jobs provide parallelism for backfills. Every worker independently computes the same ordered list of all jobs,
-then deterministically selects its subset. No coordinator or job queue is needed.
+Both backfills and operational updates distribute work across Kubernetes indexed jobs. Every worker independently computes the same ordered list of all jobs, then deterministically selects its subset via round-robin. No coordinator or job queue is needed.
 
-1. **Job generation**: `RegionJob.get_jobs()` creates all jobs by combining:
-   - Regions: slices along the append dimension (typically one shard each)
-   - Variable groups: subsets of data variables that share source files
-   - Filters: for append dim start/end/contains and variables applied
+1. **Job generation**: `RegionJob.get_jobs()` creates all jobs by combining regions (shard slices along append dim) × variable groups (controlled by `max_vars_per_job`), with optional filters.
 
-2. **Worker assignment**: `get_worker_jobs(all_jobs, worker_index, workers_total)` distributes jobs round-robin: `islice(jobs, worker_index, None, workers_total)`
+2. **Worker assignment**: `get_worker_jobs(all_jobs, worker_index, workers_total)` distributes jobs round-robin.
 
-3. **Kubernetes execution**: Each pod receives `WORKER_INDEX` and `WORKERS_TOTAL` env vars.
+3. **Coordination**: Workers coordinate via files in `_internal/{job_name}/` in object store. Worker 0 does setup, all workers process, the last worker (by index) finalizes.
+
+4. **Reader safety**: Zarr v3 stores defer metadata writes until finalization. Icechunk stores use a temporary branch so readers on `main` never see partial data.
+
+See [docs/parallel_processing.md](docs/parallel_processing.md) for details on coordination protocol, failure modes, and retry behavior.
 
 ## Tools
 * `uv` to manage pythons and dependencies and run python code
