@@ -10,19 +10,19 @@ import xarray as xr
 from reformatters.common import template_utils
 from reformatters.common.iterating import item
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
-from reformatters.ecmwf.aifs_deterministic.forecast.region_job import (
+from reformatters.ecmwf.aifs_single.forecast.region_job import (
     AIFS_SINGLE_PATH_CHANGE_DATE,
-    EcmwfAifsDeterministicForecastRegionJob,
-    EcmwfAifsDeterministicForecastSourceFileCoord,
+    EcmwfAifsSingleForecastRegionJob,
+    EcmwfAifsSingleForecastSourceFileCoord,
 )
-from reformatters.ecmwf.aifs_deterministic.forecast.template_config import (
-    EcmwfAifsDeterministicForecastTemplateConfig,
+from reformatters.ecmwf.aifs_single.forecast.template_config import (
+    EcmwfAifsSingleForecastTemplateConfig,
 )
 
 
 def test_source_file_coord_url_before_path_change() -> None:
-    config = EcmwfAifsDeterministicForecastTemplateConfig()
-    coord = EcmwfAifsDeterministicForecastSourceFileCoord(
+    config = EcmwfAifsSingleForecastTemplateConfig()
+    coord = EcmwfAifsSingleForecastSourceFileCoord(
         init_time=pd.Timestamp("2024-07-01T12:00"),
         lead_time=pd.Timedelta("6h"),
         data_var_group=list(config.data_vars[:1]),
@@ -38,8 +38,8 @@ def test_source_file_coord_url_before_path_change() -> None:
 
 
 def test_source_file_coord_url_after_path_change() -> None:
-    config = EcmwfAifsDeterministicForecastTemplateConfig()
-    coord = EcmwfAifsDeterministicForecastSourceFileCoord(
+    config = EcmwfAifsSingleForecastTemplateConfig()
+    coord = EcmwfAifsSingleForecastSourceFileCoord(
         init_time=AIFS_SINGLE_PATH_CHANGE_DATE,
         lead_time=pd.Timedelta("12h"),
         data_var_group=list(config.data_vars[:1]),
@@ -55,8 +55,8 @@ def test_source_file_coord_url_after_path_change() -> None:
 
 
 def test_source_file_coord_url_00z_init() -> None:
-    config = EcmwfAifsDeterministicForecastTemplateConfig()
-    coord = EcmwfAifsDeterministicForecastSourceFileCoord(
+    config = EcmwfAifsSingleForecastTemplateConfig()
+    coord = EcmwfAifsSingleForecastSourceFileCoord(
         init_time=pd.Timestamp("2024-10-15T00:00"),
         lead_time=pd.Timedelta("24h"),
         data_var_group=list(config.data_vars[:1]),
@@ -69,8 +69,8 @@ def test_source_file_coord_url_00z_init() -> None:
 
 def test_source_file_coord_url_day_before_path_change() -> None:
     """The day before the path change should still use 'aifs'."""
-    config = EcmwfAifsDeterministicForecastTemplateConfig()
-    coord = EcmwfAifsDeterministicForecastSourceFileCoord(
+    config = EcmwfAifsSingleForecastTemplateConfig()
+    coord = EcmwfAifsSingleForecastSourceFileCoord(
         init_time=AIFS_SINGLE_PATH_CHANGE_DATE - pd.Timedelta("12h"),
         lead_time=pd.Timedelta("6h"),
         data_var_group=list(config.data_vars[:1]),
@@ -82,10 +82,10 @@ def test_source_file_coord_url_day_before_path_change() -> None:
 
 
 def test_source_file_coord_out_loc() -> None:
-    config = EcmwfAifsDeterministicForecastTemplateConfig()
+    config = EcmwfAifsSingleForecastTemplateConfig()
     init_time = pd.Timestamp("2024-04-01T00:00")
     lead_time = pd.Timedelta("6h")
-    coord = EcmwfAifsDeterministicForecastSourceFileCoord(
+    coord = EcmwfAifsSingleForecastSourceFileCoord(
         init_time=init_time,
         lead_time=lead_time,
         data_var_group=list(config.data_vars[:1]),
@@ -96,8 +96,8 @@ def test_source_file_coord_out_loc() -> None:
 
 
 def test_source_groups() -> None:
-    config = EcmwfAifsDeterministicForecastTemplateConfig()
-    groups = EcmwfAifsDeterministicForecastRegionJob.source_groups(config.data_vars)
+    config = EcmwfAifsSingleForecastTemplateConfig()
+    groups = EcmwfAifsSingleForecastRegionJob.source_groups(config.data_vars)
     assert len(groups) == 2
 
     group_without_date = [
@@ -113,10 +113,10 @@ def test_source_groups() -> None:
 
 
 def test_generate_source_file_coords() -> None:
-    config = EcmwfAifsDeterministicForecastTemplateConfig()
+    config = EcmwfAifsSingleForecastTemplateConfig()
     template_ds = config.get_template(pd.Timestamp("2024-04-03"))
 
-    region_job = EcmwfAifsDeterministicForecastRegionJob.model_construct(
+    region_job = EcmwfAifsSingleForecastRegionJob.model_construct(
         tmp_store=Mock(),
         template_ds=template_ds.isel(
             init_time=slice(0, 4),
@@ -130,21 +130,21 @@ def test_generate_source_file_coords() -> None:
     processing_region_ds, output_region_ds = region_job._get_region_datasets()
     assert processing_region_ds.equals(output_region_ds)
 
-    groups = EcmwfAifsDeterministicForecastRegionJob.source_groups(config.data_vars)
+    groups = EcmwfAifsSingleForecastRegionJob.source_groups(config.data_vars)
 
     coords = region_job.generate_source_file_coords(processing_region_ds, groups[0])
     # 4 init_times x 3 lead_times = 12
     assert len(coords) == 4 * 3
 
     for coord in coords:
-        assert isinstance(coord, EcmwfAifsDeterministicForecastSourceFileCoord)
+        assert isinstance(coord, EcmwfAifsSingleForecastSourceFileCoord)
 
 
 def test_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
-    config = EcmwfAifsDeterministicForecastTemplateConfig()
+    config = EcmwfAifsSingleForecastTemplateConfig()
     template_ds = config.get_template(pd.Timestamp("2024-04-02"))
 
-    region_job = EcmwfAifsDeterministicForecastRegionJob.model_construct(
+    region_job = EcmwfAifsSingleForecastRegionJob.model_construct(
         tmp_store=Mock(),
         template_ds=template_ds,
         data_vars=config.data_vars,
@@ -153,7 +153,7 @@ def test_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
         reformat_job_name="test",
     )
     t2m_var = item(v for v in config.data_vars if v.name == "temperature_2m")
-    source_file_coord = EcmwfAifsDeterministicForecastSourceFileCoord(
+    source_file_coord = EcmwfAifsSingleForecastSourceFileCoord(
         init_time=pd.Timestamp("2024-04-01"),
         lead_time=pd.Timedelta("6h"),
         data_var_group=[t2m_var],
@@ -172,7 +172,7 @@ def test_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
 
     download_to_disk_mock = Mock()
     monkeypatch.setattr(
-        "reformatters.ecmwf.aifs_deterministic.forecast.region_job.http_download_to_disk",
+        "reformatters.ecmwf.aifs_single.forecast.region_job.http_download_to_disk",
         download_to_disk_mock,
     )
 
@@ -188,10 +188,10 @@ def test_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_read_data(monkeypatch: pytest.MonkeyPatch) -> None:
-    config = EcmwfAifsDeterministicForecastTemplateConfig()
+    config = EcmwfAifsSingleForecastTemplateConfig()
     template_ds = config.get_template(pd.Timestamp("2024-04-02"))
 
-    region_job = EcmwfAifsDeterministicForecastRegionJob.model_construct(
+    region_job = EcmwfAifsSingleForecastRegionJob.model_construct(
         tmp_store=Mock(),
         template_ds=template_ds,
         data_vars=config.data_vars,
@@ -200,7 +200,7 @@ def test_read_data(monkeypatch: pytest.MonkeyPatch) -> None:
         reformat_job_name="test",
     )
     t2m_var = item(v for v in config.data_vars if v.name == "temperature_2m")
-    coord = EcmwfAifsDeterministicForecastSourceFileCoord(
+    coord = EcmwfAifsSingleForecastSourceFileCoord(
         init_time=pd.Timestamp("2024-04-01"),
         lead_time=pd.Timedelta("6h"),
         data_var_group=[t2m_var],
@@ -216,7 +216,7 @@ def test_read_data(monkeypatch: pytest.MonkeyPatch) -> None:
     test_data = np.ones((721, 1440), dtype=np.float32)
     rasterio_reader.read = Mock(return_value=test_data)
     monkeypatch.setattr(
-        "reformatters.ecmwf.aifs_deterministic.forecast.region_job.rasterio.open",
+        "reformatters.ecmwf.aifs_single.forecast.region_job.rasterio.open",
         Mock(return_value=rasterio_reader),
     )
 
@@ -229,17 +229,17 @@ def test_read_data(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_read_data_multi_band(monkeypatch: pytest.MonkeyPatch) -> None:
     """When max_vars_per_download_group > 1, the GRIB has multiple bands."""
-    config = EcmwfAifsDeterministicForecastTemplateConfig()
+    config = EcmwfAifsSingleForecastTemplateConfig()
     t2m_var = item(v for v in config.data_vars if v.name == "temperature_2m")
     d2m_var = item(v for v in config.data_vars if v.name == "dew_point_temperature_2m")
-    coord = EcmwfAifsDeterministicForecastSourceFileCoord(
+    coord = EcmwfAifsSingleForecastSourceFileCoord(
         init_time=pd.Timestamp("2024-04-01"),
         lead_time=pd.Timedelta("6h"),
         data_var_group=[t2m_var, d2m_var],
         downloaded_path=Path("fake/path.grib2"),
     )
 
-    region_job = EcmwfAifsDeterministicForecastRegionJob.model_construct(
+    region_job = EcmwfAifsSingleForecastRegionJob.model_construct(
         tmp_store=Mock(),
         template_ds=Mock(),
         data_vars=config.data_vars,
@@ -266,7 +266,7 @@ def test_read_data_multi_band(monkeypatch: pytest.MonkeyPatch) -> None:
     test_data = np.ones((721, 1440), dtype=np.float32)
     rasterio_reader.read = Mock(return_value=test_data)
     monkeypatch.setattr(
-        "reformatters.ecmwf.aifs_deterministic.forecast.region_job.rasterio.open",
+        "reformatters.ecmwf.aifs_single.forecast.region_job.rasterio.open",
         Mock(return_value=rasterio_reader),
     )
 
@@ -278,8 +278,8 @@ def test_read_data_multi_band(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_apply_data_transformations_scale_factor() -> None:
     """scale_factor is applied in-place, converting geopotential (m²/s²) to height (m)."""
-    config = EcmwfAifsDeterministicForecastTemplateConfig()
-    region_job = EcmwfAifsDeterministicForecastRegionJob.model_construct(
+    config = EcmwfAifsSingleForecastTemplateConfig()
+    region_job = EcmwfAifsSingleForecastRegionJob.model_construct(
         tmp_store=Mock(),
         template_ds=Mock(),
         data_vars=config.data_vars,
@@ -309,8 +309,8 @@ def test_apply_data_transformations_scale_factor() -> None:
 
 def test_apply_data_transformations_no_scale_factor() -> None:
     """Variables without scale_factor are not modified."""
-    config = EcmwfAifsDeterministicForecastTemplateConfig()
-    region_job = EcmwfAifsDeterministicForecastRegionJob.model_construct(
+    config = EcmwfAifsSingleForecastTemplateConfig()
+    region_job = EcmwfAifsSingleForecastRegionJob.model_construct(
         tmp_store=Mock(),
         template_ds=Mock(),
         data_vars=config.data_vars,
@@ -336,8 +336,8 @@ def test_apply_data_transformations_no_scale_factor() -> None:
 
 def test_read_data_alt_precip_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
     """tp variable can be read using alt GRIB metadata (table v34+)."""
-    config = EcmwfAifsDeterministicForecastTemplateConfig()
-    region_job = EcmwfAifsDeterministicForecastRegionJob.model_construct(
+    config = EcmwfAifsSingleForecastTemplateConfig()
+    region_job = EcmwfAifsSingleForecastRegionJob.model_construct(
         tmp_store=Mock(),
         template_ds=Mock(),
         data_vars=config.data_vars,
@@ -347,7 +347,7 @@ def test_read_data_alt_precip_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     precip_var = item(v for v in config.data_vars if v.name == "precipitation_surface")
-    coord = EcmwfAifsDeterministicForecastSourceFileCoord(
+    coord = EcmwfAifsSingleForecastSourceFileCoord(
         init_time=pd.Timestamp("2024-04-01"),
         lead_time=pd.Timedelta("6h"),
         data_var_group=[precip_var],
@@ -366,7 +366,7 @@ def test_read_data_alt_precip_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
     test_data = np.ones((721, 1440), dtype=np.float32) * 0.001
     rasterio_reader.read = Mock(return_value=test_data)
     monkeypatch.setattr(
-        "reformatters.ecmwf.aifs_deterministic.forecast.region_job.rasterio.open",
+        "reformatters.ecmwf.aifs_single.forecast.region_job.rasterio.open",
         Mock(return_value=rasterio_reader),
     )
 
@@ -378,7 +378,7 @@ def test_read_data_alt_precip_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_operational_update_jobs(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    config = EcmwfAifsDeterministicForecastTemplateConfig()
+    config = EcmwfAifsSingleForecastTemplateConfig()
     store_factory = StoreFactory(
         primary_storage_config=StorageConfig(
             base_path="fake-prod-path",
@@ -396,7 +396,7 @@ def test_operational_update_jobs(
     existing_ds = config.get_template(pd.Timestamp("2024-04-01T06:01"))
     template_utils.write_metadata(existing_ds, store_factory)
 
-    jobs, template_ds = EcmwfAifsDeterministicForecastRegionJob.operational_update_jobs(
+    jobs, template_ds = EcmwfAifsSingleForecastRegionJob.operational_update_jobs(
         primary_store=store_factory.primary_store(),
         tmp_store=tmp_path / "tmp_ds.zarr",
         get_template_fn=config.get_template,
@@ -408,5 +408,5 @@ def test_operational_update_jobs(
     assert template_ds.init_time.max() == pd.Timestamp("2024-04-02T06:00")
     assert len(jobs) > 0
     for job in jobs:
-        assert isinstance(job, EcmwfAifsDeterministicForecastRegionJob)
+        assert isinstance(job, EcmwfAifsSingleForecastRegionJob)
         assert job.data_vars == config.data_vars
