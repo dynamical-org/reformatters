@@ -7,20 +7,20 @@ from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationC
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 
 from .region_job import (
-    EcmwfAifsDeterministicForecastRegionJob,
-    EcmwfAifsDeterministicForecastSourceFileCoord,
+    EcmwfAifsSingleForecastRegionJob,
+    EcmwfAifsSingleForecastSourceFileCoord,
 )
-from .template_config import EcmwfAifsDeterministicForecastTemplateConfig
+from .template_config import EcmwfAifsSingleForecastTemplateConfig
 
 
-class EcmwfAifsDeterministicForecastDataset(
-    DynamicalDataset[EcmwfDataVar, EcmwfAifsDeterministicForecastSourceFileCoord]
+class EcmwfAifsSingleForecastDataset(
+    DynamicalDataset[EcmwfDataVar, EcmwfAifsSingleForecastSourceFileCoord]
 ):
-    template_config: EcmwfAifsDeterministicForecastTemplateConfig = (
-        EcmwfAifsDeterministicForecastTemplateConfig()
+    template_config: EcmwfAifsSingleForecastTemplateConfig = (
+        EcmwfAifsSingleForecastTemplateConfig()
     )
-    region_job_class: type[EcmwfAifsDeterministicForecastRegionJob] = (
-        EcmwfAifsDeterministicForecastRegionJob
+    region_job_class: type[EcmwfAifsSingleForecastRegionJob] = (
+        EcmwfAifsSingleForecastRegionJob
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:

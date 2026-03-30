@@ -1,10 +1,10 @@
 {
   "attributes": {
-    "dataset_id": "ecmwf-aifs-deterministic-forecast",
+    "dataset_id": "ecmwf-aifs-single-forecast",
     "dataset_version": "0.1.0",
-    "name": "ECMWF AIFS deterministic forecast",
-    "description": "Weather forecasts from the ECMWF Artificial Intelligence Forecasting System (AIFS) deterministic model.",
-    "attribution": "ECMWF AIFS deterministic forecast data processed by dynamical.org from ECMWF Open Data.",
+    "name": "ECMWF AIFS Single forecast",
+    "description": "Weather forecasts from the ECMWF Artificial Intelligence Forecasting System (AIFS) Single model.",
+    "attribution": "ECMWF AIFS Single forecast data processed by dynamical.org from ECMWF Open Data.",
     "spatial_domain": "Global",
     "spatial_resolution": "0.25 degrees (~20km)",
     "time_domain": "Forecasts initialized 2024-04-01 00:00:00 UTC to Present",

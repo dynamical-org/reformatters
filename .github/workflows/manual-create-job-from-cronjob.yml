@@ -13,8 +13,8 @@ name: 'Manual: Create Job from CronJob'
         - dwd-icon-eu-forecast-5-day-archive-grib-files
         - dwd-icon-eu-forecast-5-day-update
         - dwd-icon-eu-forecast-5-day-validate
-        - ecmwf-aifs-deterministic-forecast-update
-        - ecmwf-aifs-deterministic-forecast-validate
+        - ecmwf-aifs-single-forecast-update
+        - ecmwf-aifs-single-forecast-validate
         - ecmwf-ifs-ens-forecast-15-day-0-25-degree-update
         - ecmwf-ifs-ens-forecast-15-day-0-25-degree-validate
         - nasa-smap-level3-36km-v9-update
