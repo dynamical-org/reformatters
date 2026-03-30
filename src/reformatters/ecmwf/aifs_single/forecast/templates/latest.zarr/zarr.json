@@ -3,7 +3,7 @@
     "dataset_id": "ecmwf-aifs-single-forecast",
     "dataset_version": "0.1.0",
     "name": "ECMWF AIFS Single forecast",
-    "description": "Weather forecasts from the ECMWF Artificial Intelligence Forecasting System (AIFS) single model.",
+    "description": "Weather forecasts from the ECMWF Artificial Intelligence Forecasting System (AIFS) Single model.",
     "attribution": "ECMWF AIFS Single forecast data processed by dynamical.org from ECMWF Open Data.",
     "spatial_domain": "Global",
     "spatial_resolution": "0.25 degrees (~20km)",
