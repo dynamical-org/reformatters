@@ -12,7 +12,7 @@ from reformatters.common.types import Timedelta, Timestamp
 class MarsSourceOverrides(FrozenBaseModel):
     """Overrides for variables where the MARS archive stores data differently than open data.
 
-    Only set fields that genuinely differ. For example, MARS stores geopotential (z, m²/s²)
+    Only set fields that differ. For example, MARS stores geopotential (z, m²/s²)
     rather than geopotential height (gh, gpm), requiring overrides for param, comment, and a
     scale factor to convert.
     """

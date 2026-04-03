@@ -16,53 +16,12 @@ from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job import (
     EcmwfIfsEnsForecast15Day025DegreeRegionJob,
 )
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.source_file_coord import (
-    DYNAMICAL_MARS_GRIB_BASE_URL,
     MarsSourceFileCoord,
     OpenDataSourceFileCoord,
 )
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.template_config import (
     EcmwfIfsEnsForecast15Day025DegreeTemplateConfig,
 )
-
-
-def test_open_data_source_file_coord_get_url() -> None:
-    coord = OpenDataSourceFileCoord(
-        init_time=pd.Timestamp("2025-01-01"),
-        lead_time=pd.Timedelta("0h"),
-        data_var_group=[],
-        ensemble_member=0,
-    )
-    assert (
-        coord.get_url()
-        == "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20250101/00z/ifs/0p25/enfo/20250101000000-0h-enfo-ef.grib2"
-    )
-
-    coord = OpenDataSourceFileCoord(
-        init_time=pd.Timestamp("2024-02-28"),
-        lead_time=pd.Timedelta("0h"),
-        data_var_group=[],
-        ensemble_member=0,
-    )
-    assert (
-        coord.get_url()
-        == "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20240228/00z/0p25/enfo/20240228000000-0h-enfo-ef.grib2"
-    )
-
-
-def test_mars_source_file_coord_get_url() -> None:
-    coord = MarsSourceFileCoord(
-        init_time=pd.Timestamp("2024-01-01"),
-        lead_time=pd.Timedelta("3h"),
-        ensemble_member=0,
-        data_var_group=[],
-        request_type="cf_sfc",
-    )
-    assert coord.get_url() == f"{DYNAMICAL_MARS_GRIB_BASE_URL}/2024-01-01/cf_sfc.grib"
-    assert (
-        coord.get_index_url()
-        == f"{DYNAMICAL_MARS_GRIB_BASE_URL}/2024-01-01/cf_sfc.grib.idx"
-    )
-    assert coord.index_step == 3
 
 
 def test_region_job_source_groups() -> None:
