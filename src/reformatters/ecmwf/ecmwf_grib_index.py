@@ -83,12 +83,6 @@ def _parse_index_file(
     For an example snippet of the contents of an index file, see:
         tests/ecmwf/ifs_ens/forecast_15_day_0_25_degree/region_job_test.py::test_region_job_download_file
 
-    Parameters
-    ----------
-    step : int | None
-        If provided, filter the index to only rows matching this forecast step.
-        MARS indexes contain all steps in one file, so this is needed for MARS sources.
-
     Returns
     -------
     pd.DataFrame
