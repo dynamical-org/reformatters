@@ -207,7 +207,7 @@ def test_parse_mars_cf_sfc_no_number_column() -> None:
 
 def test_parse_mars_index_with_step_filter() -> None:
     """Filtering by step returns only matching rows."""
-    df = _parse_index_file(FIXTURES_DIR / "mars_cf_sfc.idx", ensemble=True, step=3)
+    df = _parse_index_file(FIXTURES_DIR / "mars_cf_sfc.idx", ensemble=True, steps=[3])
     df_reset = df.reset_index()
     assert len(df_reset) == 2
     assert set(df_reset["param"]) == {"2t", "tp"}
@@ -217,7 +217,7 @@ def test_get_byte_ranges_mars_cf_sfc_with_step() -> None:
     """Extract byte ranges for 2t from a MARS control sfc index, filtering by step."""
     var = _make_ecmwf_var("temperature_2m", "2t", "sfc")
     starts, ends = get_message_byte_ranges_from_index(
-        FIXTURES_DIR / "mars_cf_sfc.idx", [var], ensemble_member=0, step=3
+        FIXTURES_DIR / "mars_cf_sfc.idx", [var], ensemble_member=0, steps=[3]
     )
     assert starts == [30071109]
     assert ends == [30071109 + 2076642]
@@ -229,7 +229,7 @@ def test_get_byte_ranges_mars_cf_pl_with_step() -> None:
         "geopotential_500hpa", "z", "pl", grib_index_level_value=500.0
     )
     starts, ends = get_message_byte_ranges_from_index(
-        FIXTURES_DIR / "mars_cf_pl.idx", [var], ensemble_member=0, step=0
+        FIXTURES_DIR / "mars_cf_pl.idx", [var], ensemble_member=0, steps=[0]
     )
     assert starts == [0]
     assert ends == [2076642]
@@ -239,19 +239,28 @@ def test_get_byte_ranges_mars_pf_sfc_with_step() -> None:
     """Extract byte ranges for perturbed member 1 from MARS pf_sfc index."""
     var = _make_ecmwf_var("temperature_2m", "2t", "sfc")
     starts, ends = get_message_byte_ranges_from_index(
-        FIXTURES_DIR / "mars_pf_sfc.idx", [var], ensemble_member=1, step=0
+        FIXTURES_DIR / "mars_pf_sfc.idx", [var], ensemble_member=1, steps=[0]
     )
     assert starts == [2076642]
     assert ends == [2076642 + 2076642]
 
 
 def test_get_byte_ranges_mars_multiple_steps() -> None:
-    """Extracting multiple vars across steps returns correct byte ranges."""
+    """Extracting byte ranges across multiple steps returns ranges for each step x var."""
     var_2t = _make_ecmwf_var("temperature_2m", "2t", "sfc")
     var_tp = _make_ecmwf_var("total_precipitation", "tp", "sfc")
 
     starts, ends = get_message_byte_ranges_from_index(
-        FIXTURES_DIR / "mars_cf_sfc.idx", [var_2t, var_tp], ensemble_member=0, step=6
+        FIXTURES_DIR / "mars_cf_sfc.idx",
+        [var_2t, var_tp],
+        ensemble_member=0,
+        steps=[3, 6],
     )
-    assert starts == [58065503, 68448713]
-    assert ends == [58065503 + 2076642, 68448713 + 2076642]
+    # step=3: 2t then tp, step=6: 2t then tp
+    assert starts == [30071109, 40454319, 58065503, 68448713]
+    assert ends == [
+        30071109 + 2076642,
+        40454319 + 2076642,
+        58065503 + 2076642,
+        68448713 + 2076642,
+    ]

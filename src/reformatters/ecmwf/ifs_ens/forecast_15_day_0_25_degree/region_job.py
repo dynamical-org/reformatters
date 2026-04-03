@@ -39,35 +39,11 @@ from .source_file_coord import (
 log = get_logger(__name__)
 
 
-def _get_all_byte_ranges(
-    idx_local_path: Path,
-    resolved_vars: Sequence[EcmwfDataVar],
-    coord: IfsEnsSourceFileCoord,
-) -> tuple[list[int], list[int]]:
-    """Get byte ranges for all data vars across all steps in the coord."""
-    if isinstance(coord, MarsSourceFileCoord):
-        # MARS files contain all steps; extract byte ranges per step and combine
-        all_starts: list[int] = []
-        all_ends: list[int] = []
-        for lead_time in coord.lead_times:
-            step = whole_hours(lead_time)
-            starts, ends = get_message_byte_ranges_from_index(
-                idx_local_path, resolved_vars, coord.ensemble_member, step=step
-            )
-            all_starts.extend(starts)
-            all_ends.extend(ends)
-        return all_starts, all_ends
-    else:
-        return get_message_byte_ranges_from_index(
-            idx_local_path, resolved_vars, coord.ensemble_member
-        )
-
-
 def _find_bands_by_forecast_seconds(
     reader: rasterio.DatasetReader, lead_times: tuple[Timedelta, ...]
 ) -> list[int]:
     """Find rasterio band indexes (1-indexed) matching the requested lead times."""
-    target_seconds = {int(pd.Timedelta(lt).total_seconds()): lt for lt in lead_times}
+    target_seconds = {int(lt.total_seconds()): lt for lt in lead_times}
     band_map: dict[int, int] = {}
     for band_idx in range(1, reader.count + 1):
         forecast_seconds = int(reader.tags(band_idx)["GRIB_FORECAST_SECONDS"])
@@ -79,7 +55,7 @@ def _find_bands_by_forecast_seconds(
         f"Wanted seconds {sorted(target_seconds.keys())}, found {sorted(band_map.keys())}"
     )
     # Return bands ordered by lead_time
-    return [band_map[int(pd.Timedelta(lt).total_seconds())] for lt in lead_times]
+    return [band_map[int(lt.total_seconds())] for lt in lead_times]
 
 
 def _validate_grib_comment(
@@ -196,11 +172,14 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         """Download the file for the given coordinate and return the local path."""
         idx_local_path = http_download_to_disk(coord.get_index_url(), self.dataset_id)
 
-        # Resolve data vars with source-appropriate attrs
         resolved_vars = [coord.resolve_data_var(v) for v in coord.data_var_group]
-
-        byte_range_starts, byte_range_ends = _get_all_byte_ranges(
-            idx_local_path, resolved_vars, coord
+        steps = (
+            [whole_hours(lt) for lt in coord.lead_times]
+            if isinstance(coord, MarsSourceFileCoord)
+            else None
+        )
+        byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(
+            idx_local_path, resolved_vars, coord.ensemble_member, steps=steps
         )
         suffix = digest(
             f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)
