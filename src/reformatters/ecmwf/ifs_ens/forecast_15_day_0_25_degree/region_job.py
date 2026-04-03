@@ -43,8 +43,9 @@ log = get_logger(__name__)
 
 MARS_OPEN_DATA_CUTOVER = pd.Timestamp("2024-04-01T00:00")
 
-DYNAMICAL_MARS_GRIB_BUCKET_URL = "https://data.source.coop"
-DYNAMICAL_MARS_GRIB_PREFIX = "dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens"
+DYNAMICAL_MARS_GRIB_BASE_URL = (
+    "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens"
+)
 
 
 class OpenDataSourceFileCoord(SourceFileCoord):
@@ -123,10 +124,10 @@ class MarsSourceFileCoord(SourceFileCoord):
         return self.init_time.strftime("%Y-%m-%d")
 
     def get_url(self) -> str:
-        return f"{DYNAMICAL_MARS_GRIB_BUCKET_URL}/{DYNAMICAL_MARS_GRIB_PREFIX}/{self._date_str()}/{self.request_type}.grib"
+        return f"{DYNAMICAL_MARS_GRIB_BASE_URL}/{self._date_str()}/{self.request_type}.grib"
 
     def get_index_url(self) -> str:
-        return f"{DYNAMICAL_MARS_GRIB_BUCKET_URL}/{DYNAMICAL_MARS_GRIB_PREFIX}/{self._date_str()}/{self.request_type}.grib.idx"
+        return f"{DYNAMICAL_MARS_GRIB_BASE_URL}/{self._date_str()}/{self.request_type}.grib.idx"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
         return {

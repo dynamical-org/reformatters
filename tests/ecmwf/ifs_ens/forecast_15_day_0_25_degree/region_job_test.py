@@ -13,8 +13,7 @@ from reformatters.common.pydantic import replace
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job import (
-    DYNAMICAL_MARS_GRIB_BUCKET_URL,
-    DYNAMICAL_MARS_GRIB_PREFIX,
+    DYNAMICAL_MARS_GRIB_BASE_URL,
     EcmwfIfsEnsForecast15Day025DegreeRegionJob,
     MarsSourceFileCoord,
     OpenDataSourceFileCoord,
@@ -56,13 +55,10 @@ def test_mars_source_file_coord_get_url() -> None:
         request_type="cf_sfc",
         lead_times=(pd.Timedelta("0h"), pd.Timedelta("3h")),
     )
-    assert (
-        coord.get_url()
-        == f"{DYNAMICAL_MARS_GRIB_BUCKET_URL}/{DYNAMICAL_MARS_GRIB_PREFIX}/2024-01-01/cf_sfc.grib"
-    )
+    assert coord.get_url() == f"{DYNAMICAL_MARS_GRIB_BASE_URL}/2024-01-01/cf_sfc.grib"
     assert (
         coord.get_index_url()
-        == f"{DYNAMICAL_MARS_GRIB_BUCKET_URL}/{DYNAMICAL_MARS_GRIB_PREFIX}/2024-01-01/cf_sfc.grib.idx"
+        == f"{DYNAMICAL_MARS_GRIB_BASE_URL}/2024-01-01/cf_sfc.grib.idx"
     )
 
 
