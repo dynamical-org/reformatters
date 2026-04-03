@@ -10,13 +10,13 @@ from reformatters.ecmwf.ecmwf_config_models import (
 
 from .region_job import (
     EcmwfIfsEnsForecast15Day025DegreeRegionJob,
-    EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord,
+    IfsEnsSourceFileCoord,
 )
 from .template_config import EcmwfIfsEnsForecast15Day025DegreeTemplateConfig
 
 
 class EcmwfIfsEnsForecast15Day025DegreeDataset(
-    DynamicalDataset[EcmwfDataVar, EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]
+    DynamicalDataset[EcmwfDataVar, IfsEnsSourceFileCoord]
 ):
     template_config: EcmwfIfsEnsForecast15Day025DegreeTemplateConfig = (
         EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()

@@ -5,8 +5,21 @@ import pandas as pd
 
 from reformatters.common.config_models import BaseInternalAttrs, DataVar
 from reformatters.common.iterating import item
-from reformatters.common.pydantic import replace
+from reformatters.common.pydantic import FrozenBaseModel, replace
 from reformatters.common.types import Timedelta, Timestamp
+
+
+class MarsSourceOverrides(FrozenBaseModel):
+    """Overrides for variables where the MARS archive stores data differently than open data.
+
+    Only set fields that genuinely differ. For example, MARS stores geopotential (z, m²/s²)
+    rather than geopotential height (gh, gpm), requiring overrides for param, comment, and a
+    scale factor to convert.
+    """
+
+    grib_index_param: str | None = None
+    grib_comment: str | None = None
+    scale_factor: float | None = None
 
 
 class EcmwfInternalAttrs(BaseInternalAttrs):
@@ -39,10 +52,7 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
     window_reset_frequency: Timedelta | None = pd.Timedelta.max
     deaccumulation_invalid_below_threshold_rate: float | None = None
 
-    # MARS archive overrides — only needed where the archive differs from open data.
-    # MARS stores geopotential (z, m²/s²) not geopotential height (gh, gpm).
-    mars_grib_index_param: str | None = None
-    mars_read_scale_factor: float | None = None
+    mars: MarsSourceOverrides | None = None
 
 
 class EcmwfDataVar(DataVar[EcmwfInternalAttrs]):

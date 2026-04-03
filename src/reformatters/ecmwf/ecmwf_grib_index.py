@@ -36,14 +36,7 @@ def get_message_byte_ranges_from_index(
             if np.isnan(level_value := data_var.internal_attrs.grib_index_level_value)
             else level_value
         )
-        # Use MARS param name when filtering by step (MARS source)
-        if (
-            step is not None
-            and data_var.internal_attrs.mars_grib_index_param is not None
-        ):
-            param = data_var.internal_attrs.mars_grib_index_param
-        else:
-            param = data_var.internal_attrs.grib_index_param
+        param = data_var.internal_attrs.grib_index_param
 
         if ensemble_member is not None:
             loc_key = (

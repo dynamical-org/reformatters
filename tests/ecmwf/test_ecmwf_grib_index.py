@@ -17,8 +17,10 @@ from reformatters.ecmwf.ecmwf_grib_index import (
     get_message_byte_ranges_from_index,
 )
 
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
 # ---------------------------------------------------------------------------
-# Minimal JSONL index fixture
+# Minimal JSONL index fixture (open data format)
 # ---------------------------------------------------------------------------
 
 # Represents an ECMWF GRIB index file with:
@@ -189,3 +191,67 @@ def test_get_byte_ranges_multiple_vars(index_file: Path) -> None:
     assert len(starts2) == 1
     assert starts1[0] < ends1[0]
     assert starts2[0] < ends2[0]
+
+
+# ---------------------------------------------------------------------------
+# MARS index tests (using real index fixtures from source.coop)
+# ---------------------------------------------------------------------------
+
+
+def test_parse_mars_cf_sfc_no_number_column() -> None:
+    """MARS control-only indexes have no 'number' column — parser should fill with 0."""
+    df = _parse_index_file(FIXTURES_DIR / "mars_cf_sfc.idx", ensemble=True)
+    df_reset = df.reset_index()
+    assert (df_reset["number"] == 0).all()
+
+
+def test_parse_mars_index_with_step_filter() -> None:
+    """Filtering by step returns only matching rows."""
+    df = _parse_index_file(FIXTURES_DIR / "mars_cf_sfc.idx", ensemble=True, step=3)
+    df_reset = df.reset_index()
+    assert len(df_reset) == 2
+    assert set(df_reset["param"]) == {"2t", "tp"}
+
+
+def test_get_byte_ranges_mars_cf_sfc_with_step() -> None:
+    """Extract byte ranges for 2t from a MARS control sfc index, filtering by step."""
+    var = _make_ecmwf_var("temperature_2m", "2t", "sfc")
+    starts, ends = get_message_byte_ranges_from_index(
+        FIXTURES_DIR / "mars_cf_sfc.idx", [var], ensemble_member=0, step=3
+    )
+    assert starts == [30071109]
+    assert ends == [30071109 + 2076642]
+
+
+def test_get_byte_ranges_mars_cf_pl_with_step() -> None:
+    """Extract byte ranges for z at 500hPa from a MARS control pl index."""
+    var = _make_ecmwf_var(
+        "geopotential_500hpa", "z", "pl", grib_index_level_value=500.0
+    )
+    starts, ends = get_message_byte_ranges_from_index(
+        FIXTURES_DIR / "mars_cf_pl.idx", [var], ensemble_member=0, step=0
+    )
+    assert starts == [0]
+    assert ends == [2076642]
+
+
+def test_get_byte_ranges_mars_pf_sfc_with_step() -> None:
+    """Extract byte ranges for perturbed member 1 from MARS pf_sfc index."""
+    var = _make_ecmwf_var("temperature_2m", "2t", "sfc")
+    starts, ends = get_message_byte_ranges_from_index(
+        FIXTURES_DIR / "mars_pf_sfc.idx", [var], ensemble_member=1, step=0
+    )
+    assert starts == [2076642]
+    assert ends == [2076642 + 2076642]
+
+
+def test_get_byte_ranges_mars_multiple_steps() -> None:
+    """Extracting multiple vars across steps returns correct byte ranges."""
+    var_2t = _make_ecmwf_var("temperature_2m", "2t", "sfc")
+    var_tp = _make_ecmwf_var("total_precipitation", "tp", "sfc")
+
+    starts, ends = get_message_byte_ranges_from_index(
+        FIXTURES_DIR / "mars_cf_sfc.idx", [var_2t, var_tp], ensemble_member=0, step=6
+    )
+    assert starts == [58065503, 68448713]
+    assert ends == [58065503 + 2076642, 68448713 + 2076642]

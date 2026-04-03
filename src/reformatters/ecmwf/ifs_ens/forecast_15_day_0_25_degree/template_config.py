@@ -27,7 +27,11 @@ from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
-from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, EcmwfInternalAttrs
+from reformatters.ecmwf.ecmwf_config_models import (
+    EcmwfDataVar,
+    EcmwfInternalAttrs,
+    MarsSourceOverrides,
+)
 
 
 class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVar]):
@@ -583,8 +587,11 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_index_level_type="pl",
                     grib_index_level_value=500,
                     keep_mantissa_bits=11,
-                    mars_grib_index_param="z",
-                    mars_read_scale_factor=1 / 9.80665,
+                    mars=MarsSourceOverrides(
+                        grib_index_param="z",
+                        grib_comment="Geopotential (at the surface = orography) [m^2/s^2]",
+                        scale_factor=1 / 9.80665,
+                    ),
                 ),
             ),
             EcmwfDataVar(
@@ -605,8 +612,11 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_index_level_type="pl",
                     grib_index_level_value=850,
                     keep_mantissa_bits=11,
-                    mars_grib_index_param="z",
-                    mars_read_scale_factor=1 / 9.80665,
+                    mars=MarsSourceOverrides(
+                        grib_index_param="z",
+                        grib_comment="Geopotential (at the surface = orography) [m^2/s^2]",
+                        scale_factor=1 / 9.80665,
+                    ),
                 ),
             ),
             EcmwfDataVar(
@@ -627,8 +637,11 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_index_level_type="pl",
                     grib_index_level_value=925,
                     keep_mantissa_bits=11,
-                    mars_grib_index_param="z",
-                    mars_read_scale_factor=1 / 9.80665,
+                    mars=MarsSourceOverrides(
+                        grib_index_param="z",
+                        grib_comment="Geopotential (at the surface = orography) [m^2/s^2]",
+                        scale_factor=1 / 9.80665,
+                    ),
                 ),
             ),
             EcmwfDataVar(
