@@ -233,7 +233,10 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                     f"Expected {expected_spatial_shape} shape, found {result.shape}"
                 )
 
-            # Apply MARS-specific scale factor (e.g. geopotential → geopotential height)
+            # Apply MARS-specific scale factor (e.g. geopotential m^2/s^2 to
+            # geopotential height gpm). Applied here rather than in
+            # apply_data_transformations because a shard could mix sources and
+            # the conversion must only apply to MARS-sourced values.
             if (
                 data_var.internal_attrs.mars is not None
                 and data_var.internal_attrs.mars.scale_factor is not None
