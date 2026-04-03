@@ -81,7 +81,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                 continue
 
             member = int(ensemble_member)
-            if pd.Timestamp(init_time) < MARS_OPEN_DATA_CUTOVER:
+            if init_time < MARS_OPEN_DATA_CUTOVER:
                 # max_vars_per_download_group=1 ensures all vars share a level type
                 levtype = item(
                     {v.internal_attrs.grib_index_level_type for v in data_var_group}
@@ -95,7 +95,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                         request_type=MarsSourceFileCoord.get_request_type(
                             levtype, member
                         ),
-                    )
+                    ).resolve_data_vars()
                 )
             else:
                 coords.append(
@@ -104,7 +104,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                         lead_time=lead_time,
                         data_var_group=data_var_group,
                         ensemble_member=member,
-                    )
+                    ).resolve_data_vars()
                 )
         return coords
 
@@ -112,9 +112,11 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         """Download the file for the given coordinate and return the local path."""
         idx_local_path = http_download_to_disk(coord.get_index_url(), self.dataset_id)
 
-        resolved_vars = [coord.resolve_data_var(v) for v in coord.data_var_group]
         byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(
-            idx_local_path, resolved_vars, coord.ensemble_member, step=coord.index_step
+            idx_local_path,
+            coord.data_var_group,
+            coord.ensemble_member,
+            step=coord.index_step,
         )
         suffix = digest(
             f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)
@@ -132,7 +134,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         data_var: EcmwfDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
-        resolved = coord.resolve_data_var(data_var)
+        resolved = next(v for v in coord.data_var_group if v.name == data_var.name)
         expected_shape = (721, 1440)
 
         with rasterio.open(coord.downloaded_path) as reader:

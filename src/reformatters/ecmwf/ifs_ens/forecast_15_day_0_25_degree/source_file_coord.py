@@ -37,8 +37,14 @@ class OpenDataSourceFileCoord(SourceFileCoord):
     s3_bucket_url: ClassVar[str] = "ecmwf-forecasts"
     s3_region: ClassVar[str] = "eu-central-1"
 
-    def resolve_data_var(self, data_var: EcmwfDataVar) -> EcmwfDataVar:
-        return _resolve_grib_index_param(data_var, self.lead_time)
+    def resolve_data_vars(self) -> "OpenDataSourceFileCoord":
+        return replace(
+            self,
+            data_var_group=[
+                _resolve_grib_index_param(v, self.lead_time)
+                for v in self.data_var_group
+            ],
+        )
 
     @property
     def index_step(self) -> int | None:
@@ -78,6 +84,20 @@ class OpenDataSourceFileCoord(SourceFileCoord):
         }
 
 
+def _resolve_mars_data_var(data_var: EcmwfDataVar) -> EcmwfDataVar:
+    if data_var.internal_attrs.mars is None:
+        return data_var
+    overrides = {
+        k: v
+        for k, v in data_var.internal_attrs.mars.model_dump().items()
+        if v is not None
+    }
+    return replace(
+        data_var,
+        internal_attrs=replace(data_var.internal_attrs, **overrides, mars=None),
+    )
+
+
 class MarsSourceFileCoord(SourceFileCoord):
     """Source file coord for MARS archive data on source.coop."""
 
@@ -96,17 +116,10 @@ class MarsSourceFileCoord(SourceFileCoord):
             return "pf_sfc_0" if ensemble_member <= 25 else "pf_sfc_1"
         return "cf_pl" if ensemble_member == 0 else "pf_pl"
 
-    def resolve_data_var(self, data_var: EcmwfDataVar) -> EcmwfDataVar:
-        if data_var.internal_attrs.mars is None:
-            return data_var
-        overrides = {
-            k: v
-            for k, v in data_var.internal_attrs.mars.model_dump().items()
-            if v is not None
-        }
+    def resolve_data_vars(self) -> "MarsSourceFileCoord":
         return replace(
-            data_var,
-            internal_attrs=replace(data_var.internal_attrs, **overrides, mars=None),
+            self,
+            data_var_group=[_resolve_mars_data_var(v) for v in self.data_var_group],
         )
 
     @property
