@@ -246,6 +246,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                     dim="lead_time",
                     reset_frequency=reset_freq,
                     invalid_below_threshold_rate=deaccumulation_invalid_below_threshold_rate,
+                    expected_invalid_fraction=0.01,
                     # Short wave radiation sees 5-7% clamped due to lossy grib2 compression
                     expected_clamp_fraction=0.08,
                 )
