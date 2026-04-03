@@ -37,37 +37,6 @@ from .source_file_coord import (
 log = get_logger(__name__)
 
 
-def _validate_grib_comment(
-    actual_comment: str,
-    expected_comment: str,
-    var_name: str,
-    *,
-    unit_only: bool = False,
-) -> None:
-    """Validate grib comment matches expected.
-
-    When unit_only=True, only checks the bracketed unit suffix matches (e.g. "[C]").
-    This is useful for MARS GRIBs where the descriptive text differs from open data
-    but the physical unit is the same.
-    """
-    if unit_only:
-        actual_unit = actual_comment[actual_comment.rfind("[") :]
-        expected_unit = expected_comment[expected_comment.rfind("[") :]
-        assert actual_unit == expected_unit, (
-            f"Unit mismatch: {actual_comment=} vs {expected_comment=}"
-        )
-    elif var_name == "categorical_precipitation_type_surface":
-        # ECMWF occasionally adds new values in the reserved range.
-        # Check the first 6 categories that shouldn't change.
-        assert actual_comment[:100] == expected_comment[:100], (
-            f"{actual_comment=} != {expected_comment=}"
-        )
-    else:
-        assert actual_comment == expected_comment, (
-            f"{actual_comment=} != {expected_comment=}"
-        )
-
-
 class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     RegionJob[EcmwfDataVar, IfsEnsSourceFileCoord]
 ):
@@ -168,18 +137,13 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
 
         with rasterio.open(coord.downloaded_path) as reader:
             assert reader.count == 1, f"Expected 1 band, found {reader.count}"
-            _validate_grib_comment(
-                reader.tags(1)["GRIB_COMMENT"],
+            _validate_grib_metadata(
+                reader,
                 resolved.internal_attrs.grib_comment,
+                resolved.internal_attrs.grib_description,
                 data_var.name,
                 unit_only=coord.validate_grib_comment_unit_only,
             )
-            if not coord.validate_grib_comment_unit_only:
-                assert (
-                    reader.descriptions[0] == resolved.internal_attrs.grib_description
-                ), (
-                    f"{reader.descriptions[0]=} != {resolved.internal_attrs.grib_description}"
-                )
             result: ArrayFloat32 = reader.read(1, out_dtype=np.float32)
             assert result.shape == expected_shape, (
                 f"Expected {expected_shape} shape, found {result.shape}"
@@ -294,3 +258,42 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             filter_start=append_dim_start,
         )
         return jobs, template_ds
+
+
+def _validate_grib_metadata(
+    reader: rasterio.DatasetReader,
+    expected_comment: str,
+    expected_description: str,
+    var_name: str,
+    *,
+    unit_only: bool = False,
+) -> None:
+    """Validate GRIB metadata for the first band matches expected values.
+
+    When unit_only=True, only checks the bracketed unit suffix of the comment
+    (e.g. "[C]") and skips description validation. This is useful for MARS GRIBs
+    where the descriptive text differs from open data but the physical unit matches.
+    """
+    actual_comment = reader.tags(1)["GRIB_COMMENT"]
+    if unit_only:
+        actual_unit = actual_comment[actual_comment.rfind("[") :]
+        expected_unit = expected_comment[expected_comment.rfind("[") :]
+        assert actual_unit == expected_unit, (
+            f"Unit mismatch: {actual_comment=} vs {expected_comment=}"
+        )
+    elif var_name == "categorical_precipitation_type_surface":
+        # ECMWF occasionally adds new values in the reserved range.
+        # Check the first 6 categories that shouldn't change.
+        assert actual_comment[:100] == expected_comment[:100], (
+            f"{actual_comment=} != {expected_comment=}"
+        )
+    else:
+        assert actual_comment == expected_comment, (
+            f"{actual_comment=} != {expected_comment=}"
+        )
+
+    if not unit_only:
+        actual_description = reader.descriptions[0]
+        assert actual_description == expected_description, (
+            f"{actual_description=} != {expected_description=}"
+        )
