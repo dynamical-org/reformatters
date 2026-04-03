@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import rasterio
 import xarray as xr
+from obstore.exceptions import PermissionDeniedError
 from zarr.abc.store import Store
 
 from reformatters.common.binary_rounding import round_float32_inplace
@@ -166,6 +167,9 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
                     )
                 except FileNotFoundError as exc:
                     last_exception = exc
+                except PermissionDeniedError as exc:
+                    last_exception = FileNotFoundError(coord.get_url(source))
+                    last_exception.__cause__ = exc
 
         assert last_exception is not None
         raise last_exception
