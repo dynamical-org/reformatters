@@ -400,7 +400,9 @@ def test_download_file_from_ecmwf_open_data() -> None:
                 source_coord, downloaded_path=region_job.download_file(source_coord)
             )
             data = region_job.read_data(downloaded_coord, data_var)
-            assert np.all(np.isfinite(data))
+            assert np.all(np.isfinite(data)), (
+                f"Non-finite values for {data_var.name} at lead_time={source_coord.lead_time}"
+            )
 
     all_data_vars = [
         data_var

@@ -113,9 +113,8 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
 
             member = int(ensemble_member)
             if pd.Timestamp(init_time) < MARS_OPEN_DATA_CUTOVER:
-                # All vars in a download group share a level type (enforced by
-                # max_vars_per_download_group=1 and source_groups splitting by level type)
-                request_type = item(
+                # max_vars_per_download_group=1 ensures all vars share a level type
+                levtype = item(
                     {v.internal_attrs.grib_index_level_type for v in data_var_group}
                 )
                 coords.append(
@@ -125,7 +124,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                         ensemble_member=member,
                         data_var_group=data_var_group,
                         request_type=MarsSourceFileCoord.get_request_type(
-                            request_type, member
+                            levtype, member
                         ),
                     )
                 )

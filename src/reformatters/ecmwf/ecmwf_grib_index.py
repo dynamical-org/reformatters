@@ -36,18 +36,16 @@ def get_message_byte_ranges_from_index(
             if np.isnan(level_value := data_var.internal_attrs.grib_index_level_value)
             else level_value
         )
-        param = data_var.internal_attrs.grib_index_param
-
         if ensemble_member is not None:
             loc_key = (
                 ensemble_member,
-                param,
+                data_var.internal_attrs.grib_index_param,
                 data_var.internal_attrs.grib_index_level_type,
                 level_selector,
             )
         else:
             loc_key = (
-                param,
+                data_var.internal_attrs.grib_index_param,
                 data_var.internal_attrs.grib_index_level_type,
                 level_selector,
             )
