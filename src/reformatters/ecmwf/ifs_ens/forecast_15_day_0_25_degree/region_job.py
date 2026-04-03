@@ -46,15 +46,6 @@ DYNAMICAL_MARS_GRIB_BUCKET_URL = "https://data.source.coop"
 DYNAMICAL_MARS_GRIB_PREFIX = "dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens"
 
 
-def _mars_request_type(levtype: str, ensemble_member: int) -> str:
-    """Map a level type and ensemble member to the MARS request type used in file paths."""
-    if levtype == "sfc":
-        if ensemble_member == 0:
-            return "cf_sfc"
-        return "pf_sfc_0" if ensemble_member <= 25 else "pf_sfc_1"
-    return "cf_pl" if ensemble_member == 0 else "pf_pl"
-
-
 class OpenDataSourceFileCoord(SourceFileCoord):
     """Source file coord for ECMWF open data (one GRIB per init_time x lead_time)."""
 
@@ -107,6 +98,15 @@ class MarsSourceFileCoord(SourceFileCoord):
     data_var_group: Sequence[EcmwfDataVar]
     request_type: str
     lead_times: tuple[Timedelta, ...]
+
+    @staticmethod
+    def get_request_type(levtype: str, ensemble_member: int) -> str:
+        """Map a level type and ensemble member to the MARS request type used in file paths."""
+        if levtype == "sfc":
+            if ensemble_member == 0:
+                return "cf_sfc"
+            return "pf_sfc_0" if ensemble_member <= 25 else "pf_sfc_1"
+        return "cf_pl" if ensemble_member == 0 else "pf_pl"
 
     def resolve_internal_attrs(self, data_var: EcmwfDataVar) -> EcmwfInternalAttrs:
         if data_var.internal_attrs.mars is None:
@@ -285,7 +285,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                     defaultdict(list)
                 )
                 for v in data_var_group:
-                    rt = _mars_request_type(
+                    rt = MarsSourceFileCoord.get_request_type(
                         v.internal_attrs.grib_index_level_type, int(ensemble_member)
                     )
                     vars_by_request_type[rt].append(v)

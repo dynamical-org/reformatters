@@ -18,7 +18,6 @@ from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job import (
     EcmwfIfsEnsForecast15Day025DegreeRegionJob,
     MarsSourceFileCoord,
     OpenDataSourceFileCoord,
-    _mars_request_type,
 )
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.template_config import (
     EcmwfIfsEnsForecast15Day025DegreeTemplateConfig,
@@ -444,7 +443,7 @@ def test_download_and_read_mars_data() -> None:
     )
 
     for data_var in template_config.data_vars:
-        request_type = _mars_request_type(
+        request_type = MarsSourceFileCoord.get_request_type(
             data_var.internal_attrs.grib_index_level_type, test_member
         )
         coord = MarsSourceFileCoord(
