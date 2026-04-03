@@ -40,6 +40,14 @@ class OpenDataSourceFileCoord(SourceFileCoord):
     def resolve_data_var(self, data_var: EcmwfDataVar) -> EcmwfDataVar:
         return _resolve_grib_index_param(data_var, self.lead_time)
 
+    @property
+    def index_step(self) -> int | None:
+        return None
+
+    @property
+    def validate_grib_comment_unit_only(self) -> bool:
+        return False
+
     def _get_base_url(self) -> str:
         base_url = f"https://{self.s3_bucket_url}.s3.{self.s3_region}.amazonaws.com"
 
@@ -71,13 +79,13 @@ class OpenDataSourceFileCoord(SourceFileCoord):
 
 
 class MarsSourceFileCoord(SourceFileCoord):
-    """Source file coord for MARS archive data (one GRIB per init_time x request_type, all steps inside)."""
+    """Source file coord for MARS archive data on source.coop."""
 
     init_time: Timestamp
+    lead_time: Timedelta
     ensemble_member: int
     data_var_group: Sequence[EcmwfDataVar]
     request_type: str
-    lead_times: tuple[Timedelta, ...]
 
     @staticmethod
     def get_request_type(levtype: str, ensemble_member: int) -> str:
@@ -101,6 +109,17 @@ class MarsSourceFileCoord(SourceFileCoord):
             internal_attrs=replace(data_var.internal_attrs, **overrides, mars=None),
         )
 
+    @property
+    def index_step(self) -> int | None:
+        # MARS indexes contain all steps; filter to the one we need
+        return whole_hours(self.lead_time)
+
+    @property
+    def validate_grib_comment_unit_only(self) -> bool:
+        # MARS GRIBs use different descriptive text than open data (e.g.
+        # "2 metre temperature" vs "Temperature") but the physical unit matches
+        return True
+
     def _date_str(self) -> str:
         return self.init_time.strftime("%Y-%m-%d")
 
@@ -113,7 +132,7 @@ class MarsSourceFileCoord(SourceFileCoord):
     def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
         return {
             "init_time": self.init_time,
-            "lead_time": slice(self.lead_times[0], self.lead_times[-1]),
+            "lead_time": self.lead_time,
             "ensemble_member": self.ensemble_member,
         }
 

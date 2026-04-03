@@ -15,12 +15,10 @@ from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import digest, item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob
-from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     AppendDim,
     ArrayFloat32,
     DatetimeLike,
-    Timedelta,
 )
 from reformatters.ecmwf.ecmwf_config_models import (
     EcmwfDataVar,
@@ -37,25 +35,6 @@ from .source_file_coord import (
 )
 
 log = get_logger(__name__)
-
-
-def _find_bands_by_forecast_seconds(
-    reader: rasterio.DatasetReader, lead_times: tuple[Timedelta, ...]
-) -> list[int]:
-    """Find rasterio band indexes (1-indexed) matching the requested lead times."""
-    target_seconds = {int(lt.total_seconds()): lt for lt in lead_times}
-    band_map: dict[int, int] = {}
-    for band_idx in range(1, reader.count + 1):
-        forecast_seconds = int(reader.tags(band_idx)["GRIB_FORECAST_SECONDS"])
-        if forecast_seconds in target_seconds:
-            band_map[forecast_seconds] = band_idx
-
-    assert set(band_map.keys()) == set(target_seconds.keys()), (
-        f"Could not find bands for all lead times. "
-        f"Wanted seconds {sorted(target_seconds.keys())}, found {sorted(band_map.keys())}"
-    )
-    # Return bands ordered by lead_time
-    return [band_map[int(lt.total_seconds())] for lt in lead_times]
 
 
 def _validate_grib_comment(
@@ -118,53 +97,46 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[EcmwfDataVar],
     ) -> Sequence[IfsEnsSourceFileCoord]:
-        """Returns a sequence of coords, one for each source file required to process the data covered by processing_region_ds.
-
-        For open data (>= MARS_OPEN_DATA_CUTOVER): one coord per init_time x lead_time x ensemble_member.
-        For MARS archive: one coord per init_time x request_type x ensemble_member (all lead_times grouped).
-        """
+        """Returns a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
         coords: list[IfsEnsSourceFileCoord] = []
         group_has_hour_0_values = item({has_hour_0_values(v) for v in data_var_group})
-        for init_time, ensemble_member in itertools.product(
+        for init_time, lead_time, ensemble_member in itertools.product(
             processing_region_ds["init_time"].values,
+            processing_region_ds["lead_time"].values,
             processing_region_ds["ensemble_member"].values,
         ):
             if not vars_available(data_var_group, init_time):
                 continue
 
-            lead_times = processing_region_ds["lead_time"].values
-            if not group_has_hour_0_values:
-                lead_times = lead_times[lead_times != np.timedelta64(0)]
+            if not group_has_hour_0_values and lead_time == np.timedelta64(0):
+                continue
 
+            member = int(ensemble_member)
             if pd.Timestamp(init_time) < MARS_OPEN_DATA_CUTOVER:
-                # Group vars by MARS request type (one file per request type)
-                vars_by_request_type: defaultdict[str, list[EcmwfDataVar]] = (
-                    defaultdict(list)
+                # All vars in a download group share a level type (enforced by
+                # max_vars_per_download_group=1 and source_groups splitting by level type)
+                request_type = item(
+                    {v.internal_attrs.grib_index_level_type for v in data_var_group}
                 )
-                for v in data_var_group:
-                    rt = MarsSourceFileCoord.get_request_type(
-                        v.internal_attrs.grib_index_level_type, int(ensemble_member)
+                coords.append(
+                    MarsSourceFileCoord(
+                        init_time=init_time,
+                        lead_time=lead_time,
+                        ensemble_member=member,
+                        data_var_group=data_var_group,
+                        request_type=MarsSourceFileCoord.get_request_type(
+                            request_type, member
+                        ),
                     )
-                    vars_by_request_type[rt].append(v)
-                for request_type, rt_vars in vars_by_request_type.items():
-                    coords.append(
-                        MarsSourceFileCoord(
-                            init_time=init_time,
-                            ensemble_member=int(ensemble_member),
-                            data_var_group=rt_vars,
-                            request_type=request_type,
-                            lead_times=tuple(lead_times),
-                        )
-                    )
+                )
             else:
-                coords.extend(
+                coords.append(
                     OpenDataSourceFileCoord(
                         init_time=init_time,
                         lead_time=lead_time,
                         data_var_group=data_var_group,
-                        ensemble_member=int(ensemble_member),
+                        ensemble_member=member,
                     )
-                    for lead_time in lead_times
                 )
         return coords
 
@@ -173,13 +145,8 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         idx_local_path = http_download_to_disk(coord.get_index_url(), self.dataset_id)
 
         resolved_vars = [coord.resolve_data_var(v) for v in coord.data_var_group]
-        steps = (
-            [whole_hours(lt) for lt in coord.lead_times]
-            if isinstance(coord, MarsSourceFileCoord)
-            else None
-        )
         byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(
-            idx_local_path, resolved_vars, coord.ensemble_member, steps=steps
+            idx_local_path, resolved_vars, coord.ensemble_member, step=coord.index_step
         )
         suffix = digest(
             f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)
@@ -198,40 +165,26 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
         resolved = coord.resolve_data_var(data_var)
-        expected_spatial_shape = (721, 1440)
+        expected_shape = (721, 1440)
 
         with rasterio.open(coord.downloaded_path) as reader:
-            if isinstance(coord, MarsSourceFileCoord):
-                band_indexes = _find_bands_by_forecast_seconds(reader, coord.lead_times)
-                # MARS GRIBs use different descriptive text than open data (e.g.
-                # "2 metre temperature" vs "Temperature") but the physical unit
-                # in brackets should match.
-                _validate_grib_comment(
-                    reader.tags(band_indexes[0])["GRIB_COMMENT"],
-                    resolved.internal_attrs.grib_comment,
-                    data_var.name,
-                    unit_only=True,
-                )
-                result: ArrayFloat32 = reader.read(band_indexes, out_dtype=np.float32)
-                assert result.shape == (len(band_indexes), *expected_spatial_shape), (
-                    f"Expected {(len(band_indexes), *expected_spatial_shape)} shape, found {result.shape}"
-                )
-            else:
-                assert reader.count == 1, f"Expected 1 band, found {reader.count}"
-                _validate_grib_comment(
-                    reader.tags(1)["GRIB_COMMENT"],
-                    resolved.internal_attrs.grib_comment,
-                    data_var.name,
-                )
+            assert reader.count == 1, f"Expected 1 band, found {reader.count}"
+            _validate_grib_comment(
+                reader.tags(1)["GRIB_COMMENT"],
+                resolved.internal_attrs.grib_comment,
+                data_var.name,
+                unit_only=coord.validate_grib_comment_unit_only,
+            )
+            if not coord.validate_grib_comment_unit_only:
                 assert (
                     reader.descriptions[0] == resolved.internal_attrs.grib_description
                 ), (
                     f"{reader.descriptions[0]=} != {resolved.internal_attrs.grib_description}"
                 )
-                result = reader.read(1, out_dtype=np.float32)
-                assert result.shape == expected_spatial_shape, (
-                    f"Expected {expected_spatial_shape} shape, found {result.shape}"
-                )
+            result: ArrayFloat32 = reader.read(1, out_dtype=np.float32)
+            assert result.shape == expected_shape, (
+                f"Expected {expected_shape} shape, found {result.shape}"
+            )
 
             # Apply MARS-specific scale factor (e.g. geopotential m^2/s^2 to
             # geopotential height gpm). Applied here rather than in

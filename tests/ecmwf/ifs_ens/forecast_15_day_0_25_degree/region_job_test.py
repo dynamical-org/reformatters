@@ -52,16 +52,17 @@ def test_open_data_source_file_coord_get_url() -> None:
 def test_mars_source_file_coord_get_url() -> None:
     coord = MarsSourceFileCoord(
         init_time=pd.Timestamp("2024-01-01"),
+        lead_time=pd.Timedelta("3h"),
         ensemble_member=0,
         data_var_group=[],
         request_type="cf_sfc",
-        lead_times=(pd.Timedelta("0h"), pd.Timedelta("3h")),
     )
     assert coord.get_url() == f"{DYNAMICAL_MARS_GRIB_BASE_URL}/2024-01-01/cf_sfc.grib"
     assert (
         coord.get_index_url()
         == f"{DYNAMICAL_MARS_GRIB_BASE_URL}/2024-01-01/cf_sfc.grib.idx"
     )
+    assert coord.index_step == 3
 
 
 def test_region_job_source_groups() -> None:
@@ -133,7 +134,7 @@ def test_region_job_generate_source_file_coords_open_data() -> None:
 
 
 def test_region_job_generate_source_file_coords_mars() -> None:
-    """MARS init times (< cutover) produce one MarsSourceFileCoord per init_time x member."""
+    """MARS init times (< cutover) produce MarsSourceFileCoords, one per lead_time like open data."""
     template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
     # Override append_dim_start to allow pre-cutover dates
     object.__setattr__(template_config, "append_dim_start", pd.Timestamp("2024-01-01"))
@@ -152,21 +153,16 @@ def test_region_job_generate_source_file_coords_mars() -> None:
         reformat_job_name="test",
     )
     processing_region_ds, _ = region_job._get_region_datasets()
-    groups = EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_groups(
-        template_config.data_vars
-    )
-    # Group 0 has both sfc and pl vars. For MARS, these split by request type:
-    # cf_sfc and cf_pl for member 0, pf_sfc_0 and pf_pl for member 1.
-    # So: 2 init_times x 2 members x 2 request_types = 8 coords
-    group_0_coords = region_job.generate_source_file_coords(
-        processing_region_ds, groups[0]
-    )
-    assert len(group_0_coords) == 2 * 2 * 2
-    assert all(isinstance(c, MarsSourceFileCoord) for c in group_0_coords)
-    # Each MARS coord should have all 5 lead times
-    mars_coord = group_0_coords[0]
+
+    # Use a single-var group (as process() does with max_vars_per_download_group=1)
+    t2m = item(v for v in template_config.data_vars if v.name == "temperature_2m")
+    coords = region_job.generate_source_file_coords(processing_region_ds, [t2m])
+    # 2 init_times x 5 lead_times x 2 members = 20 coords
+    assert len(coords) == 2 * 5 * 2
+    assert all(isinstance(c, MarsSourceFileCoord) for c in coords)
+    mars_coord = coords[0]
     assert isinstance(mars_coord, MarsSourceFileCoord)
-    assert len(mars_coord.lead_times) == 5
+    assert mars_coord.request_type == "cf_sfc"
 
 
 def test_region_job_download_file_open_data(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -278,9 +274,9 @@ def test_region_job_read_data_open_data(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_region_job_read_data_mars(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test grib data reading for MARS with multi-band file and GRIB_FORECAST_SECONDS matching."""
+    """Test grib data reading for MARS with unit-only comment validation."""
     template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
-    template_ds = template_config.get_template(pd.Timestamp("2024-01-03"))
+    template_ds = template_config.get_template(pd.Timestamp("2024-04-02"))
 
     region_job = EcmwfIfsEnsForecast15Day025DegreeRegionJob.model_construct(
         tmp_store=Mock(),
@@ -293,30 +289,24 @@ def test_region_job_read_data_mars(monkeypatch: pytest.MonkeyPatch) -> None:
     t2m_var = item(
         var for var in template_config.data_vars if var.name == "temperature_2m"
     )
-    lead_times = (pd.Timedelta("0h"), pd.Timedelta("3h"), pd.Timedelta("6h"))
     source_file_coord = MarsSourceFileCoord(
         init_time=pd.Timestamp("2024-01-01"),
+        lead_time=pd.Timedelta("3h"),
         ensemble_member=0,
         data_var_group=[t2m_var],
         request_type="cf_sfc",
-        lead_times=lead_times,
         downloaded_path=Path("fake/path/to/downloaded/file.grib"),
     )
 
     rasterio_reader = Mock()
     rasterio_reader.__enter__ = Mock(return_value=rasterio_reader)
     rasterio_reader.__exit__ = Mock(return_value=False)
-    rasterio_reader.count = 3
-
-    def tags_side_effect(band_idx: int) -> dict[str, str]:
-        forecast_seconds = {1: "0", 2: "10800", 3: "21600"}
-        return {
-            "GRIB_FORECAST_SECONDS": forecast_seconds[band_idx],
-            "GRIB_COMMENT": "2 metre temperature [C]",
-        }
-
-    rasterio_reader.tags = tags_side_effect
-    test_data = np.ones((3, 721, 1440), dtype=np.float32)
+    rasterio_reader.count = 1
+    # MARS uses different descriptive text but same unit
+    rasterio_reader.tags = Mock(
+        return_value={"GRIB_COMMENT": "2 metre temperature [C]"}
+    )
+    test_data = np.ones((721, 1440), dtype=np.float32)
     rasterio_reader.read = Mock(return_value=test_data)
     monkeypatch.setattr(
         "reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job.rasterio.open",
@@ -325,9 +315,10 @@ def test_region_job_read_data_mars(monkeypatch: pytest.MonkeyPatch) -> None:
 
     result = region_job.read_data(source_file_coord, t2m_var)
 
-    assert result.shape == (3, 721, 1440)
+    assert np.array_equal(result, test_data)
+    assert result.shape == (721, 1440)
     assert result.dtype == np.float32
-    rasterio_reader.read.assert_called_once_with([1, 2, 3], out_dtype=np.float32)
+    rasterio_reader.read.assert_called_once_with(1, out_dtype=np.float32)
 
 
 def test_operational_update_jobs(
@@ -429,7 +420,7 @@ def test_download_and_read_mars_data() -> None:
 
     test_init_time = pd.Timestamp("2016-03-08")
     test_member = 0
-    test_lead_times = (pd.Timedelta("3h"),)
+    test_lead_time = pd.Timedelta("3h")
 
     region_job = EcmwfIfsEnsForecast15Day025DegreeRegionJob.model_construct(
         tmp_store=Mock(),
@@ -446,17 +437,17 @@ def test_download_and_read_mars_data() -> None:
         )
         coord = MarsSourceFileCoord(
             init_time=test_init_time,
+            lead_time=test_lead_time,
             ensemble_member=test_member,
             data_var_group=[data_var],
             request_type=request_type,
-            lead_times=test_lead_times,
         )
         downloaded_coord = replace(
             coord, downloaded_path=region_job.download_file(coord)
         )
         result = region_job.read_data(downloaded_coord, data_var)
 
-        assert result.shape == (1, 721, 1440), (
-            f"{data_var.name}: expected shape (1, 721, 1440), got {result.shape}"
+        assert result.shape == (721, 1440), (
+            f"{data_var.name}: expected shape (721, 1440), got {result.shape}"
         )
         assert np.all(np.isfinite(result)), f"{data_var.name}: has non-finite values"
