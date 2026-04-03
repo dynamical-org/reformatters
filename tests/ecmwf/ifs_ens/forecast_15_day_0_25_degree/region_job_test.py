@@ -376,7 +376,7 @@ def test_download_file_from_ecmwf_open_data() -> None:
 
 @pytest.mark.slow
 def test_download_and_read_mars_data() -> None:
-    """Download MARS GRIB data from source.coop using the coord classes and validate all template variables."""
+    """Download MARS GRIB data from source.coop and read all template variables."""
     template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
 
     test_init_time = pd.Timestamp("2016-03-08")
@@ -392,7 +392,7 @@ def test_download_and_read_mars_data() -> None:
         reformat_job_name="test",
     )
 
-    for data_var in template_config.data_vars:
+    def check_data_var(data_var: EcmwfDataVar) -> None:
         request_type = MarsSourceFileCoord.get_request_type(
             data_var.internal_attrs.grib_index_level_type, test_member
         )
@@ -402,7 +402,7 @@ def test_download_and_read_mars_data() -> None:
             ensemble_member=test_member,
             data_var_group=[data_var],
             request_type=request_type,
-        )
+        ).resolve_data_vars()
         downloaded_coord = replace(
             coord, downloaded_path=region_job.download_file(coord)
         )
@@ -412,3 +412,6 @@ def test_download_and_read_mars_data() -> None:
             f"{data_var.name}: expected shape (721, 1440), got {result.shape}"
         )
         assert np.all(np.isfinite(result)), f"{data_var.name}: has non-finite values"
+
+    with ThreadPoolExecutor() as executor:
+        list(executor.map(check_data_var, template_config.data_vars))
