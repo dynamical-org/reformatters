@@ -87,14 +87,17 @@ class OpenDataSourceFileCoord(SourceFileCoord):
 def _resolve_mars_data_var(data_var: EcmwfDataVar) -> EcmwfDataVar:
     if data_var.internal_attrs.mars is None:
         return data_var
+    # Merge mars overrides into internal_attrs, except scale_factor which is
+    # applied separately in read_data (not apply_data_transformations) because
+    # a shard could mix sources and the conversion must only apply to MARS values.
     overrides = {
         k: v
         for k, v in data_var.internal_attrs.mars.model_dump().items()
-        if v is not None
+        if v is not None and k != "scale_factor"
     }
     return replace(
         data_var,
-        internal_attrs=replace(data_var.internal_attrs, **overrides, mars=None),
+        internal_attrs=replace(data_var.internal_attrs, **overrides),
     )
 
 

@@ -134,15 +134,17 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         data_var: EcmwfDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
-        resolved = next(v for v in coord.data_var_group if v.name == data_var.name)
+        # Use the data var on the coord which has resolved the grib metadata
+        # to account for MARS / Open Data differences
+        data_var = item(v for v in coord.data_var_group if v.name == data_var.name)
         expected_shape = (721, 1440)
 
         with rasterio.open(coord.downloaded_path) as reader:
             assert reader.count == 1, f"Expected 1 band, found {reader.count}"
             _validate_grib_metadata(
                 reader,
-                resolved.internal_attrs.grib_comment,
-                resolved.internal_attrs.grib_description,
+                data_var.internal_attrs.grib_comment,
+                data_var.internal_attrs.grib_description,
                 data_var.name,
                 unit_only=coord.validate_grib_comment_unit_only,
             )
