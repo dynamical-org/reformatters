@@ -8,10 +8,8 @@ from reformatters.ecmwf.ecmwf_config_models import (
     EcmwfDataVar,
 )
 
-from .region_job import (
-    EcmwfIfsEnsForecast15Day025DegreeRegionJob,
-    IfsEnsSourceFileCoord,
-)
+from .region_job import EcmwfIfsEnsForecast15Day025DegreeRegionJob
+from .source_file_coord import IfsEnsSourceFileCoord
 from .template_config import EcmwfIfsEnsForecast15Day025DegreeTemplateConfig
 
 

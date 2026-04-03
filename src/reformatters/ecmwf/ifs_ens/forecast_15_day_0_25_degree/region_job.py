@@ -1,6 +1,6 @@
 import itertools
 from collections import defaultdict
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import ClassVar
 
@@ -14,150 +14,29 @@ from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import digest, item
 from reformatters.common.logging import get_logger
-from reformatters.common.pydantic import replace
-from reformatters.common.region_job import (
-    CoordinateValueOrRange,
-    RegionJob,
-    SourceFileCoord,
-)
+from reformatters.common.region_job import RegionJob
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     AppendDim,
     ArrayFloat32,
     DatetimeLike,
-    Dim,
     Timedelta,
-    Timestamp,
 )
 from reformatters.ecmwf.ecmwf_config_models import (
     EcmwfDataVar,
-    EcmwfInternalAttrs,
     has_hour_0_values,
-    resolve_grib_index_params,
     vars_available,
 )
 from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
 
-log = get_logger(__name__)
-
-
-MARS_OPEN_DATA_CUTOVER = pd.Timestamp("2024-04-01T00:00")
-
-DYNAMICAL_MARS_GRIB_BASE_URL = (
-    "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens"
+from .source_file_coord import (
+    MARS_OPEN_DATA_CUTOVER,
+    IfsEnsSourceFileCoord,
+    MarsSourceFileCoord,
+    OpenDataSourceFileCoord,
 )
 
-
-class OpenDataSourceFileCoord(SourceFileCoord):
-    """Source file coord for ECMWF open data (one GRIB per init_time x lead_time)."""
-
-    init_time: Timestamp
-    lead_time: Timedelta
-    ensemble_member: int
-    data_var_group: Sequence[EcmwfDataVar]
-
-    s3_bucket_url: ClassVar[str] = "ecmwf-forecasts"
-    s3_region: ClassVar[str] = "eu-central-1"
-
-    def resolve_internal_attrs(self, data_var: EcmwfDataVar) -> EcmwfInternalAttrs:
-        return data_var.internal_attrs
-
-    def _get_base_url(self) -> str:
-        base_url = f"https://{self.s3_bucket_url}.s3.{self.s3_region}.amazonaws.com"
-
-        init_time_str = self.init_time.strftime("%Y%m%d")
-        init_hour_str = self.init_time.strftime("%H")  # pads 0 to be "00", as desired
-        lead_time_hour_str = whole_hours(self.lead_time)
-
-        # On 2024-02-29 and onward, the /ifs/ directory is included in the URL path.
-        if self.init_time >= pd.Timestamp("2024-02-29T00:00"):
-            directory_path = f"{init_time_str}/{init_hour_str}z/ifs/0p25/enfo"
-        else:
-            directory_path = f"{init_time_str}/{init_hour_str}z/0p25/enfo"
-
-        filename = f"{init_time_str}{init_hour_str}0000-{lead_time_hour_str}h-enfo-ef"
-        return f"{base_url}/{directory_path}/{filename}"
-
-    def get_url(self) -> str:
-        return self._get_base_url() + ".grib2"
-
-    def get_index_url(self) -> str:
-        return self._get_base_url() + ".index"
-
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
-        return {
-            "init_time": self.init_time,
-            "lead_time": self.lead_time,
-            "ensemble_member": self.ensemble_member,
-        }
-
-
-class MarsSourceFileCoord(SourceFileCoord):
-    """Source file coord for MARS archive data (one GRIB per init_time x request_type, all steps inside)."""
-
-    init_time: Timestamp
-    ensemble_member: int
-    data_var_group: Sequence[EcmwfDataVar]
-    request_type: str
-    lead_times: tuple[Timedelta, ...]
-
-    @staticmethod
-    def get_request_type(levtype: str, ensemble_member: int) -> str:
-        """Map a level type and ensemble member to the MARS request type used in file paths."""
-        if levtype == "sfc":
-            if ensemble_member == 0:
-                return "cf_sfc"
-            return "pf_sfc_0" if ensemble_member <= 25 else "pf_sfc_1"
-        return "cf_pl" if ensemble_member == 0 else "pf_pl"
-
-    def resolve_internal_attrs(self, data_var: EcmwfDataVar) -> EcmwfInternalAttrs:
-        if data_var.internal_attrs.mars is None:
-            return data_var.internal_attrs
-        overrides = {
-            k: v
-            for k, v in data_var.internal_attrs.mars.model_dump().items()
-            if v is not None
-        }
-        return replace(data_var.internal_attrs, **overrides, mars=None)
-
-    def _date_str(self) -> str:
-        return self.init_time.strftime("%Y-%m-%d")
-
-    def get_url(self) -> str:
-        return f"{DYNAMICAL_MARS_GRIB_BASE_URL}/{self._date_str()}/{self.request_type}.grib"
-
-    def get_index_url(self) -> str:
-        return f"{DYNAMICAL_MARS_GRIB_BASE_URL}/{self._date_str()}/{self.request_type}.grib.idx"
-
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
-        return {
-            "init_time": self.init_time,
-            "lead_time": slice(self.lead_times[0], self.lead_times[-1]),
-            "ensemble_member": self.ensemble_member,
-        }
-
-
-type IfsEnsSourceFileCoord = OpenDataSourceFileCoord | MarsSourceFileCoord
-
-
-def _resolve_vars_for_coord(
-    coord: IfsEnsSourceFileCoord,
-) -> Sequence[EcmwfDataVar]:
-    """Return data vars with source-appropriate internal attrs resolved."""
-    resolved = [_with_resolved_attrs(coord, v) for v in coord.data_var_group]
-    if isinstance(coord, OpenDataSourceFileCoord):
-        resolved = list(resolve_grib_index_params(resolved, coord.lead_time))
-    return resolved
-
-
-def _with_resolved_attrs(
-    coord: IfsEnsSourceFileCoord, data_var: EcmwfDataVar
-) -> EcmwfDataVar:
-    """Return a copy of data_var with internal_attrs resolved for the coord's source."""
-    resolved = coord.resolve_internal_attrs(data_var)
-    if resolved is data_var.internal_attrs:
-        return data_var
-    return replace(data_var, internal_attrs=resolved)
+log = get_logger(__name__)
 
 
 def _get_all_byte_ranges(
@@ -318,7 +197,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         idx_local_path = http_download_to_disk(coord.get_index_url(), self.dataset_id)
 
         # Resolve data vars with source-appropriate attrs
-        resolved_vars = _resolve_vars_for_coord(coord)
+        resolved_vars = [coord.resolve_data_var(v) for v in coord.data_var_group]
 
         byte_range_starts, byte_range_ends = _get_all_byte_ranges(
             idx_local_path, resolved_vars, coord
@@ -339,7 +218,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         data_var: EcmwfDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
-        resolved_attrs = coord.resolve_internal_attrs(data_var)
+        resolved = coord.resolve_data_var(data_var)
         expected_spatial_shape = (721, 1440)
 
         with rasterio.open(coord.downloaded_path) as reader:
@@ -350,7 +229,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                 # in brackets should match.
                 _validate_grib_comment(
                     reader.tags(band_indexes[0])["GRIB_COMMENT"],
-                    resolved_attrs.grib_comment,
+                    resolved.internal_attrs.grib_comment,
                     data_var.name,
                     unit_only=True,
                 )
@@ -362,11 +241,13 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                 assert reader.count == 1, f"Expected 1 band, found {reader.count}"
                 _validate_grib_comment(
                     reader.tags(1)["GRIB_COMMENT"],
-                    resolved_attrs.grib_comment,
+                    resolved.internal_attrs.grib_comment,
                     data_var.name,
                 )
-                assert reader.descriptions[0] == resolved_attrs.grib_description, (
-                    f"{reader.descriptions[0]=} != {resolved_attrs.grib_description}"
+                assert (
+                    reader.descriptions[0] == resolved.internal_attrs.grib_description
+                ), (
+                    f"{reader.descriptions[0]=} != {resolved.internal_attrs.grib_description}"
                 )
                 result = reader.read(1, out_dtype=np.float32)
                 assert result.shape == expected_spatial_shape, (

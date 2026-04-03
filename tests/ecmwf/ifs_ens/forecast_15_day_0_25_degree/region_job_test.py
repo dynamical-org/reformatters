@@ -13,8 +13,10 @@ from reformatters.common.pydantic import replace
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job import (
-    DYNAMICAL_MARS_GRIB_BASE_URL,
     EcmwfIfsEnsForecast15Day025DegreeRegionJob,
+)
+from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.source_file_coord import (
+    DYNAMICAL_MARS_GRIB_BASE_URL,
     MarsSourceFileCoord,
     OpenDataSourceFileCoord,
 )

@@ -85,13 +85,6 @@ def _resolve_grib_index_param(
     return data_var
 
 
-def resolve_grib_index_params(
-    data_vars: Sequence[EcmwfDataVar], lead_time: Timedelta
-) -> Sequence[EcmwfDataVar]:
-    """Return data_vars with grib_index_param adjusted for lead_time-specific overrides."""
-    return [_resolve_grib_index_param(v, lead_time) for v in data_vars]
-
-
 def has_hour_0_values(data_var: EcmwfDataVar) -> bool:
     """Returns True if this variable has a value at lead_time=0h.
 
