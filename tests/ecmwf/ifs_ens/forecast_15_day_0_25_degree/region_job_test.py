@@ -255,15 +255,15 @@ def test_region_job_read_data_mars(monkeypatch: pytest.MonkeyPatch) -> None:
         data_var_group=[t2m_var],
         request_type="cf_sfc",
         downloaded_path=Path("fake/path/to/downloaded/file.grib"),
-    )
+    ).resolve_data_vars()
 
     rasterio_reader = Mock()
     rasterio_reader.__enter__ = Mock(return_value=rasterio_reader)
     rasterio_reader.__exit__ = Mock(return_value=False)
     rasterio_reader.count = 1
-    # MARS uses different descriptive text but same unit
+    # MARS uses different element names and descriptive text but same unit
     rasterio_reader.tags = Mock(
-        return_value={"GRIB_COMMENT": "2 metre temperature [C]"}
+        return_value={"GRIB_ELEMENT": "2T", "GRIB_COMMENT": "2 metre temperature [C]"}
     )
     test_data = np.ones((721, 1440), dtype=np.float32)
     rasterio_reader.read = Mock(return_value=test_data)

@@ -146,6 +146,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                 reader,
                 resolved_data_var.internal_attrs.grib_comment,
                 resolved_data_var.internal_attrs.grib_description,
+                resolved_data_var.internal_attrs.grib_element,
                 data_var.name,
                 unit_only=coord.validate_grib_comment_unit_only,
             )
@@ -269,6 +270,7 @@ def _validate_grib_metadata(
     reader: rasterio.DatasetReader,
     expected_comment: str,
     expected_description: str,
+    expected_element: str,
     var_name: str,
     *,
     unit_only: bool = False,
@@ -278,8 +280,17 @@ def _validate_grib_metadata(
     When unit_only=True, only checks the bracketed unit suffix of the comment
     (e.g. "[C]") and skips description validation. This is useful for MARS GRIBs
     where the descriptive text differs from open data but the physical unit matches.
+
+    GRIB_ELEMENT is always validated as it's the most reliable identifier across sources.
     """
-    actual_comment = reader.tags(1)["GRIB_COMMENT"]
+    tags = reader.tags(1)
+
+    actual_element = tags["GRIB_ELEMENT"]
+    assert actual_element == expected_element, (
+        f"Element mismatch: {actual_element=} vs {expected_element=}"
+    )
+
+    actual_comment = tags["GRIB_COMMENT"]
     if unit_only:
         actual_unit = actual_comment[actual_comment.rfind("[") :]
         expected_unit = expected_comment[expected_comment.rfind("[") :]

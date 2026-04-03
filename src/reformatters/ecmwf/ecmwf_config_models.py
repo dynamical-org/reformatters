@@ -18,6 +18,7 @@ class MarsSourceOverrides(FrozenBaseModel):
     """
 
     grib_index_param: str | None = None
+    grib_element: str | None = None
     grib_comment: str | None = None
     scale_factor: float | None = None
 
