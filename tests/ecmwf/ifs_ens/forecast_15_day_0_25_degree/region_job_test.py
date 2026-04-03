@@ -14,35 +14,14 @@ from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFacto
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job import (
     EcmwfIfsEnsForecast15Day025DegreeRegionJob,
-    EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord,
+)
+from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.source_file_coord import (
+    MarsSourceFileCoord,
+    OpenDataSourceFileCoord,
 )
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.template_config import (
     EcmwfIfsEnsForecast15Day025DegreeTemplateConfig,
 )
-
-
-def test_source_file_coord_get_url() -> None:
-    coord = EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
-        init_time=pd.Timestamp("2025-01-01"),
-        lead_time=pd.Timedelta("0h"),
-        data_var_group=[],
-        ensemble_member=0,
-    )
-    assert (
-        coord.get_url()
-        == "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20250101/00z/ifs/0p25/enfo/20250101000000-0h-enfo-ef.grib2"
-    )
-
-    coord = EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
-        init_time=pd.Timestamp("2024-02-28"),
-        lead_time=pd.Timedelta("0h"),
-        data_var_group=[],
-        ensemble_member=0,
-    )
-    assert (
-        coord.get_url()
-        == "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20240228/00z/0p25/enfo/20240228000000-0h-enfo-ef.grib2"
-    )
 
 
 def test_region_job_source_groups() -> None:
@@ -61,7 +40,8 @@ def test_region_job_source_groups() -> None:
     assert item(groups[3]).name == "total_cloud_cover_atmosphere"
 
 
-def test_region_job_generate_source_file_coords() -> None:
+def test_region_job_generate_source_file_coords_open_data() -> None:
+    """Open data init times (>= cutover) produce one OpenDataSourceFileCoord per lead_time."""
     template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
     template_ds = template_config.get_template(pd.Timestamp("2024-11-15"))
 
@@ -89,6 +69,9 @@ def test_region_job_generate_source_file_coords() -> None:
     # Since our region is three init times (slice(0, 3)), 2 ensemble members, and 12 lead times,
     # we should get 3 * 2 * 12 = 72 source file coords
     assert len(group_0_source_file_coords) == 3 * 2 * 12
+    assert all(
+        isinstance(c, OpenDataSourceFileCoord) for c in group_0_source_file_coords
+    )
 
     group_1_source_file_coords = region_job.generate_source_file_coords(
         processing_region_ds, groups[1]
@@ -109,9 +92,41 @@ def test_region_job_generate_source_file_coords() -> None:
     assert item(group_2_source_file_coords[0].data_var_group).name == "wind_gust_10m"
 
 
-def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_region_job_generate_source_file_coords_mars() -> None:
+    """MARS init times (< cutover) produce MarsSourceFileCoords, one per lead_time like open data."""
     template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
-    template_ds = template_config.get_template(pd.Timestamp("2024-02-02"))
+    # Override append_dim_start to allow pre-cutover dates
+    object.__setattr__(template_config, "append_dim_start", pd.Timestamp("2024-01-01"))
+    template_ds = template_config.get_template(pd.Timestamp("2024-01-03"))
+
+    region_job = EcmwfIfsEnsForecast15Day025DegreeRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_ds.isel(
+            init_time=slice(0, 2),
+            ensemble_member=slice(0, 2),
+            lead_time=slice(0, 5),
+        ),
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 2),
+        reformat_job_name="test",
+    )
+    processing_region_ds, _ = region_job._get_region_datasets()
+
+    # Use a single-var group (as process() does with max_vars_per_download_group=1)
+    t2m = item(v for v in template_config.data_vars if v.name == "temperature_2m")
+    coords = region_job.generate_source_file_coords(processing_region_ds, [t2m])
+    # 2 init_times x 5 lead_times x 2 members = 20 coords
+    assert len(coords) == 2 * 5 * 2
+    assert all(isinstance(c, MarsSourceFileCoord) for c in coords)
+    mars_coord = coords[0]
+    assert isinstance(mars_coord, MarsSourceFileCoord)
+    assert mars_coord.request_type == "cf_sfc"
+
+
+def test_region_job_download_file_open_data(monkeypatch: pytest.MonkeyPatch) -> None:
+    template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
+    template_ds = template_config.get_template(pd.Timestamp("2024-04-02"))
 
     region_job = EcmwfIfsEnsForecast15Day025DegreeRegionJob.model_construct(
         tmp_store=Mock(),
@@ -121,8 +136,8 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
         region=slice(0, 1),
         reformat_job_name="test",
     )
-    source_file_coord = EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
-        init_time=pd.Timestamp("2024-02-01"),
+    source_file_coord = OpenDataSourceFileCoord(
+        init_time=pd.Timestamp("2024-04-01"),
         lead_time=pd.Timedelta("3h"),
         data_var_group=[
             var for var in template_config.data_vars if var.name == "temperature_2m"
@@ -131,13 +146,13 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     example_grib_index = """
-{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levelist": "500", "levtype": "pl", "number": "2", "param": "gh", "_offset": 674936844, "_length": 393429}
-{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "3", "levtype": "sfc", "param": "2t", "_offset": 0, "_length": 665525}
-{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "3", "levtype": "sfc", "param": "10u", "_offset": 3773626, "_length": 665525}
-{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "3", "levtype": "sfc", "param": "10u", "_offset": 665525, "_length": 888917}
-{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levtype": "sfc", "number": "1", "param": "2t", "_offset": 1554442, "_length": 664922}
-{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levtype": "sfc", "number": "2", "param": "2t", "_offset": 2219364, "_length": 664716}
-{"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levtype": "sfc", "number": "1", "param": "10u", "_offset": 2884080, "_length": 889546}
+{"domain": "g", "date": "20240401", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levelist": "500", "levtype": "pl", "number": "2", "param": "gh", "_offset": 674936844, "_length": 393429}
+{"domain": "g", "date": "20240401", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "3", "levtype": "sfc", "param": "2t", "_offset": 0, "_length": 665525}
+{"domain": "g", "date": "20240401", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "3", "levtype": "sfc", "param": "10u", "_offset": 3773626, "_length": 665525}
+{"domain": "g", "date": "20240401", "time": "0000", "expver": "0001", "class": "od", "type": "cf", "stream": "enfo", "step": "3", "levtype": "sfc", "param": "10u", "_offset": 665525, "_length": 888917}
+{"domain": "g", "date": "20240401", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levtype": "sfc", "number": "1", "param": "2t", "_offset": 1554442, "_length": 664922}
+{"domain": "g", "date": "20240401", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levtype": "sfc", "number": "2", "param": "2t", "_offset": 2219364, "_length": 664716}
+{"domain": "g", "date": "20240401", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levtype": "sfc", "number": "1", "param": "10u", "_offset": 2884080, "_length": 889546}
 """
     mock_index_df = pd.read_json(StringIO(example_grib_index), lines=True)
     monkeypatch.setattr(
@@ -161,7 +176,7 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert (
         url
-        == "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20240201/00z/0p25/enfo/20240201000000-3h-enfo-ef.grib2"
+        == "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20240401/00z/ifs/0p25/enfo/20240401000000-3h-enfo-ef.grib2"
     )
     assert dataset_id == "ecmwf-ifs-ens-forecast-15-day-0-25-degree"
     assert (
@@ -170,8 +185,8 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
     assert byte_ranges == ([0], [665525])
 
 
-def test_region_job_read_data(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test grib data reading with mocked file operations."""
+def test_region_job_read_data_open_data(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test grib data reading for open data with mocked file operations."""
     template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
     template_ds = template_config.get_template(pd.Timestamp("2024-04-02"))
 
@@ -186,7 +201,7 @@ def test_region_job_read_data(monkeypatch: pytest.MonkeyPatch) -> None:
     t2m_var = item(
         var for var in template_config.data_vars if var.name == "temperature_2m"
     )
-    source_file_coord = EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
+    source_file_coord = OpenDataSourceFileCoord(
         init_time=pd.Timestamp("2024-04-01"),
         lead_time=pd.Timedelta("3h"),
         data_var_group=[t2m_var],
@@ -211,11 +226,57 @@ def test_region_job_read_data(monkeypatch: pytest.MonkeyPatch) -> None:
 
     result = region_job.read_data(source_file_coord, t2m_var)
 
-    # Verify the result
     assert np.array_equal(result, test_data)
     assert result.shape == (721, 1440)
     assert result.dtype == np.float32
+    rasterio_reader.read.assert_called_once_with(1, out_dtype=np.float32)
 
+
+def test_region_job_read_data_mars(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test grib data reading for MARS with unit-only comment validation."""
+    template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
+    template_ds = template_config.get_template(pd.Timestamp("2024-04-02"))
+
+    region_job = EcmwfIfsEnsForecast15Day025DegreeRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_ds,
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+    t2m_var = item(
+        var for var in template_config.data_vars if var.name == "temperature_2m"
+    )
+    source_file_coord = MarsSourceFileCoord(
+        init_time=pd.Timestamp("2024-01-01"),
+        lead_time=pd.Timedelta("3h"),
+        ensemble_member=0,
+        data_var_group=[t2m_var],
+        request_type="cf_sfc",
+        downloaded_path=Path("fake/path/to/downloaded/file.grib"),
+    ).resolve_data_vars()
+
+    rasterio_reader = Mock()
+    rasterio_reader.__enter__ = Mock(return_value=rasterio_reader)
+    rasterio_reader.__exit__ = Mock(return_value=False)
+    rasterio_reader.count = 1
+    # MARS uses different element names and descriptive text but same unit
+    rasterio_reader.tags = Mock(
+        return_value={"GRIB_ELEMENT": "2T", "GRIB_COMMENT": "2 metre temperature [C]"}
+    )
+    test_data = np.ones((721, 1440), dtype=np.float32)
+    rasterio_reader.read = Mock(return_value=test_data)
+    monkeypatch.setattr(
+        "reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job.rasterio.open",
+        Mock(return_value=rasterio_reader),
+    )
+
+    result = region_job.read_data(source_file_coord, t2m_var)
+
+    assert np.array_equal(result, test_data)
+    assert result.shape == (721, 1440)
+    assert result.dtype == np.float32
     rasterio_reader.read.assert_called_once_with(1, out_dtype=np.float32)
 
 
@@ -311,3 +372,46 @@ def test_download_file_from_ecmwf_open_data() -> None:
     ]
     with ThreadPoolExecutor() as executor:
         list(executor.map(check_data_var, all_data_vars))
+
+
+@pytest.mark.slow
+def test_download_and_read_mars_data() -> None:
+    """Download MARS GRIB data from source.coop and read all template variables."""
+    template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
+
+    test_init_time = pd.Timestamp("2016-03-08")
+    test_member = 0
+    test_lead_time = pd.Timedelta("3h")
+
+    region_job = EcmwfIfsEnsForecast15Day025DegreeRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_config.get_template(test_init_time + pd.Timedelta(days=1)),
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    def check_data_var(data_var: EcmwfDataVar) -> None:
+        request_type = MarsSourceFileCoord.get_request_type(
+            data_var.internal_attrs.grib_index_level_type, test_member
+        )
+        coord = MarsSourceFileCoord(
+            init_time=test_init_time,
+            lead_time=test_lead_time,
+            ensemble_member=test_member,
+            data_var_group=[data_var],
+            request_type=request_type,
+        ).resolve_data_vars()
+        downloaded_coord = replace(
+            coord, downloaded_path=region_job.download_file(coord)
+        )
+        result = region_job.read_data(downloaded_coord, data_var)
+
+        assert result.shape == (721, 1440), (
+            f"{data_var.name}: expected shape (721, 1440), got {result.shape}"
+        )
+        assert np.all(np.isfinite(result)), f"{data_var.name}: has non-finite values"
+
+    with ThreadPoolExecutor() as executor:
+        list(executor.map(check_data_var, template_config.data_vars))

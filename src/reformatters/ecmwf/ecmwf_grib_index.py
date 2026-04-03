@@ -14,6 +14,8 @@ def get_message_byte_ranges_from_index(
     index_local_path: PathLike[str],
     data_vars: Sequence[DataVar[EcmwfInternalAttrs]],
     ensemble_member: int | None = None,
+    *,
+    step: int | None = None,
 ) -> tuple[list[int], list[int]]:
     """
     Given an ECMWF grib index file, returns the byte ranges the given data var(s) can be found within.
@@ -26,7 +28,7 @@ def get_message_byte_ranges_from_index(
     byte_range_starts: list[int] = []
     byte_range_ends: list[int] = []
     index_file_df = _parse_index_file(
-        index_local_path, ensemble=ensemble_member is not None
+        index_local_path, ensemble=ensemble_member is not None, step=step
     )
     for data_var in data_vars:
         level_selector = (
@@ -64,7 +66,7 @@ def get_message_byte_ranges_from_index(
 
 
 def _parse_index_file(
-    index_local_path: PathLike[str], *, ensemble: bool
+    index_local_path: PathLike[str], *, ensemble: bool, step: int | None = None
 ) -> pd.DataFrame:
     """
     Parses an ECMWF index file into a pandas dataframe containing that information.
@@ -81,6 +83,9 @@ def _parse_index_file(
     """
     df = pd.read_json(index_local_path, lines=True)
 
+    if step is not None:
+        df = df[df["step"] == step]
+
     if "levelist" not in df.columns:
         df["levelist"] = np.nan
 
@@ -89,8 +94,11 @@ def _parse_index_file(
     if ensemble:
         index_cols = ["number", *index_cols]
 
-        # Control members by default don't have "number" field. We fill with 0
-        df["number"] = df["number"].fillna(0).astype(int)
+        # Control-only indexes (e.g. MARS cf_sfc) may not have a "number" column at all
+        if "number" not in df.columns:
+            df["number"] = 0
+        else:
+            df["number"] = df["number"].fillna(0).astype(int)
         # Ensure that every row we filled with number=0 was indeed type "cf" (control forecast)
         assert (df[df["number"] == 0]["type"] == "cf").all(), (
             "Parsed row as control member that didn't have type='cf'"

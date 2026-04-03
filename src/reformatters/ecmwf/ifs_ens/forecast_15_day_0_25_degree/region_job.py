@@ -1,6 +1,6 @@
 import itertools
 from collections import defaultdict
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import ClassVar
 
@@ -11,90 +11,34 @@ import xarray as xr
 from zarr.abc.store import Store
 
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
-from reformatters.common.download import (
-    http_download_to_disk,
-)
+from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import digest, item
 from reformatters.common.logging import get_logger
-from reformatters.common.region_job import (
-    CoordinateValueOrRange,
-    RegionJob,
-    SourceFileCoord,
-)
-from reformatters.common.time_utils import whole_hours
+from reformatters.common.region_job import RegionJob
 from reformatters.common.types import (
     AppendDim,
     ArrayFloat32,
     DatetimeLike,
-    Dim,
-    Timedelta,
-    Timestamp,
 )
 from reformatters.ecmwf.ecmwf_config_models import (
     EcmwfDataVar,
     has_hour_0_values,
-    resolve_grib_index_params,
     vars_available,
 )
 from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
 
+from .source_file_coord import (
+    MARS_OPEN_DATA_CUTOVER,
+    IfsEnsSourceFileCoord,
+    MarsSourceFileCoord,
+    OpenDataSourceFileCoord,
+)
+
 log = get_logger(__name__)
 
 
-class EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(SourceFileCoord):
-    """Coordinates of a single source file to process.
-
-    NOTE: All data vars & ensemble members actually live within the same ECMWF grib file,
-        but all in different sections, which we want to do windowed downloads/reads on.
-
-    Data_var_group is a sequence, but should in practice only have one element (see max_vars_per_download_group below).
-    Ensemble member is a single int instead of a sequence (expanded out in generate_source_file_coords).
-    """
-
-    init_time: Timestamp
-    lead_time: Timedelta
-    ensemble_member: int
-
-    # should contain one element, but leaving as sequence for flexibility
-    data_var_group: Sequence[EcmwfDataVar]
-
-    s3_bucket_url: ClassVar[str] = "ecmwf-forecasts"
-    s3_region: ClassVar[str] = "eu-central-1"
-
-    def _get_base_url(self) -> str:
-        base_url = f"https://{self.s3_bucket_url}.s3.{self.s3_region}.amazonaws.com"
-
-        init_time_str = self.init_time.strftime("%Y%m%d")
-        init_hour_str = self.init_time.strftime("%H")  # pads 0 to be "00", as desired
-        lead_time_hour_str = whole_hours(self.lead_time)
-
-        # On 2024-02-29 and onward, the /ifs/ directory is included in the URL path.
-        if self.init_time >= pd.Timestamp("2024-02-29T00:00"):
-            directory_path = f"{init_time_str}/{init_hour_str}z/ifs/0p25/enfo"
-        else:
-            directory_path = f"{init_time_str}/{init_hour_str}z/0p25/enfo"
-
-        filename = f"{init_time_str}{init_hour_str}0000-{lead_time_hour_str}h-enfo-ef"
-        return f"{base_url}/{directory_path}/{filename}"
-
-    def get_url(self) -> str:
-        return self._get_base_url() + ".grib2"
-
-    def get_index_url(self) -> str:
-        return self._get_base_url() + ".index"
-
-    def out_loc(
-        self,
-    ) -> Mapping[Dim, CoordinateValueOrRange]:
-        return {
-            "init_time": self.init_time,
-            "lead_time": self.lead_time,
-            "ensemble_member": self.ensemble_member,
-        }
-
-
 class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
-    RegionJob[EcmwfDataVar, EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]
+    RegionJob[EcmwfDataVar, IfsEnsSourceFileCoord]
 ):
     # Limits the number of variables downloaded together.
     # All variables are scattered throughout the grib file without any organization,
@@ -121,16 +65,9 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         self,
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[EcmwfDataVar],
-    ) -> Sequence[EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]:
-        """Returns a sequence of coords, one for each source file required to process the data covered by processing_region_ds.
-
-        NOTE: all ensemble members are included in the same source file, but we only
-            include one per SourceFileCoord because we want them to get processed separately.
-        This is because the ensemble members & variables are scattered throughout the file
-            rather than being clustered in one contiguous window, and we can get better
-            download/read performance by treating them separately and parallelizing.
-        """
-        coords = []
+    ) -> Sequence[IfsEnsSourceFileCoord]:
+        """Returns a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
+        coords: list[IfsEnsSourceFileCoord] = []
         group_has_hour_0_values = item({has_hour_0_values(v) for v in data_var_group})
         for init_time, lead_time, ensemble_member in itertools.product(
             processing_region_ds["init_time"].values,
@@ -143,29 +80,43 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             if not group_has_hour_0_values and lead_time == np.timedelta64(0):
                 continue
 
-            coord = EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord(
-                init_time=init_time,
-                lead_time=lead_time,
-                data_var_group=data_var_group,
-                ensemble_member=int(ensemble_member),
-            )
-            coords.append(coord)
+            member = int(ensemble_member)
+            if init_time < MARS_OPEN_DATA_CUTOVER:
+                # max_vars_per_download_group=1 ensures all vars share a level type
+                levtype = item(
+                    {v.internal_attrs.grib_index_level_type for v in data_var_group}
+                )
+                coords.append(
+                    MarsSourceFileCoord(
+                        init_time=init_time,
+                        lead_time=lead_time,
+                        ensemble_member=member,
+                        data_var_group=data_var_group,
+                        request_type=MarsSourceFileCoord.get_request_type(
+                            levtype, member
+                        ),
+                    ).resolve_data_vars()
+                )
+            else:
+                coords.append(
+                    OpenDataSourceFileCoord(
+                        init_time=init_time,
+                        lead_time=lead_time,
+                        data_var_group=data_var_group,
+                        ensemble_member=member,
+                    ).resolve_data_vars()
+                )
         return coords
 
-    def download_file(
-        self, coord: EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord
-    ) -> Path:
+    def download_file(self, coord: IfsEnsSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
-        # Download grib index file
-        idx_url = coord.get_index_url()
-        idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
+        idx_local_path = http_download_to_disk(coord.get_index_url(), self.dataset_id)
 
-        # Download the grib messages for the data vars in the coord using byte ranges
-        data_vars = resolve_grib_index_params(coord.data_var_group, coord.lead_time)
         byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(
             idx_local_path,
-            data_vars,
+            coord.data_var_group,
             coord.ensemble_member,
+            step=coord.index_step,
         )
         suffix = digest(
             f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)
@@ -179,40 +130,41 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
 
     def read_data(
         self,
-        coord: EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord,
+        coord: IfsEnsSourceFileCoord,
         data_var: EcmwfDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
+        # Resolved var has source-appropriate grib metadata (e.g. MARS param/comment overrides)
+        resolved_data_var = item(
+            v for v in coord.data_var_group if v.name == data_var.name
+        )
+        expected_shape = (721, 1440)
 
         with rasterio.open(coord.downloaded_path) as reader:
-            # Expecting one band per downloaded file because we should only have one data var & one ensemble member
-            assert reader.count == 1, "Expected only one band per downloaded file"
-            rasterio_band_index = 1
-
-            grib_comment = reader.tags(rasterio_band_index)["GRIB_COMMENT"]
-            grib_description = reader.descriptions[rasterio_band_index - 1]
-
-            if data_var.name == "categorical_precipitation_type_surface":
-                # ECMWF occasionally adds new values in the reserved range.
-                # Check the first 6 categories that shouldn't change.
-                assert (
-                    grib_comment[:100] == data_var.internal_attrs.grib_comment[:100]
-                ), f"{grib_comment=} != {data_var.internal_attrs.grib_comment=}"
-            else:
-                assert grib_comment == data_var.internal_attrs.grib_comment, (
-                    f"{grib_comment=} != {data_var.internal_attrs.grib_comment=}"
-                )
-            assert grib_description == data_var.internal_attrs.grib_description, (
-                f"{grib_description=} != {data_var.internal_attrs.grib_description}"
+            assert reader.count == 1, f"Expected 1 band, found {reader.count}"
+            _validate_grib_metadata(
+                reader,
+                resolved_data_var.internal_attrs.grib_comment,
+                resolved_data_var.internal_attrs.grib_description,
+                resolved_data_var.internal_attrs.grib_element,
+                data_var.name,
+                unit_only=coord.validate_grib_comment_unit_only,
             )
-
-            result: ArrayFloat32 = reader.read(
-                rasterio_band_index, out_dtype=np.float32
-            )
-            expected_shape = (721, 1440)
+            result: ArrayFloat32 = reader.read(1, out_dtype=np.float32)
             assert result.shape == expected_shape, (
                 f"Expected {expected_shape} shape, found {result.shape}"
             )
+
+            # Apply MARS-specific scale factor (e.g. geopotential m^2/s^2 to
+            # geopotential height gpm). Applied here rather than in
+            # apply_data_transformations because a shard could mix sources and
+            # the conversion must only apply to MARS-sourced values.
+            if (
+                data_var.internal_attrs.mars is not None
+                and data_var.internal_attrs.mars.scale_factor is not None
+            ):
+                result = result * data_var.internal_attrs.mars.scale_factor
+
             return result
 
     def apply_data_transformations(
@@ -265,9 +217,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         all_data_vars: Sequence[EcmwfDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence[
-            "RegionJob[EcmwfDataVar, EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]"
-        ],
+        Sequence["RegionJob[EcmwfDataVar, IfsEnsSourceFileCoord]"],
         xr.Dataset,
     ]:
         """
@@ -295,7 +245,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
 
         Returns
         -------
-        Sequence[RegionJob[EcmwfDataVar, EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]]
+        Sequence[RegionJob[EcmwfDataVar, IfsEnsSourceFileCoord]]
             RegionJob instances that need processing for operational updates.
         xr.Dataset
             The template_ds for the operational update.
@@ -315,3 +265,52 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             filter_start=append_dim_start,
         )
         return jobs, template_ds
+
+
+def _validate_grib_metadata(
+    reader: rasterio.DatasetReader,
+    expected_comment: str,
+    expected_description: str,
+    expected_element: str,
+    var_name: str,
+    *,
+    unit_only: bool = False,
+) -> None:
+    """Validate GRIB metadata for the first band matches expected values.
+
+    When unit_only=True, only checks the bracketed unit suffix of the comment
+    (e.g. "[C]") and skips description validation. This is useful for MARS GRIBs
+    where the descriptive text differs from open data but the physical unit matches.
+
+    GRIB_ELEMENT is always validated as it's the most reliable identifier across sources.
+    """
+    tags = reader.tags(1)
+
+    actual_element = tags["GRIB_ELEMENT"]
+    assert actual_element == expected_element, (
+        f"Element mismatch: {actual_element=} vs {expected_element=}"
+    )
+
+    actual_comment = tags["GRIB_COMMENT"]
+    if unit_only:
+        actual_unit = actual_comment[actual_comment.rfind("[") :]
+        expected_unit = expected_comment[expected_comment.rfind("[") :]
+        assert actual_unit == expected_unit, (
+            f"Unit mismatch: {actual_comment=} vs {expected_comment=}"
+        )
+    elif var_name == "categorical_precipitation_type_surface":
+        # ECMWF occasionally adds new values in the reserved range.
+        # Check the first 6 categories that shouldn't change.
+        assert actual_comment[:100] == expected_comment[:100], (
+            f"{actual_comment=} != {expected_comment=}"
+        )
+    else:
+        assert actual_comment == expected_comment, (
+            f"{actual_comment=} != {expected_comment=}"
+        )
+
+    if not unit_only:
+        actual_description = reader.descriptions[0]
+        assert actual_description == expected_description, (
+            f"{actual_description=} != {expected_description=}"
+        )

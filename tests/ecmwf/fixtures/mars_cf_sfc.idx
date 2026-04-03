@@ -1,0 +1,6 @@
+{"type": "cf", "param": "2t", "step": 0, "levtype": "sfc", "_offset": 2076642, "_length": 2076642}
+{"type": "cf", "param": "tp", "step": 0, "levtype": "sfc", "_offset": 12459852, "_length": 2076642}
+{"type": "cf", "param": "2t", "step": 3, "levtype": "sfc", "_offset": 30071109, "_length": 2076642}
+{"type": "cf", "param": "tp", "step": 3, "levtype": "sfc", "_offset": 40454319, "_length": 2076642}
+{"type": "cf", "param": "2t", "step": 6, "levtype": "sfc", "_offset": 58065503, "_length": 2076642}
+{"type": "cf", "param": "tp", "step": 6, "levtype": "sfc", "_offset": 68448713, "_length": 2076642}
