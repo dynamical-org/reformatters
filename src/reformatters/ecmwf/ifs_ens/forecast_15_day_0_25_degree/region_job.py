@@ -14,6 +14,7 @@ from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import digest, item
 from reformatters.common.logging import get_logger
+from reformatters.common.pydantic import replace
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
     RegionJob,
@@ -116,7 +117,7 @@ class MarsSourceFileCoord(SourceFileCoord):
             for k, v in data_var.internal_attrs.mars.model_dump().items()
             if v is not None
         }
-        return data_var.internal_attrs.model_copy(update={**overrides, "mars": None})
+        return replace(data_var.internal_attrs, **overrides, mars=None)
 
     def _date_str(self) -> str:
         return self.init_time.strftime("%Y-%m-%d")
@@ -155,7 +156,7 @@ def _with_resolved_attrs(
     resolved = coord.resolve_internal_attrs(data_var)
     if resolved is data_var.internal_attrs:
         return data_var
-    return data_var.model_copy(update={"internal_attrs": resolved})
+    return replace(data_var, internal_attrs=resolved)
 
 
 def _get_all_byte_ranges(
