@@ -130,6 +130,7 @@ uv run pytest tests/$DATASET_PATH/dynamical_dataset_test.py
 The details here depend on the computing resources and the Zarr storage location you'll be using. Get in touch with feedback@dynamical.org for support at this point if you haven't already.
 
 1. Run a backfill on your local computer: `DYNAMICAL_ENV=prod uv run main $DATASET_ID backfill-local <append-dim-end>`. If this is fast enough and you have the disk space, it is a nice and simple approach.
+1. If you're working to create a public dynamical.org dataset, run `./deploy/aws/create_new_aws_open_data_bucket.sh <provider>-<model>`
 1. Run a backfill on a kubernetes cluster:
    - This supports parallelism across servers to process much larger datasets.
    - Complete the steps in README.md > Deploying to the cloud > Setup.
@@ -152,7 +153,7 @@ Common issues to look out for:
 - Time misalignment (e.g. diurnal cycle peaks shifted vs a reference dataset).
 
 Notes
-- `DATASET_URL` is the complete, direct URL to the dataset (`bucket-prefix/dataset-id/version`), e.g. `s3://us-west-2.opendata.source.coop/dynamical/ecmwf-ifs-ens-forecast-15-day-0-25-degree/v0.1.0.zarr`. The bucket prefix can be found in `__main__.py` and the dataset id and version in the `TemplateConfig.dataset_attributes`.
+- `DATASET_URL` is the complete, direct URL to the dataset (`bucket-prefix/dataset-id/version`), e.g. `s3://us-west-2.opendata.source.coop/dynamical/ecmwf-ifs-ens-forecast-15-day-0-25-degree/v0.1.0.zarr` or `s3://dynamical-noaa-hrrr/noaa-hrrr-analysis/v0.1.0.icechunk`. The bucket prefix can be found in `__main__.py` and the dataset id and version in the `TemplateConfig.dataset_attributes`.
 - The spatial and timeseries plots will plot the data against a reference dataset (GEFS analysis by default) to highlight unexpected differences.
 - You can also run each validation plot individually, see `uv run src/scripts/validation/plots.py --help`.
 - You can add additional `--variable` flags if side by side plots help add context (e.g. show solar radiation alongside cloud cover).

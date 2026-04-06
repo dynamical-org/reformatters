@@ -36,7 +36,15 @@ src/reformatters/
 
 tests/                       # Mirrors src/ structure
 docs/                        # Documentation
+├── dataset_integration_guide.md         # Integrate new datasets (TemplateConfig, RegionJob, DynamicalDataset)
+├── source_data_exploration_guide.md     # Explore/document source dataset structure before integration
+├── add_new_variable.md                  # Add new variable to existing dataset
+├── staging.md                           # Run concurrent dataset versions for testing/legacy support
+├── chunk_shard_layout_tool.md           # Zarr V3 chunk/shard layout optimizer
+└── ops_card.md                          # Operations: monitoring, troubleshooting, manual dataset updates
 deploy/                      # Docker and kubernetes configs
+├── Dockerfile               # Container image for reformatter jobs
+└── aws/                     # nodepool.yaml, create_new_aws_open_data_bucket.sh
 ```
 
 - **Shared provider utilities** Check `src/reformatters/<provider>/` for shared modules (e.g., `ecmwf/ecmwf_grib_index.py`, `noaa/noaa_utils.py`).
@@ -150,3 +158,5 @@ then deterministically selects its subset. No coordinator or job queue is needed
 * Follow ruff format
 * Test each module with pytest
 * Log don't print: `from reformatters.common.logging import get_logger` and `log = get_logger(__name__)`
+* Keep documentation up to date. After making a change that would update a doc, always update relevant docs, regardless of if you have been explicitly asked.
+* CLAUDE.md is an alias for AGENTS.md
