@@ -485,23 +485,23 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         log.info(
                             f"Branch {branch_name} already exists on {role}, reusing"
                         )
-                # Write metadata to all icechunk stores on the temp branch.
+                # Write metadata to icechunk stores on the temp branch.
                 # Use write_metadata (not copy_zarr_metadata) so to_zarr creates/expands
                 # the full zarr structure including arrays and coordinates.
-                icechunk_primary = self.store_factory.primary_store(
-                    writable=True, branch=branch_name
-                )
-                icechunk_replicas = self.store_factory.replica_stores(
-                    writable=True, branch=branch_name
-                )
-                for ic_store in [icechunk_primary, *icechunk_replicas]:
+                # Get stores from icechunk_repos (not primary_store/replica_stores)
+                # to avoid accidentally writing mode="w" to zarr v3 stores.
+                ic_stores = [
+                    repo.writable_session(branch_name).store
+                    for _role, repo in icechunk_repos
+                ]
+                for ic_store in ic_stores:
                     template_utils.write_metadata(
                         template_ds, ic_store, mode="w", skip_icechunk_commit=True
                     )
                 storage.commit_if_icechunk(
                     "expand metadata for parallel update",
-                    icechunk_primary,
-                    icechunk_replicas,
+                    ic_stores[0],
+                    ic_stores[1:],
                 )
             # Zarr v3: do NOT expand (readers would see empty holes)
 
