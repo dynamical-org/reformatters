@@ -139,7 +139,14 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         workers_total: Annotated[int, typer.Argument(envvar="WORKERS_TOTAL")] = 1,
     ) -> None:
         """Update an existing dataset with the latest data."""
-        with self._monitor(ReformatCronJob, reformat_job_name):
+        is_first = worker_index == 0
+        is_last = worker_index == workers_total - 1
+        with self._monitor(
+            ReformatCronJob,
+            reformat_job_name,
+            send_in_progress=is_first,
+            send_result=is_last,
+        ):
             tmp_store = self._tmp_store()
 
             all_jobs, template_ds = self.region_job_class.operational_update_jobs(
@@ -386,27 +393,28 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
 
         # ── GET STORES AND PROCESS JOBS ───────────────────────────────
-        primary_store = self.store_factory.primary_store(
-            writable=True, branch=branch_name
-        )
-        replica_stores = self.store_factory.replica_stores(
-            writable=True, branch=branch_name
-        )
-
         all_results: dict[str, list[SOURCE_FILE_COORD]] = {}
-        for job in my_jobs:
-            template_utils.write_metadata(job.template_ds, job.tmp_store)
-            results = job.process(
-                primary_store=primary_store, replica_stores=replica_stores
+        if my_jobs:
+            primary_store = self.store_factory.primary_store(
+                writable=True, branch=branch_name
             )
-            for var_name, coords in results.items():
-                all_results.setdefault(var_name, []).extend(coords)
+            replica_stores = self.store_factory.replica_stores(
+                writable=True, branch=branch_name
+            )
 
-        storage.commit_if_icechunk(
-            f"Worker {worker_index} at {pd.Timestamp.now(tz='UTC').isoformat()}",
-            primary_store,
-            replica_stores,
-        )
+            for job in my_jobs:
+                template_utils.write_metadata(job.template_ds, job.tmp_store)
+                results = job.process(
+                    primary_store=primary_store, replica_stores=replica_stores
+                )
+                for var_name, coords in results.items():
+                    all_results.setdefault(var_name, []).extend(coords)
+
+            storage.commit_if_icechunk(
+                f"Worker {worker_index} at {pd.Timestamp.now(tz='UTC').isoformat()}",
+                primary_store,
+                replica_stores,
+            )
 
         # ── WRITE RESULTS & FINALIZE ──────────────────────────────────
         if workers_total > 1:
@@ -681,6 +689,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         cron_type: type[CronJob],
         reformat_job_name: str,
         cron_job_name: str | None = None,
+        *,
+        send_in_progress: bool = True,
+        send_result: bool = True,
     ) -> Iterator[None]:
         # Don't require operational_kubernetes_resources to be defined unless sentry reporting is enabled
         if not Config.is_sentry_enabled:
@@ -715,11 +726,14 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 },
             )
 
-        capture_checkin("in_progress")
+        if send_in_progress:
+            capture_checkin("in_progress")
         try:
             yield
         except Exception:
-            capture_checkin("error")
+            if send_result:
+                capture_checkin("error")
             raise
         else:
-            capture_checkin("ok")
+            if send_result:
+                capture_checkin("ok")
