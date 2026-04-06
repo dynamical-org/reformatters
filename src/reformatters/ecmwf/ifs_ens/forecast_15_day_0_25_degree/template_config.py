@@ -53,7 +53,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
             dataset_id="ecmwf-ifs-ens-forecast-15-day-0-25-degree",
-            dataset_version="para0",
+            dataset_version="0.1.0",
             name="ECMWF IFS ENS Forecast, 15 day, 0.25 degree",
             description="Ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS).",
             attribution="ECMWF IFS ENS Forecast data processed by dynamical.org from ECMWF Open Data.",
