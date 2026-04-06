@@ -176,6 +176,7 @@ class StoreFactory(FrozenBaseModel):
     def read_all_coordination_files(self, job_name: str, prefix: str) -> list[bytes]:
         base = f"{self._coordination_base_path()}/{job_name}/{prefix}"
         fs = self._coordination_fs()
+        fs.invalidate_cache(base)
         try:
             files = fs.ls(base, detail=False)
         except FileNotFoundError:
