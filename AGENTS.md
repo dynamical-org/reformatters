@@ -36,13 +36,13 @@ src/reformatters/
 
 tests/                       # Mirrors src/ structure
 docs/
-├── dataset_integration_guide.md  # Step-by-step new dataset walkthrough
-├── parallel_processing.md        # How parallel writes coordinate across workers
-├── add_new_variable.md           # Adding variables to existing datasets
-├── chunk_shard_layout_tool.md    # Tool for designing chunk/shard layouts
+├── dataset_integration_guide.md      # Step-by-step new dataset walkthrough
+├── parallel_processing.md            # How parallel writes coordinate across workers
+├── add_new_variable.md               # Adding variables to existing datasets
+├── chunk_shard_layout_tool.md        # Tool for designing chunk/shard layouts
 ├── source_data_exploration_guide.md  # Exploring source datasets
-├── ops_card.md                   # Operational runbook
-└── staging.md                    # Staging environment setup
+├── ops_card.md                       # Operational runbook
+└── staging.md                        # Operational updates of non-primary dataset versions
 deploy/                      # Docker and kubernetes configs
 ├── Dockerfile               # Container image for reformatter jobs
 └── aws/                     # nodepool.yaml, create_new_aws_open_data_bucket.sh
