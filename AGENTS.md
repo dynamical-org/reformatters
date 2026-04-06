@@ -158,5 +158,5 @@ then deterministically selects its subset. No coordinator or job queue is needed
 * Follow ruff format
 * Test each module with pytest
 * Log don't print: `from reformatters.common.logging import get_logger` and `log = get_logger(__name__)`
-* Keep documentation up to date. After making a change that would update a doc, always update relevant docs, regardless of if you have been explicitly asked.
+* Keep documentation up to date. After making a change that would update any .md file in the repo (CLAUDE.md, docs/*, etc.), always update relevant docs, regardless of if you have been explicitly asked.
 * CLAUDE.md is an alias for AGENTS.md
