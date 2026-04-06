@@ -26,6 +26,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
 
+        workers = self.update_num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             # ECMWF uploads the first file at 07:40 UTC and the last one by ~07:45 UTC.
@@ -40,6 +41,8 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
             shared_memory="19G",
             ephemeral_storage="30G",
             secret_names=self.store_factory.k8s_secret_names(),
+            workers_total=workers,
+            parallelism=workers,
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",

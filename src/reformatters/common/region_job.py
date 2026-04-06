@@ -6,7 +6,7 @@ from contextlib import suppress
 from copy import deepcopy
 from enum import Enum, auto
 from http import HTTPStatus
-from itertools import batched, chain, pairwise
+from itertools import chain, pairwise
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Generic, TypeVar, get_args
@@ -21,7 +21,7 @@ from zarr.abc.store import Store
 
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config_models import DataVar
-from reformatters.common.iterating import dimension_slices
+from reformatters.common.iterating import dimension_slices, split_groups
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel, replace
 from reformatters.common.shared_memory_utils import (
@@ -400,9 +400,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             # Split by source groups first as those are efficient groupings,
             # then split further to create smaller jobs for parallelism.
             data_var_groups = cls.source_groups(data_vars)
-            data_var_groups = cls._maybe_split_groups(
-                data_var_groups, cls.max_vars_per_job
-            )
+            data_var_groups = split_groups(data_var_groups, cls.max_vars_per_job)
         else:
             data_var_groups = [data_vars]
 
@@ -498,7 +496,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         data_var_groups = self.source_groups(self.data_vars)
         if self.max_vars_per_download_group is not None:
-            data_var_groups = self._maybe_split_groups(
+            data_var_groups = split_groups(
                 data_var_groups, self.max_vars_per_download_group
             )
 
@@ -588,17 +586,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         processing_region_ds = ds.isel({self.append_dim: processing_region})
         output_region_ds = ds.isel({self.append_dim: self.region})
         return processing_region_ds, output_region_ds
-
-    @classmethod
-    def _maybe_split_groups(
-        cls, data_var_groups: Sequence[Sequence[DATA_VAR]], batch_size: int
-    ) -> Sequence[Sequence[DATA_VAR]]:
-        """Splits inner groups into smaller groups of at most batch_size."""
-        return [
-            tuple(split_group)
-            for group in data_var_groups
-            for split_group in batched(group, batch_size, strict=False)
-        ]
 
     def _download_processing_group(
         self,

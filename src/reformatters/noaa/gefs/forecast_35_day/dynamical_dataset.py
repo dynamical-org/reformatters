@@ -20,6 +20,7 @@ class GefsForecast35DayDataset(
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
+        workers = self.update_num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             # GEFS f384 last perturbed member available ~6h30m after 00z init on NOMADS. +3 min buffer.
@@ -32,6 +33,8 @@ class GefsForecast35DayDataset(
             shared_memory="24G",
             ephemeral_storage="150G",
             secret_names=self.store_factory.k8s_secret_names(),
+            workers_total=workers,
+            parallelism=workers,
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",

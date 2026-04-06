@@ -23,7 +23,7 @@ from pydantic import Field, computed_field
 from reformatters.common import docker, storage, template_utils, validation
 from reformatters.common.config import Config
 from reformatters.common.config_models import DataVar
-from reformatters.common.iterating import digest, get_worker_jobs, item
+from reformatters.common.iterating import digest, get_worker_jobs, item, split_groups
 from reformatters.common.kubernetes import (
     CronJob,
     Job,
@@ -126,6 +126,15 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     @property
     def dataset_id(self) -> str:
         return self.template_config.dataset_id
+
+    def update_num_variable_groups(self) -> int:
+        """Number of variable groups for parallel updates, derived from region_job_class.max_vars_per_job."""
+        max_vars = self.region_job_class.max_vars_per_job
+        if max_vars is None:
+            return 1
+        groups = self.region_job_class.source_groups(self.template_config.data_vars)
+        groups = split_groups(groups, max_vars)
+        return len(groups)
 
     def update_template(self) -> None:
         """Generate and persist the dataset template using the template_config."""
