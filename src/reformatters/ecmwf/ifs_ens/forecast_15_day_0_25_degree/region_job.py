@@ -57,7 +57,10 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             list
         )
         for data_var in data_vars:
-            key = (data_var.internal_attrs.date_available, has_hour_0_values(data_var))
+            key = (
+                data_var.internal_attrs.date_available,
+                has_hour_0_values(data_var),
+            )
             vars_by_key[key].append(data_var)
         return list(vars_by_key.values())
 
@@ -74,9 +77,6 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             processing_region_ds["lead_time"].values,
             processing_region_ds["ensemble_member"].values,
         ):
-            if not vars_available(data_var_group, init_time):
-                continue
-
             if not group_has_hour_0_values and lead_time == np.timedelta64(0):
                 continue
 
@@ -86,26 +86,26 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                 levtype = item(
                     {v.internal_attrs.grib_index_level_type for v in data_var_group}
                 )
-                coords.append(
-                    MarsSourceFileCoord(
-                        init_time=init_time,
-                        lead_time=lead_time,
-                        ensemble_member=member,
-                        data_var_group=data_var_group,
-                        request_type=MarsSourceFileCoord.get_request_type(
-                            levtype, member
-                        ),
-                    ).resolve_data_vars()
+                coord: IfsEnsSourceFileCoord = MarsSourceFileCoord(
+                    init_time=init_time,
+                    lead_time=lead_time,
+                    ensemble_member=member,
+                    data_var_group=data_var_group,
+                    request_type=MarsSourceFileCoord.get_request_type(levtype, member),
                 )
             else:
-                coords.append(
-                    OpenDataSourceFileCoord(
-                        init_time=init_time,
-                        lead_time=lead_time,
-                        data_var_group=data_var_group,
-                        ensemble_member=member,
-                    ).resolve_data_vars()
+                coord = OpenDataSourceFileCoord(
+                    init_time=init_time,
+                    lead_time=lead_time,
+                    data_var_group=data_var_group,
+                    ensemble_member=member,
                 )
+
+            coord = coord.resolve_data_vars()
+            # resolve_data_vars applies source-specific overrides (e.g. MARS
+            # clears date_available since it has all configured vars).
+            if vars_available(coord.data_var_group, init_time):
+                coords.append(coord)
         return coords
 
     def download_file(self, coord: IfsEnsSourceFileCoord) -> Path:

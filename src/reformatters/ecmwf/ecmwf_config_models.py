@@ -45,9 +45,9 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
 
     scale_factor: float | None = None
 
-    # ECMWF will sometimes add variables to a dataset after the dataset start date.
-    # This internal attribute can be used to handle whether or not we should try
-    # to process a variable for a given date.
+    # Date when this variable became available for the time period being processed.
+    # Source-specific overrides (e.g. _resolve_mars_data_var) may clear this when
+    # the source has the variable regardless of the original availability date.
     date_available: Timestamp | None = None
 
     window_reset_frequency: Timedelta | None = pd.Timedelta.max
