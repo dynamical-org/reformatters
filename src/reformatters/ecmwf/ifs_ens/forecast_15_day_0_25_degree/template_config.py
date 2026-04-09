@@ -504,7 +504,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_element="PTYPE",
                     grib_index_param="ptype",
                     keep_mantissa_bits="no-rounding",
-                    date_available=pd.Timestamp("2024-11-13T00:00"),
+                    open_data_date_available=pd.Timestamp("2024-11-13T00:00"),
                 ),
             ),
             EcmwfDataVar(
@@ -734,7 +734,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                         (pd.Timedelta("93h"), pd.Timedelta("144h"), "10fg3"),
                     ),
                     keep_mantissa_bits=6,
-                    date_available=pd.Timestamp("2024-11-13T00:00"),
+                    open_data_date_available=pd.Timestamp("2024-11-13T00:00"),
                     mars=MarsSourceOverrides(
                         grib_element="var49 of table 128 of center ECMWF",
                         grib_comment="undefined [-]",
@@ -759,7 +759,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     # Source data is 0-1 fraction; scale to percent for cross-dataset consistency
                     scale_factor=100,
                     keep_mantissa_bits=default_keep_mantissa_bits,
-                    date_available=pd.Timestamp("2025-11-21T00:00"),
+                    open_data_date_available=pd.Timestamp("2025-11-21T00:00"),
                     mars=MarsSourceOverrides(
                         grib_element="TCC",
                         grib_comment="Total cloud cover (0 - 1) [-]",

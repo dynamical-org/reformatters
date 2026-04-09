@@ -89,22 +89,24 @@ def test_dimension_coordinates_shapes_and_values() -> None:
     assert len(lon) == 1440
 
 
-def test_data_vars_date_available() -> None:
+def test_data_vars_open_data_date_available() -> None:
     config = EcmwfAifsSingleForecastTemplateConfig()
     expanded_date = pd.Timestamp("2025-02-26T00:00")
 
     vars_with_date = [
-        v for v in config.data_vars if v.internal_attrs.date_available is not None
+        v
+        for v in config.data_vars
+        if v.internal_attrs.open_data_date_available is not None
     ]
     vars_without_date = [
-        v for v in config.data_vars if v.internal_attrs.date_available is None
+        v for v in config.data_vars if v.internal_attrs.open_data_date_available is None
     ]
 
     assert len(vars_with_date) > 0
     assert len(vars_without_date) > 0
 
     for v in vars_with_date:
-        assert v.internal_attrs.date_available == expanded_date
+        assert v.internal_attrs.open_data_date_available == expanded_date
 
 
 def test_template_variables_have_required_attrs() -> None:
