@@ -383,7 +383,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         if workers_total != len(all_jobs):
             log.warning(
-                f"workers_total ({workers_total}) != number of jobs ({len(all_jobs)}). "
+                f"{self.dataset_id}: workers_total ({workers_total}) != number of jobs ({len(all_jobs)}). "
                 f"Optimal workers_total is {len(all_jobs)}."
             )
 
