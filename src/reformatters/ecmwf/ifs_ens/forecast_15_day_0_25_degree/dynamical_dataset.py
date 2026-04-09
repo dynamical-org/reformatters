@@ -42,7 +42,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
             ephemeral_storage="30G",
             secret_names=self.store_factory.k8s_secret_names(),
             workers_total=workers,
-            parallelism=workers,
+            parallelism=min(workers, 8),
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
