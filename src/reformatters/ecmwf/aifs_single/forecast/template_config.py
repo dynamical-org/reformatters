@@ -290,7 +290,7 @@ class EcmwfAifsSingleForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
 
         default_keep_mantissa_bits = 7
 
-        # Variables available only from 2025-02-26 are marked with open_data_date_available.
+        # Variables available only from 2025-02-26 are marked with date_available.
         # All variables listed here are available from 2024-04-01 (append_dim_start) unless noted.
         expanded_vars_date = pd.Timestamp("2025-02-26T00:00")
 
@@ -386,7 +386,7 @@ class EcmwfAifsSingleForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
                     grib_element="UGRD",
                     grib_index_param="100u",
                     keep_mantissa_bits=6,
-                    open_data_date_available=expanded_vars_date,
+                    date_available=expanded_vars_date,
                 ),
             ),
             EcmwfDataVar(
@@ -405,7 +405,7 @@ class EcmwfAifsSingleForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
                     grib_element="VGRD",
                     grib_index_param="100v",
                     keep_mantissa_bits=6,
-                    open_data_date_available=expanded_vars_date,
+                    date_available=expanded_vars_date,
                 ),
             ),
             EcmwfDataVar(
@@ -449,7 +449,7 @@ class EcmwfAifsSingleForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
                     grib_element="DLWRF",
                     grib_index_param="strd",
                     keep_mantissa_bits=default_keep_mantissa_bits,
-                    open_data_date_available=expanded_vars_date,
+                    date_available=expanded_vars_date,
                     deaccumulate_to_rate=True,
                     window_reset_frequency=pd.Timedelta.max,
                     deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
@@ -471,7 +471,7 @@ class EcmwfAifsSingleForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
                     grib_element="DSWRF",
                     grib_index_param="ssrd",
                     keep_mantissa_bits=default_keep_mantissa_bits,
-                    open_data_date_available=expanded_vars_date,
+                    date_available=expanded_vars_date,
                     deaccumulate_to_rate=True,
                     window_reset_frequency=pd.Timedelta.max,
                     deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
@@ -634,7 +634,7 @@ class EcmwfAifsSingleForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
                     grib_element="TCDC",
                     grib_index_param="tcc",
                     keep_mantissa_bits=default_keep_mantissa_bits,
-                    open_data_date_available=expanded_vars_date,
+                    date_available=expanded_vars_date,
                 ),
             ),
         ]

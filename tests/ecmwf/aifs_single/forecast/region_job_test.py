@@ -101,10 +101,10 @@ def test_source_groups() -> None:
     assert len(groups) == 2
 
     group_without_date = [
-        g for g in groups if g[0].internal_attrs.open_data_date_available is None
+        g for g in groups if g[0].internal_attrs.date_available is None
     ]
     group_with_date = [
-        g for g in groups if g[0].internal_attrs.open_data_date_available is not None
+        g for g in groups if g[0].internal_attrs.date_available is not None
     ]
     assert len(group_without_date) == 1
     assert len(group_with_date) == 1

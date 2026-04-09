@@ -91,7 +91,7 @@ class EcmwfAifsSingleForecastRegionJob(
         cls,
         data_vars: Sequence[EcmwfDataVar],
     ) -> Sequence[Sequence[EcmwfDataVar]]:
-        return group_by(data_vars, lambda v: v.internal_attrs.open_data_date_available)
+        return group_by(data_vars, lambda v: v.internal_attrs.date_available)
 
     def generate_source_file_coords(
         self,
