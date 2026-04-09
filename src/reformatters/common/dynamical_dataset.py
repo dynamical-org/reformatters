@@ -381,6 +381,12 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         is_last = worker_index == workers_total - 1
         my_jobs = get_worker_jobs(all_jobs, worker_index, workers_total)
 
+        if workers_total != len(all_jobs):
+            log.warning(
+                f"workers_total ({workers_total}) != number of jobs ({len(all_jobs)}). "
+                f"Optimal workers_total is {len(all_jobs)}."
+            )
+
         jobs_summary = ", ".join(repr(j) for j in my_jobs)
         log.info(
             f"This is {worker_index = }, {workers_total = }, {len(my_jobs)} jobs, {jobs_summary}"

@@ -26,7 +26,7 @@ For backfills, metadata is written before workers start (the dataset is being cr
 
 All work happens on a temporary branch (`_job_{job_name}`). Readers on `main` are unaffected. The flow:
 
-1. **Worker 0 setup** — creates a temp branch from main's current snapshot, writes expanded metadata, commits on the branch
+1. **Worker 0 setup** — creates a temp branch from main's current snapshot, copies expanded metadata from the local tmp store, commits on the branch
 2. **All workers** — open sessions on the temp branch, write chunk data, commit with `ConflictDetector` rebase (uncooperative distributed writes)
 3. **Last worker finalization** — writes final metadata on the branch, then atomically resets `main` to the branch tip using `reset_branch("main", snapshot, from_snapshot_id=original)`. The `from_snapshot_id` check ensures no concurrent process moved main.
 
@@ -36,7 +36,7 @@ Workers coordinate via files in an object store directory at `{base_path}/{datas
 
 ### Setup signal
 
-Worker 0 writes `setup/ready.pkl` after completing setup (creating branches, writing metadata). Workers 1+ poll for this file before proceeding.
+Worker 0 writes `setup/ready.json` after completing setup (creating branches, writing metadata). Workers 1+ poll for this file before proceeding.
 
 ### Results
 
@@ -51,7 +51,7 @@ After successful finalization, the last worker deletes the `_internal/{job_name}
 ### Any worker dies mid-processing
 
 The worker's pod is restarted by Kubernetes. On restart, it re-enters `_process_region_jobs` from the top:
-- Reads the existing `setup/ready.pkl` (setup already done by worker 0)
+- Reads the existing `setup/ready.json` (setup already done by worker 0)
 - Opens stores on the same branch (deterministic name)
 - Re-processes its jobs (chunk writes are idempotent — icechunk rebase handles conflicts, zarr v3 overwrites)
 - Re-writes its results file
@@ -63,7 +63,7 @@ Other workers are unaffected.
 On restart, worker 0 retries setup:
 - Branch creation catches "already exists" and reuses the existing branch
 - Metadata write is idempotent
-- `setup/ready.pkl` is written (or overwritten) when setup completes
+- `setup/ready.json` is written (or overwritten) when setup completes
 
 Workers 1+ that were polling for setup will proceed once the file appears.
 

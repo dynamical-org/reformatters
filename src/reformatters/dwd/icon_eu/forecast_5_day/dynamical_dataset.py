@@ -74,6 +74,8 @@ class DwdIconEuForecast5DayDataset(
             shared_memory="400M",
             ephemeral_storage="30G",
             secret_names=self.store_factory.k8s_secret_names(),
+            workers_total=2,
+            parallelism=2,
         )
 
         validation_cron_job = ValidationCronJob(
