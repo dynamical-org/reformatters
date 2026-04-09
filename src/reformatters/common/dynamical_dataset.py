@@ -481,23 +481,17 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         repo.create_branch(branch_name, snapshot)
                     except (icechunk.IcechunkError, ValueError):
                         # Branch already exists from a previous worker 0 attempt — reuse it.
-                        # Safe because write_metadata(mode="w") overwrites the branch state.
                         log.info(
                             f"Branch {branch_name} already exists on {role}, reusing"
                         )
-                # Write metadata to icechunk stores on the temp branch.
-                # Use write_metadata (not copy_zarr_metadata) so to_zarr creates/expands
-                # the full zarr structure including arrays and coordinates.
-                # Get stores from icechunk_repos (not primary_store/replica_stores)
-                # to avoid accidentally writing mode="w" to zarr v3 stores.
+                # Copy metadata from local tmp_store to icechunk stores,
+                # expanding dimensions by writing updated zarr.json and coordinate arrays.
                 ic_stores = [
                     repo.writable_session(branch_name).store
                     for _role, repo in icechunk_repos
                 ]
                 for ic_store in ic_stores:
-                    template_utils.write_metadata(
-                        template_ds, ic_store, mode="w", skip_icechunk_commit=True
-                    )
+                    copy_zarr_metadata(template_ds, tmp_store, ic_store)
                 storage.commit_if_icechunk(
                     "expand metadata for parallel update",
                     ic_stores[0],

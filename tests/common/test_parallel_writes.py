@@ -12,8 +12,6 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-import zarr
-from icechunk.store import IcechunkStore
 from pydantic import computed_field
 
 from reformatters.common import storage as storage_module
@@ -341,12 +339,13 @@ class TestIcechunkParallelWrites:
             ),
         )
 
-    def _init_store(self, dataset: ParallelDataset) -> None:
-        """Create the icechunk store with initial empty dataset commit."""
-        store = dataset.store_factory.primary_store(writable=True)
-        assert isinstance(store, IcechunkStore)
-        zarr.open_group(store, mode="w", attributes={"initialized": True})
-        store.session.commit(message="init empty store")
+    def _init_store(
+        self, dataset: ParallelDataset, template_ds: xr.Dataset | None = None
+    ) -> None:
+        """Write metadata to the icechunk store, matching production backfill flow."""
+        if template_ds is None:
+            template_ds = _create_template_ds()
+        template_utils.write_metadata(template_ds, dataset.store_factory)
 
     def test_single_worker_backfill(self, tmp_path: Path) -> None:
         dataset = self._make_dataset(tmp_path)
@@ -377,7 +376,9 @@ class TestIcechunkParallelWrites:
     def test_two_worker_backfill_reader_safety(self, tmp_path: Path) -> None:
         """While workers write on a temp branch, readers on main see no new data."""
         dataset = self._make_dataset(tmp_path)
-        self._init_store(dataset)
+        # Init with 0 time steps so main has the arrays but no data
+        empty_template = _create_template_ds(num_time=0)
+        self._init_store(dataset, template_ds=empty_template)
         template_ds = _create_template_ds()
 
         all_jobs = ParallelRegionJob.get_jobs(
@@ -399,10 +400,10 @@ class TestIcechunkParallelWrites:
             update_template_with_results=False,
         )
 
-        # Reader on main should see no data yet (only the empty init commit)
+        # Reader on main should see no new data yet
         reader_store = dataset.store_factory.primary_store()
         reader_ds = xr.open_zarr(reader_store)
-        assert reader_ds.sizes.get("time", 0) == 0
+        assert reader_ds.sizes["time"] == 0
 
         # Worker 1 (last) — processes, merges, resets main
         dataset._process_region_jobs(
@@ -478,16 +479,9 @@ class TestReplicaParallelWrites:
                 ),
             ],
         )
-        # Init both stores
-        for store in [
-            dataset.store_factory.primary_store(writable=True),
-            *dataset.store_factory.replica_stores(writable=True),
-        ]:
-            assert isinstance(store, IcechunkStore)
-            zarr.open_group(store, mode="w", attributes={"initialized": True})
-            store.session.commit(message="init")
-
         template_ds = _create_template_ds(num_time=2)
+        # Init both stores with metadata matching production backfill flow
+        template_utils.write_metadata(template_ds, dataset.store_factory)
         all_jobs = ParallelRegionJob.get_jobs(
             tmp_store=dataset._tmp_store(),
             template_ds=template_ds,
