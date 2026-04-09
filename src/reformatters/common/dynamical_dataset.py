@@ -469,8 +469,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         tmp_store: Path,
         icechunk_repos: list[tuple[str, Any]],
     ) -> _SetupInfo:
-        has_icechunk = len(icechunk_repos) > 0
-
         if is_first:
             template_utils.write_metadata(template_ds, tmp_store)
 
@@ -478,7 +476,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             # Icechunk: create temp branch, write full metadata, commit on branch.
             # This expands the dataset on the temp branch while readers on "main" are unaffected.
             # Branch name is deterministic so worker 0 retries reuse the same branch.
-            if has_icechunk:
+            if icechunk_repos:
                 setup_info["repo_snapshots"] = {}
                 for role, repo in icechunk_repos:
                     snapshot = repo.lookup_branch("main")
@@ -515,33 +513,35 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         # Poll until worker 0 completes setup. Rely on kubernetes pod_active_deadline for timeout.
         if workers_total > 1:
-            while not self.store_factory.read_all_coordination_files(
+            setup_files = self.store_factory.read_all_coordination_files(
                 reformat_job_name, "setup"
-            ):
+            )
+            while not setup_files:
                 log.info("Waiting for worker 0 to complete setup...")
                 time.sleep(5)
-            return json.loads(
-                self.store_factory.read_all_coordination_files(
+                setup_files = self.store_factory.read_all_coordination_files(
                     reformat_job_name, "setup"
-                )[0]
-            )
+                )
+            return json.loads(setup_files[0])
 
         return _SetupInfo()
 
-    def _wait_for_workers(self, reformat_job_name: str, workers_total: int) -> None:
+    def _wait_for_workers(
+        self, reformat_job_name: str, workers_total: int
+    ) -> list[bytes]:
         if workers_total <= 1:
-            return
+            return []
         # Poll until all workers write results. Rely on kubernetes pod_active_deadline for timeout.
-        while (
-            len(
-                self.store_factory.read_all_coordination_files(
-                    reformat_job_name, "results"
-                )
-            )
-            < workers_total
-        ):
+        result_files = self.store_factory.read_all_coordination_files(
+            reformat_job_name, "results"
+        )
+        while len(result_files) < workers_total:
             log.info("Waiting for all workers to complete...")
             time.sleep(10)
+            result_files = self.store_factory.read_all_coordination_files(
+                reformat_job_name, "results"
+            )
+        return result_files
 
     def _collect_results(
         self,
@@ -552,12 +552,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         if workers_total == 1:
             return local_results
 
-        self._wait_for_workers(reformat_job_name, workers_total)
+        result_files = self._wait_for_workers(reformat_job_name, workers_total)
 
         merged: dict[str, list[SOURCE_FILE_COORD]] = {}
-        for data in self.store_factory.read_all_coordination_files(
-            reformat_job_name, "results"
-        ):
+        for data in result_files:
             for var_name, coords in pickle.loads(data).items():  # noqa: S301
                 merged.setdefault(var_name, []).extend(coords)
         return merged
