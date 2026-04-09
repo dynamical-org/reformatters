@@ -83,28 +83,26 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                 levtype = item(
                     {v.internal_attrs.grib_index_level_type for v in data_var_group}
                 )
-                coord = MarsSourceFileCoord(
+                coord: IfsEnsSourceFileCoord = MarsSourceFileCoord(
                     init_time=init_time,
                     lead_time=lead_time,
                     ensemble_member=member,
                     data_var_group=data_var_group,
                     request_type=MarsSourceFileCoord.get_request_type(levtype, member),
-                ).resolve_data_vars()
-                # Check availability after resolving MARS overrides, which clears
-                # date_available (MARS has all configured vars).
-                if vars_available(coord.data_var_group, init_time):
-                    coords.append(coord)
-            else:
-                if not vars_available(data_var_group, init_time):
-                    continue
-                coords.append(
-                    OpenDataSourceFileCoord(
-                        init_time=init_time,
-                        lead_time=lead_time,
-                        data_var_group=data_var_group,
-                        ensemble_member=member,
-                    ).resolve_data_vars()
                 )
+            else:
+                coord = OpenDataSourceFileCoord(
+                    init_time=init_time,
+                    lead_time=lead_time,
+                    data_var_group=data_var_group,
+                    ensemble_member=member,
+                )
+
+            coord = coord.resolve_data_vars()
+            # resolve_data_vars clears date_available for MARS (which has all
+            # configured vars); for open data vars_available checks the original value.
+            if vars_available(coord.data_var_group, init_time):
+                coords.append(coord)
         return coords
 
     def download_file(self, coord: IfsEnsSourceFileCoord) -> Path:
