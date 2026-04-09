@@ -63,7 +63,7 @@ def download_to_disk(
         with open(temp_path, "wb") as file:
             file.writelines(response_buffers)
 
-        temp_path.rename(local_path)
+        temp_path.replace(local_path)
 
     except Exception:
         with contextlib.suppress(FileNotFoundError):
