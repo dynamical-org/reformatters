@@ -1,3 +1,5 @@
+from collections import defaultdict
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from io import StringIO
 from pathlib import Path
@@ -113,7 +115,7 @@ def test_region_job_generate_source_file_coords_mars() -> None:
     )
     processing_region_ds, _ = region_job._get_region_datasets()
 
-    # Use a single-var group (as process() does with max_vars_per_download_group=1)
+    # Single sfc var: produces one coord per (init_time, lead_time, member)
     t2m = item(v for v in template_config.data_vars if v.name == "temperature_2m")
     coords = region_job.generate_source_file_coords(processing_region_ds, [t2m])
     # 2 init_times x 5 lead_times x 2 members = 20 coords
@@ -122,6 +124,33 @@ def test_region_job_generate_source_file_coords_mars() -> None:
     mars_coord = coords[0]
     assert isinstance(mars_coord, MarsSourceFileCoord)
     assert mars_coord.request_type == "cf_sfc"
+
+    # Mixed levtype group (sfc + pl): MARS splits by levtype, producing
+    # 2 coords per (init_time, lead_time, member) - one for sfc, one for pl
+    groups = EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_groups(
+        template_config.data_vars
+    )
+    mixed_group = groups[0]  # 16 vars with sfc + pl
+    sfc_count = sum(
+        1 for v in mixed_group if v.internal_attrs.grib_index_level_type == "sfc"
+    )
+    pl_count = sum(
+        1 for v in mixed_group if v.internal_attrs.grib_index_level_type == "pl"
+    )
+    assert sfc_count > 0
+    assert pl_count > 0
+
+    mixed_coords = region_job.generate_source_file_coords(
+        processing_region_ds, mixed_group
+    )
+    # 2 init_times x 5 lead_times x 2 members x 2 levtypes = 40 coords
+    assert len(mixed_coords) == 2 * 5 * 2 * 2
+    assert all(isinstance(c, MarsSourceFileCoord) for c in mixed_coords)
+    request_types = {
+        c.request_type for c in mixed_coords if isinstance(c, MarsSourceFileCoord)
+    }
+    assert "cf_sfc" in request_types
+    assert "cf_pl" in request_types
 
 
 def test_region_job_download_file_open_data(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -160,29 +189,37 @@ def test_region_job_download_file_open_data(monkeypatch: pytest.MonkeyPatch) -> 
         lambda path, **kwargs: mock_index_df,
     )
 
-    download_to_disk_mock = Mock()
+    # Mock the index download (still via http_download_to_disk)
+    index_download_mock = Mock(return_value=Path("fake/index.idx"))
     monkeypatch.setattr(
         "reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job.http_download_to_disk",
+        index_download_mock,
+    )
+
+    # Mock S3 data download (download_to_disk + s3_store)
+    download_to_disk_mock = Mock()
+    monkeypatch.setattr(
+        "reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job.download_to_disk",
         download_to_disk_mock,
+    )
+    monkeypatch.setattr(
+        "reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job.s3_store",
+        Mock(),
     )
 
     region_job.download_file(source_file_coord)
 
-    url, dataset_id = download_to_disk_mock.call_args[0]
+    # Index was downloaded with overwrite_existing=False (cached)
+    index_download_mock.assert_called_once()
+    assert index_download_mock.call_args[1]["overwrite_existing"] is False
+
+    # Data was downloaded via download_to_disk (S3Store path)
+    download_to_disk_mock.assert_called_once()
+    _, remote_path, _local_path = download_to_disk_mock.call_args[0][:3]
     kwargs = download_to_disk_mock.call_args[1]
 
-    byte_ranges = kwargs["byte_ranges"]
-    local_path_suffix = kwargs["local_path_suffix"]
-
-    assert (
-        url
-        == "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20240401/00z/ifs/0p25/enfo/20240401000000-3h-enfo-ef.grib2"
-    )
-    assert dataset_id == "ecmwf-ifs-ens-forecast-15-day-0-25-degree"
-    assert (
-        local_path_suffix == "-4f434771"
-    )  # result of calling digest on the byte ranges
-    assert byte_ranges == ([0], [665525])
+    assert remote_path == "20240401/00z/ifs/0p25/enfo/20240401000000-3h-enfo-ef.grib2"
+    assert kwargs["byte_ranges"] == ([0], [665525])
 
 
 def test_region_job_read_data_open_data(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -201,10 +238,15 @@ def test_region_job_read_data_open_data(monkeypatch: pytest.MonkeyPatch) -> None
     t2m_var = item(
         var for var in template_config.data_vars if var.name == "temperature_2m"
     )
+    # Simulate a multi-var download group (2 vars downloaded together)
+    wind_u_var = item(
+        var for var in template_config.data_vars if var.name == "wind_u_10m"
+    )
+    data_var_group: Sequence[EcmwfDataVar] = [t2m_var, wind_u_var]
     source_file_coord = OpenDataSourceFileCoord(
         init_time=pd.Timestamp("2024-04-01"),
         lead_time=pd.Timedelta("3h"),
-        data_var_group=[t2m_var],
+        data_var_group=data_var_group,
         ensemble_member=0,
         downloaded_path=Path("fake/path/to/downloaded/file.grib2"),
     )
@@ -212,8 +254,11 @@ def test_region_job_read_data_open_data(monkeypatch: pytest.MonkeyPatch) -> None
     rasterio_reader = Mock()
     rasterio_reader.__enter__ = Mock(return_value=rasterio_reader)
     rasterio_reader.__exit__ = Mock(return_value=False)
-    rasterio_reader.count = 1
-    rasterio_reader.descriptions = ['2[m] HTGL="Specified height level above ground"']
+    rasterio_reader.count = 2
+    rasterio_reader.descriptions = [
+        '2[m] HTGL="Specified height level above ground"',
+        '10[m] HTGL="Specified height level above ground"',
+    ]
     rasterio_reader.tags = Mock(
         return_value={"GRIB_ELEMENT": "TMP", "GRIB_COMMENT": "Temperature [C]"}
     )
@@ -229,7 +274,9 @@ def test_region_job_read_data_open_data(monkeypatch: pytest.MonkeyPatch) -> None
     assert np.array_equal(result, test_data)
     assert result.shape == (721, 1440)
     assert result.dtype == np.float32
+    # t2m_var is band 1 (first in data_var_group)
     rasterio_reader.read.assert_called_once_with(1, out_dtype=np.float32)
+    rasterio_reader.tags.assert_called_once_with(1)
 
 
 def test_region_job_read_data_mars(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -248,11 +295,16 @@ def test_region_job_read_data_mars(monkeypatch: pytest.MonkeyPatch) -> None:
     t2m_var = item(
         var for var in template_config.data_vars if var.name == "temperature_2m"
     )
+    # MARS coords get split by levtype, so a sfc group may have multiple sfc vars
+    sp_var = item(
+        var for var in template_config.data_vars if var.name == "pressure_surface"
+    )
+    data_var_group: Sequence[EcmwfDataVar] = [t2m_var, sp_var]
     source_file_coord = MarsSourceFileCoord(
         init_time=pd.Timestamp("2024-01-01"),
         lead_time=pd.Timedelta("3h"),
         ensemble_member=0,
-        data_var_group=[t2m_var],
+        data_var_group=data_var_group,
         request_type="cf_sfc",
         downloaded_path=Path("fake/path/to/downloaded/file.grib"),
     ).resolve_data_vars()
@@ -260,7 +312,7 @@ def test_region_job_read_data_mars(monkeypatch: pytest.MonkeyPatch) -> None:
     rasterio_reader = Mock()
     rasterio_reader.__enter__ = Mock(return_value=rasterio_reader)
     rasterio_reader.__exit__ = Mock(return_value=False)
-    rasterio_reader.count = 1
+    rasterio_reader.count = 2
     # MARS uses different element names and descriptive text but same unit
     rasterio_reader.tags = Mock(
         return_value={"GRIB_ELEMENT": "2T", "GRIB_COMMENT": "2 metre temperature [C]"}
@@ -277,6 +329,7 @@ def test_region_job_read_data_mars(monkeypatch: pytest.MonkeyPatch) -> None:
     assert np.array_equal(result, test_data)
     assert result.shape == (721, 1440)
     assert result.dtype == np.float32
+    # t2m_var is band 1 (first in resolved data_var_group)
     rasterio_reader.read.assert_called_once_with(1, out_dtype=np.float32)
 
 
@@ -328,7 +381,11 @@ def test_operational_update_jobs(
 
 @pytest.mark.slow
 def test_download_file_from_ecmwf_open_data() -> None:
-    """Download a recent ECMWF IFS ENS init time and read all template variables at lead_times where they are present."""
+    """Download a recent ECMWF IFS ENS init time and read all template variables at lead_times where they are present.
+
+    Uses multi-var source groups (the same groups used in production) to verify that
+    batched byte-range downloads and multi-band GRIB reads work end-to-end.
+    """
     template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
     # Use a recent date so the test catches format changes in the current ECMWF data
     init_time = (pd.Timestamp.now() - pd.Timedelta(days=5)).floor("D")
@@ -353,30 +410,33 @@ def test_download_file_from_ecmwf_open_data() -> None:
         ensemble_member=[0],
     )
 
-    def check_data_var(data_var: EcmwfDataVar) -> None:
-        for source_coord in region_job.generate_source_file_coords(test_ds, [data_var]):
+    def check_source_group(data_var_group: Sequence[EcmwfDataVar]) -> None:
+        for source_coord in region_job.generate_source_file_coords(
+            test_ds, data_var_group
+        ):
             downloaded_coord = replace(
                 source_coord, downloaded_path=region_job.download_file(source_coord)
             )
-            data = region_job.read_data(downloaded_coord, data_var)
-            assert np.all(np.isfinite(data)), (
-                f"Non-finite values for {data_var.name} at lead_time={source_coord.lead_time}"
-            )
+            for data_var in downloaded_coord.data_var_group:
+                data = region_job.read_data(downloaded_coord, data_var)
+                assert np.all(np.isfinite(data)), (
+                    f"Non-finite values for {data_var.name} at lead_time={source_coord.lead_time}"
+                )
 
-    all_data_vars = [
-        data_var
-        for group in EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_groups(
-            template_config.data_vars
-        )
-        for data_var in group
-    ]
+    source_groups = EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_groups(
+        template_config.data_vars
+    )
     with ThreadPoolExecutor() as executor:
-        list(executor.map(check_data_var, all_data_vars))
+        list(executor.map(check_source_group, source_groups))
 
 
 @pytest.mark.slow
 def test_download_and_read_mars_data() -> None:
-    """Download MARS GRIB data from source.coop and read all template variables."""
+    """Download MARS GRIB data from source.coop and read all template variables.
+
+    Uses multi-var groups per levtype, matching the production MARS code path where
+    generate_source_file_coords splits mixed-levtype groups.
+    """
     template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
 
     test_init_time = pd.Timestamp("2016-03-08")
@@ -392,26 +452,36 @@ def test_download_and_read_mars_data() -> None:
         reformat_job_name="test",
     )
 
-    def check_data_var(data_var: EcmwfDataVar) -> None:
-        request_type = MarsSourceFileCoord.get_request_type(
-            data_var.internal_attrs.grib_index_level_type, test_member
-        )
+    # Group vars by levtype (mimics what generate_source_file_coords does for MARS)
+    vars_by_levtype: defaultdict[str, list[EcmwfDataVar]] = defaultdict(list)
+    for dv in template_config.data_vars:
+        vars_by_levtype[dv.internal_attrs.grib_index_level_type].append(dv)
+
+    def check_levtype_group(levtype: str, data_vars: Sequence[EcmwfDataVar]) -> None:
+        request_type = MarsSourceFileCoord.get_request_type(levtype, test_member)
         coord = MarsSourceFileCoord(
             init_time=test_init_time,
             lead_time=test_lead_time,
             ensemble_member=test_member,
-            data_var_group=[data_var],
+            data_var_group=data_vars,
             request_type=request_type,
         ).resolve_data_vars()
         downloaded_coord = replace(
             coord, downloaded_path=region_job.download_file(coord)
         )
-        result = region_job.read_data(downloaded_coord, data_var)
-
-        assert result.shape == (721, 1440), (
-            f"{data_var.name}: expected shape (721, 1440), got {result.shape}"
-        )
-        assert np.all(np.isfinite(result)), f"{data_var.name}: has non-finite values"
+        for data_var in data_vars:
+            result = region_job.read_data(downloaded_coord, data_var)
+            assert result.shape == (721, 1440), (
+                f"{data_var.name}: expected shape (721, 1440), got {result.shape}"
+            )
+            assert np.all(np.isfinite(result)), (
+                f"{data_var.name}: has non-finite values"
+            )
 
     with ThreadPoolExecutor() as executor:
-        list(executor.map(check_data_var, template_config.data_vars))
+        list(
+            executor.map(
+                lambda item: check_levtype_group(*item),
+                vars_by_levtype.items(),
+            )
+        )

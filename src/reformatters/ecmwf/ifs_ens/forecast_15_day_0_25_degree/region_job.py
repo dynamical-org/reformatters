@@ -3,6 +3,7 @@ from collections import defaultdict
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import ClassVar
+from urllib.parse import urlparse
 
 import numpy as np
 import pandas as pd
@@ -11,7 +12,12 @@ import xarray as xr
 from zarr.abc.store import Store
 
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
-from reformatters.common.download import http_download_to_disk
+from reformatters.common.download import (
+    download_to_disk,
+    get_local_path,
+    http_download_to_disk,
+    s3_store,
+)
 from reformatters.common.iterating import digest, item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob
@@ -40,11 +46,6 @@ log = get_logger(__name__)
 class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     RegionJob[EcmwfDataVar, IfsEnsSourceFileCoord]
 ):
-    # Limits the number of variables downloaded together.
-    # All variables are scattered throughout the grib file without any organization,
-    # so it's more efficient to do separate windowed downloads & reads for each
-    # variable that we can parallelize.
-    max_vars_per_download_group: ClassVar[int] = 1
     max_vars_per_backfill_job: ClassVar[int] = 1
 
     @classmethod
@@ -82,21 +83,25 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
 
             member = int(ensemble_member)
             if init_time < MARS_OPEN_DATA_CUTOVER:
-                # max_vars_per_download_group=1 ensures all vars share a level type
-                levtype = item(
-                    {v.internal_attrs.grib_index_level_type for v in data_var_group}
+                # MARS stores different levtypes in separate files, so
+                # split the group by levtype and emit one coord per file.
+                vars_by_levtype: defaultdict[str, list[EcmwfDataVar]] = defaultdict(
+                    list
                 )
-                coords.append(
-                    MarsSourceFileCoord(
-                        init_time=init_time,
-                        lead_time=lead_time,
-                        ensemble_member=member,
-                        data_var_group=data_var_group,
-                        request_type=MarsSourceFileCoord.get_request_type(
-                            levtype, member
-                        ),
-                    ).resolve_data_vars()
-                )
+                for v in data_var_group:
+                    vars_by_levtype[v.internal_attrs.grib_index_level_type].append(v)
+                for levtype, levtype_vars in vars_by_levtype.items():
+                    coords.append(
+                        MarsSourceFileCoord(
+                            init_time=init_time,
+                            lead_time=lead_time,
+                            ensemble_member=member,
+                            data_var_group=levtype_vars,
+                            request_type=MarsSourceFileCoord.get_request_type(
+                                levtype, member
+                            ),
+                        ).resolve_data_vars()
+                    )
             else:
                 coords.append(
                     OpenDataSourceFileCoord(
@@ -109,8 +114,19 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         return coords
 
     def download_file(self, coord: IfsEnsSourceFileCoord) -> Path:
-        """Download the file for the given coordinate and return the local path."""
-        idx_local_path = http_download_to_disk(coord.get_index_url(), self.dataset_id)
+        """Download the file for the given coordinate and return the local path.
+
+        Index files are cached on disk (they are immutable and shared across all
+        members/variables for the same init_time + lead_time). For open-data coords
+        the GRIB data is fetched via S3Store directly rather than HTTP, which keeps
+        all byte-range GETs on a single connection pool per bucket.
+        """
+        # Index files are identical for every member and variable at the same
+        # (init_time, lead_time).  Cache them so we download once, not once per
+        # variable x member.
+        idx_local_path = http_download_to_disk(
+            coord.get_index_url(), self.dataset_id, overwrite_existing=False
+        )
 
         byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(
             idx_local_path,
@@ -121,6 +137,27 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         suffix = digest(
             f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)
         )
+
+        if isinstance(coord, OpenDataSourceFileCoord):
+            store = s3_store(
+                f"s3://{coord.s3_bucket_url}",
+                coord.s3_region,
+                skip_signature=True,
+            )
+            url = coord.get_url()
+            parsed = urlparse(url)
+            # S3 path is the URL path without the leading /
+            remote_path = parsed.path.removeprefix("/")
+            local_path = get_local_path(self.dataset_id, remote_path, f"-{suffix}")
+            download_to_disk(
+                store,
+                remote_path,
+                local_path,
+                byte_ranges=(byte_range_starts, byte_range_ends),
+                overwrite_existing=True,
+            )
+            return local_path
+
         return http_download_to_disk(
             coord.get_url(),
             self.dataset_id,
@@ -140,8 +177,16 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         )
         expected_shape = (721, 1440)
 
+        # Band index is 1-based, matching the order of data_var_group used to
+        # build the byte ranges in download_file.
+        band = next(
+            i for i, v in enumerate(coord.data_var_group, 1) if v.name == data_var.name
+        )
+
         with rasterio.open(coord.downloaded_path) as reader:
-            assert reader.count == 1, f"Expected 1 band, found {reader.count}"
+            assert reader.count == len(coord.data_var_group), (
+                f"Expected {len(coord.data_var_group)} band(s), found {reader.count}"
+            )
             _validate_grib_metadata(
                 reader,
                 resolved_data_var.internal_attrs.grib_comment,
@@ -149,8 +194,9 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                 resolved_data_var.internal_attrs.grib_element,
                 data_var.name,
                 unit_only=coord.validate_grib_comment_unit_only,
+                band=band,
             )
-            result: ArrayFloat32 = reader.read(1, out_dtype=np.float32)
+            result: ArrayFloat32 = reader.read(band, out_dtype=np.float32)
             assert result.shape == expected_shape, (
                 f"Expected {expected_shape} shape, found {result.shape}"
             )
@@ -275,8 +321,9 @@ def _validate_grib_metadata(
     var_name: str,
     *,
     unit_only: bool = False,
+    band: int = 1,
 ) -> None:
-    """Validate GRIB metadata for the first band matches expected values.
+    """Validate GRIB metadata for the given band matches expected values.
 
     When unit_only=True, only checks the bracketed unit suffix of the comment
     (e.g. "[C]") and skips description validation. This is useful for MARS GRIBs
@@ -284,7 +331,7 @@ def _validate_grib_metadata(
 
     GRIB_ELEMENT is always validated as it's the most reliable identifier across sources.
     """
-    tags = reader.tags(1)
+    tags = reader.tags(band)
 
     actual_element = tags["GRIB_ELEMENT"]
     assert actual_element == expected_element, (
@@ -310,7 +357,7 @@ def _validate_grib_metadata(
         )
 
     if not unit_only:
-        actual_description = reader.descriptions[0]
+        actual_description = reader.descriptions[band - 1]
         assert actual_description == expected_description, (
             f"{actual_description=} != {expected_description=}"
         )

@@ -131,6 +131,7 @@ def http_download_to_disk(
     dataset_id: str,
     byte_ranges: tuple[Sequence[int], Sequence[int]] | None = None,
     local_path_suffix: str = "",
+    overwrite_existing: bool = True,
 ) -> Path:
     parsed_url = urlparse(url)
     base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
@@ -140,7 +141,7 @@ def http_download_to_disk(
         store,
         parsed_url.path,
         local_path,
-        overwrite_existing=True,
+        overwrite_existing=overwrite_existing,
         byte_ranges=byte_ranges,
     )
     return local_path
