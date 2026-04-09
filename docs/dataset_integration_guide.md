@@ -115,6 +115,8 @@ Kubernetes resource values:
   - cpu: the number of spatial dimension shards minus 1 to account for kubernetes headroom. e.g. if 2 latitude shards * 4 longitude shards = 8, choose 7 cpu to schedule on an 8 cpu node.
   - ephemeral_storage: 20GB is a good starting point.
 
+Parallelism: If your `RegionJob` sets `max_vars_per_job`, set `workers_total` and `parallelism` on the `ReformatCronJob` using `self.update_num_variable_groups()`. Multiply by 2 if `operational_update_jobs` reprocesses the most recent time slice (see GEFS datasets for examples). A warning is logged at runtime if `workers_total` doesn't match the actual number of jobs.
+
 The update cron schedule should run shortly after the source data is expected to be available and the validate cron should run at `update cron start + update pod_active_deadline`.
 
 #### Integration test with snapshot values

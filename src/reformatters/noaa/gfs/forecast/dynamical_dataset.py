@@ -29,6 +29,8 @@ class NoaaGfsForecastDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
             shared_memory="1.5G",
             ephemeral_storage="20G",
             secret_names=self.store_factory.k8s_secret_names(),
+            workers_total=2,
+            parallelism=2,
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",

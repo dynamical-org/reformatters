@@ -22,6 +22,8 @@ Pushing to a `stage/**` branch triggers a GitHub Actions workflow that runs the 
 
 On a feature branch, make your changes and bump the version in the dataset's `TemplateConfig.dataset_attributes`. The version must differ from what's on `main`. Run `uv run main <dataset-id> update-template` and commit the template changes.
 
+**Staging a system change vs. a data change:** If your change requires a new dataset version to publish (new variables, structure changes), the version bump is part of the feature branch and will merge to `main`. If you're testing a system change that doesn't change the dataset version (e.g. infrastructure, processing logic), commit the version bump on the staging branch only (don't include it on your feature branch).
+
 ### 2. Backfill
 
 Before staging operational updates can run, the new version's store must exist. From your feature branch, run a backfill into the new version's store, the same process as any new dataset:

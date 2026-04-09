@@ -63,7 +63,7 @@ class GefsAnalysisRegionJob(RegionJob[GEFSDataVar, GefsAnalysisSourceFileCoord])
     """RegionJob for GEFS Analysis dataset processing."""
 
     # 1 makes logic simpler when accessing GEFSv12 reforecast which has a file per variable
-    max_vars_per_backfill_job = 1
+    max_vars_per_job = 1
     max_vars_per_download_group = 1
 
     def get_processing_region(self) -> slice:
@@ -216,7 +216,6 @@ class GefsAnalysisRegionJob(RegionJob[GEFSDataVar, GefsAnalysisSourceFileCoord])
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
-            kind="operational-update",
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=append_dim,

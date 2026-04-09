@@ -19,6 +19,7 @@ from reformatters.common.config_models import (
     DataVarAttrs,
     Encoding,
 )
+from reformatters.common.iterating import get_worker_jobs
 from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
@@ -60,7 +61,7 @@ class ExampleSourceFileCoords(SourceFileCoord):
 
 
 class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoords]):
-    max_vars_per_backfill_job: ClassVar[int] = 2
+    max_vars_per_job: ClassVar[int] = 2
 
     @classmethod
     def source_groups(
@@ -197,7 +198,6 @@ def test_region_job_empty_chunk_writing(
     template_utils.write_metadata(template_ds, store_factory)
 
     jobs = ExampleRegionJob.get_jobs(
-        "backfill",
         tmp_store,
         template_ds,
         "time",
@@ -301,7 +301,6 @@ def test_get_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
     data_vars = [ExampleDataVar(name=str(name)) for name in template_ds.data_vars]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
-        kind="backfill",
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -337,7 +336,6 @@ def test_get_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
     data_vars = [ExampleDataVar(name=str(name)) for name in template_ds.data_vars]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
-        kind="backfill",
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -377,8 +375,7 @@ def test_get_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
 def test_get_jobs_grouping_filters_and_worker_index(template_ds: xr.Dataset) -> None:
     data_vars = [ExampleDataVar(name=str(name)) for name in template_ds.data_vars]
     tmp_store = get_local_tmp_store()
-    jobs = ExampleRegionJob.get_jobs(
-        kind="backfill",
+    all_jobs = ExampleRegionJob.get_jobs(
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -387,13 +384,14 @@ def test_get_jobs_grouping_filters_and_worker_index(template_ds: xr.Dataset) -> 
         filter_variable_names=["var0", "var1", "var2"],
         filter_start=pd.Timestamp("2025-01-02T03"),
         filter_end=pd.Timestamp("2025-01-02T06"),
-        worker_index=0,
-        workers_total=2,
     )
-    # RegionJobA groups vars into batches of 3 -> [3] and then then max_backfill_jobs of 2 -> [2, 1]
+    # RegionJobA groups vars into batches of 3 -> [3] and then max_vars_per_job of 2 -> [2, 1]
     # and shards of size 24 -> 2 shards
     # but filters limit to only second shard
-    # and then gets the first worker's single job
+    assert len(all_jobs) == 2
+
+    # Partitioning is done by the caller
+    jobs = get_worker_jobs(all_jobs, worker_index=0, workers_total=2)
 
     # jobs are sorted by region start
     assert all(a.region.start <= b.region.start for a, b in pairwise(jobs))
@@ -411,7 +409,6 @@ def test_get_jobs_grouping_filter_contains(template_ds: xr.Dataset) -> None:
     data_vars = [ExampleDataVar(name=str(name)) for name in template_ds.data_vars]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
-        kind="backfill",
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -440,7 +437,6 @@ def test_get_jobs_grouping_filter_contains_second_shard(
     data_vars = [ExampleDataVar(name=str(name)) for name in template_ds.data_vars]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
-        kind="backfill",
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -467,7 +463,6 @@ def test_get_jobs_grouping_filter_contains_all_shards(template_ds: xr.Dataset) -
     data_vars = [ExampleDataVar(name=str(name)) for name in template_ds.data_vars]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
-        kind="backfill",
         tmp_store=tmp_store,
         template_ds=template_ds,
         append_dim="time",
@@ -544,7 +539,6 @@ def test_get_jobs_many_shards_combined_filters() -> None:
     filter_contains = [pd.Timestamp(init_time_coords[i]) for i in range(50, 250, 2)]
 
     jobs = ExampleRegionJob.get_jobs(
-        kind="backfill",
         tmp_store=tmp_store,
         template_ds=large_template_ds,
         append_dim="init_time",
@@ -557,7 +551,7 @@ def test_get_jobs_many_shards_combined_filters() -> None:
     )
 
     # Expected: 75 unique shards (indices 100-248 stepping by 2) x 1 var group = 75 jobs
-    # With max_vars_per_backfill_job=2, [var0, var1] stays as one group
+    # With max_vars_per_job=2, [var0, var1] stays as one group
     expected_shard_indices = list(range(100, 250, 2))  # 75 shards
     assert len(jobs) == 75
     assert all(len(j.data_vars) == 2 for j in jobs)
@@ -617,7 +611,6 @@ def _get_regions(
     """Helper to get just the regions from get_jobs."""
     data_vars = [ExampleDataVar(name=str(name)) for name in ds.data_vars]
     jobs = ExampleRegionJob.get_jobs(
-        kind="backfill",
         tmp_store=get_local_tmp_store(),
         template_ds=ds,
         append_dim="time",
