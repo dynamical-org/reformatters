@@ -84,17 +84,25 @@ class OpenDataSourceFileCoord(SourceFileCoord):
         }
 
 
-def _resolve_mars_data_var(data_var: EcmwfDataVar) -> EcmwfDataVar:
-    if data_var.internal_attrs.mars is None:
-        return data_var
-    overrides = {
-        k: v
-        for k, v in data_var.internal_attrs.mars.model_dump().items()
-        if v is not None
-    }
+def resolve_mars_data_var(data_var: EcmwfDataVar) -> EcmwfDataVar:
+    """Resolve data var attributes for the MARS source.
+
+    The MARS archive has all configured variables, so date_available (which tracks
+    open data availability) is cleared. Any MARS-specific attribute overrides
+    (param names, grib element/comment, scale factors) are also applied.
+    """
+    overrides: dict[str, object] = {"date_available": None, "mars": None}
+    if data_var.internal_attrs.mars is not None:
+        overrides.update(
+            {
+                k: v
+                for k, v in data_var.internal_attrs.mars.model_dump().items()
+                if v is not None
+            }
+        )
     return replace(
         data_var,
-        internal_attrs=replace(data_var.internal_attrs, **overrides, mars=None),
+        internal_attrs=replace(data_var.internal_attrs, **overrides),
     )
 
 
@@ -119,7 +127,7 @@ class MarsSourceFileCoord(SourceFileCoord):
     def resolve_data_vars(self) -> "MarsSourceFileCoord":
         return replace(
             self,
-            data_var_group=[_resolve_mars_data_var(v) for v in self.data_var_group],
+            data_var_group=[resolve_mars_data_var(v) for v in self.data_var_group],
         )
 
     @property

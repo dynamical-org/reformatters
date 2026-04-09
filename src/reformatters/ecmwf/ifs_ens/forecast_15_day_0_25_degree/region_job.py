@@ -32,6 +32,7 @@ from .source_file_coord import (
     IfsEnsSourceFileCoord,
     MarsSourceFileCoord,
     OpenDataSourceFileCoord,
+    resolve_mars_data_var,
 )
 
 log = get_logger(__name__)
@@ -74,14 +75,21 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             processing_region_ds["lead_time"].values,
             processing_region_ds["ensemble_member"].values,
         ):
-            if not vars_available(data_var_group, init_time):
+            is_mars = init_time < MARS_OPEN_DATA_CUTOVER
+            resolved_group = (
+                [resolve_mars_data_var(v) for v in data_var_group]
+                if is_mars
+                else data_var_group
+            )
+
+            if not vars_available(resolved_group, init_time):
                 continue
 
             if not group_has_hour_0_values and lead_time == np.timedelta64(0):
                 continue
 
             member = int(ensemble_member)
-            if init_time < MARS_OPEN_DATA_CUTOVER:
+            if is_mars:
                 # max_vars_per_download_group=1 ensures all vars share a level type
                 levtype = item(
                     {v.internal_attrs.grib_index_level_type for v in data_var_group}
@@ -91,11 +99,11 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                         init_time=init_time,
                         lead_time=lead_time,
                         ensemble_member=member,
-                        data_var_group=data_var_group,
+                        data_var_group=resolved_group,
                         request_type=MarsSourceFileCoord.get_request_type(
                             levtype, member
                         ),
-                    ).resolve_data_vars()
+                    )
                 )
             else:
                 coords.append(

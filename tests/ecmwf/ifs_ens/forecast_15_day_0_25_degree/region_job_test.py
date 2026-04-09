@@ -124,6 +124,59 @@ def test_region_job_generate_source_file_coords_mars() -> None:
     assert mars_coord.request_type == "cf_sfc"
 
 
+def test_region_job_generate_source_file_coords_mars_date_available_vars() -> None:
+    """Variables with open_data_date_available should still produce coords for MARS-era init times.
+
+    date_available tracks when a variable became available in ECMWF open data, but the
+    MARS archive has all configured variables regardless of that date.
+    """
+    template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
+    object.__setattr__(template_config, "append_dim_start", pd.Timestamp("2024-03-25"))
+    template_ds = template_config.get_template(pd.Timestamp("2024-03-27"))
+
+    region_job = EcmwfIfsEnsForecast15Day025DegreeRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_ds.isel(
+            init_time=slice(0, 2),
+            ensemble_member=slice(0, 2),
+            lead_time=slice(0, 5),
+        ),
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 2),
+        reformat_job_name="test",
+    )
+    processing_region_ds, _ = region_job._get_region_datasets()
+    groups = EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_groups(
+        template_config.data_vars
+    )
+
+    # Group 1: categorical_precipitation_type_surface (date_available=2024-11-13, has hour 0)
+    cat_precip_coords = region_job.generate_source_file_coords(
+        processing_region_ds, groups[1]
+    )
+    assert item(groups[1]).name == "categorical_precipitation_type_surface"
+    # 2 init_times x 5 lead_times x 2 members = 20 (all MARS, not filtered by date_available)
+    assert len(cat_precip_coords) == 2 * 5 * 2
+    assert all(isinstance(c, MarsSourceFileCoord) for c in cat_precip_coords)
+
+    # Group 2: wind_gust_10m (date_available=2024-11-13, no hour 0 → lead_time=0 excluded)
+    wind_gust_coords = region_job.generate_source_file_coords(
+        processing_region_ds, groups[2]
+    )
+    assert item(groups[2]).name == "wind_gust_10m"
+    # 2 init_times x 4 lead_times (excluding 0h) x 2 members = 16
+    assert len(wind_gust_coords) == 2 * 4 * 2
+    assert all(isinstance(c, MarsSourceFileCoord) for c in wind_gust_coords)
+
+    # Group 3: total_cloud_cover_atmosphere (date_available=2025-11-21, has hour 0)
+    tcc_coords = region_job.generate_source_file_coords(processing_region_ds, groups[3])
+    assert item(groups[3]).name == "total_cloud_cover_atmosphere"
+    # 2 init_times x 5 lead_times x 2 members = 20 (all MARS, not filtered by date_available)
+    assert len(tcc_coords) == 2 * 5 * 2
+    assert all(isinstance(c, MarsSourceFileCoord) for c in tcc_coords)
+
+
 def test_region_job_download_file_open_data(monkeypatch: pytest.MonkeyPatch) -> None:
     template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
     template_ds = template_config.get_template(pd.Timestamp("2024-04-02"))

@@ -233,6 +233,31 @@ def test_mars_resolve_data_vars_no_mars_overrides() -> None:
     assert coord.data_var_group[0].internal_attrs.grib_comment == "Temperature [C]"
 
 
+def test_mars_resolve_data_vars_clears_date_available() -> None:
+    """date_available tracks open data availability; MARS has all configured vars."""
+    var = _make_var(
+        mars=MarsSourceOverrides(grib_element="2T"),
+    )
+    var = var.model_copy(
+        update={
+            "internal_attrs": var.internal_attrs.model_copy(
+                update={"date_available": pd.Timestamp("2024-11-13")}
+            )
+        }
+    )
+    assert var.internal_attrs.date_available == pd.Timestamp("2024-11-13")
+
+    coord = MarsSourceFileCoord(
+        init_time=pd.Timestamp("2024-01-01"),
+        lead_time=pd.Timedelta("3h"),
+        ensemble_member=0,
+        data_var_group=[var],
+        request_type="cf_sfc",
+    ).resolve_data_vars()
+    assert coord.data_var_group[0].internal_attrs.date_available is None
+    assert coord.data_var_group[0].internal_attrs.grib_element == "2T"
+
+
 def test_mars_resolve_data_vars_merges_overrides() -> None:
     var = _make_var(
         name="geopotential_height_500hpa",
