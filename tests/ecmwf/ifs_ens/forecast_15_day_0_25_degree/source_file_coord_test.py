@@ -24,7 +24,7 @@ def _make_var(
     grib_comment: str = "Temperature [C]",
     grib_description: str = '2[m] HTGL="Specified height level above ground"',
     mars: MarsSourceOverrides | None = None,
-    open_data_date_available: pd.Timestamp | None = None,
+    date_available: pd.Timestamp | None = None,
     grib_index_param_lead_time_overrides: tuple[
         tuple[pd.Timedelta, pd.Timedelta, str], ...
     ] = (),
@@ -47,7 +47,7 @@ def _make_var(
             grib_comment=grib_comment,
             grib_description=grib_description,
             mars=mars,
-            open_data_date_available=open_data_date_available,
+            date_available=date_available,
             grib_index_param_lead_time_overrides=grib_index_param_lead_time_overrides,
         ),
     )
@@ -235,9 +235,9 @@ def test_mars_resolve_data_vars_no_mars_overrides() -> None:
     assert coord.data_var_group[0].internal_attrs.grib_comment == "Temperature [C]"
 
 
-def test_mars_resolve_data_vars_clears_open_data_date_available() -> None:
-    """open_data_date_available tracks open data availability; MARS has all configured vars."""
-    var = _make_var(open_data_date_available=pd.Timestamp("2024-11-13"))
+def test_mars_resolve_data_vars_clears_date_available() -> None:
+    """date_available tracks open data availability; MARS has all configured vars."""
+    var = _make_var(date_available=pd.Timestamp("2024-11-13"))
     coord = MarsSourceFileCoord(
         init_time=pd.Timestamp("2024-01-01"),
         lead_time=pd.Timedelta("3h"),
@@ -245,7 +245,7 @@ def test_mars_resolve_data_vars_clears_open_data_date_available() -> None:
         data_var_group=[var],
         request_type="cf_sfc",
     ).resolve_data_vars()
-    assert coord.data_var_group[0].internal_attrs.open_data_date_available is None
+    assert coord.data_var_group[0].internal_attrs.date_available is None
 
 
 def test_mars_resolve_data_vars_merges_overrides() -> None:

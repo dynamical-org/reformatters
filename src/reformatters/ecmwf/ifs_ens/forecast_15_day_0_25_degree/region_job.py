@@ -58,7 +58,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         )
         for data_var in data_vars:
             key = (
-                data_var.internal_attrs.open_data_date_available,
+                data_var.internal_attrs.date_available,
                 has_hour_0_values(data_var),
             )
             vars_by_key[key].append(data_var)
@@ -102,8 +102,8 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                 )
 
             coord = coord.resolve_data_vars()
-            # resolve_data_vars clears open_data_date_available for MARS (which has all
-            # configured vars); for open data vars_available checks the original value.
+            # resolve_data_vars applies source-specific overrides (e.g. MARS
+            # clears date_available since it has all configured vars).
             if vars_available(coord.data_var_group, init_time):
                 coords.append(coord)
         return coords

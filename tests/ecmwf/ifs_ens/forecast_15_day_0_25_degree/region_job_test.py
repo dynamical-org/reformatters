@@ -30,7 +30,7 @@ def test_region_job_source_groups() -> None:
         template_config.data_vars
     )
     assert len(groups) == 4
-    # Main group: vars with no open_data_date_available (available since dataset start), all with hour 0 values
+    # Main group: vars with no date_available (available since dataset start), all with hour 0 values
     assert len(groups[0]) == 16
     # categorical_precipitation_type_surface is instant (has hour 0) and available from 2024-11-13
     assert item(groups[1]).name == "categorical_precipitation_type_surface"
@@ -62,7 +62,7 @@ def test_region_job_generate_source_file_coords_open_data() -> None:
     groups = EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_groups(
         template_config.data_vars
     )
-    # We are grouping by open_data_date_available and has_hour_0_values, so we should get 4 groups
+    # We are grouping by date_available and has_hour_0_values, so we should get 4 groups
     group_0_source_file_coords = region_job.generate_source_file_coords(
         processing_region_ds, groups[0]
     )
@@ -124,12 +124,10 @@ def test_region_job_generate_source_file_coords_mars() -> None:
     assert mars_coord.request_type == "cf_sfc"
 
 
-def test_region_job_generate_source_file_coords_mars_open_data_date_available_vars() -> (
-    None
-):
-    """Variables with open_data_date_available set should still produce coords for MARS-era init times.
+def test_region_job_generate_source_file_coords_mars_date_available_vars() -> None:
+    """Variables with date_available set should still produce coords for MARS-era init times.
 
-    open_data_date_available tracks when a variable became available in ECMWF open data, but the
+    date_available tracks when a variable became available in ECMWF open data, but the
     MARS archive has all configured variables regardless of that date.
     """
     template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
@@ -153,16 +151,16 @@ def test_region_job_generate_source_file_coords_mars_open_data_date_available_va
         template_config.data_vars
     )
 
-    # Group 1: categorical_precipitation_type_surface (open_data_date_available=2024-11-13, has hour 0)
+    # Group 1: categorical_precipitation_type_surface (date_available=2024-11-13, has hour 0)
     cat_precip_coords = region_job.generate_source_file_coords(
         processing_region_ds, groups[1]
     )
     assert item(groups[1]).name == "categorical_precipitation_type_surface"
-    # 2 init_times x 5 lead_times x 2 members = 20 (all MARS, not filtered by open_data_date_available)
+    # 2 init_times x 5 lead_times x 2 members = 20 (all MARS, not filtered by date_available)
     assert len(cat_precip_coords) == 2 * 5 * 2
     assert all(isinstance(c, MarsSourceFileCoord) for c in cat_precip_coords)
 
-    # Group 2: wind_gust_10m (open_data_date_available=2024-11-13, no hour 0 → lead_time=0 excluded)
+    # Group 2: wind_gust_10m (date_available=2024-11-13, no hour 0 → lead_time=0 excluded)
     wind_gust_coords = region_job.generate_source_file_coords(
         processing_region_ds, groups[2]
     )
@@ -171,10 +169,10 @@ def test_region_job_generate_source_file_coords_mars_open_data_date_available_va
     assert len(wind_gust_coords) == 2 * 4 * 2
     assert all(isinstance(c, MarsSourceFileCoord) for c in wind_gust_coords)
 
-    # Group 3: total_cloud_cover_atmosphere (open_data_date_available=2025-11-21, has hour 0)
+    # Group 3: total_cloud_cover_atmosphere (date_available=2025-11-21, has hour 0)
     tcc_coords = region_job.generate_source_file_coords(processing_region_ds, groups[3])
     assert item(groups[3]).name == "total_cloud_cover_atmosphere"
-    # 2 init_times x 5 lead_times x 2 members = 20 (all MARS, not filtered by open_data_date_available)
+    # 2 init_times x 5 lead_times x 2 members = 20 (all MARS, not filtered by date_available)
     assert len(tcc_coords) == 2 * 5 * 2
     assert all(isinstance(c, MarsSourceFileCoord) for c in tcc_coords)
 

@@ -87,10 +87,10 @@ class OpenDataSourceFileCoord(SourceFileCoord):
 def _resolve_mars_data_var(data_var: EcmwfDataVar) -> EcmwfDataVar:
     """Resolve data var attributes for the MARS source.
 
-    Clears open_data_date_available (MARS has all configured vars; open_data_date_available only tracks
-    open data availability) and applies any MARS-specific attribute overrides.
+    Clears date_available (MARS has all configured vars) and applies any
+    MARS-specific attribute overrides.
     """
-    overrides: dict[str, object] = {"open_data_date_available": None, "mars": None}
+    overrides: dict[str, object] = {"date_available": None, "mars": None}
     if data_var.internal_attrs.mars is not None:
         overrides.update(
             {

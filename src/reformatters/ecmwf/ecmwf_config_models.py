@@ -45,10 +45,10 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
 
     scale_factor: float | None = None
 
-    # Date when this variable became available in ECMWF open data. Variables may
-    # exist in the MARS archive before this date; this field only governs filtering
-    # for open-data-era init times (>= MARS_OPEN_DATA_CUTOVER).
-    open_data_date_available: Timestamp | None = None
+    # Date when this variable became available for the time period being processed.
+    # Source-specific overrides (e.g. _resolve_mars_data_var) may clear this when
+    # the source has the variable regardless of the original availability date.
+    date_available: Timestamp | None = None
 
     window_reset_frequency: Timedelta | None = pd.Timedelta.max
     deaccumulation_invalid_below_threshold_rate: float | None = None
@@ -63,10 +63,8 @@ class EcmwfDataVar(DataVar[EcmwfInternalAttrs]):
 def vars_available(
     data_var_group: Sequence[EcmwfDataVar], init_time: Timestamp
 ) -> bool:
-    """Check if a group of vars (which must share the same open_data_date_available) are available at init_time."""
-    date_available = item(
-        {v.internal_attrs.open_data_date_available for v in data_var_group}
-    )
+    """Check if a group of vars (which must share the same date_available) are available at init_time."""
+    date_available = item({v.internal_attrs.date_available for v in data_var_group})
     return date_available is None or date_available <= init_time
 
 
