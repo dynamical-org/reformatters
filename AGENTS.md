@@ -36,13 +36,13 @@ src/reformatters/
 
 tests/                       # Mirrors src/ structure
 docs/
-├── dataset_integration_guide.md      # Step-by-step new dataset walkthrough
+├── dataset_integration_guide.md      # Step-by-step new dataset integration walkthrough
 ├── parallel_processing.md            # How parallel writes coordinate across workers
-├── add_new_variable.md               # Adding variables to existing datasets
-├── chunk_shard_layout_tool.md        # Tool for designing chunk/shard layouts
-├── source_data_exploration_guide.md  # Exploring source datasets
-├── ops_card.md                       # Operational runbook
-└── staging.md                        # Operational updates of non-primary dataset versions
+├── add_new_variable.md               # Add new variable to an existing dataset
+├── chunk_shard_layout_tool.md        # Zarr V3 chunk/shard layout optimizer
+├── source_data_exploration_guide.md  # Explore/document source data structure before integration
+├── ops_card.md                       # Operations: monitoring, troubleshooting, manual updates
+└── staging.md                        # Run concurrent dataset versions for testing
 deploy/                      # Docker and kubernetes configs
 ├── Dockerfile               # Container image for reformatter jobs
 └── aws/                     # nodepool.yaml, create_new_aws_open_data_bucket.sh
