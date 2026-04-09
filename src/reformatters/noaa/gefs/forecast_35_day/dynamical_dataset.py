@@ -20,7 +20,6 @@ class GefsForecast35DayDataset(
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
-        # 2x because operational updates reprocess the most recent init_time (may be incomplete)
         workers = 2 * self.update_num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
