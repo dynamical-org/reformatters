@@ -156,11 +156,7 @@ class StoreFactory(FrozenBaseModel):
         coordination_path = self._coordination_base_path()
         if Config.is_prod:
             storage_options = self.primary_storage_config.load_storage_options()
-            protocol = (
-                coordination_path.split("://")[0]
-                if "://" in coordination_path
-                else "file"
-            )
+            protocol = urlparse(coordination_path).scheme or "file"
             return fsspec.filesystem(protocol, **storage_options)
         else:
             return fsspec.filesystem("file")
