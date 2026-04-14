@@ -1,4 +1,3 @@
-import contextlib
 import json
 import os
 import pickle
@@ -381,15 +380,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         is_last = worker_index == workers_total - 1
         my_jobs = get_worker_jobs(all_jobs, worker_index, workers_total)
 
-        if workers_total != len(all_jobs):
-            log.warning(
-                f"{self.dataset_id}: workers_total ({workers_total}) != number of jobs ({len(all_jobs)}). "
-                f"Optimal workers_total is {len(all_jobs)}."
-            )
-
         jobs_summary = ", ".join(repr(j) for j in my_jobs)
         log.info(
-            f"This is {worker_index = }, {workers_total = }, {len(my_jobs)} jobs, {jobs_summary}"
+            f"This is {worker_index = }, {workers_total = }, "
+            f"{len(my_jobs)} of {len(all_jobs)} total jobs, {jobs_summary}"
         )
 
         icechunk_repos = self.store_factory.icechunk_repos(sort="primary-first")
@@ -472,22 +466,33 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         if is_first:
             template_utils.write_metadata(template_ds, tmp_store)
 
-            setup_info: _SetupInfo = {}
+            # On retry, reuse snapshots from the prior attempt's ready.json so
+            # original_snapshot stays stable. This keeps finalize's
+            # from_snapshot_id check correct if main was written externally
+            # between the first attempt and the retry.
+            existing_setup = self.store_factory.read_all_coordination_files(
+                reformat_job_name, "setup"
+            )
+            setup_info: _SetupInfo = (
+                json.loads(existing_setup[0]) if existing_setup else {}
+            )
+
             # Icechunk: create temp branch, write full metadata, commit on branch.
             # This expands the dataset on the temp branch while readers on "main" are unaffected.
             # Branch name is deterministic so worker 0 retries reuse the same branch.
             if icechunk_repos:
-                setup_info["repo_snapshots"] = {}
+                repo_snapshots = setup_info.setdefault("repo_snapshots", {})
                 for role, repo in icechunk_repos:
-                    snapshot = repo.lookup_branch("main")
-                    setup_info["repo_snapshots"][role] = snapshot
-                    try:
-                        repo.create_branch(branch_name, snapshot)
-                    except (icechunk.IcechunkError, ValueError):
+                    snapshot = repo_snapshots.setdefault(
+                        role, repo.lookup_branch("main")
+                    )
+                    if branch_name in repo.list_branches():
                         # Branch already exists from a previous worker 0 attempt — reuse it.
                         log.info(
                             f"Branch {branch_name} already exists on {role}, reusing"
                         )
+                    else:
+                        repo.create_branch(branch_name, snapshot)
                 # Copy metadata from local tmp_store to icechunk stores,
                 # expanding dimensions by writing updated zarr.json and coordinate arrays.
                 ic_stores = [
@@ -609,7 +614,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 )
             # Second pass: clean up temp branches.
             for _role, repo in replicas_first:
-                with contextlib.suppress(icechunk.IcechunkError, ValueError):
+                if branch_name in repo.list_branches():
                     repo.delete_branch(branch_name)
 
         # Zarr v3: copy metadata now (makes data visible to readers).
