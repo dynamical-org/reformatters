@@ -177,7 +177,20 @@ class StoreFactory(FrozenBaseModel):
             files = fs.ls(base, detail=False)
         except FileNotFoundError:
             return []
-        return [fs.cat_file(f) for f in sorted(files)]
+        if not files:
+            return []
+        # fs.cat runs reads concurrently on async backends like s3fs.
+        contents = fs.cat(files)
+        return [contents[f] for f in sorted(files)]
+
+    def count_coordination_files(self, job_name: str, prefix: str) -> int:
+        base = f"{self._coordination_base_path()}/{job_name}/{prefix}"
+        fs = self._coordination_fs()
+        fs.invalidate_cache(base)
+        try:
+            return len(fs.ls(base, detail=False))
+        except FileNotFoundError:
+            return 0
 
     def clear_coordination_files(self, job_name: str) -> None:
         path = f"{self._coordination_base_path()}/{job_name}"

@@ -531,22 +531,18 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         return _SetupInfo()
 
-    def _wait_for_workers(
-        self, reformat_job_name: str, workers_total: int
-    ) -> list[bytes]:
+    def _wait_for_workers(self, reformat_job_name: str, workers_total: int) -> None:
+        # Poll until all workers write their results file. Backfills can have
+        # many thousands of workers, so count (cheap ls) rather than read.
+        # Rely on kubernetes pod_active_deadline for timeout.
         if workers_total <= 1:
-            return []
-        # Poll until all workers write results. Rely on kubernetes pod_active_deadline for timeout.
-        result_files = self.store_factory.read_all_coordination_files(
-            reformat_job_name, "results"
-        )
-        while len(result_files) < workers_total:
+            return
+        while (
+            self.store_factory.count_coordination_files(reformat_job_name, "results")
+            < workers_total
+        ):
             log.info("Waiting for all workers to complete...")
             time.sleep(10)
-            result_files = self.store_factory.read_all_coordination_files(
-                reformat_job_name, "results"
-            )
-        return result_files
 
     def _collect_results(
         self,
@@ -557,7 +553,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         if workers_total == 1:
             return local_results
 
-        result_files = self._wait_for_workers(reformat_job_name, workers_total)
+        self._wait_for_workers(reformat_job_name, workers_total)
+        result_files = self.store_factory.read_all_coordination_files(
+            reformat_job_name, "results"
+        )
 
         merged: dict[str, list[SOURCE_FILE_COORD]] = {}
         for data in result_files:
