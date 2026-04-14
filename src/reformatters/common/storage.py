@@ -116,7 +116,11 @@ class StoreFactory(FrozenBaseModel):
     def icechunk_repos(
         self, *, sort: Literal["primary-first", "primary-last"]
     ) -> list[tuple[str, icechunk.Repository]]:
-        """Returns (role, Repository) for each icechunk store in the specified order."""
+        """Returns (role, Repository) for each icechunk store in the specified order.
+
+        `role` uniquely identifies the repo within this StoreFactory:
+        "primary" for the primary store, "replica-0", "replica-1", ... for replicas.
+        """
         repos: list[tuple[str, icechunk.Repository]] = []
         all_configs = [
             ("primary", self.primary_storage_config),
