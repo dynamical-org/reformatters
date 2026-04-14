@@ -2,15 +2,13 @@ import json
 import os
 import pickle
 import subprocess
-import time
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Annotated, Any, Generic, Literal, TypedDict, TypeVar
+from typing import Annotated, Any, Generic, Literal, TypeVar
 
-import icechunk
 import numpy as np
 import pandas as pd
 import sentry_sdk
@@ -19,7 +17,13 @@ import typer
 import xarray as xr
 from pydantic import Field, computed_field
 
-from reformatters.common import docker, storage, template_utils, validation
+from reformatters.common import (
+    docker,
+    parallel_coordination,
+    storage,
+    template_utils,
+    validation,
+)
 from reformatters.common.config import Config
 from reformatters.common.config_models import DataVar
 from reformatters.common.iterating import digest, get_worker_jobs, item
@@ -35,16 +39,11 @@ from reformatters.common.region_job import RegionJob, SourceFileCoord
 from reformatters.common.storage import StorageConfig, StoreFactory, get_local_tmp_store
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike
-from reformatters.common.zarr import copy_zarr_metadata
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
 
 log = get_logger(__name__)
-
-
-class _SetupInfo(TypedDict, total=False):
-    repo_snapshots: dict[str, str]
 
 
 class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
@@ -385,18 +384,19 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         has_icechunk = len(icechunk_repos) > 0
         branch_name = f"_job_{reformat_job_name}" if has_icechunk else "main"
 
-        # ── SETUP / WAIT ─────────────────────────────────────────────
-        setup_info = self._parallel_setup(
-            is_first,
-            workers_total,
-            reformat_job_name,
-            branch_name,
-            template_ds,
-            tmp_store,
-            icechunk_repos,
+        # 1. Set up / wait for setup
+        setup_info = parallel_coordination.parallel_setup(
+            self.store_factory,
+            is_first=is_first,
+            workers_total=workers_total,
+            reformat_job_name=reformat_job_name,
+            branch_name=branch_name,
+            template_ds=template_ds,
+            tmp_store=tmp_store,
+            icechunk_repos=icechunk_repos,
         )
 
-        # ── GET STORES AND PROCESS JOBS ───────────────────────────────
+        # 2. Get stores and process jobs
         worker_results: dict[str, list[SOURCE_FILE_COORD]] = {}
         if worker_jobs:
             primary_store = self.store_factory.primary_store(
@@ -420,7 +420,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 replica_stores,
             )
 
-        # ── WRITE RESULTS & FINALIZE ──────────────────────────────────
+        # 3. Write results and finalize
         if workers_total > 1:
             self.store_factory.write_coordination_file(
                 reformat_job_name,
@@ -431,15 +431,18 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         if is_last:
             if update_template_with_results:
                 if workers_total > 1:
-                    merged_results = self._collect_results(
-                        reformat_job_name, workers_total
+                    merged_results = parallel_coordination.collect_results(
+                        self.store_factory, reformat_job_name, workers_total
                     )
                 else:
                     merged_results = worker_results
             else:
-                self._wait_for_workers(reformat_job_name, workers_total)
+                parallel_coordination.wait_for_workers(
+                    self.store_factory, reformat_job_name, workers_total
+                )
                 merged_results = {}
-            self._finalize(
+            parallel_coordination.finalize(
+                self.store_factory,
                 all_jobs=all_jobs,
                 merged_results=merged_results,
                 reformat_job_name=reformat_job_name,
@@ -450,182 +453,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 workers_total=workers_total,
                 update_template_with_results=update_template_with_results,
             )
-
-    def _parallel_setup(
-        self,
-        is_first: bool,
-        workers_total: int,
-        reformat_job_name: str,
-        branch_name: str,
-        template_ds: xr.Dataset,
-        tmp_store: Path,
-        icechunk_repos: list[tuple[str, Any]],
-    ) -> _SetupInfo:
-        if is_first:
-            template_utils.write_metadata(template_ds, tmp_store)
-
-            # On retry, reuse snapshots from the prior attempt's ready.json so
-            # original_snapshot stays stable. This keeps finalize's
-            # from_snapshot_id check correct if main was written externally
-            # between the first attempt and the retry.
-            existing_setup = self.store_factory.read_all_coordination_files(
-                reformat_job_name, "setup"
-            )
-            setup_info: _SetupInfo = (
-                json.loads(existing_setup[0]) if existing_setup else {}
-            )
-
-            # Icechunk: create temp branch, write full metadata, commit on branch.
-            # This expands the dataset on the temp branch while readers on "main" are unaffected.
-            # Branch name is deterministic so worker 0 retries reuse the same branch.
-            if icechunk_repos:
-                repo_snapshots = setup_info.setdefault("repo_snapshots", {})
-                for role, repo in icechunk_repos:
-                    snapshot = repo_snapshots.setdefault(
-                        role, repo.lookup_branch("main")
-                    )
-                    if branch_name in repo.list_branches():
-                        # Branch already exists from a previous worker 0 attempt — reuse it.
-                        log.info(
-                            f"Branch {branch_name} already exists on {role}, reusing"
-                        )
-                    else:
-                        repo.create_branch(branch_name, snapshot)
-                # Copy metadata from local tmp_store to icechunk stores,
-                # expanding dimensions by writing updated zarr.json and coordinate arrays.
-                ic_stores = [
-                    repo.writable_session(branch_name).store
-                    for _role, repo in icechunk_repos
-                ]
-                for ic_store in ic_stores:
-                    copy_zarr_metadata(template_ds, tmp_store, ic_store)
-                storage.commit_if_icechunk(
-                    "expand metadata for parallel update",
-                    ic_stores[0],
-                    ic_stores[1:],
-                )
-            # Zarr v3: do NOT expand (readers would see empty holes)
-
-            if workers_total > 1:
-                self.store_factory.write_coordination_file(
-                    reformat_job_name,
-                    "setup/ready.json",
-                    json.dumps(setup_info).encode(),
-                )
-            return setup_info
-
-        # Poll until worker 0 completes setup. Rely on kubernetes pod_active_deadline for timeout.
-        if workers_total > 1:
-            setup_files = self.store_factory.read_all_coordination_files(
-                reformat_job_name, "setup"
-            )
-            while not setup_files:
-                log.info("Waiting for worker 0 to complete setup...")
-                time.sleep(5)
-                setup_files = self.store_factory.read_all_coordination_files(
-                    reformat_job_name, "setup"
-                )
-            return json.loads(setup_files[0])
-
-        return _SetupInfo()
-
-    def _wait_for_workers(self, reformat_job_name: str, workers_total: int) -> None:
-        # Poll until all workers write their results file. Backfills can have
-        # many thousands of workers, so count (cheap ls) rather than read.
-        # Rely on kubernetes pod_active_deadline for timeout.
-        if workers_total <= 1:
-            return
-        while (
-            self.store_factory.count_coordination_files(reformat_job_name, "results")
-            < workers_total
-        ):
-            log.info("Waiting for all workers to complete...")
-            time.sleep(10)
-
-    def _collect_results(
-        self,
-        reformat_job_name: str,
-        workers_total: int,
-    ) -> Mapping[str, Sequence[SOURCE_FILE_COORD]]:
-        self._wait_for_workers(reformat_job_name, workers_total)
-        result_files = self.store_factory.read_all_coordination_files(
-            reformat_job_name, "results"
-        )
-
-        merged: dict[str, list[SOURCE_FILE_COORD]] = {}
-        for data in result_files:
-            for var_name, coords in pickle.loads(data).items():  # noqa: S301
-                merged.setdefault(var_name, []).extend(coords)
-        return merged
-
-    def _finalize(
-        self,
-        all_jobs: Sequence[RegionJob[DATA_VAR, SourceFileCoord]],
-        merged_results: Mapping[str, Sequence[SOURCE_FILE_COORD]],
-        reformat_job_name: str,
-        branch_name: str,
-        template_ds: xr.Dataset,
-        tmp_store: Path,
-        setup_info: _SetupInfo,
-        workers_total: int,
-        *,
-        update_template_with_results: bool,
-    ) -> None:
-        if update_template_with_results:
-            assert len(all_jobs) > 0
-            updated_template = all_jobs[0].update_template_with_results(merged_results)
-            template_utils.write_metadata(updated_template, tmp_store)
-        else:
-            updated_template = template_ds
-
-        # Icechunk: write final (possibly trimmed) metadata on temp branch, commit, reset main.
-        # Uses copy_zarr_metadata (not write_metadata) because the zarr arrays already exist
-        # on the temp branch from _parallel_setup — we only need to update the metadata files.
-        # Process replicas before primary so primary (which drives future work) is last to update.
-        if branch_name != "main":
-            replicas_first = self.store_factory.icechunk_repos(sort="primary-last")
-            # First pass: commit final metadata and reset main on each repo.
-            # If a previous attempt already reset main for a repo, skip it.
-            for role, repo in replicas_first:
-                original_snapshot = setup_info.get("repo_snapshots", {}).get(role)
-                current_main = repo.lookup_branch("main")
-                if current_main != original_snapshot:
-                    log.info(
-                        f"Skipping {role}: main already moved past original snapshot"
-                    )
-                    continue
-                session = repo.writable_session(branch_name)
-                copy_zarr_metadata(
-                    updated_template, tmp_store, session.store, icechunk_only=True
-                )
-                new_snapshot = session.commit(
-                    "finalize parallel update",
-                    rebase_with=icechunk.ConflictDetector(),
-                )
-                repo.reset_branch(
-                    "main", new_snapshot, from_snapshot_id=original_snapshot
-                )
-            # Second pass: clean up temp branches.
-            for _role, repo in replicas_first:
-                if branch_name in repo.list_branches():
-                    repo.delete_branch(branch_name)
-
-        # Zarr v3: copy metadata now (makes data visible to readers).
-        # Only needed for updates where metadata was deferred during setup.
-        # For backfills, metadata is written before workers start.
-        if update_template_with_results:
-            zarr3_primary = self.store_factory.primary_store(writable=True)
-            zarr3_replicas = self.store_factory.replica_stores(writable=True)
-            copy_zarr_metadata(
-                updated_template,
-                tmp_store,
-                zarr3_primary,
-                replica_stores=zarr3_replicas,
-                zarr3_only=True,
-            )
-
-        if workers_total > 1:
-            self.store_factory.clear_coordination_files(reformat_job_name)
 
     def validate_dataset(
         self,
