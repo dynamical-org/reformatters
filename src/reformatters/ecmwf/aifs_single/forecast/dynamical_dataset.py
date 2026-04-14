@@ -24,7 +24,7 @@ class EcmwfAifsSingleForecastDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        workers = 2 * self.update_num_variable_groups()
+        workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="21 */6 * * *",

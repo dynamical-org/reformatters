@@ -373,3 +373,51 @@ class TestBranchSupport:
         # Should not raise even with a non-main branch
         store = factory.primary_store(writable=True, branch="some-branch")
         assert isinstance(store, zarr.storage.LocalStore)
+
+
+@pytest.mark.parametrize(
+    "env",
+    [Env.prod, Env.dev, Env.test],
+)
+@pytest.mark.parametrize(
+    "dataset_format",
+    [DatasetFormat.ZARR3, DatasetFormat.ICECHUNK],
+)
+def test_coordination_base_path_ends_in_internal(
+    monkeypatch: pytest.MonkeyPatch,
+    env: Env,
+    dataset_format: DatasetFormat,
+) -> None:
+    """_coordination_base_path must end with `/_internal` in every environment
+    and format — downstream coordination key paths assume it."""
+    monkeypatch.setattr(Config, "env", env)
+    factory = StoreFactory(
+        primary_storage_config=StorageConfig(
+            base_path="s3://bucket/prefix", format=dataset_format
+        ),
+        dataset_id="test-dataset",
+        template_config_version="v1.0",
+    )
+    assert factory._coordination_base_path().endswith("/_internal")
+
+
+def test_clear_coordination_files_rm_path_rooted_in_internal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """clear_coordination_files must only rm paths inside `/_internal/` — a
+    safety boundary that prevents accidentally deleting dataset zarr data."""
+    factory = StoreFactory(
+        primary_storage_config=StorageConfig(
+            base_path="s3://bucket/prefix", format=DatasetFormat.ICECHUNK
+        ),
+        dataset_id="test-dataset",
+        template_config_version="v1.0",
+    )
+    mock_fs = MagicMock()
+    monkeypatch.setattr(factory, "_coordination_fs", lambda: mock_fs)
+
+    factory.clear_coordination_files("my-job")
+
+    mock_fs.rm.assert_called_once()
+    path = mock_fs.rm.call_args.args[0]
+    assert path.endswith("/_internal/my-job"), path

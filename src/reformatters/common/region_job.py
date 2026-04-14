@@ -148,6 +148,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         return [data_vars]
 
+    @classmethod
+    def num_variable_groups(cls, data_vars: Sequence[DATA_VAR]) -> int:
+        """Number of variable groups produced by get_jobs for a given set of data_vars."""
+        if cls.max_vars_per_job is None:
+            return 1
+        return len(split_groups(cls.source_groups(data_vars), cls.max_vars_per_job))
+
     def get_processing_region(self) -> slice:
         """
         Return a slice of integer offsets into self.template_ds along self.append_dim that identifies

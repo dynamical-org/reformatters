@@ -22,7 +22,7 @@ from pydantic import Field, computed_field
 from reformatters.common import docker, storage, template_utils, validation
 from reformatters.common.config import Config
 from reformatters.common.config_models import DataVar
-from reformatters.common.iterating import digest, get_worker_jobs, item, split_groups
+from reformatters.common.iterating import digest, get_worker_jobs, item
 from reformatters.common.kubernetes import (
     CronJob,
     Job,
@@ -126,18 +126,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def dataset_id(self) -> str:
         return self.template_config.dataset_id
 
-    def update_num_variable_groups(self) -> int:
-        """Number of variable groups for parallel updates, derived from region_job_class.max_vars_per_job."""
-        max_vars = self.region_job_class.max_vars_per_job
-        if max_vars is None:
-            return 1
-        groups = self.region_job_class.source_groups(self.template_config.data_vars)
-        groups = split_groups(groups, max_vars)
-        return len(groups)
-
     def update_template(self) -> None:
         """Generate and persist the dataset template using the template_config."""
         self.template_config.update_template()
+
+    def num_variable_groups(self) -> int:
+        """Number of variable groups for parallel updates."""
+        return self.region_job_class.num_variable_groups(self.template_config.data_vars)
 
     def update(
         self,
@@ -378,12 +373,12 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         is_first = worker_index == 0
         is_last = worker_index == workers_total - 1
-        my_jobs = get_worker_jobs(all_jobs, worker_index, workers_total)
+        worker_jobs = get_worker_jobs(all_jobs, worker_index, workers_total)
 
-        jobs_summary = ", ".join(repr(j) for j in my_jobs)
+        jobs_summary = ", ".join(repr(j) for j in worker_jobs)
         log.info(
             f"This is {worker_index = }, {workers_total = }, "
-            f"{len(my_jobs)} of {len(all_jobs)} total jobs, {jobs_summary}"
+            f"{len(worker_jobs)} of {len(all_jobs)} total jobs, {jobs_summary}"
         )
 
         icechunk_repos = self.store_factory.icechunk_repos(sort="primary-first")
@@ -402,8 +397,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
 
         # ── GET STORES AND PROCESS JOBS ───────────────────────────────
-        all_results: dict[str, list[SOURCE_FILE_COORD]] = {}
-        if my_jobs:
+        worker_results: dict[str, list[SOURCE_FILE_COORD]] = {}
+        if worker_jobs:
             primary_store = self.store_factory.primary_store(
                 writable=True, branch=branch_name
             )
@@ -411,13 +406,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 writable=True, branch=branch_name
             )
 
-            for job in my_jobs:
+            for job in worker_jobs:
                 template_utils.write_metadata(job.template_ds, job.tmp_store)
                 results = job.process(
                     primary_store=primary_store, replica_stores=replica_stores
                 )
                 for var_name, coords in results.items():
-                    all_results.setdefault(var_name, []).extend(coords)
+                    worker_results.setdefault(var_name, []).extend(coords)
 
             storage.commit_if_icechunk(
                 f"Worker {worker_index} at {pd.Timestamp.now(tz='UTC').isoformat()}",
@@ -430,14 +425,17 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             self.store_factory.write_coordination_file(
                 reformat_job_name,
                 f"results/worker-{worker_index}.pkl",
-                pickle.dumps(all_results),
+                pickle.dumps(worker_results),
             )
 
         if is_last:
             if update_template_with_results:
-                merged_results = self._collect_results(
-                    all_results, reformat_job_name, workers_total
-                )
+                if workers_total > 1:
+                    merged_results = self._collect_results(
+                        reformat_job_name, workers_total
+                    )
+                else:
+                    merged_results = worker_results
             else:
                 self._wait_for_workers(reformat_job_name, workers_total)
                 merged_results = {}
@@ -546,13 +544,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def _collect_results(
         self,
-        local_results: dict[str, list[SOURCE_FILE_COORD]],
         reformat_job_name: str,
         workers_total: int,
     ) -> Mapping[str, Sequence[SOURCE_FILE_COORD]]:
-        if workers_total == 1:
-            return local_results
-
         self._wait_for_workers(reformat_job_name, workers_total)
         result_files = self.store_factory.read_all_coordination_files(
             reformat_job_name, "results"

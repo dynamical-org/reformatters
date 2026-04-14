@@ -20,7 +20,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
         # suspend = True  # Defaults to False, remove when you're ready to run operational updates and validation
-        # workers = self.update_num_variable_groups()  # set if max_vars_per_job is set on RegionJob
+        # workers = self.num_variable_groups()  # set if max_vars_per_job is set on RegionJob
         # operational_update_cron_job = ReformatCronJob(
         #     name=f"{self.dataset_id}-update",
         #     schedule="0 0 * * *",
