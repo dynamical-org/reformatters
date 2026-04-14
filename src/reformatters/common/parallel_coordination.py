@@ -36,7 +36,7 @@ def parallel_setup(
     branch_name: str,
     template_ds: xr.Dataset,
     tmp_store: Path,
-    icechunk_repos: list[tuple[str, Any]],
+    icechunk_repos: list[tuple[str, icechunk.Repository]],
 ) -> SetupInfo:
     if is_first:
         template_utils.write_metadata(template_ds, tmp_store)
