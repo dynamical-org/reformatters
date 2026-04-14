@@ -4,6 +4,7 @@ from itertools import product
 import pandas as pd
 import xarray as xr
 
+from reformatters.common.ingest_stats import update_ingested_forecast_length
 from reformatters.common.iterating import item
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
@@ -27,6 +28,13 @@ class NoaaGfsForecastSourceFileCoord(NoaaGfsSourceFileCoord):
 
 
 class NoaaGfsForecastRegionJob(NoaaGfsCommonRegionJob):
+    def update_template_with_results(
+        self,
+        process_results: Mapping[str, Sequence[NoaaGfsSourceFileCoord]],
+    ) -> xr.Dataset:
+        ds = super().update_template_with_results(process_results)
+        return update_ingested_forecast_length(ds, process_results)
+
     def generate_source_file_coords(
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[NoaaDataVar]
     ) -> Sequence[NoaaGfsForecastSourceFileCoord]:

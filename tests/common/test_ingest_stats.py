@@ -71,3 +71,31 @@ def test_update_ingested_forecast_length_update_existing() -> None:
     assert ds["ingested_forecast_length"].sel(
         init_time=init_time
     ).values == pd.Timedelta(hours=12)
+
+
+def test_update_ingested_forecast_length_unprocessed_unchanged() -> None:
+    processed_time = pd.Timestamp("2025-01-01 12:00")
+    unprocessed_time = pd.Timestamp("2025-01-01 18:00")
+
+    empty_deltas = pd.to_timedelta([pd.NaT, pd.NaT]).to_numpy()  # type: ignore[call-overload]
+
+    ds = xr.Dataset(
+        coords={
+            "init_time": [processed_time, unprocessed_time],
+            "ingested_forecast_length": (("init_time",), empty_deltas),
+        }
+    )
+
+    coord = MockSourceFileCoord(
+        init_time=processed_time,
+        lead_time=pd.Timedelta(hours=6),
+    )
+
+    ds = update_ingested_forecast_length(ds, {"var1": [coord]})
+
+    assert ds["ingested_forecast_length"].sel(
+        init_time=processed_time
+    ).values == pd.Timedelta(hours=6)
+    assert pd.isnull(
+        ds["ingested_forecast_length"].sel(init_time=unprocessed_time).values
+    )
