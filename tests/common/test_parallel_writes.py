@@ -1,7 +1,13 @@
-"""Integration tests for parallel write coordination across multiple workers."""
+"""Integration tests for parallel write coordination across multiple workers.
+
+Marked `slow` because each test runs `_process_region_jobs` end-to-end,
+which spins up executors, writes zarr metadata, and (for icechunk tests)
+opens a repo session.
+"""
 
 import json
 from collections.abc import Iterable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, ClassVar
@@ -16,6 +22,7 @@ import xarray as xr
 from pydantic import computed_field
 
 from reformatters.common import parallel_coordination as pc_module
+from reformatters.common import region_job as region_job_module
 from reformatters.common import storage as storage_module
 from reformatters.common import template_utils
 from reformatters.common.config_models import (
@@ -33,6 +40,17 @@ from reformatters.common.region_job import (
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, ArrayFloat32, Dim, Timedelta, Timestamp
+
+pytestmark = pytest.mark.slow
+
+
+@pytest.fixture(autouse=True)
+def _use_thread_pool_for_shard_writes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Substitute ThreadPoolExecutor for ProcessPoolExecutor in region_job so
+    shard writes skip spawn overhead. SharedMemory works in-process, and the
+    zarr writes are I/O-bound — threads are fine for these tests."""
+    monkeypatch.setattr(region_job_module, "ProcessPoolExecutor", ThreadPoolExecutor)
+
 
 _LAT_SIZE = 3
 _LON_SIZE = 4
