@@ -71,7 +71,7 @@ def parallel_setup(
             for ic_store in ic_stores:
                 copy_zarr_metadata(template_ds, tmp_store, ic_store)
             storage.commit_if_icechunk(
-                "expand metadata for parallel update",
+                "Expand dataset",
                 ic_stores[0],
                 ic_stores[1:],
             )
