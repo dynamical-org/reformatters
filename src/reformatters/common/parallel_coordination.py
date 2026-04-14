@@ -153,7 +153,7 @@ def finalize(
         updated_template = template_ds
 
     now = pd.Timestamp.now(tz="UTC")
-    commit_message = f"Update at {now.strftime('%Y-%m-%dT%H:%M:%S')} UTC"
+    commit_message = f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}"
 
     # Icechunk: write final (possibly trimmed) metadata on temp branch, commit, reset main.
     # Uses copy_zarr_metadata (not write_metadata) because the zarr arrays already exist
