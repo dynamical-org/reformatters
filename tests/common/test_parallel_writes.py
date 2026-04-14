@@ -1,5 +1,6 @@
 """Integration tests for parallel write coordination across multiple workers."""
 
+import json
 import pickle
 from collections.abc import Iterable, Sequence
 from datetime import timedelta
@@ -14,6 +15,7 @@ import pytest
 import xarray as xr
 from pydantic import computed_field
 
+from reformatters.common import dynamical_dataset as dd_module
 from reformatters.common import storage as storage_module
 from reformatters.common import template_utils
 from reformatters.common.config_models import (
@@ -606,3 +608,271 @@ class TestWorkerEdgeCases:
 
         result = xr.open_zarr(dataset.store_factory.primary_store())
         assert result.sizes["time"] == 2
+
+
+def _run_workers(
+    dataset: "ParallelDataset",
+    all_jobs: Sequence,
+    template_ds: xr.Dataset,
+    *,
+    workers_total: int,
+    reformat_job_name: str = "test",
+    worker_indices: Iterable[int] | None = None,
+    update_template_with_results: bool = False,
+) -> None:
+    """Helper: run a set of worker indices sequentially against the same dataset."""
+    if worker_indices is None:
+        worker_indices = range(workers_total)
+    for worker_index in worker_indices:
+        dataset._process_region_jobs(
+            all_jobs=all_jobs,
+            worker_index=worker_index,
+            workers_total=workers_total,
+            reformat_job_name=reformat_job_name,
+            template_ds=template_ds,
+            tmp_store=dataset._tmp_store(),
+            update_template_with_results=update_template_with_results,
+        )
+
+
+class TestWorkerRestart:
+    """Failure mode: a worker pod dies mid-processing and k8s restarts it
+    with the same WORKER_INDEX. Re-running `_process_region_jobs` with the
+    same args must converge to the correct final state."""
+
+    def test_zarr3_restart_is_idempotent(self, tmp_path: Path) -> None:
+        dataset = ParallelDataset(
+            primary_storage_config=StorageConfig(
+                base_path=str(tmp_path), format=DatasetFormat.ZARR3
+            ),
+        )
+        template_ds = _create_template_ds()
+        template_utils.write_metadata(template_ds, dataset.store_factory)
+        all_jobs = ParallelRegionJob.get_jobs(
+            tmp_store=dataset._tmp_store(),
+            template_ds=template_ds,
+            append_dim="time",
+            all_data_vars=ParallelTemplateConfig().data_vars,
+            reformat_job_name="test",
+        )
+
+        # Worker 0 runs, "dies", restarts (runs again), then worker 1 finalizes.
+        _run_workers(
+            dataset,
+            all_jobs,
+            template_ds,
+            workers_total=2,
+            worker_indices=[0, 0, 1],
+        )
+
+        result = xr.open_zarr(dataset.store_factory.primary_store())
+        assert result.sizes["time"] == 4
+        for var in ["var0", "var1", "var2", "var3"]:
+            assert np.all(result[var].values == 1.0)
+
+    def test_icechunk_restart_is_idempotent(self, tmp_path: Path) -> None:
+        dataset = ParallelDataset(
+            primary_storage_config=StorageConfig(
+                base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+            ),
+        )
+        template_ds = _create_template_ds()
+        template_utils.write_metadata(template_ds, dataset.store_factory)
+        all_jobs = ParallelRegionJob.get_jobs(
+            tmp_store=dataset._tmp_store(),
+            template_ds=template_ds,
+            append_dim="time",
+            all_data_vars=ParallelTemplateConfig().data_vars,
+            reformat_job_name="test",
+        )
+
+        # Worker 0 runs, "dies", restarts (reuses existing temp branch
+        # and ready.json), then worker 1 finalizes.
+        _run_workers(
+            dataset,
+            all_jobs,
+            template_ds,
+            workers_total=2,
+            worker_indices=[0, 0, 1],
+        )
+
+        result = xr.open_zarr(dataset.store_factory.primary_store())
+        assert result.sizes["time"] == 4
+        for var in ["var0", "var1", "var2", "var3"]:
+            assert np.all(result[var].values == 1.0)
+
+        # Temp branch cleaned up
+        _, repo = dataset.store_factory.icechunk_repos(sort="primary-first")[0]
+        assert list(repo.list_branches()) == ["main"]
+
+
+class TestWorker0SnapshotStability:
+    """Failure mode: worker 0 dies after writing ready.json and is restarted.
+    On retry, setup_info.repo_snapshots must stay pinned to the original value
+    (read back from ready.json), not refreshed from a new lookup_branch("main").
+    Otherwise an external write to main between attempts is silently overwritten
+    at finalize."""
+
+    def test_retry_reuses_snapshot_from_ready_json(self, tmp_path: Path) -> None:
+        dataset = ParallelDataset(
+            primary_storage_config=StorageConfig(
+                base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+            ),
+        )
+        template_ds = _create_template_ds()
+        template_utils.write_metadata(template_ds, dataset.store_factory)
+        all_jobs = ParallelRegionJob.get_jobs(
+            tmp_store=dataset._tmp_store(),
+            template_ds=template_ds,
+            append_dim="time",
+            all_data_vars=ParallelTemplateConfig().data_vars,
+            reformat_job_name="test",
+        )
+
+        # First attempt creates ready.json with real snapshot A.
+        _run_workers(
+            dataset, all_jobs, template_ds, workers_total=2, worker_indices=[0]
+        )
+
+        # Overwrite with a sentinel the code could only preserve (not produce).
+        sentinel = "SENTINEL_SNAP_00000000"
+        dataset.store_factory.write_coordination_file(
+            "test",
+            "setup/ready.json",
+            json.dumps({"repo_snapshots": {"primary": sentinel}}).encode(),
+        )
+
+        # Worker 0 retry: setdefault should reuse sentinel, not refresh.
+        _run_workers(
+            dataset, all_jobs, template_ds, workers_total=2, worker_indices=[0]
+        )
+
+        ready_data = dataset.store_factory.read_all_coordination_files("test", "setup")[
+            0
+        ]
+        assert json.loads(ready_data)["repo_snapshots"]["primary"] == sentinel
+
+
+class TestLastWorkerRetryAfterPartialFinalize:
+    """Failure mode: last worker dies mid-finalize after resetting some repos
+    but not others. On retry, the skip-if-already-reset check must skip done
+    repos and complete the remaining ones."""
+
+    def test_retry_after_replica_reset_completes_primary(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            storage_module,
+            "_get_store_path",
+            lambda dataset_id, version, config: (
+                f"{config.base_path}/{dataset_id}/v{version}.icechunk"
+            ),
+        )
+        dataset = ParallelDataset(
+            primary_storage_config=StorageConfig(
+                base_path=str(tmp_path / "primary"), format=DatasetFormat.ICECHUNK
+            ),
+            replica_storage_configs=[
+                StorageConfig(
+                    base_path=str(tmp_path / "replica"),
+                    format=DatasetFormat.ICECHUNK,
+                ),
+            ],
+        )
+        template_ds = _create_template_ds()
+        template_utils.write_metadata(template_ds, dataset.store_factory)
+        all_jobs = ParallelRegionJob.get_jobs(
+            tmp_store=dataset._tmp_store(),
+            template_ds=template_ds,
+            append_dim="time",
+            all_data_vars=ParallelTemplateConfig().data_vars,
+            reformat_job_name="test",
+        )
+
+        # Patch copy_zarr_metadata to raise on the 2nd icechunk_only call,
+        # simulating a pod death between the replica and primary reset_branch.
+        # icechunk_only=True is only passed by _finalize, not _parallel_setup.
+        original_copy = dd_module.copy_zarr_metadata
+        finalize_count = [0]
+        should_raise = [True]
+
+        def wrapped_copy(*args: object, **kwargs: object) -> None:
+            if kwargs.get("icechunk_only") and should_raise[0]:
+                finalize_count[0] += 1
+                if finalize_count[0] == 2:
+                    raise RuntimeError("simulated pod death between resets")
+            return original_copy(*args, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(dd_module, "copy_zarr_metadata", wrapped_copy)
+
+        _run_workers(
+            dataset, all_jobs, template_ds, workers_total=2, worker_indices=[0]
+        )
+        with pytest.raises(RuntimeError, match="simulated pod death"):
+            _run_workers(
+                dataset, all_jobs, template_ds, workers_total=2, worker_indices=[1]
+            )
+
+        # Replica was reset; primary was not.
+        primary_repo = dataset.store_factory.icechunk_repos(sort="primary-first")[0][1]
+        replica_repo = dataset.store_factory.icechunk_repos(sort="primary-last")[0][1]
+        primary_pre_retry = primary_repo.lookup_branch("main")
+        replica_pre_retry = replica_repo.lookup_branch("main")
+
+        # Disable the simulated failure and retry the last worker.
+        should_raise[0] = False
+        _run_workers(
+            dataset, all_jobs, template_ds, workers_total=2, worker_indices=[1]
+        )
+
+        # Primary advanced, replica stayed at its already-reset value.
+        assert primary_repo.lookup_branch("main") != primary_pre_retry
+        assert replica_repo.lookup_branch("main") == replica_pre_retry
+
+        # Both stores have the full data.
+        for store in [
+            dataset.store_factory.primary_store(),
+            *dataset.store_factory.replica_stores(),
+        ]:
+            result = xr.open_zarr(store)
+            assert result.sizes["time"] == 4
+            for var in ["var0", "var1", "var2", "var3"]:
+                assert np.all(result[var].values == 1.0)
+
+        # Temp branches cleaned up on both repos.
+        for _role, repo in dataset.store_factory.icechunk_repos(sort="primary-first"):
+            assert list(repo.list_branches()) == ["main"]
+
+
+class TestReplicaOrdering:
+    """Design invariant: replicas are written before the primary in both the
+    parallel-setup and finalize phases, so that if a failure occurs mid-way
+    the primary (which drives future work) still reflects the pre-update state."""
+
+    def test_primary_last_sort_order(self, tmp_path: Path) -> None:
+        dataset = ParallelDataset(
+            primary_storage_config=StorageConfig(
+                base_path=str(tmp_path / "primary"), format=DatasetFormat.ICECHUNK
+            ),
+            replica_storage_configs=[
+                StorageConfig(
+                    base_path=str(tmp_path / "replica-0"),
+                    format=DatasetFormat.ICECHUNK,
+                ),
+                StorageConfig(
+                    base_path=str(tmp_path / "replica-1"),
+                    format=DatasetFormat.ICECHUNK,
+                ),
+            ],
+        )
+        # Avoid collision from shared _get_store_path base
+        roles_first = [
+            role
+            for role, _ in dataset.store_factory.icechunk_repos(sort="primary-first")
+        ]
+        roles_last = [
+            role
+            for role, _ in dataset.store_factory.icechunk_repos(sort="primary-last")
+        ]
+        assert roles_first[0] == "primary"
+        assert roles_last[-1] == "primary"

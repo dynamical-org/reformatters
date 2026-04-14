@@ -36,6 +36,7 @@ class NoaaHrrrForecast48HourDataset(
         """Define Kubernetes cron jobs for operational updates and validation."""
         # We pull the 0, 6, 12, and 18 init times in this dataset.
         # HRRR f048 (last lead time) available ~1h48m after init on NOMADS. +3 min buffer.
+        workers = 2 * self.update_num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="51 1,7,13,19 * * *",
@@ -47,8 +48,8 @@ class NoaaHrrrForecast48HourDataset(
             shared_memory="400M",
             ephemeral_storage="30G",
             secret_names=self.store_factory.k8s_secret_names(),
-            workers_total=2,
-            parallelism=2,
+            workers_total=workers,
+            parallelism=workers,
         )
 
         validation_cron_job = ValidationCronJob(
