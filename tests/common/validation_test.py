@@ -546,7 +546,7 @@ def test_check_for_expected_shards_fails_missing_shards(
 
     assert not result.passed
     assert "temperature" in result.message
-    assert "missing expected shards" in result.message
+    assert "Missing shards" in result.message
 
 
 def test_check_for_expected_shards_passes_with_extra_shards(
