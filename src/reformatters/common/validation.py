@@ -347,10 +347,14 @@ def check_for_expected_shards(store: Store, ds: xr.Dataset) -> ValidationResult:
             f"{var} ({len(var_missing_shard_indexes[var])} missing)"
             for var in problem_vars
         )
-        details = ", ".join(
-            f"{var}: {_truncate_shards(var_missing_shard_indexes[var])}"
-            for var in problem_vars
-        )
+        shard_lists = [var_missing_shard_indexes[var] for var in problem_vars]
+        if len(problem_vars) > 1 and all(s == shard_lists[0] for s in shard_lists[1:]):
+            details = f"all missing the same shards: {_truncate_shards(shard_lists[0])}"
+        else:
+            details = ", ".join(
+                f"{var}: {_truncate_shards(var_missing_shard_indexes[var])}"
+                for var in problem_vars
+            )
         return ValidationResult(
             passed=False,
             message=f"Missing shards: {summary}. {details}",
