@@ -58,4 +58,6 @@ jobs:
         run: uv run pytest -p no:sugar --verbose
 
       - name: Ensure SHA pinned actions
-        uses: zgosalvez/github-actions-ensure-sha-pinned-actions@ca46236c6ce584ae24bc6283ba8dcf4b3ec8a066 # v5
+        # TODO: bump to v5 (ca46236c6ce584ae24bc6283ba8dcf4b3ec8a066) which runs on Node 24
+        # once the dynamical-org Actions allowlist is updated. v3 still uses Node 20.
+        uses: zgosalvez/github-actions-ensure-sha-pinned-actions@fc87bb5b5a97953d987372e74478de634726b3e5 # v3
