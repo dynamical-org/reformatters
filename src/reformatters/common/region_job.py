@@ -16,7 +16,13 @@ import numpy as np
 import pandas as pd
 import pydantic
 import xarray as xr
-from pydantic import AfterValidator, Field, computed_field
+from pydantic import (
+    AfterValidator,
+    Field,
+    computed_field,
+    field_serializer,
+    field_validator,
+)
 from zarr.abc.store import Store
 
 from reformatters.common.binary_rounding import round_float32_inplace
@@ -97,6 +103,49 @@ class SourceFileCoord(FrozenBaseModel):
             if coord := out_loc.get(d):
                 return coord
         return pd.Timestamp.min
+
+
+def _ser_out_loc_value(v: Any) -> Any:  # noqa: ANN401
+    if isinstance(v, pd.Timestamp):
+        return {"__t": "ts", "v": v.isoformat()}
+    if isinstance(v, pd.Timedelta):
+        return {"__t": "td", "v": v.isoformat()}
+    return v
+
+
+def _val_out_loc_value(v: Any) -> Any:  # noqa: ANN401
+    if isinstance(v, dict) and "__t" in v:
+        if v["__t"] == "ts":
+            return pd.Timestamp(v["v"])
+        if v["__t"] == "td":
+            return pd.Timedelta(v["v"])
+    return v
+
+
+class SourceFileResult(FrozenBaseModel):
+    """Per-file result passed to `update_template_with_results`.
+
+    Workers serialize this (JSON) into coordination files; the finalizer
+    reads them back. Avoids sending full SourceFileCoord subclasses over
+    untrusted object storage.
+    """
+
+    status: SourceFileStatus
+    # pd.Timestamp / pd.Timedelta values are round-tripped via tagged dicts
+    # so JSON deserialization reconstructs the original pandas type.
+    out_loc: dict[str, Any]
+    url: str
+
+    @field_serializer("out_loc")
+    def _ser_out_loc(self, v: dict[str, Any]) -> dict[str, Any]:
+        return {k: _ser_out_loc_value(val) for k, val in v.items()}
+
+    @field_validator("out_loc", mode="before")
+    @classmethod
+    def _val_out_loc(cls, v: Any) -> Any:  # noqa: ANN401
+        if not isinstance(v, dict):
+            return v
+        return {k: _val_out_loc_value(val) for k, val in v.items()}
 
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
@@ -234,7 +283,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
 
     def update_template_with_results(
-        self, process_results: Mapping[str, Sequence[SOURCE_FILE_COORD]]
+        self, process_results: Mapping[str, Sequence[SourceFileResult]]
     ) -> xr.Dataset:
         """
         Update template dataset based on processing results. This method is called
@@ -251,8 +300,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         Parameters
         ----------
-        process_results : Mapping[str, Sequence[SOURCE_FILE_COORD]]
-            Mapping from variable names to their source file coordinates with final processing status.
+        process_results : Mapping[str, Sequence[SourceFileResult]]
+            Mapping from variable names to their SourceFileResult with final processing status.
 
         Returns
         -------
@@ -261,10 +310,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         max_append_dim_processed = max(
             (
-                c.out_loc()[self.append_dim]
+                c.out_loc[self.append_dim]
                 for c in chain.from_iterable(process_results.values())
                 if c.status == SourceFileStatus.Succeeded
-            ),  # ty: ignore[invalid-argument-type]
+            ),
             default=None,
         )
         if max_append_dim_processed is None:

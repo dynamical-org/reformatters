@@ -1,4 +1,4 @@
-import pickle
+import json
 from unittest.mock import MagicMock
 
 import icechunk
@@ -252,15 +252,15 @@ class TestCoordinationFiles:
     def test_write_and_read_round_trip(self, tmp_path: str) -> None:
         factory = _local_factory(tmp_path)
         factory.write_coordination_file(
-            "test-job", "results/worker-0.pkl", pickle.dumps({"a": 1})
+            "test-job", "results/worker-0.json", json.dumps({"a": 1}).encode()
         )
         factory.write_coordination_file(
-            "test-job", "results/worker-1.pkl", pickle.dumps({"b": 2})
+            "test-job", "results/worker-1.json", json.dumps({"b": 2}).encode()
         )
 
         files = factory.read_all_coordination_files("test-job", "results")
         assert len(files) == 2
-        results = [pickle.loads(f) for f in files]  # noqa: S301
+        results = [json.loads(f) for f in files]
         assert {"a": 1} in results
         assert {"b": 2} in results
 
@@ -270,16 +270,16 @@ class TestCoordinationFiles:
 
     def test_prefix_filtering(self, tmp_path: str) -> None:
         factory = _local_factory(tmp_path)
-        factory.write_coordination_file("test-job", "setup/ready.pkl", b"ready")
-        factory.write_coordination_file("test-job", "results/worker-0.pkl", b"data")
+        factory.write_coordination_file("test-job", "setup/ready.json", b"ready")
+        factory.write_coordination_file("test-job", "results/worker-0.json", b"data")
 
         assert len(factory.read_all_coordination_files("test-job", "setup")) == 1
         assert len(factory.read_all_coordination_files("test-job", "results")) == 1
 
     def test_clear_removes_all_files(self, tmp_path: str) -> None:
         factory = _local_factory(tmp_path)
-        factory.write_coordination_file("test-job", "results/worker-0.pkl", b"data")
-        factory.write_coordination_file("test-job", "setup/ready.pkl", b"ready")
+        factory.write_coordination_file("test-job", "results/worker-0.json", b"data")
+        factory.write_coordination_file("test-job", "setup/ready.json", b"ready")
 
         factory.clear_coordination_files("test-job")
 

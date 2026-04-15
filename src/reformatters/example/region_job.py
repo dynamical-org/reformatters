@@ -9,6 +9,7 @@ from reformatters.common.region_job import (
     CoordinateValueOrRange,
     RegionJob,
     SourceFileCoord,
+    SourceFileResult,
 )
 from reformatters.common.types import (
     AppendDim,
@@ -157,7 +158,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
     #     super().apply_data_transformations(data_array, data_var)
 
     def update_template_with_results(
-        self, process_results: Mapping[str, Sequence[ExampleSourceFileCoord]]
+        self, process_results: Mapping[str, Sequence[SourceFileResult]]
     ) -> xr.Dataset:
         """
         Update template dataset based on processing results. This method is called
@@ -174,8 +175,8 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
 
         Parameters
         ----------
-        process_results : Mapping[str, Sequence[ExampleSourceFileCoord]]
-            Mapping from variable names to their source file coordinates with final processing status.
+        process_results : Mapping[str, Sequence[SourceFileResult]]
+            Mapping from variable names to their SourceFileResult with final processing status.
 
         Returns
         -------
@@ -186,7 +187,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
         #
         # max_append_dim_processed = max(
         #     (
-        #         c.out_loc()[self.append_dim]
+        #         c.out_loc[self.append_dim]
         #         for c in chain.from_iterable(process_results.values())
         #         if c.status == SourceFileStatus.Succeeded
         #     ),

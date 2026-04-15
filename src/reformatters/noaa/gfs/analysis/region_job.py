@@ -6,6 +6,7 @@ import xarray as xr
 from reformatters.common.iterating import item
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
+    SourceFileResult,
 )
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
@@ -64,7 +65,7 @@ class NoaaGfsAnalysisRegionJob(NoaaGfsCommonRegionJob):
         ]
 
     def update_template_with_results(
-        self, process_results: Mapping[str, Sequence[NoaaGfsSourceFileCoord]]
+        self, process_results: Mapping[str, Sequence[SourceFileResult]]
     ) -> xr.Dataset:
         # Remove the last hour. We pull accumulated variables (precipitation) from the 1 hour lead time,
         # but use the 0 hour lead time for other variables. This results in one additional

@@ -14,6 +14,7 @@ from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
     RegionJob,
+    SourceFileResult,
 )
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
@@ -226,7 +227,7 @@ class GefsAnalysisRegionJob(RegionJob[GEFSDataVar, GefsAnalysisSourceFileCoord])
         return jobs, template_ds
 
     def update_template_with_results(
-        self, process_results: Mapping[str, Sequence[GefsAnalysisSourceFileCoord]]
+        self, process_results: Mapping[str, Sequence[SourceFileResult]]
     ) -> xr.Dataset:
         # Remove the last hour because most variables (except precip) lack hour 0 values.
         # Precipitation extends to hour 6 of the latest forecast, but other variables do not,

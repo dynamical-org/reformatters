@@ -7,14 +7,15 @@ lives in tests/common/test_parallel_writes.py.
 """
 
 import json
-import pickle
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pandas as pd
 import pytest
 import xarray as xr
 
 from reformatters.common import parallel_coordination as pc
+from reformatters.common.region_job import SourceFileResult, SourceFileStatus
 
 
 class FakeStoreFactory:
@@ -354,13 +355,13 @@ class TestWaitForWorkers:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         factory = FakeStoreFactory()
-        factory.write_coordination_file("job", "results/worker-0.pkl", b"x")
+        factory.write_coordination_file("job", "results/worker-0.json", b"x")
         sleep_calls: list[float] = []
 
         def fake_sleep(seconds: float) -> None:
             sleep_calls.append(seconds)
             factory.write_coordination_file(
-                "job", f"results/worker-{len(sleep_calls)}.pkl", b"x"
+                "job", f"results/worker-{len(sleep_calls)}.json", b"x"
             )
 
         monkeypatch.setattr(pc.time, "sleep", fake_sleep)
@@ -372,26 +373,43 @@ class TestWaitForWorkers:
 
 
 class TestCollectResults:
-    def test_merges_pickled_results_across_workers(self) -> None:
+    def test_merges_json_results_across_workers(self) -> None:
         factory = FakeStoreFactory()
+
+        def r(ts: str, td: str, url: str) -> SourceFileResult:
+            return SourceFileResult(
+                status=SourceFileStatus.Succeeded,
+                out_loc={"init_time": pd.Timestamp(ts), "lead_time": pd.Timedelta(td)},
+                url=url,
+            )
+
+        worker_0 = {
+            "var_a": [r("2026-04-15", "0h", "u0"), r("2026-04-15", "6h", "u1")],
+            "var_b": [r("2026-04-15", "0h", "u2")],
+        }
+        worker_1 = {
+            "var_a": [r("2026-04-15", "12h", "u3")],
+            "var_c": [r("2026-04-15", "0h", "u4")],
+        }
         factory.write_coordination_file(
-            "job",
-            "results/worker-0.pkl",
-            pickle.dumps({"var_a": ["c0", "c1"], "var_b": ["c2"]}),
+            "job", "results/worker-0.json", pc.dump_worker_results_json(worker_0)
         )
         factory.write_coordination_file(
-            "job",
-            "results/worker-1.pkl",
-            pickle.dumps({"var_a": ["c3"], "var_c": ["c4"]}),
+            "job", "results/worker-1.json", pc.dump_worker_results_json(worker_1)
         )
 
         merged = pc.collect_results(factory, "job", workers_total=2)  # type: ignore[arg-type]
 
-        assert dict(merged) == {
-            "var_a": ["c0", "c1", "c3"],
-            "var_b": ["c2"],
-            "var_c": ["c4"],
+        # URLs identify each result unambiguously; check the merged set per var.
+        merged_urls = {v: [r.url for r in rs] for v, rs in merged.items()}
+        assert merged_urls == {
+            "var_a": ["u0", "u1", "u3"],
+            "var_b": ["u2"],
+            "var_c": ["u4"],
         }
+        # Spot-check that pandas types round-tripped.
+        assert merged["var_a"][2].out_loc["lead_time"] == pd.Timedelta("12h")
+        assert merged["var_a"][2].out_loc["init_time"] == pd.Timestamp("2026-04-15")
 
 
 class TestFinalize:
@@ -528,10 +546,19 @@ class TestFinalize:
         # Update path: flips to True → zarr3 copy called once with zarr3_only=True.
         job = MagicMock()
         job.update_template_with_results.return_value = _template()
+        merged = {
+            "v": [
+                SourceFileResult(
+                    status=SourceFileStatus.Succeeded,
+                    out_loc={"time": pd.Timestamp("2026-04-15")},
+                    url="u",
+                )
+            ]
+        }
         pc.finalize(
             factory,  # type: ignore[arg-type]
             all_jobs=[job],
-            merged_results={"v": ["x"]},
+            merged_results=merged,
             reformat_job_name="job",
             branch_name="main",
             template_ds=_template(),
@@ -540,7 +567,7 @@ class TestFinalize:
             workers_total=1,
             update_template_with_results=True,
         )
-        job.update_template_with_results.assert_called_once_with({"v": ["x"]})
+        job.update_template_with_results.assert_called_once_with(merged)
         assert stub_io["copy_zarr_metadata"].call_count == 1
         copy_kwargs = stub_io["copy_zarr_metadata"].call_args.kwargs
         assert copy_kwargs["zarr3_only"] is True
@@ -551,7 +578,7 @@ class TestFinalize:
         self, tmp_path: Path
     ) -> None:
         factory = FakeStoreFactory()
-        factory.write_coordination_file("job", "results/worker-0.pkl", b"x")
+        factory.write_coordination_file("job", "results/worker-0.json", b"x")
 
         pc.finalize(
             factory,  # type: ignore[arg-type]

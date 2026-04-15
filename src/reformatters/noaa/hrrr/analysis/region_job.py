@@ -7,6 +7,7 @@ from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValueOrRange,
+    SourceFileResult,
 )
 from reformatters.common.types import (
     Dim,
@@ -61,7 +62,7 @@ class NoaaHrrrAnalysisRegionJob(NoaaHrrrRegionJob):
         ]
 
     def update_template_with_results(
-        self, process_results: Mapping[str, Sequence[NoaaHrrrSourceFileCoord]]
+        self, process_results: Mapping[str, Sequence[SourceFileResult]]
     ) -> xr.Dataset:
         # Remove the last hour. We pull accumulated variables (precipitation) from the 1 hour lead time,
         # but use the 0 hour lead time for other variables. This results in one additional

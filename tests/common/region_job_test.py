@@ -23,6 +23,7 @@ from reformatters.common.iterating import get_worker_jobs
 from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
+    SourceFileResult,
     SourceFileStatus,
 )
 from reformatters.common.storage import (
@@ -264,22 +265,20 @@ def test_update_template_with_results(template_ds: xr.Dataset) -> None:
         reformat_job_name="test-job",
     )
 
+    def _result(time: str, status: SourceFileStatus) -> SourceFileResult:
+        return SourceFileResult(
+            status=status,
+            out_loc={"time": pd.Timestamp(time)},
+            url=f"https://test/{time}",
+        )
+
     # Mock process results
     process_results = {
         "var0": [
-            ExampleSourceFileCoords(
-                time=pd.Timestamp("2025-01-01T12"), status=SourceFileStatus.Succeeded
-            ),
-            ExampleSourceFileCoords(
-                time=pd.Timestamp("2025-01-02T12"),
-                status=SourceFileStatus.DownloadFailed,
-            ),
+            _result("2025-01-01T12", SourceFileStatus.Succeeded),
+            _result("2025-01-02T12", SourceFileStatus.DownloadFailed),
         ],
-        "var1": [
-            ExampleSourceFileCoords(
-                time=pd.Timestamp("2025-01-02T00"), status=SourceFileStatus.Succeeded
-            )
-        ],
+        "var1": [_result("2025-01-02T00", SourceFileStatus.Succeeded)],
     }
 
     updated_template = job.update_template_with_results(process_results)
