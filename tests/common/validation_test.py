@@ -522,6 +522,10 @@ def test_check_for_expected_shards_fails_missing_shards(
                 ["time", "y", "x"],
                 rng.standard_normal((len(times), len(y), len(x))),
             ),
+            "humidity": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
         },
         coords={"time": times, "y": y, "x": x},
         attrs={"dataset_id": "test-dataset"},
@@ -538,15 +542,64 @@ def test_check_for_expected_shards_fails_missing_shards(
     store = zarr.storage.MemoryStore()
     ds.to_zarr(store, mode="w", consolidated=False)
 
-    # Manually delete a shard to simulate missing data
-    # Delete shard 0/0/0 for temperature using sync wrapper
+    # Delete different shards per variable to exercise the per-var details branch
     zarr.core.sync.sync(store.delete("temperature/c/0/0/0"))
+    zarr.core.sync.sync(store.delete("humidity/c/1/0/0"))
+    zarr.core.sync.sync(store.delete("humidity/c/2/0/0"))
 
     result = validation.check_for_expected_shards(store, ds)
 
     assert not result.passed
-    assert "temperature" in result.message
-    assert "Missing shards" in result.message
+    assert result.message == (
+        "Missing shards: temperature (1 missing), humidity (2 missing). "
+        "temperature: [0/0/0], humidity: [1/0/0, 2/0/0]"
+    )
+
+
+def test_check_for_expected_shards_fails_same_missing_shards_across_vars(
+    rng: np.random.Generator,
+) -> None:
+    """When all problem vars are missing the same shards the message is collapsed."""
+    times = pd.date_range("2024-01-01", periods=16, freq="1h")
+    x = np.arange(10)
+    y = np.arange(8)
+
+    ds = xr.Dataset(
+        {
+            "temperature": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+            "humidity": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+        },
+        coords={"time": times, "y": y, "x": x},
+        attrs={"dataset_id": "test-dataset"},
+    )
+
+    chunk_sizes = (4, 4, 5)
+    shard_sizes = (4, 4, 5)
+    for var in ds.data_vars.values():
+        var.encoding["chunks"] = chunk_sizes
+        var.encoding["shards"] = shard_sizes
+
+    store = zarr.storage.MemoryStore()
+    ds.to_zarr(store, mode="w", consolidated=False)
+
+    # Delete the same shards for both variables
+    for var in ("temperature", "humidity"):
+        zarr.core.sync.sync(store.delete(f"{var}/c/0/0/0"))
+        zarr.core.sync.sync(store.delete(f"{var}/c/1/0/0"))
+
+    result = validation.check_for_expected_shards(store, ds)
+
+    assert not result.passed
+    assert result.message == (
+        "Missing shards: temperature (2 missing), humidity (2 missing). "
+        "all missing the same shards: [0/0/0, 1/0/0]"
+    )
 
 
 def test_check_for_expected_shards_passes_with_extra_shards(
