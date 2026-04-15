@@ -62,6 +62,7 @@ class DwdIconEuForecast5DayDataset(
         # init. We schedule the reformat 3 minutes after that (3h48m after init). The archive job
         # may not have finished copying to Source Co-Op yet, in which case download_file falls back
         # to reading directly from DWD.
+        workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             suspend=True,
             name=f"{self.dataset_id}-update",
@@ -74,6 +75,8 @@ class DwdIconEuForecast5DayDataset(
             shared_memory="400M",
             ephemeral_storage="30G",
             secret_names=self.store_factory.k8s_secret_names(),
+            workers_total=workers,
+            parallelism=workers,
         )
 
         validation_cron_job = ValidationCronJob(

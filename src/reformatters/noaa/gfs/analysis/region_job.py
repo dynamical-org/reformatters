@@ -32,7 +32,7 @@ class NoaaGfsAnalysisRegionJob(NoaaGfsCommonRegionJob):
     """Region job for GFS analysis data processing."""
 
     max_vars_per_download_group = 3
-    max_vars_per_backfill_job = 12
+    max_vars_per_job = 12
 
     def get_processing_region(self) -> slice:
         """Buffer start by one step to allow deaccumulation without gaps in resulting output."""

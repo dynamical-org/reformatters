@@ -24,6 +24,7 @@ class EcmwfAifsSingleForecastDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
+        workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="21 */6 * * *",
@@ -35,6 +36,8 @@ class EcmwfAifsSingleForecastDataset(
             shared_memory="1.5G",
             ephemeral_storage="20G",
             secret_names=self.store_factory.k8s_secret_names(),
+            workers_total=workers,
+            parallelism=workers,
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",

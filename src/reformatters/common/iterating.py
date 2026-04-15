@@ -1,7 +1,7 @@
 import hashlib
 from collections import deque
 from collections.abc import Callable, Iterable, Sequence
-from itertools import islice, pairwise, product, starmap
+from itertools import batched, islice, pairwise, product, starmap
 from typing import Any, Literal
 
 import xarray as xr
@@ -80,6 +80,17 @@ def digest(data: Iterable[str], length: int = 8) -> str:
     for string in data:
         message.update(string.encode())
     return message.hexdigest()[:length]
+
+
+def split_groups[T](
+    groups: Sequence[Sequence[T]], batch_size: int
+) -> Sequence[Sequence[T]]:
+    """Splits inner groups into smaller groups of at most batch_size."""
+    return [
+        tuple(split_group)
+        for group in groups
+        for split_group in batched(group, batch_size, strict=False)
+    ]
 
 
 def group_by[T](

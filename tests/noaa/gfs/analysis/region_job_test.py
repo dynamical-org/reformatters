@@ -265,10 +265,12 @@ def test_operational_update_jobs(
 
     assert template_ds.time.max() == pd.Timestamp("2021-05-01T10:00")
 
-    assert len(jobs) == 1
+    # max_vars_per_job=12 splits 21 vars into 2 jobs
+    assert len(jobs) == 2
     for job in jobs:
         assert isinstance(job, NoaaGfsAnalysisRegionJob)
-        assert job.data_vars == template_config.data_vars
+    all_job_vars = [v for job in jobs for v in job.data_vars]
+    assert {v.name for v in all_job_vars} == {v.name for v in template_config.data_vars}
 
 
 def test_update_template_with_results(
