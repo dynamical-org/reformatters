@@ -145,7 +145,7 @@ class NoaaNdviCdrAnalysisRegionJob(
         remote_path = urlparse(url).path.removeprefix("/")
         local_path = get_local_path(self.dataset_id, remote_path)
 
-        download_to_disk(store, remote_path, local_path, overwrite_existing=True)
+        download_to_disk(store, remote_path, local_path)
         log.debug(f"Downloaded {url} to {local_path}")
 
         return local_path

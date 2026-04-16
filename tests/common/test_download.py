@@ -59,12 +59,12 @@ def test_s3_store_returns_s3_store() -> None:
     assert isinstance(store, obstore.store.S3Store)
 
 
-def test_download_to_disk_skips_if_exists_and_no_overwrite(tmp_path: Path) -> None:
+def test_download_to_disk_skips_if_exists_and_disk_cache(tmp_path: Path) -> None:
     local_path = tmp_path / "existing_file.bin"
     local_path.write_bytes(b"existing content")
 
     mock_store = MagicMock()
-    download_to_disk(mock_store, "some/path", local_path, overwrite_existing=False)
+    download_to_disk(mock_store, "some/path", local_path, disk_cache=True)
 
     mock_store.get.assert_not_called()
     mock_store.get_ranges.assert_not_called()
@@ -82,7 +82,7 @@ def test_download_to_disk_writes_file(tmp_path: Path) -> None:
         patch("obstore.get", return_value=mock_get_result),
         patch.object(mock_get_result, "stream", return_value=iter([file_content])),
     ):
-        download_to_disk(mock_store, "some/path", local_path, overwrite_existing=True)
+        download_to_disk(mock_store, "some/path", local_path)
 
     assert local_path.exists()
     assert local_path.read_bytes() == file_content
@@ -96,7 +96,7 @@ def test_download_to_disk_cleans_up_temp_on_error(tmp_path: Path) -> None:
         patch("obstore.get", side_effect=OSError("network error")),
         pytest.raises(OSError, match="network error"),
     ):
-        download_to_disk(mock_store, "some/path", local_path, overwrite_existing=True)
+        download_to_disk(mock_store, "some/path", local_path)
 
     assert not local_path.exists()
     temp_files = list(tmp_path.glob("*.???????"))
@@ -112,14 +112,14 @@ def test_http_download_to_disk_calls_download(tmp_path: Path) -> None:
         local_path: Path,
         *,
         byte_ranges: tuple[Sequence[int], Sequence[int]] | None,
-        overwrite_existing: bool,
+        disk_cache: bool,
     ) -> None:
         captured.append(
             {
                 "path": path,
                 "local_path": local_path,
                 "byte_ranges": byte_ranges,
-                "overwrite_existing": overwrite_existing,
+                "disk_cache": disk_cache,
             }
         )
         local_path.parent.mkdir(parents=True, exist_ok=True)
@@ -132,8 +132,33 @@ def test_http_download_to_disk_calls_download(tmp_path: Path) -> None:
 
     assert len(captured) == 1
     assert captured[0]["path"] == "/data/file.grib2"
-    assert captured[0]["overwrite_existing"] is True
+    assert captured[0]["disk_cache"] is False
     assert result == get_local_path("my-dataset", "/data/file.grib2")
+
+
+def test_http_download_to_disk_disk_cache_passes_through(
+    tmp_path: Path,
+) -> None:
+    captured: list[dict] = []
+
+    def fake_download_to_disk(
+        store: object,
+        path: str,
+        local_path: Path,
+        *,
+        byte_ranges: tuple[Sequence[int], Sequence[int]] | None,
+        disk_cache: bool,
+    ) -> None:
+        captured.append({"disk_cache": disk_cache})
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_bytes(b"data")
+
+    with patch.object(download_module, "download_to_disk", fake_download_to_disk):
+        http_download_to_disk(
+            "https://example.com/data/file.idx", "my-dataset", disk_cache=True
+        )
+
+    assert captured[0]["disk_cache"] is True
 
 
 def test_http_download_to_disk_with_byte_ranges(tmp_path: Path) -> None:
@@ -145,7 +170,7 @@ def test_http_download_to_disk_with_byte_ranges(tmp_path: Path) -> None:
         local_path: Path,
         *,
         byte_ranges: tuple[Sequence[int], Sequence[int]] | None,
-        overwrite_existing: bool,
+        disk_cache: bool,
     ) -> None:
         captured_ranges.append(byte_ranges)
         local_path.parent.mkdir(parents=True, exist_ok=True)
@@ -349,6 +374,63 @@ def test_httpx_download_to_disk_cleans_up_on_error(tmp_path: Path) -> None:
     all_files = list(tmp_path.rglob("*"))
     data_files = [f for f in all_files if f.is_file()]
     assert len(data_files) == 0
+
+
+def test_httpx_download_to_disk_disk_cache_skips_when_file_exists(
+    tmp_path: Path,
+) -> None:
+    # Pre-create the cached file
+    local_path = tmp_path / "my-dataset" / "data" / "file.idx"
+    local_path.parent.mkdir(parents=True, exist_ok=True)
+    cached_content = b"cached content"
+    local_path.write_bytes(cached_content)
+
+    call_count = 0
+
+    def fake_get_with_retry(*args: object, **kwargs: object) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        return _make_httpx_response(status_code=200, content=b"fresh content")
+
+    with (
+        patch.object(download_module, "_httpx_get_with_retry", fake_get_with_retry),
+        patch.object(download_module, "DOWNLOAD_DIR", tmp_path),
+    ):
+        result = httpx_download_to_disk(
+            "https://example.com/data/file.idx",
+            "my-dataset",
+            disk_cache=True,
+        )
+
+    # Should not have made any HTTP request and should return the existing file
+    assert call_count == 0
+    assert result == local_path
+    assert result.read_bytes() == cached_content
+
+
+def test_httpx_download_to_disk_disk_cache_downloads_when_missing(
+    tmp_path: Path,
+) -> None:
+    response = _make_httpx_response(status_code=200, content=b"fresh content")
+    call_count = 0
+
+    def fake_get_with_retry(*args: object, **kwargs: object) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        return response
+
+    with (
+        patch.object(download_module, "_httpx_get_with_retry", fake_get_with_retry),
+        patch.object(download_module, "DOWNLOAD_DIR", tmp_path),
+    ):
+        result = httpx_download_to_disk(
+            "https://example.com/data/file.idx",
+            "my-dataset",
+            disk_cache=True,
+        )
+
+    assert call_count == 1
+    assert result.read_bytes() == b"fresh content"
 
 
 def test_httpx_download_to_disk_with_suffix(tmp_path: Path) -> None:

@@ -97,7 +97,9 @@ class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
             if source == "nomads"
             else http_download_to_disk
         )
-        idx_local_path = download(coord.get_idx_url(source=source), self.dataset_id)
+        idx_local_path = download(
+            coord.get_idx_url(source=source), self.dataset_id, disk_cache=True
+        )
         starts, ends = grib_message_byte_ranges_from_index(
             idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
         )

@@ -139,7 +139,9 @@ class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
             if source == "nomads"
             else http_download_to_disk
         )
-        idx_local_path = download(coord.get_idx_url(source=source), self.dataset_id)
+        idx_local_path = download(
+            coord.get_idx_url(source=source), self.dataset_id, disk_cache=True
+        )
         byte_range_starts, byte_range_ends = grib_message_byte_ranges_from_index(
             idx_local_path,
             coord.data_vars,
