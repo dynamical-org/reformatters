@@ -2314,7 +2314,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "wind_speed_of_gust_10m": {
+      "wind_gust_10m": {
         "shape": [
           1,
           93,

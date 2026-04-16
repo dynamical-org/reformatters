@@ -432,7 +432,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
             ),
             DwdIconEuDataVar(
-                name="wind_speed_of_gust_10m",
+                name="wind_gust_10m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="i10fg",
