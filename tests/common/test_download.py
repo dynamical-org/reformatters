@@ -136,6 +136,31 @@ def test_http_download_to_disk_calls_download(tmp_path: Path) -> None:
     assert result == get_local_path("my-dataset", "/data/file.grib2")
 
 
+def test_http_download_to_disk_use_local_cache_passes_overwrite_false(
+    tmp_path: Path,
+) -> None:
+    captured: list[dict] = []
+
+    def fake_download_to_disk(
+        store: object,
+        path: str,
+        local_path: Path,
+        *,
+        byte_ranges: tuple[Sequence[int], Sequence[int]] | None,
+        overwrite_existing: bool,
+    ) -> None:
+        captured.append({"overwrite_existing": overwrite_existing})
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_bytes(b"data")
+
+    with patch.object(download_module, "download_to_disk", fake_download_to_disk):
+        http_download_to_disk(
+            "https://example.com/data/file.idx", "my-dataset", use_local_cache=True
+        )
+
+    assert captured[0]["overwrite_existing"] is False
+
+
 def test_http_download_to_disk_with_byte_ranges(tmp_path: Path) -> None:
     captured_ranges: list = []
 
@@ -349,6 +374,63 @@ def test_httpx_download_to_disk_cleans_up_on_error(tmp_path: Path) -> None:
     all_files = list(tmp_path.rglob("*"))
     data_files = [f for f in all_files if f.is_file()]
     assert len(data_files) == 0
+
+
+def test_httpx_download_to_disk_use_local_cache_skips_when_file_exists(
+    tmp_path: Path,
+) -> None:
+    # Pre-create the cached file
+    local_path = tmp_path / "my-dataset" / "data" / "file.idx"
+    local_path.parent.mkdir(parents=True, exist_ok=True)
+    cached_content = b"cached content"
+    local_path.write_bytes(cached_content)
+
+    call_count = 0
+
+    def fake_get_with_retry(*args: object, **kwargs: object) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        return _make_httpx_response(status_code=200, content=b"fresh content")
+
+    with (
+        patch.object(download_module, "_httpx_get_with_retry", fake_get_with_retry),
+        patch.object(download_module, "DOWNLOAD_DIR", tmp_path),
+    ):
+        result = httpx_download_to_disk(
+            "https://example.com/data/file.idx",
+            "my-dataset",
+            use_local_cache=True,
+        )
+
+    # Should not have made any HTTP request and should return the existing file
+    assert call_count == 0
+    assert result == local_path
+    assert result.read_bytes() == cached_content
+
+
+def test_httpx_download_to_disk_use_local_cache_downloads_when_missing(
+    tmp_path: Path,
+) -> None:
+    response = _make_httpx_response(status_code=200, content=b"fresh content")
+    call_count = 0
+
+    def fake_get_with_retry(*args: object, **kwargs: object) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        return response
+
+    with (
+        patch.object(download_module, "_httpx_get_with_retry", fake_get_with_retry),
+        patch.object(download_module, "DOWNLOAD_DIR", tmp_path),
+    ):
+        result = httpx_download_to_disk(
+            "https://example.com/data/file.idx",
+            "my-dataset",
+            use_local_cache=True,
+        )
+
+    assert call_count == 1
+    assert result.read_bytes() == b"fresh content"
 
 
 def test_httpx_download_to_disk_with_suffix(tmp_path: Path) -> None:
