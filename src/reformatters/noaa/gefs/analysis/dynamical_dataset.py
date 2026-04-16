@@ -18,7 +18,9 @@ class GefsAnalysisDataset(DynamicalDataset[GEFSDataVar, GefsAnalysisSourceFileCo
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
-        workers = self.num_variable_groups()
+        # GEFS analysis overrides max_vars_per_job to 1 for logic simplicity.
+        # Using num_variable_groups() would create way more parallelism than is useful
+        workers = 2
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             # GEFS f006 (last lead time used) available ~3h48m after init on NOMADS. +3 min buffer.
