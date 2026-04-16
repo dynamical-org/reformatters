@@ -23,7 +23,10 @@ def list_grib_files_on_dwd_https(
     rclone_args = (
         f"--http-url={http_url}",
         "--min-age=1m",  # Ignore files that are so young they might be incomplete.
-        # The ordering of these filters matters:
+        # The ordering of these filters matters: include the specific pressure levels
+        # we reformat (500 and 850 hPa) before excluding the rest.
+        "--filter=+ *pressure-level_*_500_*.grib2.bz2",
+        "--filter=+ *pressure-level_*_850_*.grib2.bz2",
         "--filter=- *pressure-level*",
         "--filter=+ *.grib2.bz2",
         "--filter=- *",
