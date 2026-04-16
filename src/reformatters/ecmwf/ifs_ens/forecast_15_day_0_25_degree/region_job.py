@@ -111,7 +111,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     def download_file(self, coord: IfsEnsSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
         idx_local_path = http_download_to_disk(
-            coord.get_index_url(), self.dataset_id, use_local_cache=True
+            coord.get_index_url(), self.dataset_id, disk_cache=True
         )
 
         byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(

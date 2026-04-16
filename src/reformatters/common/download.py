@@ -40,9 +40,9 @@ def download_to_disk(
     local_path: Path,
     *,
     byte_ranges: tuple[Sequence[int], Sequence[int]] | None = None,
-    overwrite_existing: bool,
+    disk_cache: bool = False,
 ) -> None:
-    if not overwrite_existing and local_path.exists():
+    if disk_cache and local_path.exists():
         return
 
     local_path.parent.mkdir(parents=True, exist_ok=True)
@@ -131,7 +131,7 @@ def http_download_to_disk(
     dataset_id: str,
     byte_ranges: tuple[Sequence[int], Sequence[int]] | None = None,
     local_path_suffix: str = "",
-    use_local_cache: bool = False,
+    disk_cache: bool = False,
 ) -> Path:
     parsed_url = urlparse(url)
     base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
@@ -141,7 +141,7 @@ def http_download_to_disk(
         store,
         parsed_url.path,
         local_path,
-        overwrite_existing=not use_local_cache,
+        disk_cache=disk_cache,
         byte_ranges=byte_ranges,
     )
     return local_path
@@ -285,12 +285,12 @@ def httpx_download_to_disk(
     local_path_suffix: str = "",
     rate_limiter: RateLimiter | None = None,
     retry_status_codes: set[int] = _DEFAULT_RETRY_STATUS_CODES,
-    use_local_cache: bool = False,
+    disk_cache: bool = False,
 ) -> Path:
     """httpx based download which supports redirects and maintains cookies."""
     parsed_url = urlparse(url)
     local_path = get_local_path(dataset_id, parsed_url.path, local_path_suffix)
-    if use_local_cache and local_path.exists():
+    if disk_cache and local_path.exists():
         return local_path
     local_path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = local_path.with_name(f"{local_path.name}.{uuid.uuid4().hex[:8]}")

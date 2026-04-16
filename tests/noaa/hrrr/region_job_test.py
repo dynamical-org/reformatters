@@ -179,9 +179,7 @@ def test_region_job_download_file(
         "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t00z.wrfsfcf00.grib2.idx",
         "test-dataset-hrrr",
     )
-    assert mock_http_download_to_disk.call_args_list[0].kwargs == {
-        "use_local_cache": True
-    }
+    assert mock_http_download_to_disk.call_args_list[0].kwargs == {"disk_cache": True}
 
     assert mock_http_download_to_disk.call_args_list[1].args == (
         "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t00z.wrfsfcf00.grib2",

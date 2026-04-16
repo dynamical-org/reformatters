@@ -118,7 +118,7 @@ class EcmwfAifsSingleForecastRegionJob(
     def download_file(self, coord: EcmwfAifsSingleForecastSourceFileCoord) -> Path:
         idx_url = coord.get_index_url()
         idx_local_path = http_download_to_disk(
-            idx_url, self.dataset_id, use_local_cache=True
+            idx_url, self.dataset_id, disk_cache=True
         )
 
         byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(
