@@ -39,9 +39,6 @@ class DwdIconEuInternalAttrs(BaseInternalAttrs):
     Attributes:
         variable_name_in_filename (str): The name used in ICON-EU's GRIB filename for this variable.
             For example, `alb_rad` (for `surface_albedo`).
-        additional_variable_name_in_filename (str | None): If set, read a second GRIB file for this
-            variable name and sum it into the output (used to derive total downward shortwave from
-            direct + diffuse components).
         deaccumulation_invalid_below_threshold_rate (float | None): Threshold passed through to
             `deaccumulate_to_rates_inplace` when `deaccumulate_to_rate` is True. Used, for example,
             to tolerate the larger negative noise produced by lossy-compressed radiation fields.
@@ -53,7 +50,6 @@ class DwdIconEuInternalAttrs(BaseInternalAttrs):
     variable_name_in_filename: str
     window_reset_frequency: Timedelta | None = None
     scale_factor: float | None = None
-    additional_variable_name_in_filename: str | None = None
     deaccumulation_invalid_below_threshold_rate: float | None = None
     deaccumulation_type: AccumulationType = "accumulated"
 
@@ -339,7 +335,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
 
         default_keep_mantissa_bits = 7
 
-        surface_vars: list[DwdIconEuDataVar] = [
+        return [
             # Some of the `comment` text is taken from the DWD Database Reference PDF:
             # https://www.dwd.de/DWD/forschung/nwv/fepub/icon_database_main.pdf
             #
@@ -348,6 +344,195 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
             # Database Reference: "Values over snow-free land points are based
             # on a monthly mean MODIS climatology." It's much more data-efficient
             # to just download those monthly means from DWD.
+            DwdIconEuDataVar(
+                name="downward_diffuse_short_wave_radiation_flux_surface",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="aswdifd_s",
+                    long_name="Surface diffuse short-wave radiation flux",
+                    units="W m-2",
+                    step_type="avg",
+                    standard_name="surface_diffuse_downwelling_shortwave_flux_in_air",
+                ),
+                internal_attrs=DwdIconEuInternalAttrs(
+                    variable_name_in_filename="aswdifd_s",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    deaccumulate_to_rate=True,
+                    window_reset_frequency=pd.Timedelta.max,
+                    deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+                    deaccumulation_type="running_mean",
+                ),
+            ),
+            DwdIconEuDataVar(
+                name="downward_direct_short_wave_radiation_flux_surface",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="aswdir_s",
+                    standard_name="surface_direct_downwelling_shortwave_flux_in_air",
+                    long_name="Surface direct short-wave radiation flux",
+                    units="W m-2",
+                    step_type="avg",
+                    comment=(
+                        "Downward solar direct radiation flux at the surface, averaged over each"
+                        " forecast step. This quantity is not directly provided by the radiation"
+                        " scheme. It is aposteriori diagnosed from the definition of the surface"
+                        " net shortwave radiation flux."
+                    ),
+                ),
+                internal_attrs=DwdIconEuInternalAttrs(
+                    variable_name_in_filename="aswdir_s",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    deaccumulate_to_rate=True,
+                    window_reset_frequency=pd.Timedelta.max,
+                    deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+                    deaccumulation_type="running_mean",
+                ),
+            ),
+            DwdIconEuDataVar(
+                name="convective_available_potential_energy_atmosphere",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="cape",
+                    standard_name="atmosphere_convective_available_potential_energy",
+                    long_name="Convective available potential energy",
+                    units="J kg-1",
+                    step_type="instant",
+                ),
+                internal_attrs=DwdIconEuInternalAttrs(
+                    variable_name_in_filename="cape_con",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
+            DwdIconEuDataVar(
+                name="cloud_cover_high",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="hcc",
+                    standard_name="cloud_area_fraction_in_atmosphere_layer",
+                    long_name="High cloud cover",
+                    units="percent",
+                    step_type="instant",
+                    comment=(
+                        "Cloud Cover (0 - 400 hPa). Different agencies use different short_names"
+                        " for this same parameter: ECMWF: HCC; WMO GRIB table: HCDC."
+                    ),
+                ),
+                internal_attrs=DwdIconEuInternalAttrs(
+                    variable_name_in_filename="clch",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
+            DwdIconEuDataVar(
+                name="cloud_cover_low",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="lcc",
+                    standard_name="cloud_area_fraction_in_atmosphere_layer",
+                    long_name="Low cloud cover",
+                    units="percent",
+                    step_type="instant",
+                    comment=(
+                        "Cloud Cover (800 hPa - Soil). Different agencies use different short_names"
+                        " for this same parameter: ECMWF: LCC; WMO GRIB table: LCDC."
+                    ),
+                ),
+                internal_attrs=DwdIconEuInternalAttrs(
+                    variable_name_in_filename="clcl",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
+            DwdIconEuDataVar(
+                name="cloud_cover_medium",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="mcc",
+                    standard_name="cloud_area_fraction_in_atmosphere_layer",
+                    long_name="Medium cloud cover",
+                    units="percent",
+                    step_type="instant",
+                    comment=(
+                        "Cloud Cover (400 - 800 hPa). Different agencies use different short_names"
+                        " for this same parameter: ECMWF: MCC; WMO GRIB table: MCDC."
+                    ),
+                ),
+                internal_attrs=DwdIconEuInternalAttrs(
+                    variable_name_in_filename="clcm",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
+            DwdIconEuDataVar(
+                name="total_cloud_cover_atmosphere",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="tcc",
+                    standard_name="cloud_area_fraction",
+                    long_name="Total Cloud Cover",
+                    units="percent",
+                    step_type="instant",
+                    comment=(
+                        "Total cloud cover. Different agencies use different short_names for this"
+                        " same parameter: ECMWF: TCC; NOAA & WMO: TCDC."
+                    ),
+                ),
+                internal_attrs=DwdIconEuInternalAttrs(
+                    variable_name_in_filename="clct",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
+            DwdIconEuDataVar(
+                name="snow_thickness_surface",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="sde",
+                    long_name="Snow depth",
+                    standard_name="surface_snow_thickness",
+                    units="m",
+                    step_type="instant",
+                    comment=(
+                        "Snow depth in m. It is diagnosed from RHO_SNOW and W_SNOW according to"
+                        " H_SNOW = W_SNOW / RHO_SNOW and is limited to H_SNOW <= 40 m."
+                    ),
+                ),
+                internal_attrs=DwdIconEuInternalAttrs(
+                    variable_name_in_filename="h_snow",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
+            DwdIconEuDataVar(
+                name="pressure_reduced_to_mean_sea_level",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="prmsl",
+                    standard_name="air_pressure_at_mean_sea_level",
+                    long_name="Pressure reduced to MSL",
+                    units="Pa",
+                    step_type="instant",
+                    comment="Surface pressure reduced to mean sea level",
+                ),
+                internal_attrs=DwdIconEuInternalAttrs(
+                    variable_name_in_filename="pmsl",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
+            DwdIconEuDataVar(
+                name="relative_humidity_2m",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="2r",
+                    long_name="2 metre relative humidity",
+                    units="percent",
+                    step_type="instant",
+                    comment=(
+                        "Relative humidity at 2m above ground. Other short_names used for this"
+                        " parameter: rh, 2r, r."
+                    ),
+                    standard_name="relative_humidity",
+                ),
+                internal_attrs=DwdIconEuInternalAttrs(
+                    variable_name_in_filename="relhum_2m",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
             DwdIconEuDataVar(
                 name="temperature_2m",
                 encoding=encoding_float32_default,
@@ -369,37 +554,25 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
             ),
             DwdIconEuDataVar(
-                name="dew_point_temperature_2m",
+                name="precipitation_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="2d",
-                    standard_name="dew_point_temperature",
-                    long_name="2 metre dewpoint temperature",
-                    units="degree_Celsius",
-                    step_type="instant",
-                ),
-                internal_attrs=DwdIconEuInternalAttrs(
-                    variable_name_in_filename="td_2m",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                ),
-            ),
-            DwdIconEuDataVar(
-                name="relative_humidity_2m",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="2r",
-                    long_name="2 metre relative humidity",
-                    units="percent",
-                    step_type="instant",
+                    short_name="prate",
+                    standard_name="precipitation_flux",
+                    long_name="Precipitation rate",
+                    units="kg m-2 s-1",
+                    step_type="accum",
                     comment=(
-                        "Relative humidity at 2m above ground. Other short_names used for this"
-                        " parameter: rh, 2r, r."
+                        "Precipitation rate since previous forecast step."
+                        " TOT_PREC = RAIN_GSP + SNOW_GSP + RAIN_CON + SNOW_CON."
+                        " Units equivalent to mm/s."
                     ),
-                    standard_name="relative_humidity",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    variable_name_in_filename="relhum_2m",
+                    variable_name_in_filename="tot_prec",
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    deaccumulate_to_rate=True,
+                    window_reset_frequency=pd.Timedelta.max,  # accumulates over full lead time, never resetting
                 ),
             ),
             DwdIconEuDataVar(
@@ -457,239 +630,6 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
             ),
             DwdIconEuDataVar(
-                name="pressure_surface",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="sp",
-                    standard_name="surface_air_pressure",
-                    long_name="Surface pressure",
-                    units="Pa",
-                    step_type="instant",
-                ),
-                internal_attrs=DwdIconEuInternalAttrs(
-                    variable_name_in_filename="ps",
-                    keep_mantissa_bits=10,
-                ),
-            ),
-            DwdIconEuDataVar(
-                name="pressure_reduced_to_mean_sea_level",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="prmsl",
-                    standard_name="air_pressure_at_mean_sea_level",
-                    long_name="Pressure reduced to MSL",
-                    units="Pa",
-                    step_type="instant",
-                    comment="Surface pressure reduced to mean sea level",
-                ),
-                internal_attrs=DwdIconEuInternalAttrs(
-                    variable_name_in_filename="pmsl",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                ),
-            ),
-            DwdIconEuDataVar(
-                name="precipitation_surface",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="prate",
-                    standard_name="precipitation_flux",
-                    long_name="Precipitation rate",
-                    units="kg m-2 s-1",
-                    step_type="accum",
-                    comment=(
-                        "Precipitation rate since previous forecast step."
-                        " TOT_PREC = RAIN_GSP + SNOW_GSP + RAIN_CON + SNOW_CON."
-                        " Units equivalent to mm/s."
-                    ),
-                ),
-                internal_attrs=DwdIconEuInternalAttrs(
-                    variable_name_in_filename="tot_prec",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                    deaccumulate_to_rate=True,
-                    window_reset_frequency=pd.Timedelta.max,  # accumulates over full lead time, never resetting
-                ),
-            ),
-            DwdIconEuDataVar(
-                name="precipitable_water_atmosphere",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="pwat",
-                    standard_name="atmosphere_mass_content_of_water_vapor",
-                    long_name="Precipitable water",
-                    units="kg m-2",
-                    step_type="instant",
-                ),
-                internal_attrs=DwdIconEuInternalAttrs(
-                    variable_name_in_filename="tqv",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                ),
-            ),
-            DwdIconEuDataVar(
-                name="downward_short_wave_radiation_flux_surface",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="sdswrf",
-                    standard_name="surface_downwelling_shortwave_flux_in_air",
-                    long_name="Surface downward short-wave radiation flux",
-                    units="W m-2",
-                    step_type="avg",
-                    comment=(
-                        "Total downward short-wave radiation flux at the surface, averaged over"
-                        " each forecast step. Derived as the sum of the direct (ASWDIR_S) and"
-                        " diffuse (ASWDIFD_S) downward short-wave components because DWD ICON-EU"
-                        " does not provide the total as a single variable."
-                    ),
-                ),
-                internal_attrs=DwdIconEuInternalAttrs(
-                    variable_name_in_filename="aswdir_s",
-                    additional_variable_name_in_filename="aswdifd_s",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                    deaccumulate_to_rate=True,
-                    window_reset_frequency=pd.Timedelta.max,
-                    deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
-                    deaccumulation_type="running_mean",
-                ),
-            ),
-            DwdIconEuDataVar(
-                name="downward_diffuse_short_wave_radiation_flux_surface",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="aswdifd_s",
-                    long_name="Surface diffuse short-wave radiation flux",
-                    units="W m-2",
-                    step_type="avg",
-                    standard_name="surface_diffuse_downwelling_shortwave_flux_in_air",
-                ),
-                internal_attrs=DwdIconEuInternalAttrs(
-                    variable_name_in_filename="aswdifd_s",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                    deaccumulate_to_rate=True,
-                    window_reset_frequency=pd.Timedelta.max,
-                    deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
-                    deaccumulation_type="running_mean",
-                ),
-            ),
-            DwdIconEuDataVar(
-                name="downward_direct_short_wave_radiation_flux_surface",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="aswdir_s",
-                    standard_name="surface_direct_downwelling_shortwave_flux_in_air",
-                    long_name="Surface direct short-wave radiation flux",
-                    units="W m-2",
-                    step_type="avg",
-                    comment=(
-                        "Downward solar direct radiation flux at the surface, averaged over each"
-                        " forecast step. This quantity is not directly provided by the radiation"
-                        " scheme. It is aposteriori diagnosed from the definition of the surface"
-                        " net shortwave radiation flux."
-                    ),
-                ),
-                internal_attrs=DwdIconEuInternalAttrs(
-                    variable_name_in_filename="aswdir_s",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                    deaccumulate_to_rate=True,
-                    window_reset_frequency=pd.Timedelta.max,
-                    deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
-                    deaccumulation_type="running_mean",
-                ),
-            ),
-            DwdIconEuDataVar(
-                name="total_cloud_cover_atmosphere",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="tcc",
-                    standard_name="cloud_area_fraction",
-                    long_name="Total Cloud Cover",
-                    units="percent",
-                    step_type="instant",
-                    comment=(
-                        "Total cloud cover. Different agencies use different short_names for this"
-                        " same parameter: ECMWF: TCC; NOAA & WMO: TCDC."
-                    ),
-                ),
-                internal_attrs=DwdIconEuInternalAttrs(
-                    variable_name_in_filename="clct",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                ),
-            ),
-            DwdIconEuDataVar(
-                name="cloud_cover_high",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="hcc",
-                    standard_name="cloud_area_fraction_in_atmosphere_layer",
-                    long_name="High cloud cover",
-                    units="percent",
-                    step_type="instant",
-                    comment=(
-                        "Cloud Cover (0 - 400 hPa). Different agencies use different short_names"
-                        " for this same parameter: ECMWF: HCC; WMO GRIB table: HCDC."
-                    ),
-                ),
-                internal_attrs=DwdIconEuInternalAttrs(
-                    variable_name_in_filename="clch",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                ),
-            ),
-            DwdIconEuDataVar(
-                name="cloud_cover_medium",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="mcc",
-                    standard_name="cloud_area_fraction_in_atmosphere_layer",
-                    long_name="Medium cloud cover",
-                    units="percent",
-                    step_type="instant",
-                    comment=(
-                        "Cloud Cover (400 - 800 hPa). Different agencies use different short_names"
-                        " for this same parameter: ECMWF: MCC; WMO GRIB table: MCDC."
-                    ),
-                ),
-                internal_attrs=DwdIconEuInternalAttrs(
-                    variable_name_in_filename="clcm",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                ),
-            ),
-            DwdIconEuDataVar(
-                name="cloud_cover_low",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="lcc",
-                    standard_name="cloud_area_fraction_in_atmosphere_layer",
-                    long_name="Low cloud cover",
-                    units="percent",
-                    step_type="instant",
-                    comment=(
-                        "Cloud Cover (800 hPa - Soil). Different agencies use different short_names"
-                        " for this same parameter: ECMWF: LCC; WMO GRIB table: LCDC."
-                    ),
-                ),
-                internal_attrs=DwdIconEuInternalAttrs(
-                    variable_name_in_filename="clcl",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                ),
-            ),
-            DwdIconEuDataVar(
-                name="snow_thickness_surface",
-                encoding=encoding_float32_default,
-                attrs=DataVarAttrs(
-                    short_name="sde",
-                    long_name="Snow depth",
-                    standard_name="surface_snow_thickness",
-                    units="m",
-                    step_type="instant",
-                    comment=(
-                        "Snow depth in m. It is diagnosed from RHO_SNOW and W_SNOW according to"
-                        " H_SNOW = W_SNOW / RHO_SNOW and is limited to H_SNOW <= 40 m."
-                    ),
-                ),
-                internal_attrs=DwdIconEuInternalAttrs(
-                    variable_name_in_filename="h_snow",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
-                ),
-            ),
-            DwdIconEuDataVar(
                 name="snow_water_equivalent_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -710,20 +650,48 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
             ),
             DwdIconEuDataVar(
-                name="convective_available_potential_energy_atmosphere",
+                name="dew_point_temperature_2m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="cape",
-                    standard_name="atmosphere_convective_available_potential_energy",
-                    long_name="Convective available potential energy",
-                    units="J kg-1",
+                    short_name="2d",
+                    standard_name="dew_point_temperature",
+                    long_name="2 metre dewpoint temperature",
+                    units="degree_Celsius",
                     step_type="instant",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
-                    variable_name_in_filename="cape_con",
+                    variable_name_in_filename="td_2m",
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
+            DwdIconEuDataVar(
+                name="pressure_surface",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="sp",
+                    standard_name="surface_air_pressure",
+                    long_name="Surface pressure",
+                    units="Pa",
+                    step_type="instant",
+                ),
+                internal_attrs=DwdIconEuInternalAttrs(
+                    variable_name_in_filename="ps",
+                    keep_mantissa_bits=10,
+                ),
+            ),
+            DwdIconEuDataVar(
+                name="precipitable_water_atmosphere",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="pwat",
+                    standard_name="atmosphere_mass_content_of_water_vapor",
+                    long_name="Precipitable water",
+                    units="kg m-2",
+                    step_type="instant",
+                ),
+                internal_attrs=DwdIconEuInternalAttrs(
+                    variable_name_in_filename="tqv",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
             ),
         ]
-
-        return surface_vars

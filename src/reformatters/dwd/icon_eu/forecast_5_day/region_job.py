@@ -44,17 +44,16 @@ class DwdIconEuForecast5DaySourceFileCoord(SourceFileCoord):
     lead_time: Timedelta
     data_var: DwdIconEuDataVar
 
-    def get_url(self, variable_name: str | None = None) -> str:
+    def get_url(self) -> str:
         """Return URL to .grib2.bz2 files on Dynamical.org's public archive of ICON-EU hosted on Source Co-Op."""
-        variable_name = variable_name or self.variable_name_in_filename
         init_time_str = self.init_time.strftime("%Y-%m-%dT%H")
         return (
             "https://s3-us-west-2.amazonaws.com/us-west-2.opendata.source.coop/"
             "dynamical/dwd-icon-grib/icon-eu/regular-lat-lon/"
-            f"{init_time_str}/{variable_name}/"
-        ) + self._get_basename(variable_name)
+            f"{init_time_str}/{self.variable_name_in_filename}/"
+        ) + self._get_basename()
 
-    def get_fallback_url(self, variable_name: str | None = None) -> str:
+    def get_fallback_url(self) -> str:
         """Return URLs to .grib2.bz2 files on DWD's HTTP server.
 
         Note that DWD may change their directory structure for ICON-EU. See this comment for
@@ -63,19 +62,19 @@ class DwdIconEuForecast5DaySourceFileCoord(SourceFileCoord):
         # Example DWD URL:
         # https://opendata.dwd.de/weather/nwp/icon-eu/grib/00/alb_rad/icon-eu_europe_regular-lat-lon_single-level_2025090700_000_ALB_RAD.grib2.bz2
 
-        variable_name = variable_name or self.variable_name_in_filename
         init_hour_str = self.init_time.strftime("%H")
         return (
             "https://opendata.dwd.de/weather/nwp/icon-eu/grib/"
-            f"{init_hour_str}/{variable_name}/"
-        ) + self._get_basename(variable_name)
+            f"{init_hour_str}/{self.variable_name_in_filename}/"
+        ) + self._get_basename()
 
-    def _get_basename(self, variable_name: str) -> str:
+    def _get_basename(self) -> str:
+        """Note that this only handles single-level variables."""
         init_time_str: str = self.init_time.strftime("%Y%m%d%H")
         lead_time_hours: int = whole_hours(self.lead_time)
         return (
-            f"icon-eu_europe_regular-lat-lon_single-level_{init_time_str}_"
-            f"{lead_time_hours:03d}_{variable_name.upper()}.grib2.bz2"
+            f"icon-eu_europe_regular-lat-lon_single-level_{init_time_str}_{lead_time_hours:03d}_"
+            f"{self.variable_name_in_filename.upper()}.grib2.bz2"
         )
 
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
@@ -140,64 +139,32 @@ class DwdIconEuForecast5DayRegionJob(
 
         Downloads the `.grib.bz2` file and returns its local `Path`.
         """
-        return self._download_variable(coord, coord.variable_name_in_filename)
-
-    def _download_variable(
-        self,
-        coord: DwdIconEuForecast5DaySourceFileCoord,
-        variable_name: str,
-        local_path_suffix: str = "",
-    ) -> Path:
-        url = coord.get_url(variable_name)
+        url = coord.get_url()
         try:
-            return http_download_to_disk(
-                url, self.dataset_id, local_path_suffix=local_path_suffix
-            )
+            bz2_file_path = http_download_to_disk(url, self.dataset_id)
         except (FileNotFoundError, GenericError, PermissionDeniedError) as e:
             log.debug(f"Failed to download '{url}': {e}")
-            fallback_url = coord.get_fallback_url(variable_name)
+            fallback_url = coord.get_fallback_url()
             log.debug(f"Attempting to download from {fallback_url=}")
-            return http_download_to_disk(
-                fallback_url, self.dataset_id, local_path_suffix=local_path_suffix
-            )
+            bz2_file_path = http_download_to_disk(fallback_url, self.dataset_id)
+        return bz2_file_path
 
     def read_data(
         self,
         coord: DwdIconEuForecast5DaySourceFileCoord,
         data_var: DwdIconEuDataVar,
     ) -> ArrayFloat32:
-        """Read and return an array of data for the given variable and source file coordinate.
-
-        When the data variable has an `additional_variable_name_in_filename` set (used to derive
-        total downward shortwave from the sum of its direct and diffuse components), the
-        additional file is downloaded and its values are added to the primary result.
-        """
+        """Read and return an array of data for the given variable and source file coordinate."""
         assert coord.downloaded_path is not None  # for type check, system guarantees it
 
-        result = self._read_grib_bz2(coord.downloaded_path, data_var)
-
-        additional = data_var.internal_attrs.additional_variable_name_in_filename
-        if additional is not None:
-            # Download to a per-variable path so we don't race with another variable whose
-            # primary URL matches this additional (e.g. downward_diffuse... runs alongside
-            # us and would otherwise see its own cached file unlinked below).
-            additional_path = self._download_variable(
-                coord, additional, local_path_suffix=f".derived-for-{data_var.name}"
-            )
-            try:
-                result = result + self._read_grib_bz2(additional_path, data_var)
-            finally:
-                additional_path.unlink(missing_ok=True)
-        return result
-
-    @staticmethod
-    def _read_grib_bz2(path: Path, data_var: DwdIconEuDataVar) -> ArrayFloat32:
-        with bz2.open(path, "rb") as f:
+        with bz2.open(coord.downloaded_path, "rb") as f:
             grib_data = f.read()
+
         with MemoryFile(grib_data) as memfile, memfile.open() as reader:
             assert reader.count == 1, (
                 f"Expected exactly 1 element in each ICON-EU grib file, found {reader.count=}. "
-                f"{data_var.internal_attrs.variable_name_in_filename=}, {path=}"
+                f"{data_var.internal_attrs.variable_name_in_filename=}, "
+                f"{coord.downloaded_path=}"
             )
             result: ArrayFloat32 = reader.read(indexes=1, out_dtype=np.float32)
         return result
