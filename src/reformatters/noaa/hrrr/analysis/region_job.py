@@ -6,7 +6,8 @@ import xarray as xr
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
+    SourceFileResult,
 )
 from reformatters.common.types import (
     Dim,
@@ -21,7 +22,7 @@ log = get_logger(__name__)
 
 
 class NoaaHrrrAnalysisSourceFileCoord(NoaaHrrrSourceFileCoord):
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {"time": self.init_time + self.lead_time}
 
 
@@ -61,7 +62,7 @@ class NoaaHrrrAnalysisRegionJob(NoaaHrrrRegionJob):
         ]
 
     def update_template_with_results(
-        self, process_results: Mapping[str, Sequence[NoaaHrrrSourceFileCoord]]
+        self, process_results: Mapping[str, Sequence[SourceFileResult]]
     ) -> xr.Dataset:
         # Remove the last hour. We pull accumulated variables (precipitation) from the 1 hour lead time,
         # but use the 0 hour lead time for other variables. This results in one additional

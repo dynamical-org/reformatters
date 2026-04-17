@@ -14,7 +14,7 @@ from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
     RegionJob,
     SourceFileCoord,
 )
@@ -76,7 +76,7 @@ class DwdIconEuForecast5DaySourceFileCoord(SourceFileCoord):
             f"{self.variable_name_in_filename.upper()}.grib2.bz2"
         )
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         """Return the output location for this file's data in the dataset."""
         # Map to the standard dimension names used in the template
         return {

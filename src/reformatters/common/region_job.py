@@ -16,7 +16,13 @@ import numpy as np
 import pandas as pd
 import pydantic
 import xarray as xr
-from pydantic import AfterValidator, Field, computed_field
+from pydantic import (
+    AfterValidator,
+    Field,
+    computed_field,
+    field_serializer,
+    field_validator,
+)
 from zarr.abc.store import Store
 
 from reformatters.common.binary_rounding import round_float32_inplace
@@ -40,7 +46,7 @@ from reformatters.common.zarr import copy_data_var
 
 log = get_logger(__name__)
 
-type CoordinateValueOrRange = slice | int | float | pd.Timestamp | pd.Timedelta | str
+type CoordinateValue = int | float | pd.Timestamp | pd.Timedelta | str
 
 
 class SourceFileStatus(Enum):
@@ -74,11 +80,11 @@ class SourceFileCoord(FrozenBaseModel):
 
     def out_loc(
         self,
-    ) -> Mapping[Dim, CoordinateValueOrRange]:
+    ) -> Mapping[Dim, CoordinateValue]:
         """
         Return a data array indexer which identifies the region in the output dataset
         to write the data from the source file. The indexer is a dict from dimension
-        names to coordinate values or slices.
+        names to coordinate values.
 
         If the names of the coordinate attributes of your SourceFileCoord subclass are also all
         dimension names in the output dataset, use the default implementation of this method.
@@ -90,8 +96,8 @@ class SourceFileCoord(FrozenBaseModel):
         return self.model_dump(exclude=["status", "downloaded_path"])  # type: ignore[arg-type,return-value]
 
     @property
-    def append_dim_coord(self) -> CoordinateValueOrRange:
-        """Return the coordinate value or range for the append dimension."""
+    def append_dim_coord(self) -> CoordinateValue:
+        """Return the coordinate value for the append dimension."""
         out_loc = self.out_loc()
         for d in get_args(AppendDim.__value__):
             if coord := out_loc.get(d):
@@ -234,7 +240,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
 
     def update_template_with_results(
-        self, process_results: Mapping[str, Sequence[SOURCE_FILE_COORD]]
+        self, process_results: Mapping[str, Sequence["SourceFileResult"]]
     ) -> xr.Dataset:
         """
         Update template dataset based on processing results. This method is called
@@ -251,8 +257,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         Parameters
         ----------
-        process_results : Mapping[str, Sequence[SOURCE_FILE_COORD]]
-            Mapping from variable names to their source file coordinates with final processing status.
+        process_results : Mapping[str, Sequence[SourceFileResult]]
+            Mapping from variable names to their SourceFileResult with final processing status.
 
         Returns
         -------
@@ -261,10 +267,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         max_append_dim_processed = max(
             (
-                c.out_loc()[self.append_dim]
+                c.out_loc[self.append_dim]
                 for c in chain.from_iterable(process_results.values())
                 if c.status == SourceFileStatus.Succeeded
-            ),  # ty: ignore[invalid-argument-type]
+            ),
             default=None,
         )
         if max_append_dim_processed is None:
@@ -618,8 +624,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 # For recent files, we expect some files to not exist yet, just log the path
                 # else, log exception so it is caught by error reporting but doesn't stop processing
                 append_dim_coord = coord.append_dim_coord
-                if isinstance(append_dim_coord, slice):
-                    append_dim_coord = append_dim_coord.start
                 two_days_ago = pd.Timestamp.now() - pd.Timedelta(hours=48)
                 is_not_found = isinstance(e, FileNotFoundError) or (
                     isinstance(e, httpx.HTTPStatusError)
@@ -717,3 +721,48 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def __repr__(self) -> str:
         return f"RegionJob(region=({self.region.start}, {self.region.stop}), data_vars={[v.name for v in self.data_vars]})"
+
+
+class SourceFileResult(FrozenBaseModel):
+    """
+    Per SourceFileCoord result passed to `update_template_with_results`.
+
+    This class is distinct from SourceFileCoord to support JSON serialization.
+    Each worker writes its own serialized results, which are then read back
+    and merged by the last worker using `parallel_coordination.collect_results`
+    before being passed into `update_template_with_results`.
+    """
+
+    status: SourceFileStatus
+    out_loc: dict[str, Any]
+    url: str
+
+    @field_serializer("out_loc")
+    def _ser_out_loc(self, v: dict[str, Any]) -> dict[str, Any]:
+        return {k: self._ser_out_loc_value(val) for k, val in v.items()}
+
+    @field_validator("out_loc", mode="before")
+    @classmethod
+    def _val_out_loc(cls, v: Any) -> Any:  # noqa: ANN401
+        if not isinstance(v, dict):
+            return v
+        return {k: cls._val_out_loc_value(val) for k, val in v.items()}
+
+    @staticmethod
+    def _ser_out_loc_value(v: Any) -> Any:  # noqa: ANN401
+        # pd.Timestamp / pd.Timedelta values are round-tripped via tagged dicts
+        # so JSON deserialization reconstructs the original pandas type.
+        if isinstance(v, pd.Timestamp):
+            return {"__t": "ts", "v": v.isoformat()}
+        if isinstance(v, pd.Timedelta):
+            return {"__t": "td", "v": v.isoformat()}
+        return v
+
+    @staticmethod
+    def _val_out_loc_value(v: Any) -> Any:  # noqa: ANN401
+        if isinstance(v, dict) and "__t" in v:
+            if v["__t"] == "ts":
+                return pd.Timestamp(v["v"])
+            if v["__t"] == "td":
+                return pd.Timedelta(v["v"])
+        return v

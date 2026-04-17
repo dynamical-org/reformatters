@@ -21,7 +21,7 @@ from reformatters.common.download import (
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
     RegionJob,
     SourceFileCoord,
 )
@@ -62,7 +62,7 @@ class NoaaNdviCdrAnalysisSourceFileCoord(SourceFileCoord):
     def get_url(self) -> str:
         return self.url
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {"time": self.time}
 
 

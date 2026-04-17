@@ -17,7 +17,7 @@ from reformatters.common.download import http_download_to_disk
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import replace
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
     RegionJob,
     SourceFileCoord,
 )
@@ -74,7 +74,7 @@ class NoaaMrmsSourceFileCoord(SourceFileCoord):
             case _ as unreachable:
                 assert_never(unreachable)
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {"time": self.time}
 
 

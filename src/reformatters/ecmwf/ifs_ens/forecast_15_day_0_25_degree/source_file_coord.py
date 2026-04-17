@@ -5,7 +5,7 @@ import pandas as pd
 
 from reformatters.common.pydantic import replace
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
     SourceFileCoord,
 )
 from reformatters.common.time_utils import whole_hours
@@ -76,7 +76,7 @@ class OpenDataSourceFileCoord(SourceFileCoord):
     def get_index_url(self) -> str:
         return self._get_base_url() + ".index"
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {
             "init_time": self.init_time,
             "lead_time": self.lead_time,
@@ -149,7 +149,7 @@ class MarsSourceFileCoord(SourceFileCoord):
     def get_index_url(self) -> str:
         return f"{DYNAMICAL_MARS_GRIB_BASE_URL}/{self._date_str()}/{self.request_type}.grib.idx"
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {
             "init_time": self.init_time,
             "lead_time": self.lead_time,

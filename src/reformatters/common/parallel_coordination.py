@@ -4,7 +4,6 @@ See docs/parallel_processing.md for the overall design.
 """
 
 import json
-import pickle
 import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -13,14 +12,27 @@ from typing import Any, TypedDict
 import icechunk
 import pandas as pd
 import xarray as xr
+from pydantic import TypeAdapter
 
 from reformatters.common import storage, template_utils
 from reformatters.common.logging import get_logger
-from reformatters.common.region_job import RegionJob, SourceFileCoord
+from reformatters.common.region_job import RegionJob, SourceFileResult
 from reformatters.common.storage import StoreFactory
 from reformatters.common.zarr import copy_zarr_metadata
 
 log = get_logger(__name__)
+
+_WORKER_RESULTS_ADAPTER: TypeAdapter[dict[str, list[SourceFileResult]]] = TypeAdapter(
+    dict[str, list[SourceFileResult]]
+)
+
+
+def dump_worker_results_json(
+    worker_results: Mapping[str, Sequence[SourceFileResult]],
+) -> bytes:
+    return _WORKER_RESULTS_ADAPTER.dump_json(
+        {k: list(v) for k, v in worker_results.items()}
+    )
 
 
 class SetupInfo(TypedDict, total=False):
@@ -119,15 +131,15 @@ def wait_for_workers(
 
 def collect_results(
     store_factory: StoreFactory, reformat_job_name: str, workers_total: int
-) -> Mapping[str, Sequence[Any]]:
+) -> Mapping[str, Sequence[SourceFileResult]]:
     wait_for_workers(store_factory, reformat_job_name, workers_total)
     result_files = store_factory.read_all_coordination_files(
         reformat_job_name, "results"
     )
 
-    merged: dict[str, list[SourceFileCoord]] = {}
+    merged: dict[str, list[SourceFileResult]] = {}
     for data in result_files:
-        for var_name, coords in pickle.loads(data).items():  # noqa: S301
+        for var_name, coords in _WORKER_RESULTS_ADAPTER.validate_json(data).items():
             merged.setdefault(var_name, []).extend(coords)
     return merged
 
@@ -136,7 +148,7 @@ def finalize(
     store_factory: StoreFactory,
     *,
     all_jobs: Sequence[RegionJob[Any, Any]],
-    merged_results: Mapping[str, Sequence[Any]],
+    merged_results: Mapping[str, Sequence[SourceFileResult]],
     reformat_job_name: str,
     branch_name: str,
     template_ds: xr.Dataset,

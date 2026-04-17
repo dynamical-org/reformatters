@@ -586,7 +586,7 @@ class TestResultsAggregation:
         assert set(merged.keys()) == {"var0", "var1", "var2", "var3"}
         # Each var spans every time step in the template (2 shards, 2 times each).
         for var_name in ("var0", "var1", "var2", "var3"):
-            times = sorted(c.time for c in merged[var_name])
+            times = sorted(c.out_loc["time"] for c in merged[var_name])
             assert times == list(template_ds["time"].values)
 
     def test_partial_read_failure_trims_template_to_last_successful_time(

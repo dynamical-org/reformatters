@@ -8,7 +8,7 @@ import pytest
 
 from reformatters.common import template_utils
 from reformatters.common.pydantic import replace
-from reformatters.common.region_job import SourceFileStatus
+from reformatters.common.region_job import SourceFileResult, SourceFileStatus
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.noaa.mrms.conus_analysis_hourly.region_job import (
     NoaaMrmsRegionJob,
@@ -416,11 +416,13 @@ def test_update_template_with_results(
     )
 
     last_time = template_ds.time.values[-1]
-    mock_coord = Mock()
-    mock_coord.status = SourceFileStatus.Succeeded
-    mock_coord.out_loc.return_value = {"time": last_time}
+    result = SourceFileResult(
+        status=SourceFileStatus.Succeeded,
+        out_loc={"time": pd.Timestamp(last_time)},
+        url="https://test/",
+    )
 
-    process_results = {template_config.data_vars[0].name: [mock_coord]}
+    process_results = {template_config.data_vars[0].name: [result]}
     result_ds = region_job.update_template_with_results(process_results)
 
     assert len(result_ds.time) == len(template_ds.time)

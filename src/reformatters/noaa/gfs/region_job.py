@@ -19,7 +19,7 @@ from reformatters.common.download import (
 from reformatters.common.iterating import digest, group_by
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
     RegionJob,
     SourceFileCoord,
 )
@@ -70,7 +70,7 @@ class NoaaGfsSourceFileCoord(SourceFileCoord):
     def get_idx_url(self, source: DownloadSource = "s3") -> str:
         return f"{self.get_url(source=source)}.idx"
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         raise NotImplementedError("Subclasses must implement out_loc()")
 
 

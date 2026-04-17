@@ -1,6 +1,5 @@
 import json
 import os
-import pickle
 import subprocess
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
@@ -35,7 +34,11 @@ from reformatters.common.kubernetes import (
 )
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
-from reformatters.common.region_job import RegionJob, SourceFileCoord
+from reformatters.common.region_job import (
+    RegionJob,
+    SourceFileCoord,
+    SourceFileResult,
+)
 from reformatters.common.storage import StorageConfig, StoreFactory, get_local_tmp_store
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike
@@ -397,7 +400,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
 
         # 2. Get stores and process jobs
-        worker_results: dict[str, list[SOURCE_FILE_COORD]] = {}
+        worker_results: dict[str, list[SourceFileResult]] = {}
         if worker_jobs:
             primary_store = self.store_factory.primary_store(
                 writable=True, branch=branch_name
@@ -412,7 +415,14 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     primary_store=primary_store, replica_stores=replica_stores
                 )
                 for var_name, coords in results.items():
-                    worker_results.setdefault(var_name, []).extend(coords)
+                    worker_results.setdefault(var_name, []).extend(
+                        SourceFileResult(
+                            status=c.status,
+                            out_loc={**c.out_loc()},
+                            url=c.get_url(),
+                        )
+                        for c in coords
+                    )
 
             now = pd.Timestamp.now(tz="UTC")
             storage.commit_if_icechunk(
@@ -425,8 +435,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         if workers_total > 1:
             self.store_factory.write_coordination_file(
                 reformat_job_name,
-                f"results/worker-{worker_index}.pkl",
-                pickle.dumps(worker_results),
+                f"results/worker-{worker_index}.json",
+                parallel_coordination.dump_worker_results_json(worker_results),
             )
 
         if is_last:

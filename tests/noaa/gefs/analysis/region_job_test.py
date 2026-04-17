@@ -13,7 +13,7 @@ from obstore.exceptions import PermissionDeniedError
 
 from reformatters.common.config_models import DataVarAttrs, Encoding
 from reformatters.common.pydantic import replace
-from reformatters.common.region_job import SourceFileStatus
+from reformatters.common.region_job import SourceFileResult, SourceFileStatus
 from reformatters.common.storage import (
     DatasetFormat,
     StorageConfig,
@@ -597,8 +597,13 @@ def test_update_template_with_results(
         data_vars=data_vars,
         status=SourceFileStatus.Succeeded,
     )
+    result = SourceFileResult(
+        status=coord.status,
+        out_loc={**coord.out_loc()},
+        url=coord.get_url(),
+    )
     process_results = {
-        "temperature_2m": [coord],
+        "temperature_2m": [result],
     }
     updated_template = job.update_template_with_results(process_results)
     assert updated_template.time.max() == pd.Timestamp("2000-01-03T18:00")
