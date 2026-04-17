@@ -202,9 +202,6 @@ class DwdIconEuForecast5DayRegionJob(
             )
             if invalid_below is not None:
                 deaccumulate_kwargs["invalid_below_threshold_rate"] = invalid_below
-                # Short wave radiation sees several percent of values clamped to 0
-                # due to lossy grib2 compression noise.
-                deaccumulate_kwargs["expected_clamp_fraction"] = 0.08
             try:
                 deaccumulate_to_rates_inplace(
                     data_array,
