@@ -146,15 +146,20 @@ class DwdIconEuForecast5DayRegionJob(
         self,
         coord: DwdIconEuForecast5DaySourceFileCoord,
         variable_name: str,
+        local_path_suffix: str = "",
     ) -> Path:
         url = coord.get_url(variable_name)
         try:
-            return http_download_to_disk(url, self.dataset_id)
+            return http_download_to_disk(
+                url, self.dataset_id, local_path_suffix=local_path_suffix
+            )
         except (FileNotFoundError, GenericError, PermissionDeniedError) as e:
             log.debug(f"Failed to download '{url}': {e}")
             fallback_url = coord.get_fallback_url(variable_name)
             log.debug(f"Attempting to download from {fallback_url=}")
-            return http_download_to_disk(fallback_url, self.dataset_id)
+            return http_download_to_disk(
+                fallback_url, self.dataset_id, local_path_suffix=local_path_suffix
+            )
 
     def read_data(
         self,
@@ -173,7 +178,12 @@ class DwdIconEuForecast5DayRegionJob(
 
         additional = data_var.internal_attrs.additional_variable_name_in_filename
         if additional is not None:
-            additional_path = self._download_variable(coord, additional)
+            # Download to a per-variable path so we don't race with another variable whose
+            # primary URL matches this additional (e.g. downward_diffuse... runs alongside
+            # us and would otherwise see its own cached file unlinked below).
+            additional_path = self._download_variable(
+                coord, additional, local_path_suffix=f".derived-for-{data_var.name}"
+            )
             try:
                 result = result + self._read_grib_bz2(additional_path, data_var)
             finally:

@@ -166,7 +166,7 @@ def test_region_job_download_file_fallback(
 ) -> None:
     call_count = 0
 
-    def mock_download(url: str, dataset_id: str) -> Path:
+    def mock_download(url: str, dataset_id: str, **kwargs: object) -> Path:
         nonlocal call_count
         call_count += 1
         if call_count == 1:
@@ -276,7 +276,7 @@ def test_region_job_download_file_both_fail(
     source_file_coord: DwdIconEuForecast5DaySourceFileCoord,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def mock_download(url: str, dataset_id: str) -> Path:
+    def mock_download(url: str, dataset_id: str, **kwargs: object) -> Path:
         raise FileNotFoundError("not found")
 
     monkeypatch.setattr(
@@ -295,7 +295,7 @@ def test_region_job_download_file_fallback_on_generic_error(
 ) -> None:
     call_count = 0
 
-    def mock_download(url: str, dataset_id: str) -> Path:
+    def mock_download(url: str, dataset_id: str, **kwargs: object) -> Path:
         nonlocal call_count
         call_count += 1
         if call_count == 1:
@@ -319,7 +319,7 @@ def test_region_job_download_file_fallback_on_permission_denied(
 ) -> None:
     call_count = 0
 
-    def mock_download(url: str, dataset_id: str) -> Path:
+    def mock_download(url: str, dataset_id: str, **kwargs: object) -> Path:
         nonlocal call_count
         call_count += 1
         if call_count == 1:
@@ -480,11 +480,11 @@ def test_download_from_dynamical_source_coop_archive_and_read_all_variables(
     """
     real_http_download_to_disk = region_job_module.http_download_to_disk
 
-    def source_coop_only(url: str, dataset_id: str) -> Path:
+    def source_coop_only(url: str, dataset_id: str, **kwargs: object) -> Path:
         assert "opendata.dwd.de" not in url, (
             f"Unexpected DWD fallback for url that should be in the archive: {url}"
         )
-        return real_http_download_to_disk(url, dataset_id)
+        return real_http_download_to_disk(url, dataset_id, **kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr(region_job_module, "http_download_to_disk", source_coop_only)
 
