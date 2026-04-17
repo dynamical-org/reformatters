@@ -177,7 +177,6 @@ def _deaccumulate_to_rates_numba(
                 if skip_step[t]:
                     continue
 
-                # `previous_seconds` still holds tₜ₋₁ here; used by both branches below.
                 time_step = seconds[t] - previous_seconds
 
                 step_accumulation = sequence[t] - previous_accumulation
