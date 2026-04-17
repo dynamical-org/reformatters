@@ -16,6 +16,7 @@ from reformatters.common.config_models import (
     Encoding,
     StatisticsApproximate,
 )
+from reformatters.common.deaccumulation import RADIATION_INVALID_BELOW_THRESHOLD
 from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
     TemplateConfig,
@@ -41,6 +42,9 @@ class DwdIconEuInternalAttrs(BaseInternalAttrs):
         additional_variable_name_in_filename (str | None): If set, read a second GRIB file for this
             variable name and sum it into the output (used to derive total downward shortwave from
             direct + diffuse components).
+        deaccumulation_invalid_below_threshold_rate (float | None): Threshold passed through to
+            `deaccumulate_to_rates_inplace` when `deaccumulate_to_rate` is True. Used, for example,
+            to tolerate the larger negative noise produced by lossy-compressed radiation fields.
     """
 
     variable_name_in_filename: str
@@ -48,6 +52,7 @@ class DwdIconEuInternalAttrs(BaseInternalAttrs):
     scale_factor: float | None = None
     pressure_level: int | None = None
     additional_variable_name_in_filename: str | None = None
+    deaccumulation_invalid_below_threshold_rate: float | None = None
 
 
 class DwdIconEuDataVar(DataVar[DwdIconEuInternalAttrs]):
@@ -435,8 +440,8 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 name="wind_gust_10m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="i10fg",
-                    long_name="Instantaneous 10 metre wind gust",
+                    short_name="10fg",
+                    long_name="Maximum 10 metre wind gust since previous post-processing",
                     standard_name="wind_speed_of_gust",
                     units="m s-1",
                     step_type="max",
@@ -532,15 +537,18 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     step_type="avg",
                     comment=(
                         "Total downward short-wave radiation flux at the surface, averaged over"
-                        " forecast time. Derived as the sum of the direct (ASWDIR_S) and diffuse"
-                        " (ASWDIFD_S) downward short-wave components because DWD ICON-EU does not"
-                        " provide the total as a single variable."
+                        " each forecast step. Derived as the sum of the direct (ASWDIR_S) and"
+                        " diffuse (ASWDIFD_S) downward short-wave components because DWD ICON-EU"
+                        " does not provide the total as a single variable."
                     ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="aswdir_s",
                     additional_variable_name_in_filename="aswdifd_s",
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    deaccumulate_to_rate=True,
+                    window_reset_frequency=pd.Timedelta.max,
+                    deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
                 ),
             ),
             DwdIconEuDataVar(
@@ -548,7 +556,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="aswdifd_s",
-                    long_name="Downward diffusive short wave radiation flux at surface",
+                    long_name="Surface diffuse short-wave radiation flux",
                     units="W m-2",
                     step_type="avg",
                     standard_name="surface_diffuse_downwelling_shortwave_flux_in_air",
@@ -556,6 +564,9 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="aswdifd_s",
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    deaccumulate_to_rate=True,
+                    window_reset_frequency=pd.Timedelta.max,
+                    deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
                 ),
             ),
             DwdIconEuDataVar(
@@ -564,19 +575,22 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=DataVarAttrs(
                     short_name="aswdir_s",
                     standard_name="surface_direct_downwelling_shortwave_flux_in_air",
-                    long_name="Downward direct short wave radiation flux at surface",
+                    long_name="Surface direct short-wave radiation flux",
                     units="W m-2",
                     step_type="avg",
                     comment=(
-                        "Downward solar direct radiation flux at the surface, averaged over forecast time."
-                        " This quantity is not directly provided by the radiation scheme."
-                        " It is aposteriori diagnosed from the definition of the surface net"
-                        " shortwave radiation flux."
+                        "Downward solar direct radiation flux at the surface, averaged over each"
+                        " forecast step. This quantity is not directly provided by the radiation"
+                        " scheme. It is aposteriori diagnosed from the definition of the surface"
+                        " net shortwave radiation flux."
                     ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="aswdir_s",
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    deaccumulate_to_rate=True,
+                    window_reset_frequency=pd.Timedelta.max,
+                    deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
                 ),
             ),
             DwdIconEuDataVar(
@@ -695,7 +709,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
             ),
             DwdIconEuDataVar(
-                name="cape_convective",
+                name="convective_available_potential_energy_atmosphere",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="cape",

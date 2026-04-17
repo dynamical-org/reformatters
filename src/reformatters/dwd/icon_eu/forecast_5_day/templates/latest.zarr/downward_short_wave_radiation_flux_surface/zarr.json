@@ -72,7 +72,7 @@
     "short_name": "sdswrf",
     "standard_name": "surface_downwelling_shortwave_flux_in_air",
     "units": "W m-2",
-    "comment": "Total downward short-wave radiation flux at the surface, averaged over forecast time. Derived as the sum of the direct (ASWDIR_S) and diffuse (ASWDIFD_S) downward short-wave components because DWD ICON-EU does not provide the total as a single variable.",
+    "comment": "Total downward short-wave radiation flux at the surface, averaged over each forecast step. Derived as the sum of the direct (ASWDIR_S) and diffuse (ASWDIFD_S) downward short-wave components because DWD ICON-EU does not provide the total as a single variable.",
     "step_type": "avg",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
