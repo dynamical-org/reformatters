@@ -209,6 +209,7 @@ def test_region_job_apply_data_transformations_deaccumulation(
         data_array,
         dim="lead_time",
         reset_frequency=reset_freq,
+        accumulation_type="accumulated",
     )
 
 

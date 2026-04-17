@@ -16,7 +16,10 @@ from reformatters.common.config_models import (
     Encoding,
     StatisticsApproximate,
 )
-from reformatters.common.deaccumulation import RADIATION_INVALID_BELOW_THRESHOLD
+from reformatters.common.deaccumulation import (
+    RADIATION_INVALID_BELOW_THRESHOLD,
+    AccumulationType,
+)
 from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
     TemplateConfig,
@@ -45,6 +48,9 @@ class DwdIconEuInternalAttrs(BaseInternalAttrs):
         deaccumulation_invalid_below_threshold_rate (float | None): Threshold passed through to
             `deaccumulate_to_rates_inplace` when `deaccumulate_to_rate` is True. Used, for example,
             to tolerate the larger negative noise produced by lossy-compressed radiation fields.
+        deaccumulation_type (AccumulationType): Whether the source values are cumulative totals
+            ("accumulated", default) or running-mean rates whose averaging window grows from
+            forecast start ("running_mean", used for ICON-EU averaged radiation fields).
     """
 
     variable_name_in_filename: str
@@ -53,6 +59,7 @@ class DwdIconEuInternalAttrs(BaseInternalAttrs):
     pressure_level: int | None = None
     additional_variable_name_in_filename: str | None = None
     deaccumulation_invalid_below_threshold_rate: float | None = None
+    deaccumulation_type: AccumulationType = "accumulated"
 
 
 class DwdIconEuDataVar(DataVar[DwdIconEuInternalAttrs]):
@@ -549,6 +556,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     deaccumulate_to_rate=True,
                     window_reset_frequency=pd.Timedelta.max,
                     deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+                    deaccumulation_type="running_mean",
                 ),
             ),
             DwdIconEuDataVar(
@@ -567,6 +575,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     deaccumulate_to_rate=True,
                     window_reset_frequency=pd.Timedelta.max,
                     deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+                    deaccumulation_type="running_mean",
                 ),
             ),
             DwdIconEuDataVar(
@@ -591,6 +600,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     deaccumulate_to_rate=True,
                     window_reset_frequency=pd.Timedelta.max,
                     deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+                    deaccumulation_type="running_mean",
                 ),
             ),
             DwdIconEuDataVar(

@@ -1,3 +1,5 @@
+from typing import Literal
+
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -13,6 +15,20 @@ VALID_OUTPUT_UNITS_FOR_DEACCUMULATION = ["mm s-1", "m s-1", "kg m-2 s-1", "W m-2
 PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD = -7e-5
 RADIATION_INVALID_BELOW_THRESHOLD = -50.0  # W/m^2 aka J/m^2/s
 
+# How the input values along `dim` should be interpreted:
+#   - "accumulated": values are cumulative totals (e.g. J m-2 since forecast start).
+#     Step rate = (A_t - A_{t-1}) / dt.
+#   - "running_mean": values are running-mean rates whose averaging window grows
+#     from forecast start (e.g. DWD ICON-EU averaged radiation fields).
+#     Step rate = A_t + (A_t - A_{t-1}) * t_{t-1} / dt. This rearrangement of
+#     (A_t * t_t - A_{t-1} * t_{t-1}) / dt keeps every intermediate product small,
+#     preserving float32 precision across long forecast horizons.
+AccumulationType = Literal["accumulated", "running_mean"]
+
+# Integer encoding of AccumulationType to keep the numba loop branch cheap.
+_ACCUMULATION_TYPE_ACCUMULATED = 0
+_ACCUMULATION_TYPE_RUNNING_MEAN = 1
+
 
 def deaccumulate_to_rates_inplace(
     data_array: xr.DataArray,
@@ -23,6 +39,7 @@ def deaccumulate_to_rates_inplace(
     invalid_below_threshold_rate: float = PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
     expected_invalid_fraction: float = 0.0,
     expected_clamp_fraction: float = 0.05,
+    accumulation_type: AccumulationType = "accumulated",
 ) -> xr.DataArray:
     """
     Convert accumulated values to per-second rates in place.
@@ -41,10 +58,24 @@ def deaccumulate_to_rates_inplace(
         expected_clamp_fraction: Fraction of values expected to be clamped to 0 (small
             negative rates from lossy compression artifacts). Raises ValueError if actual
             clamped fraction exceeds this.
+        accumulation_type: How to interpret the input values. "accumulated" (default) treats
+            them as cumulative totals. "running_mean" treats them as running-mean rates whose
+            averaging window grows from forecast start and converts them to per-step rates
+            without materialising the large cumulative-product intermediate.
     """
     assert data_array.attrs["units"] in VALID_OUTPUT_UNITS_FOR_DEACCUMULATION, (
         "Output units must be a per-second rate"
     )
+
+    if accumulation_type == "accumulated":
+        accumulation_type_int = _ACCUMULATION_TYPE_ACCUMULATED
+    elif accumulation_type == "running_mean":
+        accumulation_type_int = _ACCUMULATION_TYPE_RUNNING_MEAN
+    else:
+        raise ValueError(
+            f"Unknown accumulation_type {accumulation_type!r}; "
+            "expected 'accumulated' or 'running_mean'."
+        )
 
     # Support timedelta or datetime dimension values, converting either to seconds
     times = data_array[dim].values
@@ -73,7 +104,12 @@ def deaccumulate_to_rates_inplace(
     )
 
     invalid_negative_count, clamped_count = _deaccumulate_to_rates_numba(
-        values, seconds, reset_after, skip_step, invalid_below_threshold_rate
+        values,
+        seconds,
+        reset_after,
+        skip_step,
+        invalid_below_threshold_rate,
+        accumulation_type_int,
     )
 
     invalid_fraction = invalid_negative_count / values.size
@@ -98,6 +134,7 @@ def _deaccumulate_to_rates_numba(
     reset_after: Array1D[np.bool],
     skip_step: Array1D[np.bool],
     invalid_below_threshold_rate: float,
+    accumulation_type: int,
 ) -> tuple[int, int]:
     """
     Convert accumulated values to per-second rates, mutating `values` in place.
@@ -141,13 +178,25 @@ def _deaccumulate_to_rates_numba(
                 if skip_step[t]:
                     continue
 
+                # `previous_seconds` still holds tₜ₋₁ here; used by both branches below.
                 time_step = seconds[t] - previous_seconds
-                previous_seconds = seconds[t]
 
                 step_accumulation = sequence[t] - previous_accumulation
                 # store previous accumulation before we overwrite sequence[t] with rate
                 previous_accumulation = sequence[t]
-                sequence[t] = step_accumulation / time_step
+
+                # Note: no `else` branch here even as a safety net. Numba disables
+                # `prange` parallelisation if the loop has any additional exit points
+                # (raise, assert, etc.) so we rely on the wrapper to reject unknown
+                # accumulation_type values before entering this kernel.
+                if accumulation_type == _ACCUMULATION_TYPE_ACCUMULATED:
+                    sequence[t] = step_accumulation / time_step
+                elif accumulation_type == _ACCUMULATION_TYPE_RUNNING_MEAN:
+                    sequence[t] = sequence[t] + (
+                        (step_accumulation * previous_seconds) / time_step
+                    )
+
+                previous_seconds = seconds[t]
 
                 if reset_after[t]:
                     previous_accumulation = 0

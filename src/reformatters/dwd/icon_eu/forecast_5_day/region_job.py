@@ -224,7 +224,9 @@ class DwdIconEuForecast5DayRegionJob(
             log.info(
                 f"Converting {data_var.name} from accumulations to rates along lead_time"
             )
-            deaccumulate_kwargs: dict[str, Any] = {}
+            deaccumulate_kwargs: dict[str, Any] = {
+                "accumulation_type": data_var.internal_attrs.deaccumulation_type,
+            }
             invalid_below = (
                 data_var.internal_attrs.deaccumulation_invalid_below_threshold_rate
             )
