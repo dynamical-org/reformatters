@@ -68,7 +68,7 @@
     }
   ],
   "attributes": {
-    "long_name": "Downward diffusive short wave radiation flux at surface",
+    "long_name": "Surface diffuse short-wave radiation flux",
     "short_name": "aswdifd_s",
     "standard_name": "surface_diffuse_downwelling_shortwave_flux_in_air",
     "units": "W m-2",

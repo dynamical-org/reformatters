@@ -1,6 +1,7 @@
 import bz2
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -193,11 +194,20 @@ class DwdIconEuForecast5DayRegionJob(
             log.info(
                 f"Converting {data_var.name} from accumulations to rates along lead_time"
             )
+            deaccumulate_kwargs: dict[str, Any] = {
+                "accumulation_type": data_var.internal_attrs.deaccumulation_type,
+            }
+            invalid_below = (
+                data_var.internal_attrs.deaccumulation_invalid_below_threshold_rate
+            )
+            if invalid_below is not None:
+                deaccumulate_kwargs["invalid_below_threshold_rate"] = invalid_below
             try:
                 deaccumulate_to_rates_inplace(
                     data_array,
                     dim="lead_time",
                     reset_frequency=data_var.internal_attrs.window_reset_frequency,
+                    **deaccumulate_kwargs,
                 )
             except ValueError:
                 # Log exception so we are notified if deaccumulation errors are larger than expected.

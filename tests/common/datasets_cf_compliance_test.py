@@ -463,9 +463,6 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     "quality_assurance",
     "Soil Moisture (AM)",
     "Soil Moisture (PM)",
-    # DWD ICON-specific variables
-    "Downward diffusive short wave radiation flux at surface",
-    "Downward direct short wave radiation flux at surface",
     # HRRR 80m wind (no ECMWF equivalent)
     "80 metre U wind component",
     "80 metre V wind component",

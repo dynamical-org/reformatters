@@ -1,3 +1,4 @@
+from itertools import pairwise
 from typing import Final
 
 import numpy as np
@@ -7,6 +8,7 @@ import xarray as xr
 
 from reformatters.common.deaccumulation import (
     PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
+    RADIATION_INVALID_BELOW_THRESHOLD,
     deaccumulate_to_rates_inplace,
 )
 
@@ -868,6 +870,281 @@ def test_deaccumulate_expected_invalid_fraction_still_raises_when_exceeded() -> 
             dim="lead_time",
             reset_frequency=reset_frequency,
             expected_invalid_fraction=0.10,
+        )
+
+
+def test_deaccumulate_running_mean_constant_rate() -> None:
+    """A constant running-mean rate should deaccumulate to that same rate each step."""
+    reset_frequency = pd.Timedelta.max
+    lead_times = pd.to_timedelta(["0h", "1h", "2h", "3h"])
+
+    # Constant 5 W m-2 averaged over every [0, t] window means every step saw 5 W m-2.
+    values = np.array([0.0, 5.0, 5.0, 5.0], dtype=np.float32)
+    expected = np.array([np.nan, 5.0, 5.0, 5.0], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        values,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "W m-2"},
+    )
+
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="lead_time",
+        reset_frequency=reset_frequency,
+        accumulation_type="running_mean",
+    )
+
+    np.testing.assert_allclose(result.values, expected, equal_nan=True)
+
+
+def test_deaccumulate_running_mean_decreasing_rate() -> None:
+    """Decreasing running-mean values (as radiation does through the evening) recover the step rate."""
+    reset_frequency = pd.Timedelta.max
+    lead_times = pd.to_timedelta(["0h", "1h", "2h", "3h"])
+
+    # Step rates: step1=800, step2=600, step3=400.
+    # Running means:
+    #   A1 = (800) / 1                    = 800
+    #   A2 = (800 + 600) / 2              = 700
+    #   A3 = (800 + 600 + 400) / 3        = 600
+    values = np.array([0.0, 800.0, 700.0, 600.0], dtype=np.float32)
+    expected = np.array([np.nan, 800.0, 600.0, 400.0], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        values,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "W m-2"},
+    )
+
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="lead_time",
+        reset_frequency=reset_frequency,
+        accumulation_type="running_mean",
+        invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+    )
+
+    np.testing.assert_allclose(result.values, expected, equal_nan=True)
+
+
+def test_deaccumulate_running_mean_step_size_transition() -> None:
+    """ICON-EU switches from hourly to 3-hourly lead steps. Make sure both ranges recover."""
+    reset_frequency = pd.Timedelta.max
+    # Hourly through 3h then 3-hourly from 6h onwards (mimics the ICON-EU lead_time layout).
+    lead_hours = [0, 1, 2, 3, 6, 9]
+    lead_times = pd.to_timedelta(lead_hours, unit="h")
+
+    # Step rates by the end of each window (uniform within each window):
+    #   1h -> 300, 2h -> 500, 3h -> 700, (3-6h) -> 200, (6-9h) -> 100.
+    # Running means over [0, t]:
+    step_rates = {1: 300.0, 2: 500.0, 3: 700.0, 6: 200.0, 9: 100.0}
+    # Cumulative sums of step_rate * step_duration give the integrated energy.
+    cumulative_energy: list[float] = [0.0]
+    for prev, curr in pairwise(lead_hours):
+        cumulative_energy.append(
+            cumulative_energy[-1] + step_rates[curr] * (curr - prev)
+        )
+    running_means = [
+        e / h if h > 0 else 0.0
+        for e, h in zip(cumulative_energy, lead_hours, strict=True)
+    ]
+    values = np.array(running_means, dtype=np.float32)
+
+    expected = np.array(
+        [np.nan, 300.0, 500.0, 700.0, 200.0, 100.0],
+        dtype=np.float32,
+    )
+
+    data_array = xr.DataArray(
+        values,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "W m-2"},
+    )
+
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="lead_time",
+        reset_frequency=reset_frequency,
+        accumulation_type="running_mean",
+        invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+    )
+
+    np.testing.assert_allclose(result.values, expected, rtol=1e-5, equal_nan=True)
+
+
+def test_deaccumulate_running_mean_nan_propagates() -> None:
+    """Missing inputs keep the rate at that step (and the next dependent step) as NaN."""
+    reset_frequency = pd.Timedelta.max
+    lead_times = pd.to_timedelta(["0h", "1h", "2h", "3h"])
+
+    values = np.array([0.0, np.nan, 600.0, 500.0], dtype=np.float32)
+    # Step 1: prev A=0 (reset), sequence[1]=nan -> nan output.
+    # Step 2: prev A=nan -> step_accumulation=nan -> output nan.
+    # Step 3: prev A=600, sequence[3]=500 -> 500 + (500-600)*(2/1) = 300.
+    expected = np.array([np.nan, np.nan, np.nan, 300.0], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        values,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "W m-2"},
+    )
+
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="lead_time",
+        reset_frequency=reset_frequency,
+        accumulation_type="running_mean",
+        invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+    )
+
+    np.testing.assert_allclose(result.values, expected, equal_nan=True)
+
+
+def test_deaccumulate_running_mean_multidim() -> None:
+    """Verify the running-mean branch works across parallelised leading dims."""
+    reset_frequency = pd.Timedelta.max
+    lead_times = pd.to_timedelta(["0h", "1h", "2h", "3h"])
+
+    # Two ensemble members x a 1x1 spatial grid. Second member has every rate doubled.
+    base = np.array([0.0, 800.0, 700.0, 600.0], dtype=np.float32)
+    values = np.stack([base, 2 * base])[:, :, None, None]  # (member, lead_time, y, x)
+
+    expected_member = np.array([np.nan, 800.0, 600.0, 400.0], dtype=np.float32)
+    expected = np.stack([expected_member, 2 * expected_member])[:, :, None, None]
+
+    data_array = xr.DataArray(
+        values,
+        coords={
+            "ensemble_member": [0, 1],
+            "lead_time": lead_times,
+            "y": [0],
+            "x": [0],
+        },
+        dims=["ensemble_member", "lead_time", "y", "x"],
+        attrs={"units": "W m-2"},
+    )
+
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="lead_time",
+        reset_frequency=reset_frequency,
+        accumulation_type="running_mean",
+        invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+    )
+
+    np.testing.assert_allclose(result.values, expected, rtol=1e-5, equal_nan=True)
+
+
+def test_deaccumulate_running_mean_skip_step() -> None:
+    """Skipped steps should be preserved and excluded from the calculation."""
+    reset_frequency = pd.Timedelta.max
+    lead_times = pd.to_timedelta(["0h", "1h", "2h", "3h"])
+
+    values = np.array([0.0, 800.0, -999.0, 600.0], dtype=np.float32)
+    skip = np.array([False, False, True, False])
+
+    # Skip step 2. Step 3 sees previous_seconds=1h (tₜ₋₁ = 1h).
+    # sequence[3] = 600 + (600 - 800) * (3600 / 7200) = 600 - 100 = 500.
+    expected = np.array([np.nan, 800.0, -999.0, 500.0], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        values,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "W m-2"},
+    )
+
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="lead_time",
+        reset_frequency=reset_frequency,
+        skip_step=skip,
+        accumulation_type="running_mean",
+        invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+    )
+
+    np.testing.assert_allclose(result.values, expected, equal_nan=True)
+
+
+def test_deaccumulate_running_mean_invalid_below_threshold_raises() -> None:
+    """A large drop in the running mean exceeds the threshold and raises."""
+    reset_frequency = pd.Timedelta.max
+    lead_times = pd.to_timedelta(["0h", "1h", "2h"])
+
+    # A1=1000 (step rate 1000), A2=400 -> step rate = 400 + (400-1000)*1 = -200 W m-2.
+    # -200 < RADIATION_INVALID_BELOW_THRESHOLD (-50), so expect a raise.
+    values = np.array([0.0, 1000.0, 400.0], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        values,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "W m-2"},
+    )
+
+    with pytest.raises(ValueError, match="below threshold"):
+        deaccumulate_to_rates_inplace(
+            data_array,
+            dim="lead_time",
+            reset_frequency=reset_frequency,
+            accumulation_type="running_mean",
+            invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+        )
+
+
+def test_deaccumulate_running_mean_preserves_float32_precision_at_long_lead() -> None:
+    """Pre-multiplying by cumulative seconds would lose float32 precision at long leads.
+
+    The rearranged formula keeps every intermediate in the low thousands, so recovering
+    constant-rate inputs should match to float32 roundoff even at 120h.
+    """
+    reset_frequency = pd.Timedelta.max
+    hours = np.arange(0, 121, dtype=np.int64)
+    lead_times = pd.to_timedelta(hours, unit="h")
+
+    # Constant step rate of 400 W m-2 -> running mean is 400 for every non-zero step.
+    values = np.where(hours == 0, 0.0, 400.0).astype(np.float32)
+    expected = np.where(hours == 0, np.nan, 400.0).astype(np.float32)
+
+    data_array = xr.DataArray(
+        values,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "W m-2"},
+    )
+
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="lead_time",
+        reset_frequency=reset_frequency,
+        accumulation_type="running_mean",
+        invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+    )
+
+    np.testing.assert_allclose(result.values, expected, rtol=1e-6, equal_nan=True)
+
+
+def test_deaccumulate_unknown_accumulation_type_raises() -> None:
+    """The wrapper rejects an unknown accumulation_type before calling the numba kernel."""
+    lead_times = pd.to_timedelta(["0h", "1h", "2h"])
+    data_array = xr.DataArray(
+        np.array([0.0, 1.0, 2.0], dtype=np.float32),
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "W m-2"},
+    )
+
+    with pytest.raises(ValueError, match="Unknown accumulation_type"):
+        deaccumulate_to_rates_inplace(
+            data_array,
+            dim="lead_time",
+            reset_frequency=pd.Timedelta.max,
+            accumulation_type="not-a-real-type",  # type: ignore[arg-type]
         )
 
 
