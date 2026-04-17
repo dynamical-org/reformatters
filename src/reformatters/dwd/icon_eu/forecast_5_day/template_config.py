@@ -39,9 +39,6 @@ class DwdIconEuInternalAttrs(BaseInternalAttrs):
     Attributes:
         variable_name_in_filename (str): The name used in ICON-EU's GRIB filename for this variable.
             For example, `alb_rad` (for `surface_albedo`).
-        pressure_level (int | None): Pressure level in hPa. If set, this variable is read from an
-            ICON-EU pressure-level GRIB file at the specified level; otherwise it is read from a
-            single-level GRIB file.
         additional_variable_name_in_filename (str | None): If set, read a second GRIB file for this
             variable name and sum it into the output (used to derive total downward shortwave from
             direct + diffuse components).
@@ -56,7 +53,6 @@ class DwdIconEuInternalAttrs(BaseInternalAttrs):
     variable_name_in_filename: str
     window_reset_frequency: Timedelta | None = None
     scale_factor: float | None = None
-    pressure_level: int | None = None
     additional_variable_name_in_filename: str | None = None
     deaccumulation_invalid_below_threshold_rate: float | None = None
     deaccumulation_type: AccumulationType = "accumulated"
@@ -342,11 +338,6 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
         )
 
         default_keep_mantissa_bits = 7
-
-        # Standard gravity used to convert geopotential (m^2/s^2) to geopotential height (m).
-        g = 9.80665
-
-        pressure_levels_hpa = (500, 850)
 
         surface_vars: list[DwdIconEuDataVar] = [
             # Some of the `comment` text is taken from the DWD Database Reference PDF:
@@ -735,77 +726,4 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
             ),
         ]
 
-        pressure_level_vars: list[DwdIconEuDataVar] = []
-        for level in pressure_levels_hpa:
-            pressure_level_vars.extend(
-                [
-                    DwdIconEuDataVar(
-                        name=f"geopotential_height_{level}hpa",
-                        encoding=encoding_float32_default,
-                        attrs=DataVarAttrs(
-                            short_name="gh",
-                            long_name="Geopotential height",
-                            units="m",
-                            step_type="instant",
-                            standard_name="geopotential_height",
-                        ),
-                        internal_attrs=DwdIconEuInternalAttrs(
-                            variable_name_in_filename="fi",
-                            pressure_level=level,
-                            # ICON-EU provides geopotential (m^2/s^2); divide by g for height (m).
-                            scale_factor=1.0 / g,
-                            keep_mantissa_bits=11,
-                        ),
-                    ),
-                    DwdIconEuDataVar(
-                        name=f"temperature_{level}hpa",
-                        encoding=encoding_float32_default,
-                        attrs=DataVarAttrs(
-                            short_name="t",
-                            long_name="Temperature",
-                            units="degree_Celsius",
-                            step_type="instant",
-                            standard_name="air_temperature",
-                        ),
-                        internal_attrs=DwdIconEuInternalAttrs(
-                            variable_name_in_filename="t",
-                            pressure_level=level,
-                            keep_mantissa_bits=default_keep_mantissa_bits,
-                        ),
-                    ),
-                    DwdIconEuDataVar(
-                        name=f"wind_u_{level}hpa",
-                        encoding=encoding_float32_default,
-                        attrs=DataVarAttrs(
-                            short_name="u",
-                            long_name="U component of wind",
-                            units="m s-1",
-                            step_type="instant",
-                            standard_name="eastward_wind",
-                        ),
-                        internal_attrs=DwdIconEuInternalAttrs(
-                            variable_name_in_filename="u",
-                            pressure_level=level,
-                            keep_mantissa_bits=default_keep_mantissa_bits,
-                        ),
-                    ),
-                    DwdIconEuDataVar(
-                        name=f"wind_v_{level}hpa",
-                        encoding=encoding_float32_default,
-                        attrs=DataVarAttrs(
-                            short_name="v",
-                            long_name="V component of wind",
-                            units="m s-1",
-                            step_type="instant",
-                            standard_name="northward_wind",
-                        ),
-                        internal_attrs=DwdIconEuInternalAttrs(
-                            variable_name_in_filename="v",
-                            pressure_level=level,
-                            keep_mantissa_bits=default_keep_mantissa_bits,
-                        ),
-                    ),
-                ]
-            )
-
-        return surface_vars + pressure_level_vars
+        return surface_vars

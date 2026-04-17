@@ -14,6 +14,7 @@ from reformatters.common import template_utils
 from reformatters.common.config_models import DataVarAttrs, Encoding
 from reformatters.common.pydantic import replace
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
+from reformatters.dwd.icon_eu.forecast_5_day import region_job as region_job_module
 from reformatters.dwd.icon_eu.forecast_5_day.region_job import (
     DwdIconEuForecast5DayRegionJob,
     DwdIconEuForecast5DaySourceFileCoord,
@@ -405,12 +406,61 @@ def test_region_job_read_data_multi_band_raises(
 
 
 @pytest.mark.slow
-def test_download_and_read_all_variables() -> None:
-    """Download a real ICON-EU GRIB file and read all template variables."""
+def test_download_from_dwd_and_read_all_variables() -> None:
+    """Download a real ICON-EU GRIB file from DWD and read all template variables."""
     template_config = DwdIconEuForecast5DayTemplateConfig()
     # DWD only keeps a ~24h rolling window on their HTTPS server. Pick the most recent
     # init that should be complete (ICON-EU is fully available ~4h after the 00/06/12/18 UTC run).
     init_time = (pd.Timestamp.now() - pd.Timedelta(hours=5)).floor("6h")
+
+    region_job = DwdIconEuForecast5DayRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_config.get_template(init_time + pd.Timedelta(days=1)),
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    lead_time = pd.Timedelta(hours=1)
+
+    for data_var in template_config.data_vars:
+        coord = DwdIconEuForecast5DaySourceFileCoord(
+            init_time=init_time,
+            lead_time=lead_time,
+            data_var=data_var,
+        )
+        coord = replace(coord, downloaded_path=region_job.download_file(coord))
+
+        data = region_job.read_data(coord, data_var)
+        assert data.shape == (657, 1377), (
+            f"Unexpected shape for {data_var.name}: {data.shape}"
+        )
+        assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
+
+
+@pytest.mark.slow
+def test_download_from_dynamical_source_coop_archive_and_read_all_variables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify every template variable is available from the Source Co-Op archive.
+
+    We fail loudly on any DWD fallback so the test can only pass if all required files
+    are genuinely present in the archive. Uses a fixed init_time far enough in the past
+    that DWD's ~24h rolling window would not help.
+    """
+    real_http_download_to_disk = region_job_module.http_download_to_disk
+
+    def source_coop_only(url: str, dataset_id: str) -> Path:
+        assert "opendata.dwd.de" not in url, (
+            f"Unexpected DWD fallback for url that should be in the archive: {url}"
+        )
+        return real_http_download_to_disk(url, dataset_id)
+
+    monkeypatch.setattr(region_job_module, "http_download_to_disk", source_coop_only)
+
+    template_config = DwdIconEuForecast5DayTemplateConfig()
+    init_time = pd.Timestamp("2026-04-01T00:00")
 
     region_job = DwdIconEuForecast5DayRegionJob.model_construct(
         tmp_store=Mock(),

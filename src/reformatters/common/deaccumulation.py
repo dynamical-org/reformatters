@@ -19,7 +19,7 @@ RADIATION_INVALID_BELOW_THRESHOLD = -50.0  # W/m^2 aka J/m^2/s
 #   - "accumulated": values are cumulative totals (e.g. J m-2 since forecast start).
 #     Step rate = (A_t - A_{t-1}) / dt.
 #   - "running_mean": values are running-mean rates whose averaging window grows
-#     from forecast start (e.g. DWD ICON-EU averaged radiation fields).
+#     from forecast start.
 #     Step rate = A_t + (A_t - A_{t-1}) * t_{t-1} / dt. This rearrangement of
 #     (A_t * t_t - A_{t-1} * t_{t-1}) / dt keeps every intermediate product small,
 #     preserving float32 precision across long forecast horizons.
@@ -60,8 +60,7 @@ def deaccumulate_to_rates_inplace(
             clamped fraction exceeds this.
         accumulation_type: How to interpret the input values. "accumulated" (default) treats
             them as cumulative totals. "running_mean" treats them as running-mean rates whose
-            averaging window grows from forecast start and converts them to per-step rates
-            without materialising the large cumulative-product intermediate.
+            averaging window grows from forecast start and converts them to per-step rates.
     """
     assert data_array.attrs["units"] in VALID_OUTPUT_UNITS_FOR_DEACCUMULATION, (
         "Output units must be a per-second rate"

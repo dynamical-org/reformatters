@@ -71,18 +71,11 @@ class DwdIconEuForecast5DaySourceFileCoord(SourceFileCoord):
         ) + self._get_basename(variable_name)
 
     def _get_basename(self, variable_name: str) -> str:
-        """Build the basename for either a single-level or a pressure-level GRIB file."""
         init_time_str: str = self.init_time.strftime("%Y%m%d%H")
         lead_time_hours: int = whole_hours(self.lead_time)
-        pressure_level = self.data_var.internal_attrs.pressure_level
-        if pressure_level is None:
-            return (
-                f"icon-eu_europe_regular-lat-lon_single-level_{init_time_str}_"
-                f"{lead_time_hours:03d}_{variable_name.upper()}.grib2.bz2"
-            )
         return (
-            f"icon-eu_europe_regular-lat-lon_pressure-level_{init_time_str}_"
-            f"{lead_time_hours:03d}_{pressure_level}_{variable_name.upper()}.grib2.bz2"
+            f"icon-eu_europe_regular-lat-lon_single-level_{init_time_str}_"
+            f"{lead_time_hours:03d}_{variable_name.upper()}.grib2.bz2"
         )
 
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
