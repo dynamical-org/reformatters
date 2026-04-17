@@ -48,7 +48,7 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     filter_variable_names = [
         "temperature_2m",  # instantaneous
         "precipitation_surface",  # accumulation we deaccumulate
-        "dew_point_temperature_2m",  # instantaneous, one of the new variables
+        "snow_depth_water_equivalent",  # applies scale_factor
     ]
 
     # Local backfill reformat
@@ -93,8 +93,8 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
         np.array([np.nan, 0.0], dtype=np.float32),
     )
     assert_array_equal(
-        point_ds["dew_point_temperature_2m"].values,
-        np.array([-9.9375, -10.0], dtype=np.float32),
+        point_ds["snow_depth_water_equivalent"].values,
+        np.array([0.018310546875, 0.018310546875], dtype=np.float32),
     )
 
     # Operational update
@@ -161,8 +161,8 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
         np.array([np.nan, 2.0302832e-07], dtype=np.float32),
     )
     assert_array_equal(
-        point_ds["dew_point_temperature_2m"].values,
-        np.array([-7.46875, -6.9375], dtype=np.float32),
+        point_ds["snow_depth_water_equivalent"].values,
+        np.array([0.0174560546875, 0.0174560546875], dtype=np.float32),
     )
 
 

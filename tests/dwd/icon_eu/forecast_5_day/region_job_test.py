@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-from obstore.exceptions import GenericError
+from obstore.exceptions import GenericError, PermissionDeniedError
 from rasterio.io import MemoryFile
 from rasterio.transform import from_bounds
 
@@ -308,6 +308,30 @@ def test_region_job_download_file_fallback_on_generic_error(
     assert call_count == 2
 
 
+def test_region_job_download_file_fallback_on_permission_denied(
+    region_job: DwdIconEuForecast5DayRegionJob,
+    source_file_coord: DwdIconEuForecast5DaySourceFileCoord,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    call_count = 0
+
+    def mock_download(url: str, dataset_id: str) -> Path:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise PermissionDeniedError("permission denied")
+        return Path("/fake/fallback.grib2.bz2")
+
+    monkeypatch.setattr(
+        "reformatters.dwd.icon_eu.forecast_5_day.region_job.http_download_to_disk",
+        mock_download,
+    )
+
+    result = region_job.download_file(source_file_coord)
+    assert result == Path("/fake/fallback.grib2.bz2")
+    assert call_count == 2
+
+
 def test_region_job_read_data(
     region_job: DwdIconEuForecast5DayRegionJob,
     t_2m_data_var: DwdIconEuDataVar,
@@ -383,7 +407,9 @@ def test_region_job_read_data_multi_band_raises(
 def test_download_and_read_all_variables() -> None:
     """Download a real ICON-EU GRIB file and read all template variables."""
     template_config = DwdIconEuForecast5DayTemplateConfig()
-    init_time = pd.Timestamp("2026-03-01T00:00")
+    # DWD only keeps a ~24h rolling window on their HTTPS server. Pick the most recent
+    # init that should be complete (ICON-EU is fully available ~4h after the 00/06/12/18 UTC run).
+    init_time = (pd.Timestamp.now() - pd.Timedelta(hours=5)).floor("6h")
 
     region_job = DwdIconEuForecast5DayRegionJob.model_construct(
         tmp_store=Mock(),

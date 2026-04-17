@@ -98,6 +98,14 @@ class NoaaMrmsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
     format: DatasetFormat = DatasetFormat.ICECHUNK
 
 
+class DwdIconEuIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
+    """DWD ICON-EU in Icechunk on AWS Open Data."""
+
+    base_path: str = "s3://dynamical-dwd-icon-eu"
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
 class SourceCoopZarrDatasetStorageConfig(StorageConfig):
     """Configuration for the storage of a SourceCoop dataset."""
 
@@ -163,7 +171,8 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     ),
     # DWD
     DwdIconEuForecast5DayDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig()
+        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
+        replica_storage_configs=[DwdIconEuIcechunkAwsOpenDataDatasetStorageConfig()],
     ),
     # Contrib
     UarizonaSwannAnalysisDataset(
