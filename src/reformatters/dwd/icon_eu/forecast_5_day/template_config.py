@@ -633,7 +633,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
             ),
             DwdIconEuDataVar(
-                name="cloud_cover_mid",
+                name="cloud_cover_medium",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="mcc",

@@ -195,7 +195,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "cloud_cover_mid": {
+      "cloud_cover_medium": {
         "shape": [
           1,
           93,
