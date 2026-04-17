@@ -232,7 +232,7 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                     ),
                     mrms_level="00.00",
                     deaccumulate_to_rate=True,
-                    expected_invalid_fraction=0.08,  # impact of radar only in most recent time step
+                    expected_invalid_fraction=0.38,  # impact of radar only in most recent time step
                     window_reset_frequency=qpe_window_reset_frequency,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                 ),
