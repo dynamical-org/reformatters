@@ -97,14 +97,7 @@ class DwdIconEuForecast5DayRegionJob(
         cls,
         data_vars: Sequence[DwdIconEuDataVar],
     ) -> Sequence[Sequence[DwdIconEuDataVar]]:
-        """Return a sequence of one-element sequences `[[var1], [var2], ...]`.
-
-        In the `reformatters` API, this function can be used to return groups of variables,
-        where all variables in a group can be retrieved from the same source file.
-
-        But, in the case of ICON-EU, each grib file from DWD holds only one variable. So there's
-        no ability/benefit from downloading multiple variables from the same file at the same time.
-        """
+        # Each ICON-EU grib file contains a single variable.
         return [[var] for var in data_vars]
 
     def generate_source_file_coords(
@@ -193,7 +186,7 @@ class DwdIconEuForecast5DayRegionJob(
         """
 
         if (scale_factor := data_var.internal_attrs.scale_factor) is not None:
-            data_array.values *= scale_factor
+            data_array *= scale_factor
 
         if data_var.internal_attrs.deaccumulate_to_rate:
             assert data_var.internal_attrs.window_reset_frequency is not None
