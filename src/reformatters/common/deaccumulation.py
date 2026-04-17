@@ -183,16 +183,16 @@ def _deaccumulate_to_rates_numba(
                 # store previous accumulation before we overwrite sequence[t] with rate
                 previous_accumulation = sequence[t]
 
-                # Note: no `else` branch here even as a safety net. Numba disables
-                # `prange` parallelisation if the loop has any additional exit points
-                # (raise, assert, etc.) so we rely on the wrapper to reject unknown
-                # accumulation_type values before entering this kernel.
                 if accumulation_type == _ACCUMULATION_TYPE_ACCUMULATED:
                     sequence[t] = step_accumulation / time_step
                 elif accumulation_type == _ACCUMULATION_TYPE_RUNNING_MEAN:
                     sequence[t] = sequence[t] + (
                         (step_accumulation * previous_seconds) / time_step
                     )
+                # Note: no `else` branch here even as a safety net. Numba disables
+                # `prange` parallelisation if the loop has any additional exit points
+                # (raise, assert, etc.) so we rely on the wrapper to reject unknown
+                # accumulation_type values before entering this kernel.
 
                 previous_seconds = seconds[t]
 
