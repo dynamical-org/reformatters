@@ -12,7 +12,7 @@ from reformatters.common.interpolation import linear_interpolate_1d_inplace
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
     RegionJob,
     SourceFileResult,
 )
@@ -54,7 +54,7 @@ def filter_available_times(times: pd.DatetimeIndex) -> pd.DatetimeIndex:
 class GefsAnalysisSourceFileCoord(GefsEnsembleSourceFileCoord):
     ensemble_member: int = 0  # Control member for analysis
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {
             "time": self.init_time + self.lead_time,
         }

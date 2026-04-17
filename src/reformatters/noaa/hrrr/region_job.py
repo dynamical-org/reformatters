@@ -15,7 +15,7 @@ from reformatters.common.download import http_download_to_disk, httpx_download_t
 from reformatters.common.iterating import digest, group_by, item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
     RegionJob,
     SourceFileCoord,
 )
@@ -74,7 +74,7 @@ class NoaaHrrrSourceFileCoord(SourceFileCoord):
         """Return the URL for the GRIB index file."""
         return f"{self.get_url(source=source)}.idx"
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         raise NotImplementedError  # depends on if the dataset is a forecast or analysis
 
 

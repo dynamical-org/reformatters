@@ -8,7 +8,7 @@ import pytest
 
 from reformatters.common import template_utils
 from reformatters.common.pydantic import replace
-from reformatters.common.region_job import CoordinateValueOrRange
+from reformatters.common.region_job import CoordinateValue
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.common.types import Dim
 from reformatters.noaa.gfs.forecast.region_job import (
@@ -26,7 +26,7 @@ from reformatters.noaa.noaa_utils import has_hour_0_values
 class ConcreteSourceFileCoord(NoaaGfsSourceFileCoord):
     """Concrete implementation of NoaaGfsSourceFileCoord for testing."""
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {"init_time": self.init_time, "lead_time": self.lead_time}
 
 

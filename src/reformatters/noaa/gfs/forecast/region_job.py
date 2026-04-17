@@ -6,7 +6,7 @@ import xarray as xr
 
 from reformatters.common.iterating import item
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
 )
 from reformatters.common.types import (
     Dim,
@@ -22,7 +22,7 @@ from reformatters.noaa.noaa_utils import has_hour_0_values
 class NoaaGfsForecastSourceFileCoord(NoaaGfsSourceFileCoord):
     """Coordinates of a single source file to process for forecast dataset."""
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {"init_time": self.init_time, "lead_time": self.lead_time}
 
 

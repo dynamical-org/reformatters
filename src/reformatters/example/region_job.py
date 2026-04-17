@@ -6,7 +6,7 @@ from zarr.abc.store import Store
 
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
     RegionJob,
     SourceFileCoord,
     SourceFileResult,
@@ -31,11 +31,11 @@ class ExampleSourceFileCoord(SourceFileCoord):
 
     def out_loc(
         self,
-    ) -> Mapping[Dim, CoordinateValueOrRange]:
+    ) -> Mapping[Dim, CoordinateValue]:
         """
         Returns a data array indexer which identifies the region in the output dataset
         to write the data from the source file. The indexer is a dict from dimension
-        names to coordinate values or slices.
+        names to coordinate values.
         """
         # If the names of the coordinate attributes of your SourceFileCoord subclass are also all
         # dimension names in the output dataset (e.g. init_time and lead_time),

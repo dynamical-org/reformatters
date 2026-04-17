@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from reformatters.common.config_models import DataVar, EnsembleStatistic
-from reformatters.common.region_job import CoordinateValueOrRange, SourceFileCoord
+from reformatters.common.region_job import CoordinateValue, SourceFileCoord
 from reformatters.common.types import Dim, Timedelta, Timestamp
 from reformatters.noaa.models import NoaaInternalAttrs
 from reformatters.noaa.noaa_utils import has_hour_0_values
@@ -235,7 +235,7 @@ class GefsEnsembleSourceFileCoord(GefsSourceFileCoord):
 
     ensemble_member: int
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {
             "init_time": self.init_time,
             "lead_time": self.lead_time,
@@ -248,7 +248,7 @@ class GefsStatisticSourceFileCoord(GefsSourceFileCoord):
 
     statistic: EnsembleStatistic
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {
             "init_time": self.init_time,
             "lead_time": self.lead_time,

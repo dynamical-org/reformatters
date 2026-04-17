@@ -14,7 +14,7 @@ from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import digest, group_by
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
     RegionJob,
     SourceFileCoord,
 )
@@ -74,7 +74,7 @@ class EcmwfAifsSingleForecastSourceFileCoord(SourceFileCoord):
     def get_index_url(self) -> str:
         return self._get_base_url() + ".index"
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {
             "init_time": self.init_time,
             "lead_time": self.lead_time,

@@ -1,3 +1,4 @@
+import json
 import logging
 from collections.abc import Sequence
 from itertools import batched, pairwise
@@ -1093,3 +1094,57 @@ class TestDownloadErrorLogging:
             job, FileNotFoundError("missing"), monkeypatch, caplog
         )
         assert levels == [logging.ERROR]
+
+
+class TestSourceFileResultSerialization:
+    """Lock in the JSON wire format for SourceFileResult."""
+
+    def test_timestamp_and_timedelta_roundtrip_via_tagged_dicts(self) -> None:
+        original = SourceFileResult(
+            status=SourceFileStatus.Succeeded,
+            out_loc={
+                "init_time": pd.Timestamp("2026-04-15T12:00:00"),
+                "lead_time": pd.Timedelta("6h"),
+            },
+            url="https://example/file",
+        )
+
+        payload = json.loads(original.model_dump_json())
+
+        assert payload["out_loc"]["init_time"] == {
+            "__t": "ts",
+            "v": "2026-04-15T12:00:00",
+        }
+        assert payload["out_loc"]["lead_time"] == {
+            "__t": "td",
+            "v": "P0DT6H0M0S",
+        }
+
+        restored = SourceFileResult.model_validate_json(original.model_dump_json())
+        assert restored == original
+        assert isinstance(restored.out_loc["init_time"], pd.Timestamp)
+        assert isinstance(restored.out_loc["lead_time"], pd.Timedelta)
+
+    def test_plain_values_pass_through_unchanged(self) -> None:
+        original = SourceFileResult(
+            status=SourceFileStatus.Succeeded,
+            out_loc={
+                "ensemble_member": 3,
+                "threshold": 0.25,
+                "variant": "control",
+                "optional": None,
+            },
+            url="https://example/file",
+        )
+
+        payload = json.loads(original.model_dump_json())
+
+        assert payload["out_loc"] == {
+            "ensemble_member": 3,
+            "threshold": 0.25,
+            "variant": "control",
+            "optional": None,
+        }
+
+        restored = SourceFileResult.model_validate_json(original.model_dump_json())
+        assert restored == original

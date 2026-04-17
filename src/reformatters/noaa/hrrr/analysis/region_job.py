@@ -6,7 +6,7 @@ import xarray as xr
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
     SourceFileResult,
 )
 from reformatters.common.types import (
@@ -22,7 +22,7 @@ log = get_logger(__name__)
 
 
 class NoaaHrrrAnalysisSourceFileCoord(NoaaHrrrSourceFileCoord):
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {"time": self.init_time + self.lead_time}
 
 

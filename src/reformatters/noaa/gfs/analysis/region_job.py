@@ -5,7 +5,7 @@ import xarray as xr
 
 from reformatters.common.iterating import item
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
     SourceFileResult,
 )
 from reformatters.common.time_utils import whole_hours
@@ -25,7 +25,7 @@ NOAA_GFS_INIT_FREQUENCY = pd.Timedelta("6h")
 class NoaaGfsAnalysisSourceFileCoord(NoaaGfsSourceFileCoord):
     """Coordinates of a single source file to process for analysis dataset."""
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {"time": self.init_time + self.lead_time}
 
 
