@@ -1,4 +1,6 @@
 import bz2
+from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -405,6 +407,42 @@ def test_region_job_read_data_multi_band_raises(
         region_job.read_data(coord, t_2m_data_var)
 
 
+def _download_and_read_one(
+    region_job: DwdIconEuForecast5DayRegionJob,
+    init_time: pd.Timestamp,
+    lead_time: pd.Timedelta,
+    data_var: DwdIconEuDataVar,
+) -> None:
+    coord = DwdIconEuForecast5DaySourceFileCoord(
+        init_time=init_time,
+        lead_time=lead_time,
+        data_var=data_var,
+    )
+    coord = replace(coord, downloaded_path=region_job.download_file(coord))
+
+    data = region_job.read_data(coord, data_var)
+    assert data.shape == (657, 1377), (
+        f"Unexpected shape for {data_var.name}: {data.shape}"
+    )
+    assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
+
+
+def _parallel_download_and_read_all(
+    region_job: DwdIconEuForecast5DayRegionJob,
+    init_time: pd.Timestamp,
+    lead_time: pd.Timedelta,
+    data_vars: Sequence[DwdIconEuDataVar],
+) -> None:
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        # list() forces the map to drain so exceptions from any variable surface here.
+        list(
+            executor.map(
+                lambda v: _download_and_read_one(region_job, init_time, lead_time, v),
+                data_vars,
+            )
+        )
+
+
 @pytest.mark.slow
 def test_download_from_dwd_and_read_all_variables() -> None:
     """Download a real ICON-EU GRIB file from DWD and read all template variables."""
@@ -422,21 +460,12 @@ def test_download_from_dwd_and_read_all_variables() -> None:
         reformat_job_name="test",
     )
 
-    lead_time = pd.Timedelta(hours=1)
-
-    for data_var in template_config.data_vars:
-        coord = DwdIconEuForecast5DaySourceFileCoord(
-            init_time=init_time,
-            lead_time=lead_time,
-            data_var=data_var,
-        )
-        coord = replace(coord, downloaded_path=region_job.download_file(coord))
-
-        data = region_job.read_data(coord, data_var)
-        assert data.shape == (657, 1377), (
-            f"Unexpected shape for {data_var.name}: {data.shape}"
-        )
-        assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
+    _parallel_download_and_read_all(
+        region_job,
+        init_time,
+        pd.Timedelta(hours=1),
+        template_config.data_vars,
+    )
 
 
 @pytest.mark.slow
@@ -471,18 +500,9 @@ def test_download_from_dynamical_source_coop_archive_and_read_all_variables(
         reformat_job_name="test",
     )
 
-    lead_time = pd.Timedelta(hours=1)
-
-    for data_var in template_config.data_vars:
-        coord = DwdIconEuForecast5DaySourceFileCoord(
-            init_time=init_time,
-            lead_time=lead_time,
-            data_var=data_var,
-        )
-        coord = replace(coord, downloaded_path=region_job.download_file(coord))
-
-        data = region_job.read_data(coord, data_var)
-        assert data.shape == (657, 1377), (
-            f"Unexpected shape for {data_var.name}: {data.shape}"
-        )
-        assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
+    _parallel_download_and_read_all(
+        region_job,
+        init_time,
+        pd.Timedelta(hours=1),
+        template_config.data_vars,
+    )
