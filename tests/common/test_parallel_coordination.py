@@ -267,6 +267,37 @@ class TestParallelSetupFirstWorker:
         # create_branch still called, with the preserved sentinel as snapshot.
         assert primary_repo.create_branch_calls == [("temp-branch", sentinel)]
 
+    def test_icechunk_primary_only_passes_empty_replicas(
+        self, tmp_path: Path, stub_io: dict[str, MagicMock]
+    ) -> None:
+        """When the StoreFactory has only an icechunk primary (no icechunk
+        replicas), parallel_setup must still create the branch on primary and
+        call commit_if_icechunk with an empty replicas list."""
+        factory = FakeStoreFactory()
+        primary_repo = FakeRepo(initial_main="snap-primary-init")
+
+        result = pc.parallel_setup(
+            factory,  # type: ignore[arg-type]
+            is_first=True,
+            workers_total=2,
+            reformat_job_name="job",
+            branch_name="temp-branch",
+            template_ds=_template(),
+            tmp_store=tmp_path,
+            icechunk_repos=[("primary", primary_repo)],  # ty: ignore[invalid-argument-type]
+        )
+
+        assert primary_repo.create_branch_calls == [
+            ("temp-branch", "snap-primary-init")
+        ]
+        primary_session = primary_repo.sessions[0]
+        stub_io["commit_if_icechunk"].assert_called_once_with(
+            "Expand dataset",
+            primary_session.store,
+            [],
+        )
+        assert result["repo_snapshots"] == {"primary": "snap-primary-init"}
+
     def test_icechunk_retry_reuses_existing_branch(self, tmp_path: Path) -> None:
         factory = FakeStoreFactory()
         primary_repo = FakeRepo(initial_main="snap-primary-init")

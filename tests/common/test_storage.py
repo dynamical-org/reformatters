@@ -7,11 +7,13 @@ import zarr
 import zarr.storage
 from icechunk.store import IcechunkStore
 
+from reformatters.common import retry as retry_module
 from reformatters.common.config import Config, Env
 from reformatters.common.storage import (
     DatasetFormat,
     StorageConfig,
     StoreFactory,
+    _get_icechunk_storage,
     _get_store_path,
     commit_if_icechunk,
 )
@@ -421,3 +423,216 @@ def test_clear_coordination_files_rm_path_rooted_in_internal(
     mock_fs.rm.assert_called_once()
     path = mock_fs.rm.call_args.args[0]
     assert path.endswith("/_internal/my-job"), path
+
+
+class TestIcechunkStorageScheme:
+    """`_get_icechunk_storage` is the only place that selects an icechunk storage
+    backend. In prod we only support s3 today — anything else must fail loudly
+    rather than silently fall back to the local filesystem path."""
+
+    def test_rejects_unsupported_scheme_in_prod(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(Config, "env", Env.prod)
+        config = StorageConfig(
+            base_path="gs://bucket/data", format=DatasetFormat.ICECHUNK
+        )
+        with pytest.raises(ValueError, match="gs Icechunk stores are not"):
+            _get_icechunk_storage("gs://bucket/data/d/v1.icechunk", config)
+
+    def test_rejects_http_scheme_in_prod(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(Config, "env", Env.prod)
+        config = StorageConfig(
+            base_path="http://host/data", format=DatasetFormat.ICECHUNK
+        )
+        with pytest.raises(ValueError, match="http Icechunk stores are not"):
+            _get_icechunk_storage("http://host/data/d/v1.icechunk", config)
+
+
+class TestIcechunkReposDevEnv:
+    """Dev env must behave the same as `replica_stores`: skip replicas entirely.
+    Regression guard for treating icechunk replicas differently than zarr3 ones."""
+
+    def test_dev_env_excludes_replicas(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: str
+    ) -> None:
+        monkeypatch.setattr(Config, "env", Env.dev)
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+            ),
+            replica_storage_configs=[
+                StorageConfig(base_path=str(tmp_path), format=DatasetFormat.ICECHUNK),
+                StorageConfig(base_path=str(tmp_path), format=DatasetFormat.ICECHUNK),
+            ],
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+        )
+        repos = factory.icechunk_repos(sort="primary-first")
+        assert [role for role, _repo in repos] == ["primary"]
+
+
+class TestReplicaStoresDevEnv:
+    """Dev env short-circuits replicas — must hold even when the replica is
+    icechunk (the icechunk path is newer and easy to miss in dev guards)."""
+
+    def test_dev_env_returns_no_replicas_for_icechunk(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: str
+    ) -> None:
+        monkeypatch.setattr(Config, "env", Env.dev)
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+            ),
+            replica_storage_configs=[
+                StorageConfig(base_path=str(tmp_path), format=DatasetFormat.ICECHUNK),
+            ],
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+        )
+        assert factory.replica_stores(writable=True) == []
+
+
+class TestIcechunkPrimaryWithZarr3Replica:
+    """Primary=icechunk + replica=zarr3 is a supported staging configuration.
+    `icechunk_repos` must return only the primary icechunk repo so
+    `commit_if_icechunk` in finalize touches the primary but not the zarr3 replica."""
+
+    def test_only_primary_returned_when_replica_is_zarr3(self) -> None:
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/primary", format=DatasetFormat.ICECHUNK
+            ),
+            replica_storage_configs=[
+                StorageConfig(
+                    base_path="s3://bucket/replica", format=DatasetFormat.ZARR3
+                ),
+            ],
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+        )
+        repos = factory.icechunk_repos(sort="primary-first")
+        assert len(repos) == 1
+        assert repos[0][0] == "primary"
+
+    def test_primary_last_sort_with_single_primary(self) -> None:
+        """Single-primary icechunk config: `primary-last` still returns the
+        primary (nothing in front of it). Guards the sort key logic at the
+        boundary case of one element."""
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/primary", format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+        )
+        repos = factory.icechunk_repos(sort="primary-last")
+        assert [role for role, _repo in repos] == ["primary"]
+
+
+class TestCommitIfIcechunkFailureIsolation:
+    """When a replica commit fails permanently, the primary MUST NOT commit.
+    Otherwise we'd have primary ahead of replica — readers of the replica
+    would miss data that primary's future work assumes is already present."""
+
+    @pytest.fixture(autouse=True)
+    def _no_sleep(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # retry() sleeps with exponential backoff between attempts — skip the
+        # waits so 10-attempt retry tests stay fast.
+        monkeypatch.setattr(retry_module.time, "sleep", lambda *_a, **_kw: None)
+
+    def test_primary_not_committed_when_replica_commit_fails(self) -> None:
+        primary = MagicMock(spec=IcechunkStore)
+        primary.session = MagicMock()
+
+        replica = MagicMock(spec=IcechunkStore)
+        replica.session = MagicMock()
+        replica.session.commit.side_effect = RuntimeError("replica unreachable")
+
+        with pytest.raises(RuntimeError, match="replica unreachable"):
+            commit_if_icechunk("msg", primary, [replica])
+
+        # retry() calls the function max_attempts times before re-raising.
+        assert replica.session.commit.call_count == 10
+        primary.session.commit.assert_not_called()
+
+    def test_transient_replica_failure_retried_then_primary_commits(self) -> None:
+        primary = MagicMock(spec=IcechunkStore)
+        primary.session = MagicMock()
+
+        attempts = {"n": 0}
+
+        def flaky_commit(**_kw: object) -> str:
+            attempts["n"] += 1
+            if attempts["n"] < 3:
+                raise RuntimeError("transient")
+            return "snap-ok"
+
+        replica = MagicMock(spec=IcechunkStore)
+        replica.session = MagicMock()
+        replica.session.commit.side_effect = flaky_commit
+
+        commit_if_icechunk("msg", primary, [replica])
+
+        assert replica.session.commit.call_count == 3
+        primary.session.commit.assert_called_once()
+
+
+class TestPrimaryStoreReadonly:
+    """`primary_store(writable=False)` opens a readonly icechunk session.
+    Tested end-to-end for writable=True already; readonly is exercised by
+    `all_stores_exist` and validators and was previously uncovered."""
+
+    def test_readonly_session_opens_on_specified_branch(self) -> None:
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/data", format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+        )
+        # Initialize the repo by opening writable first.
+        writable = factory.primary_store(writable=True)
+        assert isinstance(writable, IcechunkStore)
+        zarr.open_group(writable, mode="w", attributes={"v": 1})
+        branch_snapshot = writable.session.commit(message="init")
+
+        # Create a branch so we can open readonly on something other than main.
+        # Point it at the initial snapshot so we can distinguish it from main
+        # after a subsequent commit on main.
+        repo = factory.icechunk_repos(sort="primary-first")[0][1]
+        repo.create_branch("ro-branch", branch_snapshot)
+        # Advance main past the branch point.
+        writable_again = factory.primary_store(writable=True)
+        assert isinstance(writable_again, IcechunkStore)
+        zarr.open_group(writable_again, mode="w", attributes={"v": 2})
+        main_snapshot = writable_again.session.commit(message="advance main")
+        assert main_snapshot != branch_snapshot
+
+        readonly = factory.primary_store(writable=False, branch="ro-branch")
+        assert isinstance(readonly, IcechunkStore)
+        assert readonly.read_only
+        # Readonly session resolves the branch to its snapshot id at open time.
+        assert readonly.session.snapshot_id == branch_snapshot
+
+
+class TestAllStoresExistWithIcechunk:
+    """`all_stores_exist` is used as a precondition for backfills with
+    `overwrite_existing=True`. It should return True for a populated icechunk
+    primary and False for one that doesn't yet exist on disk."""
+
+    def test_returns_true_for_initialized_icechunk_primary(self) -> None:
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/data", format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+        )
+        # Initialize the store so xr.open_zarr can read it.
+        store = factory.primary_store(writable=True)
+        assert isinstance(store, IcechunkStore)
+        zarr.open_group(store, mode="w", attributes={"init": True})
+        store.session.commit(message="init")
+
+        assert factory.all_stores_exist() is True
