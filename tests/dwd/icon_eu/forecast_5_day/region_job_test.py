@@ -216,6 +216,44 @@ def test_region_job_apply_data_transformations_deaccumulation(
     )
 
 
+def test_region_job_apply_data_transformations_deaccumulation_optional_kwargs(
+    region_job: DwdIconEuForecast5DayRegionJob,
+    t_2m_data_var: DwdIconEuDataVar,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reset_freq = pd.Timedelta.max
+    data_var = replace(
+        t_2m_data_var,
+        internal_attrs=replace(
+            t_2m_data_var.internal_attrs,
+            deaccumulate_to_rate=True,
+            window_reset_frequency=reset_freq,
+            deaccumulation_invalid_below_threshold_rate=-50.0,
+            deaccumulation_expected_clamp_fraction=0.25,
+            deaccumulation_type="running_mean",
+        ),
+    )
+    times = pd.date_range("2000-01-01", periods=3, freq="1h")
+    data = np.array([0, 1, 2], dtype=np.float32)
+    data_array = xr.DataArray(data, coords={"lead_time": times}, dims=["lead_time"])
+
+    mock_deaccum = Mock()
+    monkeypatch.setattr(
+        "reformatters.dwd.icon_eu.forecast_5_day.region_job.deaccumulate_to_rates_inplace",
+        mock_deaccum,
+    )
+
+    region_job.apply_data_transformations(data_array, data_var)
+    mock_deaccum.assert_called_once_with(
+        data_array,
+        dim="lead_time",
+        reset_frequency=reset_freq,
+        accumulation_type="running_mean",
+        invalid_below_threshold_rate=-50.0,
+        expected_clamp_fraction=0.25,
+    )
+
+
 def test_region_job_apply_data_transformations_scale_factor(
     region_job: DwdIconEuForecast5DayRegionJob,
     t_2m_data_var: DwdIconEuDataVar,

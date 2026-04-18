@@ -202,6 +202,11 @@ class DwdIconEuForecast5DayRegionJob(
             )
             if invalid_below is not None:
                 deaccumulate_kwargs["invalid_below_threshold_rate"] = invalid_below
+            expected_clamp = (
+                data_var.internal_attrs.deaccumulation_expected_clamp_fraction
+            )
+            if expected_clamp is not None:
+                deaccumulate_kwargs["expected_clamp_fraction"] = expected_clamp
             try:
                 deaccumulate_to_rates_inplace(
                     data_array,
