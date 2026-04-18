@@ -207,7 +207,7 @@ class EcmwfAifsSingleForecastRegionJob(
         all_data_vars: Sequence[EcmwfDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence["RegionJob[EcmwfDataVar, EcmwfAifsSingleForecastSourceFileCoord]"],
+        Sequence[RegionJob[EcmwfDataVar, EcmwfAifsSingleForecastSourceFileCoord]],
         xr.Dataset,
     ]:
         existing_ds = xr.open_zarr(primary_store, chunks=None)

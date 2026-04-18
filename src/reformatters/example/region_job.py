@@ -221,7 +221,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
         all_data_vars: Sequence[ExampleDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence["RegionJob[ExampleDataVar, ExampleSourceFileCoord]"], xr.Dataset
+        Sequence[RegionJob[ExampleDataVar, ExampleSourceFileCoord]], xr.Dataset
     ]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset

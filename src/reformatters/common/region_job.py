@@ -240,7 +240,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
 
     def update_template_with_results(
-        self, process_results: Mapping[str, Sequence["SourceFileResult"]]
+        self, process_results: Mapping[str, Sequence[SourceFileResult]]
     ) -> xr.Dataset:
         """
         Update template dataset based on processing results. This method is called
@@ -293,7 +293,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         append_dim: AppendDim,
         all_data_vars: Sequence[DATA_VAR],
         reformat_job_name: str,
-    ) -> tuple[Sequence["RegionJob[DATA_VAR, SOURCE_FILE_COORD]"], xr.Dataset]:
+    ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.Dataset]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset
         from its current state to include the latest available data.
@@ -360,7 +360,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         filter_end: Timestamp | None = None,
         filter_contains: list[Timestamp] | None = None,
         filter_variable_names: list[str] | None = None,
-    ) -> Sequence["RegionJob[DATA_VAR, SOURCE_FILE_COORD]"]:
+    ) -> Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]:
         """
         Return a sequence of RegionJob instances to process.
 

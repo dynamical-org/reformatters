@@ -317,7 +317,7 @@ class NoaaNdviCdrAnalysisRegionJob(
         all_data_vars: Sequence[NoaaNdviCdrDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence["RegionJob[NoaaNdviCdrDataVar, NoaaNdviCdrAnalysisSourceFileCoord]"],
+        Sequence[RegionJob[NoaaNdviCdrDataVar, NoaaNdviCdrAnalysisSourceFileCoord]],
         xr.Dataset,
     ]:
         existing_ds = xr.open_zarr(primary_store)

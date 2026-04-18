@@ -679,7 +679,7 @@ class TestWorkerEdgeCases:
 
 
 def _run_workers(
-    dataset: "ParallelDataset",
+    dataset: ParallelDataset,
     all_jobs: Sequence,
     template_ds: xr.Dataset,
     *,

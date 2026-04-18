@@ -124,7 +124,7 @@ class Encoding(pydantic.BaseModel):
     shards: tuple[int, ...] | int | None  # We don't shard coordinate arrays
 
     @pydantic.model_validator(mode="after")
-    def validate_shards_multiple_of_chunks(self) -> "Encoding":
+    def validate_shards_multiple_of_chunks(self) -> Encoding:
         if self.shards is None:
             return self
 
