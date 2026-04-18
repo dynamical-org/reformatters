@@ -42,6 +42,8 @@ class DwdIconEuInternalAttrs(BaseInternalAttrs):
         deaccumulation_invalid_below_threshold_rate (float | None): Threshold passed through to
             `deaccumulate_to_rates_inplace` when `deaccumulate_to_rate` is True. Used, for example,
             to tolerate the larger negative noise produced by lossy-compressed radiation fields.
+        deaccumulation_expected_clamp_fraction (float | None): Override for the fraction of values
+            expected to be clamped to 0.
         deaccumulation_type (AccumulationType): Whether the source values are cumulative totals
             ("accumulated", default) or running-mean rates whose averaging window grows from
             forecast start ("running_mean", used for ICON-EU averaged radiation fields).
@@ -51,6 +53,7 @@ class DwdIconEuInternalAttrs(BaseInternalAttrs):
     window_reset_frequency: Timedelta | None = None
     scale_factor: float | None = None
     deaccumulation_invalid_below_threshold_rate: float | None = None
+    deaccumulation_expected_clamp_fraction: float | None = None
     deaccumulation_type: AccumulationType = "accumulated"
 
 
@@ -360,6 +363,8 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     deaccumulate_to_rate=True,
                     window_reset_frequency=pd.Timedelta.max,
                     deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+                    # GRIB precision jitter in the running mean drives nighttime clamping to ~20%.
+                    deaccumulation_expected_clamp_fraction=0.25,
                     deaccumulation_type="running_mean",
                 ),
             ),
@@ -385,6 +390,8 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     deaccumulate_to_rate=True,
                     window_reset_frequency=pd.Timedelta.max,
                     deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+                    # GRIB precision jitter in the running mean drives nighttime clamping to ~20%.
+                    deaccumulation_expected_clamp_fraction=0.25,
                     deaccumulation_type="running_mean",
                 ),
             ),
