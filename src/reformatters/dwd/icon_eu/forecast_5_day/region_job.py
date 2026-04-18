@@ -208,7 +208,7 @@ class DwdIconEuForecast5DayRegionJob(
         all_data_vars: Sequence[DwdIconEuDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence["RegionJob[DwdIconEuDataVar, DwdIconEuForecast5DaySourceFileCoord]"],
+        Sequence[RegionJob[DwdIconEuDataVar, DwdIconEuForecast5DaySourceFileCoord]],
         xr.Dataset,
     ]:
         """Return RegionJob instances to update the dataset from its current state to the latest available data."""

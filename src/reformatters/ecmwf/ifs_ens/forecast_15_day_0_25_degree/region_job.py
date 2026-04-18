@@ -219,7 +219,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         all_data_vars: Sequence[EcmwfDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence["RegionJob[EcmwfDataVar, IfsEnsSourceFileCoord]"],
+        Sequence[RegionJob[EcmwfDataVar, IfsEnsSourceFileCoord]],
         xr.Dataset,
     ]:
         """

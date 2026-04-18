@@ -21,7 +21,7 @@ apt-get install -qyy \
     build-essential \
     ca-certificates \
     python3-setuptools \
-    python3.13-dev \
+    python3.14-dev \
     build-essential \
     gcc \
 EOT
@@ -36,7 +36,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 ENV UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never \
-    UV_PYTHON=python3.13 \
+    UV_PYTHON=python3.14 \
     UV_PROJECT_ENVIRONMENT=/app 
 
 
@@ -116,8 +116,8 @@ RUN <<EOT
 apt-get update -qy
 apt-get install -qyy \
     -o APT::Install-Suggests=false \
-    python3.13 \
-    libpython3.13 \
+    python3.14 \
+    libpython3.14 \
 
 apt-get clean
 rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
