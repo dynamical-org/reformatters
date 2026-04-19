@@ -204,6 +204,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
             log.info("Writing to existing stores, skipping metadata write.")
         else:
+            # Write metadata to final store. Required for Zarr v3 only, Icechunk metadata is written in parallel_setup.
             template_utils.write_metadata(template_ds, self.store_factory)
 
         num_jobs = len(
@@ -302,6 +303,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
 
         template_ds = self._get_template(append_dim_end)
+        # Write metadata to final store. Required for Zarr v3 only, Icechunk metadata is written in parallel_setup.
         template_utils.write_metadata(template_ds, self.store_factory)
 
         self.backfill(

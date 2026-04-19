@@ -20,15 +20,15 @@ Readers must always see a consistent view — either the old data or the fully u
 
 Data chunks can be written directly because they occupy new shard regions that readers won't access until the metadata (which defines the dataset's dimensions) is updated. The metadata write is deferred until the last worker completes, making all new data visible atomically.
 
-For backfills, metadata is written before workers start (the dataset is being created, not read). Specifically, `backfill_local` / `backfill_kubernetes` write metadata to final stores before spawning worker execution. `parallel_setup` writes metadata only to local tmp storage (and to temp icechunk branches), not to final zarr v3 stores. For operational updates, metadata is deferred to finalization.
+For backfills, metadata is written before workers start (the dataset is being created, not read). Specifically, `backfill_local` / `backfill_kubernetes` write metadata to final stores before spawning worker execution. `parallel_setup` writes metadata only to local tmp storage, not to final zarr v3 stores. For operational updates, metadata is deferred to finalization.
 
 ### Icechunk stores
 
-All work happens on a temporary branch (`_job_{job_name}`). Readers on `main` are unaffected. The flow:
+All metadata and chunk writes happen on a temporary branch (`_job_{job_name}`). Readers on `main` are unaffected. The flow:
 
 1. **Worker 0 setup** — creates a temp branch from main's current snapshot, copies expanded metadata from the local tmp store, commits on the branch
 2. **All workers** — open sessions on the temp branch, write chunk data, commit with `ConflictDetector` rebase (uncooperative distributed writes)
-3. **Last worker finalization** — writes final metadata on the branch, then atomically resets `main` to the branch tip using `reset_branch("main", snapshot, from_snapshot_id=original)`. The `from_snapshot_id` check ensures no concurrent process moved main.
+3. **Last worker finalization** — writes final metadata on the branch, then atomically resets `main` to the branch tip using `reset_branch("main", snapshot, from_snapshot_id=original)`. This branch reset is what makes all writes visible to readers. The `from_snapshot_id` check ensures no concurrent process moved main.
 
 ## Worker coordination
 
