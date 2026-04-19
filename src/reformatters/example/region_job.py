@@ -220,9 +220,7 @@ class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
         append_dim: AppendDim,
         all_data_vars: Sequence[ExampleDataVar],
         reformat_job_name: str,
-    ) -> tuple[
-        Sequence[RegionJob[ExampleDataVar, ExampleSourceFileCoord]], xr.Dataset
-    ]:
+    ) -> tuple[Sequence[RegionJob[ExampleDataVar, ExampleSourceFileCoord]], xr.Dataset]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset
         from its current state to include the latest available data.
