@@ -55,7 +55,8 @@ class DwdIconEuForecast5DayDataset(
             cpu="1.5",
             memory="6G",
             ephemeral_storage="1G",  # not used
-            secret_names=self.store_factory.k8s_secret_names(),
+            # Credentials to write to Source Coop
+            secret_names=["source-coop-storage-options-key"],
         )
 
         # ICON-EU runs at 00, 06, 12, 18 UTC. DWD's complete forecast is available ~3h45m after
