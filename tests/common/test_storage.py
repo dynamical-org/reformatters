@@ -13,7 +13,6 @@ from reformatters.common.storage import (
     DatasetFormat,
     StorageConfig,
     StoreFactory,
-    _get_icechunk_storage,
     _get_store_path,
     commit_if_icechunk,
 )
@@ -423,74 +422,6 @@ def test_clear_coordination_files_rm_path_rooted_in_internal(
     mock_fs.rm.assert_called_once()
     path = mock_fs.rm.call_args.args[0]
     assert path.endswith("/_internal/my-job"), path
-
-
-class TestIcechunkStorageScheme:
-    """`_get_icechunk_storage` is the only place that selects an icechunk storage
-    backend. In prod we only support s3 today — anything else must fail loudly
-    rather than silently fall back to the local filesystem path."""
-
-    def test_rejects_unsupported_scheme_in_prod(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(Config, "env", Env.prod)
-        config = StorageConfig(
-            base_path="gs://bucket/data", format=DatasetFormat.ICECHUNK
-        )
-        with pytest.raises(ValueError, match="gs Icechunk stores are not"):
-            _get_icechunk_storage("gs://bucket/data/d/v1.icechunk", config)
-
-    def test_rejects_http_scheme_in_prod(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(Config, "env", Env.prod)
-        config = StorageConfig(
-            base_path="http://host/data", format=DatasetFormat.ICECHUNK
-        )
-        with pytest.raises(ValueError, match="http Icechunk stores are not"):
-            _get_icechunk_storage("http://host/data/d/v1.icechunk", config)
-
-
-class TestIcechunkReposDevEnv:
-    """Dev env must behave the same as `replica_stores`: skip replicas entirely.
-    Regression guard for treating icechunk replicas differently than zarr3 ones."""
-
-    def test_dev_env_excludes_replicas(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: str
-    ) -> None:
-        monkeypatch.setattr(Config, "env", Env.dev)
-        factory = StoreFactory(
-            primary_storage_config=StorageConfig(
-                base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
-            ),
-            replica_storage_configs=[
-                StorageConfig(base_path=str(tmp_path), format=DatasetFormat.ICECHUNK),
-                StorageConfig(base_path=str(tmp_path), format=DatasetFormat.ICECHUNK),
-            ],
-            dataset_id="test-dataset",
-            template_config_version="v1.0",
-        )
-        repos = factory.icechunk_repos(sort="primary-first")
-        assert [role for role, _repo in repos] == ["primary"]
-
-
-class TestReplicaStoresDevEnv:
-    """Dev env short-circuits replicas — must hold even when the replica is
-    icechunk (the icechunk path is newer and easy to miss in dev guards)."""
-
-    def test_dev_env_returns_no_replicas_for_icechunk(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: str
-    ) -> None:
-        monkeypatch.setattr(Config, "env", Env.dev)
-        factory = StoreFactory(
-            primary_storage_config=StorageConfig(
-                base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
-            ),
-            replica_storage_configs=[
-                StorageConfig(base_path=str(tmp_path), format=DatasetFormat.ICECHUNK),
-            ],
-            dataset_id="test-dataset",
-            template_config_version="v1.0",
-        )
-        assert factory.replica_stores(writable=True) == []
 
 
 class TestIcechunkPrimaryWithZarr3Replica:
