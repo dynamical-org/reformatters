@@ -33,7 +33,7 @@ Explore the source dataset to understand the nuances of what's available and how
 uv run main initialize-new-integration <provider> <model> <variant>
 ```
 
-Provider, model and variant can contain letters, numbers and dashes (e.g. ICON-EU or analyisis-hourly). Capitalization will be normalized for you.
+Provider, model and variant can contain letters, numbers and dashes (e.g. ICON-EU or analysis-hourly). Capitalization will be normalized for you.
 
 This will add a number of files within `src/reformatters/<provider>/<model>/<variant>` and `tests/<provider>/<model>/<variant>`.
 
@@ -145,7 +145,7 @@ The details here depend on the computing resources and the Zarr storage location
 Run the plotting tools and inspect the generated images in `data/output/<dataset-id>/`.
 
 ```bash
-uv run python src/scripts/validation/plots.py run-all <DATASET_URL>
+uv run src/scripts/validation/plots.py run-all <DATASET_URL>
 ```
 
 Common issues to look out for:

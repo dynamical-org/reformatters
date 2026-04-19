@@ -55,7 +55,7 @@ DYNAMICAL_ENV=prod uv run main <DATASET_ID> backfill-kubernetes \
 Run the plotting tools and inspect the generated images in `data/output/<dataset-id>/`.
 
 ```bash
-uv run python src/scripts/validation/plots.py run-all <DATASET_URL>
+uv run src/scripts/validation/plots.py run-all <DATASET_URL>
 ```
 
 Common issues to look out for:

@@ -28,7 +28,7 @@ We use
 
 * `uv run main --help` - list all datasets
 * `uv run main <DATASET_ID> update-template`
-* `uv run main <DATASET_ID> backfill-local <INIT_TIME_END>`
+* `uv run main <DATASET_ID> backfill-local <APPEND_DIM_END>`
 
 ### Development commands
 * Add dependency: `uv add <package> [--dev]`. Use `--dev` to add a development only dependency.
