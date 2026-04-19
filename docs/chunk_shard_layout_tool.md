@@ -13,14 +13,14 @@ This tool helps you:
 
 ```bash
 # Analysis mode (time-series dataset) - search for optimal layout
-uv run python src/scripts/chunk_shard_size.py \
+uv run src/scripts/chunk_shard_size.py \
   --time 73000:3:hour \
   --latitude 721:0.25:degrees \
   --longitude 1440:0.25:degrees \
   --search
 
 # Forecast mode (init_time + lead_time) - search for optimal layout
-uv run python src/scripts/chunk_shard_size.py \
+uv run src/scripts/chunk_shard_size.py \
   --init_time 365 \
   --ensemble_member 31 \
   --lead_time 181:3:hour \
@@ -29,7 +29,7 @@ uv run python src/scripts/chunk_shard_size.py \
   --search
 
 # Manual configuration - analyze specific chunk/shard shapes
-uv run python src/scripts/chunk_shard_size.py \
+uv run src/scripts/chunk_shard_size.py \
   --time 73000:3:hour \
   --latitude 721:0.25:degrees \
   --longitude 1440:0.25:degrees \
@@ -169,7 +169,7 @@ The tool outputs a comprehensive ASCII table with:
 
 **Command:**
 ```bash
-uv run python src/scripts/chunk_shard_size.py \
+uv run src/scripts/chunk_shard_size.py \
   --time 73000:3:hour \
   --latitude 721:0.25:degrees \
   --longitude 1440:0.25:degrees \
@@ -281,7 +281,7 @@ uv run python src/scripts/chunk_shard_size.py \
 
 **Command:**
 ```bash
-uv run python src/scripts/chunk_shard_size.py \
+uv run src/scripts/chunk_shard_size.py \
   --time 73000:3:hour \
   --latitude 721:0.25:degrees \
   --longitude 1440:0.25:degrees \
@@ -318,7 +318,7 @@ Lengths: (73000, 721, 1440)
 --------------------------------------------------------------------------------
 Run this command to see detailed analysis of top recommendation:
 
-uv run python src/scripts/chunk_shard_size.py \
+uv run src/scripts/chunk_shard_size.py \
     --time 73000:3.0:hour \
     --latitude 721:0.25:degrees \
     --longitude 1440:0.25:degrees \
@@ -339,7 +339,7 @@ uv run python src/scripts/chunk_shard_size.py \
 
 **Command:**
 ```bash
-uv run python src/scripts/chunk_shard_size.py \
+uv run src/scripts/chunk_shard_size.py \
   --init_time 365 \
   --ensemble_member 31 \
   --lead_time 181:3:hour \
@@ -378,7 +378,7 @@ Lengths: (365, 31, 181, 721, 1440)
 --------------------------------------------------------------------------------
 Run this command to see detailed analysis of top recommendation:
 
-uv run python src/scripts/chunk_shard_size.py \
+uv run src/scripts/chunk_shard_size.py \
     --init_time 365 \
     --ensemble_member 31 \
     --lead_time 181:3.0:hour \
@@ -402,7 +402,7 @@ uv run python src/scripts/chunk_shard_size.py \
 
 **Command:**
 ```bash
-uv run python src/scripts/chunk_shard_size.py \
+uv run src/scripts/chunk_shard_size.py \
   --init_time 1825 \
   --ensemble_member 31 \
   --lead_time 181:3:hour \
