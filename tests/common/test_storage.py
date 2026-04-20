@@ -1,4 +1,5 @@
 import json
+from typing import Any
 from unittest.mock import MagicMock
 
 import icechunk
@@ -14,6 +15,7 @@ from reformatters.common.storage import (
     StorageConfig,
     StoreFactory,
     _get_store_path,
+    _icechunk_to_s3fs_storage_options,
     commit_if_icechunk,
 )
 
@@ -545,6 +547,116 @@ class TestPrimaryStoreReadonly:
         assert readonly.read_only
         # Readonly session resolves the branch to its snapshot id at open time.
         assert readonly.session.snapshot_id == branch_snapshot
+
+
+class TestIcechunkToS3fsStorageOptions:
+    """Icechunk secrets are keyed for `icechunk.s3_storage(**options)` but
+    coordination files on an icechunk primary go through fsspec/s3fs, which
+    uses different option names. The translation keeps those two consumers
+    of the same secret in sync."""
+
+    def test_translates_credential_keys(self) -> None:
+        assert _icechunk_to_s3fs_storage_options(
+            {
+                "access_key_id": "AKIA",
+                "secret_access_key": "shh",
+                "session_token": "tok",
+            }
+        ) == {"key": "AKIA", "secret": "shh", "token": "tok"}
+
+    def test_region_moves_into_client_kwargs(self) -> None:
+        assert _icechunk_to_s3fs_storage_options({"region": "us-east-1"}) == {
+            "client_kwargs": {"region_name": "us-east-1"}
+        }
+
+    def test_region_merges_with_existing_client_kwargs(self) -> None:
+        assert _icechunk_to_s3fs_storage_options(
+            {"region": "us-east-1", "client_kwargs": {"verify": False}}
+        ) == {"client_kwargs": {"region_name": "us-east-1", "verify": False}}
+
+    def test_unknown_keys_pass_through(self) -> None:
+        assert _icechunk_to_s3fs_storage_options({"endpoint_url": "https://x"}) == {
+            "endpoint_url": "https://x"
+        }
+
+    def test_empty_options(self) -> None:
+        assert _icechunk_to_s3fs_storage_options({}) == {}
+
+
+class TestCoordinationFsStorageOptions:
+    """`_coordination_fs` must pass s3fs-compatible kwargs to `fsspec.filesystem`
+    regardless of which dialect the primary storage config's secret uses.
+    Without translation, an icechunk-style secret (access_key_id, ...) causes
+    s3fs/aiobotocore to raise `TypeError: AioSession.__init__() got an
+    unexpected keyword argument 'access_key_id'`."""
+
+    def _capture_filesystem_kwargs(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        primary_format: DatasetFormat,
+        storage_options: dict[str, Any],
+    ) -> dict[str, Any]:
+        monkeypatch.setattr(Config, "env", Env.prod)
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/data", format=primary_format
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+        )
+        monkeypatch.setattr(
+            StorageConfig,
+            "load_storage_options",
+            lambda self: storage_options,
+        )
+        captured: dict[str, Any] = {}
+
+        def fake_filesystem(protocol: str, **kwargs: Any) -> MagicMock:  # noqa: ANN401
+            captured["protocol"] = protocol
+            captured["kwargs"] = kwargs
+            return MagicMock()
+
+        monkeypatch.setattr(
+            "reformatters.common.storage.fsspec.filesystem", fake_filesystem
+        )
+        factory._coordination_fs()
+        return captured
+
+    def test_icechunk_primary_translates_to_s3fs_kwargs(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured = self._capture_filesystem_kwargs(
+            monkeypatch,
+            primary_format=DatasetFormat.ICECHUNK,
+            storage_options={
+                "access_key_id": "AKIA",
+                "secret_access_key": "shh",
+                "region": "us-east-1",
+            },
+        )
+        assert captured["protocol"] == "s3"
+        kwargs = captured["kwargs"]
+        # icechunk-style keys must not leak through
+        assert "access_key_id" not in kwargs
+        assert "secret_access_key" not in kwargs
+        assert "region" not in kwargs
+        assert kwargs["key"] == "AKIA"
+        assert kwargs["secret"] == "shh"  # noqa: S105
+        assert kwargs["client_kwargs"] == {"region_name": "us-east-1"}
+
+    def test_zarr3_primary_passes_options_unchanged(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Zarr3 secrets are already s3fs-shaped — don't rewrite them.
+        options = {"key": "AKIA", "secret": "shh", "endpoint_url": "https://s"}
+        captured = self._capture_filesystem_kwargs(
+            monkeypatch,
+            primary_format=DatasetFormat.ZARR3,
+            storage_options=options,
+        )
+        assert captured["protocol"] == "s3"
+        assert captured["kwargs"] == options
 
 
 class TestAllStoresExistWithIcechunk:
