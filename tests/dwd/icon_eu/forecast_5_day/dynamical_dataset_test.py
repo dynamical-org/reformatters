@@ -158,7 +158,7 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     )
     np.testing.assert_allclose(
         point_ds["precipitation_surface"].values,
-        np.array([np.nan, 2.0302832e-07], dtype=np.float32),
+        np.array([np.nan, 2.03494e-07], dtype=np.float32),
     )
     assert_array_equal(
         point_ds["snow_water_equivalent_surface"].values,

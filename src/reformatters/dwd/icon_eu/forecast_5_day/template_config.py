@@ -518,7 +518,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="pmsl",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    keep_mantissa_bits=10,
                 ),
             ),
             DwdIconEuDataVar(
@@ -577,7 +577,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="tot_prec",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    keep_mantissa_bits=8,
                     deaccumulate_to_rate=True,
                     window_reset_frequency=pd.Timedelta.max,  # accumulates over full lead time, never resetting
                 ),
