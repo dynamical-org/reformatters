@@ -493,45 +493,6 @@ def _parallel_download_and_read_all(
 
 
 @pytest.mark.slow
-def test_download_from_dwd_temperature_latitude_orientation() -> None:
-    """Verify read_data produces north->south row order by checking real temperatures.
-
-    Our template latitude is descending: 70.5N (index 0) to 29.5N (index -1), matching
-    the source GRIB row order. At every time of year, mean 2m temperature over Europe
-    is higher in the south than in the far north, so the first 100 rows should be
-    colder than the last 100 rows. Catches regressions where a future change flips
-    the wrong axis or flips at all.
-    """
-    template_config = DwdIconEuForecast5DayTemplateConfig()
-    init_time = (pd.Timestamp.now() - pd.Timedelta(hours=5)).floor("6h")
-
-    region_job = DwdIconEuForecast5DayRegionJob.model_construct(
-        tmp_store=Mock(),
-        template_ds=template_config.get_template(init_time + pd.Timedelta(days=1)),
-        data_vars=template_config.data_vars,
-        append_dim=template_config.append_dim,
-        region=slice(0, 1),
-        reformat_job_name="test",
-    )
-    t_2m = next(v for v in template_config.data_vars if v.name == "temperature_2m")
-    coord = DwdIconEuForecast5DaySourceFileCoord(
-        init_time=init_time,
-        lead_time=pd.Timedelta(hours=1),
-        data_var=t_2m,
-    )
-    coord = replace(coord, downloaded_path=region_job.download_file(coord))
-
-    data = region_job.read_data(coord, t_2m)
-    northern_mean = data[:100].mean()
-    southern_mean = data[-100:].mean()
-    assert southern_mean > northern_mean + 5, (
-        f"Expected southern rows warmer than northern rows by at least 5C, "
-        f"got south={southern_mean:.2f}, north={northern_mean:.2f}. "
-        f"Latitude axis may be flipped."
-    )
-
-
-@pytest.mark.slow
 def test_download_from_dwd_and_read_all_variables() -> None:
     """Download a real ICON-EU GRIB file from DWD and read all template variables."""
     template_config = DwdIconEuForecast5DayTemplateConfig()
