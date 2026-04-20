@@ -172,6 +172,7 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     # DWD
     DwdIconEuForecast5DayDataset(
         primary_storage_config=DwdIconEuIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     # Contrib
     UarizonaSwannAnalysisDataset(

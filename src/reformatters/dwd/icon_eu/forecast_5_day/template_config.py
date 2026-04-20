@@ -72,7 +72,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
             dataset_id="dwd-icon-eu-forecast-5-day",
-            dataset_version="0.1.0",
+            dataset_version="0.2.0",
             name="DWD ICON-EU Forecast, 5 Day",
             description=(
                 "High-resolution weather forecasts for Europe from the ICON-EU model operated by"
@@ -98,8 +98,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     pd.timedelta_range("81h", "120h", freq="3h")
                 )
             ),
-            # These coordinates are for the pixel centers:
-            "latitude": np.linspace(29.5, 70.5, 657),
+            "latitude": np.linspace(70.5, 29.5, 657),  # descending north->south
             "longitude": np.linspace(-23.5, 62.5, 1377),
         }
 

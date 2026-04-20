@@ -380,8 +380,14 @@ def test_region_job_read_data(
     tmp_path: Path,
 ) -> None:
     height, width = 657, 1377
+    # from_bounds(west, south, east, north, ...) produces a north-up transform
+    # (row 0 at north, matching the ICON-EU GRIB row order and our descending
+    # template latitude coord).
     transform = from_bounds(-23.5, 29.5, 62.5, 70.5, width, height)
-    data = np.random.default_rng(42).random((height, width)).astype(np.float32)
+    # Row-varying values so the north/south orientation is detectable.
+    data = np.broadcast_to(
+        np.arange(height, dtype=np.float32)[:, np.newaxis], (height, width)
+    ).copy()
 
     with MemoryFile() as memfile:
         with memfile.open(
@@ -408,7 +414,12 @@ def test_region_job_read_data(
     result = region_job.read_data(coord, t_2m_data_var)
     assert result.shape == (height, width)
     assert result.dtype == np.float32
+    # Source rows run north->south (row 0 = north). Our template latitude is
+    # also descending (lat[0] = 70.5), so read_data passes the array through
+    # unchanged: result[0] is the northern source row, result[-1] the southern.
     np.testing.assert_array_equal(result, data)
+    assert result[0, 0] == 0
+    assert result[-1, 0] == height - 1
 
 
 def test_region_job_read_data_multi_band_raises(

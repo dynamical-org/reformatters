@@ -97,6 +97,10 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
         np.array([0.018310546875, 0.018310546875], dtype=np.float32),
     )
 
+    # Latitude descends north->south; southern rows must be warmer than
+    # northern rows. Guards against a wrong-axis flip being introduced.
+    _assert_temperature_decreases_with_latitude(backfill_ds)
+
     # Operational update
     dataset = _make_dataset()
     append_dim_end = pd.Timestamp("2026-02-10T12:00")
@@ -163,6 +167,21 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     assert_array_equal(
         point_ds["snow_water_equivalent_surface"].values,
         np.array([0.0174560546875, 0.0174560546875], dtype=np.float32),
+    )
+
+    _assert_temperature_decreases_with_latitude(updated_ds)
+
+
+def _assert_temperature_decreases_with_latitude(ds: xr.Dataset) -> None:
+    temp = ds["temperature_2m"]
+    # Latitude coord is descending (70.5 -> 29.5), so low indices are north
+    # and high indices are south.
+    northern_mean = float(temp.isel(latitude=slice(0, 10)).mean())
+    southern_mean = float(temp.isel(latitude=slice(-10, None)).mean())
+    assert southern_mean > northern_mean + 5, (
+        f"Expected southern-10-rows mean warmer than northern-10-rows mean by >5C, "
+        f"got south={southern_mean:.2f}, north={northern_mean:.2f}. "
+        f"Latitude axis may be flipped."
     )
 
 
