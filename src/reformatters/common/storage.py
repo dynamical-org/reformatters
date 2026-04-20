@@ -158,12 +158,17 @@ class StoreFactory(FrozenBaseModel):
 
     def _coordination_fs(self) -> fsspec.AbstractFileSystem:
         coordination_path = self._coordination_base_path()
-        if Config.is_prod:
-            storage_options = self.primary_storage_config.load_storage_options()
-            protocol = urlparse(coordination_path).scheme or "file"
-            return fsspec.filesystem(protocol, **storage_options)
-        else:
+        if not Config.is_prod:
             return fsspec.filesystem("file")
+
+        storage_options = self.primary_storage_config.load_storage_options()
+        # Icechunk secrets are keyed for `icechunk.s3_storage(**options)`
+        # (e.g. access_key_id, secret_access_key, region). Coordination
+        # files go through fsspec/s3fs, which uses different option names.
+        if self.primary_storage_config.format == DatasetFormat.ICECHUNK:
+            storage_options = _icechunk_to_s3fs_storage_options(storage_options)
+        protocol = urlparse(coordination_path).scheme or "file"
+        return fsspec.filesystem(protocol, **storage_options)
 
     def write_coordination_file(self, job_name: str, key: str, data: bytes) -> None:
         base = self._coordination_base_path()
@@ -201,6 +206,31 @@ class StoreFactory(FrozenBaseModel):
         fs = self._coordination_fs()
         with contextlib.suppress(FileNotFoundError):
             fs.rm(path, recursive=True)
+
+
+_ICECHUNK_TO_S3FS_CREDENTIAL_KEYS = {
+    "access_key_id": "key",
+    "secret_access_key": "secret",
+    "session_token": "token",
+}
+
+
+def _icechunk_to_s3fs_storage_options(options: dict[str, Any]) -> dict[str, Any]:
+    """Translate `icechunk.s3_storage` option names to s3fs/fsspec ones."""
+    translated: dict[str, Any] = {}
+    client_kwargs: dict[str, Any] = dict(options.get("client_kwargs") or {})
+    for k, v in options.items():
+        if k == "client_kwargs":
+            continue
+        if k == "region":
+            client_kwargs["region_name"] = v
+        elif k in _ICECHUNK_TO_S3FS_CREDENTIAL_KEYS:
+            translated[_ICECHUNK_TO_S3FS_CREDENTIAL_KEYS[k]] = v
+        else:
+            translated[k] = v
+    if client_kwargs:
+        translated["client_kwargs"] = client_kwargs
+    return translated
 
 
 @cache
@@ -275,6 +305,10 @@ def _get_icechunk_storage(
                 # We are currently only working with s3 stores (and s3 compatible stores like R2).
                 # Icechunk supports additional storage backends, which we can add support for
                 # as needed. See https://icechunk.io/en/latest/storage/
+                #
+                # If you add a new storage backend, also check the _coordination_fs
+                # method to see if you need to add support for mapping its storage options
+                # keys / kwargs from icechunk to fsspec names.
                 raise ValueError(
                     f"{scheme} Icechunk stores are not currently supported."
                 )
