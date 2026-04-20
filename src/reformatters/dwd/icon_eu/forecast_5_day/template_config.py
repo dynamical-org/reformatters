@@ -72,7 +72,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
             dataset_id="dwd-icon-eu-forecast-5-day",
-            dataset_version="0.1.0",
+            dataset_version="0.2.0",
             name="DWD ICON-EU Forecast, 5 Day",
             description=(
                 "High-resolution weather forecasts for Europe from the ICON-EU model operated by"
