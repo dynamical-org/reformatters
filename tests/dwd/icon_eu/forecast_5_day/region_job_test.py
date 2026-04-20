@@ -381,7 +381,8 @@ def test_region_job_read_data(
 ) -> None:
     height, width = 657, 1377
     # from_bounds(west, south, east, north, ...) produces a north-up transform
-    # (row 0 at north, matching the ICON-EU GRIB row order).
+    # (row 0 at north, matching the ICON-EU GRIB row order and our descending
+    # template latitude coord).
     transform = from_bounds(-23.5, 29.5, 62.5, 70.5, width, height)
     # Row-varying values so the north/south orientation is detectable.
     data = np.broadcast_to(
@@ -413,12 +414,12 @@ def test_region_job_read_data(
     result = region_job.read_data(coord, t_2m_data_var)
     assert result.shape == (height, width)
     assert result.dtype == np.float32
-    # Source rows run north->south (row 0 = north). Our template latitude goes
-    # south->north (lat[0] = 29.5). read_data must flip so result[0] is the
-    # southern source row and result[-1] is the northern source row.
-    np.testing.assert_array_equal(result, np.flip(data, axis=0))
-    assert result[0, 0] == height - 1
-    assert result[-1, 0] == 0
+    # Source rows run north->south (row 0 = north). Our template latitude is
+    # also descending (lat[0] = 70.5), so read_data passes the array through
+    # unchanged: result[0] is the northern source row, result[-1] the southern.
+    np.testing.assert_array_equal(result, data)
+    assert result[0, 0] == 0
+    assert result[-1, 0] == height - 1
 
 
 def test_region_job_read_data_multi_band_raises(
@@ -493,12 +494,13 @@ def _parallel_download_and_read_all(
 
 @pytest.mark.slow
 def test_download_from_dwd_temperature_latitude_orientation() -> None:
-    """Verify read_data produces south->north row order by checking real temperatures.
+    """Verify read_data produces north->south row order by checking real temperatures.
 
-    Our template latitude runs 29.5N (index 0) to 70.5N (index -1). At every time of
-    year, mean 2m temperature over Europe is higher in the south than in the far north.
-    This end-to-end test catches regressions where a future change flips the wrong axis
-    or removes the np.flip entirely.
+    Our template latitude is descending: 70.5N (index 0) to 29.5N (index -1), matching
+    the source GRIB row order. At every time of year, mean 2m temperature over Europe
+    is higher in the south than in the far north, so the first 100 rows should be
+    colder than the last 100 rows. Catches regressions where a future change flips
+    the wrong axis or flips at all.
     """
     template_config = DwdIconEuForecast5DayTemplateConfig()
     init_time = (pd.Timestamp.now() - pd.Timedelta(hours=5)).floor("6h")
@@ -520,9 +522,8 @@ def test_download_from_dwd_temperature_latitude_orientation() -> None:
     coord = replace(coord, downloaded_path=region_job.download_file(coord))
 
     data = region_job.read_data(coord, t_2m)
-    # Compare the southern 100 rows to the northern 100 rows.
-    southern_mean = data[:100].mean()
-    northern_mean = data[-100:].mean()
+    northern_mean = data[:100].mean()
+    southern_mean = data[-100:].mean()
     assert southern_mean > northern_mean + 5, (
         f"Expected southern rows warmer than northern rows by at least 5C, "
         f"got south={southern_mean:.2f}, north={northern_mean:.2f}. "

@@ -98,8 +98,9 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     pd.timedelta_range("81h", "120h", freq="3h")
                 )
             ),
-            # These coordinates are for the pixel centers:
-            "latitude": np.linspace(29.5, 70.5, 657),
+            # These coordinates are for the pixel centers. Latitude is descending
+            # (north->south) to match the source GRIB row order and project convention.
+            "latitude": np.linspace(70.5, 29.5, 657),
             "longitude": np.linspace(-23.5, 62.5, 1377),
         }
 

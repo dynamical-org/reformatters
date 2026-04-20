@@ -167,7 +167,7 @@ class DwdIconEuForecast5DayRegionJob(
                 f"{coord.downloaded_path=}"
             )
             result: ArrayFloat32 = reader.read(indexes=1, out_dtype=np.float32)
-        return np.flip(result, axis=0)  # Flip latitude so north is up
+        return result
 
     def apply_data_transformations(
         self, data_array: xr.DataArray, data_var: DwdIconEuDataVar
