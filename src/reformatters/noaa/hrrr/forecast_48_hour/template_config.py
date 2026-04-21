@@ -49,6 +49,7 @@ class NoaaHrrrForecast48HourTemplateConfig(NoaaHrrrCommonTemplateConfig):
             name="NOAA HRRR forecast, 48 hour",
             description="Weather forecasts from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
             attribution="NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
+            license="CC BY 4.0",
             spatial_domain="Continental United States",
             spatial_resolution="3 km",
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",

@@ -56,6 +56,7 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #     name="Producer Model Variant",
         #     description="Weather data from the Model operated by Producer.",
         #     attribution="Producer Model Variant data processed by dynamical.org from Producer Model.",
+        #     license="CC BY 4.0",
         #     spatial_domain="Global",
         #     spatial_resolution="0.25 degrees (~20km)",
         #     time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",

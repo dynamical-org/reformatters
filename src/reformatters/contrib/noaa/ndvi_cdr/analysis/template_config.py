@@ -70,6 +70,7 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
                 "Vermote, Eric; NOAA CDR Program. (2019): NOAA Climate Data Record (CDR) of AVHRR Normalized Difference Vegetation Index (NDVI), Version 5. "
                 "NOAA National Centers for Environmental Information."
             ),
+            license="CC BY 4.0",
             spatial_domain="Global",
             spatial_resolution="0.05 degrees (~5km)",
             time_domain="1981-06-24 to Present",
