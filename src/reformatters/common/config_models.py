@@ -22,7 +22,7 @@ type SpatialResolution = Literal[
 ]
 type License = Literal[
     "CC BY 4.0",
-    "CC BY 4.0 and the ECMWF Terms of Use (https://apps.ecmwf.int/datasets/licences/general/)",
+    "CC-BY-4.0-and-ECMWF-Terms-of-Use",
 ]
 
 

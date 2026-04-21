@@ -5,7 +5,7 @@
     "name": "ECMWF AIFS Single forecast",
     "description": "Weather forecasts from the ECMWF Artificial Intelligence Forecasting System (AIFS) Single model.",
     "attribution": "ECMWF AIFS Single forecast data processed by dynamical.org from ECMWF Open Data.",
-    "license": "CC BY 4.0 and the ECMWF Terms of Use (https://apps.ecmwf.int/datasets/licences/general/)",
+    "license": "CC-BY-4.0-and-ECMWF-Terms-of-Use",
     "spatial_domain": "Global",
     "spatial_resolution": "0.25 degrees (~20km)",
     "time_domain": "Forecasts initialized 2024-04-01 00:00:00 UTC to Present",
