@@ -54,6 +54,7 @@ class UarizonaSwannAnalysisTemplateConfig(TemplateConfig[UarizonaSwannDataVar]):
                 "Boulder, Colorado USA. NASA  National Snow and Ice Data Center Distributed Active Archive Center. "
                 "https://doi.org/10.5067/0GGPB220EX6A."
             ),
+            license="CC BY 4.0",
             spatial_domain="Conterminous US",
             spatial_resolution="4 km",
             time_domain="1981-10-01 to Present",

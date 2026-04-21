@@ -5,6 +5,7 @@
     "name": "NASA SMAP L3 Radiometer Global Daily 36 km EASE-Grid Soil Moisture, Version 9",
     "description": "Soil moisture data from the NASA SMAP passive microwave radiometer.",
     "attribution": "O'Neill, P. E., Chan, S., Njoku, E. G., Jackson, T., Bindlish, R. & Chaubell, J. (2023). SMAP L3 Radiometer Global Daily 36 km EASE-Grid Soil Moisture. (SPL3SMP, Version 9). Boulder, Colorado USA. NASA National Snow and Ice Data Center Distributed Active Archive Center. https://doi.org/10.5067/4XXOGX0OOW1S.",
+    "license": "CC BY 4.0",
     "spatial_domain": "Global",
     "spatial_resolution": "36 km",
     "time_domain": "Retrievals from 2015-04-01 00:00:00 to Present",

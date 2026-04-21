@@ -63,6 +63,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
                 "SMAP L3 Radiometer Global Daily 36 km EASE-Grid Soil Moisture. (SPL3SMP, Version 9). Boulder, Colorado USA. "
                 "NASA National Snow and Ice Data Center Distributed Active Archive Center. https://doi.org/10.5067/4XXOGX0OOW1S."
             ),
+            license="CC BY 4.0",
             spatial_domain="Global",
             spatial_resolution="36 km",
             time_domain=f"Retrievals from {self.append_dim_start} to Present",

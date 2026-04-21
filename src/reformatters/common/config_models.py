@@ -20,6 +20,10 @@ type SpatialResolution = Literal[
     "4 km",
     "36 km",
 ]
+type License = Literal[
+    "CC BY 4.0",
+    "CC BY 4.0 and the ECMWF Terms of Use (https://apps.ecmwf.int/datasets/licences/general/)",
+]
 
 
 class DatasetAttributes(FrozenBaseModel):
@@ -28,6 +32,7 @@ class DatasetAttributes(FrozenBaseModel):
     name: AttributeStr
     description: Sentence
     attribution: Sentence
+    license: License
     spatial_domain: AttributeStr
     spatial_resolution: SpatialResolution
     time_domain: AttributeStr
