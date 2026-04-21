@@ -120,7 +120,6 @@ class DwdIconEuForecast5DayRegionJob(
         lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
         data_var = item(data_var_group)
 
-        # Sanity checks
         assert len(init_times) > 0
         assert len(lead_times) > 0
 
