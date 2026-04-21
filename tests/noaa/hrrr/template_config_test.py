@@ -20,7 +20,7 @@ def template_config(monkeypatch: pytest.MonkeyPatch) -> NoaaHrrrCommonTemplateCo
         name="Test HRRR",
         description="Test dataset.",
         attribution="Test.",
-        license="CC BY 4.0",
+        license="CC-BY-4.0",
         spatial_domain="CONUS",
         spatial_resolution="3 km",
         time_domain="Test",
