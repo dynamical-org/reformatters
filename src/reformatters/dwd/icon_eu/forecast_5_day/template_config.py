@@ -79,7 +79,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 " Deutscher Wetterdienst (DWD)."
             ),
             attribution="DWD ICON-EU data processed by dynamical.org.",
-            license="CC BY 4.0",
+            license="CC-BY-4.0",
             spatial_domain="Europe",
             spatial_resolution="0.0625 degrees (~7km)",
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
