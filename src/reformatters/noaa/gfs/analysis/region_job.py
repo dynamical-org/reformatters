@@ -5,7 +5,8 @@ import xarray as xr
 
 from reformatters.common.iterating import item
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
+    SourceFileResult,
 )
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
@@ -24,7 +25,7 @@ NOAA_GFS_INIT_FREQUENCY = pd.Timedelta("6h")
 class NoaaGfsAnalysisSourceFileCoord(NoaaGfsSourceFileCoord):
     """Coordinates of a single source file to process for analysis dataset."""
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {"time": self.init_time + self.lead_time}
 
 
@@ -32,7 +33,7 @@ class NoaaGfsAnalysisRegionJob(NoaaGfsCommonRegionJob):
     """Region job for GFS analysis data processing."""
 
     max_vars_per_download_group = 3
-    max_vars_per_backfill_job = 12
+    max_vars_per_job = 12
 
     def get_processing_region(self) -> slice:
         """Buffer start by one step to allow deaccumulation without gaps in resulting output."""
@@ -64,7 +65,7 @@ class NoaaGfsAnalysisRegionJob(NoaaGfsCommonRegionJob):
         ]
 
     def update_template_with_results(
-        self, process_results: Mapping[str, Sequence[NoaaGfsSourceFileCoord]]
+        self, process_results: Mapping[str, Sequence[SourceFileResult]]
     ) -> xr.Dataset:
         # Remove the last hour. We pull accumulated variables (precipitation) from the 1 hour lead time,
         # but use the 0 hour lead time for other variables. This results in one additional

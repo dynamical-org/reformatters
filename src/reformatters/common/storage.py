@@ -1,3 +1,4 @@
+import contextlib
 import functools
 from collections.abc import Sequence
 from enum import StrEnum
@@ -7,6 +8,7 @@ from typing import Any, Literal, assert_never
 from urllib.parse import urlparse
 from uuid import uuid4
 
+import fsspec
 import icechunk
 import xarray as xr
 import zarr
@@ -74,16 +76,18 @@ class StoreFactory(FrozenBaseModel):
             *[config.k8s_secret_name for config in self.replica_storage_configs],
         ]
 
-    def primary_store(self, writable: bool = False) -> Store:
+    def primary_store(self, writable: bool = False, branch: str = "main") -> Store:
         store_path = _get_store_path(
             self.dataset_id,
             self.version,
             self.primary_storage_config,
         )
 
-        return _get_store(store_path, self.primary_storage_config, writable)
+        return _get_store(store_path, self.primary_storage_config, writable, branch)
 
-    def replica_stores(self, writable: bool = False) -> list[Store]:
+    def replica_stores(
+        self, writable: bool = False, branch: str = "main"
+    ) -> list[Store]:
         # Disable replica stores in dev environment
         if Config.is_dev:
             return []
@@ -91,7 +95,7 @@ class StoreFactory(FrozenBaseModel):
         stores = []
         for config in self.replica_storage_configs:
             store_path = _get_store_path(self.dataset_id, self.version, config)
-            store = _get_store(store_path, config, writable)
+            store = _get_store(store_path, config, writable, branch)
             stores.append(store)
 
         return stores
@@ -108,6 +112,125 @@ class StoreFactory(FrozenBaseModel):
                 log.exception(f"Store {store} does not exist")
                 return False
         return True
+
+    def icechunk_repos(
+        self, *, sort: Literal["primary-first", "primary-last"]
+    ) -> list[tuple[str, icechunk.Repository]]:
+        """Returns (role, Repository) for each icechunk store in the specified order.
+
+        `role` uniquely identifies the repo within this StoreFactory:
+        "primary" for the primary store, "replica-0", "replica-1", ... for replicas.
+        """
+        repos: list[tuple[str, icechunk.Repository]] = []
+        all_configs = [
+            ("primary", self.primary_storage_config),
+            *[
+                (f"replica-{i}", config)
+                for i, config in enumerate(self.replica_storage_configs)
+            ],
+        ]
+        # In dev, skip replicas (same as replica_stores behavior)
+        if Config.is_dev:
+            all_configs = [all_configs[0]]
+
+        for role, config in all_configs:
+            if config.format != DatasetFormat.ICECHUNK:
+                continue
+            store_path = _get_store_path(self.dataset_id, self.version, config)
+            ic_storage = _get_icechunk_storage(store_path, config)
+            repo = icechunk.Repository.open_or_create(ic_storage)
+            repos.append((role, repo))
+
+        match sort:
+            case "primary-first":
+                return sorted(repos, key=lambda r: r[0] != "primary")
+            case "primary-last":
+                return sorted(repos, key=lambda r: r[0] == "primary")
+            case _ as unreachable:
+                assert_never(unreachable)
+
+    def _coordination_base_path(self) -> str:
+        if Config.is_prod:
+            base_path = self.primary_storage_config.base_path
+        else:
+            base_path = _LOCAL_ZARR_STORE_BASE_PATH
+        return f"{base_path}/{self.dataset_id}/_internal"
+
+    def _coordination_fs(self) -> fsspec.AbstractFileSystem:
+        coordination_path = self._coordination_base_path()
+        if not Config.is_prod:
+            return fsspec.filesystem("file")
+
+        storage_options = self.primary_storage_config.load_storage_options()
+        # Icechunk secrets are keyed for `icechunk.s3_storage(**options)`
+        # (e.g. access_key_id, secret_access_key, region). Coordination
+        # files go through fsspec/s3fs, which uses different option names.
+        if self.primary_storage_config.format == DatasetFormat.ICECHUNK:
+            storage_options = _icechunk_to_s3fs_storage_options(storage_options)
+        protocol = urlparse(coordination_path).scheme or "file"
+        return fsspec.filesystem(protocol, **storage_options)
+
+    def write_coordination_file(self, job_name: str, key: str, data: bytes) -> None:
+        base = self._coordination_base_path()
+        path = f"{base}/{job_name}/{key}"
+        parent = path.rsplit("/", 1)[0]
+        fs = self._coordination_fs()
+        fs.mkdirs(parent, exist_ok=True)
+        fs.pipe_file(path, data)
+
+    def read_all_coordination_files(self, job_name: str, prefix: str) -> list[bytes]:
+        base = f"{self._coordination_base_path()}/{job_name}/{prefix}"
+        fs = self._coordination_fs()
+        fs.invalidate_cache(base)
+        try:
+            files = fs.ls(base, detail=False)
+        except FileNotFoundError:
+            return []
+        if not files:
+            return []
+        # fs.cat runs reads concurrently on async backends like s3fs.
+        contents = fs.cat(files)
+        return [contents[f] for f in sorted(files)]
+
+    def count_coordination_files(self, job_name: str, prefix: str) -> int:
+        base = f"{self._coordination_base_path()}/{job_name}/{prefix}"
+        fs = self._coordination_fs()
+        fs.invalidate_cache(base)
+        try:
+            return len(fs.ls(base, detail=False))
+        except FileNotFoundError:
+            return 0
+
+    def clear_coordination_files(self, job_name: str) -> None:
+        path = f"{self._coordination_base_path()}/{job_name}"
+        fs = self._coordination_fs()
+        with contextlib.suppress(FileNotFoundError):
+            fs.rm(path, recursive=True)
+
+
+_ICECHUNK_TO_S3FS_CREDENTIAL_KEYS = {
+    "access_key_id": "key",
+    "secret_access_key": "secret",
+    "session_token": "token",
+}
+
+
+def _icechunk_to_s3fs_storage_options(options: dict[str, Any]) -> dict[str, Any]:
+    """Translate `icechunk.s3_storage` option names to s3fs/fsspec ones."""
+    translated: dict[str, Any] = {}
+    client_kwargs: dict[str, Any] = dict(options.get("client_kwargs") or {})
+    for k, v in options.items():
+        if k == "client_kwargs":
+            continue
+        if k == "region":
+            client_kwargs["region_name"] = v
+        elif k in _ICECHUNK_TO_S3FS_CREDENTIAL_KEYS:
+            translated[_ICECHUNK_TO_S3FS_CREDENTIAL_KEYS[k]] = v
+        else:
+            translated[k] = v
+    if client_kwargs:
+        translated["client_kwargs"] = client_kwargs
+    return translated
 
 
 @cache
@@ -134,11 +257,13 @@ def _get_store_path(
     return f"{base_path}/{dataset_id}/v{version}.{extension}"
 
 
-def _get_store(store_path: str, storage_config: StorageConfig, writable: bool) -> Store:
+def _get_store(
+    store_path: str, storage_config: StorageConfig, writable: bool, branch: str = "main"
+) -> Store:
     match storage_config.format:
         case DatasetFormat.ICECHUNK:
             assert store_path.endswith(".icechunk")
-            return _get_icechunk_store(store_path, storage_config, writable)
+            return _get_icechunk_store(store_path, storage_config, writable, branch)
         case DatasetFormat.ZARR3:
             assert store_path.endswith(".zarr")
             return _get_zarr3_store(store_path, storage_config, writable)
@@ -159,9 +284,9 @@ def _get_zarr3_store(
         )
 
 
-def _get_icechunk_store(
-    store_path: str, storage_config: StorageConfig, writable: bool
-) -> IcechunkStore:
+def _get_icechunk_storage(
+    store_path: str, storage_config: StorageConfig
+) -> icechunk.Storage:
     if Config.is_prod:
         parsed_path = urlparse(store_path)
 
@@ -171,7 +296,7 @@ def _get_icechunk_store(
 
         match scheme:
             case "s3":
-                storage = icechunk.s3_storage(
+                return icechunk.s3_storage(
                     bucket=bucket,
                     prefix=prefix,
                     **storage_config.load_storage_options(),
@@ -180,21 +305,38 @@ def _get_icechunk_store(
                 # We are currently only working with s3 stores (and s3 compatible stores like R2).
                 # Icechunk supports additional storage backends, which we can add support for
                 # as needed. See https://icechunk.io/en/latest/storage/
+                #
+                # If you add a new storage backend, also check the _coordination_fs
+                # method to see if you need to add support for mapping its storage options
+                # keys / kwargs from icechunk to fsspec names.
                 raise ValueError(
                     f"{scheme} Icechunk stores are not currently supported."
                 )
     else:
-        storage = icechunk.local_filesystem_storage(store_path)
+        return icechunk.local_filesystem_storage(store_path)
+
+
+def _get_icechunk_store(
+    store_path: str,
+    storage_config: StorageConfig,
+    writable: bool,
+    branch: str = "main",
+) -> IcechunkStore:
+    storage = _get_icechunk_storage(store_path, storage_config)
 
     if writable:
-        log.info(f"Opening icechunk store {store_path} in writable mode")
+        log.info(
+            f"Opening icechunk store {store_path} on branch {branch} in writable mode"
+        )
         repo = icechunk.Repository.open_or_create(storage)
-        session = repo.writable_session("main")
+        session = repo.writable_session(branch)
         return session.store
     else:
-        log.info(f"Opening icechunk store {store_path} in readonly mode")
+        log.info(
+            f"Opening icechunk store {store_path} on branch {branch} in readonly mode"
+        )
         repo = icechunk.Repository.open(storage)
-        session = repo.readonly_session("main")
+        session = repo.readonly_session(branch)
         return session.store
 
 

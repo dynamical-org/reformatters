@@ -21,7 +21,7 @@ from reformatters.common.download import (
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
     RegionJob,
     SourceFileCoord,
 )
@@ -62,7 +62,7 @@ class NoaaNdviCdrAnalysisSourceFileCoord(SourceFileCoord):
     def get_url(self) -> str:
         return self.url
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {"time": self.time}
 
 
@@ -145,7 +145,7 @@ class NoaaNdviCdrAnalysisRegionJob(
         remote_path = urlparse(url).path.removeprefix("/")
         local_path = get_local_path(self.dataset_id, remote_path)
 
-        download_to_disk(store, remote_path, local_path, overwrite_existing=True)
+        download_to_disk(store, remote_path, local_path)
         log.debug(f"Downloaded {url} to {local_path}")
 
         return local_path
@@ -326,7 +326,6 @@ class NoaaNdviCdrAnalysisRegionJob(
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
-            kind="operational-update",
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=append_dim,

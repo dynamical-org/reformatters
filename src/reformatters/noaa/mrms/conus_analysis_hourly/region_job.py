@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import rasterio
 import xarray as xr
+from obstore.exceptions import PermissionDeniedError
 from zarr.abc.store import Store
 
 from reformatters.common.binary_rounding import round_float32_inplace
@@ -16,7 +17,7 @@ from reformatters.common.download import http_download_to_disk
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import replace
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
     RegionJob,
     SourceFileCoord,
 )
@@ -73,7 +74,7 @@ class NoaaMrmsSourceFileCoord(SourceFileCoord):
             case _ as unreachable:
                 assert_never(unreachable)
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {"time": self.time}
 
 
@@ -166,6 +167,9 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
                     )
                 except FileNotFoundError as exc:
                     last_exception = exc
+                except PermissionDeniedError as exc:
+                    last_exception = FileNotFoundError(coord.get_url(source))
+                    last_exception.__cause__ = exc
 
         assert last_exception is not None
         raise last_exception
@@ -251,7 +255,6 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
-            kind="operational-update",
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=append_dim,

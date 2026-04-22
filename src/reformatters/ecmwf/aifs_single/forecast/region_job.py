@@ -14,7 +14,7 @@ from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import digest, group_by
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
     RegionJob,
     SourceFileCoord,
 )
@@ -47,7 +47,7 @@ _PRECIP_ALT_GRIB_METADATA: dict[str, tuple[str, str]] = {
 }
 
 
-class EcmwfAifsDeterministicForecastSourceFileCoord(SourceFileCoord):
+class EcmwfAifsSingleForecastSourceFileCoord(SourceFileCoord):
     init_time: Timestamp
     lead_time: Timedelta
     data_var_group: Sequence[EcmwfDataVar]
@@ -74,15 +74,15 @@ class EcmwfAifsDeterministicForecastSourceFileCoord(SourceFileCoord):
     def get_index_url(self) -> str:
         return self._get_base_url() + ".index"
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {
             "init_time": self.init_time,
             "lead_time": self.lead_time,
         }
 
 
-class EcmwfAifsDeterministicForecastRegionJob(
-    RegionJob[EcmwfDataVar, EcmwfAifsDeterministicForecastSourceFileCoord]
+class EcmwfAifsSingleForecastRegionJob(
+    RegionJob[EcmwfDataVar, EcmwfAifsSingleForecastSourceFileCoord]
 ):
     max_vars_per_download_group: ClassVar[int] = 10
 
@@ -97,7 +97,7 @@ class EcmwfAifsDeterministicForecastRegionJob(
         self,
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[EcmwfDataVar],
-    ) -> Sequence[EcmwfAifsDeterministicForecastSourceFileCoord]:
+    ) -> Sequence[EcmwfAifsSingleForecastSourceFileCoord]:
         coords = []
         for init_time, lead_time in itertools.product(
             processing_region_ds["init_time"].values,
@@ -107,7 +107,7 @@ class EcmwfAifsDeterministicForecastRegionJob(
                 continue
 
             coords.append(
-                EcmwfAifsDeterministicForecastSourceFileCoord(
+                EcmwfAifsSingleForecastSourceFileCoord(
                     init_time=init_time,
                     lead_time=lead_time,
                     data_var_group=data_var_group,
@@ -115,11 +115,11 @@ class EcmwfAifsDeterministicForecastRegionJob(
             )
         return coords
 
-    def download_file(
-        self, coord: EcmwfAifsDeterministicForecastSourceFileCoord
-    ) -> Path:
+    def download_file(self, coord: EcmwfAifsSingleForecastSourceFileCoord) -> Path:
         idx_url = coord.get_index_url()
-        idx_local_path = http_download_to_disk(idx_url, self.dataset_id)
+        idx_local_path = http_download_to_disk(
+            idx_url, self.dataset_id, disk_cache=True
+        )
 
         byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(
             idx_local_path,
@@ -137,7 +137,7 @@ class EcmwfAifsDeterministicForecastRegionJob(
 
     def read_data(
         self,
-        coord: EcmwfAifsDeterministicForecastSourceFileCoord,
+        coord: EcmwfAifsSingleForecastSourceFileCoord,
         data_var: EcmwfDataVar,
     ) -> ArrayFloat32:
         expected_comment = data_var.internal_attrs.grib_comment
@@ -207,9 +207,7 @@ class EcmwfAifsDeterministicForecastRegionJob(
         all_data_vars: Sequence[EcmwfDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence[
-            "RegionJob[EcmwfDataVar, EcmwfAifsDeterministicForecastSourceFileCoord]"
-        ],
+        Sequence["RegionJob[EcmwfDataVar, EcmwfAifsSingleForecastSourceFileCoord]"],
         xr.Dataset,
     ]:
         existing_ds = xr.open_zarr(primary_store, chunks=None)
@@ -218,7 +216,6 @@ class EcmwfAifsDeterministicForecastRegionJob(
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
-            kind="operational-update",
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=append_dim,

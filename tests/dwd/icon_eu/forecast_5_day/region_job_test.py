@@ -1,4 +1,6 @@
 import bz2
+from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -6,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-from obstore.exceptions import GenericError
+from obstore.exceptions import GenericError, PermissionDeniedError
 from rasterio.io import MemoryFile
 from rasterio.transform import from_bounds
 
@@ -14,6 +16,7 @@ from reformatters.common import template_utils
 from reformatters.common.config_models import DataVarAttrs, Encoding
 from reformatters.common.pydantic import replace
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
+from reformatters.dwd.icon_eu.forecast_5_day import region_job as region_job_module
 from reformatters.dwd.icon_eu.forecast_5_day.region_job import (
     DwdIconEuForecast5DayRegionJob,
     DwdIconEuForecast5DaySourceFileCoord,
@@ -209,6 +212,45 @@ def test_region_job_apply_data_transformations_deaccumulation(
         data_array,
         dim="lead_time",
         reset_frequency=reset_freq,
+        accumulation_type="accumulated",
+    )
+
+
+def test_region_job_apply_data_transformations_deaccumulation_optional_kwargs(
+    region_job: DwdIconEuForecast5DayRegionJob,
+    t_2m_data_var: DwdIconEuDataVar,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reset_freq = pd.Timedelta.max
+    data_var = replace(
+        t_2m_data_var,
+        internal_attrs=replace(
+            t_2m_data_var.internal_attrs,
+            deaccumulate_to_rate=True,
+            window_reset_frequency=reset_freq,
+            deaccumulation_invalid_below_threshold_rate=-50.0,
+            deaccumulation_expected_clamp_fraction=0.25,
+            deaccumulation_type="running_mean",
+        ),
+    )
+    times = pd.date_range("2000-01-01", periods=3, freq="1h")
+    data = np.array([0, 1, 2], dtype=np.float32)
+    data_array = xr.DataArray(data, coords={"lead_time": times}, dims=["lead_time"])
+
+    mock_deaccum = Mock()
+    monkeypatch.setattr(
+        "reformatters.dwd.icon_eu.forecast_5_day.region_job.deaccumulate_to_rates_inplace",
+        mock_deaccum,
+    )
+
+    region_job.apply_data_transformations(data_array, data_var)
+    mock_deaccum.assert_called_once_with(
+        data_array,
+        dim="lead_time",
+        reset_frequency=reset_freq,
+        accumulation_type="running_mean",
+        invalid_below_threshold_rate=-50.0,
+        expected_clamp_fraction=0.25,
     )
 
 
@@ -308,14 +350,44 @@ def test_region_job_download_file_fallback_on_generic_error(
     assert call_count == 2
 
 
+def test_region_job_download_file_fallback_on_permission_denied(
+    region_job: DwdIconEuForecast5DayRegionJob,
+    source_file_coord: DwdIconEuForecast5DaySourceFileCoord,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    call_count = 0
+
+    def mock_download(url: str, dataset_id: str) -> Path:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise PermissionDeniedError("permission denied")
+        return Path("/fake/fallback.grib2.bz2")
+
+    monkeypatch.setattr(
+        "reformatters.dwd.icon_eu.forecast_5_day.region_job.http_download_to_disk",
+        mock_download,
+    )
+
+    result = region_job.download_file(source_file_coord)
+    assert result == Path("/fake/fallback.grib2.bz2")
+    assert call_count == 2
+
+
 def test_region_job_read_data(
     region_job: DwdIconEuForecast5DayRegionJob,
     t_2m_data_var: DwdIconEuDataVar,
     tmp_path: Path,
 ) -> None:
     height, width = 657, 1377
+    # from_bounds(west, south, east, north, ...) produces a north-up transform
+    # (row 0 at north, matching the ICON-EU GRIB row order and our descending
+    # template latitude coord).
     transform = from_bounds(-23.5, 29.5, 62.5, 70.5, width, height)
-    data = np.random.default_rng(42).random((height, width)).astype(np.float32)
+    # Row-varying values so the north/south orientation is detectable.
+    data = np.broadcast_to(
+        np.arange(height, dtype=np.float32)[:, np.newaxis], (height, width)
+    ).copy()
 
     with MemoryFile() as memfile:
         with memfile.open(
@@ -342,7 +414,12 @@ def test_region_job_read_data(
     result = region_job.read_data(coord, t_2m_data_var)
     assert result.shape == (height, width)
     assert result.dtype == np.float32
+    # Source rows run north->south (row 0 = north). Our template latitude is
+    # also descending (lat[0] = 70.5), so read_data passes the array through
+    # unchanged: result[0] is the northern source row, result[-1] the southern.
     np.testing.assert_array_equal(result, data)
+    assert result[0, 0] == 0
+    assert result[-1, 0] == height - 1
 
 
 def test_region_job_read_data_multi_band_raises(
@@ -379,11 +456,49 @@ def test_region_job_read_data_multi_band_raises(
         region_job.read_data(coord, t_2m_data_var)
 
 
+def _download_and_read_one(
+    region_job: DwdIconEuForecast5DayRegionJob,
+    init_time: pd.Timestamp,
+    lead_time: pd.Timedelta,
+    data_var: DwdIconEuDataVar,
+) -> None:
+    coord = DwdIconEuForecast5DaySourceFileCoord(
+        init_time=init_time,
+        lead_time=lead_time,
+        data_var=data_var,
+    )
+    coord = replace(coord, downloaded_path=region_job.download_file(coord))
+
+    data = region_job.read_data(coord, data_var)
+    assert data.shape == (657, 1377), (
+        f"Unexpected shape for {data_var.name}: {data.shape}"
+    )
+    assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
+
+
+def _parallel_download_and_read_all(
+    region_job: DwdIconEuForecast5DayRegionJob,
+    init_time: pd.Timestamp,
+    lead_time: pd.Timedelta,
+    data_vars: Sequence[DwdIconEuDataVar],
+) -> None:
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        # list() forces the map to drain so exceptions from any variable surface here.
+        list(
+            executor.map(
+                lambda v: _download_and_read_one(region_job, init_time, lead_time, v),
+                data_vars,
+            )
+        )
+
+
 @pytest.mark.slow
-def test_download_and_read_all_variables() -> None:
-    """Download a real ICON-EU GRIB file and read all template variables."""
+def test_download_from_dwd_and_read_all_variables() -> None:
+    """Download a real ICON-EU GRIB file from DWD and read all template variables."""
     template_config = DwdIconEuForecast5DayTemplateConfig()
-    init_time = pd.Timestamp("2026-03-01T00:00")
+    # DWD only keeps a ~24h rolling window on their HTTPS server. Pick the most recent
+    # init that should be complete (ICON-EU is fully available ~4h after the 00/06/12/18 UTC run).
+    init_time = (pd.Timestamp.now() - pd.Timedelta(hours=5)).floor("6h")
 
     region_job = DwdIconEuForecast5DayRegionJob.model_construct(
         tmp_store=Mock(),
@@ -394,18 +509,49 @@ def test_download_and_read_all_variables() -> None:
         reformat_job_name="test",
     )
 
-    lead_time = pd.Timedelta(hours=1)
+    _parallel_download_and_read_all(
+        region_job,
+        init_time,
+        pd.Timedelta(hours=1),
+        template_config.data_vars,
+    )
 
-    for data_var in template_config.data_vars:
-        coord = DwdIconEuForecast5DaySourceFileCoord(
-            init_time=init_time,
-            lead_time=lead_time,
-            data_var=data_var,
-        )
-        coord = replace(coord, downloaded_path=region_job.download_file(coord))
 
-        data = region_job.read_data(coord, data_var)
-        assert data.shape == (657, 1377), (
-            f"Unexpected shape for {data_var.name}: {data.shape}"
+@pytest.mark.slow
+def test_download_from_dynamical_source_coop_archive_and_read_all_variables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify every template variable is available from the Source Co-Op archive.
+
+    We fail loudly on any DWD fallback so the test can only pass if all required files
+    are genuinely present in the archive. Uses a fixed init_time far enough in the past
+    that DWD's ~24h rolling window would not help.
+    """
+    real_http_download_to_disk = region_job_module.http_download_to_disk
+
+    def source_coop_only(url: str, dataset_id: str) -> Path:
+        assert "opendata.dwd.de" not in url, (
+            f"Unexpected DWD fallback for url that should be in the archive: {url}"
         )
-        assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
+        return real_http_download_to_disk(url, dataset_id)
+
+    monkeypatch.setattr(region_job_module, "http_download_to_disk", source_coop_only)
+
+    template_config = DwdIconEuForecast5DayTemplateConfig()
+    init_time = pd.Timestamp("2026-04-01T00:00")
+
+    region_job = DwdIconEuForecast5DayRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_config.get_template(init_time + pd.Timedelta(days=1)),
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    _parallel_download_and_read_all(
+        region_job,
+        init_time,
+        pd.Timedelta(hours=1),
+        template_config.data_vars,
+    )

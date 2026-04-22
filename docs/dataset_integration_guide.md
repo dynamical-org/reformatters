@@ -33,7 +33,7 @@ Explore the source dataset to understand the nuances of what's available and how
 uv run main initialize-new-integration <provider> <model> <variant>
 ```
 
-Provider, model and variant can contain letters, numbers and dashes (e.g. ICON-EU or analyisis-hourly). Capitalization will be normalized for you.
+Provider, model and variant can contain letters, numbers and dashes (e.g. ICON-EU or analysis-hourly). Capitalization will be normalized for you.
 
 This will add a number of files within `src/reformatters/<provider>/<model>/<variant>` and `tests/<provider>/<model>/<variant>`.
 
@@ -115,6 +115,8 @@ Kubernetes resource values:
   - cpu: the number of spatial dimension shards minus 1 to account for kubernetes headroom. e.g. if 2 latitude shards * 4 longitude shards = 8, choose 7 cpu to schedule on an 8 cpu node.
   - ephemeral_storage: 20GB is a good starting point.
 
+Parallelism: Set `workers_total` and `parallelism` on the `ReformatCronJob` using `self.num_variable_groups()`. Multiply by 2 if `operational_update_jobs` reprocesses the most recent time slice (see GEFS datasets for examples).
+
 The update cron schedule should run shortly after the source data is expected to be available and the validate cron should run at `update cron start + update pod_active_deadline`.
 
 #### Integration test with snapshot values
@@ -130,6 +132,7 @@ uv run pytest tests/$DATASET_PATH/dynamical_dataset_test.py
 The details here depend on the computing resources and the Zarr storage location you'll be using. Get in touch with feedback@dynamical.org for support at this point if you haven't already.
 
 1. Run a backfill on your local computer: `DYNAMICAL_ENV=prod uv run main $DATASET_ID backfill-local <append-dim-end>`. If this is fast enough and you have the disk space, it is a nice and simple approach.
+1. If you're working to create a public dynamical.org dataset, run `./deploy/aws/create_new_aws_open_data_bucket.sh <provider>-<model>`
 1. Run a backfill on a kubernetes cluster:
    - This supports parallelism across servers to process much larger datasets.
    - Complete the steps in README.md > Deploying to the cloud > Setup.
@@ -142,7 +145,7 @@ The details here depend on the computing resources and the Zarr storage location
 Run the plotting tools and inspect the generated images in `data/output/<dataset-id>/`.
 
 ```bash
-uv run python src/scripts/validation/plots.py run-all <DATASET_URL>
+uv run src/scripts/validation/plots.py run-all <DATASET_URL>
 ```
 
 Common issues to look out for:
@@ -152,7 +155,7 @@ Common issues to look out for:
 - Time misalignment (e.g. diurnal cycle peaks shifted vs a reference dataset).
 
 Notes
-- `DATASET_URL` is the complete, direct URL to the dataset (`bucket-prefix/dataset-id/version`), e.g. `s3://us-west-2.opendata.source.coop/dynamical/ecmwf-ifs-ens-forecast-15-day-0-25-degree/v0.1.0.zarr`. The bucket prefix can be found in `__main__.py` and the dataset id and version in the `TemplateConfig.dataset_attributes`.
+- `DATASET_URL` is the complete, direct URL to the dataset (`bucket-prefix/dataset-id/version`), e.g. `s3://us-west-2.opendata.source.coop/dynamical/ecmwf-ifs-ens-forecast-15-day-0-25-degree/v0.1.0.zarr` or `s3://dynamical-noaa-hrrr/noaa-hrrr-analysis/v0.1.0.icechunk`. The bucket prefix can be found in `__main__.py` and the dataset id and version in the `TemplateConfig.dataset_attributes`.
 - The spatial and timeseries plots will plot the data against a reference dataset (GEFS analysis by default) to highlight unexpected differences.
 - You can also run each validation plot individually, see `uv run src/scripts/validation/plots.py --help`.
 - You can add additional `--variable` flags if side by side plots help add context (e.g. show solar radiation alongside cloud cover).

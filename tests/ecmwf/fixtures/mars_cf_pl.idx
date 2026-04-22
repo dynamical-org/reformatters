@@ -1,0 +1,4 @@
+{"type": "cf", "param": "z", "step": 0, "levtype": "pl", "_offset": 0, "_length": 2076642, "levelist": 500}
+{"type": "cf", "param": "t", "step": 0, "levtype": "pl", "_offset": 2076642, "_length": 2076642, "levelist": 500}
+{"type": "cf", "param": "z", "step": 3, "levtype": "pl", "_offset": 12459852, "_length": 2076642, "levelist": 500}
+{"type": "cf", "param": "t", "step": 3, "levtype": "pl", "_offset": 14536494, "_length": 2076642, "levelist": 500}

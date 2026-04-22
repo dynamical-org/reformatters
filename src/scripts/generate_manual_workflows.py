@@ -81,12 +81,12 @@ def generate_create_job_workflow(cronjob_names: list[str]) -> dict[str, Any]:
                 "environment": MANUAL_K8S_GITHUB_ENVIRONMENT,
                 "steps": [
                     {
-                        "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+                        "uses": "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
                         "with": {"sparse-checkout": "."},
                     },
                     {
                         "name": "Configure AWS Credentials",
-                        "uses": "aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502",
+                        "uses": "aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37",
                         "with": {
                             "role-to-assume": "${{ secrets.AWS_ROLE_TO_ASSUME }}",
                             "aws-region": "${{ secrets.AWS_REGION }}",
@@ -94,7 +94,7 @@ def generate_create_job_workflow(cronjob_names: list[str]) -> dict[str, Any]:
                     },
                     {
                         "name": "Install kubectl",
-                        "uses": "azure/setup-kubectl@901a10e89ea615cf61f57ac05cecdf23e7de06d8",
+                        "uses": "azure/setup-kubectl@15650b3ad78fff148532a140b8a4c821796b2d7b",
                         "with": {"version": "latest"},
                     },
                     {
@@ -180,12 +180,12 @@ def generate_get_jobs_workflow() -> dict[str, Any]:
                 "environment": MANUAL_K8S_GITHUB_ENVIRONMENT,
                 "steps": [
                     {
-                        "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+                        "uses": "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
                         "with": {"sparse-checkout": "."},
                     },
                     {
                         "name": "Configure AWS Credentials",
-                        "uses": "aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502",
+                        "uses": "aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37",
                         "with": {
                             "role-to-assume": "${{ secrets.AWS_ROLE_TO_ASSUME }}",
                             "aws-region": "${{ secrets.AWS_REGION }}",
@@ -193,7 +193,7 @@ def generate_get_jobs_workflow() -> dict[str, Any]:
                     },
                     {
                         "name": "Install kubectl",
-                        "uses": "azure/setup-kubectl@901a10e89ea615cf61f57ac05cecdf23e7de06d8",
+                        "uses": "azure/setup-kubectl@15650b3ad78fff148532a140b8a4c821796b2d7b",
                         "with": {"version": "latest"},
                     },
                     {
@@ -252,12 +252,12 @@ def generate_get_pods_workflow() -> dict[str, Any]:
                 "environment": MANUAL_K8S_GITHUB_ENVIRONMENT,
                 "steps": [
                     {
-                        "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+                        "uses": "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
                         "with": {"sparse-checkout": "."},
                     },
                     {
                         "name": "Configure AWS Credentials",
-                        "uses": "aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502",
+                        "uses": "aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37",
                         "with": {
                             "role-to-assume": "${{ secrets.AWS_ROLE_TO_ASSUME }}",
                             "aws-region": "${{ secrets.AWS_REGION }}",
@@ -265,7 +265,7 @@ def generate_get_pods_workflow() -> dict[str, Any]:
                     },
                     {
                         "name": "Install kubectl",
-                        "uses": "azure/setup-kubectl@901a10e89ea615cf61f57ac05cecdf23e7de06d8",
+                        "uses": "azure/setup-kubectl@15650b3ad78fff148532a140b8a4c821796b2d7b",
                         "with": {"version": "latest"},
                     },
                     {

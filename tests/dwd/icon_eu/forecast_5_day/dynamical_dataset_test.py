@@ -48,7 +48,7 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     filter_variable_names = [
         "temperature_2m",  # instantaneous
         "precipitation_surface",  # accumulation we deaccumulate
-        "dew_point_temperature_2m",  # instantaneous, one of the new variables
+        "snow_water_equivalent_surface",  # applies scale_factor
     ]
 
     # Local backfill reformat
@@ -93,9 +93,13 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
         np.array([np.nan, 0.0], dtype=np.float32),
     )
     assert_array_equal(
-        point_ds["dew_point_temperature_2m"].values,
-        np.array([-9.9375, -10.0], dtype=np.float32),
+        point_ds["snow_water_equivalent_surface"].values,
+        np.array([0.018310546875, 0.018310546875], dtype=np.float32),
     )
+
+    # Latitude descends north->south; southern rows must be warmer than
+    # northern rows. Guards against a wrong-axis flip being introduced.
+    _assert_temperature_decreases_with_latitude(backfill_ds)
 
     # Operational update
     dataset = _make_dataset()
@@ -158,11 +162,26 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     )
     np.testing.assert_allclose(
         point_ds["precipitation_surface"].values,
-        np.array([np.nan, 2.0302832e-07], dtype=np.float32),
+        np.array([np.nan, 2.03494e-07], dtype=np.float32),
     )
     assert_array_equal(
-        point_ds["dew_point_temperature_2m"].values,
-        np.array([-7.46875, -6.9375], dtype=np.float32),
+        point_ds["snow_water_equivalent_surface"].values,
+        np.array([0.0174560546875, 0.0174560546875], dtype=np.float32),
+    )
+
+    _assert_temperature_decreases_with_latitude(updated_ds)
+
+
+def _assert_temperature_decreases_with_latitude(ds: xr.Dataset) -> None:
+    temp = ds["temperature_2m"]
+    # Latitude coord is descending (70.5 -> 29.5), so low indices are north
+    # and high indices are south.
+    northern_mean = float(temp.isel(latitude=slice(0, 10)).mean())
+    southern_mean = float(temp.isel(latitude=slice(-10, None)).mean())
+    assert southern_mean > northern_mean + 5, (
+        f"Expected southern-10-rows mean warmer than northern-10-rows mean by >5C, "
+        f"got south={southern_mean:.2f}, north={northern_mean:.2f}. "
+        f"Latitude axis may be flipped."
     )
 
 

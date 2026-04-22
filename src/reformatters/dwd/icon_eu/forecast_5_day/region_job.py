@@ -1,6 +1,7 @@
 import bz2
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -14,7 +15,7 @@ from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
     RegionJob,
     SourceFileCoord,
 )
@@ -76,7 +77,7 @@ class DwdIconEuForecast5DaySourceFileCoord(SourceFileCoord):
             f"{self.variable_name_in_filename.upper()}.grib2.bz2"
         )
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         """Return the output location for this file's data in the dataset."""
         # Map to the standard dimension names used in the template
         return {
@@ -97,14 +98,7 @@ class DwdIconEuForecast5DayRegionJob(
         cls,
         data_vars: Sequence[DwdIconEuDataVar],
     ) -> Sequence[Sequence[DwdIconEuDataVar]]:
-        """Return a sequence of one-element sequences `[[var1], [var2], ...]`.
-
-        In the `reformatters` API, this function can be used to return groups of variables,
-        where all variables in a group can be retrieved from the same source file.
-
-        But, in the case of ICON-EU, each grib file from DWD holds only one variable. So there's
-        no ability/benefit from downloading multiple variables from the same file at the same time.
-        """
+        # Each ICON-EU grib file contains a single variable.
         return [[var] for var in data_vars]
 
     def generate_source_file_coords(
@@ -193,18 +187,32 @@ class DwdIconEuForecast5DayRegionJob(
         """
 
         if (scale_factor := data_var.internal_attrs.scale_factor) is not None:
-            data_array.values *= scale_factor
+            data_array *= scale_factor
 
         if data_var.internal_attrs.deaccumulate_to_rate:
             assert data_var.internal_attrs.window_reset_frequency is not None
             log.info(
                 f"Converting {data_var.name} from accumulations to rates along lead_time"
             )
+            deaccumulate_kwargs: dict[str, Any] = {
+                "accumulation_type": data_var.internal_attrs.deaccumulation_type,
+            }
+            invalid_below = (
+                data_var.internal_attrs.deaccumulation_invalid_below_threshold_rate
+            )
+            if invalid_below is not None:
+                deaccumulate_kwargs["invalid_below_threshold_rate"] = invalid_below
+            expected_clamp = (
+                data_var.internal_attrs.deaccumulation_expected_clamp_fraction
+            )
+            if expected_clamp is not None:
+                deaccumulate_kwargs["expected_clamp_fraction"] = expected_clamp
             try:
                 deaccumulate_to_rates_inplace(
                     data_array,
                     dim="lead_time",
                     reset_frequency=data_var.internal_attrs.window_reset_frequency,
+                    **deaccumulate_kwargs,
                 )
             except ValueError:
                 # Log exception so we are notified if deaccumulation errors are larger than expected.
@@ -232,7 +240,6 @@ class DwdIconEuForecast5DayRegionJob(
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
-            kind="operational-update",
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=append_dim,

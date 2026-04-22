@@ -8,13 +8,13 @@ import xarray as xr
 
 from reformatters.common.iterating import item
 from reformatters.common.template_config import SPATIAL_REF_COORDS
-from reformatters.ecmwf.aifs_deterministic.forecast.template_config import (
-    EcmwfAifsDeterministicForecastTemplateConfig,
+from reformatters.ecmwf.aifs_single.forecast.template_config import (
+    EcmwfAifsSingleForecastTemplateConfig,
 )
 
 
 def test_template_config_attrs() -> None:
-    config = EcmwfAifsDeterministicForecastTemplateConfig()
+    config = EcmwfAifsSingleForecastTemplateConfig()
 
     assert config.dims == ("init_time", "lead_time", "latitude", "longitude")
     assert config.append_dim == "init_time"
@@ -25,16 +25,16 @@ def test_template_config_attrs() -> None:
 
 
 def test_dataset_attributes() -> None:
-    cfg = EcmwfAifsDeterministicForecastTemplateConfig()
+    cfg = EcmwfAifsSingleForecastTemplateConfig()
     attrs = cfg.dataset_attributes
-    assert attrs.dataset_id == "ecmwf-aifs-deterministic-forecast"
+    assert attrs.dataset_id == "ecmwf-aifs-single-forecast"
     assert re.match(r"\d+\.\d+\.\d+", attrs.dataset_version) is not None
     assert str(cfg.append_dim_start) in attrs.time_domain
     assert "every 6 hours" in attrs.time_resolution
 
 
 def test_dimension_coordinates() -> None:
-    config = EcmwfAifsDeterministicForecastTemplateConfig()
+    config = EcmwfAifsSingleForecastTemplateConfig()
     coords = config.dimension_coordinates()
 
     assert config.append_dim == "init_time"
@@ -59,7 +59,7 @@ def test_dimension_coordinates() -> None:
 
 
 def test_dimension_coordinates_shapes_and_values() -> None:
-    cfg = EcmwfAifsDeterministicForecastTemplateConfig()
+    cfg = EcmwfAifsSingleForecastTemplateConfig()
     dc = cfg.dimension_coordinates()
     assert set(dc) == {"init_time", "lead_time", "latitude", "longitude"}
 
@@ -90,7 +90,7 @@ def test_dimension_coordinates_shapes_and_values() -> None:
 
 
 def test_data_vars_date_available() -> None:
-    config = EcmwfAifsDeterministicForecastTemplateConfig()
+    config = EcmwfAifsSingleForecastTemplateConfig()
     expanded_date = pd.Timestamp("2025-02-26T00:00")
 
     vars_with_date = [
@@ -108,7 +108,7 @@ def test_data_vars_date_available() -> None:
 
 
 def test_template_variables_have_required_attrs() -> None:
-    config = EcmwfAifsDeterministicForecastTemplateConfig()
+    config = EcmwfAifsSingleForecastTemplateConfig()
 
     for var in config.data_vars:
         assert var.name
@@ -121,7 +121,7 @@ def test_template_variables_have_required_attrs() -> None:
 
 
 def test_geopotential_height_vars_have_scale_factor() -> None:
-    config = EcmwfAifsDeterministicForecastTemplateConfig()
+    config = EcmwfAifsSingleForecastTemplateConfig()
     gh_vars = [v for v in config.data_vars if "geopotential_height" in v.name]
     assert len(gh_vars) == 3  # 500, 850, 925 hPa
 
@@ -135,7 +135,7 @@ def test_geopotential_height_vars_have_scale_factor() -> None:
 
 
 def test_derive_coordinates() -> None:
-    config = EcmwfAifsDeterministicForecastTemplateConfig()
+    config = EcmwfAifsSingleForecastTemplateConfig()
     ds = config.get_template(config.append_dim_start + config.append_dim_frequency)
 
     assert "valid_time" in ds.coords
@@ -149,7 +149,7 @@ def test_derive_coordinates() -> None:
 
 
 def test_derive_coordinates_and_spatial_ref() -> None:
-    cfg = EcmwfAifsDeterministicForecastTemplateConfig()
+    cfg = EcmwfAifsSingleForecastTemplateConfig()
     dc = cfg.dimension_coordinates()
     ds = xr.Dataset(coords=dc)
     derived = cfg.derive_coordinates(ds)
@@ -179,7 +179,7 @@ def test_derive_coordinates_and_spatial_ref() -> None:
 
 
 def test_coords_property_order_and_names() -> None:
-    cfg = EcmwfAifsDeterministicForecastTemplateConfig()
+    cfg = EcmwfAifsSingleForecastTemplateConfig()
     names = [c.name for c in cfg.coords]
     assert names == [
         "init_time",
@@ -194,7 +194,7 @@ def test_coords_property_order_and_names() -> None:
 
 
 def test_get_template_spatial_ref() -> None:
-    template_config = EcmwfAifsDeterministicForecastTemplateConfig()
+    template_config = EcmwfAifsSingleForecastTemplateConfig()
     ds = template_config.get_template(
         template_config.append_dim_start + pd.Timedelta(days=10)
     )

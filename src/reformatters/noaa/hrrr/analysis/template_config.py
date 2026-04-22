@@ -42,6 +42,7 @@ class NoaaHrrrAnalysisTemplateConfig(NoaaHrrrCommonTemplateConfig):
             name="NOAA HRRR analysis",
             description="Analysis data from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
             attribution="NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
+            license="CC-BY-4.0",
             spatial_domain="Continental United States",
             spatial_resolution="3 km",
             time_domain=f"{self.append_dim_start} UTC to Present",

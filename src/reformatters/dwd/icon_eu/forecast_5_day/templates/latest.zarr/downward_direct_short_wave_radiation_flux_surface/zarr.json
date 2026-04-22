@@ -68,11 +68,11 @@
     }
   ],
   "attributes": {
-    "long_name": "Downward direct short wave radiation flux at surface",
+    "long_name": "Surface direct short-wave radiation flux",
     "short_name": "aswdir_s",
     "standard_name": "surface_direct_downwelling_shortwave_flux_in_air",
     "units": "W m-2",
-    "comment": "Downward solar direct radiation flux at the surface, averaged over forecast time. This quantity is not directly provided by the radiation scheme. It is aposteriori diagnosed from the definition of the surface net shortwave radiation flux.",
+    "comment": "Downward solar direct radiation flux at the surface, averaged over each forecast step. This quantity is not directly provided by the radiation scheme. It is aposteriori diagnosed from the definition of the surface net shortwave radiation flux.",
     "step_type": "avg",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

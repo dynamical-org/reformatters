@@ -75,10 +75,10 @@ def test_cli_has_backfill_kubernetes_command(dataset_id: str) -> None:
 
 
 @pytest.mark.parametrize("dataset_id", DATASET_IDS)
-def test_cli_has_process_backfill_region_jobs_command(dataset_id: str) -> None:
-    result = runner.invoke(app, [dataset_id, "process-backfill-region-jobs", "--help"])
+def test_cli_has_backfill_command(dataset_id: str) -> None:
+    result = runner.invoke(app, [dataset_id, "backfill", "--help"])
     assert result.exit_code == 0, (
-        f"{dataset_id} process-backfill-region-jobs --help failed: {result.output}\n{result.exception}"
+        f"{dataset_id} backfill --help failed: {result.output}\n{result.exception}"
     )
 
 

@@ -41,10 +41,15 @@ def write_metadata(
         assert isinstance(storage, (Store, Path))
         store = storage
         replica_stores = []
-        # respect mode if provided by legacy implementations
         if mode is None:
             assert isinstance(store, Path), f"Expected Path, got {type(store)}"
             mode = _get_mode_from_path_store(store)
+
+    if mode == "w" and not isinstance(store, Path):
+        raise ValueError(
+            f"mode='w' is not allowed on remote stores (got {type(store).__name__}). "
+            "Use copy_zarr_metadata to update metadata on existing stores."
+        )
 
     with warnings.catch_warnings():
         # Unconsolidated metadata is also written so adding

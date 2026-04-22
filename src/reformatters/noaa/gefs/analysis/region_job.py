@@ -12,8 +12,9 @@ from reformatters.common.interpolation import linear_interpolate_1d_inplace
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
     RegionJob,
+    SourceFileResult,
 )
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
@@ -53,7 +54,7 @@ def filter_available_times(times: pd.DatetimeIndex) -> pd.DatetimeIndex:
 class GefsAnalysisSourceFileCoord(GefsEnsembleSourceFileCoord):
     ensemble_member: int = 0  # Control member for analysis
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {
             "time": self.init_time + self.lead_time,
         }
@@ -63,7 +64,7 @@ class GefsAnalysisRegionJob(RegionJob[GEFSDataVar, GefsAnalysisSourceFileCoord])
     """RegionJob for GEFS Analysis dataset processing."""
 
     # 1 makes logic simpler when accessing GEFSv12 reforecast which has a file per variable
-    max_vars_per_backfill_job = 1
+    max_vars_per_job = 1
     max_vars_per_download_group = 1
 
     def get_processing_region(self) -> slice:
@@ -216,7 +217,6 @@ class GefsAnalysisRegionJob(RegionJob[GEFSDataVar, GefsAnalysisSourceFileCoord])
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
-            kind="operational-update",
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=append_dim,
@@ -227,7 +227,7 @@ class GefsAnalysisRegionJob(RegionJob[GEFSDataVar, GefsAnalysisSourceFileCoord])
         return jobs, template_ds
 
     def update_template_with_results(
-        self, process_results: Mapping[str, Sequence[GefsAnalysisSourceFileCoord]]
+        self, process_results: Mapping[str, Sequence[SourceFileResult]]
     ) -> xr.Dataset:
         # Remove the last hour because most variables (except precip) lack hour 0 values.
         # Precipitation extends to hour 6 of the latest forecast, but other variables do not,

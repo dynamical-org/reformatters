@@ -19,7 +19,7 @@ def _download_file_from_gefs_source(
     source_url: str,
     download: _DownloadFn,
 ) -> Path:
-    idx_local_path = download(index_url, dataset_id)
+    idx_local_path = download(index_url, dataset_id, disk_cache=True)
 
     starts, ends = grib_message_byte_ranges_from_index(
         idx_local_path, coord.data_vars, coord.init_time, coord.lead_time

@@ -16,6 +16,10 @@ from reformatters.common.config_models import (
     Encoding,
     StatisticsApproximate,
 )
+from reformatters.common.deaccumulation import (
+    RADIATION_INVALID_BELOW_THRESHOLD,
+    AccumulationType,
+)
 from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
     TemplateConfig,
@@ -35,11 +39,22 @@ class DwdIconEuInternalAttrs(BaseInternalAttrs):
     Attributes:
         variable_name_in_filename (str): The name used in ICON-EU's GRIB filename for this variable.
             For example, `alb_rad` (for `surface_albedo`).
+        deaccumulation_invalid_below_threshold_rate (float | None): Threshold passed through to
+            `deaccumulate_to_rates_inplace` when `deaccumulate_to_rate` is True. Used, for example,
+            to tolerate the larger negative noise produced by lossy-compressed radiation fields.
+        deaccumulation_expected_clamp_fraction (float | None): Override for the fraction of values
+            expected to be clamped to 0.
+        deaccumulation_type (AccumulationType): Whether the source values are cumulative totals
+            ("accumulated", default) or running-mean rates whose averaging window grows from
+            forecast start ("running_mean", used for ICON-EU averaged radiation fields).
     """
 
     variable_name_in_filename: str
     window_reset_frequency: Timedelta | None = None
     scale_factor: float | None = None
+    deaccumulation_invalid_below_threshold_rate: float | None = None
+    deaccumulation_expected_clamp_fraction: float | None = None
+    deaccumulation_type: AccumulationType = "accumulated"
 
 
 class DwdIconEuDataVar(DataVar[DwdIconEuInternalAttrs]):
@@ -57,13 +72,14 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
             dataset_id="dwd-icon-eu-forecast-5-day",
-            dataset_version="0.1.0",
-            name="DWD ICON-EU Forecast, 5 Day",
+            dataset_version="0.2.0",
+            name="DWD ICON-EU forecast, 5 Day",
             description=(
                 "High-resolution weather forecasts for Europe from the ICON-EU model operated by"
                 " Deutscher Wetterdienst (DWD)."
             ),
             attribution="DWD ICON-EU data processed by dynamical.org.",
+            license="CC-BY-4.0",
             spatial_domain="Europe",
             spatial_resolution="0.0625 degrees (~7km)",
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
@@ -83,8 +99,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     pd.timedelta_range("81h", "120h", freq="3h")
                 )
             ),
-            # These coordinates are for the pixel centers:
-            "latitude": np.linspace(29.5, 70.5, 657),
+            "latitude": np.linspace(70.5, 29.5, 657),  # descending north->south
             "longitude": np.linspace(-23.5, 62.5, 1377),
         }
 
@@ -337,7 +352,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="aswdifd_s",
-                    long_name="Downward diffusive short wave radiation flux at surface",
+                    long_name="Surface diffuse short-wave radiation flux",
                     units="W m-2",
                     step_type="avg",
                     standard_name="surface_diffuse_downwelling_shortwave_flux_in_air",
@@ -345,6 +360,12 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="aswdifd_s",
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    deaccumulate_to_rate=True,
+                    window_reset_frequency=pd.Timedelta.max,
+                    deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+                    # GRIB precision jitter in the running mean drives nighttime clamping to ~20%.
+                    deaccumulation_expected_clamp_fraction=0.25,
+                    deaccumulation_type="running_mean",
                 ),
             ),
             DwdIconEuDataVar(
@@ -353,23 +374,29 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=DataVarAttrs(
                     short_name="aswdir_s",
                     standard_name="surface_direct_downwelling_shortwave_flux_in_air",
-                    long_name="Downward direct short wave radiation flux at surface",
+                    long_name="Surface direct short-wave radiation flux",
                     units="W m-2",
                     step_type="avg",
                     comment=(
-                        "Downward solar direct radiation flux at the surface, averaged over forecast time."
-                        " This quantity is not directly provided by the radiation scheme."
-                        " It is aposteriori diagnosed from the definition of the surface net"
-                        " shortwave radiation flux."
+                        "Downward solar direct radiation flux at the surface, averaged over each"
+                        " forecast step. This quantity is not directly provided by the radiation"
+                        " scheme. It is aposteriori diagnosed from the definition of the surface"
+                        " net shortwave radiation flux."
                     ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="aswdir_s",
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    deaccumulate_to_rate=True,
+                    window_reset_frequency=pd.Timedelta.max,
+                    deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+                    # GRIB precision jitter in the running mean drives nighttime clamping to ~20%.
+                    deaccumulation_expected_clamp_fraction=0.25,
+                    deaccumulation_type="running_mean",
                 ),
             ),
             DwdIconEuDataVar(
-                name="convective_available_potential_energy",
+                name="convective_available_potential_energy_atmosphere",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="cape",
@@ -384,7 +411,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
             ),
             DwdIconEuDataVar(
-                name="high_cloud_cover",
+                name="cloud_cover_high",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="hcc",
@@ -403,7 +430,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
             ),
             DwdIconEuDataVar(
-                name="low_cloud_cover",
+                name="cloud_cover_low",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="lcc",
@@ -422,7 +449,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
             ),
             DwdIconEuDataVar(
-                name="medium_cloud_cover",
+                name="cloud_cover_medium",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="mcc",
@@ -441,7 +468,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
             ),
             DwdIconEuDataVar(
-                name="total_cloud_cover",
+                name="total_cloud_cover_atmosphere",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="tcc",
@@ -460,7 +487,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
             ),
             DwdIconEuDataVar(
-                name="snow_depth",
+                name="snow_thickness_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="sde",
@@ -491,7 +518,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="pmsl",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    keep_mantissa_bits=10,
                 ),
             ),
             DwdIconEuDataVar(
@@ -550,7 +577,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="tot_prec",
-                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    keep_mantissa_bits=8,
                     deaccumulate_to_rate=True,
                     window_reset_frequency=pd.Timedelta.max,  # accumulates over full lead time, never resetting
                 ),
@@ -588,11 +615,11 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
             ),
             DwdIconEuDataVar(
-                name="maximum_wind_10m",
+                name="wind_gust_10m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
-                    short_name="i10fg",
-                    long_name="Instantaneous 10 metre wind gust",
+                    short_name="10fg",
+                    long_name="Maximum 10 metre wind gust since previous post-processing",
                     standard_name="wind_speed_of_gust",
                     units="m s-1",
                     step_type="max",
@@ -610,7 +637,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 ),
             ),
             DwdIconEuDataVar(
-                name="snow_depth_water_equivalent",
+                name="snow_water_equivalent_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="sd",

@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 
 from reformatters.common import template_utils
-from reformatters.common.region_job import SourceFileStatus
+from reformatters.common.region_job import SourceFileResult, SourceFileStatus
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.noaa.gfs.analysis.region_job import (
     NOAA_GFS_INIT_FREQUENCY,
@@ -265,10 +265,12 @@ def test_operational_update_jobs(
 
     assert template_ds.time.max() == pd.Timestamp("2021-05-01T10:00")
 
-    assert len(jobs) == 1
+    # max_vars_per_job=12 splits 21 vars into 2 jobs
+    assert len(jobs) == 2
     for job in jobs:
         assert isinstance(job, NoaaGfsAnalysisRegionJob)
-        assert job.data_vars == template_config.data_vars
+    all_job_vars = [v for job in jobs for v in job.data_vars]
+    assert {v.name for v in all_job_vars} == {v.name for v in template_config.data_vars}
 
 
 def test_update_template_with_results(
@@ -286,13 +288,15 @@ def test_update_template_with_results(
         reformat_job_name="test",
     )
 
-    # Create mock process_results that simulates successful processing up to the last time
+    # Create process_results that simulates successful processing up to the last time
     last_time = template_ds.time.values[-1]
-    mock_coord = Mock()
-    mock_coord.status = SourceFileStatus.Succeeded
-    mock_coord.out_loc.return_value = {"time": last_time}
+    result = SourceFileResult(
+        status=SourceFileStatus.Succeeded,
+        out_loc={"time": pd.Timestamp(last_time)},
+        url="https://test/",
+    )
 
-    process_results = {template_config.data_vars[0].name: [mock_coord]}
+    process_results = {template_config.data_vars[0].name: [result]}
 
     result_ds = region_job.update_template_with_results(process_results)
 

@@ -19,7 +19,7 @@ from reformatters.common.download import (
 from reformatters.common.iterating import digest, group_by
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
     RegionJob,
     SourceFileCoord,
 )
@@ -70,7 +70,7 @@ class NoaaGfsSourceFileCoord(SourceFileCoord):
     def get_idx_url(self, source: DownloadSource = "s3") -> str:
         return f"{self.get_url(source=source)}.idx"
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValueOrRange]:
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         raise NotImplementedError("Subclasses must implement out_loc()")
 
 
@@ -97,7 +97,9 @@ class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
             if source == "nomads"
             else http_download_to_disk
         )
-        idx_local_path = download(coord.get_idx_url(source=source), self.dataset_id)
+        idx_local_path = download(
+            coord.get_idx_url(source=source), self.dataset_id, disk_cache=True
+        )
         starts, ends = grib_message_byte_ranges_from_index(
             idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
         )
@@ -205,7 +207,6 @@ class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
-            kind="operational-update",
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=append_dim,

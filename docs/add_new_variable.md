@@ -9,7 +9,7 @@ How to add a new data variable to an existing dataset.
 1b. Add a new `DataVar` to your dataset’s `TemplateConfig.data_vars` (usually in `src/reformatters/<provider>/<model>/<variant>/template_config.py`).
    - **Name + externally visible attrs**: match existing naming/attrs used in this repo where possible; otherwise follow CF Conventions. Variable names generally follow the format `<long name>_<level>`.
    - **Internal attrs**: derive from `gdalinfo` output on a representative source file (and GRIB index if relevant)
-   - **Encoding**: match existing variables, setting `keep_mantissa_bits` to 7 by default, 6 for wind variables, and 10 for pressure variables with units `pa`.
+   - **Encoding**: match existing variables, setting `keep_mantissa_bits` to 7 by default, 6 for wind variables, 8 for precipitation and 10 for pressure variables with units `pa`.
 
 1c. Regenerate the checked-in Zarr template metadata:
 
@@ -55,7 +55,7 @@ DYNAMICAL_ENV=prod uv run main <DATASET_ID> backfill-kubernetes \
 Run the plotting tools and inspect the generated images in `data/output/<dataset-id>/`.
 
 ```bash
-uv run python src/scripts/validation/plots.py run-all <DATASET_URL>
+uv run src/scripts/validation/plots.py run-all <DATASET_URL>
 ```
 
 Common issues to look out for:
@@ -65,7 +65,7 @@ Common issues to look out for:
 - Time misalignment (e.g. diurnal cycle peaks shifted vs a reference dataset).
 
 Notes
-- `DATASET_URL` is the complete, direct URL to the dataset (`bucket-prefix/dataset-id/version`), e.g. `s3://us-west-2.opendata.source.coop/dynamical/ecmwf-ifs-ens-forecast-15-day-0-25-degree/v0.1.0.zarr`. The bucket prefix can be found in `__main__.py` and the dataset id and version in the `TemplateConfig.dataset_attributes`.
+- `DATASET_URL` is the complete, direct URL to the dataset (`bucket-prefix/dataset-id/version`), e.g. `s3://us-west-2.opendata.source.coop/dynamical/ecmwf-ifs-ens-forecast-15-day-0-25-degree/v0.1.0.zarr` or `s3://dynamical-noaa-hrrr/noaa-hrrr-analysis/v0.1.0.icechunk`. The bucket prefix can be found in `__main__.py` and the dataset id and version in the `TemplateConfig.dataset_attributes`.
 - The spatial and timeseries plots will plot the data against a reference dataset (GEFS analysis by default) to highlight unexpected differences.
 - You can also run each validation plot individually, see `uv run src/scripts/validation/plots.py --help`.
 - You can add additional `--variable` flags if side by side plots help add context (e.g. show solar radiation alongside cloud cover).

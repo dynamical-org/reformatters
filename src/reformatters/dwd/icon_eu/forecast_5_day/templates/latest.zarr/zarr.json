@@ -1,10 +1,11 @@
 {
   "attributes": {
     "dataset_id": "dwd-icon-eu-forecast-5-day",
-    "dataset_version": "0.1.0",
-    "name": "DWD ICON-EU Forecast, 5 Day",
+    "dataset_version": "0.2.0",
+    "name": "DWD ICON-EU forecast, 5 Day",
     "description": "High-resolution weather forecasts for Europe from the ICON-EU model operated by Deutscher Wetterdienst (DWD).",
     "attribution": "DWD ICON-EU data processed by dynamical.org.",
+    "license": "CC-BY-4.0",
     "spatial_domain": "Europe",
     "spatial_resolution": "0.0625 degrees (~7km)",
     "time_domain": "Forecasts initialized 2026-02-10 00:00:00 UTC to Present",
@@ -17,7 +18,274 @@
     "kind": "inline",
     "must_understand": false,
     "metadata": {
-      "convective_available_potential_energy": {
+      "cloud_cover_high": {
+        "shape": [
+          1,
+          93,
+          657,
+          1377
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              93,
+              657,
+              1377
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                1,
+                93,
+                219,
+                153
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "High cloud cover",
+          "short_name": "hcc",
+          "standard_name": "cloud_area_fraction_in_atmosphere_layer",
+          "units": "percent",
+          "comment": "Cloud Cover (0 - 400 hPa). Different agencies use different short_names for this same parameter: ECMWF: HCC; WMO GRIB table: HCDC.",
+          "step_type": "instant",
+          "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "latitude",
+          "longitude"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "cloud_cover_low": {
+        "shape": [
+          1,
+          93,
+          657,
+          1377
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              93,
+              657,
+              1377
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                1,
+                93,
+                219,
+                153
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Low cloud cover",
+          "short_name": "lcc",
+          "standard_name": "cloud_area_fraction_in_atmosphere_layer",
+          "units": "percent",
+          "comment": "Cloud Cover (800 hPa - Soil). Different agencies use different short_names for this same parameter: ECMWF: LCC; WMO GRIB table: LCDC.",
+          "step_type": "instant",
+          "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "latitude",
+          "longitude"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "cloud_cover_medium": {
+        "shape": [
+          1,
+          93,
+          657,
+          1377
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              93,
+              657,
+              1377
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                1,
+                93,
+                219,
+                153
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Medium cloud cover",
+          "short_name": "mcc",
+          "standard_name": "cloud_area_fraction_in_atmosphere_layer",
+          "units": "percent",
+          "comment": "Cloud Cover (400 - 800 hPa). Different agencies use different short_names for this same parameter: ECMWF: MCC; WMO GRIB table: MCDC.",
+          "step_type": "instant",
+          "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "latitude",
+          "longitude"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "convective_available_potential_energy_atmosphere": {
         "shape": [
           1,
           93,
@@ -263,7 +531,7 @@
           }
         ],
         "attributes": {
-          "long_name": "Downward diffusive short wave radiation flux at surface",
+          "long_name": "Surface diffuse short-wave radiation flux",
           "short_name": "aswdifd_s",
           "standard_name": "surface_diffuse_downwelling_shortwave_flux_in_air",
           "units": "W m-2",
@@ -351,11 +619,11 @@
           }
         ],
         "attributes": {
-          "long_name": "Downward direct short wave radiation flux at surface",
+          "long_name": "Surface direct short-wave radiation flux",
           "short_name": "aswdir_s",
           "standard_name": "surface_direct_downwelling_shortwave_flux_in_air",
           "units": "W m-2",
-          "comment": "Downward solar direct radiation flux at the surface, averaged over forecast time. This quantity is not directly provided by the radiation scheme. It is aposteriori diagnosed from the definition of the surface net shortwave radiation flux.",
+          "comment": "Downward solar direct radiation flux at the surface, averaged over each forecast step. This quantity is not directly provided by the radiation scheme. It is aposteriori diagnosed from the definition of the surface net shortwave radiation flux.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -419,95 +687,6 @@
         },
         "dimension_names": [
           "init_time"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "high_cloud_cover": {
-        "shape": [
-          1,
-          93,
-          657,
-          1377
-        ],
-        "data_type": "float32",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              93,
-              657,
-              1377
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "sharding_indexed",
-            "configuration": {
-              "chunk_shape": [
-                1,
-                93,
-                219,
-                153
-              ],
-              "codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "blosc",
-                  "configuration": {
-                    "typesize": 4,
-                    "cname": "zstd",
-                    "clevel": 3,
-                    "shuffle": "shuffle",
-                    "blocksize": 0
-                  }
-                }
-              ],
-              "index_codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "crc32c"
-                }
-              ],
-              "index_location": "end"
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "High cloud cover",
-          "short_name": "hcc",
-          "standard_name": "cloud_area_fraction_in_atmosphere_layer",
-          "units": "percent",
-          "comment": "Cloud Cover (0 - 400 hPa). Different agencies use different short_names for this same parameter: ECMWF: HCC; WMO GRIB table: HCDC.",
-          "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "lead_time",
-          "latitude",
-          "longitude"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -783,273 +962,6 @@
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "longitude"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "low_cloud_cover": {
-        "shape": [
-          1,
-          93,
-          657,
-          1377
-        ],
-        "data_type": "float32",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              93,
-              657,
-              1377
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "sharding_indexed",
-            "configuration": {
-              "chunk_shape": [
-                1,
-                93,
-                219,
-                153
-              ],
-              "codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "blosc",
-                  "configuration": {
-                    "typesize": 4,
-                    "cname": "zstd",
-                    "clevel": 3,
-                    "shuffle": "shuffle",
-                    "blocksize": 0
-                  }
-                }
-              ],
-              "index_codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "crc32c"
-                }
-              ],
-              "index_location": "end"
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Low cloud cover",
-          "short_name": "lcc",
-          "standard_name": "cloud_area_fraction_in_atmosphere_layer",
-          "units": "percent",
-          "comment": "Cloud Cover (800 hPa - Soil). Different agencies use different short_names for this same parameter: ECMWF: LCC; WMO GRIB table: LCDC.",
-          "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "lead_time",
-          "latitude",
-          "longitude"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "maximum_wind_10m": {
-        "shape": [
-          1,
-          93,
-          657,
-          1377
-        ],
-        "data_type": "float32",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              93,
-              657,
-              1377
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "sharding_indexed",
-            "configuration": {
-              "chunk_shape": [
-                1,
-                93,
-                219,
-                153
-              ],
-              "codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "blosc",
-                  "configuration": {
-                    "typesize": 4,
-                    "cname": "zstd",
-                    "clevel": 3,
-                    "shuffle": "shuffle",
-                    "blocksize": 0
-                  }
-                }
-              ],
-              "index_codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "crc32c"
-                }
-              ],
-              "index_location": "end"
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Instantaneous 10 metre wind gust",
-          "short_name": "i10fg",
-          "standard_name": "wind_speed_of_gust",
-          "units": "m s-1",
-          "comment": "Maximum wind gust at 10 m above ground. It is diagnosed from the turbulence state in the atmospheric boundary layer, including a potential enhancement by the SSO parameterization over mountainous terrain. In the presence of deep convection, it contains an additional contribution due to convective gusts.",
-          "step_type": "max",
-          "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "lead_time",
-          "latitude",
-          "longitude"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "medium_cloud_cover": {
-        "shape": [
-          1,
-          93,
-          657,
-          1377
-        ],
-        "data_type": "float32",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              93,
-              657,
-              1377
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "sharding_indexed",
-            "configuration": {
-              "chunk_shape": [
-                1,
-                93,
-                219,
-                153
-              ],
-              "codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "blosc",
-                  "configuration": {
-                    "typesize": 4,
-                    "cname": "zstd",
-                    "clevel": 3,
-                    "shuffle": "shuffle",
-                    "blocksize": 0
-                  }
-                }
-              ],
-              "index_codecs": [
-                {
-                  "name": "bytes",
-                  "configuration": {
-                    "endian": "little"
-                  }
-                },
-                {
-                  "name": "crc32c"
-                }
-              ],
-              "index_location": "end"
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Medium cloud cover",
-          "short_name": "mcc",
-          "standard_name": "cloud_area_fraction_in_atmosphere_layer",
-          "units": "percent",
-          "comment": "Cloud Cover (400 - 800 hPa). Different agencies use different short_names for this same parameter: ECMWF: MCC; WMO GRIB table: MCDC.",
-          "step_type": "instant",
-          "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "lead_time",
-          "latitude",
           "longitude"
         ],
         "zarr_format": 3,
@@ -1499,7 +1411,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "snow_depth": {
+      "snow_thickness_surface": {
         "shape": [
           1,
           93,
@@ -1588,7 +1500,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "snow_depth_water_equivalent": {
+      "snow_water_equivalent_surface": {
         "shape": [
           1,
           93,
@@ -1815,7 +1727,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "total_cloud_cover": {
+      "total_cloud_cover_atmosphere": {
         "shape": [
           1,
           93,
@@ -1957,6 +1869,95 @@
         "dimension_names": [
           "init_time",
           "lead_time"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "wind_gust_10m": {
+        "shape": [
+          1,
+          93,
+          657,
+          1377
+        ],
+        "data_type": "float32",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              93,
+              657,
+              1377
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "sharding_indexed",
+            "configuration": {
+              "chunk_shape": [
+                1,
+                93,
+                219,
+                153
+              ],
+              "codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "blosc",
+                  "configuration": {
+                    "typesize": 4,
+                    "cname": "zstd",
+                    "clevel": 3,
+                    "shuffle": "shuffle",
+                    "blocksize": 0
+                  }
+                }
+              ],
+              "index_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                },
+                {
+                  "name": "crc32c"
+                }
+              ],
+              "index_location": "end"
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Maximum 10 metre wind gust since previous post-processing",
+          "short_name": "10fg",
+          "standard_name": "wind_speed_of_gust",
+          "units": "m s-1",
+          "comment": "Maximum wind gust at 10 m above ground. It is diagnosed from the turbulence state in the atmospheric boundary layer, including a potential enhancement by the SSO parameterization over mountainous terrain. In the presence of deep convection, it contains an additional contribution due to convective gusts.",
+          "step_type": "max",
+          "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "latitude",
+          "longitude"
         ],
         "zarr_format": 3,
         "node_type": "array",

@@ -30,7 +30,7 @@ from reformatters.common.zarr import (
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, EcmwfInternalAttrs
 
 
-class EcmwfAifsDeterministicForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
+class EcmwfAifsSingleForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
     dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
     append_dim: AppendDim = "init_time"
     # Start from 2024-04-01 when PL u/v are available and the grid is regular 0.25 degree.
@@ -42,13 +42,14 @@ class EcmwfAifsDeterministicForecastTemplateConfig(TemplateConfig[EcmwfDataVar])
     @property
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
-            dataset_id="ecmwf-aifs-deterministic-forecast",
+            dataset_id="ecmwf-aifs-single-forecast",
             dataset_version="0.1.0",
-            name="ECMWF AIFS deterministic forecast",
-            description="Weather forecasts from the ECMWF Artificial Intelligence Forecasting System (AIFS) deterministic model.",
-            attribution="ECMWF AIFS deterministic forecast data processed by dynamical.org from ECMWF Open Data.",
+            name="ECMWF AIFS Single forecast",
+            description="Weather forecasts from the ECMWF Artificial Intelligence Forecasting System (AIFS) Single model.",
+            attribution="ECMWF AIFS Single forecast data processed by dynamical.org from ECMWF Open Data.",
+            license="CC-BY-4.0",
             spatial_domain="Global",
-            spatial_resolution="0.25 degrees (~25km)",
+            spatial_resolution="0.25 degrees (~20km)",
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
             time_resolution=f"Forecasts initialized every {self.append_dim_frequency.total_seconds() / 3600:.0f} hours",
             forecast_domain="Forecast lead time 0-360 hours (0-15 days) ahead",

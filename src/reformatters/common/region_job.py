@@ -6,22 +6,28 @@ from contextlib import suppress
 from copy import deepcopy
 from enum import Enum, auto
 from http import HTTPStatus
-from itertools import batched, chain, pairwise
+from itertools import chain, pairwise
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar, get_args
+from typing import Annotated, Any, ClassVar, Generic, TypeVar, get_args
 
 import httpx
 import numpy as np
 import pandas as pd
 import pydantic
 import xarray as xr
-from pydantic import AfterValidator, Field, computed_field
+from pydantic import (
+    AfterValidator,
+    Field,
+    computed_field,
+    field_serializer,
+    field_validator,
+)
 from zarr.abc.store import Store
 
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config_models import DataVar
-from reformatters.common.iterating import dimension_slices, get_worker_jobs
+from reformatters.common.iterating import dimension_slices, split_groups
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel, replace
 from reformatters.common.shared_memory_utils import (
@@ -40,7 +46,7 @@ from reformatters.common.zarr import copy_data_var
 
 log = get_logger(__name__)
 
-type CoordinateValueOrRange = slice | int | float | pd.Timestamp | pd.Timedelta | str
+type CoordinateValue = int | float | pd.Timestamp | pd.Timedelta | str
 
 
 class SourceFileStatus(Enum):
@@ -74,11 +80,11 @@ class SourceFileCoord(FrozenBaseModel):
 
     def out_loc(
         self,
-    ) -> Mapping[Dim, CoordinateValueOrRange]:
+    ) -> Mapping[Dim, CoordinateValue]:
         """
         Return a data array indexer which identifies the region in the output dataset
         to write the data from the source file. The indexer is a dict from dimension
-        names to coordinate values or slices.
+        names to coordinate values.
 
         If the names of the coordinate attributes of your SourceFileCoord subclass are also all
         dimension names in the output dataset, use the default implementation of this method.
@@ -90,8 +96,8 @@ class SourceFileCoord(FrozenBaseModel):
         return self.model_dump(exclude=["status", "downloaded_path"])  # type: ignore[arg-type,return-value]
 
     @property
-    def append_dim_coord(self) -> CoordinateValueOrRange:
-        """Return the coordinate value or range for the append dimension."""
+    def append_dim_coord(self) -> CoordinateValue:
+        """Return the coordinate value for the append dimension."""
         out_loc = self.out_loc()
         for d in get_args(AppendDim.__value__):
             if coord := out_loc.get(d):
@@ -118,9 +124,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     region: Annotated[slice, AfterValidator(region_slice)]
     reformat_job_name: str
 
-    # Limit the number of variables processed in each backfill job if set.
+    # Limit the number of variables processed in each job if set.
     # Rule of thumb: leave unset unless a job takes > 15 minutes.
-    max_vars_per_backfill_job: ClassVar[int | None] = None
+    max_vars_per_job: ClassVar[int | None] = None
 
     # Limit the number of variables processed in each download group if set.
     # If value is less than len(data_vars), downloading, reading/recompressing, and writing steps
@@ -147,6 +153,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         This is a class method so it can be called by RegionJob factory methods.
         """
         return [data_vars]
+
+    @classmethod
+    def num_variable_groups(cls, data_vars: Sequence[DATA_VAR]) -> int:
+        """Number of variable groups produced by get_jobs for a given set of data_vars."""
+        if cls.max_vars_per_job is None:
+            return 1
+        return len(split_groups(cls.source_groups(data_vars), cls.max_vars_per_job))
 
     def get_processing_region(self) -> slice:
         """
@@ -227,7 +240,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
 
     def update_template_with_results(
-        self, process_results: Mapping[str, Sequence[SOURCE_FILE_COORD]]
+        self, process_results: Mapping[str, Sequence["SourceFileResult"]]
     ) -> xr.Dataset:
         """
         Update template dataset based on processing results. This method is called
@@ -244,8 +257,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         Parameters
         ----------
-        process_results : Mapping[str, Sequence[SOURCE_FILE_COORD]]
-            Mapping from variable names to their source file coordinates with final processing status.
+        process_results : Mapping[str, Sequence[SourceFileResult]]
+            Mapping from variable names to their SourceFileResult with final processing status.
 
         Returns
         -------
@@ -254,10 +267,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         max_append_dim_processed = max(
             (
-                c.out_loc()[self.append_dim]
+                c.out_loc[self.append_dim]
                 for c in chain.from_iterable(process_results.values())
                 if c.status == SourceFileStatus.Succeeded
-            ),  # ty: ignore[invalid-argument-type]
+            ),
             default=None,
         )
         if max_append_dim_processed is None:
@@ -338,14 +351,11 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     @classmethod
     def get_jobs(
         cls,
-        kind: Literal["backfill", "operational-update"],
         tmp_store: Path,
         template_ds: xr.Dataset,
         append_dim: AppendDim,
         all_data_vars: Sequence[DATA_VAR],
         reformat_job_name: str,
-        worker_index: int = 0,
-        workers_total: int = 1,
         filter_start: Timestamp | None = None,
         filter_end: Timestamp | None = None,
         filter_contains: list[Timestamp] | None = None,
@@ -353,9 +363,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> Sequence["RegionJob[DATA_VAR, SOURCE_FILE_COORD]"]:
         """
         Return a sequence of RegionJob instances to process.
-
-        If `workers_total` and `worker_index` are provided the returned jobs are
-        filtered to only include jobs which should be processed by `worker_index`.
 
         If any of the `filter_*` arguments are provided, the returned jobs are filtered
         to only include jobs which intersect all provided filters. Complete jobs are always
@@ -376,10 +383,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         reformat_job_name : str
             The name of the reformatting job, used for progress tracking.
             This is often the name of the Kubernetes job, or "local".
-        worker_index : int, default 0
-            Index of the current worker (0-indexed).
-        workers_total : int, default 1
-            Total number of workers processing jobs in parallel.
         filter_start : Timestamp | None, default None
             Keep shards where max(shard_coords) >= filter_start. Inclusive.
         filter_end : Timestamp | None, default None
@@ -393,7 +396,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         Returns
         -------
         Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
-            RegionJob instances assigned to this worker.
+            All RegionJob instances matching the filters. Worker partitioning
+            is handled by the caller via get_worker_jobs.
         """
 
         # Data variables -- filter and group
@@ -405,23 +409,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         else:
             data_vars = all_data_vars
 
-        # If kind == "operational-update" we need all variables in one job
-        # so we don't extend the dataset before all variables are processed.
-        # If kind == "backfill" it can be useful to make smaller jobs for more parallelism
-        # and granular progress tracking at the kubernetes job level.
-        if kind == "backfill" and cls.max_vars_per_backfill_job is not None:
-            # split by source groups first as those are efficient groupings
+        if cls.max_vars_per_job is not None:
+            # Split by source groups first as those are efficient groupings,
+            # then split further to create smaller jobs for parallelism.
             data_var_groups = cls.source_groups(data_vars)
-            data_var_groups = cls._maybe_split_groups(
-                data_var_groups, cls.max_vars_per_backfill_job
-            )
+            data_var_groups = split_groups(data_var_groups, cls.max_vars_per_job)
         else:
-            # In operational update we must have all variables in one job.
-            # In backfill without max_vars_per_backfill_job set we also want all variables in one job.
             data_var_groups = [data_vars]
-
-        if kind == "operational-update":
-            assert len(data_var_groups) == 1
 
         # Regions along append dimension
         regions = dimension_slices(template_ds, append_dim, kind="shards")
@@ -486,7 +480,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             for region in regions
             for data_var_group in data_var_groups
         ]
-        return get_worker_jobs(all_jobs, worker_index, workers_total)
+        return all_jobs
 
     def process(
         self,
@@ -515,7 +509,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         data_var_groups = self.source_groups(self.data_vars)
         if self.max_vars_per_download_group is not None:
-            data_var_groups = self._maybe_split_groups(
+            data_var_groups = split_groups(
                 data_var_groups, self.max_vars_per_download_group
             )
 
@@ -606,17 +600,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         output_region_ds = ds.isel({self.append_dim: self.region})
         return processing_region_ds, output_region_ds
 
-    @classmethod
-    def _maybe_split_groups(
-        cls, data_var_groups: Sequence[Sequence[DATA_VAR]], batch_size: int
-    ) -> Sequence[Sequence[DATA_VAR]]:
-        """Splits inner groups into smaller groups of at most batch_size."""
-        return [
-            tuple(split_group)
-            for group in data_var_groups
-            for split_group in batched(group, batch_size, strict=False)
-        ]
-
     def _download_processing_group(
         self,
         source_file_coords: Sequence[SOURCE_FILE_COORD],
@@ -641,8 +624,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 # For recent files, we expect some files to not exist yet, just log the path
                 # else, log exception so it is caught by error reporting but doesn't stop processing
                 append_dim_coord = coord.append_dim_coord
-                if isinstance(append_dim_coord, slice):
-                    append_dim_coord = append_dim_coord.start
                 two_days_ago = pd.Timestamp.now() - pd.Timedelta(hours=48)
                 is_not_found = isinstance(e, FileNotFoundError) or (
                     isinstance(e, httpx.HTTPStatusError)
@@ -740,3 +721,48 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def __repr__(self) -> str:
         return f"RegionJob(region=({self.region.start}, {self.region.stop}), data_vars={[v.name for v in self.data_vars]})"
+
+
+class SourceFileResult(FrozenBaseModel):
+    """
+    Per SourceFileCoord result passed to `update_template_with_results`.
+
+    This class is distinct from SourceFileCoord to support JSON serialization.
+    Each worker writes its own serialized results, which are then read back
+    and merged by the last worker using `parallel_coordination.collect_results`
+    before being passed into `update_template_with_results`.
+    """
+
+    status: SourceFileStatus
+    out_loc: dict[str, Any]
+    url: str
+
+    @field_serializer("out_loc")
+    def _ser_out_loc(self, v: dict[str, Any]) -> dict[str, Any]:
+        return {k: self._ser_out_loc_value(val) for k, val in v.items()}
+
+    @field_validator("out_loc", mode="before")
+    @classmethod
+    def _val_out_loc(cls, v: Any) -> Any:  # noqa: ANN401
+        if not isinstance(v, dict):
+            return v
+        return {k: cls._val_out_loc_value(val) for k, val in v.items()}
+
+    @staticmethod
+    def _ser_out_loc_value(v: Any) -> Any:  # noqa: ANN401
+        # pd.Timestamp / pd.Timedelta values are round-tripped via tagged dicts
+        # so JSON deserialization reconstructs the original pandas type.
+        if isinstance(v, pd.Timestamp):
+            return {"__t": "ts", "v": v.isoformat()}
+        if isinstance(v, pd.Timedelta):
+            return {"__t": "td", "v": v.isoformat()}
+        return v
+
+    @staticmethod
+    def _val_out_loc_value(v: Any) -> Any:  # noqa: ANN401
+        if isinstance(v, dict) and "__t" in v:
+            if v["__t"] == "ts":
+                return pd.Timestamp(v["v"])
+            if v["__t"] == "td":
+                return pd.Timedelta(v["v"])
+        return v

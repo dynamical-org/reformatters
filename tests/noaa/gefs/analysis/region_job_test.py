@@ -13,7 +13,7 @@ from obstore.exceptions import PermissionDeniedError
 
 from reformatters.common.config_models import DataVarAttrs, Encoding
 from reformatters.common.pydantic import replace
-from reformatters.common.region_job import SourceFileStatus
+from reformatters.common.region_job import SourceFileResult, SourceFileStatus
 from reformatters.common.storage import (
     DatasetFormat,
     StorageConfig,
@@ -116,9 +116,9 @@ def example_data_vars() -> list[GEFSDataVar]:
     ]
 
 
-def test_max_vars_per_backfill_job() -> None:
-    """Test max_vars_per_backfill_job is correctly set."""
-    assert GefsAnalysisRegionJob.max_vars_per_backfill_job == 1
+def test_max_vars_per_job() -> None:
+    """Test max_vars_per_job is correctly set."""
+    assert GefsAnalysisRegionJob.max_vars_per_job == 1
 
 
 def test_get_processing_region(
@@ -567,7 +567,6 @@ def test_operational_update_jobs(
             # Verify get_jobs was called with correct parameters
             mock_get_jobs.assert_called_once()
             call_args = mock_get_jobs.call_args
-            assert call_args.kwargs["kind"] == "operational-update"
             assert call_args.kwargs["tmp_store"] == tmp_store_path
             assert call_args.kwargs["append_dim"] == "time"
             assert call_args.kwargs["all_data_vars"] == example_data_vars
@@ -598,8 +597,13 @@ def test_update_template_with_results(
         data_vars=data_vars,
         status=SourceFileStatus.Succeeded,
     )
+    result = SourceFileResult(
+        status=coord.status,
+        out_loc={**coord.out_loc()},
+        url=coord.get_url(),
+    )
     process_results = {
-        "temperature_2m": [coord],
+        "temperature_2m": [result],
     }
     updated_template = job.update_template_with_results(process_results)
     assert updated_template.time.max() == pd.Timestamp("2000-01-03T18:00")

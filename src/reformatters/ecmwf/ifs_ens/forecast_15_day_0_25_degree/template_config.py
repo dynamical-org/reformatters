@@ -27,7 +27,11 @@ from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
-from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, EcmwfInternalAttrs
+from reformatters.ecmwf.ecmwf_config_models import (
+    EcmwfDataVar,
+    EcmwfInternalAttrs,
+    MarsSourceOverrides,
+)
 
 
 class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVar]):
@@ -50,9 +54,10 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
         return DatasetAttributes(
             dataset_id="ecmwf-ifs-ens-forecast-15-day-0-25-degree",
             dataset_version="0.1.0",
-            name="ECMWF IFS ENS Forecast, 15 day, 0.25 degree",
+            name="ECMWF IFS ENS forecast, 15 day, 0.25 degree",
             description="Ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS).",
-            attribution="ECMWF IFS ENS Forecast data processed by dynamical.org from ECMWF Open Data.",
+            attribution="ECMWF IFS ENS forecast data processed by dynamical.org from ECMWF Open Data.",
+            license="CC-BY-4.0",
             spatial_domain="Global",
             spatial_resolution="0.25 degrees (~20km)",
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
@@ -350,6 +355,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_element="PRES",
                     grib_index_param="sp",
                     keep_mantissa_bits=11,
+                    mars=MarsSourceOverrides(grib_element="SP"),
                 ),
             ),
             EcmwfDataVar(
@@ -368,6 +374,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_element="TMP",
                     grib_index_param="2t",
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    mars=MarsSourceOverrides(grib_element="2T"),
                 ),
             ),
             EcmwfDataVar(
@@ -386,6 +393,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_element="UGRD",
                     grib_index_param="10u",
                     keep_mantissa_bits=6,
+                    mars=MarsSourceOverrides(grib_element="10U"),
                 ),
             ),
             EcmwfDataVar(
@@ -404,6 +412,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_element="VGRD",
                     grib_index_param="10v",
                     keep_mantissa_bits=6,
+                    mars=MarsSourceOverrides(grib_element="10V"),
                 ),
             ),
             EcmwfDataVar(
@@ -422,6 +431,10 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_element="UGRD",
                     grib_index_param="100u",
                     keep_mantissa_bits=6,
+                    mars=MarsSourceOverrides(
+                        grib_element="var246 of table 228 of center ECMWF",
+                        grib_comment="undefined [-]",
+                    ),
                 ),
             ),
             EcmwfDataVar(
@@ -440,6 +453,10 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_element="VGRD",
                     grib_index_param="100v",
                     keep_mantissa_bits=6,
+                    mars=MarsSourceOverrides(
+                        grib_element="var247 of table 228 of center ECMWF",
+                        grib_comment="undefined [-]",
+                    ),
                 ),
             ),
             EcmwfDataVar(
@@ -466,6 +483,10 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     window_reset_frequency=pd.Timedelta.max,  # accumulate over the full lead time dimension, never resetting
                     deaccumulation_invalid_below_threshold_rate=PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
+                    mars=MarsSourceOverrides(
+                        grib_element="TP",
+                        grib_comment="Total precipitation [m]",
+                    ),
                 ),
             ),
             EcmwfDataVar(
@@ -506,6 +527,10 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     deaccumulate_to_rate=True,
                     window_reset_frequency=pd.Timedelta.max,
                     deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+                    mars=MarsSourceOverrides(
+                        grib_element="STRD",
+                        grib_comment="Surface thermal radiation downwards [W*s/m^2]",
+                    ),
                 ),
             ),
             EcmwfDataVar(
@@ -527,6 +552,10 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     deaccumulate_to_rate=True,
                     window_reset_frequency=pd.Timedelta.max,
                     deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+                    mars=MarsSourceOverrides(
+                        grib_element="SSRD",
+                        grib_comment="Surface solar radiation downwards [W*s/m^2]",
+                    ),
                 ),
             ),
             EcmwfDataVar(
@@ -545,6 +574,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_element="PRES",
                     grib_index_param="msl",
                     keep_mantissa_bits=11,
+                    mars=MarsSourceOverrides(grib_element="MSL"),
                 ),
             ),
             EcmwfDataVar(
@@ -563,6 +593,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_element="DPT",
                     grib_index_param="2d",
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    mars=MarsSourceOverrides(grib_element="2D"),
                 ),
             ),
             EcmwfDataVar(
@@ -583,6 +614,12 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_index_level_type="pl",
                     grib_index_level_value=500,
                     keep_mantissa_bits=11,
+                    mars=MarsSourceOverrides(
+                        grib_index_param="z",
+                        grib_element="Z",
+                        grib_comment="Geopotential (at the surface = orography) [m^2/s^2]",
+                        scale_factor=1 / 9.80665,
+                    ),
                 ),
             ),
             EcmwfDataVar(
@@ -603,6 +640,12 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_index_level_type="pl",
                     grib_index_level_value=850,
                     keep_mantissa_bits=11,
+                    mars=MarsSourceOverrides(
+                        grib_index_param="z",
+                        grib_element="Z",
+                        grib_comment="Geopotential (at the surface = orography) [m^2/s^2]",
+                        scale_factor=1 / 9.80665,
+                    ),
                 ),
             ),
             EcmwfDataVar(
@@ -623,6 +666,12 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_index_level_type="pl",
                     grib_index_level_value=925,
                     keep_mantissa_bits=11,
+                    mars=MarsSourceOverrides(
+                        grib_index_param="z",
+                        grib_element="Z",
+                        grib_comment="Geopotential (at the surface = orography) [m^2/s^2]",
+                        scale_factor=1 / 9.80665,
+                    ),
                 ),
             ),
             EcmwfDataVar(
@@ -643,6 +692,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_index_level_type="pl",
                     grib_index_level_value=850,
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    mars=MarsSourceOverrides(grib_element="T"),
                 ),
             ),
             EcmwfDataVar(
@@ -663,6 +713,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_index_level_type="pl",
                     grib_index_level_value=925,
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    mars=MarsSourceOverrides(grib_element="T"),
                 ),
             ),
             EcmwfDataVar(
@@ -685,6 +736,10 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     ),
                     keep_mantissa_bits=6,
                     date_available=pd.Timestamp("2024-11-13T00:00"),
+                    mars=MarsSourceOverrides(
+                        grib_element="var49 of table 128 of center ECMWF",
+                        grib_comment="undefined [-]",
+                    ),
                 ),
             ),
             EcmwfDataVar(
@@ -706,6 +761,10 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     scale_factor=100,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     date_available=pd.Timestamp("2025-11-21T00:00"),
+                    mars=MarsSourceOverrides(
+                        grib_element="TCC",
+                        grib_comment="Total cloud cover (0 - 1) [-]",
+                    ),
                 ),
             ),
         ]

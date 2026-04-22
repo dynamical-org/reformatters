@@ -30,8 +30,9 @@ def test_spatial_coordinates() -> None:
     assert np.isclose(ds.longitude.min(), -23.5)
     assert np.isclose(ds.longitude.max(), 62.5)
 
-    # Resolution is 0.0625 degrees
-    assert np.allclose(ds.latitude.diff(dim="latitude"), 0.0625)
+    # Resolution is 0.0625 degrees. Latitude is descending (north->south) to
+    # match the source GRIB row order and the project's other datasets.
+    assert np.allclose(ds.latitude.diff(dim="latitude"), -0.0625)
     assert np.allclose(ds.longitude.diff(dim="longitude"), 0.0625)
 
 
@@ -162,6 +163,6 @@ def test_dataset_attributes() -> None:
     config = DwdIconEuForecast5DayTemplateConfig()
     attrs = config.dataset_attributes
     assert attrs.dataset_id == "dwd-icon-eu-forecast-5-day"
-    assert attrs.dataset_version == "0.1.0"
+    assert attrs.dataset_version == "0.2.0"
     assert "Europe" in attrs.spatial_domain
     assert "0.0625" in attrs.spatial_resolution

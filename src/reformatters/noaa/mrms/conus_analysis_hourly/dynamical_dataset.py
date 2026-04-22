@@ -23,11 +23,11 @@ class NoaaMrmsConusAnalysisHourlyDataset(
     region_job_class: type[NoaaMrmsRegionJob] = NoaaMrmsRegionJob
 
     def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
-        # Pass 2 has ~60-min latency. Update every 3 hours, 3 min after Pass 2 is expected.
+        # Pass 2 has ~60-min latency. Update hourly, 3 min after Pass 2 is expected.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="3 */3 * * *",
-            pod_active_deadline=timedelta(minutes=30),
+            schedule="3 * * * *",
+            pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="14",
@@ -39,7 +39,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
 
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="33 */3 * * *",
+            schedule="13 * * * *",
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,

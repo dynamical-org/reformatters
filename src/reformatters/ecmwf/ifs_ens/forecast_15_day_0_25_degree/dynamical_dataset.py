@@ -8,15 +8,13 @@ from reformatters.ecmwf.ecmwf_config_models import (
     EcmwfDataVar,
 )
 
-from .region_job import (
-    EcmwfIfsEnsForecast15Day025DegreeRegionJob,
-    EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord,
-)
+from .region_job import EcmwfIfsEnsForecast15Day025DegreeRegionJob
+from .source_file_coord import IfsEnsSourceFileCoord
 from .template_config import EcmwfIfsEnsForecast15Day025DegreeTemplateConfig
 
 
 class EcmwfIfsEnsForecast15Day025DegreeDataset(
-    DynamicalDataset[EcmwfDataVar, EcmwfIfsEnsForecast15Day025DegreeSourceFileCoord]
+    DynamicalDataset[EcmwfDataVar, IfsEnsSourceFileCoord]
 ):
     template_config: EcmwfIfsEnsForecast15Day025DegreeTemplateConfig = (
         EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
@@ -28,6 +26,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
 
+        workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             # ECMWF uploads the first file at 07:40 UTC and the last one by ~07:45 UTC.
@@ -42,6 +41,8 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
             shared_memory="19G",
             ephemeral_storage="30G",
             secret_names=self.store_factory.k8s_secret_names(),
+            workers_total=workers,
+            parallelism=min(workers, 20),
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",

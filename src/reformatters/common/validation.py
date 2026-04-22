@@ -1,5 +1,4 @@
 import itertools
-import json
 from collections.abc import Sequence
 from datetime import timedelta
 from functools import partial
@@ -344,16 +343,35 @@ def check_for_expected_shards(store: Store, ds: xr.Dataset) -> ValidationResult:
             var_missing_shard_indexes[var] = sorted(missing_shard_indexes)
 
     if len(problem_vars) > 0:
-        var_missing_shards_json = json.dumps(var_missing_shard_indexes)
+        summary = ", ".join(
+            f"{var} ({len(var_missing_shard_indexes[var])} missing)"
+            for var in problem_vars
+        )
+        shard_lists = [var_missing_shard_indexes[var] for var in problem_vars]
+        if len(problem_vars) > 1 and all(s == shard_lists[0] for s in shard_lists[1:]):
+            details = f"all missing the same shards: {_truncate_shards(shard_lists[0])}"
+        else:
+            details = ", ".join(
+                f"{var}: {_truncate_shards(var_missing_shard_indexes[var])}"
+                for var in problem_vars
+            )
         return ValidationResult(
             passed=False,
-            message=f"{problem_vars} are missing expected shards: {var_missing_shards_json[:2000]}",
+            message=f"Missing shards: {summary}. {details}",
         )
 
     return ValidationResult(
         passed=True,
         message="All variables have expected shards",
     )
+
+
+def _truncate_shards(shards: Sequence[str], keep: int = 3) -> str:
+    if len(shards) <= keep * 2:
+        return f"[{', '.join(shards)}]"
+    head = ", ".join(shards[:keep])
+    tail = ", ".join(shards[-keep:])
+    return f"[{head}, ..., {tail}]"
 
 
 def _sync_list_shards(store: Store, var: str) -> set[str]:

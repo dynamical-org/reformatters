@@ -70,7 +70,7 @@ def test_region_job_integration(dataset: GefsAnalysisDataset) -> None:
     assert template_config.append_dim == "time"
 
     # Region job should have expected max vars per backfill job
-    assert region_job_class.max_vars_per_backfill_job == 1
+    assert region_job_class.max_vars_per_job == 1
 
     # Data variables from template config should be compatible with region job
     data_vars = template_config.data_vars

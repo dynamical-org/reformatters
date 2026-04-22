@@ -11,7 +11,7 @@ from zarr.abc.store import Store
 
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.region_job import (
-    CoordinateValueOrRange,
+    CoordinateValue,
     RegionJob,
     SourceFileCoord,
 )
@@ -62,7 +62,7 @@ class UarizonaSwannAnalysisSourceFileCoord(SourceFileCoord):
 
     def out_loc(
         self,
-    ) -> Mapping[Dim, CoordinateValueOrRange]:
+    ) -> Mapping[Dim, CoordinateValue]:
         return {"time": self.time}
 
     def get_water_year(self) -> int:
@@ -103,7 +103,6 @@ class UarizonaSwannAnalysisRegionJob(
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
-            kind="operational-update",
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=append_dim,

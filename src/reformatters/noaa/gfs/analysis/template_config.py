@@ -39,6 +39,7 @@ class NoaaGfsAnalysisTemplateConfig(NoaaGfsCommonTemplateConfig):
             name="NOAA GFS analysis",
             description="Weather analysis from the Global Forecast System (GFS) operated by NOAA NWS NCEP.",
             attribution="NOAA NWS NCEP GFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
+            license="CC-BY-4.0",
             spatial_domain="Global",
             spatial_resolution="0.25 degrees (~20km)",
             time_domain=f"{self.append_dim_start} UTC to Present",
