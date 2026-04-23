@@ -1648,7 +1648,7 @@
           }
         ],
         "attributes": {
-          "long_name": "Total Cloud Cover",
+          "long_name": "Total cloud cover",
           "short_name": "tcc",
           "standard_name": "cloud_area_fraction",
           "units": "percent",

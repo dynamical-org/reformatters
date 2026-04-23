@@ -37,7 +37,7 @@ log = get_logger(__name__)
 class DwdIconEuForecast5DaySourceFileCoord(SourceFileCoord):
     """Coordinates of a single source file to process.
 
-    Note that, unlike NOAA's NWPs, ICON-EU is published as one GRIB2 file per variable.
+    ICON-EU is published as one Bzip2-compressed GRIB2 file per variable.
     """
 
     init_time: Timestamp
@@ -69,7 +69,7 @@ class DwdIconEuForecast5DaySourceFileCoord(SourceFileCoord):
         ) + self._get_basename()
 
     def _get_basename(self) -> str:
-        """Note that this only handles single-level variables."""
+        # Note that this only handles single-level variables.
         init_time_str: str = self.init_time.strftime("%Y%m%d%H")
         lead_time_hours: int = whole_hours(self.lead_time)
         return (
@@ -79,11 +79,7 @@ class DwdIconEuForecast5DaySourceFileCoord(SourceFileCoord):
 
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         """Return the output location for this file's data in the dataset."""
-        # Map to the standard dimension names used in the template
-        return {
-            "init_time": self.init_time,
-            "lead_time": self.lead_time,
-        }
+        return {"init_time": self.init_time, "lead_time": self.lead_time}
 
     @property
     def variable_name_in_filename(self) -> str:
@@ -120,7 +116,6 @@ class DwdIconEuForecast5DayRegionJob(
         lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
         data_var = item(data_var_group)
 
-        # Sanity checks
         assert len(init_times) > 0
         assert len(lead_times) > 0
 
@@ -172,50 +167,33 @@ class DwdIconEuForecast5DayRegionJob(
     def apply_data_transformations(
         self, data_array: xr.DataArray, data_var: DwdIconEuDataVar
     ) -> None:
-        """
-        Apply in-place data transformations to the output data array for a given data variable.
+        """Apply in-place data transformations to the output data array for a given data variable."""
+        attrs = data_var.internal_attrs
 
-        This method is called after reading all data for a variable into the shared-memory array,
-        and before writing shards to the output store.
+        if attrs.scale_factor is not None:
+            data_array *= attrs.scale_factor
 
-        Parameters
-        ----------
-        data_array : xr.DataArray
-            The output data array to be transformed in-place.
-        data_var : DwdIconEuDataVar
-            The data variable metadata object, which may contain transformation parameters.
-        """
-
-        if (scale_factor := data_var.internal_attrs.scale_factor) is not None:
-            data_array *= scale_factor
-
-        if data_var.internal_attrs.deaccumulate_to_rate:
-            assert data_var.internal_attrs.window_reset_frequency is not None
+        if attrs.deaccumulate_to_rate:
+            assert attrs.window_reset_frequency is not None
             log.info(
                 f"Converting {data_var.name} from accumulations to rates along lead_time"
             )
-            deaccumulate_kwargs: dict[str, Any] = {
-                "accumulation_type": data_var.internal_attrs.deaccumulation_type,
+            optional_kwargs: dict[str, Any] = {
+                "invalid_below_threshold_rate": attrs.deaccumulation_invalid_below_threshold_rate,
+                "expected_clamp_fraction": attrs.deaccumulation_expected_clamp_fraction,
             }
-            invalid_below = (
-                data_var.internal_attrs.deaccumulation_invalid_below_threshold_rate
-            )
-            if invalid_below is not None:
-                deaccumulate_kwargs["invalid_below_threshold_rate"] = invalid_below
-            expected_clamp = (
-                data_var.internal_attrs.deaccumulation_expected_clamp_fraction
-            )
-            if expected_clamp is not None:
-                deaccumulate_kwargs["expected_clamp_fraction"] = expected_clamp
+            optional_kwargs = {
+                k: v for k, v in optional_kwargs.items() if v is not None
+            }
             try:
                 deaccumulate_to_rates_inplace(
                     data_array,
                     dim="lead_time",
-                    reset_frequency=data_var.internal_attrs.window_reset_frequency,
-                    **deaccumulate_kwargs,
+                    reset_frequency=attrs.window_reset_frequency,
+                    accumulation_type=attrs.deaccumulation_type,
+                    **optional_kwargs,
                 )
             except ValueError:
-                # Log exception so we are notified if deaccumulation errors are larger than expected.
                 log.exception(f"Error deaccumulating {data_var.name}")
 
         super().apply_data_transformations(data_array, data_var)
