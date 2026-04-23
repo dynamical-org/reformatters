@@ -1,4 +1,4 @@
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from datetime import timedelta
 from functools import partial
 
@@ -24,7 +24,7 @@ class NoaaHrrrAnalysisDataset(
     template_config: NoaaHrrrAnalysisTemplateConfig = NoaaHrrrAnalysisTemplateConfig()
     region_job_class: type[NoaaHrrrAnalysisRegionJob] = NoaaHrrrAnalysisRegionJob
 
-    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
+    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Define Kubernetes cron jobs for operational updates and validation."""
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",

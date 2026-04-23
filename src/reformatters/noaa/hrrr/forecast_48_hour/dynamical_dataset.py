@@ -1,4 +1,4 @@
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from datetime import timedelta
 
 from reformatters.common import validation
@@ -32,7 +32,7 @@ class NoaaHrrrForecast48HourDataset(
         NoaaHrrrForecast48HourRegionJob
     )
 
-    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
+    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Define Kubernetes cron jobs for operational updates and validation."""
         # We pull the 0, 6, 12, and 18 init times in this dataset.
         # HRRR f048 (last lead time) available ~1h48m after init on NOMADS. +3 min buffer.
