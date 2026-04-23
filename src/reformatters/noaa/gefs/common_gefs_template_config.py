@@ -440,7 +440,7 @@ def get_shared_data_var_configs(
             attrs=DataVarAttrs(
                 short_name="tcc",
                 standard_name="cloud_area_fraction",
-                long_name="Total Cloud Cover",
+                long_name="Total cloud cover",
                 units="percent",
                 comment="Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
                 step_type="avg",

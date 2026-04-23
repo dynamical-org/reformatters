@@ -623,7 +623,7 @@ class EcmwfAifsSingleForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="tcc",
-                    long_name="Total Cloud Cover",
+                    long_name="Total cloud cover",
                     units="percent",
                     step_type="instant",
                     standard_name="cloud_area_fraction",

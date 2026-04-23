@@ -1,4 +1,4 @@
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from datetime import timedelta
 from functools import partial
 
@@ -22,7 +22,7 @@ class NoaaGfsAnalysisDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
     template_config: NoaaGfsAnalysisTemplateConfig = NoaaGfsAnalysisTemplateConfig()
     region_job_class: type[NoaaGfsAnalysisRegionJob] = NoaaGfsAnalysisRegionJob
 
-    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
+    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Define Kubernetes cron jobs for operational updates and validation."""
         # GFS f006 (last lead time used) available ~3h34m after init on NOMADS. +3 min buffer.
         workers = self.num_variable_groups()

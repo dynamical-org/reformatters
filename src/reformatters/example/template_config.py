@@ -380,7 +380,7 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #         attrs=DataVarAttrs(
         #             short_name="tcc",
         #             standard_name="cloud_area_fraction",
-        #             long_name="Total Cloud Cover",
+        #             long_name="Total cloud cover",
         #             units="percent",
         #             step_type="avg",
         #         ),

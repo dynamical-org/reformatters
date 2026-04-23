@@ -1,4 +1,4 @@
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from datetime import timedelta
 
 from reformatters.common import validation
@@ -34,7 +34,7 @@ class UarizonaSwannAnalysisDataset(
             check_random_time_within_last_year_nans,
         )
 
-    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
+    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="0 20 * * *",

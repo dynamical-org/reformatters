@@ -1,5 +1,5 @@
 import subprocess
-from collections.abc import Iterable
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from functools import partial
 from pathlib import Path
@@ -97,7 +97,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
     region_job_class: type[ExampleRegionJob] = ExampleRegionJob
     primary_storage_config: ExampleDatasetStorageConfig = ExampleDatasetStorageConfig()
 
-    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
+    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         return [
             ReformatCronJob(
                 name=f"{self.dataset_id}-update",
@@ -395,7 +395,7 @@ class ExampleDatasetWithThreeCronJobs(
     region_job_class: type[ExampleRegionJob] = ExampleRegionJob
     primary_storage_config: ExampleDatasetStorageConfig = ExampleDatasetStorageConfig()
 
-    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
+    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         return [
             CronJob(
                 command=["archive-grib-files"],

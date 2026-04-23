@@ -61,6 +61,24 @@ def ecmwf_shortname_to_names(ecmwf_params: list[dict[str, Any]]) -> dict[str, se
 
 
 @pytest.fixture(scope="session")
+def ecmwf_shortname_to_canonical(
+    ecmwf_params: list[dict[str, Any]],
+) -> dict[str, tuple[int, str]]:
+    """Map each ECMWF shortname to its canonical (lowest-id) (id, name) pair.
+
+    When a shortname is re-published in extended / vendor-local GRIB tables with
+    different capitalization (e.g. "tcc" exists as id 164 'Total cloud cover' AND
+    id 228164 'Total Cloud Cover'), the lowest-id entry is treated as canonical.
+    """
+    result: dict[str, tuple[int, str]] = {}
+    for p in ecmwf_params:
+        shortname = p["shortname"]
+        if shortname not in result or p["id"] < result[shortname][0]:
+            result[shortname] = (p["id"], p["name"])
+    return result
+
+
+@pytest.fixture(scope="session")
 def cf_standard_name_to_canonical_units() -> dict[str, str]:
     """
     Load the CF Standard Name Table from the local XML file.
@@ -502,12 +520,16 @@ def test_ecmwf_parameter_compliance(
     ecmwf_shortname_to_id: dict[str, int],
     ecmwf_name_to_id: dict[str, int],
     ecmwf_shortname_to_names: dict[str, set[str]],
+    ecmwf_shortname_to_canonical: dict[str, tuple[int, str]],
 ) -> None:
     """
     For each data variable, validate ECMWF parameter compliance:
     1. short_name must be in the ECMWF parameter database (or exempt)
     2. long_name must be in the ECMWF parameter database (or exempt)
     3. If both are in the ECMWF database, they must refer to the same parameter
+    4. long_name must exactly match the canonical (lowest-id) ECMWF entry for
+       that short_name. Guards against using alt-capitalization duplicates that
+       appear in ECMWF extended tables (228xxx) or vendor-local tables (500xxx).
     """
     template_config = dataset.template_config
     errors: list[str] = []
@@ -553,6 +575,32 @@ def test_ecmwf_parameter_compliance(
                     f"(ECMWF long_names for this shortname: {sorted(names_for_shortname)}) "
                     f"but long_name='{long_name}'. They must refer to the same ECMWF parameter. "
                     f"See {ECMWF_PARAM_DB_URL}?id={param_id}"
+                )
+
+        # Prefer the canonical (lowest-id) ECMWF entry for this short_name when
+        # a case-only variant would otherwise slip through. ECMWF extended tables
+        # (228xxx) and vendor-local tables (500xxx) sometimes re-publish a
+        # parameter with different capitalization (e.g. 'tcc' exists as id 164
+        # 'Total cloud cover' AND id 228164 'Total Cloud Cover'); we only want
+        # the lowest-id form. This check ignores cases where the canonical name
+        # differs semantically (e.g. 'sd' means 'Snow depth' in table 1 but
+        # 'Snow depth water equivalent' in extended table 228).
+        if (
+            not short_exempt
+            and not long_exempt
+            and short_name in ecmwf_shortname_to_canonical
+        ):
+            canonical_id, canonical_name = ecmwf_shortname_to_canonical[short_name]
+            if (
+                long_name != canonical_name
+                and long_name.casefold() == canonical_name.casefold()
+            ):
+                errors.append(
+                    f"Variable '{var_config.name}' has long_name='{long_name}' "
+                    f"but the canonical ECMWF entry for short_name='{short_name}' is "
+                    f"'{canonical_name}' (lowest-id match, id={canonical_id}). "
+                    f"The non-canonical form appears only in extended / vendor-local "
+                    f"GRIB tables. See {ECMWF_PARAM_DB_URL}?id={canonical_id}"
                 )
 
     assert not errors, (

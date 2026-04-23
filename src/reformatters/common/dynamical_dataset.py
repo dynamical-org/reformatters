@@ -1,7 +1,7 @@
 import json
 import os
 import subprocess
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from functools import partial
@@ -68,7 +68,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             template_config_version=self.template_config.version,
         )
 
-    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
+    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """
         Return the kubernetes cron job definitions to operationally
         update and validate this dataset.
