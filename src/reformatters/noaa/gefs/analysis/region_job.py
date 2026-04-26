@@ -196,7 +196,7 @@ class GefsAnalysisRegionJob(RegionJob[GEFSDataVar, GefsAnalysisSourceFileCoord])
         all_data_vars: Sequence[GEFSDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence["RegionJob[GEFSDataVar, GefsAnalysisSourceFileCoord]"], xr.Dataset
+        Sequence[RegionJob[GEFSDataVar, GefsAnalysisSourceFileCoord]], xr.Dataset
     ]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset

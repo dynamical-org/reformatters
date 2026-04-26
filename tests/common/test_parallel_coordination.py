@@ -30,7 +30,7 @@ class FakeStoreFactory:
         self._primary_store: object = MagicMock(name="primary_zarr3_store")
         self._replica_stores: list[object] = []
 
-    def set_icechunk_repos(self, ordered: list[tuple[str, "FakeRepo"]]) -> None:
+    def set_icechunk_repos(self, ordered: list[tuple[str, FakeRepo]]) -> None:
         self._icechunk_repos_by_sort["primary-first"] = list(ordered)
         self._icechunk_repos_by_sort["primary-last"] = list(reversed(ordered))
 
@@ -48,7 +48,7 @@ class FakeStoreFactory:
     def clear_coordination_files(self, job_name: str) -> None:
         self.files.pop(job_name, None)
 
-    def icechunk_repos(self, *, sort: str) -> list[tuple[str, "FakeRepo"]]:
+    def icechunk_repos(self, *, sort: str) -> list[tuple[str, FakeRepo]]:
         return list(self._icechunk_repos_by_sort[sort])
 
     def primary_store(self, writable: bool = False) -> object:  # noqa: ARG002
@@ -61,7 +61,7 @@ class FakeStoreFactory:
 class FakeSession:
     _counter = 0
 
-    def __init__(self, branch: str, repo: "FakeRepo") -> None:
+    def __init__(self, branch: str, repo: FakeRepo) -> None:
         FakeSession._counter += 1
         self.id = FakeSession._counter
         self.branch = branch

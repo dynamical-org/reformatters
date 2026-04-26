@@ -37,7 +37,7 @@ class OpenDataSourceFileCoord(SourceFileCoord):
     s3_bucket_url: ClassVar[str] = "ecmwf-forecasts"
     s3_region: ClassVar[str] = "eu-central-1"
 
-    def resolve_data_vars(self) -> "OpenDataSourceFileCoord":
+    def resolve_data_vars(self) -> OpenDataSourceFileCoord:
         return replace(
             self,
             data_var_group=[
@@ -123,7 +123,7 @@ class MarsSourceFileCoord(SourceFileCoord):
             return "pf_sfc_0" if ensemble_member <= 25 else "pf_sfc_1"
         return "cf_pl" if ensemble_member == 0 else "pf_pl"
 
-    def resolve_data_vars(self) -> "MarsSourceFileCoord":
+    def resolve_data_vars(self) -> MarsSourceFileCoord:
         return replace(
             self,
             data_var_group=[_resolve_mars_data_var(v) for v in self.data_var_group],

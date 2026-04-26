@@ -133,7 +133,7 @@ class GefsForecast35DayRegionJob(
         all_data_vars: Sequence[GEFSDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence["RegionJob[GEFSDataVar, GefsForecast35DaySourceFileCoord]"], xr.Dataset
+        Sequence[RegionJob[GEFSDataVar, GefsForecast35DaySourceFileCoord]], xr.Dataset
     ]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset

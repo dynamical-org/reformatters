@@ -119,7 +119,7 @@ class NasaSmapLevel336KmV9RegionJob(
         all_data_vars: Sequence[NasaSmapDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence["RegionJob[NasaSmapDataVar, NasaSmapLevel336KmV9SourceFileCoord]"],
+        Sequence[RegionJob[NasaSmapDataVar, NasaSmapLevel336KmV9SourceFileCoord]],
         xr.Dataset,
     ]:
         """
