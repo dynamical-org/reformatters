@@ -380,3 +380,43 @@ def commit_if_icechunk(
             functools.partial(_commit, primary_store),
             max_attempts=10,
         )
+
+
+def amend_if_icechunk(
+    message: str,
+    primary_store: zarr.storage.StoreLike,
+    replica_stores: Sequence[Store],
+) -> None:
+    """Like commit_if_icechunk, but the new snapshot REPLACES the current branch tip
+    instead of being placed after it. Used for intermediate writes on a temporary
+    job branch so the per-worker snapshots do not appear in main's history after
+    reset_branch folds the temp branch into main.
+
+    Do NOT use for the very first write on a freshly created branch — amending there
+    would replace the parent snapshot in the branch's view of history, removing it
+    from main's ancestry after reset_branch.
+
+    icechunk's amend does not accept a rebase_with argument, so we manually rebase
+    on ConflictError and retry the amend.
+    """
+
+    def _amend(icechunk_store: IcechunkStore) -> None:
+        session = icechunk_store.session
+        try:
+            session.amend(message=message)
+        except icechunk.ConflictError:
+            session.rebase(icechunk.ConflictDetector())
+            session.amend(message=message)
+
+    for store in replica_stores:
+        if isinstance(store, IcechunkStore):
+            retry(
+                functools.partial(_amend, store),
+                max_attempts=10,
+            )
+
+    if isinstance(primary_store, IcechunkStore):
+        retry(
+            functools.partial(_amend, primary_store),
+            max_attempts=10,
+        )
