@@ -39,6 +39,7 @@ docs/
 ├── dataset_integration_guide.md      # Step-by-step new dataset integration walkthrough
 ├── parallel_processing.md            # How parallel writes coordinate across workers
 ├── add_new_variable.md               # Add new variable to an existing dataset
+├── validation.md                     # Run + read validation plots; data quality checklist
 ├── chunk_shard_layout_tool.md        # Zarr V3 chunk/shard layout optimizer
 ├── source_data_exploration_guide.md  # Explore/document source data structure before integration
 ├── ops_card.md                       # Operations: monitoring, troubleshooting, manual updates

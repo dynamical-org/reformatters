@@ -1,19 +1,27 @@
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import typer
 import xarray as xr
 import zarr
+from matplotlib.axes import Axes
 
 from reformatters.common.logging import get_logger
 from reformatters.common.time_utils import whole_hours
 from scripts.validation.utils import (
+    RunContext,
+    VariableStats,
     end_date_option,
-    get_output_filepath,
+    get_two_random_points,
     is_forecast_dataset,
     load_zarr_dataset,
+    output_dir_option,
+    resolve_output_dir,
     scope_time_period,
     select_random_ensemble_member,
+    select_variables_for_plotting,
     start_date_option,
     variables_option,
 )
@@ -38,78 +46,36 @@ def align_to_valid_time_forecast(
     init_time: str | None,
     lead_time: str | None,
 ) -> tuple[xr.Dataset, xr.Dataset]:
-    """Align forecast dataset to reference dataset by selecting init_time/lead_time."""
     rng = np.random.default_rng()
 
-    if init_time is None:
-        selected_init_time = pd.Timestamp(rng.choice(ds.init_time, 1)[0])
-    else:
-        selected_init_time = pd.Timestamp(init_time)
-
-    if lead_time is None:
-        selected_lead_time = rng.choice(ds.lead_time, 1)[0]
-    else:
-        selected_lead_time = lead_time
-
-    ds = ds.sel(
-        init_time=selected_init_time,
-        lead_time=selected_lead_time,
+    selected_init_time = (
+        pd.Timestamp(rng.choice(ds.init_time, 1)[0])
+        if init_time is None
+        else pd.Timestamp(init_time)
+    )
+    selected_lead_time = (
+        rng.choice(ds.lead_time, 1)[0] if lead_time is None else lead_time
     )
 
+    ds = ds.sel(init_time=selected_init_time, lead_time=selected_lead_time)
     valid_time = pd.Timestamp(ds.valid_time.item())
-
     reference_ds = reference_ds.sel(time=valid_time, method="nearest")
     return ds, reference_ds
 
 
 def align_to_valid_time_analysis(
-    ds: xr.Dataset,
-    reference_ds: xr.Dataset,
-    time: str | None,
+    ds: xr.Dataset, reference_ds: xr.Dataset, time: str | None
 ) -> tuple[xr.Dataset, xr.Dataset]:
-    """Align analysis dataset to reference dataset by selecting a time."""
     rng = np.random.default_rng()
-
-    if time is None:
-        selected_time = pd.Timestamp(rng.choice(ds.time, 1)[0])
-    else:
-        selected_time = pd.Timestamp(time)
-
+    selected_time = (
+        pd.Timestamp(rng.choice(ds.time, 1)[0]) if time is None else pd.Timestamp(time)
+    )
     ds = ds.sel(time=selected_time)
     reference_ds = reference_ds.sel(time=selected_time, method="nearest")
     return ds, reference_ds
 
 
-def create_comparison_plot(  # noqa: PLR0915 PLR0912
-    validation_ds: xr.Dataset,
-    reference_ds: xr.Dataset,
-    variables: list[str],
-    validation_url: str,
-    ensemble_member: int | None = None,
-    init_time: str | None = None,
-    lead_time: str | None = None,
-    time: str | None = None,
-) -> None:
-    """Create comparison plot matching the example image format"""
-    is_forecast = is_forecast_dataset(validation_ds)
-
-    # Align datasets to a common time point (done once for all variables)
-    if is_forecast:
-        ds, ref_ds = align_to_valid_time_forecast(
-            validation_ds,
-            reference_ds,
-            init_time,
-            lead_time,
-        )
-    else:
-        ds, ref_ds = align_to_valid_time_analysis(
-            validation_ds,
-            reference_ds,
-            time,
-        )
-
-    # Downsample high-resolution spatial data for plotting efficiency
-    max_plot_dim = 1000
+def _downsample_for_plot(ds: xr.Dataset, max_plot_dim: int = 1000) -> xr.Dataset:
     strides: dict[str, int] = {}
     for dim in ("latitude", "longitude", "y", "x"):
         if dim in ds.dims and ds.sizes[dim] > max_plot_dim:
@@ -118,209 +84,271 @@ def create_comparison_plot(  # noqa: PLR0915 PLR0912
         ds = ds.isel(
             {dim: slice(None, None, stride) for dim, stride in strides.items()}
         )
-        log.info(f"Downsampled validation data with strides {strides} for plotting")
+    return ds
 
-    # Format timestamps for titles (done once for all variables)
+
+def _format_spatial_time_label(ds: xr.Dataset, is_forecast: bool) -> str:
     if is_forecast:
-        ds_init_time = pd.Timestamp(ds.init_time.item()).strftime("%Y-%m-%dT%H:%M")
-        ds_lead_time_hours = whole_hours(pd.Timedelta(ds.lead_time.item()))
-        ds_lead_time_str = f"{ds_lead_time_hours:g}h"
-        ds_time = f"{ds_init_time}+{ds_lead_time_str}"
-    else:
-        ds_time = pd.Timestamp(ds.time.item()).strftime("%Y-%m-%dT%H:%M")
-    ref_time = pd.Timestamp(ref_ds.time.item()).strftime("%Y-%m-%dT%H:%M")
+        init_str = pd.Timestamp(ds.init_time.item()).strftime("%Y-%m-%dT%H:%M")
+        lead_hours = whole_hours(pd.Timedelta(ds.lead_time.item()))
+        return f"init={init_str}, lead={lead_hours:g}h"
+    return pd.Timestamp(ds.time.item()).strftime("%Y-%m-%dT%H:%M")
 
-    n_vars = len(variables)
-    plt.figure(figsize=(15, 3 * n_vars))
 
-    for i, var in enumerate(variables):
-        # Get validation data array
-        data = ds[var].load()
-
-        # Check if variable exists in reference dataset
-        var_in_reference = var in reference_ds.data_vars
-
-        if var_in_reference:
-            ref_data = ref_ds[var].load()
-            vmin = min(float(data.min()), float(ref_data.min()))
-            vmax = max(float(data.max()), float(ref_data.max()))
-        else:
-            vmin = float(data.min())
-            vmax = float(data.max())
-
-        if var_in_reference:
-            log.info(
-                f"Plotting {var} for {ds.attrs['name']} ({ds_time}) and {ref_ds.attrs['name']} ({ref_time})"
-            )
-        else:
-            log.info(
-                f"Plotting {var} for {ds.attrs['name']} ({ds_time}) - variable not found in reference dataset"
-            )
-
-        ds_title = f"{ds.attrs['name']}"
-        if ensemble_member is not None:
-            ds_title += f" (Ensemble Member {ensemble_member})"
-        ds_title += f" - {var}\n{ds_time}"
-
-        if var_in_reference:
-            ref_title = f"{ref_ds.attrs['name']} - {var}\n{ref_time}"
-        else:
-            ref_title = f"{ref_ds.attrs['name']} - {var}\n(Variable not available)"
-
-        # Left plot - reference dataset (or empty if variable doesn't exist)
-        ax1 = plt.subplot(n_vars, 3, i * 3 + 1)
-
-        if var_in_reference:
-            im1 = ax1.pcolormesh(
-                ref_data.longitude,  # ty: ignore[possibly-unresolved-reference]
-                ref_data.latitude,  # ty: ignore[possibly-unresolved-reference]
-                ref_data.values,  # ty: ignore[possibly-unresolved-reference]
-                vmin=vmin,
-                vmax=vmax,
-            )
-            plt.colorbar(im1, ax=ax1)
-
-            # Use combined bounds from both datasets for consistent axis ranges
-            lon_min = min(float(ref_data.longitude.min()), float(data.longitude.min()))  # ty: ignore[possibly-unresolved-reference]
-            lon_max = max(float(ref_data.longitude.max()), float(data.longitude.max()))  # ty: ignore[possibly-unresolved-reference]
-            lat_min = min(float(ref_data.latitude.min()), float(data.latitude.min()))  # ty: ignore[possibly-unresolved-reference]
-            lat_max = max(float(ref_data.latitude.max()), float(data.latitude.max()))  # ty: ignore[possibly-unresolved-reference]
-        else:
-            # Show empty plot for missing variable
-            ax1.text(
-                0.5,
-                0.5,
-                "Variable not\navailable in\nreference dataset",
-                ha="center",
-                va="center",
-                transform=ax1.transAxes,
-                fontsize=12,
-                color="gray",
-            )
-            ax1.set_xlim(0, 1)
-            ax1.set_ylim(0, 1)
-
-            # Use validation dataset bounds when reference doesn't have the variable
-            lon_min = float(data.longitude.min())
-            lon_max = float(data.longitude.max())
-            lat_min = float(data.latitude.min())
-            lat_max = float(data.latitude.max())
-
-        ax1.set_title(ref_title)
-        ax1.set_aspect("auto")
-        ax1.set_xlabel("Longitude")
-        ax1.set_ylabel("Latitude")
-
-        # Middle plot - validation dataset
-        ax2 = plt.subplot(n_vars, 3, i * 3 + 2)
-        im2 = ax2.pcolormesh(
-            data.longitude,
-            data.latitude,
-            data.values,
-            vmin=vmin,
-            vmax=vmax,
+def _compute_spatial_stats(
+    data: xr.DataArray, ref_data: xr.DataArray | None, stats: VariableStats
+) -> tuple[np.ndarray, np.ndarray]:
+    """Update stats and return (data_clean, ref_clean) flattened arrays."""
+    data_clean = data.values.flat[~np.isnan(data.values.flat)]
+    if data_clean.size == 0:
+        stats.val_spatial_min = stats.val_spatial_max = stats.val_spatial_mean = float(
+            "nan"
         )
-        plt.colorbar(im2, ax=ax2)
-        ax2.set_title(ds_title)
-        ax2.set_aspect("auto")
-        ax2.set_xlabel("Longitude")
-        ax2.set_ylabel("Latitude")
+    else:
+        stats.val_spatial_min = float(np.min(data_clean))
+        stats.val_spatial_max = float(np.max(data_clean))
+        stats.val_spatial_mean = float(np.mean(data_clean))
 
-        ax2.set_xlim(lon_min, lon_max)
-        ax2.set_ylim(lat_min, lat_max)
+    if ref_data is not None:
+        ref_clean = ref_data.values.flat[~np.isnan(ref_data.values.flat)]
+        stats.ref_available_spatial = True
+        if ref_clean.size:
+            stats.ref_spatial_min = float(np.min(ref_clean))
+            stats.ref_spatial_max = float(np.max(ref_clean))
+            stats.ref_spatial_mean = float(np.mean(ref_clean))
+    else:
+        ref_clean = np.array([])
+        stats.ref_available_spatial = False
 
-        # Right plot - histogram comparison
-        ax3 = plt.subplot(n_vars, 3, i * 3 + 3)
+    return data_clean, ref_clean
 
-        # Flatten validation data and remove NaN values in one step
-        data_values_flat = data.values.flat
-        data_clean = data_values_flat[~np.isnan(data_values_flat)]
 
-        if len(data_clean) == 0:
-            ax3.text(
-                0.5,
-                0.5,
-                "All data in validated\ndataset is nan at this step",
-                ha="center",
-                va="center",
-                transform=ax3.transAxes,
-                fontsize=12,
-                color="gray",
-            )
-            ax1.set_xlim(0, 1)
-            ax1.set_ylim(0, 1)
-            continue
+def _draw_spatial_triplet(
+    ax_ref: Axes,
+    ax_val: Axes,
+    ax_hist: Axes,
+    var: str,
+    data: xr.DataArray,
+    ref_data: xr.DataArray | None,
+    data_clean: np.ndarray,
+    ref_clean: np.ndarray,
+    units: str | None,
+    ds_title: str,
+    ref_title: str,
+) -> None:
+    """Draw reference map, validation map, and histogram onto provided axes."""
+    if ref_data is not None:
+        vmin = min(float(data.min()), float(ref_data.min()))
+        vmax = max(float(data.max()), float(ref_data.max()))
+    else:
+        vmin = float(data.min()) if data_clean.size else 0.0
+        vmax = float(data.max()) if data_clean.size else 1.0
 
-        if var_in_reference and not np.isnan(ref_data.values).all():  # ty: ignore[possibly-unresolved-reference]
-            # Include reference data in histogram if available
-            ref_values_flat = ref_data.values.flat  # ty: ignore[possibly-unresolved-reference]
-            ref_clean = ref_values_flat[~np.isnan(ref_values_flat)]
+    # Reference map
+    if ref_data is not None:
+        im1 = ax_ref.pcolormesh(
+            ref_data.longitude, ref_data.latitude, ref_data.values, vmin=vmin, vmax=vmax
+        )
+        plt.colorbar(im1, ax=ax_ref, label=units or "")
+        lon_min = min(float(ref_data.longitude.min()), float(data.longitude.min()))
+        lon_max = max(float(ref_data.longitude.max()), float(data.longitude.max()))
+        lat_min = min(float(ref_data.latitude.min()), float(data.latitude.min()))
+        lat_max = max(float(ref_data.latitude.max()), float(data.latitude.max()))
+    else:
+        ax_ref.text(
+            0.5,
+            0.5,
+            "Variable not\navailable in\nreference dataset",
+            ha="center",
+            va="center",
+            transform=ax_ref.transAxes,
+            fontsize=12,
+            color="gray",
+        )
+        lon_min = float(data.longitude.min())
+        lon_max = float(data.longitude.max())
+        lat_min = float(data.latitude.min())
+        lat_max = float(data.latitude.max())
+    ax_ref.set_title(ref_title, fontsize=10)
+    ax_ref.set_aspect("auto")
+    ax_ref.set_xlabel("Longitude")
+    ax_ref.set_ylabel("Latitude")
 
-            # Calculate combined range for consistent bins
-            data_min, data_max = (
-                min(np.min(data_clean), np.min(ref_clean)),
-                max(np.max(data_clean), np.max(ref_clean)),
-            )
+    # Validation map
+    im2 = ax_val.pcolormesh(
+        data.longitude, data.latitude, data.values, vmin=vmin, vmax=vmax
+    )
+    plt.colorbar(im2, ax=ax_val, label=units or "")
+    ax_val.set_title(ds_title, fontsize=10)
+    ax_val.set_aspect("auto")
+    ax_val.set_xlabel("Longitude")
+    ax_val.set_ylabel("Latitude")
+    ax_val.set_xlim(lon_min, lon_max)
+    ax_val.set_ylim(lat_min, lat_max)
 
-            # Create histograms with consistent bins
-            ax3.hist(
-                ref_clean,
-                bins=40,
-                alpha=0.7,
-                label=ref_ds.attrs["name"],
-                color="blue",
-                range=(data_min, data_max),
-                density=True,
-                stacked=True,
-            )
-        else:
-            # Only validation data available
-            data_min, data_max = np.min(data_clean), np.max(data_clean)
+    # Histogram
+    if data_clean.size == 0:
+        ax_hist.text(
+            0.5,
+            0.5,
+            "All validation data is\nNaN at this step",
+            ha="center",
+            va="center",
+            transform=ax_hist.transAxes,
+            fontsize=12,
+            color="gray",
+        )
+        return
 
-        ax3.hist(
-            data_clean,
+    if ref_data is not None and ref_clean.size:
+        data_min = min(np.min(data_clean), np.min(ref_clean))
+        data_max = max(np.max(data_clean), np.max(ref_clean))
+        ax_hist.hist(
+            ref_clean,
             bins=40,
             alpha=0.7,
-            label=ds.attrs["name"],
-            color="red",
+            label=ref_title.splitlines()[0] if ref_title else "reference",
+            color="blue",
             range=(data_min, data_max),
             density=True,
             stacked=True,
         )
+    else:
+        data_min = float(np.min(data_clean))
+        data_max = float(np.max(data_clean))
 
-        # Set x-axis limits to match the data range (only if there's actual range)
-        if data_min != data_max:
-            ax3.set_xlim(data_min, data_max)
+    ax_hist.hist(
+        data_clean,
+        bins=40,
+        alpha=0.7,
+        label=ds_title.splitlines()[0] if ds_title else "validation",
+        color="red",
+        range=(data_min, data_max),
+        density=True,
+        stacked=True,
+    )
+    if data_min != data_max:
+        ax_hist.set_xlim(data_min, data_max)
+    ax_hist.set_xlabel(f"{var}" + (f" [{units}]" if units else ""))
+    ax_hist.set_ylabel("Density")
+    ax_hist.set_title(f"Distribution — {var}", fontsize=10)
+    ax_hist.legend(fontsize="small", frameon=False)
+    ax_hist.grid(True, alpha=0.3)
 
-        ax3.set_xlabel(f"{var}")
-        ax3.set_ylabel("Frequency")
-        ax3.set_title(f"Distribution - {var}")
 
-        # Position legend below the title
-        ax3.legend(
-            bbox_to_anchor=(0.5, 0.95),
-            loc="center",
-            ncol=2,
-            fontsize="small",
-            frameon=False,
-            columnspacing=1.0,
+def run_compare_spatial(
+    ctx: RunContext,
+    init_time: str | None = None,
+    lead_time: str | None = None,
+    time: str | None = None,
+) -> None:
+    """Produce per-variable + combined spatial comparison plots in ctx.output_dir."""
+    assert ctx.reference_ds is not None, "compare-spatial requires a reference dataset"
+
+    is_forecast = is_forecast_dataset(ctx.validation_ds)
+    spatially_aligned_ref = align_reference_spatially(
+        ctx.validation_ds, ctx.reference_ds
+    )
+
+    if is_forecast:
+        ds, ref_ds = align_to_valid_time_forecast(
+            ctx.validation_ds, spatially_aligned_ref, init_time, lead_time
         )
-        ax3.grid(True, alpha=0.3)
+    else:
+        ds, ref_ds = align_to_valid_time_analysis(
+            ctx.validation_ds, spatially_aligned_ref, time
+        )
+    ds = _downsample_for_plot(ds)
 
-    plt.tight_layout()
-    filename_parts = [
-        validation_ds.attrs["dataset_id"],
-        validation_ds.attrs["dataset_version"],
-        ds_time,
-        reference_ds.attrs["dataset_id"],
-        reference_ds.attrs["dataset_version"],
-        ref_time,
-        f"{len(variables)}_variables",
-    ]
-    base_filename = "_".join(filename_parts)
-    filepath = get_output_filepath(base_filename, validation_url)
-    plt.savefig(filepath, dpi=300, bbox_inches="tight")
-    log.info(f"Comparison plot saved to {filepath}")
+    val_time_label = _format_spatial_time_label(ds, is_forecast)
+    ref_time_label = pd.Timestamp(ref_ds.time.item()).strftime("%Y-%m-%dT%H:%M")
+    val_label = ctx.validation_ds.attrs.get("name", "validation")
+    ref_label = ctx.reference_ds.attrs.get("name", "reference")
+    ctx.spatial_time_label = val_time_label
+    ctx.ref_spatial_time_label = ref_time_label
+
+    n_vars = len(ctx.variables)
+    log.info(
+        f"compare-spatial: {n_vars} variables at {val_time_label} "
+        f"(ref {ref_time_label})"
+    )
+
+    fig_c, axes_c = plt.subplots(n_vars, 3, figsize=(15, 3.375 * n_vars), squeeze=False)
+
+    for i, var in enumerate(ctx.variables):
+        stats = ctx.stats_for(var)
+
+        data = ds[var].load()
+        ref_data = ref_ds[var].load() if var in ref_ds.data_vars else None
+        data_clean, ref_clean = _compute_spatial_stats(data, ref_data, stats)
+
+        stats.spatial_time_label = val_time_label
+        stats.spatial_plot = f"spatial_{var}.png"
+
+        ds_title = val_label
+        if ctx.ensemble_member is not None:
+            ds_title += f" (ensemble {ctx.ensemble_member})"
+        ds_title += f"\n{var} @ {val_time_label}"
+        ref_title = (
+            f"{ref_label}\n{var} @ {ref_time_label}"
+            if ref_data is not None
+            else f"{ref_label}\n{var} (not available)"
+        )
+
+        # Per-variable figure
+        fig_v, axes_v = plt.subplots(1, 3, figsize=(15, 3.375), squeeze=False)
+        _draw_spatial_triplet(
+            axes_v[0, 0],
+            axes_v[0, 1],
+            axes_v[0, 2],
+            var,
+            data,
+            ref_data,
+            data_clean,
+            ref_clean,
+            stats.units,
+            ds_title,
+            ref_title,
+        )
+        fig_v.tight_layout()
+        fig_v.savefig(ctx.output_dir / stats.spatial_plot, dpi=150, bbox_inches="tight")
+        plt.close(fig_v)
+
+        # Combined row
+        _draw_spatial_triplet(
+            axes_c[i, 0],
+            axes_c[i, 1],
+            axes_c[i, 2],
+            var,
+            data,
+            ref_data,
+            data_clean,
+            ref_clean,
+            stats.units,
+            ds_title,
+            ref_title,
+        )
+
+        ref_note = (
+            f"ref[{stats.ref_spatial_min:.3g}, {stats.ref_spatial_max:.3g}]"
+            if stats.ref_available_spatial and stats.ref_spatial_min is not None
+            else "ref=n/a"
+        )
+        log.info(
+            f"  spatial {var}: val[{stats.val_spatial_min:.3g}, "
+            f"{stats.val_spatial_max:.3g}] mean={stats.val_spatial_mean:.3g} {ref_note}"
+        )
+
+    fig_c.suptitle(
+        f"Spatial comparison — all variables\n{val_label} @ {val_time_label} vs "
+        f"{ref_label} @ {ref_time_label}",
+        fontsize=13,
+    )
+    fig_c.tight_layout()
+    combined_path = ctx.output_dir / "combined_spatial.png"
+    fig_c.savefig(combined_path, dpi=120, bbox_inches="tight")
+    plt.close(fig_c)
+    ctx.combined_spatial_plot = combined_path.name
 
 
 def compare_spatial(
@@ -333,64 +361,57 @@ def compare_spatial(
     time: str | None = None,
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
+    output_dir: Path | None = output_dir_option,
 ) -> None:
-    """Create comparison plots between two zarr datasets.
-
-    For forecast datasets (with init_time and lead_time dimensions), use
-    --init-time and --lead-time to specify the point to plot.
-
-    For analysis datasets (with time dimension), use --time to specify
-    the point to plot.
-    """
-
-    log.info(f"Loading validation dataset from: {validation_url}")
+    """Create per-variable + combined spatial comparison plots between two zarr datasets."""
+    log.info(f"Loading validation dataset: {validation_url}")
     validation_ds = load_zarr_dataset(validation_url)
     if start_date or end_date:
         validation_ds = scope_time_period(validation_ds, start_date, end_date)
 
     is_forecast = is_forecast_dataset(validation_ds)
-    log.info(
-        f"Detected {'forecast' if is_forecast else 'analysis'} dataset "
-        f"(dimensions: {list(validation_ds.sizes.keys())})"
-    )
+    log.info(f"Detected {'forecast' if is_forecast else 'analysis'} dataset")
 
-    log.info(f"Loading reference dataset from: {reference_url}")
+    log.info(f"Loading reference dataset: {reference_url}")
     reference_ds = load_zarr_dataset(reference_url)
 
     validation_vars = [str(k) for k in validation_ds.data_vars]
-    log.info(f"Found {len(validation_vars)} variables in validation dataset")
-
     if variables:
-        # Use specified variables that exist in validation dataset
-        selected_vars = [var for var in variables if var in validation_ds.data_vars]
-        missing_vars = set(variables) - set(validation_vars)
-
-        if missing_vars:
-            log.warning(f"Variables not found in validation dataset: {missing_vars}")
-
+        selected_vars = [v for v in variables if v in validation_vars]
+        missing = set(variables) - set(validation_vars)
+        if missing:
+            log.warning(f"Variables not in validation dataset: {missing}")
         if not selected_vars:
             typer.echo("Error: No valid variables specified", err=True)
             raise typer.Exit(1)
     else:
-        selected_vars = validation_vars
-
-    log.info(f"Plotting variables: {selected_vars}")
+        selected_vars = select_variables_for_plotting(validation_ds, None)
 
     validation_ds, ensemble_member = select_random_ensemble_member(validation_ds)
-    spatially_aligned_reference_ds = align_reference_spatially(
-        validation_ds, reference_ds
+    point1_sel, point2_sel, (lat1, lon1), (lat2, lon2) = get_two_random_points(
+        validation_ds
     )
 
-    create_comparison_plot(
-        validation_ds,
-        spatially_aligned_reference_ds,
-        selected_vars,
+    out = resolve_output_dir(validation_url, output_dir)
+    log.info(f"output dir: {out}")
+
+    ctx = RunContext(
+        output_dir=out,
         validation_url=validation_url,
+        reference_url=reference_url,
+        validation_ds=validation_ds,
+        reference_ds=reference_ds,
+        started_at=pd.Timestamp.now(),
+        point1_sel=point1_sel,
+        point2_sel=point2_sel,
+        point1_lat=lat1,
+        point1_lon=lon1,
+        point2_lat=lat2,
+        point2_lon=lon2,
         ensemble_member=ensemble_member,
-        init_time=init_time,
-        lead_time=lead_time,
-        time=time,
+        variables=selected_vars,
     )
+    run_compare_spatial(ctx, init_time=init_time, lead_time=lead_time, time=time)
 
     if show_plot:
         plt.show()
