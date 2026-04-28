@@ -299,13 +299,13 @@ class EcmwfAifsEnsForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
             "latitude": 32,  # 23 chunks over 721 pixels
             "longitude": 32,  # 45 chunks over 1440 pixels
         }
-        # ~1273MB uncompressed, ~255MB compressed
+        # ~1312MB uncompressed, ~262MB compressed
         var_shards: dict[Dim, int] = {
             "init_time": var_chunks["init_time"],
             "lead_time": var_chunks["lead_time"],
             "ensemble_member": var_chunks["ensemble_member"],
-            "latitude": var_chunks["latitude"] * 10,
-            "longitude": var_chunks["longitude"] * 10,
+            "latitude": var_chunks["latitude"] * 12,  # 2 shards over 721 pixels
+            "longitude": var_chunks["longitude"] * 9,  # 5 shards over 1440 pixels
         }
 
         encoding_float32_default = Encoding(
