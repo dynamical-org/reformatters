@@ -24,6 +24,9 @@ from reformatters.contrib.noaa.ndvi_cdr.analysis import (
 )
 from reformatters.contrib.uarizona.swann.analysis import UarizonaSwannAnalysisDataset
 from reformatters.dwd.icon_eu.forecast_5_day import DwdIconEuForecast5DayDataset
+from reformatters.ecmwf.aifs_ens.forecast import (
+    EcmwfAifsEnsForecastDataset,
+)
 from reformatters.ecmwf.aifs_single.forecast import (
     EcmwfAifsSingleForecastDataset,
 )
@@ -86,6 +89,14 @@ class EcmwfAifsSingleIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
     """ECMWF AIFS Single in Icechunk on AWS Open Data."""
 
     base_path: str = "s3://dynamical-ecmwf-aifs-single"
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
+class EcmwfAifsEnsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
+    """ECMWF AIFS ENS in Icechunk on AWS Open Data."""
+
+    base_path: str = "s3://dynamical-ecmwf-aifs-ens"
     k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
     format: DatasetFormat = DatasetFormat.ICECHUNK
 
@@ -168,6 +179,10 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         replica_storage_configs=[
             EcmwfAifsSingleIcechunkAwsOpenDataDatasetStorageConfig()
         ],
+    ),
+    EcmwfAifsEnsForecastDataset(
+        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
+        replica_storage_configs=[EcmwfAifsEnsIcechunkAwsOpenDataDatasetStorageConfig()],
     ),
     # DWD
     DwdIconEuForecast5DayDataset(
