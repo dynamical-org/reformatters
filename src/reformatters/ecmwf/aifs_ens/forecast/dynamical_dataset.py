@@ -30,6 +30,7 @@ class EcmwfAifsEnsForecastDataset(
             # AIFS-ENS publishes the last file (step 360h) at ~H+5h44m after init.
             # Run 3 minutes later at H+5h47m.
             schedule="47 5/6 * * *",
+            suspend=True,
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -45,6 +46,7 @@ class EcmwfAifsEnsForecastDataset(
             name=f"{self.dataset_id}-validate",
             # Validation runs 30 minutes after each update run: 00:17, 06:17, 12:17, and 18:17.
             schedule="17 */6 * * *",
+            suspend=True,
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
