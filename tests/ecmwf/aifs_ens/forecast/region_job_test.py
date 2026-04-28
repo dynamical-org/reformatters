@@ -367,7 +367,12 @@ def test_operational_update_jobs(
 
 @pytest.mark.slow
 def test_download_file_from_ecmwf_open_data() -> None:
-    """Download a recent ECMWF AIFS-ENS init time and read all template variables for cf and pf members."""
+    """Download a single recent ECMWF AIFS-ENS pf file and read all template variables.
+
+    Scoped to a single (init_time, lead_time, ensemble_member) so only one grib file
+    is fetched. The cf and pf URL/index paths are covered separately by the
+    test_download_file_cf / test_download_file_pf unit tests.
+    """
     template_config = EcmwfAifsEnsForecastTemplateConfig()
     init_time = (pd.Timestamp.now() - pd.Timedelta(days=5)).floor("D")
 
@@ -381,12 +386,10 @@ def test_download_file_from_ecmwf_open_data() -> None:
         reformat_job_name="test",
     )
 
-    # Test ensemble_member 0 (cf file) and 1 (pf file) so both URL/index code paths
-    # are exercised. Test multiple lead times to catch any per-step issues.
     test_ds = full_template.sel(
-        init_time=slice(init_time, None),
-        lead_time=[pd.Timedelta("0h"), pd.Timedelta("6h"), pd.Timedelta("24h")],
-        ensemble_member=[0, 1],
+        init_time=[init_time],
+        lead_time=[pd.Timedelta("6h")],
+        ensemble_member=[1],  # first pf (perturbed) member
     )
 
     def check_data_var(data_var: EcmwfDataVar) -> None:

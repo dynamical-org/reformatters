@@ -417,7 +417,10 @@ def test_operational_update_jobs(
 
 @pytest.mark.slow
 def test_download_file_from_ecmwf_open_data() -> None:
-    """Download a recent ECMWF AIFS Single init time and read all template variables."""
+    """Download a single recent ECMWF AIFS Single grib file and read all template variables.
+
+    Scoped to a single (init_time, lead_time) so only one grib file is fetched.
+    """
     template_config = EcmwfAifsSingleForecastTemplateConfig()
     init_time = (pd.Timestamp.now() - pd.Timedelta(days=5)).floor("D")
 
@@ -432,8 +435,8 @@ def test_download_file_from_ecmwf_open_data() -> None:
     )
 
     test_ds = full_template.sel(
-        init_time=slice(init_time, None),
-        lead_time=[pd.Timedelta("0h"), pd.Timedelta("6h"), pd.Timedelta("24h")],
+        init_time=[init_time],
+        lead_time=[pd.Timedelta("6h")],
     )
 
     def check_data_var(data_var: EcmwfDataVar) -> None:
