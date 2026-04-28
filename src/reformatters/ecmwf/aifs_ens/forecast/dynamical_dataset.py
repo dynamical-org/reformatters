@@ -27,9 +27,9 @@ class EcmwfAifsEnsForecastDataset(
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            # AIFS-ENS publishes within ~5h44m after init time. Schedule update
-            # 6 hours after init to give a small buffer.
-            schedule="50 5/6 * * *",
+            # AIFS-ENS publishes the last file (step 360h) at ~H+5h44m after init.
+            # Run 3 minutes later at H+5h47m.
+            schedule="47 5/6 * * *",
             pod_active_deadline=timedelta(hours=2),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -43,7 +43,7 @@ class EcmwfAifsEnsForecastDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="50 7/6 * * *",
+            schedule="47 7/6 * * *",
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
