@@ -83,7 +83,8 @@ class EcmwfAifsEnsForecastSourceFileCoord(SourceFileCoord):
 class EcmwfAifsEnsForecastRegionJob(
     RegionJob[EcmwfDataVar, EcmwfAifsEnsForecastSourceFileCoord]
 ):
-    max_vars_per_download_group: ClassVar[int] = 10
+    max_vars_per_download_group: ClassVar[int] = 2
+    max_vars_per_job: ClassVar[int] = 4
 
     @classmethod
     def source_groups(

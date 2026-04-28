@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from io import StringIO
 from pathlib import Path
 from unittest.mock import Mock
@@ -9,6 +10,7 @@ import xarray as xr
 
 from reformatters.common import template_utils
 from reformatters.common.iterating import item
+from reformatters.common.pydantic import replace
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.ecmwf.aifs_ens.forecast.region_job import (
     EcmwfAifsEnsForecastRegionJob,
@@ -17,6 +19,7 @@ from reformatters.ecmwf.aifs_ens.forecast.region_job import (
 from reformatters.ecmwf.aifs_ens.forecast.template_config import (
     EcmwfAifsEnsForecastTemplateConfig,
 )
+from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 
 
 def test_source_file_coord_url_cf() -> None:
@@ -351,7 +354,62 @@ def test_operational_update_jobs(
     )
 
     assert template_ds.init_time.max() == pd.Timestamp("2025-07-02T12:00")
-    assert len(jobs) > 0
+    # 2 regions (06z reprocess + new 12z) x ceil(17 vars / max_vars_per_job=4) = 10
+    n_regions = 2
+    n_jobs_per_region = -(-len(config.data_vars) // 4)
+    assert len(jobs) == n_regions * n_jobs_per_region
     for job in jobs:
         assert isinstance(job, EcmwfAifsEnsForecastRegionJob)
-        assert job.data_vars == config.data_vars
+    all_job_vars = {v.name for job in jobs for v in job.data_vars}
+    expected_vars = {v.name for v in config.data_vars}
+    assert all_job_vars == expected_vars
+
+
+@pytest.mark.slow
+def test_download_file_from_ecmwf_open_data() -> None:
+    """Download a recent ECMWF AIFS-ENS init time and read all template variables for cf and pf members."""
+    template_config = EcmwfAifsEnsForecastTemplateConfig()
+    init_time = (pd.Timestamp.now() - pd.Timedelta(days=5)).floor("D")
+
+    full_template = template_config.get_template(init_time + pd.Timedelta(days=1))
+    region_job = EcmwfAifsEnsForecastRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=full_template,
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    # Test ensemble_member 0 (cf file) and 1 (pf file) so both URL/index code paths
+    # are exercised. Test multiple lead times to catch any per-step issues.
+    test_ds = full_template.sel(
+        init_time=slice(init_time, None),
+        lead_time=[pd.Timedelta("0h"), pd.Timedelta("6h"), pd.Timedelta("24h")],
+        ensemble_member=[0, 1],
+    )
+
+    def check_data_var(data_var: EcmwfDataVar) -> None:
+        for source_coord in region_job.generate_source_file_coords(test_ds, [data_var]):
+            downloaded_coord = replace(
+                source_coord, downloaded_path=region_job.download_file(source_coord)
+            )
+            data = region_job.read_data(downloaded_coord, data_var)
+            assert data.shape == (721, 1440), (
+                f"{data_var.name}: expected shape (721, 1440), got {data.shape}"
+            )
+            assert np.all(np.isfinite(data)), (
+                f"Non-finite values for {data_var.name} at "
+                f"lead_time={source_coord.lead_time}, "
+                f"ensemble_member={source_coord.ensemble_member}"
+            )
+
+    all_data_vars = [
+        data_var
+        for group in EcmwfAifsEnsForecastRegionJob.source_groups(
+            template_config.data_vars
+        )
+        for data_var in group
+    ]
+    with ThreadPoolExecutor() as executor:
+        list(executor.map(check_data_var, all_data_vars))

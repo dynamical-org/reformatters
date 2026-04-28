@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from io import StringIO
 from pathlib import Path
 from unittest.mock import Mock
@@ -9,6 +10,7 @@ import xarray as xr
 
 from reformatters.common import template_utils
 from reformatters.common.iterating import item
+from reformatters.common.pydantic import replace
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.ecmwf.aifs_single.forecast.region_job import (
     AIFS_SINGLE_PATH_CHANGE_DATE,
@@ -18,6 +20,7 @@ from reformatters.ecmwf.aifs_single.forecast.region_job import (
 from reformatters.ecmwf.aifs_single.forecast.template_config import (
     EcmwfAifsSingleForecastTemplateConfig,
 )
+from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 
 
 def test_source_file_coord_url_before_path_change() -> None:
@@ -410,3 +413,48 @@ def test_operational_update_jobs(
     for job in jobs:
         assert isinstance(job, EcmwfAifsSingleForecastRegionJob)
         assert job.data_vars == config.data_vars
+
+
+@pytest.mark.slow
+def test_download_file_from_ecmwf_open_data() -> None:
+    """Download a recent ECMWF AIFS Single init time and read all template variables."""
+    template_config = EcmwfAifsSingleForecastTemplateConfig()
+    init_time = (pd.Timestamp.now() - pd.Timedelta(days=5)).floor("D")
+
+    full_template = template_config.get_template(init_time + pd.Timedelta(days=1))
+    region_job = EcmwfAifsSingleForecastRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=full_template,
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    test_ds = full_template.sel(
+        init_time=slice(init_time, None),
+        lead_time=[pd.Timedelta("0h"), pd.Timedelta("6h"), pd.Timedelta("24h")],
+    )
+
+    def check_data_var(data_var: EcmwfDataVar) -> None:
+        for source_coord in region_job.generate_source_file_coords(test_ds, [data_var]):
+            downloaded_coord = replace(
+                source_coord, downloaded_path=region_job.download_file(source_coord)
+            )
+            data = region_job.read_data(downloaded_coord, data_var)
+            assert data.shape == (721, 1440), (
+                f"{data_var.name}: expected shape (721, 1440), got {data.shape}"
+            )
+            assert np.all(np.isfinite(data)), (
+                f"Non-finite values for {data_var.name} at lead_time={source_coord.lead_time}"
+            )
+
+    all_data_vars = [
+        data_var
+        for group in EcmwfAifsSingleForecastRegionJob.source_groups(
+            template_config.data_vars
+        )
+        for data_var in group
+    ]
+    with ThreadPoolExecutor() as executor:
+        list(executor.map(check_data_var, all_data_vars))
