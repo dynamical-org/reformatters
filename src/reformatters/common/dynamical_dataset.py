@@ -4,7 +4,6 @@ import subprocess
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
-from enum import StrEnum
 from functools import partial
 from pathlib import Path
 from typing import Annotated, Any, Generic, Literal, TypeVar
@@ -48,11 +47,6 @@ DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
 
 log = get_logger(__name__)
-
-
-class DatasetUrlsFormat(StrEnum):
-    text = "text"
-    json = "json"
 
 
 class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
@@ -513,20 +507,20 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def dataset_urls(
         self,
         output_format: Annotated[
-            DatasetUrlsFormat,
+            Literal["text", "json"],
             typer.Option("--format", help="Output format"),
-        ] = DatasetUrlsFormat.text,
+        ] = "text",
     ) -> None:
         """Print the canonical production URLs for this dataset's primary and replica stores."""
         primary = self.store_factory.primary_url()
         replicas = self.store_factory.replica_urls()
 
         match output_format:
-            case DatasetUrlsFormat.json:
+            case "json":
                 typer.echo(
                     json.dumps({"primary": primary, "replicas": replicas}, indent=2)
                 )
-            case DatasetUrlsFormat.text:
+            case "text":
                 typer.echo("Primary:")
                 typer.echo(primary)
                 typer.echo("")
