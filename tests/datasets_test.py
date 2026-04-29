@@ -97,8 +97,12 @@ def test_cli_dataset_urls_text_format(dataset: DynamicalDataset[Any, Any]) -> No
     assert "Primary:" in result.output
     assert expected_primary in result.output
     assert "Replicas:" in result.output
-    for replica_url in dataset.store_factory.replica_urls():
-        assert replica_url in result.output
+    replica_urls = dataset.store_factory.replica_urls()
+    if replica_urls:
+        for replica_url in replica_urls:
+            assert replica_url in result.output
+    else:
+        assert "(none)" in result.output
 
 
 @pytest.mark.parametrize(

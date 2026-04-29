@@ -531,8 +531,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 typer.echo(primary)
                 typer.echo("")
                 typer.echo("Replicas:")
-                for url in replicas:
-                    typer.echo(url)
+                if replicas:
+                    for url in replicas:
+                        typer.echo(url)
+                else:
+                    typer.echo("(none)")
 
     def get_cli(
         self,
