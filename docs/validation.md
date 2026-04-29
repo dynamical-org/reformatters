@@ -15,7 +15,7 @@ uv run src/scripts/validation/plots.py run-all <DATASET_URL>
 - `s3://dynamical-noaa-hrrr/noaa-hrrr-analysis/v0.1.0.icechunk`
 - `s3://dynamical-dwd-icon-eu/dwd-icon-eu-forecast-5-day/v0.2.0.icechunk`
 
-The bucket prefix can be found in `src/reformatters/__main__.py`. The dataset id and version are in the `TemplateConfig.dataset_attributes`.
+To look up the URLs for a dataset, run `uv run main <dataset-id> dataset-urls`. It prints the primary and replica URLs; pass `--format json` for a machine-readable form.
 
 Expect the run to take ~30–60 seconds per variable, mostly bounded by S3 reads (a ~20-variable dataset finishes in ~10–15 minutes). Progress is logged: one line per variable per plot type.
 

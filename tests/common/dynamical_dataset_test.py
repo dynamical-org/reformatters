@@ -134,6 +134,7 @@ def test_dynamical_dataset_methods_exist() -> None:
         "backfill",
         "update",
         "validate_dataset",
+        "dataset_urls",
     ]
     for method in methods:
         assert hasattr(DynamicalDataset, method), f"{method} missing"

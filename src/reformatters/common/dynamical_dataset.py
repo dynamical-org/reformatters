@@ -504,6 +504,33 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 )
                 log.info(f"Done validating {replica_store}")
 
+    def dataset_urls(
+        self,
+        output_format: Annotated[
+            Literal["text", "json"],
+            typer.Option("--format", help="Output format"),
+        ] = "text",
+    ) -> None:
+        """Print the canonical production URLs for this dataset's primary and replica stores."""
+        primary = self.store_factory.primary_url()
+        replicas = self.store_factory.replica_urls()
+
+        match output_format:
+            case "json":
+                typer.echo(
+                    json.dumps({"primary": primary, "replicas": replicas}, indent=2)
+                )
+            case "text":
+                typer.echo("Primary:")
+                typer.echo(primary)
+                typer.echo("")
+                typer.echo("Replicas:")
+                if replicas:
+                    for url in replicas:
+                        typer.echo(url)
+                else:
+                    typer.echo("(none)")
+
     def get_cli(
         self,
     ) -> typer.Typer:
@@ -514,6 +541,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         app.command()(self.backfill_kubernetes)
         app.command()(self.backfill_local)
         app.command()(self.backfill)
+        app.command()(self.dataset_urls)
         # Avoid method name conflict with pydantic's validate while keeping cli commands consistent
         app.command("validate")(self.validate_dataset)
         return app

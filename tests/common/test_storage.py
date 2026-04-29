@@ -51,6 +51,40 @@ def test_get_store_path(
     assert result == f"{expected_base}/dataset/v1.0{expected_extension}"
 
 
+@pytest.mark.parametrize("env", [Env.dev, Env.prod, Env.test])
+def test_store_factory_urls_use_production_paths_and_template_version(
+    monkeypatch: pytest.MonkeyPatch, env: Env
+) -> None:
+    """primary_url/replica_urls always return canonical production URLs and use
+    the template_config_version (not the env-dependent "dev" version)."""
+    monkeypatch.setattr(Config, "env", env)
+    monkeypatch.setattr(
+        "reformatters.common.storage._LOCAL_ZARR_STORE_BASE_PATH", "local/output"
+    )
+
+    factory = StoreFactory(
+        primary_storage_config=StorageConfig(
+            base_path="s3://primary-bucket/data", format=DatasetFormat.ZARR3
+        ),
+        replica_storage_configs=[
+            StorageConfig(
+                base_path="s3://replica-bucket-a/data", format=DatasetFormat.ICECHUNK
+            ),
+            StorageConfig(
+                base_path="s3://replica-bucket-b/data", format=DatasetFormat.ZARR3
+            ),
+        ],
+        dataset_id="my-dataset",
+        template_config_version="0.3.1",
+    )
+
+    assert factory.primary_url() == "s3://primary-bucket/data/my-dataset/v0.3.1.zarr"
+    assert factory.replica_urls() == [
+        "s3://replica-bucket-a/data/my-dataset/v0.3.1.icechunk",
+        "s3://replica-bucket-b/data/my-dataset/v0.3.1.zarr",
+    ]
+
+
 @pytest.mark.parametrize(
     ("env", "expected_version"),
     [
