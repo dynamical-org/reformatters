@@ -276,6 +276,12 @@ def _get_store_path(
 def _build_dataset_url(
     dataset_id: str, version: str, storage_config: StorageConfig
 ) -> str:
+    """Canonical production URL for a dataset, regardless of `Config.env`.
+
+    Unlike `_get_store_path`, this always uses `storage_config.base_path` and
+    is intended for human-readable output (e.g. the `dataset-urls` CLI),
+    not for opening a store.
+    """
     return _format_dataset_path(
         storage_config.base_path, dataset_id, version, storage_config.format
     )
