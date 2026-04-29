@@ -251,33 +251,34 @@ def get_local_tmp_store() -> Path:
     return Path(f"data/tmp/{uuid4()}-tmp.zarr").absolute()
 
 
-def _dataset_format_extension(dataset_format: DatasetFormat) -> str:
+def _format_dataset_path(
+    base_path: str, dataset_id: str, version: str, dataset_format: DatasetFormat
+) -> str:
     match dataset_format:
         case DatasetFormat.ZARR3:
-            return "zarr"
+            extension = "zarr"
         case DatasetFormat.ICECHUNK:
-            return "icechunk"
+            extension = "icechunk"
         case _ as unreachable:
             assert_never(unreachable)
+    return f"{base_path}/{dataset_id}/v{version}.{extension}"
 
 
 def _get_store_path(
     dataset_id: str, version: str, storage_config: StorageConfig
 ) -> str:
-    if Config.is_prod:
-        base_path = storage_config.base_path
-    else:
-        base_path = _LOCAL_ZARR_STORE_BASE_PATH
-
-    extension = _dataset_format_extension(storage_config.format)
-    return f"{base_path}/{dataset_id}/v{version}.{extension}"
+    base_path = (
+        storage_config.base_path if Config.is_prod else _LOCAL_ZARR_STORE_BASE_PATH
+    )
+    return _format_dataset_path(base_path, dataset_id, version, storage_config.format)
 
 
 def _build_dataset_url(
     dataset_id: str, version: str, storage_config: StorageConfig
 ) -> str:
-    extension = _dataset_format_extension(storage_config.format)
-    return f"{storage_config.base_path}/{dataset_id}/v{version}.{extension}"
+    return _format_dataset_path(
+        storage_config.base_path, dataset_id, version, storage_config.format
+    )
 
 
 def _get_store(
