@@ -311,7 +311,7 @@ def run_compare_spatial(
             ref_title,
         )
         fig_v.tight_layout()
-        fig_v.savefig(ctx.output_dir / stats.spatial_plot, dpi=150, bbox_inches="tight")
+        fig_v.savefig(ctx.output_dir / stats.spatial_plot, dpi=80, bbox_inches="tight")
         plt.close(fig_v)
 
         # Combined row

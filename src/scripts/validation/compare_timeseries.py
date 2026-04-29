@@ -257,7 +257,7 @@ def run_compare_timeseries(ctx: RunContext) -> None:
             f"{var}\n{val_label} vs {ref_label}\n{title_suffix}", fontsize=11
         )
         out_path = ctx.output_dir / f"temporal_{var}.png"
-        fig_v.savefig(out_path, dpi=150, bbox_inches="tight")
+        fig_v.savefig(out_path, dpi=80, bbox_inches="tight")
         plt.close(fig_v)
         stats.temporal_plot = out_path.name
 
