@@ -164,7 +164,7 @@ def run_report_nulls(ctx: RunContext) -> None:
         fig_v.suptitle(var, fontsize=11)
         fig_v.tight_layout()
         out_path = ctx.output_dir / f"nulls_{var}.png"
-        fig_v.savefig(out_path, dpi=150, bbox_inches="tight")
+        fig_v.savefig(out_path, dpi=80, bbox_inches="tight")
         plt.close(fig_v)
         stats.null_plot = out_path.name
 
