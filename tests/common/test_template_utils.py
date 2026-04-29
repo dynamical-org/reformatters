@@ -28,8 +28,8 @@ from reformatters.common.template_utils import (
     [
         ("templates/latest.zarr", "w"),
         ("some/path/templates/latest.zarr", "w"),
-        ("dev.zarr", "w"),
         ("something-tmp.zarr", "w"),
+        ("dev.zarr", "w-"),
         ("prod-v1.zarr", "w-"),
         ("v1.0.zarr", "w-"),
         ("my-dataset/v1.5.zarr", "w-"),

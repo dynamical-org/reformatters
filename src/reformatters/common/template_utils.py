@@ -84,8 +84,8 @@ def _get_mode_from_path_store(store: Path) -> Literal["w", "w-"]:
     else:
         path_str = store.name
 
-    if path_str.endswith(("templates/latest.zarr", "dev.zarr", "-tmp.zarr")):
-        return "w"  # Allow overwritting dev store and template config latest.zarr
+    if path_str.endswith(("templates/latest.zarr", "-tmp.zarr")):
+        return "w"  # Allow overwritting template config latest.zarr and local_tmp_store
 
     return "w-"  # Safe default - don't overwrite
 

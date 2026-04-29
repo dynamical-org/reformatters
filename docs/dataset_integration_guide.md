@@ -50,8 +50,7 @@ from reformatters.provider.model.variant import ProviderModelVariantDataset
 DYNAMICAL_DATASETS = [
     ...,
     ProviderModelVariantDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[ProviderModelIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=ProviderModelIcechunkAwsOpenDataDatasetStorageConfig(),
 ]
 ```
 
