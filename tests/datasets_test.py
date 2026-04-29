@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 import pytest
@@ -80,6 +81,44 @@ def test_cli_has_backfill_command(dataset_id: str) -> None:
     assert result.exit_code == 0, (
         f"{dataset_id} backfill --help failed: {result.output}\n{result.exception}"
     )
+
+
+@pytest.mark.parametrize(
+    "dataset",
+    DYNAMICAL_DATASETS,
+    ids=DATASET_IDS,
+)
+def test_cli_dataset_urls_text_format(dataset: DynamicalDataset[Any, Any]) -> None:
+    result = runner.invoke(app, [dataset.dataset_id, "dataset-urls"])
+    assert result.exit_code == 0, (
+        f"{dataset.dataset_id} dataset-urls failed: {result.output}\n{result.exception}"
+    )
+    expected_primary = dataset.store_factory.primary_url()
+    assert "Primary:" in result.output
+    assert expected_primary in result.output
+    assert "Replicas:" in result.output
+    for replica_url in dataset.store_factory.replica_urls():
+        assert replica_url in result.output
+
+
+@pytest.mark.parametrize(
+    "dataset",
+    DYNAMICAL_DATASETS,
+    ids=DATASET_IDS,
+)
+def test_cli_dataset_urls_json_format(dataset: DynamicalDataset[Any, Any]) -> None:
+    result = runner.invoke(
+        app, [dataset.dataset_id, "dataset-urls", "--format", "json"]
+    )
+    assert result.exit_code == 0, (
+        f"{dataset.dataset_id} dataset-urls --format json failed: "
+        f"{result.output}\n{result.exception}"
+    )
+    parsed = json.loads(result.output)
+    assert parsed == {
+        "primary": dataset.store_factory.primary_url(),
+        "replicas": dataset.store_factory.replica_urls(),
+    }
 
 
 def test_cli_has_deploy_command() -> None:

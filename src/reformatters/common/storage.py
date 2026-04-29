@@ -76,6 +76,19 @@ class StoreFactory(FrozenBaseModel):
             *[config.k8s_secret_name for config in self.replica_storage_configs],
         ]
 
+    def primary_url(self) -> str:
+        """Canonical production URL for the primary store, regardless of environment."""
+        return _build_dataset_url(
+            self.dataset_id, self.template_config_version, self.primary_storage_config
+        )
+
+    def replica_urls(self) -> list[str]:
+        """Canonical production URLs for replica stores, regardless of environment."""
+        return [
+            _build_dataset_url(self.dataset_id, self.template_config_version, config)
+            for config in self.replica_storage_configs
+        ]
+
     def primary_store(self, writable: bool = False, branch: str = "main") -> Store:
         store_path = _get_store_path(
             self.dataset_id,
@@ -238,6 +251,16 @@ def get_local_tmp_store() -> Path:
     return Path(f"data/tmp/{uuid4()}-tmp.zarr").absolute()
 
 
+def _dataset_format_extension(dataset_format: DatasetFormat) -> str:
+    match dataset_format:
+        case DatasetFormat.ZARR3:
+            return "zarr"
+        case DatasetFormat.ICECHUNK:
+            return "icechunk"
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
 def _get_store_path(
     dataset_id: str, version: str, storage_config: StorageConfig
 ) -> str:
@@ -246,15 +269,15 @@ def _get_store_path(
     else:
         base_path = _LOCAL_ZARR_STORE_BASE_PATH
 
-    match storage_config.format:
-        case DatasetFormat.ZARR3:
-            extension = "zarr"
-        case DatasetFormat.ICECHUNK:
-            extension = "icechunk"
-        case _ as unreachable:
-            assert_never(unreachable)
-
+    extension = _dataset_format_extension(storage_config.format)
     return f"{base_path}/{dataset_id}/v{version}.{extension}"
+
+
+def _build_dataset_url(
+    dataset_id: str, version: str, storage_config: StorageConfig
+) -> str:
+    extension = _dataset_format_extension(storage_config.format)
+    return f"{storage_config.base_path}/{dataset_id}/v{version}.{extension}"
 
 
 def _get_store(

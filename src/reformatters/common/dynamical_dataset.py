@@ -4,6 +4,7 @@ import subprocess
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
+from enum import StrEnum
 from functools import partial
 from pathlib import Path
 from typing import Annotated, Any, Generic, Literal, TypeVar
@@ -47,6 +48,11 @@ DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
 
 log = get_logger(__name__)
+
+
+class DatasetUrlsFormat(StrEnum):
+    text = "text"
+    json = "json"
 
 
 class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
@@ -504,6 +510,30 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 )
                 log.info(f"Done validating {replica_store}")
 
+    def dataset_urls(
+        self,
+        output_format: Annotated[
+            DatasetUrlsFormat,
+            typer.Option("--format", help="Output format"),
+        ] = DatasetUrlsFormat.text,
+    ) -> None:
+        """Print the canonical production URLs for this dataset's primary and replica stores."""
+        primary = self.store_factory.primary_url()
+        replicas = self.store_factory.replica_urls()
+
+        match output_format:
+            case DatasetUrlsFormat.json:
+                typer.echo(
+                    json.dumps({"primary": primary, "replicas": replicas}, indent=2)
+                )
+            case DatasetUrlsFormat.text:
+                typer.echo("Primary:")
+                typer.echo(primary)
+                typer.echo("")
+                typer.echo("Replicas:")
+                for url in replicas:
+                    typer.echo(url)
+
     def get_cli(
         self,
     ) -> typer.Typer:
@@ -514,6 +544,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         app.command()(self.backfill_kubernetes)
         app.command()(self.backfill_local)
         app.command()(self.backfill)
+        app.command()(self.dataset_urls)
         # Avoid method name conflict with pydantic's validate while keeping cli commands consistent
         app.command("validate")(self.validate_dataset)
         return app
