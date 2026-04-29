@@ -137,8 +137,6 @@ class UpstreamGriddedZarrsDatasetStorageConfig(StorageConfig):
 
 
 # Registry of all DynamicalDatasets.
-# Datasets that have not yet been ported over to the new DynamicalDataset pattern
-# are excluded here until they are refactored.
 DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     # NOAA
     NoaaGfsForecastDataset(
@@ -181,8 +179,7 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         ],
     ),
     EcmwfAifsEnsForecastDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[EcmwfAifsEnsIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=EcmwfAifsEnsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     # DWD
     DwdIconEuForecast5DayDataset(
