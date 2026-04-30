@@ -285,6 +285,60 @@ def test_region_job_read_data_open_data(monkeypatch: pytest.MonkeyPatch) -> None
     rasterio_reader.read.assert_called_once_with(1, out_dtype=np.float32)
 
 
+def test_region_job_read_data_open_data_skips_mars_scale_factor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Open Data publishes geopotential_height_500hpa as gh in gpm; the MARS
+    scale factor (1/g, used for converting MARS geopotential m^2/s^2 -> gpm)
+    must NOT be applied when reading from Open Data."""
+    template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
+    template_ds = template_config.get_template(pd.Timestamp("2024-04-02"))
+
+    region_job = EcmwfIfsEnsForecast15Day025DegreeRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_ds,
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+    gh_var = item(
+        v for v in template_config.data_vars if v.name == "geopotential_height_500hpa"
+    )
+    assert gh_var.internal_attrs.mars is not None
+    assert gh_var.internal_attrs.mars.scale_factor is not None
+
+    source_file_coord = OpenDataSourceFileCoord(
+        init_time=pd.Timestamp("2024-04-02"),
+        lead_time=pd.Timedelta("0h"),
+        data_var_group=[gh_var],
+        ensemble_member=0,
+        downloaded_path=Path("fake/path/to/downloaded/file.grib2"),
+    ).resolve_data_vars()
+
+    rasterio_reader = Mock()
+    rasterio_reader.__enter__ = Mock(return_value=rasterio_reader)
+    rasterio_reader.__exit__ = Mock(return_value=False)
+    rasterio_reader.count = 1
+    rasterio_reader.descriptions = ['50000[Pa] ISBL="Isobaric surface"']
+    rasterio_reader.tags = Mock(
+        return_value={
+            "GRIB_ELEMENT": "HGT",
+            "GRIB_COMMENT": "Geopotential height [gpm]",
+        }
+    )
+    test_data = np.full((721, 1440), 5500.0, dtype=np.float32)
+    rasterio_reader.read = Mock(return_value=test_data)
+    monkeypatch.setattr(
+        "reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job.rasterio.open",
+        Mock(return_value=rasterio_reader),
+    )
+
+    result = region_job.read_data(source_file_coord, gh_var)
+
+    assert np.array_equal(result, test_data)
+
+
 def test_region_job_read_data_mars(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test grib data reading for MARS with unit-only comment validation."""
     template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
@@ -331,6 +385,59 @@ def test_region_job_read_data_mars(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.shape == (721, 1440)
     assert result.dtype == np.float32
     rasterio_reader.read.assert_called_once_with(1, out_dtype=np.float32)
+
+
+def test_region_job_read_data_mars_applies_scale_factor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """MARS publishes geopotential as z in m^2/s^2; the scale factor 1/g
+    must be applied to convert to geopotential height in gpm."""
+    template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
+    template_ds = template_config.get_template(pd.Timestamp("2024-04-02"))
+
+    region_job = EcmwfIfsEnsForecast15Day025DegreeRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_ds,
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+    gh_var = item(
+        v for v in template_config.data_vars if v.name == "geopotential_height_500hpa"
+    )
+    expected_factor = gh_var.internal_attrs.mars.scale_factor  # type: ignore[union-attr]
+    assert expected_factor is not None
+
+    source_file_coord = MarsSourceFileCoord(
+        init_time=pd.Timestamp("2024-01-01"),
+        lead_time=pd.Timedelta("3h"),
+        ensemble_member=0,
+        data_var_group=[gh_var],
+        request_type="cf_pl",
+        downloaded_path=Path("fake/path/to/downloaded/file.grib"),
+    ).resolve_data_vars()
+
+    rasterio_reader = Mock()
+    rasterio_reader.__enter__ = Mock(return_value=rasterio_reader)
+    rasterio_reader.__exit__ = Mock(return_value=False)
+    rasterio_reader.count = 1
+    rasterio_reader.tags = Mock(
+        return_value={
+            "GRIB_ELEMENT": "Z",
+            "GRIB_COMMENT": "Geopotential (at the surface = orography) [m^2/s^2]",
+        }
+    )
+    test_data = np.full((721, 1440), 54000.0, dtype=np.float32)
+    rasterio_reader.read = Mock(return_value=test_data)
+    monkeypatch.setattr(
+        "reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job.rasterio.open",
+        Mock(return_value=rasterio_reader),
+    )
+
+    result = region_job.read_data(source_file_coord, gh_var)
+
+    np.testing.assert_allclose(result, test_data * expected_factor)
 
 
 def test_operational_update_jobs(

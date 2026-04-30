@@ -162,7 +162,8 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             # apply_data_transformations because a shard could mix sources and
             # the conversion must only apply to MARS-sourced values.
             if (
-                data_var.internal_attrs.mars is not None
+                isinstance(coord, MarsSourceFileCoord)
+                and data_var.internal_attrs.mars is not None
                 and data_var.internal_attrs.mars.scale_factor is not None
             ):
                 result = result * data_var.internal_attrs.mars.scale_factor
