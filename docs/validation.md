@@ -115,19 +115,22 @@ Look for each of these in every image.
 - [ ] **Coastlines/land features land at expected coordinates.** Locate a known landmark (e.g. the UK, Italy, the Great Lakes, southern Africa). Verify it sits at the correct lat/lon in the validation map. If it's shifted, the coordinate arrays are offset relative to the data array (off-by-one, wrong origin, or wrong grid spacing).
 - [ ] **Spatial extent matches the declared grid.** Domain bounds in the plot should match what the dataset's `TemplateConfig` declares. An extent truncation or overshoot means the coordinates or slicing is wrong.
 
-### Values (from `spatial_<var>.png` histogram and `validation_summary.md` stats)
+### Spatial plots (from `spatial_<var>.png` histogram and `validation_summary.md` stats)
 
 - [ ] **Validation histogram overlaps the reference histogram** for variables that are also in the reference dataset. A large horizontal offset is a unit or scale bug. A large width difference is a quantization or smoothing bug.
 - [ ] **Validation min/max is physically plausible.** Temperature in °C roughly −50 to +50. Pressure in Pa is ~50000–110000. Precipitation rate mm/s is tiny (10⁻⁵). Wind speed m/s is 0–100. Check `units` in `validation_summary.md` vs observed range.
 - [ ] **No obvious quantization banding in the spatial map.** Large flat patches of identical values or "staircasing" in smooth gradients indicates `keep_mantissa_bits` is too low.
 - [ ] **No suspicious sentinel values showing through.** Values like 9999 / -9999 / 32767 / 1e20 appearing as a color extreme mean a source nodata value was not translated to NaN.
+- [ ] **Whole plot matches meteorological expectations.** Look closely for subtly or obviously wrong new types of problems not enumerated here. Visual plots are a ley layer of our defense in depth approach to catching data quality issues. We can't list every possible issue, rather use your meterological knowlege to first define what you expect to see and compare that to what you actually see in the plots.
 
-### Time alignment (from `temporal_<var>.png`)
+### Time series plots (from `temporal_<var>.png`)
 
 - [ ] **Diurnal cycle is in phase with the reference.** Shortwave radiation, 2m temperature, and similar variables should peak at the same local hour as the reference. Phase-shift is a time-coordinate bug (e.g. UTC vs local, or off-by-one lead time).
 - [ ] **Trend magnitudes match.** The validation and reference should have similar day-to-day ranges. A consistent offset points to a calibration or unit issue; a consistent scale difference points to a unit conversion.
 - [ ] **No unexpected flatlines or spikes.** Flatlines at one value for many steps can be a read error or a stuck sentinel; isolated spikes can be unit bugs at specific lead times (common in accumulated variables).
 - [ ] **Accumulated variables reset as expected.** Precipitation and radiation accumulators should typically reset each forecast — check the `step_type` in `validation_summary.md` and confirm the shape.
+- [ ] **No obvious quantization in time series.** Time series which are snapped or binned to a limited set of values or "staircasing" in what should be smooth time series indicates `keep_mantissa_bits` is too low.
+- [ ] **Whole plot matches meteorological expectations.** Look closely for subtly or obviously wrong new types of problems not enumerated here. Visual plots are a ley layer of our defense in depth approach to catching data quality issues. We can't list every possible issue, rather use your meterological knowlege to first define what you expect to see and compare that to what you actually see in the plots.
 
 ### Missing data (from `nulls_<var>.png` and `missing_timestamps.txt`)
 
