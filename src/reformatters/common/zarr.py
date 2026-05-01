@@ -18,7 +18,7 @@ _LOCAL_ZARR_STORE_BASE_PATH = "data/output"
 
 
 def _store_repr(store: Store) -> str:
-    return repr(store).replace("\n", " ")
+    return str(store).replace("\n", " ")
 
 
 BLOSC_2BYTE_ZSTD_LEVEL3_SHUFFLE = BloscCodec(
