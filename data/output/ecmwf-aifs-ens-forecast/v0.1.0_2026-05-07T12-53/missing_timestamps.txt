@@ -1,0 +1,289 @@
+# Missing timestamps
+# Total: 116 across 34 (variable, point) combinations.
+# Use --filter-contains <timestamp> to retry those source files with backfill.
+
+## dew_point_temperature_2m @ Point 1 (lat=64.25, lon=-95.50)
+count: 2
+2025-08-05T12:00:00
+2025-10-10T18:00:00
+
+retry-filter: --filter-contains 2025-08-05T12:00:00 --filter-contains 2025-10-10T18:00:00
+
+## dew_point_temperature_2m @ Point 2 (lat=-85.00, lon=151.25)
+count: 2
+2025-08-05T12:00:00
+2025-10-10T18:00:00
+
+retry-filter: --filter-contains 2025-08-05T12:00:00 --filter-contains 2025-10-10T18:00:00
+
+## downward_long_wave_radiation_flux_surface @ Point 1 (lat=64.25, lon=-95.50)
+count: 2
+2025-08-05T06:00:00
+2025-09-11T06:00:00
+
+retry-filter: --filter-contains 2025-08-05T06:00:00 --filter-contains 2025-09-11T06:00:00
+
+## downward_long_wave_radiation_flux_surface @ Point 2 (lat=-85.00, lon=151.25)
+count: 2
+2025-08-05T06:00:00
+2025-09-11T06:00:00
+
+retry-filter: --filter-contains 2025-08-05T06:00:00 --filter-contains 2025-09-11T06:00:00
+
+## downward_short_wave_radiation_flux_surface @ Point 1 (lat=64.25, lon=-95.50)
+count: 3
+2025-08-06T00:00:00
+2025-08-08T12:00:00
+2025-08-18T12:00:00
+
+retry-filter: --filter-contains 2025-08-06T00:00:00 --filter-contains 2025-08-08T12:00:00 --filter-contains 2025-08-18T12:00:00
+
+## downward_short_wave_radiation_flux_surface @ Point 2 (lat=-85.00, lon=151.25)
+count: 3
+2025-08-06T00:00:00
+2025-08-08T12:00:00
+2025-08-18T12:00:00
+
+retry-filter: --filter-contains 2025-08-06T00:00:00 --filter-contains 2025-08-08T12:00:00 --filter-contains 2025-08-18T12:00:00
+
+## geopotential_height_500hpa @ Point 1 (lat=64.25, lon=-95.50)
+count: 2
+2025-08-05T12:00:00
+2025-10-10T18:00:00
+
+retry-filter: --filter-contains 2025-08-05T12:00:00 --filter-contains 2025-10-10T18:00:00
+
+## geopotential_height_500hpa @ Point 2 (lat=-85.00, lon=151.25)
+count: 2
+2025-08-05T12:00:00
+2025-10-10T18:00:00
+
+retry-filter: --filter-contains 2025-08-05T12:00:00 --filter-contains 2025-10-10T18:00:00
+
+## geopotential_height_850hpa @ Point 1 (lat=64.25, lon=-95.50)
+count: 6
+2025-07-20T00:00:00
+2025-07-27T06:00:00
+2025-08-06T00:00:00
+2025-08-18T00:00:00
+2025-09-23T06:00:00
+2026-03-22T12:00:00
+
+retry-filter: --filter-contains 2025-07-20T00:00:00 --filter-contains 2025-07-27T06:00:00 --filter-contains 2025-08-06T00:00:00 --filter-contains 2025-08-18T00:00:00 --filter-contains 2025-09-23T06:00:00 --filter-contains 2026-03-22T12:00:00
+
+## geopotential_height_850hpa @ Point 2 (lat=-85.00, lon=151.25)
+count: 6
+2025-07-20T00:00:00
+2025-07-27T06:00:00
+2025-08-06T00:00:00
+2025-08-18T00:00:00
+2025-09-23T06:00:00
+2026-03-22T12:00:00
+
+retry-filter: --filter-contains 2025-07-20T00:00:00 --filter-contains 2025-07-27T06:00:00 --filter-contains 2025-08-06T00:00:00 --filter-contains 2025-08-18T00:00:00 --filter-contains 2025-09-23T06:00:00 --filter-contains 2026-03-22T12:00:00
+
+## geopotential_height_925hpa @ Point 1 (lat=64.25, lon=-95.50)
+count: 6
+2025-07-20T00:00:00
+2025-07-27T06:00:00
+2025-08-06T00:00:00
+2025-08-18T00:00:00
+2025-09-23T06:00:00
+2026-03-22T12:00:00
+
+retry-filter: --filter-contains 2025-07-20T00:00:00 --filter-contains 2025-07-27T06:00:00 --filter-contains 2025-08-06T00:00:00 --filter-contains 2025-08-18T00:00:00 --filter-contains 2025-09-23T06:00:00 --filter-contains 2026-03-22T12:00:00
+
+## geopotential_height_925hpa @ Point 2 (lat=-85.00, lon=151.25)
+count: 6
+2025-07-20T00:00:00
+2025-07-27T06:00:00
+2025-08-06T00:00:00
+2025-08-18T00:00:00
+2025-09-23T06:00:00
+2026-03-22T12:00:00
+
+retry-filter: --filter-contains 2025-07-20T00:00:00 --filter-contains 2025-07-27T06:00:00 --filter-contains 2025-08-06T00:00:00 --filter-contains 2025-08-18T00:00:00 --filter-contains 2025-09-23T06:00:00 --filter-contains 2026-03-22T12:00:00
+
+## precipitation_surface @ Point 1 (lat=64.25, lon=-95.50)
+count: 2
+2025-08-05T06:00:00
+2025-09-11T06:00:00
+
+retry-filter: --filter-contains 2025-08-05T06:00:00 --filter-contains 2025-09-11T06:00:00
+
+## precipitation_surface @ Point 2 (lat=-85.00, lon=151.25)
+count: 2
+2025-08-05T06:00:00
+2025-09-11T06:00:00
+
+retry-filter: --filter-contains 2025-08-05T06:00:00 --filter-contains 2025-09-11T06:00:00
+
+## pressure_reduced_to_mean_sea_level @ Point 1 (lat=64.25, lon=-95.50)
+count: 4
+2025-08-06T00:00:00
+2025-08-08T12:00:00
+2025-08-18T12:00:00
+2025-09-04T06:00:00
+
+retry-filter: --filter-contains 2025-08-06T00:00:00 --filter-contains 2025-08-08T12:00:00 --filter-contains 2025-08-18T12:00:00 --filter-contains 2025-09-04T06:00:00
+
+## pressure_reduced_to_mean_sea_level @ Point 2 (lat=-85.00, lon=151.25)
+count: 4
+2025-08-06T00:00:00
+2025-08-08T12:00:00
+2025-08-18T12:00:00
+2025-09-04T06:00:00
+
+retry-filter: --filter-contains 2025-08-06T00:00:00 --filter-contains 2025-08-08T12:00:00 --filter-contains 2025-08-18T12:00:00 --filter-contains 2025-09-04T06:00:00
+
+## pressure_surface @ Point 1 (lat=64.25, lon=-95.50)
+count: 5
+2025-08-06T06:00:00
+2025-08-31T00:00:00
+2025-09-09T00:00:00
+2026-03-22T18:00:00
+2026-03-27T06:00:00
+
+retry-filter: --filter-contains 2025-08-06T06:00:00 --filter-contains 2025-08-31T00:00:00 --filter-contains 2025-09-09T00:00:00 --filter-contains 2026-03-22T18:00:00 --filter-contains 2026-03-27T06:00:00
+
+## pressure_surface @ Point 2 (lat=-85.00, lon=151.25)
+count: 5
+2025-08-06T06:00:00
+2025-08-31T00:00:00
+2025-09-09T00:00:00
+2026-03-22T18:00:00
+2026-03-27T06:00:00
+
+retry-filter: --filter-contains 2025-08-06T06:00:00 --filter-contains 2025-08-31T00:00:00 --filter-contains 2025-09-09T00:00:00 --filter-contains 2026-03-22T18:00:00 --filter-contains 2026-03-27T06:00:00
+
+## temperature_2m @ Point 1 (lat=64.25, lon=-95.50)
+count: 5
+2025-08-06T06:00:00
+2025-08-31T00:00:00
+2025-09-09T00:00:00
+2026-03-22T18:00:00
+2026-03-27T06:00:00
+
+retry-filter: --filter-contains 2025-08-06T06:00:00 --filter-contains 2025-08-31T00:00:00 --filter-contains 2025-09-09T00:00:00 --filter-contains 2026-03-22T18:00:00 --filter-contains 2026-03-27T06:00:00
+
+## temperature_2m @ Point 2 (lat=-85.00, lon=151.25)
+count: 5
+2025-08-06T06:00:00
+2025-08-31T00:00:00
+2025-09-09T00:00:00
+2026-03-22T18:00:00
+2026-03-27T06:00:00
+
+retry-filter: --filter-contains 2025-08-06T06:00:00 --filter-contains 2025-08-31T00:00:00 --filter-contains 2025-09-09T00:00:00 --filter-contains 2026-03-22T18:00:00 --filter-contains 2026-03-27T06:00:00
+
+## temperature_850hpa @ Point 1 (lat=64.25, lon=-95.50)
+count: 1
+2025-08-08T18:00:00
+
+retry-filter: --filter-contains 2025-08-08T18:00:00
+
+## temperature_850hpa @ Point 2 (lat=-85.00, lon=151.25)
+count: 1
+2025-08-08T18:00:00
+
+retry-filter: --filter-contains 2025-08-08T18:00:00
+
+## temperature_925hpa @ Point 1 (lat=64.25, lon=-95.50)
+count: 1
+2025-08-08T18:00:00
+
+retry-filter: --filter-contains 2025-08-08T18:00:00
+
+## temperature_925hpa @ Point 2 (lat=-85.00, lon=151.25)
+count: 1
+2025-08-08T18:00:00
+
+retry-filter: --filter-contains 2025-08-08T18:00:00
+
+## total_cloud_cover_atmosphere @ Point 1 (lat=64.25, lon=-95.50)
+count: 3
+2025-08-06T00:00:00
+2025-08-26T06:00:00
+2026-03-23T00:00:00
+
+retry-filter: --filter-contains 2025-08-06T00:00:00 --filter-contains 2025-08-26T06:00:00 --filter-contains 2026-03-23T00:00:00
+
+## total_cloud_cover_atmosphere @ Point 2 (lat=-85.00, lon=151.25)
+count: 3
+2025-08-06T00:00:00
+2025-08-26T06:00:00
+2026-03-23T00:00:00
+
+retry-filter: --filter-contains 2025-08-06T00:00:00 --filter-contains 2025-08-26T06:00:00 --filter-contains 2026-03-23T00:00:00
+
+## wind_u_100m @ Point 1 (lat=64.25, lon=-95.50)
+count: 5
+2025-07-26T18:00:00
+2025-08-06T18:00:00
+2025-08-13T12:00:00
+2025-09-26T00:00:00
+2025-11-26T12:00:00
+
+retry-filter: --filter-contains 2025-07-26T18:00:00 --filter-contains 2025-08-06T18:00:00 --filter-contains 2025-08-13T12:00:00 --filter-contains 2025-09-26T00:00:00 --filter-contains 2025-11-26T12:00:00
+
+## wind_u_100m @ Point 2 (lat=-85.00, lon=151.25)
+count: 5
+2025-07-26T18:00:00
+2025-08-06T18:00:00
+2025-08-13T12:00:00
+2025-09-26T00:00:00
+2025-11-26T12:00:00
+
+retry-filter: --filter-contains 2025-07-26T18:00:00 --filter-contains 2025-08-06T18:00:00 --filter-contains 2025-08-13T12:00:00 --filter-contains 2025-09-26T00:00:00 --filter-contains 2025-11-26T12:00:00
+
+## wind_u_10m @ Point 1 (lat=64.25, lon=-95.50)
+count: 3
+2025-07-26T00:00:00
+2025-08-08T18:00:00
+2025-08-29T18:00:00
+
+retry-filter: --filter-contains 2025-07-26T00:00:00 --filter-contains 2025-08-08T18:00:00 --filter-contains 2025-08-29T18:00:00
+
+## wind_u_10m @ Point 2 (lat=-85.00, lon=151.25)
+count: 3
+2025-07-26T00:00:00
+2025-08-08T18:00:00
+2025-08-29T18:00:00
+
+retry-filter: --filter-contains 2025-07-26T00:00:00 --filter-contains 2025-08-08T18:00:00 --filter-contains 2025-08-29T18:00:00
+
+## wind_v_100m @ Point 1 (lat=64.25, lon=-95.50)
+count: 5
+2025-07-26T18:00:00
+2025-08-06T18:00:00
+2025-08-13T12:00:00
+2025-09-26T00:00:00
+2025-11-26T12:00:00
+
+retry-filter: --filter-contains 2025-07-26T18:00:00 --filter-contains 2025-08-06T18:00:00 --filter-contains 2025-08-13T12:00:00 --filter-contains 2025-09-26T00:00:00 --filter-contains 2025-11-26T12:00:00
+
+## wind_v_100m @ Point 2 (lat=-85.00, lon=151.25)
+count: 5
+2025-07-26T18:00:00
+2025-08-06T18:00:00
+2025-08-13T12:00:00
+2025-09-26T00:00:00
+2025-11-26T12:00:00
+
+retry-filter: --filter-contains 2025-07-26T18:00:00 --filter-contains 2025-08-06T18:00:00 --filter-contains 2025-08-13T12:00:00 --filter-contains 2025-09-26T00:00:00 --filter-contains 2025-11-26T12:00:00
+
+## wind_v_10m @ Point 1 (lat=64.25, lon=-95.50)
+count: 3
+2025-07-26T00:00:00
+2025-08-08T18:00:00
+2025-08-29T18:00:00
+
+retry-filter: --filter-contains 2025-07-26T00:00:00 --filter-contains 2025-08-08T18:00:00 --filter-contains 2025-08-29T18:00:00
+
+## wind_v_10m @ Point 2 (lat=-85.00, lon=151.25)
+count: 3
+2025-07-26T00:00:00
+2025-08-08T18:00:00
+2025-08-29T18:00:00
+
+retry-filter: --filter-contains 2025-07-26T00:00:00 --filter-contains 2025-08-08T18:00:00 --filter-contains 2025-08-29T18:00:00
