@@ -13,8 +13,10 @@ from scripts.validation.compare_timeseries import (
     compare_timeseries,
     run_compare_timeseries,
 )
+from scripts.validation.render import render_report_command
 from scripts.validation.report_nulls import report_nulls, run_report_nulls
 from scripts.validation.summary import write_summary_md
+from scripts.validation.upload import upload_command
 from scripts.validation.utils import (
     RunContext,
     create_run_output_dir,
@@ -43,6 +45,14 @@ app.command("compare-timeseries", help="Timeseries comparison, one PNG per varia
     compare_timeseries
 )
 app.command("report-nulls", help="Null analysis, one PNG per variable")(report_nulls)
+app.command(
+    "render-report",
+    help="Render validation_summary.md to a static HTML report in the run directory.",
+)(render_report_command)
+app.command(
+    "upload",
+    help="Re-render and upload the run directory to the validation-reports R2 bucket.",
+)(upload_command)
 
 
 @app.command(
