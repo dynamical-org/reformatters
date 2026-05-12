@@ -85,10 +85,12 @@ Open `validation_summary.md` first. It provides text-based information which can
 
 Statistics miss the visual failure modes. Open the images and walk through the checklist in section 4.
 
+Every per-variable PNG must be reviewed: for each variable, open all three of `nulls_<var>.png`, `spatial_<var>.png`, and `temporal_<var>.png`. Do not stop after a representative sample — issues can be variable-specific (a unit bug at one level, a flipped map for one field) and only surface when every plot is checked. The only plots you may skip are the three `combined_*.png` files, and only as noted below.
+
 A good working rhythm:
 
 1. If you are a human, open the three `combined_*.png` files first. Scroll through each to get an overview of all variables together — this quickly surfaces patterns across variables (e.g. radiation peaks coinciding with cloud cover minima) and spots any variable that looks dramatically off relative to its neighbors. Skip this step if you are an AI assistant, the `combined_*.png` image pixel dimensions exceeds standard limits and attempting to read them can blow up your context or stall the session.
-2. For each variable that looked fine in combined or that you want to inspect more closely, open `nulls_<var>.png`, `spatial_<var>.png`, and `temporal_<var>.png`. The per-variable PNGs are higher-resolution. Filenames are consistent, so a pattern like `*_<var>.png` opens all of them at once in most viewers.
+2. Open `nulls_<var>.png`, `spatial_<var>.png`, and `temporal_<var>.png` for **every** variable in the dataset — not a sample. The per-variable PNGs are higher-resolution. Filenames are consistent, so a pattern like `*_<var>.png` opens all three at once in most viewers.
 3. Cross-check against the variable's row in `validation_summary.md` (units, long_name, stats).
 4. Apply the checklist below. Note anomalies as `<variable> + <file> + what's wrong` so they can be acted on.
 
