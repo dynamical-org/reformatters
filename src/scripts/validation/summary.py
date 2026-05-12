@@ -33,10 +33,6 @@ def _missing_summary(missing: list[str]) -> str:
     return f"{len(missing)} missing (first: {head} … last: {tail})"
 
 
-def _link(label: str, filename: str | None) -> str:
-    return f"[{label}]({filename})" if filename else f"~~{label}~~"
-
-
 def _dataset_time_range(ctx: RunContext) -> str:
     ds = ctx.validation_ds
     if is_forecast_dataset(ds):
@@ -56,18 +52,10 @@ def _reference_time_range(ctx: RunContext) -> str:
     return f"time {t_min} → {t_max}"
 
 
-def _variable_row(stats: VariableStats) -> str:
-    plots = (
-        f"{_link('nulls', stats.null_plot)} · "
-        f"{_link('spatial', stats.spatial_plot)} · "
-        f"{_link('temporal', stats.temporal_plot)}"
-    )
-    null_p1 = _fmt_count(stats.null_count_p1, stats.total_count_p1)
-    null_p2 = _fmt_count(stats.null_count_p2, stats.total_count_p2)
-    return (
-        f"| `{stats.name}` | {stats.units or ''} | {stats.long_name or ''} "
-        f"| {null_p1} | {null_p2} | {plots} |"
-    )
+def _stats_line(
+    label: str, mn: float | None, mean: float | None, mx: float | None
+) -> str:
+    return f"- {label}: min={_fmt_num(mn)}, mean={_fmt_num(mean)}, max={_fmt_num(mx)}"
 
 
 def _variable_section(stats: VariableStats, ctx: RunContext) -> str:
@@ -87,13 +75,21 @@ def _variable_section(stats: VariableStats, ctx: RunContext) -> str:
         f"- plot: `{stats.spatial_plot or 'n/a'}`",
         f"- time: {stats.spatial_time_label or 'n/a'} "
         f"(reference at {ctx.ref_spatial_time_label or 'n/a'})",
-        f"- validation: min={_fmt_num(stats.val_spatial_min)}, "
-        f"max={_fmt_num(stats.val_spatial_max)}, mean={_fmt_num(stats.val_spatial_mean)}",
+        _stats_line(
+            "validation",
+            stats.val_spatial_min,
+            stats.val_spatial_mean,
+            stats.val_spatial_max,
+        ),
     ]
     if stats.ref_available_spatial:
         lines.append(
-            f"- reference:  min={_fmt_num(stats.ref_spatial_min)}, "
-            f"max={_fmt_num(stats.ref_spatial_max)}, mean={_fmt_num(stats.ref_spatial_mean)}"
+            _stats_line(
+                "reference",
+                stats.ref_spatial_min,
+                stats.ref_spatial_mean,
+                stats.ref_spatial_max,
+            )
         )
     else:
         lines.append("- reference:  variable not available in reference dataset")
@@ -103,24 +99,39 @@ def _variable_section(stats: VariableStats, ctx: RunContext) -> str:
         "",
         f"- plot: `{stats.temporal_plot or 'n/a'}`",
         f"- period: {ctx.temporal_period_label or 'n/a'}",
-        f"- validation @ P1 (lat={ctx.point1_lat:.2f}, lon={ctx.point1_lon:.2f}): "
-        f"min={_fmt_num(stats.val_temporal_min_p1)}, "
-        f"max={_fmt_num(stats.val_temporal_max_p1)}, "
-        f"mean={_fmt_num(stats.val_temporal_mean_p1)}",
-        f"- validation @ P2 (lat={ctx.point2_lat:.2f}, lon={ctx.point2_lon:.2f}): "
-        f"min={_fmt_num(stats.val_temporal_min_p2)}, "
-        f"max={_fmt_num(stats.val_temporal_max_p2)}, "
-        f"mean={_fmt_num(stats.val_temporal_mean_p2)}",
+        _stats_line(
+            f"P1 validation (lat={ctx.point1_lat:.2f}, lon={ctx.point1_lon:.2f})",
+            stats.val_temporal_min_p1,
+            stats.val_temporal_mean_p1,
+            stats.val_temporal_max_p1,
+        ),
     ]
     if stats.ref_available_temporal:
-        lines += [
-            f"- reference  @ P1: min={_fmt_num(stats.ref_temporal_min_p1)}, "
-            f"max={_fmt_num(stats.ref_temporal_max_p1)}, "
-            f"mean={_fmt_num(stats.ref_temporal_mean_p1)}",
-            f"- reference  @ P2: min={_fmt_num(stats.ref_temporal_min_p2)}, "
-            f"max={_fmt_num(stats.ref_temporal_max_p2)}, "
-            f"mean={_fmt_num(stats.ref_temporal_mean_p2)}",
-        ]
+        lines.append(
+            _stats_line(
+                "P1 reference",
+                stats.ref_temporal_min_p1,
+                stats.ref_temporal_mean_p1,
+                stats.ref_temporal_max_p1,
+            )
+        )
+    lines.append(
+        _stats_line(
+            f"P2 validation (lat={ctx.point2_lat:.2f}, lon={ctx.point2_lon:.2f})",
+            stats.val_temporal_min_p2,
+            stats.val_temporal_mean_p2,
+            stats.val_temporal_max_p2,
+        )
+    )
+    if stats.ref_available_temporal:
+        lines.append(
+            _stats_line(
+                "P2 reference",
+                stats.ref_temporal_min_p2,
+                stats.ref_temporal_mean_p2,
+                stats.ref_temporal_max_p2,
+            )
+        )
     else:
         lines.append("- reference:  variable not available in reference dataset")
 
@@ -154,13 +165,16 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
     if ctx.start_date or ctx.end_date:
         scope_line = f"start={ctx.start_date or 'dataset start'}, end={ctx.end_date or 'dataset end'}"
 
-    missing_entries = []
-    for var, stats in ctx.stats.items():
-        if stats.missing_timestamps_p1:
-            missing_entries.append((var, "P1", len(stats.missing_timestamps_p1)))
-        if stats.missing_timestamps_p2:
-            missing_entries.append((var, "P2", len(stats.missing_timestamps_p2)))
-    missing_total = sum(n for _, _, n in missing_entries)
+    missing_rows: list[tuple[str, str, int, int, float]] = []
+    for var in ctx.variables:
+        stats = ctx.stats[var]
+        for point, missing, total in (
+            ("P1", stats.missing_timestamps_p1, stats.total_count_p1),
+            ("P2", stats.missing_timestamps_p2, stats.total_count_p2),
+        ):
+            if missing and total:
+                pct = len(missing) / total * 100
+                missing_rows.append((var, point, len(missing), total, pct))
 
     lines: list[str] = []
     lines.append(f"# Validation run — `{val_id}` `{val_ver}`")
@@ -169,13 +183,14 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
     lines.append("")
     lines.append("## Datasets")
     lines.append("")
-    lines.append("| Role | Name | ID / Version | URL |")
-    lines.append("|---|---|---|---|")
+    lines.append("| Role | Name | ID | Version | URL |")
+    lines.append("|---|---|---|---|---|")
     lines.append(
-        f"| Validation | {val_name} | `{val_id}` `{val_ver}` | `{ctx.validation_url}` |"
+        f"| Validation | {val_name} | `{val_id}` | `{val_ver}` | "
+        f"`{ctx.validation_url}` |"
     )
     lines.append(
-        f"| Reference  | {ref_name} | `{ref_id}` `{ref_ver}` | "
+        f"| Reference  | {ref_name} | `{ref_id}` | `{ref_ver}` | "
         f"`{ctx.reference_url or 'n/a'}` |"
     )
     lines.append("")
@@ -191,21 +206,34 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
         f"- Ensemble member: "
         f"{ctx.ensemble_member if ctx.ensemble_member is not None else 'n/a'}"
     )
+    lines.append("")
+    lines.append("### Missing values")
+    lines.append("")
     lines.append(f"- Point 1: lat={ctx.point1_lat:.4f}, lon={ctx.point1_lon:.4f}")
     lines.append(f"- Point 2: lat={ctx.point2_lat:.4f}, lon={ctx.point2_lon:.4f}")
+    lines.append("")
+    lines.append("### Spatial and distribution")
+    lines.append("")
     lines.append(
         f"- Spatial comparison time: "
         f"{ctx.spatial_time_label or 'n/a'} (reference at {ctx.ref_spatial_time_label or 'n/a'})"
     )
+    lines.append("")
+    lines.append("### Time series")
+    lines.append("")
+    lines.append(f"- Point 1: lat={ctx.point1_lat:.4f}, lon={ctx.point1_lon:.4f}")
+    lines.append(f"- Point 2: lat={ctx.point2_lat:.4f}, lon={ctx.point2_lon:.4f}")
     lines.append(f"- Timeseries period: {ctx.temporal_period_label or 'n/a'}")
     lines.append("")
 
     lines.append("## Combined plots")
     lines.append("")
+    lines.append("All variables combined into a single plot for each type of analysis.")
+    lines.append("")
     combined_items = [
-        ("nulls", ctx.combined_nulls_plot),
-        ("spatial", ctx.combined_spatial_plot),
-        ("temporal", ctx.combined_temporal_plot),
+        ("Missing values", ctx.combined_nulls_plot),
+        ("Spatial and distributions", ctx.combined_spatial_plot),
+        ("Time series", ctx.combined_temporal_plot),
     ]
     for label, filename in combined_items:
         if filename:
@@ -214,30 +242,18 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
 
     lines.append("## Missing timestamps")
     lines.append("")
-    if not missing_entries:
+    if not missing_rows:
         lines.append("None detected at the two sampled points.")
     else:
-        lines.append(
-            f"**{missing_total}** missing timestamps across **{len(missing_entries)}** "
-            f"(variable, point) combinations."
-        )
-        lines.append("")
         lines.append(
             f"Full list: [`{ctx.missing_timestamps_file or 'missing_timestamps.txt'}`]"
             f"({ctx.missing_timestamps_file or 'missing_timestamps.txt'})"
         )
         lines.append("")
-        lines.append("| Variable | Point | Count |")
-        lines.append("|---|---|---|")
-        for var, point, count in missing_entries:
-            lines.append(f"| `{var}` | {point} | {count} |")
-    lines.append("")
-
-    lines.append("## Variables overview")
-    lines.append("")
-    lines.append("| Variable | Units | Long name | Nulls @ P1 | Nulls @ P2 | Plots |")
-    lines.append("|---|---|---|---|---|---|")
-    lines.extend(_variable_row(ctx.stats[var]) for var in ctx.variables)
+        lines.append("| Variable | Point | Missing count | Total count | Missing % |")
+        lines.append("|---|---|---|---|---|")
+        for var, point, missing, total, pct in missing_rows:
+            lines.append(f"| `{var}` | {point} | {missing} | {total} | {pct:.2f}% |")
     lines.append("")
 
     lines.append("## Per-variable details")

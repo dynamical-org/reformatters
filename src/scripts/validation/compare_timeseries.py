@@ -85,7 +85,6 @@ def _compute_point_stats(
 
 def _draw_timeseries_at_point(
     ax: Axes,
-    var: str,
     val_series: xr.DataArray,
     ref_series: xr.DataArray | None,
     time_coord: str,
@@ -117,7 +116,7 @@ def _draw_timeseries_at_point(
             alpha=0.8,
         )
     ax.set_xlabel("Valid Time" if time_coord == "valid_time" else "Time")
-    ax.set_ylabel(f"{var}" + (f" [{units}]" if units else ""))
+    ax.set_ylabel(units or "")
     ax.set_title(title, fontsize=10)
     ax.grid(True, alpha=0.3)
     ax.legend(fontsize=8)
@@ -231,7 +230,6 @@ def run_compare_timeseries(ctx: RunContext) -> None:
         )
         _draw_timeseries_at_point(
             axes_v[0, 0],
-            var,
             val_p1,
             ref_p1,
             time_coord,
@@ -243,7 +241,6 @@ def run_compare_timeseries(ctx: RunContext) -> None:
         )
         _draw_timeseries_at_point(
             axes_v[0, 1],
-            var,
             val_p2,
             ref_p2,
             time_coord,
@@ -264,7 +261,6 @@ def run_compare_timeseries(ctx: RunContext) -> None:
         # Combined row
         _draw_timeseries_at_point(
             axes_c[i, 0],
-            var,
             val_p1,
             ref_p1,
             time_coord,
@@ -276,7 +272,6 @@ def run_compare_timeseries(ctx: RunContext) -> None:
         )
         _draw_timeseries_at_point(
             axes_c[i, 1],
-            var,
             val_p2,
             ref_p2,
             time_coord,
