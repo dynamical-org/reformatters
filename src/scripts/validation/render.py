@@ -224,6 +224,7 @@ section.variable.hidden { display: none; }
 @media (max-width: 880px) {
   .toc-toggle { display: block; }
   .toc { transform: translateX(-100%); transition: transform 180ms ease;
+         padding-top: 5.6rem;
          box-shadow: 0.4rem 0 1.2rem var(--shadow-color, rgba(0,0,0,0.4)); }
   body.toc-open .toc { transform: translateX(0); }
   body.toc-open::after { content: ""; position: fixed; inset: 0;
