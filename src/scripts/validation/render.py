@@ -164,7 +164,8 @@ li { margin: 0.2rem 0; }
   border: 1px solid var(--border-color); background: var(--bg-color);
   color: var(--header-color);
   width: 3.6rem; height: 3.6rem; font-size: 1.6rem; cursor: pointer;
-  display: none; padding: 0;
+  display: none; padding: 0; line-height: 1;
+  align-items: center; justify-content: center;
 }
 .toc-toggle:hover { background: var(--header-color); color: var(--bg-color); }
 
@@ -174,8 +175,8 @@ li { margin: 0.2rem 0; }
   overflow-y: auto; background: var(--bg-color); z-index: 20;
 }
 .toc-heading {
-  font-size: 1.1rem; text-transform: uppercase; letter-spacing: 1px;
-  color: var(--muted-text); margin: 2rem 0 0.8rem; font-weight: 700;
+  font-size: 1.4rem; color: var(--header-color);
+  margin: 2rem 0 0.8rem; font-weight: 700;
 }
 .toc-heading:first-child { margin-top: 0; }
 .toc ul { list-style: none; padding: 0; margin: 0; }
@@ -222,8 +223,9 @@ section.variable.hidden { display: none; }
 }
 
 @media (max-width: 880px) {
-  .toc-toggle { display: block; }
+  .toc-toggle { display: flex; }
   .toc { transform: translateX(-100%); transition: transform 180ms ease;
+         padding-top: 5.6rem;
          box-shadow: 0.4rem 0 1.2rem var(--shadow-color, rgba(0,0,0,0.4)); }
   body.toc-open .toc { transform: translateX(0); }
   body.toc-open::after { content: ""; position: fixed; inset: 0;
@@ -280,7 +282,7 @@ _JS = r"""
 
 
 def _build_toc(
-    sections: list[tuple[str, str]], variables: list[str], dataset_id: str
+    sections: list[tuple[str, str]], variables: list[str], dataset_name: str
 ) -> str:
     section_items = "".join(
         f'<li><a href="#{slug}">{title}</a></li>' for slug, title in sections
@@ -292,7 +294,7 @@ def _build_toc(
     )
     return f"""
 <nav class="toc" aria-label="Table of contents">
-  <div class="toc-heading">{dataset_id}</div>
+  <div class="toc-heading">{dataset_name}</div>
   <ul>{section_items}</ul>
   <div class="toc-heading">Variables</div>
   <div class="var-actions">
@@ -304,6 +306,11 @@ def _build_toc(
 """
 
 
+def _extract_dataset_name(md_text: str, fallback: str) -> str:
+    m = re.search(r"^\|\s*Validation\s*\|\s*([^|]+?)\s*\|", md_text, flags=re.MULTILINE)
+    return m.group(1) if m else fallback
+
+
 def render_html(md_text: str, dataset_id: str) -> str:
     md = MarkdownIt("commonmark").enable("table")
     html = md.render(md_text)
@@ -313,7 +320,8 @@ def render_html(md_text: str, dataset_id: str) -> str:
     html = _annotate_non_var_h3(html)
     html = _wrap_variable_sections(html)
     html = _wrap_tables(html)
-    toc = _build_toc(sections, variables, dataset_id)
+    dataset_name = _extract_dataset_name(md_text, dataset_id)
+    toc = _build_toc(sections, variables, dataset_name)
     title = f"Validation report — {dataset_id}"
     return f"""<!doctype html>
 <html lang="en">
