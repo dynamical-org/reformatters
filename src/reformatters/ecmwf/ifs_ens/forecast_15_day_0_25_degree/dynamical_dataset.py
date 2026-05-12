@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from functools import partial
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -62,5 +63,5 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
         """Return a sequence of DataValidators to run on this dataset."""
         return (
             validation.check_forecast_current_data,
-            validation.check_forecast_recent_nans,
+            partial(validation.check_forecast_recent_nans, max_nan_percentage=0),
         )
