@@ -145,3 +145,81 @@ For a sampling of unexplained nulls, go manually fetch source data files and ins
 
 - [ ] **Reference availability.** If the reference dataset doesn't cover your window, `validation_summary.md` will show `variable not available in reference dataset` — that is not a bug in the validation dataset, but spatial / temporal comparisons lose their signal. Consider a different reference or re-run on a time range the reference covers.
 - [ ] **Ensemble member is plausible.** For ensemble datasets `validation_summary.md` records the randomly-selected member. Rerun once more to confirm that a different member also looks right.
+
+## 5. Publishing the report
+
+Once a run is reviewed, render it to a static HTML report and publish it. Two paths exist:
+
+- **Draft** — every render goes here, timestamped, kept forever. Use for sharing a single run for review without committing to it.
+- **Stable** — the canonical report for a dataset, overwritten by each new publish. Embedded in the dynamical-stac catalog and linked from dynamical.org.
+
+Both paths live in the `dataset-validation-reports` Cloudflare R2 bucket, served publicly at `https://dataset-validation-reports.dynamical.org`. Drafts and previously-published reports are archived forever — only the file at the stable path is overwritten.
+
+### 5a. Render the HTML report
+
+```bash
+uv run src/scripts/validation/plots.py render-report <run-dir>
+```
+
+Reads `<run-dir>/validation_summary.md` and writes `<run-dir>/validation_report.html` next to it. Self-contained HTML (inline CSS/JS, no build step), images referenced at relative paths so the rendered file works locally and after upload.
+
+The HTML mirrors the markdown 1:1 with two viewing affordances:
+
+- **Left TOC** (slide-out hamburger on mobile) lists the top-level sections plus a Variables group with a checkbox per variable. "All / none" toggles let you compare a subset of variables side-by-side. Each variable section has `id="var-<name>"` so URLs can deep-link (e.g. `validation_report.html#var-temperature_2m`).
+- **Images** are full-width on mobile and wrapped in a link to the underlying file so tap/click opens the full-resolution image.
+
+`combined_*.png` images are linked from the "Combined plots" section (not inlined — they're large).
+
+`upload` re-renders before uploading, so this command is only needed for local-only previews.
+
+### 5b. Upload — drafts and publish
+
+```bash
+uv run src/scripts/validation/plots.py upload <run-dir>             # draft
+uv run src/scripts/validation/plots.py upload <run-dir> --publish   # publish to stable + archive
+```
+
+`upload` re-renders the HTML, then uploads the entire run directory (`validation_summary.md`, all `*.png`, `missing_timestamps.txt`, `validation_report.html`) to R2.
+
+Without `--publish`:
+
+```
+<dataset-id>/drafts/<version>_<YYYY-MM-DDTHH-MM>/
+```
+
+Use this to share a single run for review without committing to it. Drafts are kept forever; iterate by re-running `run-all` (a new timestamped run dir) and re-uploading.
+
+With `--publish`:
+
+```
+<dataset-id>/latest/                                  # stable, overwritten each publish
+<dataset-id>/published/<version>_<YYYY-MM-DDTHH-MM>/  # archive copy, kept forever
+```
+
+The stable path is what the dynamical-stac catalog links to. The archive copy preserves what `latest/` was before this publish; previously published reports are never lost.
+
+Prints the public URL of `validation_report.html` on completion (e.g. `https://dataset-validation-reports.dynamical.org/<dataset-id>/latest/validation_report.html`).
+
+### 5c. Update the summary in place before publishing
+
+Per [3d](#3d-update-validation_summarymd), the run already has a `## Summary` block at the top of `validation_summary.md` written during review. Before running `upload --publish`, edit that block in place: drop `### For further review` items you've followed up on, add notes about specific known issues, and update `### What looks good` if your view has changed. `upload` re-renders the HTML automatically.
+
+### 5d. Wire into dynamical-stac
+
+After the first publish for a dataset, add the report URL to the catalog so it surfaces on dynamical.org. In the `dynamical-org/dynamical-stac` repo:
+
+1. Add `validation_report_href` to the relevant `CatalogItem` in `src/catalog.py`. Value is the `latest/` URL.
+2. The STAC generator surfaces it as an asset with role `validation-report` (type `text/html`).
+3. Run `./scripts/generate` and commit `stac/`.
+
+This is a one-time wiring per dataset. Subsequent `publish-stable` runs update the report contents at the same URL — no STAC change needed.
+
+### Configuration
+
+`publish-draft` and `publish-stable` read R2 credentials from these environment variables:
+
+- `R2_VALIDATION_REPORTS_ENDPOINT_URL`
+- `R2_VALIDATION_REPORTS_ACCESS_KEY_ID`
+- `R2_VALIDATION_REPORTS_SECRET_ACCESS_KEY`
+
+Scoped to the `dataset-validation-reports` bucket. Set them in the environment before running the publish commands.

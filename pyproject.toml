@@ -38,7 +38,9 @@ main = "reformatters.__main__:app"
 
 [dependency-groups]
 dev = [
+    "boto3>=1.42.49",
     "cf-xarray>=0.10.10",
+    "markdown-it-py>=4.0.0",
     "matplotlib~=3.9",
     "pandas-stubs~=2.2",
     "prek==0.3.0",
@@ -49,6 +51,7 @@ dev = [
     # NOTE: keep this in sync with .pre-commit-config.yaml
     "ruff==0.14.14",
     "ty~=0.0.14",
+    "types-boto3>=1.43.5",
     "types-requests~=2.32",
 ]
 

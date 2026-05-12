@@ -229,9 +229,9 @@ def _draw_spatial_triplet(
     )
     if data_min != data_max:
         ax_hist.set_xlim(data_min, data_max)
-    ax_hist.set_xlabel(f"{var}" + (f" [{units}]" if units else ""))
+    ax_hist.set_xlabel(units or "")
     ax_hist.set_ylabel("Density")
-    ax_hist.set_title(f"Distribution — {var}", fontsize=10)
+    ax_hist.set_title(f"Distribution\n{var}", fontsize=10)
     ax_hist.legend(fontsize="small", frameon=False)
     ax_hist.grid(True, alpha=0.3)
 
@@ -401,7 +401,7 @@ def compare_spatial(
         reference_url=reference_url,
         validation_ds=validation_ds,
         reference_ds=reference_ds,
-        started_at=pd.Timestamp.now(),
+        started_at=pd.Timestamp.now(tz="UTC"),
         point1_sel=point1_sel,
         point2_sel=point2_sel,
         point1_lat=lat1,
