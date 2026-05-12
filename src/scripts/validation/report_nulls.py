@@ -112,10 +112,15 @@ def write_missing_timestamps_file(output_dir: Path, ctx: RunContext) -> str | No
     filename = "missing_timestamps.txt"
     path = output_dir / filename
     total = sum(len(m) for _, _, m in entries)
+    all_missing = sorted({ts for _, _, missing in entries for ts in missing})
+    combined_filter = " ".join(f"--filter-contains {ts}" for ts in all_missing)
     lines = [
         "# Missing timestamps",
         f"# Total: {total} across {len(entries)} (variable, point) combinations.",
         "# Use --filter-contains <timestamp> to retry those source files with backfill.",
+        "",
+        f"# Combined retry filter ({len(all_missing)} unique timestamps across all variables):",
+        f"combined-retry-filter: {combined_filter}",
         "",
     ]
     for var, point_label, missing in entries:
