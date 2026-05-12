@@ -279,7 +279,7 @@ def create_run_output_dir(
     validation_url: str, base_timestamp: pd.Timestamp | None = None
 ) -> Path:
     """Create the per-run output directory: data/output/<dataset-id>/<version>_<YYYY-MM-DDTHH-MM>/"""
-    ts = base_timestamp if base_timestamp is not None else pd.Timestamp.now()
+    ts = base_timestamp if base_timestamp is not None else pd.Timestamp.now(tz="UTC")
     timestamp_str = ts.strftime("%Y-%m-%dT%H-%M")
     dataset_id, version = dataset_id_and_version(validation_url)
     run_dir = Path(OUTPUT_DIR) / dataset_id / f"{version}_{timestamp_str}"

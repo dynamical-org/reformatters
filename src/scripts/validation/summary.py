@@ -99,8 +99,11 @@ def _variable_section(stats: VariableStats, ctx: RunContext) -> str:
         "",
         f"- plot: `{stats.temporal_plot or 'n/a'}`",
         f"- period: {ctx.temporal_period_label or 'n/a'}",
+        "",
+        f"P1 (lat={ctx.point1_lat:.2f}, lon={ctx.point1_lon:.2f}):",
+        "",
         _stats_line(
-            f"P1 validation (lat={ctx.point1_lat:.2f}, lon={ctx.point1_lon:.2f})",
+            "validation",
             stats.val_temporal_min_p1,
             stats.val_temporal_mean_p1,
             stats.val_temporal_max_p1,
@@ -109,24 +112,29 @@ def _variable_section(stats: VariableStats, ctx: RunContext) -> str:
     if stats.ref_available_temporal:
         lines.append(
             _stats_line(
-                "P1 reference",
+                "reference",
                 stats.ref_temporal_min_p1,
                 stats.ref_temporal_mean_p1,
                 stats.ref_temporal_max_p1,
             )
         )
-    lines.append(
+    else:
+        lines.append("- reference:  variable not available in reference dataset")
+    lines += [
+        "",
+        f"P2 (lat={ctx.point2_lat:.2f}, lon={ctx.point2_lon:.2f}):",
+        "",
         _stats_line(
-            f"P2 validation (lat={ctx.point2_lat:.2f}, lon={ctx.point2_lon:.2f})",
+            "validation",
             stats.val_temporal_min_p2,
             stats.val_temporal_mean_p2,
             stats.val_temporal_max_p2,
-        )
-    )
+        ),
+    ]
     if stats.ref_available_temporal:
         lines.append(
             _stats_line(
-                "P2 reference",
+                "reference",
                 stats.ref_temporal_min_p2,
                 stats.ref_temporal_mean_p2,
                 stats.ref_temporal_max_p2,
@@ -177,9 +185,22 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
                 missing_rows.append((var, point, len(missing), total, pct))
 
     lines: list[str] = []
-    lines.append(f"# Validation run — `{val_id}` `{val_ver}`")
+    display_ver = "v" + val_ver.removeprefix("v")
+    lines.append(f"# Dataset validation report — `{val_id}` `{display_ver}`")
     lines.append("")
-    lines.append(f"Started: {ctx.started_at.strftime('%Y-%m-%dT%H:%M:%S')} local")
+    lines.append(
+        f"This dataset validation report plots a sample of values from the "
+        f"{val_name} dataset over time and across space, comparing where possible "
+        f"to a previously validated reference dataset. It also reports the quantity "
+        f"of missing values and their associated timestamps. These analyses are one "
+        f"layer of a multi-layered dataset validation process we perform at "
+        f"dynamical.org and also provide users a preview of the dataset contents."
+    )
+    lines.append("")
+    lines.append(
+        f"Report generation start time: "
+        f"{ctx.started_at.strftime('%Y-%m-%dT%H:%M:%S')} UTC"
+    )
     lines.append("")
     lines.append("## Datasets")
     lines.append("")
@@ -197,7 +218,7 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
     lines.append("## Run parameters")
     lines.append("")
     lines.append(
-        f"- Validation dataset type: **{'forecast' if is_forecast else 'analysis'}**"
+        f"- Validation dataset type: {'forecast' if is_forecast else 'analysis'}"
     )
     lines.append(f"- Validation time range: {_dataset_time_range(ctx)}")
     lines.append(f"- Reference time range:  {_reference_time_range(ctx)}")

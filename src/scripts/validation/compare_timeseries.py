@@ -328,7 +328,7 @@ def compare_timeseries(
         reference_url=reference_url,
         validation_ds=validation_ds,
         reference_ds=reference_ds,
-        started_at=pd.Timestamp.now(),
+        started_at=pd.Timestamp.now(tz="UTC"),
         point1_sel=point1_sel,
         point2_sel=point2_sel,
         point1_lat=lat1,

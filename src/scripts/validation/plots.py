@@ -83,7 +83,7 @@ def run_all(
     output_dir: Path | None = output_dir_option,
 ) -> None:
     """Produce nulls / spatial / temporal plots, one per variable, in one directory + validation_summary.md."""
-    started_at = pd.Timestamp.now()
+    started_at = pd.Timestamp.now(tz="UTC")
 
     log.info(f"Loading validation dataset: {dataset_url}")
     validation_ds = load_zarr_dataset(dataset_url)

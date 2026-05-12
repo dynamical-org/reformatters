@@ -214,7 +214,7 @@ def report_nulls(
         reference_url=None,
         validation_ds=ds,
         reference_ds=None,
-        started_at=pd.Timestamp.now(),
+        started_at=pd.Timestamp.now(tz="UTC"),
         point1_sel=point1_sel,
         point2_sel=point2_sel,
         point1_lat=lat1,
