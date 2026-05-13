@@ -21,6 +21,11 @@ from reformatters.ecmwf.ecmwf_config_models import (
 
 MARS_OPEN_DATA_CUTOVER = pd.Timestamp("2024-04-01T00:00")
 
+# IFS Cycle 50r1 (2026-05-12 06z) merged ex-HRES and the ENS control into one
+# forecast, disseminated as stream=oper, type=fc instead of stream=enfo, type=cf.
+# From the cutover, the control member lives in oper-fc; perturbed members remain in enfo-ef.
+IFS_CYCLE_50R1_CUTOVER = pd.Timestamp("2026-05-12T06:00")
+
 DYNAMICAL_MARS_GRIB_BASE_URL = (
     "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens"
 )
@@ -61,13 +66,21 @@ class OpenDataSourceFileCoord(SourceFileCoord):
         init_hour_str = self.init_time.strftime("%H")  # pads 0 to be "00", as desired
         lead_time_hour_str = whole_hours(self.lead_time)
 
+        use_oper_control = (
+            self.init_time >= IFS_CYCLE_50R1_CUTOVER and self.ensemble_member == 0
+        )
+        stream_dir = "oper" if use_oper_control else "enfo"
+        file_kind = "oper-fc" if use_oper_control else "enfo-ef"
+
         # On 2024-02-29 and onward, the /ifs/ directory is included in the URL path.
         if self.init_time >= pd.Timestamp("2024-02-29T00:00"):
-            directory_path = f"{init_time_str}/{init_hour_str}z/ifs/0p25/enfo"
+            directory_path = f"{init_time_str}/{init_hour_str}z/ifs/0p25/{stream_dir}"
         else:
-            directory_path = f"{init_time_str}/{init_hour_str}z/0p25/enfo"
+            directory_path = f"{init_time_str}/{init_hour_str}z/0p25/{stream_dir}"
 
-        filename = f"{init_time_str}{init_hour_str}0000-{lead_time_hour_str}h-enfo-ef"
+        filename = (
+            f"{init_time_str}{init_hour_str}0000-{lead_time_hour_str}h-{file_kind}"
+        )
         return f"{base_url}/{directory_path}/{filename}"
 
     def get_url(self) -> str:

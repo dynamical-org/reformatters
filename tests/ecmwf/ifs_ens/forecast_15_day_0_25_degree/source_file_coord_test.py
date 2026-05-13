@@ -84,6 +84,49 @@ def test_open_data_get_url_without_ifs_directory() -> None:
     )
 
 
+def test_open_data_get_url_control_uses_oper_after_50r1_cutover() -> None:
+    coord = OpenDataSourceFileCoord(
+        init_time=pd.Timestamp("2026-05-12T06:00"),
+        lead_time=pd.Timedelta("78h"),
+        data_var_group=[],
+        ensemble_member=0,
+    )
+    assert (
+        coord.get_url()
+        == "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260512/06z/ifs/0p25/oper/20260512060000-78h-oper-fc.grib2"
+    )
+    assert (
+        coord.get_index_url()
+        == "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260512/06z/ifs/0p25/oper/20260512060000-78h-oper-fc.index"
+    )
+
+
+def test_open_data_get_url_control_uses_enfo_before_50r1_cutover() -> None:
+    coord = OpenDataSourceFileCoord(
+        init_time=pd.Timestamp("2026-05-12T00:00"),
+        lead_time=pd.Timedelta("78h"),
+        data_var_group=[],
+        ensemble_member=0,
+    )
+    assert (
+        coord.get_url()
+        == "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260512/00z/ifs/0p25/enfo/20260512000000-78h-enfo-ef.grib2"
+    )
+
+
+def test_open_data_get_url_perturbed_stays_in_enfo_after_50r1_cutover() -> None:
+    coord = OpenDataSourceFileCoord(
+        init_time=pd.Timestamp("2026-05-12T06:00"),
+        lead_time=pd.Timedelta("78h"),
+        data_var_group=[],
+        ensemble_member=1,
+    )
+    assert (
+        coord.get_url()
+        == "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20260512/06z/ifs/0p25/enfo/20260512060000-78h-enfo-ef.grib2"
+    )
+
+
 def test_open_data_index_step_is_none() -> None:
     coord = OpenDataSourceFileCoord(
         init_time=pd.Timestamp("2025-01-01"),

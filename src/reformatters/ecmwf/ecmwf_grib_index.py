@@ -99,9 +99,11 @@ def _parse_index_file(
             df["number"] = 0
         else:
             df["number"] = df["number"].fillna(0).astype(int)
-        # Ensure that every row we filled with number=0 was indeed type "cf" (control forecast)
-        assert (df[df["number"] == 0]["type"] == "cf").all(), (
-            "Parsed row as control member that didn't have type='cf'"
+        # Rows with number=0 must be the control member: either type=cf
+        # (pre-IFS-50r1 enfo) or type=fc (post-50r1 oper, where ex-HRES and
+        # ENS Control were merged into a single forecast).
+        assert df[df["number"] == 0]["type"].isin({"cf", "fc"}).all(), (
+            "Parsed row as control member that didn't have type='cf' or type='fc'"
         )
 
     return df.set_index(index_cols).sort_index()
