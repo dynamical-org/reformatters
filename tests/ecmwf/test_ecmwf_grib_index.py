@@ -33,6 +33,13 @@ _EXAMPLE_INDEX_JSONL = """\
 {"domain": "g", "date": "20240201", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "3", "levtype": "pl", "levelist": "500", "number": "2", "param": "gh", "_offset": 674936844, "_length": 393429}
 """
 
+# Post-IFS-50r1 oper-fc index: no "number" column, type=fc, stream=oper.
+# The parser should fill number=0 for every row (the merged ex-HRES/ENS control).
+_OPER_FC_INDEX_JSONL = """\
+{"domain": "g", "date": "20260513", "time": "0000", "expver": "0001", "class": "od", "type": "fc", "stream": "oper", "step": "78", "levtype": "sfc", "param": "2t", "_offset": 0, "_length": 1000000}
+{"domain": "g", "date": "20260513", "time": "0000", "expver": "0001", "class": "od", "type": "fc", "stream": "oper", "step": "78", "levtype": "pl", "levelist": "500", "param": "gh", "_offset": 1000000, "_length": 500000}
+"""
+
 
 @pytest.fixture
 def index_file(tmp_path: Path) -> Path:
@@ -243,6 +250,45 @@ def test_get_byte_ranges_mars_pf_sfc_with_step() -> None:
     )
     assert starts == [2076642]
     assert ends == [2076642 + 2076642]
+
+
+# ---------------------------------------------------------------------------
+# Post-50r1 oper-fc index tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def oper_fc_index_file(tmp_path: Path) -> Path:
+    path = tmp_path / "oper-fc.index"
+    path.write_text(_OPER_FC_INDEX_JSONL)
+    return path
+
+
+def test_parse_oper_fc_index_fills_number_with_0(oper_fc_index_file: Path) -> None:
+    df = _parse_index_file(oper_fc_index_file, ensemble=True)
+    df_reset = df.reset_index()
+    assert (df_reset["number"] == 0).all()
+    assert (df_reset["type"] == "fc").all()
+
+
+def test_get_byte_ranges_oper_fc_surface_var(oper_fc_index_file: Path) -> None:
+    var = _make_ecmwf_var("temperature_2m", "2t", "sfc")
+    starts, ends = get_message_byte_ranges_from_index(
+        oper_fc_index_file, [var], ensemble_member=0
+    )
+    assert starts == [0]
+    assert ends == [1000000]
+
+
+def test_get_byte_ranges_oper_fc_pressure_level_var(oper_fc_index_file: Path) -> None:
+    var = _make_ecmwf_var(
+        "geopotential_height_500hpa", "gh", "pl", grib_index_level_value=500.0
+    )
+    starts, ends = get_message_byte_ranges_from_index(
+        oper_fc_index_file, [var], ensemble_member=0
+    )
+    assert starts == [1000000]
+    assert ends == [1500000]
 
 
 def test_get_byte_ranges_mars_multiple_vars_single_step() -> None:
