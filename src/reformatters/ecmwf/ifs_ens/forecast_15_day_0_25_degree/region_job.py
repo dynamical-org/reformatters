@@ -2,7 +2,7 @@ import itertools
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import ClassVar, assert_never
+from typing import ClassVar
 
 import numpy as np
 import pandas as pd
@@ -128,17 +128,20 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         coord: IfsEnsSourceFileCoord,
         source: EcmwfOpenDataSource | MarsSource,
     ) -> Path:
-        match source:
-            case "s3-source-coop":
-                assert isinstance(coord, MarsSourceFileCoord)
-                idx_url = coord.get_index_url("s3-source-coop")
-                data_url = coord.get_url("s3-source-coop")
-            case "s3" | "gcs":
-                assert isinstance(coord, OpenDataSourceFileCoord)
-                idx_url = coord.get_index_url(source)
-                data_url = coord.get_url(source)
-            case _ as unreachable:
-                assert_never(unreachable)
+        match coord, source:
+            case (OpenDataSourceFileCoord(), "s3" | "gcs"):
+                pass
+            case (MarsSourceFileCoord(), "s3-source-coop"):
+                pass
+            case _:
+                raise AssertionError(
+                    f"Unsupported pairing: {type(coord).__name__} with {source=!r}"
+                )
+
+        # The match above guarantees this pair is supported; ty cannot narrow
+        # both coord and source together to a compatible call signature.
+        idx_url = coord.get_index_url(source)  # ty: ignore[invalid-argument-type]
+        data_url = coord.get_url(source)  # ty: ignore[invalid-argument-type]
 
         idx_local_path = http_download_to_disk(
             idx_url, self.dataset_id, disk_cache=True

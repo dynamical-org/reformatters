@@ -1,5 +1,5 @@
 from collections.abc import Mapping, Sequence
-from typing import ClassVar, Literal, assert_never
+from typing import Literal, assert_never
 
 import pandas as pd
 
@@ -42,9 +42,6 @@ class OpenDataSourceFileCoord(SourceFileCoord):
     ensemble_member: int
     data_var_group: Sequence[EcmwfDataVar]
 
-    s3_bucket_url: ClassVar[str] = "ecmwf-forecasts"
-    s3_region: ClassVar[str] = "eu-central-1"
-
     def resolve_data_vars(self) -> OpenDataSourceFileCoord:
         return replace(
             self,
@@ -65,9 +62,7 @@ class OpenDataSourceFileCoord(SourceFileCoord):
     def _get_base_url(self, source: EcmwfOpenDataSource) -> str:
         match source:
             case "s3":
-                base_url = (
-                    f"https://{self.s3_bucket_url}.s3.{self.s3_region}.amazonaws.com"
-                )
+                base_url = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
             case "gcs":
                 base_url = "https://storage.googleapis.com/ecmwf-open-data"
             case _ as unreachable:
