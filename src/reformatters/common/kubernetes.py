@@ -299,3 +299,14 @@ def _load_secret_from_kubernetes_api(
     contents = json.loads(contents_json)
     assert isinstance(contents, dict)
     return contents
+
+
+def get_deployed_cronjob_image(cronjob_name: str) -> str:
+    """Read the container image of a deployed CronJob from the cluster."""
+    config.load_kube_config()
+    batch_v1 = client.BatchV1Api()
+    cronjob = batch_v1.read_namespaced_cron_job(cronjob_name, "default")
+    image = cronjob.spec.job_template.spec.template.spec.containers[0].image
+    assert isinstance(image, str), f"CronJob {cronjob_name} image is not a string"
+    assert len(image) > 0, f"CronJob {cronjob_name} has no container image"
+    return image
