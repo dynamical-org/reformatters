@@ -124,7 +124,7 @@ def check_forecast_recent_nans(
     num_random_points: int = 2,
     skip_lead_time_0_for_non_instant: bool = True,
     additional_skip_lead_time_0_vars: Sequence[str] = (),
-    max_workers: int = 8,
+    max_workers: int = 6,
 ) -> ValidationResult:
     """
     Check the NaN fraction of the most recent init_time in a forecast dataset.
@@ -159,7 +159,7 @@ def check_analysis_recent_nans(
     exclude_vars: Sequence[str] = (),
     sampling_strategy: SamplingStrategy = "all",
     num_random_points: int = 2,
-    max_workers: int = 8,
+    max_workers: int = 6,
 ) -> ValidationResult:
     """Check the NaN fraction of recent timesteps in an analysis dataset."""
     now = pd.Timestamp.now()
