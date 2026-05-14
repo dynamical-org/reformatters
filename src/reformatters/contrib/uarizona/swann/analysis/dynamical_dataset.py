@@ -35,7 +35,12 @@ class UarizonaSwannAnalysisDataset(
             partial(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
+                # SWANN's CONUS grid has ~46.4% structural NaN (Mexico/Canada/coast
+                # within the bounding box). With random_points sampling that gives
+                # a bimodal {0, 0.5, 1.0} per-run fraction; use full-grid sampling
+                # since the dataset is small (~35MB for 5 days x 2 vars).
                 max_nan_fraction=MAX_NAN_FRACTION,
+                sampling_strategy="all",
             ),
             check_random_time_within_last_year_nans,
         )

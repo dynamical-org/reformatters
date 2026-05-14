@@ -58,8 +58,10 @@ class NoaaNdviCdrAnalysisDataset(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
                 # Large NaN fraction is expected: oceans and water bodies are always NaN
-                # (~93% baseline, observed up to ~96%).
+                # (~93% baseline, observed up to ~96%). Use full-grid sampling because
+                # structural NaN makes random_points bimodal/unstable.
                 max_nan_fraction=0.97,
                 include_vars=["ndvi_usable"],
+                sampling_strategy="all",
             ),
         )
