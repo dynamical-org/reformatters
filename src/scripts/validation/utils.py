@@ -11,10 +11,6 @@ import typer
 import xarray as xr
 from zarr.storage import ObjectStore, StoreLike
 
-from reformatters.common.logging import get_logger
-
-log = get_logger(__name__)
-
 OUTPUT_DIR = "data/output"
 
 variables_option = typer.Option(
@@ -253,23 +249,6 @@ def select_random_ensemble_member(ds: xr.Dataset) -> tuple[xr.Dataset, int | Non
         ds.sel(ensemble_member=ensemble_member),
         ensemble_member,
     )
-
-
-def ensure_ensemble_member_selected(ctx: RunContext) -> None:
-    """Reduce ctx.validation_ds to a single random ensemble member (idempotent).
-
-    Spatial and temporal plots are over a single member; the null analysis is over
-    the full ensemble so silent NaN cells at any member are visible. This helper
-    is called from the spatial/temporal entry points and skipped by the null path.
-    """
-    if "ensemble_member" not in ctx.validation_ds.dims:
-        return
-    if ctx.ensemble_member is not None:
-        return
-    ctx.validation_ds, ctx.ensemble_member = select_random_ensemble_member(
-        ctx.validation_ds
-    )
-    log.info(f"Ensemble member (random): {ctx.ensemble_member}")
 
 
 def extract_variable_metadata(ds: xr.Dataset, var: str) -> dict[str, Any]:

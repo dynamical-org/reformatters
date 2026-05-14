@@ -14,13 +14,13 @@ from scripts.validation.utils import (
     RunContext,
     VariableStats,
     end_date_option,
-    ensure_ensemble_member_selected,
     get_two_random_points,
     is_forecast_dataset,
     load_zarr_dataset,
     output_dir_option,
     resolve_output_dir,
     scope_time_period,
+    select_random_ensemble_member,
     select_variables_for_plotting,
     start_date_option,
     variables_option,
@@ -245,26 +245,34 @@ def run_compare_spatial(
     """Produce per-variable + combined spatial comparison plots in ctx.output_dir."""
     assert ctx.reference_ds is not None, "compare-spatial requires a reference dataset"
 
-    ensure_ensemble_member_selected(ctx)
+    # Spatial plots are over a single member; ctx.validation_ds keeps the full
+    # ensemble dim so report_nulls can scan every member.
+    validation_ds = ctx.validation_ds
+    if "ensemble_member" in validation_ds.dims:
+        if ctx.ensemble_member is None:
+            validation_ds, ctx.ensemble_member = select_random_ensemble_member(
+                validation_ds
+            )
+            log.info(f"Ensemble member (random): {ctx.ensemble_member}")
+        else:
+            validation_ds = validation_ds.sel(ensemble_member=ctx.ensemble_member)
 
-    is_forecast = is_forecast_dataset(ctx.validation_ds)
-    spatially_aligned_ref = align_reference_spatially(
-        ctx.validation_ds, ctx.reference_ds
-    )
+    is_forecast = is_forecast_dataset(validation_ds)
+    spatially_aligned_ref = align_reference_spatially(validation_ds, ctx.reference_ds)
 
     if is_forecast:
         ds, ref_ds = align_to_valid_time_forecast(
-            ctx.validation_ds, spatially_aligned_ref, init_time, lead_time
+            validation_ds, spatially_aligned_ref, init_time, lead_time
         )
     else:
         ds, ref_ds = align_to_valid_time_analysis(
-            ctx.validation_ds, spatially_aligned_ref, time
+            validation_ds, spatially_aligned_ref, time
         )
     ds = _downsample_for_plot(ds)
 
     val_time_label = _format_spatial_time_label(ds, is_forecast)
     ref_time_label = pd.Timestamp(ref_ds.time.item()).strftime("%Y-%m-%dT%H:%M")
-    val_label = ctx.validation_ds.attrs.get("name", "validation")
+    val_label = validation_ds.attrs.get("name", "validation")
     ref_label = ctx.reference_ds.attrs.get("name", "reference")
     ctx.spatial_time_label = val_time_label
     ctx.ref_spatial_time_label = ref_time_label

@@ -12,13 +12,13 @@ from scripts.validation.utils import (
     RunContext,
     VariableStats,
     end_date_option,
-    ensure_ensemble_member_selected,
     get_two_random_points,
     is_forecast_dataset,
     load_zarr_dataset,
     output_dir_option,
     resolve_output_dir,
     scope_time_period,
+    select_random_ensemble_member,
     select_variables_for_plotting,
     start_date_option,
     variables_option,
@@ -194,7 +194,17 @@ def run_compare_timeseries(ctx: RunContext) -> None:
         "compare-timeseries requires a reference dataset"
     )
 
-    ensure_ensemble_member_selected(ctx)
+    # Temporal plots are over a single member; ctx.validation_ds keeps the full
+    # ensemble dim so report_nulls can scan every member.
+    validation_ds = ctx.validation_ds
+    if "ensemble_member" in validation_ds.dims:
+        if ctx.ensemble_member is None:
+            validation_ds, ctx.ensemble_member = select_random_ensemble_member(
+                validation_ds
+            )
+            log.info(f"Ensemble member (random): {ctx.ensemble_member}")
+        else:
+            validation_ds = validation_ds.sel(ensemble_member=ctx.ensemble_member)
 
     (
         validation_subset,
@@ -202,9 +212,9 @@ def run_compare_timeseries(ctx: RunContext) -> None:
         title_suffix,
         time_coord,
         ref_time_coord,
-    ) = select_time_period_for_comparison(ctx.validation_ds, ctx.reference_ds)
+    ) = select_time_period_for_comparison(validation_ds, ctx.reference_ds)
 
-    val_label = ctx.validation_ds.attrs.get("name", "validation")
+    val_label = validation_ds.attrs.get("name", "validation")
     ref_label = ctx.reference_ds.attrs.get("name", "reference")
     ctx.temporal_period_label = title_suffix
 
