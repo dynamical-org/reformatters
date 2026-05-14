@@ -14,13 +14,13 @@ from scripts.validation.utils import (
     RunContext,
     VariableStats,
     end_date_option,
+    ensure_ensemble_member_selected,
     get_two_random_points,
     is_forecast_dataset,
     load_zarr_dataset,
     output_dir_option,
     resolve_output_dir,
     scope_time_period,
-    select_random_ensemble_member,
     select_variables_for_plotting,
     start_date_option,
     variables_option,
@@ -245,6 +245,8 @@ def run_compare_spatial(
     """Produce per-variable + combined spatial comparison plots in ctx.output_dir."""
     assert ctx.reference_ds is not None, "compare-spatial requires a reference dataset"
 
+    ensure_ensemble_member_selected(ctx)
+
     is_forecast = is_forecast_dataset(ctx.validation_ds)
     spatially_aligned_ref = align_reference_spatially(
         ctx.validation_ds, ctx.reference_ds
@@ -387,7 +389,6 @@ def compare_spatial(
     else:
         selected_vars = select_variables_for_plotting(validation_ds, None)
 
-    validation_ds, ensemble_member = select_random_ensemble_member(validation_ds)
     point1_sel, point2_sel, (lat1, lon1), (lat2, lon2) = get_two_random_points(
         validation_ds
     )
@@ -408,7 +409,7 @@ def compare_spatial(
         point1_lon=lon1,
         point2_lat=lat2,
         point2_lon=lon2,
-        ensemble_member=ensemble_member,
+        ensemble_member=None,
         variables=selected_vars,
     )
     run_compare_spatial(ctx, init_time=init_time, lead_time=lead_time, time=time)

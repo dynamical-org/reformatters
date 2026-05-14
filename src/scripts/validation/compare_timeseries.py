@@ -12,13 +12,13 @@ from scripts.validation.utils import (
     RunContext,
     VariableStats,
     end_date_option,
+    ensure_ensemble_member_selected,
     get_two_random_points,
     is_forecast_dataset,
     load_zarr_dataset,
     output_dir_option,
     resolve_output_dir,
     scope_time_period,
-    select_random_ensemble_member,
     select_variables_for_plotting,
     start_date_option,
     variables_option,
@@ -194,6 +194,8 @@ def run_compare_timeseries(ctx: RunContext) -> None:
         "compare-timeseries requires a reference dataset"
     )
 
+    ensure_ensemble_member_selected(ctx)
+
     (
         validation_subset,
         reference_subset,
@@ -314,7 +316,6 @@ def compare_timeseries(
     reference_ds = load_zarr_dataset(reference_url)
 
     selected_vars = select_variables_for_plotting(validation_ds, variables)
-    validation_ds, ensemble_member = select_random_ensemble_member(validation_ds)
     point1_sel, point2_sel, (lat1, lon1), (lat2, lon2) = get_two_random_points(
         validation_ds
     )
@@ -335,7 +336,7 @@ def compare_timeseries(
         point1_lon=lon1,
         point2_lat=lat2,
         point2_lon=lon2,
-        ensemble_member=ensemble_member,
+        ensemble_member=None,
         variables=selected_vars,
     )
     run_compare_timeseries(ctx)
