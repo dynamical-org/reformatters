@@ -1,6 +1,6 @@
 import itertools
 from collections.abc import Sequence
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import timedelta
 from functools import partial
 from typing import Literal, Protocol, assert_never, runtime_checkable
@@ -255,27 +255,24 @@ def _check_nan_fractions(
         f"Computing NaN fraction for {len(var_names)} variables: {sorted(var_names)}"
     )
 
+    skip_lead_time_0_vars = set(additional_skip_lead_time_0_vars)
+    fractions: dict[str, float] = {}
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        fractions = dict(
-            zip(
-                var_names,
-                executor.map(
-                    partial(
-                        _compute_var_nan_fraction,
-                        sample_ds,
-                        skip_lead_time_0_for_non_instant=skip_lead_time_0_for_non_instant,
-                        additional_skip_lead_time_0_vars=set(
-                            additional_skip_lead_time_0_vars
-                        ),
-                    ),
-                    var_names,
-                ),
-                strict=True,
-            )
-        )
-
-    for var_name, fraction in fractions.items():
-        log.info(f"NaN fraction for {var_name}: {fraction:.6f}")
+        future_to_var = {
+            executor.submit(
+                _compute_var_nan_fraction,
+                sample_ds,
+                var_name,
+                skip_lead_time_0_for_non_instant=skip_lead_time_0_for_non_instant,
+                additional_skip_lead_time_0_vars=skip_lead_time_0_vars,
+            ): var_name
+            for var_name in var_names
+        }
+        for future in as_completed(future_to_var):
+            var_name = future_to_var[future]
+            fraction = future.result()
+            fractions[var_name] = fraction
+            log.info(f"NaN fraction for {var_name}: {fraction:.6f}")
 
     problem_vars = {
         var_name: fraction
