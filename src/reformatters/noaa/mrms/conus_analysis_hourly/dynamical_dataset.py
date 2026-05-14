@@ -64,44 +64,41 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 validation.check_analysis_current_data,
                 max_expected_delay=max_expected_delay,
             ),
-            # Full-grid sampling: structural NaN regions are stable per variable
-            # group so we want the deterministic full-grid fraction (random/quarter
-            # sampling has too much per-run variance on these datasets). Thresholds
-            # below were originally tuned for worst-case quarter sampling and are
-            # therefore loose under `"all"`; tighten as we observe stable ops values.
             partial(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
-                # precipitation_surface most recent timestamp falls back to radar-only
-                # with ~34% structural coverage gaps. categorical (PrecipFlag) is
-                # radar-derived with no gauge latency, similar coverage to radar_only.
+                # precipitation_surface worst-case quarter-sampled NaN is ~36% (most recent
+                # timestamp falls back to radar-only with ~34% structural coverage gaps).
+                # categorical (PrecipFlag) is radar-derived with no gauge latency, similar coverage to radar_only.
                 max_nan_fraction=0.40,
-                sampling_strategy="all",
+                sampling_strategy="quarter",
                 exclude_vars=gauge_latency_vars + radar_only_var + flash_var,
             ),
             partial(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
-                # pass_1 and pass_2 typical NaN ~6%; recent timestamps can be 100% NaN
-                # due to gauge-collection latency, averaging higher within the window.
+                # pass_1 and pass_2 worst-case quarter-sampled NaN is ~45.5% (1 of 3 checked
+                # timestamps is 100% NaN due to gauge-collection latency, rest are ~6%).
                 max_nan_fraction=0.48,
-                sampling_strategy="all",
+                sampling_strategy="quarter",
                 include_vars=gauge_latency_vars,
             ),
             partial(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
-                # Radar only is ~34% NaN always (structural).
+                # Radar only is ~34% NaN always. With quarter sampling this can get as
+                # high as 62.2%. It is available at all timestamps.
                 max_nan_fraction=0.63,
-                sampling_strategy="all",
+                sampling_strategy="quarter",
                 include_vars=radar_only_var,
             ),
             partial(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
                 # FLASH QPE/FFG ratio has ~64% structural NaN (outside radar/FFG coverage).
+                # With quarter sampling this can reach ~86%.
                 max_nan_fraction=0.86,
-                sampling_strategy="all",
+                sampling_strategy="quarter",
                 include_vars=flash_var,
             ),
         )
