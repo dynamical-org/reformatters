@@ -58,7 +58,8 @@ class GefsForecast35DayDataset(
             partial(validation.check_forecast_recent_nans, init_time_offset=-2),
             # Latest init_time is only filled out to ~day 15 of 35,
             # so ~42% of lead_times at any spatial point are legitimately NaN.
-            # Loosen the threshold; the strict check above covers correctness
-            # of the fully-populated previous init.
-            partial(validation.check_forecast_recent_nans, max_nan_fraction=0.5),
+            # Observed max 0.420789 in prod; keep small headroom.
+            # The strict offset=-2 check above covers correctness of the
+            # fully-populated previous init.
+            partial(validation.check_forecast_recent_nans, max_nan_fraction=0.45),
         )

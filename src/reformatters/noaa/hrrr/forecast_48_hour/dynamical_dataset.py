@@ -71,7 +71,6 @@ class NoaaHrrrForecast48HourDataset(
             check_forecast_completeness,
             partial(
                 validation.check_forecast_recent_nans,
-                max_nan_fraction=0.005,
                 additional_skip_lead_time_0_vars=HRRR_EXPECTED_HOUR_0_NAN_VARS,
             ),
         )
