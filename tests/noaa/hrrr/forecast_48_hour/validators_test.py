@@ -66,7 +66,8 @@ def test_check_forecast_recent_nans_with_excessive_nans(
 ) -> None:
     """Fails when an instant var has excessive NaNs."""
     ds = hrrr_forecast_dataset.copy(deep=True)
-    ds["temperature_2m"].values[-1, :, :50, :] = np.nan
+    # NaN the entire latest init_time so any random_points sample lands on it
+    ds["temperature_2m"].values[-1, :, :, :] = np.nan
 
     result = validation.check_forecast_recent_nans(
         ds,

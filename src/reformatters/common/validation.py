@@ -117,6 +117,7 @@ def check_analysis_current_data(
 def check_forecast_recent_nans(
     ds: xr.Dataset,
     *,
+    init_time_offset: int = -1,
     max_nan_fraction: float = 0.0,
     include_vars: Sequence[str] | Literal["all"] = "all",
     exclude_vars: Sequence[str] = (),
@@ -127,7 +128,11 @@ def check_forecast_recent_nans(
     max_workers: int = 6,
 ) -> ValidationResult:
     """
-    Check the NaN fraction of the most recent init_time in a forecast dataset.
+    Check the NaN fraction of a recent init_time in a forecast dataset.
+
+    `init_time_offset` selects which init_time to check from the end
+    (`-1` = latest, `-2` = previous, etc.). Use `-2` for datasets whose
+    latest init is still being filled in (e.g. long-horizon ensembles).
 
     Default `sampling_strategy="random_points"` reads all lead_times (and any
     ensemble members) at a few random spatial points per variable — cheap when
@@ -138,7 +143,7 @@ def check_forecast_recent_nans(
     `additional_skip_lead_time_0_vars` lets a dataset opt in extra variable names
     (e.g. HRRR categorical vars which are step_type=instant but have no hour 0 data).
     """
-    sample_ds = ds.isel(init_time=[-1])
+    sample_ds = ds.isel(init_time=[init_time_offset])
     sample_ds = _apply_spatial_sampling(
         sample_ds, sampling_strategy, num_random_points=num_random_points
     )

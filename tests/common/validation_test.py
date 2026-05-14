@@ -197,6 +197,24 @@ def test_check_forecast_recent_nans_include_exclude_vars(
     assert result.passed
 
 
+def test_check_forecast_recent_nans_init_time_offset(
+    forecast_dataset: xr.Dataset,
+) -> None:
+    """init_time_offset selects which init_time slice to check."""
+    # NaN only the latest init_time
+    forecast_dataset["temperature"].loc[
+        {"init_time": forecast_dataset.init_time[-1]}
+    ] = np.nan
+
+    # Default (-1) targets the bad init_time and fails
+    assert not validation.check_forecast_recent_nans(forecast_dataset).passed
+
+    # Offset -2 targets the still-clean previous init_time and passes
+    assert validation.check_forecast_recent_nans(
+        forecast_dataset, init_time_offset=-2
+    ).passed
+
+
 def test_check_analysis_current_data_passes(
     monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
 ) -> None:
