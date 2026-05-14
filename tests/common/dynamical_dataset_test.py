@@ -16,7 +16,7 @@ import zarr
 import zarr.errors
 from pydantic import computed_field
 
-from reformatters.common import docker, storage, template_utils, validation
+from reformatters.common import dynamical_dataset, storage, template_utils, validation
 from reformatters.common.config import Config, Env
 from reformatters.common.config_models import (
     BaseInternalAttrs,
@@ -572,7 +572,9 @@ def test_backfill_kubernetes_overwrite_existing_flag(
     monkeypatch.setattr(xr, "open_zarr", Mock())
 
     monkeypatch.setattr(
-        docker, "build_and_push_image", Mock(return_value="test-image-tag")
+        dynamical_dataset,
+        "get_deployed_cronjob_image",
+        Mock(return_value="test-image-tag"),
     )
     monkeypatch.setattr(subprocess, "run", Mock())
     monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
@@ -619,7 +621,9 @@ def test_backfill_kubernetes_overwrite_existing_flag_fails_if_not_all_stores_exi
     monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
 
     monkeypatch.setattr(
-        docker, "build_and_push_image", Mock(return_value="test-image-tag")
+        dynamical_dataset,
+        "get_deployed_cronjob_image",
+        Mock(return_value="test-image-tag"),
     )
     monkeypatch.setattr(subprocess, "run", Mock())
 

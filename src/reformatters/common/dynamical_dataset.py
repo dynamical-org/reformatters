@@ -17,7 +17,6 @@ import xarray as xr
 from pydantic import Field, computed_field
 
 from reformatters.common import (
-    docker,
     parallel_coordination,
     storage,
     template_utils,
@@ -31,6 +30,7 @@ from reformatters.common.kubernetes import (
     Job,
     ReformatCronJob,
     ValidationCronJob,
+    get_deployed_cronjob_image,
 )
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
@@ -194,7 +194,22 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             "backfill_kubernetes is only supported in prod environment"
         )
 
-        image_tag = docker_image or docker.build_and_push_image()
+        # In an attempt to keep the subclassing API simpler, we are keeping
+        # all resource needs defined right in `operational_kubernetes_resources`.
+        # If for some reason there are _multiple_ ReformatCronJobs returned from
+        # that we'll need to revisit the logic below or this approach.
+        reformat_jobs = [
+            r
+            for r in self.operational_kubernetes_resources(image_tag="placeholder")
+            if isinstance(r, ReformatCronJob)
+        ]
+        assert len(reformat_jobs) == 1, (
+            f"Can't infer kubernetes resources for backfill job from {reformat_jobs}."
+        )
+        reformat_job = reformat_jobs[0]
+
+        image_tag = docker_image or get_deployed_cronjob_image(reformat_job.name)
+        log.info(f"Using image {image_tag}")
 
         template_ds = self._get_template(append_dim_end)
 
@@ -247,20 +262,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 f"--filter-variable-names={variable_name}"
                 for variable_name in filter_variable_names
             )
-
-        # In an attempt to keep the subclassing API simpler, we are keeping
-        # all resource needs defined right in `operational_kubernetes_resources`.
-        # If for some reason there are _multiple_ ReformatCronJobs returned from
-        # that we'll need to revisit the logic below or this approach.
-        reformat_jobs = [
-            r
-            for r in self.operational_kubernetes_resources(image_tag)
-            if isinstance(r, ReformatCronJob)
-        ]
-        assert len(reformat_jobs) == 1, (
-            f"Can't infer kubernetes resources for backfill job from {reformat_jobs}."
-        )
-        reformat_job = reformat_jobs[0]
 
         kubernetes_job = Job(
             command=command,
