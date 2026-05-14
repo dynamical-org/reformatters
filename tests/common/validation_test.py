@@ -399,19 +399,6 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
     assert not result.passed
 
 
-def test_check_analysis_recent_nans_random_2x2_sampling(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
-) -> None:
-    """random_2x2 selects a 2x2 spatial window."""
-    now = pd.Timestamp("2024-01-02 12:00:00")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
-
-    result = validation.check_analysis_recent_nans(
-        analysis_dataset, sampling_strategy="random_2x2"
-    )
-    assert result.passed
-
-
 def test_check_analysis_recent_nans_random_points_sampling(
     monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
 ) -> None:

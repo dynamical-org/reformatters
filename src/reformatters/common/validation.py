@@ -21,7 +21,7 @@ from reformatters.common.retry import retry
 log = get_logger(__name__)
 
 
-SamplingStrategy = Literal["all", "random_2x2", "quarter", "random_points"]
+SamplingStrategy = Literal["all", "quarter", "random_points"]
 
 
 class ValidationResult(pydantic.BaseModel):
@@ -161,16 +161,17 @@ def check_analysis_recent_nans(
     max_nan_fraction: float = 0.0,
     include_vars: Sequence[str] | Literal["all"] = "all",
     exclude_vars: Sequence[str] = (),
-    sampling_strategy: SamplingStrategy = "random_2x2",
+    sampling_strategy: SamplingStrategy = "random_points",
     num_random_points: int = 2,
     max_workers: int = 6,
 ) -> ValidationResult:
     """
     Check the NaN fraction of recent timesteps in an analysis dataset.
 
-    Default `sampling_strategy="random_2x2"` reads a random 2x2 spatial
-    window — cheap and matches the historical analysis behavior. Use
-    `"quarter"` for structural-NaN datasets and `"all"` only when small.
+    Default `sampling_strategy="random_points"` reads `num_random_points`
+    random spatial points (across all timesteps in the window) — cheap and
+    covers independent locations. Use `"quarter"` for structural-NaN
+    datasets and `"all"` only when small.
     """
     now = pd.Timestamp.now()
     sample_ds = ds.sel(time=slice(now - max_expected_delay, None))
@@ -211,11 +212,6 @@ def _apply_spatial_sampling(
     x_dim, y_dim = _spatial_dims(ds)
     x_size = ds.sizes[x_dim]
     y_size = ds.sizes[y_dim]
-
-    if sampling_strategy == "random_2x2":
-        x_idx = int(rng.integers(0, max(1, x_size - 2)))
-        y_idx = int(rng.integers(0, max(1, y_size - 2)))
-        return ds.isel({x_dim: slice(x_idx, x_idx + 2), y_dim: slice(y_idx, y_idx + 2)})
 
     if sampling_strategy == "quarter":
         x_slice = (
