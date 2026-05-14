@@ -29,7 +29,10 @@ from reformatters.common.types import (
 )
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, vars_available
 from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
-from reformatters.ecmwf.ecmwf_utils import EcmwfSource, ecmwf_download_with_fallback
+from reformatters.ecmwf.ecmwf_utils import (
+    EcmwfOpenDataSource,
+    ecmwf_download_with_fallback,
+)
 
 log = get_logger(__name__)
 
@@ -53,7 +56,7 @@ class EcmwfAifsSingleForecastSourceFileCoord(SourceFileCoord):
     lead_time: Timedelta
     data_var_group: Sequence[EcmwfDataVar]
 
-    def _get_base_url(self, source: EcmwfSource) -> str:
+    def _get_base_url(self, source: EcmwfOpenDataSource) -> str:
         match source:
             case "s3":
                 root_url = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
@@ -75,10 +78,10 @@ class EcmwfAifsSingleForecastSourceFileCoord(SourceFileCoord):
         filename = f"{init_time_str}{init_hour_str}0000-{lead_time_hour_str}h-oper-fc"
         return f"{root_url}/{directory_path}/{filename}"
 
-    def get_url(self, source: EcmwfSource = "s3") -> str:
+    def get_url(self, source: EcmwfOpenDataSource = "s3") -> str:
         return self._get_base_url(source) + ".grib2"
 
-    def get_index_url(self, source: EcmwfSource = "s3") -> str:
+    def get_index_url(self, source: EcmwfOpenDataSource = "s3") -> str:
         return self._get_base_url(source) + ".index"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
@@ -131,7 +134,7 @@ class EcmwfAifsSingleForecastRegionJob(
     def _download_from_source(
         self,
         coord: EcmwfAifsSingleForecastSourceFileCoord,
-        source: EcmwfSource,
+        source: EcmwfOpenDataSource,
     ) -> Path:
         idx_local_path = http_download_to_disk(
             coord.get_index_url(source), self.dataset_id, disk_cache=True

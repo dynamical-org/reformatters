@@ -26,7 +26,10 @@ from reformatters.ecmwf.ecmwf_config_models import (
     vars_available,
 )
 from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
-from reformatters.ecmwf.ecmwf_utils import EcmwfSource, ecmwf_download_with_fallback
+from reformatters.ecmwf.ecmwf_utils import (
+    EcmwfOpenDataSource,
+    ecmwf_download_with_fallback,
+)
 
 from .source_file_coord import (
     MARS_OPEN_DATA_CUTOVER,
@@ -123,7 +126,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     def _download_from_source(
         self,
         coord: IfsEnsSourceFileCoord,
-        source: EcmwfSource | MarsSource,
+        source: EcmwfOpenDataSource | MarsSource,
     ) -> Path:
         match source:
             case "s3-source-coop":

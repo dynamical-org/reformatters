@@ -18,7 +18,7 @@ from reformatters.ecmwf.ecmwf_config_models import (
     EcmwfDataVar,
     _resolve_grib_index_param,
 )
-from reformatters.ecmwf.ecmwf_utils import EcmwfSource
+from reformatters.ecmwf.ecmwf_utils import EcmwfOpenDataSource
 
 type MarsSource = Literal["s3-source-coop"]
 
@@ -62,7 +62,7 @@ class OpenDataSourceFileCoord(SourceFileCoord):
     def validate_grib_comment_unit_only(self) -> bool:
         return False
 
-    def _get_base_url(self, source: EcmwfSource) -> str:
+    def _get_base_url(self, source: EcmwfOpenDataSource) -> str:
         match source:
             case "s3":
                 base_url = (
@@ -94,10 +94,10 @@ class OpenDataSourceFileCoord(SourceFileCoord):
         )
         return f"{base_url}/{directory_path}/{filename}"
 
-    def get_url(self, source: EcmwfSource = "s3") -> str:
+    def get_url(self, source: EcmwfOpenDataSource = "s3") -> str:
         return self._get_base_url(source) + ".grib2"
 
-    def get_index_url(self, source: EcmwfSource = "s3") -> str:
+    def get_index_url(self, source: EcmwfOpenDataSource = "s3") -> str:
         return self._get_base_url(source) + ".index"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
