@@ -129,6 +129,15 @@ class EcmwfAifsEnsForecastRegionJob(
             )
         return coords
 
+    def download_file(self, coord: EcmwfAifsEnsForecastSourceFileCoord) -> Path:
+        if coord.init_time >= pd.Timestamp.now() - _RECENT_CUTOFF:
+            sources: tuple[EcmwfSource, ...] = ("s3", "gcs")
+        else:
+            sources = ("gcs", "s3")
+        return ecmwf_download_with_fallback(
+            sources, lambda source: self._download_from_source(coord, source)
+        )
+
     def _download_from_source(
         self,
         coord: EcmwfAifsEnsForecastSourceFileCoord,
@@ -155,15 +164,6 @@ class EcmwfAifsEnsForecastRegionJob(
             self.dataset_id,
             byte_ranges=(byte_range_starts, byte_range_ends),
             local_path_suffix=f"-{suffix}",
-        )
-
-    def download_file(self, coord: EcmwfAifsEnsForecastSourceFileCoord) -> Path:
-        if coord.init_time >= pd.Timestamp.now() - _RECENT_CUTOFF:
-            sources: tuple[EcmwfSource, ...] = ("s3", "gcs")
-        else:
-            sources = ("gcs", "s3")
-        return ecmwf_download_with_fallback(
-            sources, lambda source: self._download_from_source(coord, source)
         )
 
     def read_data(
