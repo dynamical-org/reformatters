@@ -2,7 +2,7 @@ import itertools
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, assert_never
 
 import numpy as np
 import pandas as pd
@@ -26,11 +26,12 @@ from reformatters.ecmwf.ecmwf_config_models import (
     vars_available,
 )
 from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
-from reformatters.ecmwf.ecmwf_utils import ecmwf_download_with_fallback
+from reformatters.ecmwf.ecmwf_utils import EcmwfSource, ecmwf_download_with_fallback
 
 from .source_file_coord import (
     MARS_OPEN_DATA_CUTOVER,
     IfsEnsSourceFileCoord,
+    MarsSource,
     MarsSourceFileCoord,
     OpenDataSourceFileCoord,
 )
@@ -114,19 +115,28 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         if isinstance(coord, OpenDataSourceFileCoord):
             return ecmwf_download_with_fallback(
                 ("gcs", "s3"),
-                lambda source: self._download(
-                    coord.get_index_url(source), coord.get_url(source), coord
-                ),
+                lambda source: self._download_from_source(coord, source),
             )
         # MARS lives on Dynamical's source.coop archive; no mirror to fall back to.
-        return self._download(coord.get_index_url(), coord.get_url(), coord)
+        return self._download_from_source(coord, "s3-source-coop")
 
-    def _download(
+    def _download_from_source(
         self,
-        idx_url: str,
-        data_url: str,
         coord: IfsEnsSourceFileCoord,
+        source: EcmwfSource | MarsSource,
     ) -> Path:
+        match source:
+            case "s3-source-coop":
+                assert isinstance(coord, MarsSourceFileCoord)
+                idx_url = coord.get_index_url("s3-source-coop")
+                data_url = coord.get_url("s3-source-coop")
+            case "s3" | "gcs":
+                assert isinstance(coord, OpenDataSourceFileCoord)
+                idx_url = coord.get_index_url(source)
+                data_url = coord.get_url(source)
+            case _ as unreachable:
+                assert_never(unreachable)
+
         idx_local_path = http_download_to_disk(
             idx_url, self.dataset_id, disk_cache=True
         )

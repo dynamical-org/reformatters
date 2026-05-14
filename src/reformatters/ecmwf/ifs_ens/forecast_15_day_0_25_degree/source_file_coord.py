@@ -1,5 +1,5 @@
 from collections.abc import Mapping, Sequence
-from typing import ClassVar, assert_never
+from typing import ClassVar, Literal, assert_never
 
 import pandas as pd
 
@@ -19,6 +19,8 @@ from reformatters.ecmwf.ecmwf_config_models import (
     _resolve_grib_index_param,
 )
 from reformatters.ecmwf.ecmwf_utils import EcmwfSource
+
+type MarsSource = Literal["s3-source-coop"]
 
 MARS_OPEN_DATA_CUTOVER = pd.Timestamp("2024-04-01T00:00")
 
@@ -165,11 +167,21 @@ class MarsSourceFileCoord(SourceFileCoord):
     def _date_str(self) -> str:
         return self.init_time.strftime("%Y-%m-%d")
 
-    def get_url(self) -> str:
-        return f"{DYNAMICAL_MARS_GRIB_BASE_URL}/{self._date_str()}/{self.request_type}.grib"
+    def get_url(self, source: MarsSource = "s3-source-coop") -> str:
+        match source:
+            case "s3-source-coop":
+                base_url = DYNAMICAL_MARS_GRIB_BASE_URL
+            case _ as unreachable:
+                assert_never(unreachable)
+        return f"{base_url}/{self._date_str()}/{self.request_type}.grib"
 
-    def get_index_url(self) -> str:
-        return f"{DYNAMICAL_MARS_GRIB_BASE_URL}/{self._date_str()}/{self.request_type}.grib.idx"
+    def get_index_url(self, source: MarsSource = "s3-source-coop") -> str:
+        match source:
+            case "s3-source-coop":
+                base_url = DYNAMICAL_MARS_GRIB_BASE_URL
+            case _ as unreachable:
+                assert_never(unreachable)
+        return f"{base_url}/{self._date_str()}/{self.request_type}.grib.idx"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {
