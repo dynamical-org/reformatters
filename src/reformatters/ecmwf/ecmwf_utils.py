@@ -10,11 +10,6 @@ log = get_logger(__name__)
 
 type EcmwfSource = Literal["s3", "gcs"]
 
-SOURCE_BASE_URLS: dict[EcmwfSource, str] = {
-    "s3": "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com",
-    "gcs": "https://storage.googleapis.com/ecmwf-open-data",
-}
-
 # Triggers fallback to the next source: missing files, AWS 503 Slow Down translated
 # by obstore to GenericError, and AWS 403s which obstore raises as PermissionDeniedError.
 _FALLBACK_EXCEPTIONS = (FileNotFoundError, GenericError, PermissionDeniedError)

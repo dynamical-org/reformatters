@@ -1,7 +1,7 @@
 import itertools
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, assert_never
 
 import numpy as np
 import pandas as pd
@@ -29,11 +29,7 @@ from reformatters.common.types import (
 )
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, vars_available
 from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
-from reformatters.ecmwf.ecmwf_utils import (
-    SOURCE_BASE_URLS,
-    EcmwfSource,
-    ecmwf_download_with_fallback,
-)
+from reformatters.ecmwf.ecmwf_utils import EcmwfSource, ecmwf_download_with_fallback
 
 log = get_logger(__name__)
 
@@ -66,7 +62,13 @@ class EcmwfAifsEnsForecastSourceFileCoord(SourceFileCoord):
         return "cf" if self.ensemble_member == 0 else "pf"
 
     def _get_base_url(self, source: EcmwfSource) -> str:
-        root_url = SOURCE_BASE_URLS[source]
+        match source:
+            case "s3":
+                root_url = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
+            case "gcs":
+                root_url = "https://storage.googleapis.com/ecmwf-open-data"
+            case _ as unreachable:
+                assert_never(unreachable)
 
         init_time_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")
