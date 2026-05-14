@@ -120,7 +120,7 @@ def check_forecast_recent_nans(
     max_nan_fraction: float = 0.0,
     include_vars: Sequence[str] | Literal["all"] = "all",
     exclude_vars: Sequence[str] = (),
-    sampling_strategy: SamplingStrategy = "all",
+    sampling_strategy: SamplingStrategy = "random_points",
     num_random_points: int = 2,
     skip_lead_time_0_for_non_instant: bool = True,
     additional_skip_lead_time_0_vars: Sequence[str] = (),
@@ -128,6 +128,10 @@ def check_forecast_recent_nans(
 ) -> ValidationResult:
     """
     Check the NaN fraction of the most recent init_time in a forecast dataset.
+
+    Default `sampling_strategy="random_points"` reads all lead_times (and any
+    ensemble members) at a few random spatial points per variable — cheap when
+    data is chunked by init_time. Use `"all"` only for small datasets.
 
     For variables whose `step_type != "instant"`, the lead_time=0 slice is dropped
     before computing the NaN fraction (these vars do not have valid hour 0 data).
@@ -157,11 +161,17 @@ def check_analysis_recent_nans(
     max_nan_fraction: float = 0.0,
     include_vars: Sequence[str] | Literal["all"] = "all",
     exclude_vars: Sequence[str] = (),
-    sampling_strategy: SamplingStrategy = "all",
+    sampling_strategy: SamplingStrategy = "random_2x2",
     num_random_points: int = 2,
     max_workers: int = 6,
 ) -> ValidationResult:
-    """Check the NaN fraction of recent timesteps in an analysis dataset."""
+    """
+    Check the NaN fraction of recent timesteps in an analysis dataset.
+
+    Default `sampling_strategy="random_2x2"` reads a random 2x2 spatial
+    window — cheap and matches the historical analysis behavior. Use
+    `"quarter"` for structural-NaN datasets and `"all"` only when small.
+    """
     now = pd.Timestamp.now()
     sample_ds = ds.sel(time=slice(now - max_expected_delay, None))
     sample_ds = _apply_spatial_sampling(
@@ -300,8 +310,7 @@ def _compute_var_nan_fraction(
     skip_lead_time_0_for_non_instant: bool,
     additional_skip_lead_time_0_vars: set[str],
 ) -> float:
-    # Deep copy to avoid sharing memory across threads / iterations (helps avoid memory leaks).
-    da = ds[var_name].copy(deep=True)
+    da = ds[var_name]
     if "lead_time" in da.dims and (
         var_name in additional_skip_lead_time_0_vars
         or (
@@ -310,6 +319,9 @@ def _compute_var_nan_fraction(
         )
     ):
         da = da.isel(lead_time=slice(1, None))
+    # Deep copy after slicing to force eager load of just the needed region
+    # (helps avoid memory leaks observed iterating null checks across vars).
+    da = da.copy(deep=True)
     return float(da.isnull().mean().compute().item())
 
 
