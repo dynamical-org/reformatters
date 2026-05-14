@@ -2,7 +2,7 @@ import itertools
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, assert_never
 
 import numpy as np
 import pandas as pd
@@ -128,15 +128,13 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         coord: IfsEnsSourceFileCoord,
         source: EcmwfOpenDataSource | MarsSource,
     ) -> Path:
-        match coord, source:
-            case (OpenDataSourceFileCoord(), "s3" | "gcs"):
-                pass
-            case (MarsSourceFileCoord(), "s3-source-coop"):
-                pass
-            case _:
-                raise AssertionError(
-                    f"Unsupported pairing: {type(coord).__name__} with {source=!r}"
-                )
+        match source:
+            case "s3-source-coop":
+                assert isinstance(coord, MarsSourceFileCoord)
+            case "s3" | "gcs":
+                assert isinstance(coord, OpenDataSourceFileCoord)
+            case _ as unreachable:
+                assert_never(unreachable)
 
         # The match above guarantees this pair is supported; ty cannot narrow
         # both coord and source together to a compatible call signature.
