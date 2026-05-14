@@ -21,7 +21,17 @@ from reformatters.common.retry import retry
 log = get_logger(__name__)
 
 
-SamplingStrategy = Literal["all", "quarter", "random_points"]
+SpatialSamplingStrategy = Literal["all", "quarter", "random_points"]
+
+# Default ThreadPool size per sampling strategy. Random points are tiny so we
+# can saturate S3 with many concurrent reads; "all" reads big slabs so keep
+# parallelism low to bound memory; "quarter" is in between.
+_DEFAULT_MAX_WORKERS: dict[SpatialSamplingStrategy, int] = {
+    "random_points": 12,
+    "quarter": 4,
+    "all": 2,
+}
+_NUM_RANDOM_POINTS = 2
 
 
 class ValidationResult(pydantic.BaseModel):
@@ -121,11 +131,9 @@ def check_forecast_recent_nans(
     max_nan_fraction: float = 0.0,
     include_vars: Sequence[str] | Literal["all"] = "all",
     exclude_vars: Sequence[str] = (),
-    sampling_strategy: SamplingStrategy = "random_points",
-    num_random_points: int = 2,
-    skip_lead_time_0_for_non_instant: bool = True,
+    sampling_strategy: SpatialSamplingStrategy = "random_points",
     additional_skip_lead_time_0_vars: Sequence[str] = (),
-    max_workers: int = 6,
+    max_workers: int | None = None,
 ) -> ValidationResult:
     """
     Check the NaN fraction of a recent init_time in a forecast dataset.
@@ -135,27 +143,24 @@ def check_forecast_recent_nans(
     latest init is still being filled in (e.g. long-horizon ensembles).
 
     Default `sampling_strategy="random_points"` reads all lead_times (and any
-    ensemble members) at a few random spatial points per variable — cheap when
+    ensemble members) at 2 random spatial points per variable — cheap when
     data is chunked by init_time. Use `"all"` only for small datasets.
 
-    For variables whose `step_type != "instant"`, the lead_time=0 slice is dropped
-    before computing the NaN fraction (these vars do not have valid hour 0 data).
-    `additional_skip_lead_time_0_vars` lets a dataset opt in extra variable names
+    Variables with `step_type != "instant"` always have their lead_time=0 slice
+    dropped before computing the NaN fraction (these vars do not have valid
+    hour 0 data). `additional_skip_lead_time_0_vars` adds extra names on top
     (e.g. HRRR categorical vars which are step_type=instant but have no hour 0 data).
     """
     sample_ds = ds.isel(init_time=[init_time_offset])
-    sample_ds = _apply_spatial_sampling(
-        sample_ds, sampling_strategy, num_random_points=num_random_points
-    )
+    sample_ds = _apply_spatial_sampling(sample_ds, sampling_strategy)
 
     return _check_nan_fractions(
         sample_ds,
         max_nan_fraction=max_nan_fraction,
         include_vars=include_vars,
         exclude_vars=exclude_vars,
-        skip_lead_time_0_for_non_instant=skip_lead_time_0_for_non_instant,
         additional_skip_lead_time_0_vars=additional_skip_lead_time_0_vars,
-        max_workers=max_workers,
+        max_workers=max_workers or _DEFAULT_MAX_WORKERS[sampling_strategy],
     )
 
 
@@ -166,32 +171,28 @@ def check_analysis_recent_nans(
     max_nan_fraction: float = 0.0,
     include_vars: Sequence[str] | Literal["all"] = "all",
     exclude_vars: Sequence[str] = (),
-    sampling_strategy: SamplingStrategy = "random_points",
-    num_random_points: int = 2,
-    max_workers: int = 6,
+    sampling_strategy: SpatialSamplingStrategy = "random_points",
+    max_workers: int | None = None,
 ) -> ValidationResult:
     """
     Check the NaN fraction of recent timesteps in an analysis dataset.
 
-    Default `sampling_strategy="random_points"` reads `num_random_points`
-    random spatial points (across all timesteps in the window) — cheap and
-    covers independent locations. Use `"quarter"` for structural-NaN
-    datasets and `"all"` only when small.
+    Default `sampling_strategy="random_points"` reads 2 random spatial points
+    (across all timesteps in the window) — cheap and covers independent
+    locations. Use `"quarter"` for structural-NaN datasets and `"all"` only
+    when small.
     """
     now = pd.Timestamp.now()
     sample_ds = ds.sel(time=slice(now - max_expected_delay, None))
-    sample_ds = _apply_spatial_sampling(
-        sample_ds, sampling_strategy, num_random_points=num_random_points
-    )
+    sample_ds = _apply_spatial_sampling(sample_ds, sampling_strategy)
 
     return _check_nan_fractions(
         sample_ds,
         max_nan_fraction=max_nan_fraction,
         include_vars=include_vars,
         exclude_vars=exclude_vars,
-        skip_lead_time_0_for_non_instant=False,
         additional_skip_lead_time_0_vars=(),
-        max_workers=max_workers,
+        max_workers=max_workers or _DEFAULT_MAX_WORKERS[sampling_strategy],
     )
 
 
@@ -205,9 +206,7 @@ def _spatial_dims(ds: xr.Dataset) -> tuple[str, str]:
 
 def _apply_spatial_sampling(
     ds: xr.Dataset,
-    sampling_strategy: SamplingStrategy,
-    *,
-    num_random_points: int,
+    sampling_strategy: SpatialSamplingStrategy,
 ) -> xr.Dataset:
     rng = np.random.default_rng()
 
@@ -232,8 +231,8 @@ def _apply_spatial_sampling(
         return ds.isel({x_dim: x_slice, y_dim: y_slice})
 
     if sampling_strategy == "random_points":
-        x_idxs = rng.integers(0, x_size, size=num_random_points)
-        y_idxs = rng.integers(0, y_size, size=num_random_points)
+        x_idxs = rng.integers(0, x_size, size=_NUM_RANDOM_POINTS)
+        y_idxs = rng.integers(0, y_size, size=_NUM_RANDOM_POINTS)
         # Pair each x with each y to form N points (use a synthetic "point" dim).
         return ds.isel(
             {
@@ -251,7 +250,6 @@ def _check_nan_fractions(
     max_nan_fraction: float,
     include_vars: Sequence[str] | Literal["all"],
     exclude_vars: Sequence[str],
-    skip_lead_time_0_for_non_instant: bool,
     additional_skip_lead_time_0_vars: Sequence[str],
     max_workers: int,
 ) -> ValidationResult:
@@ -274,7 +272,6 @@ def _check_nan_fractions(
                 _compute_var_nan_fraction,
                 sample_ds,
                 var_name,
-                skip_lead_time_0_for_non_instant=skip_lead_time_0_for_non_instant,
                 additional_skip_lead_time_0_vars=skip_lead_time_0_vars,
             ): var_name
             for var_name in var_names
@@ -308,16 +305,12 @@ def _compute_var_nan_fraction(
     ds: xr.Dataset,
     var_name: str,
     *,
-    skip_lead_time_0_for_non_instant: bool,
     additional_skip_lead_time_0_vars: set[str],
 ) -> float:
     da = ds[var_name]
     if "lead_time" in da.dims and (
         var_name in additional_skip_lead_time_0_vars
-        or (
-            skip_lead_time_0_for_non_instant
-            and da.attrs.get("step_type", "instant") != "instant"
-        )
+        or da.attrs.get("step_type", "instant") != "instant"
     ):
         da = da.isel(lead_time=slice(1, None))
     # Deep copy after slicing to force eager load of just the needed region

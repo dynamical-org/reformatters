@@ -427,7 +427,6 @@ def test_check_analysis_recent_nans_random_points_sampling(
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
         sampling_strategy="random_points",
-        num_random_points=3,
     )
     assert result.passed
 
@@ -438,7 +437,6 @@ def test_check_analysis_recent_nans_random_points_sampling(
         max_expected_delay=timedelta(hours=12),
         max_nan_fraction=0.05,
         sampling_strategy="random_points",
-        num_random_points=3,
     )
     assert not result.passed
 
