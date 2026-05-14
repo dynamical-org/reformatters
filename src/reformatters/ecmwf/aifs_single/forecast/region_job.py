@@ -1,7 +1,7 @@
 import itertools
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, assert_never
 
 import numpy as np
 import pandas as pd
@@ -29,6 +29,10 @@ from reformatters.common.types import (
 )
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, vars_available
 from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
+from reformatters.ecmwf.ecmwf_utils import (
+    EcmwfOpenDataSource,
+    ecmwf_download_with_fallback,
+)
 
 log = get_logger(__name__)
 
@@ -52,8 +56,14 @@ class EcmwfAifsSingleForecastSourceFileCoord(SourceFileCoord):
     lead_time: Timedelta
     data_var_group: Sequence[EcmwfDataVar]
 
-    def _get_base_url(self) -> str:
-        root_url = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
+    def _get_base_url(self, source: EcmwfOpenDataSource) -> str:
+        match source:
+            case "s3":
+                root_url = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
+            case "gcs":
+                root_url = "https://storage.googleapis.com/ecmwf-open-data"
+            case _ as unreachable:
+                assert_never(unreachable)
 
         init_time_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")
@@ -68,11 +78,11 @@ class EcmwfAifsSingleForecastSourceFileCoord(SourceFileCoord):
         filename = f"{init_time_str}{init_hour_str}0000-{lead_time_hour_str}h-oper-fc"
         return f"{root_url}/{directory_path}/{filename}"
 
-    def get_url(self) -> str:
-        return self._get_base_url() + ".grib2"
+    def get_url(self, source: EcmwfOpenDataSource = "s3") -> str:
+        return self._get_base_url(source) + ".grib2"
 
-    def get_index_url(self) -> str:
-        return self._get_base_url() + ".index"
+    def get_index_url(self, source: EcmwfOpenDataSource = "s3") -> str:
+        return self._get_base_url(source) + ".index"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {
@@ -116,9 +126,18 @@ class EcmwfAifsSingleForecastRegionJob(
         return coords
 
     def download_file(self, coord: EcmwfAifsSingleForecastSourceFileCoord) -> Path:
-        idx_url = coord.get_index_url()
+        return ecmwf_download_with_fallback(
+            ("gcs", "s3"),
+            lambda source: self._download_from_source(coord, source),
+        )
+
+    def _download_from_source(
+        self,
+        coord: EcmwfAifsSingleForecastSourceFileCoord,
+        source: EcmwfOpenDataSource,
+    ) -> Path:
         idx_local_path = http_download_to_disk(
-            idx_url, self.dataset_id, disk_cache=True
+            coord.get_index_url(source), self.dataset_id, disk_cache=True
         )
 
         byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(
@@ -129,7 +148,7 @@ class EcmwfAifsSingleForecastRegionJob(
             f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)
         )
         return http_download_to_disk(
-            coord.get_url(),
+            coord.get_url(source),
             self.dataset_id,
             byte_ranges=(byte_range_starts, byte_range_ends),
             local_path_suffix=f"-{suffix}",

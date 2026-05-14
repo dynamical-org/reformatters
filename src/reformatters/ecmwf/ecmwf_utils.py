@@ -8,7 +8,7 @@ from reformatters.common.logging import get_logger
 
 log = get_logger(__name__)
 
-type EcmwfSource = Literal["s3", "gcs"]
+type EcmwfOpenDataSource = Literal["s3", "gcs"]
 
 # Triggers fallback to the next source: missing files, AWS 503 Slow Down translated
 # by obstore to GenericError, and AWS 403s which obstore raises as PermissionDeniedError.
@@ -16,8 +16,8 @@ _FALLBACK_EXCEPTIONS = (FileNotFoundError, GenericError, PermissionDeniedError)
 
 
 def ecmwf_download_with_fallback(
-    sources: Sequence[EcmwfSource],
-    download_one: Callable[[EcmwfSource], Path],
+    sources: Sequence[EcmwfOpenDataSource],
+    download_one: Callable[[EcmwfOpenDataSource], Path],
 ) -> Path:
     """Try each source in order, falling back on missing-file / transient errors."""
     assert len(sources) > 0

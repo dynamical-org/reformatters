@@ -29,7 +29,10 @@ from reformatters.common.types import (
 )
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, vars_available
 from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
-from reformatters.ecmwf.ecmwf_utils import EcmwfSource, ecmwf_download_with_fallback
+from reformatters.ecmwf.ecmwf_utils import (
+    EcmwfOpenDataSource,
+    ecmwf_download_with_fallback,
+)
 
 log = get_logger(__name__)
 
@@ -61,7 +64,7 @@ class EcmwfAifsEnsForecastSourceFileCoord(SourceFileCoord):
         # ensemble_member 0 is the control forecast (cf), 1-50 are perturbed members (pf).
         return "cf" if self.ensemble_member == 0 else "pf"
 
-    def _get_base_url(self, source: EcmwfSource) -> str:
+    def _get_base_url(self, source: EcmwfOpenDataSource) -> str:
         match source:
             case "s3":
                 root_url = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
@@ -78,10 +81,10 @@ class EcmwfAifsEnsForecastSourceFileCoord(SourceFileCoord):
         filename = f"{init_time_str}{init_hour_str}0000-{lead_time_hour_str}h-enfo-{self.file_type}"
         return f"{root_url}/{directory_path}/{filename}"
 
-    def get_url(self, source: EcmwfSource = "s3") -> str:
+    def get_url(self, source: EcmwfOpenDataSource = "s3") -> str:
         return self._get_base_url(source) + ".grib2"
 
-    def get_index_url(self, source: EcmwfSource = "s3") -> str:
+    def get_index_url(self, source: EcmwfOpenDataSource = "s3") -> str:
         return self._get_base_url(source) + ".index"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
@@ -131,7 +134,7 @@ class EcmwfAifsEnsForecastRegionJob(
 
     def download_file(self, coord: EcmwfAifsEnsForecastSourceFileCoord) -> Path:
         if coord.init_time >= pd.Timestamp.now() - _RECENT_CUTOFF:
-            sources: tuple[EcmwfSource, ...] = ("s3", "gcs")
+            sources: tuple[EcmwfOpenDataSource, ...] = ("s3", "gcs")
         else:
             sources = ("gcs", "s3")
         return ecmwf_download_with_fallback(
@@ -141,7 +144,7 @@ class EcmwfAifsEnsForecastRegionJob(
     def _download_from_source(
         self,
         coord: EcmwfAifsEnsForecastSourceFileCoord,
-        source: EcmwfSource,
+        source: EcmwfOpenDataSource,
     ) -> Path:
         idx_local_path = http_download_to_disk(
             coord.get_index_url(source), self.dataset_id, disk_cache=True

@@ -1,5 +1,5 @@
 from collections.abc import Mapping, Sequence
-from typing import ClassVar
+from typing import Literal, assert_never
 
 import pandas as pd
 
@@ -18,6 +18,9 @@ from reformatters.ecmwf.ecmwf_config_models import (
     EcmwfDataVar,
     _resolve_grib_index_param,
 )
+from reformatters.ecmwf.ecmwf_utils import EcmwfOpenDataSource
+
+type MarsSource = Literal["s3-source-coop"]
 
 MARS_OPEN_DATA_CUTOVER = pd.Timestamp("2024-04-01T00:00")
 
@@ -39,9 +42,6 @@ class OpenDataSourceFileCoord(SourceFileCoord):
     ensemble_member: int
     data_var_group: Sequence[EcmwfDataVar]
 
-    s3_bucket_url: ClassVar[str] = "ecmwf-forecasts"
-    s3_region: ClassVar[str] = "eu-central-1"
-
     def resolve_data_vars(self) -> OpenDataSourceFileCoord:
         return replace(
             self,
@@ -59,8 +59,14 @@ class OpenDataSourceFileCoord(SourceFileCoord):
     def validate_grib_comment_unit_only(self) -> bool:
         return False
 
-    def _get_base_url(self) -> str:
-        base_url = f"https://{self.s3_bucket_url}.s3.{self.s3_region}.amazonaws.com"
+    def _get_base_url(self, source: EcmwfOpenDataSource) -> str:
+        match source:
+            case "s3":
+                base_url = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
+            case "gcs":
+                base_url = "https://storage.googleapis.com/ecmwf-open-data"
+            case _ as unreachable:
+                assert_never(unreachable)
 
         init_time_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")  # pads 0 to be "00", as desired
@@ -83,11 +89,11 @@ class OpenDataSourceFileCoord(SourceFileCoord):
         )
         return f"{base_url}/{directory_path}/{filename}"
 
-    def get_url(self) -> str:
-        return self._get_base_url() + ".grib2"
+    def get_url(self, source: EcmwfOpenDataSource = "s3") -> str:
+        return self._get_base_url(source) + ".grib2"
 
-    def get_index_url(self) -> str:
-        return self._get_base_url() + ".index"
+    def get_index_url(self, source: EcmwfOpenDataSource = "s3") -> str:
+        return self._get_base_url(source) + ".index"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {
@@ -156,11 +162,21 @@ class MarsSourceFileCoord(SourceFileCoord):
     def _date_str(self) -> str:
         return self.init_time.strftime("%Y-%m-%d")
 
-    def get_url(self) -> str:
-        return f"{DYNAMICAL_MARS_GRIB_BASE_URL}/{self._date_str()}/{self.request_type}.grib"
+    def get_url(self, source: MarsSource = "s3-source-coop") -> str:
+        match source:
+            case "s3-source-coop":
+                base_url = DYNAMICAL_MARS_GRIB_BASE_URL
+            case _ as unreachable:
+                assert_never(unreachable)
+        return f"{base_url}/{self._date_str()}/{self.request_type}.grib"
 
-    def get_index_url(self) -> str:
-        return f"{DYNAMICAL_MARS_GRIB_BASE_URL}/{self._date_str()}/{self.request_type}.grib.idx"
+    def get_index_url(self, source: MarsSource = "s3-source-coop") -> str:
+        match source:
+            case "s3-source-coop":
+                base_url = DYNAMICAL_MARS_GRIB_BASE_URL
+            case _ as unreachable:
+                assert_never(unreachable)
+        return f"{base_url}/{self._date_str()}/{self.request_type}.grib.idx"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {

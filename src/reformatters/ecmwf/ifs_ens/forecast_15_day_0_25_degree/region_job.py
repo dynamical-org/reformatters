@@ -2,7 +2,7 @@ import itertools
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, assert_never
 
 import numpy as np
 import pandas as pd
@@ -26,10 +26,15 @@ from reformatters.ecmwf.ecmwf_config_models import (
     vars_available,
 )
 from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
+from reformatters.ecmwf.ecmwf_utils import (
+    EcmwfOpenDataSource,
+    ecmwf_download_with_fallback,
+)
 
 from .source_file_coord import (
     MARS_OPEN_DATA_CUTOVER,
     IfsEnsSourceFileCoord,
+    MarsSource,
     MarsSourceFileCoord,
     OpenDataSourceFileCoord,
 )
@@ -110,8 +115,33 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
 
     def download_file(self, coord: IfsEnsSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
+        if isinstance(coord, OpenDataSourceFileCoord):
+            return ecmwf_download_with_fallback(
+                ("gcs", "s3"),
+                lambda source: self._download_from_source(coord, source),
+            )
+        # MARS lives on Dynamical's source.coop archive; no mirror to fall back to.
+        return self._download_from_source(coord, "s3-source-coop")
+
+    def _download_from_source(
+        self,
+        coord: IfsEnsSourceFileCoord,
+        source: EcmwfOpenDataSource | MarsSource,
+    ) -> Path:
+        match source:
+            case "s3-source-coop":
+                assert isinstance(coord, MarsSourceFileCoord)
+                idx_url = coord.get_index_url("s3-source-coop")
+                data_url = coord.get_url("s3-source-coop")
+            case "s3" | "gcs":
+                assert isinstance(coord, OpenDataSourceFileCoord)
+                idx_url = coord.get_index_url(source)
+                data_url = coord.get_url(source)
+            case _ as unreachable:
+                assert_never(unreachable)
+
         idx_local_path = http_download_to_disk(
-            coord.get_index_url(), self.dataset_id, disk_cache=True
+            idx_url, self.dataset_id, disk_cache=True
         )
 
         byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(
@@ -124,7 +154,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)
         )
         return http_download_to_disk(
-            coord.get_url(),
+            data_url,
             self.dataset_id,
             byte_ranges=(byte_range_starts, byte_range_ends),
             local_path_suffix=f"-{suffix}",

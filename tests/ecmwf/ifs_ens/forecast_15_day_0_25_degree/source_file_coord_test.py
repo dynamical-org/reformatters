@@ -69,6 +69,14 @@ def test_open_data_get_url_with_ifs_directory() -> None:
         coord.get_url()
         == "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20250101/00z/ifs/0p25/enfo/20250101000000-0h-enfo-ef.grib2"
     )
+    assert (
+        coord.get_url("gcs")
+        == "https://storage.googleapis.com/ecmwf-open-data/20250101/00z/ifs/0p25/enfo/20250101000000-0h-enfo-ef.grib2"
+    )
+    assert (
+        coord.get_index_url("gcs")
+        == "https://storage.googleapis.com/ecmwf-open-data/20250101/00z/ifs/0p25/enfo/20250101000000-0h-enfo-ef.index"
+    )
 
 
 def test_open_data_get_url_without_ifs_directory() -> None:
