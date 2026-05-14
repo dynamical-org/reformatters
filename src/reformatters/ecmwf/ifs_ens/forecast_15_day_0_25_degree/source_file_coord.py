@@ -1,5 +1,5 @@
 from collections.abc import Mapping, Sequence
-from typing import ClassVar
+from typing import ClassVar, assert_never
 
 import pandas as pd
 
@@ -18,6 +18,7 @@ from reformatters.ecmwf.ecmwf_config_models import (
     EcmwfDataVar,
     _resolve_grib_index_param,
 )
+from reformatters.ecmwf.ecmwf_utils import EcmwfSource
 
 MARS_OPEN_DATA_CUTOVER = pd.Timestamp("2024-04-01T00:00")
 
@@ -59,8 +60,16 @@ class OpenDataSourceFileCoord(SourceFileCoord):
     def validate_grib_comment_unit_only(self) -> bool:
         return False
 
-    def _get_base_url(self) -> str:
-        base_url = f"https://{self.s3_bucket_url}.s3.{self.s3_region}.amazonaws.com"
+    def _get_base_url(self, source: EcmwfSource) -> str:
+        match source:
+            case "s3":
+                base_url = (
+                    f"https://{self.s3_bucket_url}.s3.{self.s3_region}.amazonaws.com"
+                )
+            case "gcs":
+                base_url = "https://storage.googleapis.com/ecmwf-open-data"
+            case _ as unreachable:
+                assert_never(unreachable)
 
         init_time_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")  # pads 0 to be "00", as desired
@@ -83,11 +92,11 @@ class OpenDataSourceFileCoord(SourceFileCoord):
         )
         return f"{base_url}/{directory_path}/{filename}"
 
-    def get_url(self) -> str:
-        return self._get_base_url() + ".grib2"
+    def get_url(self, source: EcmwfSource = "s3") -> str:
+        return self._get_base_url(source) + ".grib2"
 
-    def get_index_url(self) -> str:
-        return self._get_base_url() + ".index"
+    def get_index_url(self, source: EcmwfSource = "s3") -> str:
+        return self._get_base_url(source) + ".index"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {

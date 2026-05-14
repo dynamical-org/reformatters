@@ -26,6 +26,7 @@ from reformatters.ecmwf.ecmwf_config_models import (
     vars_available,
 )
 from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
+from reformatters.ecmwf.ecmwf_utils import ecmwf_download_with_fallback
 
 from .source_file_coord import (
     MARS_OPEN_DATA_CUTOVER,
@@ -110,8 +111,24 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
 
     def download_file(self, coord: IfsEnsSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
+        if isinstance(coord, OpenDataSourceFileCoord):
+            return ecmwf_download_with_fallback(
+                ("gcs", "s3"),
+                lambda source: self._download(
+                    coord.get_index_url(source), coord.get_url(source), coord
+                ),
+            )
+        # MARS lives on Dynamical's source.coop archive; no mirror to fall back to.
+        return self._download(coord.get_index_url(), coord.get_url(), coord)
+
+    def _download(
+        self,
+        idx_url: str,
+        data_url: str,
+        coord: IfsEnsSourceFileCoord,
+    ) -> Path:
         idx_local_path = http_download_to_disk(
-            coord.get_index_url(), self.dataset_id, disk_cache=True
+            idx_url, self.dataset_id, disk_cache=True
         )
 
         byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(
@@ -124,7 +141,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)
         )
         return http_download_to_disk(
-            coord.get_url(),
+            data_url,
             self.dataset_id,
             byte_ranges=(byte_range_starts, byte_range_ends),
             local_path_suffix=f"-{suffix}",
