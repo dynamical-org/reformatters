@@ -70,8 +70,8 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # precipitation_surface worst-case quarter-sampled NaN is ~36% (most recent
                 # timestamp falls back to radar-only with ~34% structural coverage gaps).
                 # categorical (PrecipFlag) is radar-derived with no gauge latency, similar coverage to radar_only.
-                max_nan_percentage=40,
-                spatial_sampling="quarter",
+                max_nan_fraction=0.40,
+                sampling_strategy="quarter",
                 exclude_vars=gauge_latency_vars + radar_only_var + flash_var,
             ),
             partial(
@@ -79,8 +79,8 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 max_expected_delay=max_expected_delay,
                 # pass_1 and pass_2 worst-case quarter-sampled NaN is ~45.5% (1 of 3 checked
                 # timestamps is 100% NaN due to gauge-collection latency, rest are ~6%).
-                max_nan_percentage=48,
-                spatial_sampling="quarter",
+                max_nan_fraction=0.48,
+                sampling_strategy="quarter",
                 include_vars=gauge_latency_vars,
             ),
             partial(
@@ -88,8 +88,8 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 max_expected_delay=max_expected_delay,
                 # Radar only is ~%34 nan always. With quarter sampling this can get as high as 62.2%.
                 # It is available at all timestamps.
-                max_nan_percentage=63,
-                spatial_sampling="quarter",
+                max_nan_fraction=0.63,
+                sampling_strategy="quarter",
                 include_vars=radar_only_var,
             ),
             partial(
@@ -97,8 +97,8 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 max_expected_delay=max_expected_delay,
                 # FLASH QPE/FFG ratio has ~64% structural NaN (outside radar/FFG coverage).
                 # With quarter sampling this can reach ~86%.
-                max_nan_percentage=86,
-                spatial_sampling="quarter",
+                max_nan_fraction=0.86,
+                sampling_strategy="quarter",
                 include_vars=flash_var,
             ),
         )

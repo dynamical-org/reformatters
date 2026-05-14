@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from functools import partial
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -10,11 +11,7 @@ from .region_job import (
     UarizonaSwannAnalysisSourceFileCoord,
 )
 from .template_config import UarizonaSwannAnalysisTemplateConfig, UarizonaSwannDataVar
-from .validators import (
-    check_data_is_current,
-    check_latest_time_nans,
-    check_random_time_within_last_year_nans,
-)
+from .validators import MAX_NAN_FRACTION, check_random_time_within_last_year_nans
 
 
 class UarizonaSwannAnalysisDataset(
@@ -28,9 +25,18 @@ class UarizonaSwannAnalysisDataset(
     )
 
     def validators(self) -> Sequence[validation.DataValidator]:
+        # SWANN data is published daily with a few-day lag.
+        max_expected_delay = timedelta(days=5)
         return (
-            check_data_is_current,
-            check_latest_time_nans,
+            partial(
+                validation.check_analysis_current_data,
+                max_expected_delay=max_expected_delay,
+            ),
+            partial(
+                validation.check_analysis_recent_nans,
+                max_expected_delay=max_expected_delay,
+                max_nan_fraction=MAX_NAN_FRACTION,
+            ),
             check_random_time_within_last_year_nans,
         )
 
