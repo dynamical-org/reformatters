@@ -26,7 +26,6 @@ from scripts.validation.utils import (
     load_zarr_dataset,
     output_dir_option,
     scope_time_period,
-    select_random_ensemble_member,
     select_variables_for_plotting,
     start_date_option,
     variables_option,
@@ -99,10 +98,6 @@ def run_all(
     selected_vars = select_variables_for_plotting(validation_ds, variables)
     log.info(f"Variables ({len(selected_vars)}): {', '.join(selected_vars)}")
 
-    validation_ds, ensemble_member = select_random_ensemble_member(validation_ds)
-    if ensemble_member is not None:
-        log.info(f"Ensemble member (random): {ensemble_member}")
-
     point1_sel, point2_sel, (lat1, lon1), (lat2, lon2) = get_two_random_points(
         validation_ds
     )
@@ -115,6 +110,9 @@ def run_all(
     out.mkdir(parents=True, exist_ok=True)
     log.info(f"Output dir: {out}")
 
+    # ctx.validation_ds keeps the full ensemble dim; run_compare_spatial and
+    # run_compare_timeseries reduce it to a random member lazily so the null
+    # analysis sees every member.
     ctx = RunContext(
         output_dir=out,
         validation_url=dataset_url,
@@ -128,7 +126,7 @@ def run_all(
         point1_lon=lon1,
         point2_lat=lat2,
         point2_lon=lon2,
-        ensemble_member=ensemble_member,
+        ensemble_member=None,
         variables=selected_vars,
         start_date=start_date,
         end_date=end_date,
