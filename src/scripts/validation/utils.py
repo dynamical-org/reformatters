@@ -39,6 +39,13 @@ output_dir_option = typer.Option(
     help="Write outputs into this directory instead of creating a new run directory.",
 )
 
+point_option = typer.Option(
+    None,
+    "--point",
+    help="Spatial point as 'lat,lon'. Pass twice to override both validation points; "
+    "omit to use two random points.",
+)
+
 
 @dataclass
 class VariableStats:
@@ -222,6 +229,52 @@ def get_two_random_points(
         lat2 = float(ds.latitude[point2_sel["y"], point2_sel["x"]])
         lon2 = float(ds.longitude[point2_sel["y"], point2_sel["x"]])
     return point1_sel, point2_sel, (lat1, lon1), (lat2, lon2)
+
+
+def parse_point_options(
+    points: list[str] | None,
+) -> list[tuple[float, float]]:
+    """Parse repeated `--point lat,lon` strings into (lat, lon) tuples."""
+    if not points:
+        return []
+    if len(points) != 2:
+        raise ValueError(
+            f"--point must be passed exactly 0 or 2 times, got {len(points)}"
+        )
+    parsed: list[tuple[float, float]] = []
+    for p in points:
+        lat_str, _, lon_str = p.partition(",")
+        if not lat_str or not lon_str:
+            raise ValueError(f"--point '{p}' must be 'lat,lon'")
+        parsed.append((float(lat_str), float(lon_str)))
+    return parsed
+
+
+def get_points_at_latlon(
+    ds: xr.Dataset, points: list[tuple[float, float]]
+) -> tuple[dict[str, int], dict[str, int], tuple[float, float], tuple[float, float]]:
+    """Snap two (lat, lon) requests to nearest grid cells; mirrors get_two_random_points output."""
+    assert len(points) == 2
+    lat_dim, lon_dim = get_spatial_dimensions(ds)
+    sels: list[dict[str, int]] = []
+    coords: list[tuple[float, float]] = []
+    for lat, lon in points:
+        if lat_dim == "latitude" and lon_dim == "longitude":
+            lat_idx = int(np.abs(ds.latitude.values - lat).argmin())
+            lon_idx = int(np.abs(ds.longitude.values - lon).argmin())
+            sels.append({lat_dim: lat_idx, lon_dim: lon_idx})
+            coords.append((float(ds.latitude[lat_idx]), float(ds.longitude[lon_idx])))
+        else:
+            d2 = (ds.latitude.values - lat) ** 2 + (ds.longitude.values - lon) ** 2
+            y_idx, x_idx = np.unravel_index(int(np.argmin(d2)), d2.shape)
+            sels.append({"y": int(y_idx), "x": int(x_idx)})
+            coords.append(
+                (
+                    float(ds.latitude[int(y_idx), int(x_idx)]),
+                    float(ds.longitude[int(y_idx), int(x_idx)]),
+                )
+            )
+    return sels[0], sels[1], coords[0], coords[1]
 
 
 def select_variables_for_plotting(

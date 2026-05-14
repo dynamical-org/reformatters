@@ -21,10 +21,13 @@ from scripts.validation.utils import (
     RunContext,
     create_run_output_dir,
     end_date_option,
+    get_points_at_latlon,
     get_two_random_points,
     is_forecast_dataset,
     load_zarr_dataset,
     output_dir_option,
+    parse_point_options,
+    point_option,
     scope_time_period,
     select_variables_for_plotting,
     start_date_option,
@@ -80,6 +83,7 @@ def run_all(
         None, "--time", help="Analysis time for spatial plots (default: random)"
     ),
     output_dir: Path | None = output_dir_option,
+    points: list[str] | None = point_option,
 ) -> None:
     """Produce nulls / spatial / temporal plots, one per variable, in one directory + validation_summary.md."""
     started_at = pd.Timestamp.now(tz="UTC")
@@ -98,9 +102,15 @@ def run_all(
     selected_vars = select_variables_for_plotting(validation_ds, variables)
     log.info(f"Variables ({len(selected_vars)}): {', '.join(selected_vars)}")
 
-    point1_sel, point2_sel, (lat1, lon1), (lat2, lon2) = get_two_random_points(
-        validation_ds
-    )
+    parsed_points = parse_point_options(points)
+    if parsed_points:
+        point1_sel, point2_sel, (lat1, lon1), (lat2, lon2) = get_points_at_latlon(
+            validation_ds, parsed_points
+        )
+    else:
+        point1_sel, point2_sel, (lat1, lon1), (lat2, lon2) = get_two_random_points(
+            validation_ds
+        )
 
     out = (
         Path(output_dir)
