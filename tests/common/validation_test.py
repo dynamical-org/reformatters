@@ -482,6 +482,118 @@ def test_check_analysis_recent_nans_invalid_sampling_strategy(
         )
 
 
+def test_check_analysis_recent_nans_all_sampling(
+    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+) -> None:
+    """sampling_strategy='all' reads the full spatial grid."""
+    now = pd.Timestamp("2024-01-02 12:00:00")
+    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
+
+    # Inject NaNs only outside the bounds a random_2x2/random_points sample
+    # could reliably hit — full-grid sampling must still see them.
+    analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
+
+    result = validation.check_analysis_recent_nans(
+        analysis_dataset,
+        sampling_strategy="all",
+        max_nan_fraction=0.05,
+    )
+    assert not result.passed
+    assert "temperature" in result.message
+
+
+def test_spatial_dims_raises_when_unknown(
+    monkeypatch: pytest.MonkeyPatch, rng: np.random.Generator
+) -> None:
+    """Sampling on a dataset without lat/lon or x/y dims raises ValueError."""
+    now = pd.Timestamp("2024-01-02 12:00:00")
+    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
+
+    times = pd.date_range("2024-01-01", periods=48, freq="1h")
+    ds = xr.Dataset(
+        {"temperature": (["time", "row", "col"], rng.standard_normal((48, 10, 10)))},
+        coords={"time": times, "row": np.arange(10), "col": np.arange(10)},
+    )
+
+    with pytest.raises(ValueError, match="Can't infer spatial dimensions"):
+        validation.check_analysis_recent_nans(ds, sampling_strategy="quarter")
+
+
+def test_truncate_shards_truncation() -> None:
+    """_truncate_shards collapses long lists with head/tail and an ellipsis."""
+    shards = [str(i) for i in range(10)]
+    out = validation._truncate_shards(shards, keep=3)
+    assert out == "[0, 1, 2, ..., 7, 8, 9]"
+
+
+def test_check_for_expected_shards_skips_hrrr_categorical(
+    rng: np.random.Generator,
+) -> None:
+    """HRRR categorical vars are allowed to have missing shards (fill_value 0)."""
+    times = pd.date_range("2024-01-01", periods=8, freq="1h")
+    x = np.arange(6)
+    y = np.arange(4)
+
+    ds = xr.Dataset(
+        {
+            "categorical_rain_surface": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+            "temperature_2m": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+        },
+        coords={"time": times, "y": y, "x": x},
+        attrs={"dataset_id": "noaa-hrrr-forecast-48-hour"},
+    )
+    chunk_sizes = (4, 2, 3)
+    shard_sizes = (4, 2, 3)
+    for var in ds.data_vars.values():
+        var.encoding["chunks"] = chunk_sizes
+        var.encoding["shards"] = shard_sizes
+
+    store = zarr.storage.MemoryStore()
+    ds.to_zarr(store, mode="w", consolidated=False)
+
+    # Delete one shard from each variable
+    zarr.core.sync.sync(store.delete("categorical_rain_surface/c/0/0/0"))
+    zarr.core.sync.sync(store.delete("temperature_2m/c/0/0/0"))
+
+    result = validation.check_for_expected_shards(store, ds)
+
+    # Should fail only on temperature_2m; categorical is skipped
+    assert not result.passed
+    assert "temperature_2m" in result.message
+    assert "categorical_rain_surface" not in result.message
+
+
+def test_validate_dataset_raises_on_failed_validator(
+    rng: np.random.Generator,
+) -> None:
+    """validate_dataset raises ValueError listing failed validator messages."""
+    times = pd.date_range("2024-01-01", periods=4, freq="1h")
+    ds = xr.Dataset(
+        {"temperature": (["time", "y", "x"], rng.standard_normal((4, 4, 4)))},
+        coords={"time": times, "y": np.arange(4), "x": np.arange(4)},
+    )
+    store = zarr.storage.MemoryStore()
+    ds.to_zarr(store, mode="w", consolidated=False)
+
+    def passing(ds: xr.Dataset) -> validation.ValidationResult:
+        return validation.ValidationResult(passed=True, message="ok")
+
+    def failing(ds: xr.Dataset) -> validation.ValidationResult:
+        return validation.ValidationResult(passed=False, message="bad thing")
+
+    with pytest.raises(ValueError, match="bad thing"):
+        validation.validate_dataset(store, validators=[passing, failing])
+
+    # Passing-only validators should not raise.
+    validation.validate_dataset(store, validators=[passing])
+
+
 def test_compare_replica_and_primary_coords_divergence(
     rng: np.random.Generator,
 ) -> None:
