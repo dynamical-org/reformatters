@@ -31,12 +31,20 @@ def test_source_file_coord_url_cf() -> None:
         data_var_group=list(config.data_vars[:1]),
     )
     assert coord.file_type == "cf"
-    assert coord.get_url() == (
+    assert coord.get_url("s3") == (
         "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
         "/20250702/12z/aifs-ens/0p25/enfo/20250702120000-6h-enfo-cf.grib2"
     )
-    assert coord.get_index_url() == (
+    assert coord.get_index_url("s3") == (
         "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
+        "/20250702/12z/aifs-ens/0p25/enfo/20250702120000-6h-enfo-cf.index"
+    )
+    assert coord.get_url("gcs") == (
+        "https://storage.googleapis.com/ecmwf-open-data"
+        "/20250702/12z/aifs-ens/0p25/enfo/20250702120000-6h-enfo-cf.grib2"
+    )
+    assert coord.get_index_url("gcs") == (
+        "https://storage.googleapis.com/ecmwf-open-data"
         "/20250702/12z/aifs-ens/0p25/enfo/20250702120000-6h-enfo-cf.index"
     )
 
@@ -50,12 +58,20 @@ def test_source_file_coord_url_pf() -> None:
         data_var_group=list(config.data_vars[:1]),
     )
     assert coord.file_type == "pf"
-    assert coord.get_url() == (
+    assert coord.get_url("s3") == (
         "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
         "/20250702/00z/aifs-ens/0p25/enfo/20250702000000-12h-enfo-pf.grib2"
     )
-    assert coord.get_index_url() == (
+    assert coord.get_index_url("s3") == (
         "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
+        "/20250702/00z/aifs-ens/0p25/enfo/20250702000000-12h-enfo-pf.index"
+    )
+    assert coord.get_url("gcs") == (
+        "https://storage.googleapis.com/ecmwf-open-data"
+        "/20250702/00z/aifs-ens/0p25/enfo/20250702000000-12h-enfo-pf.grib2"
+    )
+    assert coord.get_index_url("gcs") == (
+        "https://storage.googleapis.com/ecmwf-open-data"
         "/20250702/00z/aifs-ens/0p25/enfo/20250702000000-12h-enfo-pf.index"
     )
 
@@ -118,11 +134,22 @@ def test_generate_source_file_coords() -> None:
         assert isinstance(coord, EcmwfAifsEnsForecastSourceFileCoord)
 
 
-def test_download_file_cf(monkeypatch: pytest.MonkeyPatch) -> None:
+_CF_INDEX = """
+{"domain": "g", "date": "20250702", "time": "0000", "expver": "0001", "class": "ai", "type": "cf", "stream": "enfo", "step": "6", "levtype": "sfc", "param": "2t", "model": "aifs-ens", "_offset": 0, "_length": 665525}
+{"domain": "g", "date": "20250702", "time": "0000", "expver": "0001", "class": "ai", "type": "cf", "stream": "enfo", "step": "6", "levtype": "sfc", "param": "10u", "_offset": 665525, "_length": 700000}
+"""
+
+_PF_INDEX = """
+{"domain": "g", "date": "20250702", "time": "0000", "expver": "0001", "class": "ai", "type": "pf", "stream": "enfo", "step": "6", "levtype": "sfc", "number": "1", "param": "2t", "model": "aifs-ens", "_offset": 0, "_length": 665525}
+{"domain": "g", "date": "20250702", "time": "0000", "expver": "0001", "class": "ai", "type": "pf", "stream": "enfo", "step": "6", "levtype": "sfc", "number": "2", "param": "2t", "model": "aifs-ens", "_offset": 665525, "_length": 670000}
+{"domain": "g", "date": "20250702", "time": "0000", "expver": "0001", "class": "ai", "type": "pf", "stream": "enfo", "step": "6", "levtype": "sfc", "number": "3", "param": "2t", "model": "aifs-ens", "_offset": 1335525, "_length": 660000}
+"""
+
+
+def _make_region_job() -> EcmwfAifsEnsForecastRegionJob:
     config = EcmwfAifsEnsForecastTemplateConfig()
     template_ds = config.get_template(pd.Timestamp("2025-07-02T06:00"))
-
-    region_job = EcmwfAifsEnsForecastRegionJob.model_construct(
+    return EcmwfAifsEnsForecastRegionJob.model_construct(
         tmp_store=Mock(),
         template_ds=template_ds,
         data_vars=config.data_vars,
@@ -130,6 +157,20 @@ def test_download_file_cf(monkeypatch: pytest.MonkeyPatch) -> None:
         region=slice(0, 1),
         reformat_job_name="test",
     )
+
+
+def _patch_pd_now(monkeypatch: pytest.MonkeyPatch, now: pd.Timestamp) -> None:
+    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *args, **kwargs: now))
+
+
+def _patch_index(monkeypatch: pytest.MonkeyPatch, index_text: str) -> None:
+    mock_index_df = pd.read_json(StringIO(index_text), lines=True)
+    monkeypatch.setattr("pandas.read_json", lambda path, **kwargs: mock_index_df)
+
+
+def test_download_file_cf(monkeypatch: pytest.MonkeyPatch) -> None:
+    region_job = _make_region_job()
+    config = EcmwfAifsEnsForecastTemplateConfig()
     t2m_var = item(v for v in config.data_vars if v.name == "temperature_2m")
     coord = EcmwfAifsEnsForecastSourceFileCoord(
         init_time=pd.Timestamp("2025-07-02T00:00"),
@@ -137,17 +178,9 @@ def test_download_file_cf(monkeypatch: pytest.MonkeyPatch) -> None:
         ensemble_member=0,
         data_var_group=[t2m_var],
     )
-
-    # cf index has no "number" or "type=pf" - all type=cf
-    example_grib_index = """
-{"domain": "g", "date": "20250702", "time": "0000", "expver": "0001", "class": "ai", "type": "cf", "stream": "enfo", "step": "6", "levtype": "sfc", "param": "2t", "model": "aifs-ens", "_offset": 0, "_length": 665525}
-{"domain": "g", "date": "20250702", "time": "0000", "expver": "0001", "class": "ai", "type": "cf", "stream": "enfo", "step": "6", "levtype": "sfc", "param": "10u", "_offset": 665525, "_length": 700000}
-"""
-    mock_index_df = pd.read_json(StringIO(example_grib_index), lines=True)
-    monkeypatch.setattr(
-        "pandas.read_json",
-        lambda path, **kwargs: mock_index_df,
-    )
+    # Recent: 12h after init_time, S3 should be tried first.
+    _patch_pd_now(monkeypatch, pd.Timestamp("2025-07-02T12:00"))
+    _patch_index(monkeypatch, _CF_INDEX)
 
     download_to_disk_mock = Mock()
     monkeypatch.setattr(
@@ -158,25 +191,19 @@ def test_download_file_cf(monkeypatch: pytest.MonkeyPatch) -> None:
     region_job.download_file(coord)
 
     assert download_to_disk_mock.call_count == 2
-    url, _dataset_id = download_to_disk_mock.call_args_list[1][0]
+    idx_url = download_to_disk_mock.call_args_list[0][0][0]
+    data_url, _dataset_id = download_to_disk_mock.call_args_list[1][0]
     kwargs = download_to_disk_mock.call_args_list[1][1]
 
-    assert "20250702000000-6h-enfo-cf.grib2" in url
+    assert "ecmwf-forecasts.s3" in idx_url
+    assert "ecmwf-forecasts.s3" in data_url
+    assert "20250702000000-6h-enfo-cf.grib2" in data_url
     assert kwargs["byte_ranges"] == ([0], [665525])
 
 
 def test_download_file_pf(monkeypatch: pytest.MonkeyPatch) -> None:
+    region_job = _make_region_job()
     config = EcmwfAifsEnsForecastTemplateConfig()
-    template_ds = config.get_template(pd.Timestamp("2025-07-02T06:00"))
-
-    region_job = EcmwfAifsEnsForecastRegionJob.model_construct(
-        tmp_store=Mock(),
-        template_ds=template_ds,
-        data_vars=config.data_vars,
-        append_dim=config.append_dim,
-        region=slice(0, 1),
-        reformat_job_name="test",
-    )
     t2m_var = item(v for v in config.data_vars if v.name == "temperature_2m")
     coord = EcmwfAifsEnsForecastSourceFileCoord(
         init_time=pd.Timestamp("2025-07-02T00:00"),
@@ -184,18 +211,9 @@ def test_download_file_pf(monkeypatch: pytest.MonkeyPatch) -> None:
         ensemble_member=2,
         data_var_group=[t2m_var],
     )
-
-    # pf index has "number" column for each ensemble member, members interleaved
-    example_grib_index = """
-{"domain": "g", "date": "20250702", "time": "0000", "expver": "0001", "class": "ai", "type": "pf", "stream": "enfo", "step": "6", "levtype": "sfc", "number": "1", "param": "2t", "model": "aifs-ens", "_offset": 0, "_length": 665525}
-{"domain": "g", "date": "20250702", "time": "0000", "expver": "0001", "class": "ai", "type": "pf", "stream": "enfo", "step": "6", "levtype": "sfc", "number": "2", "param": "2t", "model": "aifs-ens", "_offset": 665525, "_length": 670000}
-{"domain": "g", "date": "20250702", "time": "0000", "expver": "0001", "class": "ai", "type": "pf", "stream": "enfo", "step": "6", "levtype": "sfc", "number": "3", "param": "2t", "model": "aifs-ens", "_offset": 1335525, "_length": 660000}
-"""
-    mock_index_df = pd.read_json(StringIO(example_grib_index), lines=True)
-    monkeypatch.setattr(
-        "pandas.read_json",
-        lambda path, **kwargs: mock_index_df,
-    )
+    # Recent: 12h after init_time, S3 should be tried first.
+    _patch_pd_now(monkeypatch, pd.Timestamp("2025-07-02T12:00"))
+    _patch_index(monkeypatch, _PF_INDEX)
 
     download_to_disk_mock = Mock()
     monkeypatch.setattr(
@@ -206,12 +224,107 @@ def test_download_file_pf(monkeypatch: pytest.MonkeyPatch) -> None:
     region_job.download_file(coord)
 
     assert download_to_disk_mock.call_count == 2
-    url, _dataset_id = download_to_disk_mock.call_args_list[1][0]
+    data_url, _dataset_id = download_to_disk_mock.call_args_list[1][0]
     kwargs = download_to_disk_mock.call_args_list[1][1]
 
-    assert "20250702000000-6h-enfo-pf.grib2" in url
+    assert "ecmwf-forecasts.s3" in data_url
+    assert "20250702000000-6h-enfo-pf.grib2" in data_url
     # member=2 selects offsets 665525..1335525
     assert kwargs["byte_ranges"] == ([665525], [665525 + 670000])
+
+
+def test_download_file_old_init_prefers_gcs(monkeypatch: pytest.MonkeyPatch) -> None:
+    region_job = _make_region_job()
+    config = EcmwfAifsEnsForecastTemplateConfig()
+    t2m_var = item(v for v in config.data_vars if v.name == "temperature_2m")
+    coord = EcmwfAifsEnsForecastSourceFileCoord(
+        init_time=pd.Timestamp("2025-07-02T00:00"),
+        lead_time=pd.Timedelta("6h"),
+        ensemble_member=0,
+        data_var_group=[t2m_var],
+    )
+    # Old: more than 24h after init_time, GCS should be tried first.
+    _patch_pd_now(monkeypatch, pd.Timestamp("2025-07-04T00:00"))
+    _patch_index(monkeypatch, _CF_INDEX)
+
+    download_to_disk_mock = Mock()
+    monkeypatch.setattr(
+        "reformatters.ecmwf.aifs_ens.forecast.region_job.http_download_to_disk",
+        download_to_disk_mock,
+    )
+
+    region_job.download_file(coord)
+
+    assert download_to_disk_mock.call_count == 2
+    idx_url = download_to_disk_mock.call_args_list[0][0][0]
+    data_url = download_to_disk_mock.call_args_list[1][0][0]
+    assert "storage.googleapis.com/ecmwf-open-data" in idx_url
+    assert "storage.googleapis.com/ecmwf-open-data" in data_url
+
+
+def test_download_file_falls_back_to_gcs_on_s3_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    region_job = _make_region_job()
+    config = EcmwfAifsEnsForecastTemplateConfig()
+    t2m_var = item(v for v in config.data_vars if v.name == "temperature_2m")
+    coord = EcmwfAifsEnsForecastSourceFileCoord(
+        init_time=pd.Timestamp("2025-07-02T00:00"),
+        lead_time=pd.Timedelta("6h"),
+        ensemble_member=0,
+        data_var_group=[t2m_var],
+    )
+    # Recent: S3 is primary, GCS is fallback.
+    _patch_pd_now(monkeypatch, pd.Timestamp("2025-07-02T12:00"))
+    _patch_index(monkeypatch, _CF_INDEX)
+
+    download_to_disk_mock = Mock()
+
+    def fake_download(url: str, *_args: object, **_kwargs: object) -> Mock:
+        if "ecmwf-forecasts.s3" in url:
+            raise FileNotFoundError(url)
+        return Mock()
+
+    download_to_disk_mock.side_effect = fake_download
+    monkeypatch.setattr(
+        "reformatters.ecmwf.aifs_ens.forecast.region_job.http_download_to_disk",
+        download_to_disk_mock,
+    )
+
+    region_job.download_file(coord)
+
+    # First attempt: S3 index (fails). Second attempt: GCS index + GCS data.
+    urls = [call[0][0] for call in download_to_disk_mock.call_args_list]
+    assert "ecmwf-forecasts.s3" in urls[0]
+    assert all("storage.googleapis.com" in u for u in urls[1:])
+    assert any("20250702000000-6h-enfo-cf.grib2" in u for u in urls)
+
+
+def test_download_file_raises_when_all_sources_fail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    region_job = _make_region_job()
+    config = EcmwfAifsEnsForecastTemplateConfig()
+    t2m_var = item(v for v in config.data_vars if v.name == "temperature_2m")
+    coord = EcmwfAifsEnsForecastSourceFileCoord(
+        init_time=pd.Timestamp("2025-07-02T00:00"),
+        lead_time=pd.Timedelta("6h"),
+        ensemble_member=0,
+        data_var_group=[t2m_var],
+    )
+    _patch_pd_now(monkeypatch, pd.Timestamp("2025-07-02T12:00"))
+    _patch_index(monkeypatch, _CF_INDEX)
+
+    def always_404(url: str, *_args: object, **_kwargs: object) -> None:
+        raise FileNotFoundError(url)
+
+    monkeypatch.setattr(
+        "reformatters.ecmwf.aifs_ens.forecast.region_job.http_download_to_disk",
+        Mock(side_effect=always_404),
+    )
+
+    with pytest.raises(FileNotFoundError):
+        region_job.download_file(coord)
 
 
 def test_read_data(monkeypatch: pytest.MonkeyPatch) -> None:

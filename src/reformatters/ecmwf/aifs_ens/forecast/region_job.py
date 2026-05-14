@@ -29,8 +29,18 @@ from reformatters.common.types import (
 )
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, vars_available
 from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
+from reformatters.ecmwf.ecmwf_utils import (
+    SOURCE_BASE_URLS,
+    EcmwfSource,
+    ecmwf_download_with_fallback,
+)
 
 log = get_logger(__name__)
+
+# aifs-ens files land on the GCS mirror ~40 min after S3. For recent forecasts
+# prefer S3 (freshness); for older forecasts prefer GCS (better availability under
+# S3 throttling). See https://forum.ecmwf.int/t/503-slowdown-errors-for-requests-to-s3-ecmwf-forecasts/14345
+_RECENT_CUTOFF = pd.Timedelta(hours=24)
 
 # GRIB master table version changes caused metadata differences for precipitation.
 # Early data (table v27): generic product template codes.
@@ -55,8 +65,8 @@ class EcmwfAifsEnsForecastSourceFileCoord(SourceFileCoord):
         # ensemble_member 0 is the control forecast (cf), 1-50 are perturbed members (pf).
         return "cf" if self.ensemble_member == 0 else "pf"
 
-    def _get_base_url(self) -> str:
-        root_url = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
+    def _get_base_url(self, source: EcmwfSource) -> str:
+        root_url = SOURCE_BASE_URLS[source]
 
         init_time_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")
@@ -66,11 +76,11 @@ class EcmwfAifsEnsForecastSourceFileCoord(SourceFileCoord):
         filename = f"{init_time_str}{init_hour_str}0000-{lead_time_hour_str}h-enfo-{self.file_type}"
         return f"{root_url}/{directory_path}/{filename}"
 
-    def get_url(self) -> str:
-        return self._get_base_url() + ".grib2"
+    def get_url(self, source: EcmwfSource = "s3") -> str:
+        return self._get_base_url(source) + ".grib2"
 
-    def get_index_url(self) -> str:
-        return self._get_base_url() + ".index"
+    def get_index_url(self, source: EcmwfSource = "s3") -> str:
+        return self._get_base_url(source) + ".index"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {
@@ -117,10 +127,13 @@ class EcmwfAifsEnsForecastRegionJob(
             )
         return coords
 
-    def download_file(self, coord: EcmwfAifsEnsForecastSourceFileCoord) -> Path:
-        idx_url = coord.get_index_url()
+    def _download_from_source(
+        self,
+        coord: EcmwfAifsEnsForecastSourceFileCoord,
+        source: EcmwfSource,
+    ) -> Path:
         idx_local_path = http_download_to_disk(
-            idx_url, self.dataset_id, disk_cache=True
+            coord.get_index_url(source), self.dataset_id, disk_cache=True
         )
 
         # cf files have no "number" column (single member); pf files have a "number" column.
@@ -136,10 +149,19 @@ class EcmwfAifsEnsForecastRegionJob(
             f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)
         )
         return http_download_to_disk(
-            coord.get_url(),
+            coord.get_url(source),
             self.dataset_id,
             byte_ranges=(byte_range_starts, byte_range_ends),
             local_path_suffix=f"-{suffix}",
+        )
+
+    def download_file(self, coord: EcmwfAifsEnsForecastSourceFileCoord) -> Path:
+        if coord.init_time >= pd.Timestamp.now() - _RECENT_CUTOFF:
+            sources: tuple[EcmwfSource, ...] = ("s3", "gcs")
+        else:
+            sources = ("gcs", "s3")
+        return ecmwf_download_with_fallback(
+            sources, lambda source: self._download_from_source(coord, source)
         )
 
     def read_data(
