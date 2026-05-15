@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from functools import partial
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -7,7 +8,6 @@ from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationC
 
 from .region_job import NoaaNdviCdrAnalysisRegionJob, NoaaNdviCdrAnalysisSourceFileCoord
 from .template_config import NoaaNdviCdrAnalysisTemplateConfig, NoaaNdviCdrDataVar
-from .validators import check_data_is_current, check_latest_ndvi_usable_nan_percentage
 
 
 class NoaaNdviCdrAnalysisDataset(
@@ -47,7 +47,21 @@ class NoaaNdviCdrAnalysisDataset(
 
     def validators(self) -> Sequence[validation.DataValidator]:
         """Return a sequence of DataValidators to run on this dataset."""
+        # There's usually a ~3 day lag for this data's availability, occasionally much longer.
+        max_expected_delay = timedelta(days=30)
         return (
-            check_data_is_current,
-            check_latest_ndvi_usable_nan_percentage,
+            partial(
+                validation.check_analysis_current_data,
+                max_expected_delay=max_expected_delay,
+            ),
+            partial(
+                validation.check_analysis_recent_nans,
+                max_expected_delay=max_expected_delay,
+                # Large NaN fraction is expected: oceans and water bodies are always NaN
+                # (~93% baseline, observed up to ~96%). Use full-grid sampling because
+                # structural NaN makes random_points bimodal/unstable.
+                max_nan_fraction=0.97,
+                include_vars=["ndvi_usable"],
+                spatial_sampling="all",
+            ),
         )
