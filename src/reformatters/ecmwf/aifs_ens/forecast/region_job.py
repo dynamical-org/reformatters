@@ -246,7 +246,9 @@ class EcmwfAifsEnsForecastRegionJob(
     ]:
         existing_ds = xr.open_zarr(primary_store, chunks=None)
         append_dim_start = existing_ds[append_dim].max()
-        append_dim_end = pd.Timestamp.now()
+        # Subtracting 5.5h here keeps a not-yet-published
+        # cycle out of scope so pods don't waste time trying files that won't exist.
+        append_dim_end = pd.Timestamp.now() - pd.Timedelta(hours=5.5)
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
