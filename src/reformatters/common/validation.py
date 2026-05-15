@@ -244,6 +244,34 @@ def _apply_spatial_sampling(
     assert_never(sampling_strategy)
 
 
+def _format_coord_value(value: object) -> str:
+    if isinstance(value, np.datetime64):
+        return pd.Timestamp(value).isoformat()
+    if isinstance(value, np.timedelta64):
+        return str(pd.Timedelta(value))
+    if isinstance(value, float | np.floating):
+        return f"{float(value):.4f}"
+    return str(value)
+
+
+def _summarize_coords(ds: xr.Dataset) -> str:
+    parts = []
+    for name in ds.coords:
+        values = np.atleast_1d(ds.coords[name].values)
+        if values.size == 0:
+            parts.append(f"{name}=<empty>")
+        elif values.size == 1:
+            parts.append(f"{name}={_format_coord_value(values[0])}")
+        elif values.size <= 4:
+            joined = ", ".join(_format_coord_value(v) for v in values)
+            parts.append(f"{name}=[{joined}]")
+        else:
+            parts.append(
+                f"{name}=[{_format_coord_value(values[0])}..{_format_coord_value(values[-1])}] (n={values.size})"
+            )
+    return ", ".join(parts)
+
+
 def _check_nan_fractions(
     sample_ds: xr.Dataset,
     *,
@@ -261,7 +289,8 @@ def _check_nan_fractions(
     ]
 
     log.info(
-        f"Computing NaN fraction for {len(var_names)} variables: {sorted(var_names)}"
+        f"Computing NaN fraction for {len(var_names)} variables: {sorted(var_names)} "
+        f"over coordinates: {_summarize_coords(sample_ds)}"
     )
 
     skip_lead_time_0_vars = set(additional_skip_lead_time_0_vars)
