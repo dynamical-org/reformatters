@@ -68,6 +68,6 @@ class NasaSmapLevel336KmV9Dataset(
                 # Oceans and about half of land (due to swaths) are expected to be NaNs
                 # This value sounds very loose but has been tuned based on real values
                 max_nan_fraction=0.995,
-                sampling_strategy="quarter",
+                spatial_sampling="quarter",
             ),
         )

@@ -330,7 +330,7 @@ def test_check_analysis_recent_nans_quarter_sampling_passes(
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
     result = validation.check_analysis_recent_nans(
-        analysis_dataset, sampling_strategy="quarter"
+        analysis_dataset, spatial_sampling="quarter"
     )
 
     assert result.passed
@@ -349,7 +349,7 @@ def test_check_analysis_recent_nans_quarter_sampling_fails(
         analysis_dataset,
         max_expected_delay=timedelta(hours=12),
         max_nan_fraction=0.05,
-        sampling_strategy="quarter",
+        spatial_sampling="quarter",
     )
 
     assert not result.passed
@@ -391,7 +391,7 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
         analysis_dataset,
         max_expected_delay=timedelta(hours=12),
         max_nan_fraction=0.05,
-        sampling_strategy="quarter",
+        spatial_sampling="quarter",
     )
     assert result.passed
 
@@ -412,7 +412,7 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
         analysis_dataset,
         max_expected_delay=timedelta(hours=12),
         max_nan_fraction=0.05,
-        sampling_strategy="quarter",
+        spatial_sampling="quarter",
     )
     assert not result.passed
 
@@ -426,7 +426,7 @@ def test_check_analysis_recent_nans_random_points_sampling(
 
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
-        sampling_strategy="random_points",
+        spatial_sampling="random_points",
     )
     assert result.passed
 
@@ -436,7 +436,7 @@ def test_check_analysis_recent_nans_random_points_sampling(
         analysis_dataset,
         max_expected_delay=timedelta(hours=12),
         max_nan_fraction=0.05,
-        sampling_strategy="random_points",
+        spatial_sampling="random_points",
     )
     assert not result.passed
 
@@ -462,28 +462,28 @@ def test_check_analysis_recent_nans_xy_dimensions(
         coords={"time": times, "y": y, "x": x},
     )
 
-    result = validation.check_analysis_recent_nans(ds, sampling_strategy="quarter")
+    result = validation.check_analysis_recent_nans(ds, spatial_sampling="quarter")
     assert result.passed
 
 
 def test_check_analysis_recent_nans_invalid_sampling_strategy(
     monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
 ) -> None:
-    """Invalid sampling_strategy values are rejected by assert_never."""
+    """Invalid spatial_sampling values are rejected by assert_never."""
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
     with pytest.raises(AssertionError, match="Expected code to be unreachable"):
         validation.check_analysis_recent_nans(
             analysis_dataset,
-            sampling_strategy="invalid",  # type: ignore[arg-type]
+            spatial_sampling="invalid",  # type: ignore[arg-type]
         )
 
 
 def test_check_analysis_recent_nans_all_sampling(
     monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
 ) -> None:
-    """sampling_strategy='all' reads the full spatial grid."""
+    """spatial_sampling='all' reads the full spatial grid."""
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
@@ -493,7 +493,7 @@ def test_check_analysis_recent_nans_all_sampling(
 
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
-        sampling_strategy="all",
+        spatial_sampling="all",
         max_nan_fraction=0.05,
     )
     assert not result.passed
@@ -514,7 +514,7 @@ def test_spatial_dims_raises_when_unknown(
     )
 
     with pytest.raises(ValueError, match="Can't infer spatial dimensions"):
-        validation.check_analysis_recent_nans(ds, sampling_strategy="quarter")
+        validation.check_analysis_recent_nans(ds, spatial_sampling="quarter")
 
 
 def test_truncate_shards_truncation() -> None:

@@ -131,7 +131,7 @@ def check_forecast_recent_nans(
     max_nan_fraction: float = 0.0,
     include_vars: Sequence[str] | Literal["all"] = "all",
     exclude_vars: Sequence[str] = (),
-    sampling_strategy: SpatialSamplingStrategy = "random_points",
+    spatial_sampling: SpatialSamplingStrategy = "random_points",
     additional_skip_lead_time_0_vars: Sequence[str] = (),
     max_workers: int | None = None,
 ) -> ValidationResult:
@@ -142,7 +142,7 @@ def check_forecast_recent_nans(
     (`-1` = latest, `-2` = previous, etc.). Use `-2` for datasets whose
     latest init is still being filled in (e.g. long-horizon ensembles).
 
-    Default `sampling_strategy="random_points"` reads all lead_times (and any
+    Default `spatial_sampling="random_points"` reads all lead_times (and any
     ensemble members) at 2 random spatial points per variable — cheap when
     data is chunked by init_time. Use `"all"` only for small datasets.
 
@@ -152,7 +152,7 @@ def check_forecast_recent_nans(
     (e.g. HRRR categorical vars which are step_type=instant but have no hour 0 data).
     """
     sample_ds = ds.isel(init_time=[init_time_offset])
-    sample_ds = _apply_spatial_sampling(sample_ds, sampling_strategy)
+    sample_ds = _apply_spatial_sampling(sample_ds, spatial_sampling)
 
     return _check_nan_fractions(
         sample_ds,
@@ -160,7 +160,7 @@ def check_forecast_recent_nans(
         include_vars=include_vars,
         exclude_vars=exclude_vars,
         additional_skip_lead_time_0_vars=additional_skip_lead_time_0_vars,
-        max_workers=max_workers or _DEFAULT_MAX_WORKERS[sampling_strategy],
+        max_workers=max_workers or _DEFAULT_MAX_WORKERS[spatial_sampling],
     )
 
 
@@ -171,20 +171,20 @@ def check_analysis_recent_nans(
     max_nan_fraction: float = 0.0,
     include_vars: Sequence[str] | Literal["all"] = "all",
     exclude_vars: Sequence[str] = (),
-    sampling_strategy: SpatialSamplingStrategy = "random_points",
+    spatial_sampling: SpatialSamplingStrategy = "random_points",
     max_workers: int | None = None,
 ) -> ValidationResult:
     """
     Check the NaN fraction of recent timesteps in an analysis dataset.
 
-    Default `sampling_strategy="random_points"` reads 2 random spatial points
+    Default `spatial_sampling="random_points"` reads 2 random spatial points
     (across all timesteps in the window) — cheap and covers independent
     locations. Use `"quarter"` for structural-NaN datasets and `"all"` only
     when small.
     """
     now = pd.Timestamp.now()
     sample_ds = ds.sel(time=slice(now - max_expected_delay, None))
-    sample_ds = _apply_spatial_sampling(sample_ds, sampling_strategy)
+    sample_ds = _apply_spatial_sampling(sample_ds, spatial_sampling)
 
     return _check_nan_fractions(
         sample_ds,
@@ -192,7 +192,7 @@ def check_analysis_recent_nans(
         include_vars=include_vars,
         exclude_vars=exclude_vars,
         additional_skip_lead_time_0_vars=(),
-        max_workers=max_workers or _DEFAULT_MAX_WORKERS[sampling_strategy],
+        max_workers=max_workers or _DEFAULT_MAX_WORKERS[spatial_sampling],
     )
 
 

@@ -71,7 +71,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # timestamp falls back to radar-only with ~34% structural coverage gaps).
                 # categorical (PrecipFlag) is radar-derived with no gauge latency, similar coverage to radar_only.
                 max_nan_fraction=0.40,
-                sampling_strategy="quarter",
+                spatial_sampling="quarter",
                 exclude_vars=gauge_latency_vars + radar_only_var + flash_var,
             ),
             partial(
@@ -80,7 +80,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # pass_1 and pass_2 worst-case quarter-sampled NaN is ~45.5% (1 of 3 checked
                 # timestamps is 100% NaN due to gauge-collection latency, rest are ~6%).
                 max_nan_fraction=0.48,
-                sampling_strategy="quarter",
+                spatial_sampling="quarter",
                 include_vars=gauge_latency_vars,
             ),
             partial(
@@ -89,7 +89,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # Radar only is ~34% NaN always. With quarter sampling this can get as
                 # high as 62.2%. It is available at all timestamps.
                 max_nan_fraction=0.63,
-                sampling_strategy="quarter",
+                spatial_sampling="quarter",
                 include_vars=radar_only_var,
             ),
             partial(
@@ -98,7 +98,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # FLASH QPE/FFG ratio has ~64% structural NaN (outside radar/FFG coverage).
                 # With quarter sampling this can reach ~86%.
                 max_nan_fraction=0.86,
-                sampling_strategy="quarter",
+                spatial_sampling="quarter",
                 include_vars=flash_var,
             ),
         )

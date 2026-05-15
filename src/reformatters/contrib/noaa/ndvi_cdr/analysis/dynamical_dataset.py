@@ -62,6 +62,6 @@ class NoaaNdviCdrAnalysisDataset(
                 # structural NaN makes random_points bimodal/unstable.
                 max_nan_fraction=0.97,
                 include_vars=["ndvi_usable"],
-                sampling_strategy="all",
+                spatial_sampling="all",
             ),
         )
