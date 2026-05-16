@@ -82,6 +82,10 @@ def parallel_setup(
             ]
             for ic_store in ic_stores:
                 copy_zarr_metadata(template_ds, tmp_store, ic_store)
+            # Must be commit, not amend: this is the first write on the fresh
+            # temp branch, and amend would replace the original main snapshot
+            # in the branch's view of history. Subsequent writes (worker chunks
+            # and finalize) use amend so they collapse into this snapshot.
             storage.commit_if_icechunk(
                 "Expand dataset",
                 ic_stores[0],
@@ -185,9 +189,13 @@ def finalize(
             copy_zarr_metadata(
                 updated_template, tmp_store, session.store, icechunk_only=True
             )
-            new_snapshot = session.commit(
-                commit_message, rebase_with=icechunk.ConflictDetector()
-            )
+            # Amend folds the final metadata into the existing temp-branch tip
+            # so it does not become an extra snapshot in main's history.
+            try:
+                new_snapshot = session.amend(commit_message)
+            except icechunk.ConflictError:
+                session.rebase(icechunk.ConflictDetector())
+                new_snapshot = session.amend(commit_message)
             repo.reset_branch("main", new_snapshot, from_snapshot_id=original_snapshot)
         # Second pass: clean up temp branches.
         for _role, repo in replicas_first:

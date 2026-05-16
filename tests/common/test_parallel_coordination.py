@@ -68,12 +68,23 @@ class FakeSession:
         self.repo = repo
         self.store: object = MagicMock(name=f"ic_store-{self.id}")
         self.commit_calls: list[tuple[str, object]] = []
+        self.amend_calls: list[str] = []
+        self.rebase_calls: list[object] = []
 
     def commit(self, message: str, rebase_with: object = None) -> str:
         self.commit_calls.append((message, rebase_with))
-        new_snapshot = f"snap-{self.id}-{len(self.commit_calls)}"
+        new_snapshot = f"snap-{self.id}-c{len(self.commit_calls)}"
         self.repo._branches[self.branch] = new_snapshot
         return new_snapshot
+
+    def amend(self, message: str) -> str:
+        self.amend_calls.append(message)
+        new_snapshot = f"snap-{self.id}-a{len(self.amend_calls)}"
+        self.repo._branches[self.branch] = new_snapshot
+        return new_snapshot
+
+    def rebase(self, conflict_solver: object) -> None:
+        self.rebase_calls.append(conflict_solver)
 
 
 class FakeRepo:
@@ -510,11 +521,12 @@ class TestFinalize:
         assert primary_repo.reset_calls[0][2] == "snap-primary-init"
         assert replica_repo.reset_calls[0][2] == "snap-replica-init"
 
-        # Commit happened per repo before reset_branch.
-        assert len(primary_repo.sessions[0].commit_calls) == 1
-        commit_msg = primary_repo.sessions[0].commit_calls[0][0]
-        assert commit_msg.startswith("Update at ")
-        assert commit_msg.endswith("Z")
+        # Amend happened per repo before reset_branch (folds final metadata
+        # into the temp-branch tip rather than adding a new snapshot).
+        assert len(primary_repo.sessions[0].amend_calls) == 1
+        amend_msg = primary_repo.sessions[0].amend_calls[0]
+        assert amend_msg.startswith("Update at ")
+        assert amend_msg.endswith("Z")
 
         # Second pass deletes each repo's temp branch.
         assert primary_repo.delete_branch_calls == ["temp-branch"]
