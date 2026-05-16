@@ -57,8 +57,8 @@ class VariableStats:
     null_count_p2: int | None = None
     total_count_p1: int | None = None
     total_count_p2: int | None = None
-    missing_timestamps_p1: list[str] = field(default_factory=list)
-    missing_timestamps_p2: list[str] = field(default_factory=list)
+    unavailable_timestamps_p1: list[str] = field(default_factory=list)
+    unavailable_timestamps_p2: list[str] = field(default_factory=list)
 
     # Spatial comparison
     spatial_plot: str | None = None
@@ -112,7 +112,7 @@ class RunContext:
     spatial_time_label: str | None = None
     ref_spatial_time_label: str | None = None
     temporal_period_label: str | None = None
-    missing_timestamps_file: str | None = None
+    unavailable_timestamps_file: str | None = None
     combined_nulls_plot: str | None = None
     combined_spatial_plot: str | None = None
     combined_temporal_plot: str | None = None

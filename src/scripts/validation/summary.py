@@ -23,14 +23,14 @@ def _fmt_count(n: int | None, total: int | None) -> str:
     return f"{n}/{total}"
 
 
-def _missing_summary(missing: list[str]) -> str:
-    if not missing:
+def _unavailable_summary(unavailable: list[str]) -> str:
+    if not unavailable:
         return "none"
-    if len(missing) <= 6:
-        return f"{len(missing)} missing: {', '.join(missing)}"
-    head = ", ".join(missing[:3])
-    tail = ", ".join(missing[-3:])
-    return f"{len(missing)} missing (first: {head} … last: {tail})"
+    if len(unavailable) <= 6:
+        return f"{len(unavailable)} unavailable: {', '.join(unavailable)}"
+    head = ", ".join(unavailable[:3])
+    tail = ", ".join(unavailable[-3:])
+    return f"{len(unavailable)} unavailable (first: {head} … last: {tail})"
 
 
 def _dataset_time_range(ctx: RunContext) -> str:
@@ -148,9 +148,9 @@ def _variable_section(stats: VariableStats, ctx: RunContext) -> str:
         "**Nulls**",
         "",
         f"- P1 nulls: {_fmt_count(stats.null_count_p1, stats.total_count_p1)} — "
-        f"{_missing_summary(stats.missing_timestamps_p1)}",
+        f"{_unavailable_summary(stats.unavailable_timestamps_p1)}",
         f"- P2 nulls: {_fmt_count(stats.null_count_p2, stats.total_count_p2)} — "
-        f"{_missing_summary(stats.missing_timestamps_p2)}",
+        f"{_unavailable_summary(stats.unavailable_timestamps_p2)}",
         "",
     ]
     return "\n".join(lines)
@@ -173,16 +173,26 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
     if ctx.start_date or ctx.end_date:
         scope_line = f"start={ctx.start_date or 'dataset start'}, end={ctx.end_date or 'dataset end'}"
 
-    missing_rows: list[tuple[str, str, int, int, float]] = []
+    unavailable_rows: list[tuple[str, str, int, int, float, str, str]] = []
     for var in ctx.variables:
         stats = ctx.stats[var]
-        for point, missing, total in (
-            ("P1", stats.missing_timestamps_p1, stats.total_count_p1),
-            ("P2", stats.missing_timestamps_p2, stats.total_count_p2),
+        for point, unavailable, total in (
+            ("P1", stats.unavailable_timestamps_p1, stats.total_count_p1),
+            ("P2", stats.unavailable_timestamps_p2, stats.total_count_p2),
         ):
-            if missing and total:
-                pct = len(missing) / total * 100
-                missing_rows.append((var, point, len(missing), total, pct))
+            if unavailable and total:
+                pct = len(unavailable) / total * 100
+                unavailable_rows.append(
+                    (
+                        var,
+                        point,
+                        len(unavailable),
+                        total,
+                        pct,
+                        unavailable[0],
+                        unavailable[-1],
+                    )
+                )
 
     lines: list[str] = []
     display_ver = "v" + val_ver.removeprefix("v")
@@ -192,7 +202,7 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
         f"This dataset validation report plots a sample of values from the "
         f"{val_name} dataset over time and across space, comparing where possible "
         f"to a previously validated reference dataset. It also reports the quantity "
-        f"of missing values and their associated timestamps. These analyses are one "
+        f"of unavailable values and their associated timestamps. These analyses are one "
         f"layer of a multi-layered dataset validation process we perform at "
         f"dynamical.org and also provide users a preview of the dataset contents."
     )
@@ -228,7 +238,7 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
         f"{ctx.ensemble_member if ctx.ensemble_member is not None else 'n/a'}"
     )
     lines.append("")
-    lines.append("### Missing values")
+    lines.append("### Unavailable values")
     lines.append("")
     lines.append(f"- Point 1: lat={ctx.point1_lat:.4f}, lon={ctx.point1_lon:.4f}")
     lines.append(f"- Point 2: lat={ctx.point2_lat:.4f}, lon={ctx.point2_lon:.4f}")
@@ -252,7 +262,7 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
     lines.append("All variables combined into a single plot for each type of analysis.")
     lines.append("")
     combined_items = [
-        ("Missing values", ctx.combined_nulls_plot),
+        ("Unavailable values", ctx.combined_nulls_plot),
         ("Spatial and distributions", ctx.combined_spatial_plot),
         ("Time series", ctx.combined_temporal_plot),
     ]
@@ -261,20 +271,26 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
             lines.append(f"- {label}: [`{filename}`]({filename})")
     lines.append("")
 
-    lines.append("## Missing timestamps")
+    lines.append("## Unavailable timestamps")
     lines.append("")
-    if not missing_rows:
+    if not unavailable_rows:
         lines.append("None detected at the two sampled points.")
     else:
         lines.append(
-            f"Full list: [`{ctx.missing_timestamps_file or 'missing_timestamps.txt'}`]"
-            f"({ctx.missing_timestamps_file or 'missing_timestamps.txt'})"
+            f"Full list: [`{ctx.unavailable_timestamps_file or 'unavailable_timestamps.txt'}`]"
+            f"({ctx.unavailable_timestamps_file or 'unavailable_timestamps.txt'})"
         )
         lines.append("")
-        lines.append("| Variable | Point | Missing count | Total count | Missing % |")
-        lines.append("|---|---|---|---|---|")
-        for var, point, missing, total, pct in missing_rows:
-            lines.append(f"| `{var}` | {point} | {missing} | {total} | {pct:.2f}% |")
+        lines.append(
+            "| Variable | Point | Unavailable count | Total count | Unavailable % "
+            "| Earliest unavailable | Latest unavailable |"
+        )
+        lines.append("|---|---|---|---|---|---|---|")
+        for var, point, count, total, pct, earliest, latest in unavailable_rows:
+            lines.append(
+                f"| `{var}` | {point} | {count} | {total} | {pct:.2f}% "
+                f"| {earliest} | {latest} |"
+            )
     lines.append("")
 
     lines.append("## Per-variable details")

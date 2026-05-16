@@ -28,7 +28,7 @@ zarr.config.set({"async.concurrency": 32})
 def _compute_nulls_for_point(
     ds_point: xr.Dataset, var: str
 ) -> tuple[xr.DataArray, list[str], int, int]:
-    """Compute null fraction over time, plus (filtered) missing timestamps + counts.
+    """Compute null fraction over time, plus (filtered) unavailable timestamps + counts.
 
     For accumulated/avg variables, excludes the first lead_time (analysis step) from the
     "unexpected nulls" tally — it's structurally NaN by design.
@@ -49,14 +49,14 @@ def _compute_nulls_for_point(
     if check_mask.any():
         time_dim = next(d for d in ("time", "init_time") if d in null_frac.dims)
         log_null = check_mask.mean(dim=non_time_dims)
-        missing = log_null[time_dim].where(log_null > 0, drop=True)
-        missing_strs = missing.dt.strftime("%Y-%m-%dT%H:%M:%S").values.tolist()
+        unavailable = log_null[time_dim].where(log_null > 0, drop=True)
+        unavailable_strs = unavailable.dt.strftime("%Y-%m-%dT%H:%M:%S").values.tolist()
     else:
-        missing_strs = []
+        unavailable_strs = []
 
     return (
         null_frac,
-        missing_strs,
+        unavailable_strs,
         int(check_mask.sum().item()),
         int(check_mask.size),
     )
@@ -79,57 +79,59 @@ def _draw_null_trace(ax: Axes, null_data: xr.DataArray, color: str, title: str) 
     ax.grid(True, alpha=0.3)
 
 
-def _format_missing_summary(missing: list[str]) -> str:
-    if not missing:
+def _format_unavailable_summary(unavailable: list[str]) -> str:
+    if not unavailable:
         return "none"
-    if len(missing) <= 6:
-        return f"{len(missing)} ({', '.join(missing)})"
-    head = ", ".join(missing[:3])
-    tail = ", ".join(missing[-3:])
-    return f"{len(missing)} (first: {head} … last: {tail})"
+    if len(unavailable) <= 6:
+        return f"{len(unavailable)} ({', '.join(unavailable)})"
+    head = ", ".join(unavailable[:3])
+    tail = ", ".join(unavailable[-3:])
+    return f"{len(unavailable)} (first: {head} … last: {tail})"
 
 
-def write_missing_timestamps_file(output_dir: Path, ctx: RunContext) -> str | None:
-    """Write missing_timestamps.txt aggregating every (var, point) with nulls. Returns filename or None."""
+def write_unavailable_timestamps_file(output_dir: Path, ctx: RunContext) -> str | None:
+    """Write unavailable_timestamps.txt aggregating every (var, point) with nulls. Returns filename or None."""
     entries = []
     for var, stats in ctx.stats.items():
-        for point_label, missing in (
+        for point_label, unavailable in (
             (
                 f"Point 1 (lat={ctx.point1_lat:.2f}, lon={ctx.point1_lon:.2f})",
-                stats.missing_timestamps_p1,
+                stats.unavailable_timestamps_p1,
             ),
             (
                 f"Point 2 (lat={ctx.point2_lat:.2f}, lon={ctx.point2_lon:.2f})",
-                stats.missing_timestamps_p2,
+                stats.unavailable_timestamps_p2,
             ),
         ):
-            if missing:
-                entries.append((var, point_label, missing))
+            if unavailable:
+                entries.append((var, point_label, unavailable))
 
     if not entries:
         return None
 
-    filename = "missing_timestamps.txt"
+    filename = "unavailable_timestamps.txt"
     path = output_dir / filename
     total = sum(len(m) for _, _, m in entries)
-    all_missing = sorted({ts for _, _, missing in entries for ts in missing})
-    combined_filter = " ".join(f"--filter-contains {ts}" for ts in all_missing)
+    all_unavailable = sorted(
+        {ts for _, _, unavailable in entries for ts in unavailable}
+    )
+    combined_filter = " ".join(f"--filter-contains {ts}" for ts in all_unavailable)
     lines = [
-        "# Missing timestamps",
+        "# Unavailable timestamps",
         f"# Total: {total} across {len(entries)} (variable, point) combinations.",
         "# Use --filter-contains <timestamp> to retry those source files with backfill.",
         "",
-        f"# Combined retry filter ({len(all_missing)} unique timestamps across all variables):",
+        f"# Combined retry filter ({len(all_unavailable)} unique timestamps across all variables):",
         f"combined-retry-filter: {combined_filter}",
         "",
     ]
-    for var, point_label, missing in entries:
+    for var, point_label, unavailable in entries:
         lines.append(f"## {var} @ {point_label}")
-        lines.append(f"count: {len(missing)}")
-        lines.extend(missing)
+        lines.append(f"count: {len(unavailable)}")
+        lines.extend(unavailable)
         lines.append("")
         lines.append(
-            "retry-filter: " + " ".join(f"--filter-contains {m}" for m in missing)
+            "retry-filter: " + " ".join(f"--filter-contains {m}" for m in unavailable)
         )
         lines.append("")
     path.write_text("\n".join(lines))
@@ -152,11 +154,11 @@ def run_report_nulls(ctx: RunContext) -> None:
     for i, var in enumerate(ctx.variables):
         stats = ctx.stats_for(var)
 
-        null_p1, missing_p1, n_p1, total_p1 = _compute_nulls_for_point(ds_p1, var)
-        null_p2, missing_p2, n_p2, total_p2 = _compute_nulls_for_point(ds_p2, var)
+        null_p1, unavailable_p1, n_p1, total_p1 = _compute_nulls_for_point(ds_p1, var)
+        null_p2, unavailable_p2, n_p2, total_p2 = _compute_nulls_for_point(ds_p2, var)
 
-        stats.missing_timestamps_p1 = missing_p1
-        stats.missing_timestamps_p2 = missing_p2
+        stats.unavailable_timestamps_p1 = unavailable_p1
+        stats.unavailable_timestamps_p2 = unavailable_p2
         stats.null_count_p1 = n_p1
         stats.null_count_p2 = n_p2
         stats.total_count_p1 = total_p1
@@ -177,9 +179,9 @@ def run_report_nulls(ctx: RunContext) -> None:
         _draw_null_trace(axes_c[i, 0], null_p1, "blue", f"{var} — {p1_label}")
         _draw_null_trace(axes_c[i, 1], null_p2, "orange", f"{var} — {p2_label}")
 
-        p1_fmt = _format_missing_summary(missing_p1)
-        p2_fmt = _format_missing_summary(missing_p2)
-        log.info(f"  nulls {var}: P1 missing={p1_fmt} | P2 missing={p2_fmt}")
+        p1_fmt = _format_unavailable_summary(unavailable_p1)
+        p2_fmt = _format_unavailable_summary(unavailable_p2)
+        log.info(f"  nulls {var}: P1 unavailable={p1_fmt} | P2 unavailable={p2_fmt}")
 
     fig_c.suptitle("Null analysis — all variables", fontsize=13)
     fig_c.tight_layout()
@@ -188,10 +190,10 @@ def run_report_nulls(ctx: RunContext) -> None:
     plt.close(fig_c)
     ctx.combined_nulls_plot = combined_path.name
 
-    missing_file = write_missing_timestamps_file(ctx.output_dir, ctx)
-    ctx.missing_timestamps_file = missing_file
-    if missing_file:
-        log.info(f"  wrote missing timestamp list -> {missing_file}")
+    unavailable_file = write_unavailable_timestamps_file(ctx.output_dir, ctx)
+    ctx.unavailable_timestamps_file = unavailable_file
+    if unavailable_file:
+        log.info(f"  wrote unavailable timestamp list -> {unavailable_file}")
 
 
 def report_nulls(
