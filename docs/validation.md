@@ -61,7 +61,7 @@ The directory path itself is dense enough to identify the run: dataset id + vers
 The entry point for every run. It contains, in order:
 
 - Validation and reference dataset identity (name, id, version, URL), time ranges, and scope.
-- Run parameters (ensemble member, spatial points, chosen init/lead/time for the spatial plot, timeseries period).
+- Run parameters: spatial points used by the null analysis (all ensemble members), and for each of the spatial and time series sections the picked ensemble member plus the chosen init/lead/time (spatial) or timeseries period.
 - Links to the three `combined_*.png` images.
 - Unavailable-timestamp summary (count, earliest/latest unavailable per (variable, point), pointer to `unavailable_timestamps.txt` if any were detected).
 - A variables table with nulls at the two points and links to the three per-variable images.
@@ -76,7 +76,7 @@ Work in this order.
 Open `validation_summary.md` first. It provides text-based information which can help identify issues that are harder to view in plots.
 
 - [ ] **Datasets block**: confirm the validation dataset id + version match what you intend to review. Note the reference dataset and its time range — if the reference doesn't cover your validation window, temporal + spatial comparisons will be empty (expected, not a bug).
-- [ ] **Run parameters**: confirm the ensemble member (if any), the chosen spatial time (init/lead for forecasts), and the timeseries period. The spatial plot is a single snapshot — if you see something weird, you can pass `--init-time`/`--lead-time`/`--time` to reproduce deterministically.
+- [ ] **Run parameters**: confirm the ensemble member recorded under each of the spatial and time series subsections (if the dataset has ensembles — the same member is used for both, and the null analysis intentionally runs over all members), the chosen spatial time (init/lead for forecasts), and the timeseries period. The spatial plot is a single snapshot — if you see something weird, you can pass `--init-time`/`--lead-time`/`--time` to reproduce deterministically.
 - [ ] **Unavailable timestamps**: if any, open `unavailable_timestamps.txt`. The file lists exact timestamps by (variable, point) and provides a ready-to-paste `--filter-contains` argument string for a targeted backfill retry. The summary table in `validation_summary.md` also shows the earliest and latest unavailable timestamp per (variable, point), making it easy to spot common patterns across variables about when data is (un)available.
 - [ ] **Variables overview table**: scan the null counts. Unexpected non-zero values are your first lead.
 - [ ] **Per-variable details**: for each variable, compare validation stats to reference stats. Validation min/max that is orders of magnitude off from the reference is a near-certain unit mismatch.

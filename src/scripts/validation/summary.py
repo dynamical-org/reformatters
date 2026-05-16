@@ -233,11 +233,10 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
     lines.append(f"- Validation time range: {_dataset_time_range(ctx)}")
     lines.append(f"- Reference time range:  {_reference_time_range(ctx)}")
     lines.append(f"- Time scope: {scope_line}")
-    lines.append(
-        f"- Ensemble member: "
-        f"{ctx.ensemble_member if ctx.ensemble_member is not None else 'n/a'}"
-    )
     lines.append("")
+    ensemble_member_label = (
+        str(ctx.ensemble_member) if ctx.ensemble_member is not None else "n/a"
+    )
     lines.append("### Unavailable values")
     lines.append("")
     lines.append(f"- Point 1: lat={ctx.point1_lat:.4f}, lon={ctx.point1_lon:.4f}")
@@ -245,6 +244,7 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
     lines.append("")
     lines.append("### Spatial and distribution")
     lines.append("")
+    lines.append(f"- Ensemble member: {ensemble_member_label}")
     lines.append(
         f"- Spatial comparison time: "
         f"{ctx.spatial_time_label or 'n/a'} (reference at {ctx.ref_spatial_time_label or 'n/a'})"
@@ -252,6 +252,7 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
     lines.append("")
     lines.append("### Time series")
     lines.append("")
+    lines.append(f"- Ensemble member: {ensemble_member_label}")
     lines.append(f"- Point 1: lat={ctx.point1_lat:.4f}, lon={ctx.point1_lon:.4f}")
     lines.append(f"- Point 2: lat={ctx.point2_lat:.4f}, lon={ctx.point2_lon:.4f}")
     lines.append(f"- Timeseries period: {ctx.temporal_period_label or 'n/a'}")
