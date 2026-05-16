@@ -44,14 +44,14 @@ data/output/<dataset-id>/<version>_<YYYY-MM-DDTHH-MM>/
 ├── nulls_<var>.png                 # one per variable
 ├── spatial_<var>.png               # one per variable
 ├── temporal_<var>.png              # one per variable
-└── missing_timestamps.txt          # only if any nulls were detected
+└── unavailable_timestamps.txt      # only if any nulls were detected
 ```
 
 The directory path itself is dense enough to identify the run: dataset id + version + minute-precision timestamp. Multiple runs of the same dataset group under a shared `<dataset-id>/` parent.
 
 ### What each plot type shows
 
-- **`nulls_<var>.png`** — null fraction over time at two spatial points. A flat line at 0 on both panels is the healthy outcome. Catches missing source files, partial writes, or a variable that's silently all-NaN at a subset of timestamps. Missing data is expected for some variables; note the pattern.
+- **`nulls_<var>.png`** — null fraction over time at two spatial points. A flat line at 0 on both panels is the healthy outcome. Catches missing source files, partial writes, or a variable that's silently all-NaN at a subset of timestamps. Unavailable data is expected for some variables; note the pattern.
 - **`spatial_<var>.png`** — 3 panels at one time step: reference map (left), validation map (middle), value distribution histogram (right). If the variable isn't in the reference dataset, the left panel reads "Variable not available" and the histogram plots only the validation distribution. Catches flipped / rotated / mis-projected maps, wrong coordinate extents, unit-scale mismatches (different histograms), and over-quantization (visible as banding).
 - **`temporal_<var>.png`** — time series at two spatial points, validation (red) vs reference (blue). If the variable isn't in the reference, only the validation series is plotted. Catches time misalignment, diurnal-cycle phase errors, unit mismatches, trend-level biases, missing/incorrect deaccumulation, and projection errors (uncorrelated / offset timeseries).
 - **`combined_*.png`** — every variable stacked into one tall image per plot type. Use these for a first scroll through the run (seeing multiple variables together helps spot cross-variable inconsistencies — e.g. radiation peaking while cloud cover is also high — and is fast to open in a single viewer). The per-variable PNGs are higher-resolution for detailed inspection.
@@ -63,7 +63,7 @@ The entry point for every run. It contains, in order:
 - Validation and reference dataset identity (name, id, version, URL), time ranges, and scope.
 - Run parameters (ensemble member, spatial points, chosen init/lead/time for the spatial plot, timeseries period).
 - Links to the three `combined_*.png` images.
-- Missing-timestamp summary (count, pointer to `missing_timestamps.txt` if any were detected).
+- Unavailable-timestamp summary (count, earliest/latest unavailable per (variable, point), pointer to `unavailable_timestamps.txt` if any were detected).
 - A variables table with nulls at the two points and links to the three per-variable images.
 - Per-variable details: metadata (units, long/short/standard name, step type), spatial + temporal min/max/mean for both validation and reference, and nulls.
 
@@ -77,7 +77,7 @@ Open `validation_summary.md` first. It provides text-based information which can
 
 - [ ] **Datasets block**: confirm the validation dataset id + version match what you intend to review. Note the reference dataset and its time range — if the reference doesn't cover your validation window, temporal + spatial comparisons will be empty (expected, not a bug).
 - [ ] **Run parameters**: confirm the ensemble member (if any), the chosen spatial time (init/lead for forecasts), and the timeseries period. The spatial plot is a single snapshot — if you see something weird, you can pass `--init-time`/`--lead-time`/`--time` to reproduce deterministically.
-- [ ] **Missing timestamps**: if any, open `missing_timestamps.txt`. The file lists exact timestamps by (variable, point) and provides a ready-to-paste `--filter-contains` argument string for a targeted backfill retry.
+- [ ] **Unavailable timestamps**: if any, open `unavailable_timestamps.txt`. The file lists exact timestamps by (variable, point) and provides a ready-to-paste `--filter-contains` argument string for a targeted backfill retry. The summary table in `validation_summary.md` also shows the earliest and latest unavailable timestamp per (variable, point), making it easy to spot common patterns across variables about when data is (un)available.
 - [ ] **Variables overview table**: scan the null counts. Unexpected non-zero values are your first lead.
 - [ ] **Per-variable details**: for each variable, compare validation stats to reference stats. Validation min/max that is orders of magnitude off from the reference is a near-certain unit mismatch.
 
@@ -100,7 +100,7 @@ For any anomaly, reproduce it deterministically so a fix can be verified:
 
 - If spatial: rerun `run-all` with `--variable <name> --init-time <t> --lead-time <h>` (forecast) or `--time <t>` (analysis).
 - If temporal: the timeseries period is randomized — it's in `validation_summary.md`. Narrow with `--start-date` / `--end-date`.
-- If nulls: use the `retry-filter:` line in `missing_timestamps.txt` to backfill just those timestamps.
+- If nulls: use the `retry-filter:` line in `unavailable_timestamps.txt` to backfill just those timestamps.
 
 ### 3d. Update `validation_summary.md`
 
@@ -134,14 +134,14 @@ Look for each of these in every image.
 - [ ] **No obvious quantization in time series.** Time series which are snapped or binned to a limited set of values or "staircasing" in what should be smooth time series indicates `keep_mantissa_bits` is too low.
 - [ ] **Whole plot matches meteorological expectations.** Look closely for subtly or obviously wrong new types of problems not enumerated here. Visual plots are a ley layer of our defense in depth approach to catching data quality issues. We can't list every possible issue, rather use your meterological knowlege to first define what you expect to see and compare that to what you actually see in the plots.
 
-### Missing data (from `nulls_<var>.png` and `missing_timestamps.txt`)
+### Unavailable data (from `nulls_<var>.png` and `unavailable_timestamps.txt`)
 
 - [ ] **Null fraction is 0 or explained.** Any non-zero null fraction should have a reason: source data unavailable before a date for a specific variable, known source outage, ocean point for a land-only variable. Unexplained nulls are the bug.
-- [ ] **Missing pattern is not structural.** Nulls concentrated at specific lead times, specific hours of day, or specific forecast cycles suggest a processing or indexing bug, not a random source outage.
+- [ ] **Unavailable pattern is not structural.** Nulls concentrated at specific lead times, specific hours of day, or specific forecast cycles suggest a processing or indexing bug, not a random source outage. Use the earliest/latest unavailable columns in the summary table to spot patterns shared across variables (e.g. a consistent earliest-unavailable date points to source coverage starting later).
 
-Note on `step_type` ≠ `instant` variables (accumulation / average / max): the first lead time of each forecast is structurally NaN (there is no prior window to accumulate/average over). The tool excludes that slice from the null count and from `missing_timestamps.txt`, so a "0 / N nulls — none" line for an accumulated variable means *no unexpected* nulls — the structural analysis-step NaN is not counted.
+Note on `step_type` ≠ `instant` variables (accumulation / average / max): the first lead time of each forecast is structurally NaN (there is no prior window to accumulate/average over). The tool excludes that slice from the null count and from `unavailable_timestamps.txt`, so a "0 / N nulls — none" line for an accumulated variable means *no unexpected* nulls — the structural analysis-step NaN is not counted.
 
-For a sampling of unexplained nulls, go manually fetch source data files and inspect them. Do they have the data we expect, or is the data really not available at the source?
+For a sampling of unexplained nulls, go manually fetch source data files and inspect them. Do they have the data we expect, or is the data really unavailable at the source?
 
 ### Cross-dataset checks
 
@@ -181,7 +181,7 @@ uv run src/scripts/validation/plots.py upload <run-dir>             # draft
 uv run src/scripts/validation/plots.py upload <run-dir> --publish   # publish to stable + archive
 ```
 
-`upload` re-renders the HTML, then uploads the entire run directory (`validation_summary.md`, all `*.png`, `missing_timestamps.txt`, `validation_report.html`) to R2.
+`upload` re-renders the HTML, then uploads the entire run directory (`validation_summary.md`, all `*.png`, `unavailable_timestamps.txt`, `validation_report.html`) to R2.
 
 Without `--publish`:
 
@@ -204,7 +204,11 @@ Prints the public URL of `validation_report.html` on completion (e.g. `https://d
 
 ### 5c. Update the summary in place before publishing
 
-Per [3d](#3d-update-validation_summarymd), the run already has a `## Summary` block at the top of `validation_summary.md` written during review. Before running `upload --publish`, edit that block in place: drop `### For further review` items you've followed up on, add notes about specific known issues, and update `### What looks good` if your view has changed. `upload` re-renders the HTML automatically.
+Per [3d](#3d-update-validation_summarymd), the run already has a `## Summary` block at the top of `validation_summary.md` written during review. Before running `upload`, edit that block in place: drop `### For further review` items you've followed up on, add notes about specific known issues, and update `### What looks good` if your view has changed. `upload` re-renders the HTML automatically.
+
+Everything in the `## Summary` section is read by external dataset users, so write it for a public dataset consumer audience. Spell out variable names, expand acronyms, and avoid internal jargon such as "P1"/"P2" (use the explicit lat/lon or describe the point), ticket numbers, internal codenames, or process shorthand. Each item should make sense to someone who has never seen the run directory or our review process.
+
+Do not run `upload --publish` while the report still has a `### For further review` section. Published (non-draft) reports must have every item resolved and the section removed — only `### What looks good` and any user-facing notes about known issues should remain. If items are still unresolved, share a draft (`upload` without `--publish`) instead.
 
 ### 5d. Wire into dynamical-stac
 
