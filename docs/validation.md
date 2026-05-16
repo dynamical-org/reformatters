@@ -206,7 +206,7 @@ Prints the public URL of `validation_report.html` on completion (e.g. `https://d
 
 Per [3d](#3d-update-validation_summarymd), the run already has a `## Summary` block at the top of `validation_summary.md` written during review. Before running `upload`, edit that block in place: drop `### For further review` items you've followed up on, add notes about specific known issues, and update `### What looks good` if your view has changed. `upload` re-renders the HTML automatically.
 
-Everything outside of `### For further review` is read by external dataset users, so write it for a public dataset consumer audience. Spell out variable names, expand acronyms, and avoid internal jargon such as "P1"/"P2" (use the explicit lat/lon or describe the point), ticket numbers, internal codenames, or process shorthand. Each item should make sense to someone who has never seen the run directory or our review process.
+Everything in the `## Summary` section is read by external dataset users, so write it for a public dataset consumer audience. Spell out variable names, expand acronyms, and avoid internal jargon such as "P1"/"P2" (use the explicit lat/lon or describe the point), ticket numbers, internal codenames, or process shorthand. Each item should make sense to someone who has never seen the run directory or our review process.
 
 Do not run `upload --publish` while the report still has a `### For further review` section. Published (non-draft) reports must have every item resolved and the section removed — only `### What looks good` and any user-facing notes about known issues should remain. If items are still unresolved, share a draft (`upload` without `--publish`) instead.
 
