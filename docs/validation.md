@@ -204,9 +204,11 @@ Prints the public URL of `validation_report.html` on completion (e.g. `https://d
 
 ### 5c. Update the summary in place before publishing
 
-Per [3d](#3d-update-validation_summarymd), the run already has a `## Summary` block at the top of `validation_summary.md` written during review. Before running `upload --publish`, edit that block in place: drop `### For further review` items you've followed up on, add notes about specific known issues, and update `### What looks good` if your view has changed. `upload` re-renders the HTML automatically.
+Per [3d](#3d-update-validation_summarymd), the run already has a `## Summary` block at the top of `validation_summary.md` written during review. Before running `upload`, edit that block in place: drop `### For further review` items you've followed up on, add notes about specific known issues, and update `### What looks good` if your view has changed. `upload` re-renders the HTML automatically.
 
-Before publishing a non-draft report, rewrite the `## Summary` text for a public dataset consumer audience. Drafts can use internal shorthand for fast iteration, but the published report is read by external dataset users. Spell out variable names, expand acronyms, and avoid internal jargon such as "P1"/"P2" (use the explicit lat/lon or describe the point), ticket numbers, internal codenames, or process shorthand. Each item should make sense to someone who has never seen the run directory or our review process.
+Everything outside of `### For further review` is read by external dataset users, so write it for a public dataset consumer audience. Spell out variable names, expand acronyms, and avoid internal jargon such as "P1"/"P2" (use the explicit lat/lon or describe the point), ticket numbers, internal codenames, or process shorthand. Each item should make sense to someone who has never seen the run directory or our review process.
+
+Do not run `upload --publish` while the report still has a `### For further review` section. Published (non-draft) reports must have every item resolved and the section removed — only `### What looks good` and any user-facing notes about known issues should remain. If items are still unresolved, share a draft (`upload` without `--publish`) instead.
 
 ### 5d. Wire into dynamical-stac
 
