@@ -195,7 +195,7 @@ class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
         append_dim: AppendDim,
         all_data_vars: Sequence[NoaaDataVar],
         reformat_job_name: str,
-    ) -> tuple[Sequence["RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]"], xr.Dataset]:
+    ) -> tuple[Sequence[RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]], xr.Dataset]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset
         from its current state to include the latest available data.

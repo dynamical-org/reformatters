@@ -1,6 +1,6 @@
 import json
 import subprocess
-from collections.abc import Iterable
+from collections.abc import Sequence
 from datetime import timedelta
 from typing import Any
 from unittest.mock import Mock
@@ -10,13 +10,13 @@ import pytest
 from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common import deploy
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import Job, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 
 
 class ExampleDatasetInDevelopment:
     dataset_id: str = "example-dataset-in-dev"
 
-    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[Job]:
+    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         # This should not be deployed, nor cause issues with other deploys
         raise NotImplementedError("this dataset is in development")
 
@@ -24,7 +24,7 @@ class ExampleDatasetInDevelopment:
 class ExampleDataset1:
     dataset_id: str = "example-dataset-1"
 
-    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[Job]:
+    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="0 0 * * *",

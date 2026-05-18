@@ -50,8 +50,7 @@ from reformatters.provider.model.variant import ProviderModelVariantDataset
 DYNAMICAL_DATASETS = [
     ...,
     ProviderModelVariantDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[ProviderModelIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=ProviderModelIcechunkAwsOpenDataDatasetStorageConfig(),
 ]
 ```
 
@@ -142,23 +141,7 @@ The details here depend on the computing resources and the Zarr storage location
 
 ## 7. Validate
 
-Run the plotting tools and inspect the generated images in `data/output/<dataset-id>/`.
-
-```bash
-uv run src/scripts/validation/plots.py run-all <DATASET_URL>
-```
-
-Common issues to look out for:
-- Unexpected missing data (nulls/holes where you expect coverage).
-- Units vs values mismatch (e.g. mm/h vs mm/s).
-- Over-quantization (step changes in spatial or time series plots due to a too low `keep_mantissa_bits` value)
-- Time misalignment (e.g. diurnal cycle peaks shifted vs a reference dataset).
-
-Notes
-- `DATASET_URL` is the complete, direct URL to the dataset (`bucket-prefix/dataset-id/version`), e.g. `s3://us-west-2.opendata.source.coop/dynamical/ecmwf-ifs-ens-forecast-15-day-0-25-degree/v0.1.0.zarr` or `s3://dynamical-noaa-hrrr/noaa-hrrr-analysis/v0.1.0.icechunk`. The bucket prefix can be found in `__main__.py` and the dataset id and version in the `TemplateConfig.dataset_attributes`.
-- The spatial and timeseries plots will plot the data against a reference dataset (GEFS analysis by default) to highlight unexpected differences.
-- You can also run each validation plot individually, see `uv run src/scripts/validation/plots.py --help`.
-- You can add additional `--variable` flags if side by side plots help add context (e.g. show solar radiation alongside cloud cover).
+Follow [docs/validation.md](validation.md) — it walks through running `run-all`, reading `validation_summary.md`, inspecting every plot, and the full data quality checklist.
 
 ## 8. Update dataset catalog documentation
 

@@ -1,7 +1,7 @@
 import json
 import os
 import subprocess
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from functools import partial
@@ -17,7 +17,6 @@ import xarray as xr
 from pydantic import Field, computed_field
 
 from reformatters.common import (
-    docker,
     parallel_coordination,
     storage,
     template_utils,
@@ -31,6 +30,7 @@ from reformatters.common.kubernetes import (
     Job,
     ReformatCronJob,
     ValidationCronJob,
+    get_deployed_cronjob_image,
 )
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
@@ -68,7 +68,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             template_config_version=self.template_config.version,
         )
 
-    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
+    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """
         Return the kubernetes cron job definitions to operationally
         update and validate this dataset.
@@ -194,7 +194,22 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             "backfill_kubernetes is only supported in prod environment"
         )
 
-        image_tag = docker_image or docker.build_and_push_image()
+        # In an attempt to keep the subclassing API simpler, we are keeping
+        # all resource needs defined right in `operational_kubernetes_resources`.
+        # If for some reason there are _multiple_ ReformatCronJobs returned from
+        # that we'll need to revisit the logic below or this approach.
+        reformat_jobs = [
+            r
+            for r in self.operational_kubernetes_resources(image_tag="placeholder")
+            if isinstance(r, ReformatCronJob)
+        ]
+        assert len(reformat_jobs) == 1, (
+            f"Can't infer kubernetes resources for backfill job from {reformat_jobs}."
+        )
+        reformat_job = reformat_jobs[0]
+
+        image_tag = docker_image or get_deployed_cronjob_image(reformat_job.name)
+        log.info(f"Using image {image_tag}")
 
         template_ds = self._get_template(append_dim_end)
 
@@ -247,20 +262,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 f"--filter-variable-names={variable_name}"
                 for variable_name in filter_variable_names
             )
-
-        # In an attempt to keep the subclassing API simpler, we are keeping
-        # all resource needs defined right in `operational_kubernetes_resources`.
-        # If for some reason there are _multiple_ ReformatCronJobs returned from
-        # that we'll need to revisit the logic below or this approach.
-        reformat_jobs = [
-            r
-            for r in self.operational_kubernetes_resources(image_tag)
-            if isinstance(r, ReformatCronJob)
-        ]
-        assert len(reformat_jobs) == 1, (
-            f"Can't infer kubernetes resources for backfill job from {reformat_jobs}."
-        )
-        reformat_job = reformat_jobs[0]
 
         kubernetes_job = Job(
             command=command,
@@ -504,6 +505,33 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 )
                 log.info(f"Done validating {replica_store}")
 
+    def dataset_urls(
+        self,
+        output_format: Annotated[
+            Literal["text", "json"],
+            typer.Option("--format", help="Output format"),
+        ] = "text",
+    ) -> None:
+        """Print the canonical production URLs for this dataset's primary and replica stores."""
+        primary = self.store_factory.primary_url()
+        replicas = self.store_factory.replica_urls()
+
+        match output_format:
+            case "json":
+                typer.echo(
+                    json.dumps({"primary": primary, "replicas": replicas}, indent=2)
+                )
+            case "text":
+                typer.echo("Primary:")
+                typer.echo(primary)
+                typer.echo("")
+                typer.echo("Replicas:")
+                if replicas:
+                    for url in replicas:
+                        typer.echo(url)
+                else:
+                    typer.echo("(none)")
+
     def get_cli(
         self,
     ) -> typer.Typer:
@@ -514,6 +542,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         app.command()(self.backfill_kubernetes)
         app.command()(self.backfill_local)
         app.command()(self.backfill)
+        app.command()(self.dataset_urls)
         # Avoid method name conflict with pydantic's validate while keeping cli commands consistent
         app.command("validate")(self.validate_dataset)
         return app

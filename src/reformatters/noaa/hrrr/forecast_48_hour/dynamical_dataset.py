@@ -1,5 +1,6 @@
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from datetime import timedelta
+from functools import partial
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -13,11 +14,7 @@ from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
 
 from .region_job import NoaaHrrrForecast48HourRegionJob
 from .template_config import NoaaHrrrForecast48HourTemplateConfig
-from .validators import (
-    check_data_is_current,
-    check_forecast_completeness,
-    check_forecast_recent_nans,
-)
+from .validators import HRRR_EXPECTED_HOUR_0_NAN_VARS, check_forecast_completeness
 
 
 class NoaaHrrrForecast48HourDataset(
@@ -32,7 +29,7 @@ class NoaaHrrrForecast48HourDataset(
         NoaaHrrrForecast48HourRegionJob
     )
 
-    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
+    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Define Kubernetes cron jobs for operational updates and validation."""
         # We pull the 0, 6, 12, and 18 init times in this dataset.
         # HRRR f048 (last lead time) available ~1h48m after init on NOMADS. +3 min buffer.
@@ -67,7 +64,13 @@ class NoaaHrrrForecast48HourDataset(
 
     def validators(self) -> Sequence[validation.DataValidator]:
         return (
-            check_data_is_current,
+            partial(
+                validation.check_forecast_current_data,
+                max_latest_init_time_age=timedelta(hours=7),
+            ),
             check_forecast_completeness,
-            check_forecast_recent_nans,
+            partial(
+                validation.check_forecast_recent_nans,
+                additional_skip_lead_time_0_vars=HRRR_EXPECTED_HOUR_0_NAN_VARS,
+            ),
         )

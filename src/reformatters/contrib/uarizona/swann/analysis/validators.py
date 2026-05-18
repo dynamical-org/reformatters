@@ -1,75 +1,44 @@
 import numpy as np
-import pandas as pd
 import xarray as xr
 
 from reformatters.common import validation
 
 # For regions outside of CONUS, the values in this dataset are expected
 # to be NaNs. We sampled various times across the dataset and determined
-# the expected number of NaNs to be ~46.425% of the data.
-EXPECTED_NAN_PERCENTAGE = 46.425
-MAX_NAN_PERCENTAGE = EXPECTED_NAN_PERCENTAGE + 0.001
-
-
-def check_data_is_current(ds: xr.Dataset) -> validation.ValidationResult:
-    """
-    Check that the data is current within the last 48 hours.
-    """
-    # All times in the dataset are set to start of day, so we need to check
-    # that there is `time` that is within 48 hours from start of day.
-    lag_threshold = pd.Timedelta(days=5)
-    today_start = pd.Timestamp.now().floor("D")
-    latest_init_time_ds = ds.sel(time=slice(today_start - lag_threshold, None))
-    if latest_init_time_ds.sizes["time"] == 0:
-        return validation.ValidationResult(
-            passed=False, message=f"No data found for the last {lag_threshold} hours"
-        )
-
-    return validation.ValidationResult(
-        passed=True,
-        message=f"Data found for the last {lag_threshold} hours",
-    )
-
-
-def check_latest_time_nans(ds: xr.Dataset) -> validation.ValidationResult:
-    """
-    Check that the data does not have more than the expected proportion of NaNs
-    for the latest time step.
-    """
-    sample_ds = ds.isel(time=-1)
-    return _check_nans_in_ds("check_latest_time_nans", sample_ds)
+# the expected fraction of NaNs to be ~0.46425.
+EXPECTED_NAN_FRACTION = 0.46425
+MAX_NAN_FRACTION = EXPECTED_NAN_FRACTION + 0.00001
 
 
 def check_random_time_within_last_year_nans(
     ds: xr.Dataset,
 ) -> validation.ValidationResult:
     """
-    Check that the data does not have more than the expected proportion of NaNs
-    for a random time in the last year, as we pull a years worth of data for each operational
-    update of the dataset.
+    Check NaN fraction at a single random time within the last year.
+
+    The operational update pulls a year's worth of data, so we want to verify
+    older timesteps in that window remain healthy.
     """
     rng = np.random.default_rng()
-    random_time_index = rng.integers(0, 365) + 1
-    sample_ds = ds.isel(time=-random_time_index)
-    return _check_nans_in_ds("check_random_time_within_last_year_nans", sample_ds)
+    random_time_index = int(rng.integers(0, 365)) + 1
+    sample_ds = ds.isel(time=[-random_time_index])
 
-
-def _check_nans_in_ds(
-    check_name: str, sample_ds: xr.Dataset
-) -> validation.ValidationResult:
     problem_vars = []
     for var_name, da in sample_ds.data_vars.items():
-        nan_percentage = da.isnull().mean().compute() * 100
-        if nan_percentage > MAX_NAN_PERCENTAGE:
-            problem_vars.append((var_name, nan_percentage))
+        nan_fraction = float(da.isnull().mean().compute().item())
+        if nan_fraction > MAX_NAN_FRACTION:
+            problem_vars.append((str(var_name), nan_fraction))
 
     if problem_vars:
-        message = f"{check_name}: found excessive NaN values:\n"
-        for var, pct in problem_vars:
-            message += f"- {var}: {pct:.1f}% NaN\n"
+        message = "check_random_time_within_last_year_nans: excessive NaN fraction:\n"
+        for var, fraction in problem_vars:
+            message += f"- {var}: {fraction:.6f} NaN fraction\n"
         return validation.ValidationResult(passed=False, message=message)
 
     return validation.ValidationResult(
         passed=True,
-        message=f"{check_name}: all variables have acceptable NaN percentages (<{MAX_NAN_PERCENTAGE}%) in sampled location of latest data",
+        message=(
+            f"check_random_time_within_last_year_nans: all variables have NaN fraction "
+            f"<= {MAX_NAN_FRACTION:.6f}"
+        ),
     )

@@ -408,7 +408,7 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                 attrs=DataVarAttrs(
                     short_name="tcc",
                     standard_name="cloud_area_fraction",
-                    long_name="Total Cloud Cover",
+                    long_name="Total cloud cover",
                     units="percent",
                     step_type="avg",
                     comment="Average over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z).",

@@ -2,7 +2,7 @@
   "attributes": {
     "dataset_id": "dwd-icon-eu-forecast-5-day",
     "dataset_version": "0.2.0",
-    "name": "DWD ICON-EU forecast, 5 Day",
+    "name": "DWD ICON-EU forecast, 5 day",
     "description": "High-resolution weather forecasts for Europe from the ICON-EU model operated by Deutscher Wetterdienst (DWD).",
     "attribution": "DWD ICON-EU data processed by dynamical.org.",
     "license": "CC-BY-4.0",
@@ -92,7 +92,7 @@
           "short_name": "hcc",
           "standard_name": "cloud_area_fraction_in_atmosphere_layer",
           "units": "percent",
-          "comment": "Cloud Cover (0 - 400 hPa). Different agencies use different short_names for this same parameter: ECMWF: HCC; WMO GRIB table: HCDC.",
+          "comment": "Cloud cover (0 - 400 hPa).",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -181,7 +181,7 @@
           "short_name": "lcc",
           "standard_name": "cloud_area_fraction_in_atmosphere_layer",
           "units": "percent",
-          "comment": "Cloud Cover (800 hPa - Soil). Different agencies use different short_names for this same parameter: ECMWF: LCC; WMO GRIB table: LCDC.",
+          "comment": "Cloud cover (800 hPa - surface).",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -270,7 +270,7 @@
           "short_name": "mcc",
           "standard_name": "cloud_area_fraction_in_atmosphere_layer",
           "units": "percent",
-          "comment": "Cloud Cover (400 - 800 hPa). Different agencies use different short_names for this same parameter: ECMWF: MCC; WMO GRIB table: MCDC.",
+          "comment": "Cloud cover (400 - 800 hPa).",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -623,7 +623,7 @@
           "short_name": "aswdir_s",
           "standard_name": "surface_direct_downwelling_shortwave_flux_in_air",
           "units": "W m-2",
-          "comment": "Downward solar direct radiation flux at the surface, averaged over each forecast step. This quantity is not directly provided by the radiation scheme. It is aposteriori diagnosed from the definition of the surface net shortwave radiation flux.",
+          "comment": "Average value since the previous forecast step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1130,8 +1130,8 @@
           "short_name": "prate",
           "standard_name": "precipitation_flux",
           "units": "kg m-2 s-1",
-          "comment": "Precipitation rate since previous forecast step. TOT_PREC = RAIN_GSP + SNOW_GSP + RAIN_CON + SNOW_CON. Units equivalent to mm/s.",
-          "step_type": "accum",
+          "comment": "Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",
+          "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -1219,7 +1219,6 @@
           "short_name": "prmsl",
           "standard_name": "air_pressure_at_mean_sea_level",
           "units": "Pa",
-          "comment": "Surface pressure reduced to mean sea level",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1396,7 +1395,6 @@
           "short_name": "2r",
           "standard_name": "relative_humidity",
           "units": "percent",
-          "comment": "Relative humidity at 2m above ground. Other short_names used for this parameter: rh, 2r, r.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1485,7 +1483,6 @@
           "short_name": "sde",
           "standard_name": "surface_snow_thickness",
           "units": "m",
-          "comment": "Snow depth in m. It is diagnosed from RHO_SNOW and W_SNOW according to H_SNOW = W_SNOW / RHO_SNOW and is limited to H_SNOW <= 40 m.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1574,7 +1571,7 @@
           "short_name": "sd",
           "standard_name": "lwe_thickness_of_surface_snow_amount",
           "units": "m",
-          "comment": "Set to 0 above water surfaces and snow-free land points.",
+          "comment": "Set to 0 over water surfaces and snow-free land points.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1712,7 +1709,6 @@
           "short_name": "2t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "Temperature at 2m above ground, averaged over all tiles of a grid point. Different agencies use different short_names for this parameter: ECMWF: 2t; NOAA & DWD: t2m.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1797,11 +1793,10 @@
           }
         ],
         "attributes": {
-          "long_name": "Total Cloud Cover",
+          "long_name": "Total cloud cover",
           "short_name": "tcc",
           "standard_name": "cloud_area_fraction",
           "units": "percent",
-          "comment": "Total cloud cover. Different agencies use different short_names for this same parameter: ECMWF: TCC; NOAA & WMO: TCDC.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1948,7 +1943,6 @@
           "short_name": "10fg",
           "standard_name": "wind_speed_of_gust",
           "units": "m s-1",
-          "comment": "Maximum wind gust at 10 m above ground. It is diagnosed from the turbulence state in the atmospheric boundary layer, including a potential enhancement by the SSO parameterization over mountainous terrain. In the presence of deep convection, it contains an additional contribution due to convective gusts.",
           "step_type": "max",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2037,7 +2031,6 @@
           "short_name": "10u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
-          "comment": "Zonal wind (eastward) at 10m above ground",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2126,7 +2119,6 @@
           "short_name": "10v",
           "standard_name": "northward_wind",
           "units": "m s-1",
-          "comment": "Meridional wind (northward) at 10m above ground",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

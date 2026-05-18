@@ -1,5 +1,5 @@
 import subprocess
-from collections.abc import Iterable
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from functools import partial
 from pathlib import Path
@@ -16,7 +16,7 @@ import zarr
 import zarr.errors
 from pydantic import computed_field
 
-from reformatters.common import docker, storage, template_utils, validation
+from reformatters.common import dynamical_dataset, storage, template_utils, validation
 from reformatters.common.config import Config, Env
 from reformatters.common.config_models import (
     BaseInternalAttrs,
@@ -97,7 +97,7 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
     region_job_class: type[ExampleRegionJob] = ExampleRegionJob
     primary_storage_config: ExampleDatasetStorageConfig = ExampleDatasetStorageConfig()
 
-    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
+    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         return [
             ReformatCronJob(
                 name=f"{self.dataset_id}-update",
@@ -134,6 +134,7 @@ def test_dynamical_dataset_methods_exist() -> None:
         "backfill",
         "update",
         "validate_dataset",
+        "dataset_urls",
     ]
     for method in methods:
         assert hasattr(DynamicalDataset, method), f"{method} missing"
@@ -395,7 +396,7 @@ class ExampleDatasetWithThreeCronJobs(
     region_job_class: type[ExampleRegionJob] = ExampleRegionJob
     primary_storage_config: ExampleDatasetStorageConfig = ExampleDatasetStorageConfig()
 
-    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
+    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         return [
             CronJob(
                 command=["archive-grib-files"],
@@ -571,7 +572,9 @@ def test_backfill_kubernetes_overwrite_existing_flag(
     monkeypatch.setattr(xr, "open_zarr", Mock())
 
     monkeypatch.setattr(
-        docker, "build_and_push_image", Mock(return_value="test-image-tag")
+        dynamical_dataset,
+        "get_deployed_cronjob_image",
+        Mock(return_value="test-image-tag"),
     )
     monkeypatch.setattr(subprocess, "run", Mock())
     monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
@@ -618,7 +621,9 @@ def test_backfill_kubernetes_overwrite_existing_flag_fails_if_not_all_stores_exi
     monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
 
     monkeypatch.setattr(
-        docker, "build_and_push_image", Mock(return_value="test-image-tag")
+        dynamical_dataset,
+        "get_deployed_cronjob_image",
+        Mock(return_value="test-image-tag"),
     )
     monkeypatch.setattr(subprocess, "run", Mock())
 

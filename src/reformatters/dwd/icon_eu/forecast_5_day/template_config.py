@@ -73,7 +73,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
         return DatasetAttributes(
             dataset_id="dwd-icon-eu-forecast-5-day",
             dataset_version="0.2.0",
-            name="DWD ICON-EU forecast, 5 Day",
+            name="DWD ICON-EU forecast, 5 day",
             description=(
                 "High-resolution weather forecasts for Europe from the ICON-EU model operated by"
                 " Deutscher Wetterdienst (DWD)."
@@ -94,7 +94,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
             self.append_dim: self.append_dim_coordinates(
                 self.append_dim_start + self.append_dim_frequency
             ),
-            "lead_time": (  # Called "step" in the ICON-EU GRIB files.
+            "lead_time": (
                 pd.timedelta_range("0h", "78h", freq="1h").union(
                     pd.timedelta_range("81h", "120h", freq="3h")
                 )
@@ -106,7 +106,8 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
     def derive_coordinates(
         self, ds: xr.Dataset
     ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
-        """Return a dictionary of non-dimension coordinates for the dataset.
+        """
+        Return a dictionary of non-dimension coordinates for the dataset.
 
         Called whenever len(ds.append_dim) changes.
         """
@@ -313,14 +314,14 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
     @property
     def data_vars(self) -> Sequence[DwdIconEuDataVar]:
         """Define metadata and encoding for each data variable."""
-        # Roughly 12.5MB uncompressed, 2.5MB compressed
+        # ~12MB uncompressed, ~2.4MB compressed
         var_chunks: dict[Dim, int] = {
             "init_time": 1,
             "lead_time": 93,  # All lead times
             "latitude": 219,  # All latitudes / 3
             "longitude": 153,  # All longitudes / 9
         }
-        # Roughly 337MB uncompressed, 67MB compressed
+        # ~321MB uncompressed, ~64MB compressed
         var_shards: dict[Dim, int] = {
             "init_time": 1,
             "lead_time": 93,  # All lead times
@@ -338,15 +339,9 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
 
         default_keep_mantissa_bits = 7
 
+        # Some of the `comment` text is taken from the DWD Database Reference PDF:
+        # https://www.dwd.de/DWD/forschung/nwv/fepub/icon_database_main.pdf
         return [
-            # Some of the `comment` text is taken from the DWD Database Reference PDF:
-            # https://www.dwd.de/DWD/forschung/nwv/fepub/icon_database_main.pdf
-            #
-            # We don't include `alb_rad` (shortwave broadband albedo for
-            # diffuse radiation) in the Zarr because, to quote the DWD
-            # Database Reference: "Values over snow-free land points are based
-            # on a monthly mean MODIS climatology." It's much more data-efficient
-            # to just download those monthly means from DWD.
             DwdIconEuDataVar(
                 name="downward_diffuse_short_wave_radiation_flux_surface",
                 encoding=encoding_float32_default,
@@ -377,12 +372,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Surface direct short-wave radiation flux",
                     units="W m-2",
                     step_type="avg",
-                    comment=(
-                        "Downward solar direct radiation flux at the surface, averaged over each"
-                        " forecast step. This quantity is not directly provided by the radiation"
-                        " scheme. It is aposteriori diagnosed from the definition of the surface"
-                        " net shortwave radiation flux."
-                    ),
+                    comment="Average value since the previous forecast step.",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="aswdir_s",
@@ -419,10 +409,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="High cloud cover",
                     units="percent",
                     step_type="instant",
-                    comment=(
-                        "Cloud Cover (0 - 400 hPa). Different agencies use different short_names"
-                        " for this same parameter: ECMWF: HCC; WMO GRIB table: HCDC."
-                    ),
+                    comment="Cloud cover (0 - 400 hPa).",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="clch",
@@ -438,10 +425,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Low cloud cover",
                     units="percent",
                     step_type="instant",
-                    comment=(
-                        "Cloud Cover (800 hPa - Soil). Different agencies use different short_names"
-                        " for this same parameter: ECMWF: LCC; WMO GRIB table: LCDC."
-                    ),
+                    comment="Cloud cover (800 hPa - surface).",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="clcl",
@@ -457,10 +441,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Medium cloud cover",
                     units="percent",
                     step_type="instant",
-                    comment=(
-                        "Cloud Cover (400 - 800 hPa). Different agencies use different short_names"
-                        " for this same parameter: ECMWF: MCC; WMO GRIB table: MCDC."
-                    ),
+                    comment="Cloud cover (400 - 800 hPa).",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="clcm",
@@ -473,13 +454,9 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                 attrs=DataVarAttrs(
                     short_name="tcc",
                     standard_name="cloud_area_fraction",
-                    long_name="Total Cloud Cover",
+                    long_name="Total cloud cover",
                     units="percent",
                     step_type="instant",
-                    comment=(
-                        "Total cloud cover. Different agencies use different short_names for this"
-                        " same parameter: ECMWF: TCC; NOAA & WMO: TCDC."
-                    ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="clct",
@@ -495,10 +472,6 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     standard_name="surface_snow_thickness",
                     units="m",
                     step_type="instant",
-                    comment=(
-                        "Snow depth in m. It is diagnosed from RHO_SNOW and W_SNOW according to"
-                        " H_SNOW = W_SNOW / RHO_SNOW and is limited to H_SNOW <= 40 m."
-                    ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="h_snow",
@@ -514,7 +487,6 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Pressure reduced to MSL",
                     units="Pa",
                     step_type="instant",
-                    comment="Surface pressure reduced to mean sea level",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="pmsl",
@@ -529,10 +501,6 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="2 metre relative humidity",
                     units="percent",
                     step_type="instant",
-                    comment=(
-                        "Relative humidity at 2m above ground. Other short_names used for this"
-                        " parameter: rh, 2r, r."
-                    ),
                     standard_name="relative_humidity",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
@@ -548,11 +516,6 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="2 metre temperature",
                     units="degree_Celsius",
                     step_type="instant",
-                    comment=(
-                        "Temperature at 2m above ground, averaged over all tiles of a grid point."
-                        " Different agencies use different short_names for this parameter:"
-                        " ECMWF: 2t; NOAA & DWD: t2m."
-                    ),
                     standard_name="air_temperature",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
@@ -568,12 +531,8 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     standard_name="precipitation_flux",
                     long_name="Precipitation rate",
                     units="kg m-2 s-1",
-                    step_type="accum",
-                    comment=(
-                        "Precipitation rate since previous forecast step."
-                        " TOT_PREC = RAIN_GSP + SNOW_GSP + RAIN_CON + SNOW_CON."
-                        " Units equivalent to mm/s."
-                    ),
+                    step_type="avg",
+                    comment="Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="tot_prec",
@@ -591,7 +550,6 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     units="m s-1",
                     step_type="instant",
                     standard_name="eastward_wind",
-                    comment="Zonal wind (eastward) at 10m above ground",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="u_10m",
@@ -607,7 +565,6 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     units="m s-1",
                     step_type="instant",
                     standard_name="northward_wind",
-                    comment="Meridional wind (northward) at 10m above ground",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="v_10m",
@@ -623,13 +580,6 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     standard_name="wind_speed_of_gust",
                     units="m s-1",
                     step_type="max",
-                    comment=(
-                        "Maximum wind gust at 10 m above ground. It is diagnosed from the turbulence"
-                        " state in the atmospheric boundary layer, including a potential"
-                        " enhancement by the SSO parameterization over mountainous terrain."
-                        " In the presence of deep convection, it contains an additional"
-                        " contribution due to convective gusts."
-                    ),
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="vmax_10m",
@@ -645,9 +595,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Snow depth water equivalent",
                     units="m",
                     step_type="instant",
-                    comment=(
-                        "Set to 0 above water surfaces and snow-free land points."
-                    ),
+                    comment="Set to 0 over water surfaces and snow-free land points.",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="w_snow",

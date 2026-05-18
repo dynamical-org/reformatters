@@ -1,4 +1,4 @@
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from datetime import timedelta
 from functools import partial
 
@@ -22,7 +22,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
     )
     region_job_class: type[NoaaMrmsRegionJob] = NoaaMrmsRegionJob
 
-    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
+    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         # Pass 2 has ~60-min latency. Update hourly, 3 min after Pass 2 is expected.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
@@ -70,7 +70,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # precipitation_surface worst-case quarter-sampled NaN is ~36% (most recent
                 # timestamp falls back to radar-only with ~34% structural coverage gaps).
                 # categorical (PrecipFlag) is radar-derived with no gauge latency, similar coverage to radar_only.
-                max_nan_percentage=40,
+                max_nan_fraction=0.40,
                 spatial_sampling="quarter",
                 exclude_vars=gauge_latency_vars + radar_only_var + flash_var,
             ),
@@ -79,16 +79,16 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 max_expected_delay=max_expected_delay,
                 # pass_1 and pass_2 worst-case quarter-sampled NaN is ~45.5% (1 of 3 checked
                 # timestamps is 100% NaN due to gauge-collection latency, rest are ~6%).
-                max_nan_percentage=48,
+                max_nan_fraction=0.48,
                 spatial_sampling="quarter",
                 include_vars=gauge_latency_vars,
             ),
             partial(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
-                # Radar only is ~%34 nan always. With quarter sampling this can get as high as 62.2%.
-                # It is available at all timestamps.
-                max_nan_percentage=63,
+                # Radar only is ~34% NaN always. With quarter sampling this can get as
+                # high as 62.2%. It is available at all timestamps.
+                max_nan_fraction=0.63,
                 spatial_sampling="quarter",
                 include_vars=radar_only_var,
             ),
@@ -97,7 +97,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 max_expected_delay=max_expected_delay,
                 # FLASH QPE/FFG ratio has ~64% structural NaN (outside radar/FFG coverage).
                 # With quarter sampling this can reach ~86%.
-                max_nan_percentage=86,
+                max_nan_fraction=0.86,
                 spatial_sampling="quarter",
                 include_vars=flash_var,
             ),

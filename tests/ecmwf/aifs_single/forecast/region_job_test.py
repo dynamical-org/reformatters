@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from io import StringIO
 from pathlib import Path
 from unittest.mock import Mock
@@ -9,6 +10,7 @@ import xarray as xr
 
 from reformatters.common import template_utils
 from reformatters.common.iterating import item
+from reformatters.common.pydantic import replace
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.ecmwf.aifs_single.forecast.region_job import (
     AIFS_SINGLE_PATH_CHANGE_DATE,
@@ -18,6 +20,7 @@ from reformatters.ecmwf.aifs_single.forecast.region_job import (
 from reformatters.ecmwf.aifs_single.forecast.template_config import (
     EcmwfAifsSingleForecastTemplateConfig,
 )
+from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 
 
 def test_source_file_coord_url_before_path_change() -> None:
@@ -50,6 +53,14 @@ def test_source_file_coord_url_after_path_change() -> None:
     )
     assert coord.get_index_url() == (
         "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
+        "/20250226/00z/aifs-single/0p25/oper/20250226000000-12h-oper-fc.index"
+    )
+    assert coord.get_url("gcs") == (
+        "https://storage.googleapis.com/ecmwf-open-data"
+        "/20250226/00z/aifs-single/0p25/oper/20250226000000-12h-oper-fc.grib2"
+    )
+    assert coord.get_index_url("gcs") == (
+        "https://storage.googleapis.com/ecmwf-open-data"
         "/20250226/00z/aifs-single/0p25/oper/20250226000000-12h-oper-fc.index"
     )
 
@@ -140,11 +151,16 @@ def test_generate_source_file_coords() -> None:
         assert isinstance(coord, EcmwfAifsSingleForecastSourceFileCoord)
 
 
-def test_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
+_EXAMPLE_GRIB_INDEX = """
+{"domain": "g", "date": "20240401", "time": "0000", "expver": "0001", "class": "od", "stream": "oper", "step": "6", "levtype": "sfc", "param": "2t", "_offset": 0, "_length": 665525}
+{"domain": "g", "date": "20240401", "time": "0000", "expver": "0001", "class": "od", "stream": "oper", "step": "6", "levtype": "sfc", "param": "10u", "_offset": 665525, "_length": 700000}
+"""
+
+
+def _make_download_test_region_job() -> EcmwfAifsSingleForecastRegionJob:
     config = EcmwfAifsSingleForecastTemplateConfig()
     template_ds = config.get_template(pd.Timestamp("2024-04-02"))
-
-    region_job = EcmwfAifsSingleForecastRegionJob.model_construct(
+    return EcmwfAifsSingleForecastRegionJob.model_construct(
         tmp_store=Mock(),
         template_ds=template_ds,
         data_vars=config.data_vars,
@@ -152,23 +168,22 @@ def test_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
         region=slice(0, 1),
         reformat_job_name="test",
     )
+
+
+def _t2m_coord() -> EcmwfAifsSingleForecastSourceFileCoord:
+    config = EcmwfAifsSingleForecastTemplateConfig()
     t2m_var = item(v for v in config.data_vars if v.name == "temperature_2m")
-    source_file_coord = EcmwfAifsSingleForecastSourceFileCoord(
+    return EcmwfAifsSingleForecastSourceFileCoord(
         init_time=pd.Timestamp("2024-04-01"),
         lead_time=pd.Timedelta("6h"),
         data_var_group=[t2m_var],
     )
 
-    # Deterministic AIFS index has no "number" or "type" fields
-    example_grib_index = """
-{"domain": "g", "date": "20240401", "time": "0000", "expver": "0001", "class": "od", "stream": "oper", "step": "6", "levtype": "sfc", "param": "2t", "_offset": 0, "_length": 665525}
-{"domain": "g", "date": "20240401", "time": "0000", "expver": "0001", "class": "od", "stream": "oper", "step": "6", "levtype": "sfc", "param": "10u", "_offset": 665525, "_length": 700000}
-"""
-    mock_index_df = pd.read_json(StringIO(example_grib_index), lines=True)
-    monkeypatch.setattr(
-        "pandas.read_json",
-        lambda path, **kwargs: mock_index_df,
-    )
+
+def test_download_file_prefers_gcs(monkeypatch: pytest.MonkeyPatch) -> None:
+    region_job = _make_download_test_region_job()
+    mock_index_df = pd.read_json(StringIO(_EXAMPLE_GRIB_INDEX), lines=True)
+    monkeypatch.setattr("pandas.read_json", lambda path, **kwargs: mock_index_df)
 
     download_to_disk_mock = Mock()
     monkeypatch.setattr(
@@ -176,15 +191,63 @@ def test_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
         download_to_disk_mock,
     )
 
-    region_job.download_file(source_file_coord)
+    region_job.download_file(_t2m_coord())
 
-    # First call is for the index file, second for the GRIB data
+    # First call is the index file, second the GRIB data; both on GCS.
     assert download_to_disk_mock.call_count == 2
-    url, _dataset_id = download_to_disk_mock.call_args_list[1][0]
+    idx_url = download_to_disk_mock.call_args_list[0][0][0]
+    data_url, _dataset_id = download_to_disk_mock.call_args_list[1][0]
     kwargs = download_to_disk_mock.call_args_list[1][1]
 
-    assert "20240401000000-6h-oper-fc.grib2" in url
+    assert "storage.googleapis.com/ecmwf-open-data" in idx_url
+    assert "storage.googleapis.com/ecmwf-open-data" in data_url
+    assert "20240401000000-6h-oper-fc.grib2" in data_url
     assert kwargs["byte_ranges"] == ([0], [665525])
+
+
+def test_download_file_falls_back_to_s3_on_gcs_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    region_job = _make_download_test_region_job()
+    mock_index_df = pd.read_json(StringIO(_EXAMPLE_GRIB_INDEX), lines=True)
+    monkeypatch.setattr("pandas.read_json", lambda path, **kwargs: mock_index_df)
+
+    def fake_download(url: str, *_args: object, **_kwargs: object) -> Mock:
+        if "storage.googleapis.com" in url:
+            raise FileNotFoundError(url)
+        return Mock()
+
+    download_to_disk_mock = Mock(side_effect=fake_download)
+    monkeypatch.setattr(
+        "reformatters.ecmwf.aifs_single.forecast.region_job.http_download_to_disk",
+        download_to_disk_mock,
+    )
+
+    region_job.download_file(_t2m_coord())
+
+    urls = [call[0][0] for call in download_to_disk_mock.call_args_list]
+    assert "storage.googleapis.com" in urls[0]
+    assert all("ecmwf-forecasts.s3" in u for u in urls[1:])
+    assert any("20240401000000-6h-oper-fc.grib2" in u for u in urls)
+
+
+def test_download_file_raises_when_all_sources_fail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    region_job = _make_download_test_region_job()
+    mock_index_df = pd.read_json(StringIO(_EXAMPLE_GRIB_INDEX), lines=True)
+    monkeypatch.setattr("pandas.read_json", lambda path, **kwargs: mock_index_df)
+
+    def always_404(url: str, *_args: object, **_kwargs: object) -> None:
+        raise FileNotFoundError(url)
+
+    monkeypatch.setattr(
+        "reformatters.ecmwf.aifs_single.forecast.region_job.http_download_to_disk",
+        Mock(side_effect=always_404),
+    )
+
+    with pytest.raises(FileNotFoundError):
+        region_job.download_file(_t2m_coord())
 
 
 def test_read_data(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -410,3 +473,51 @@ def test_operational_update_jobs(
     for job in jobs:
         assert isinstance(job, EcmwfAifsSingleForecastRegionJob)
         assert job.data_vars == config.data_vars
+
+
+@pytest.mark.slow
+def test_download_file_from_ecmwf_open_data() -> None:
+    """Download a single recent ECMWF AIFS Single grib file and read all template variables.
+
+    Scoped to a single (init_time, lead_time) so only one grib file is fetched.
+    """
+    template_config = EcmwfAifsSingleForecastTemplateConfig()
+    init_time = (pd.Timestamp.now() - pd.Timedelta(days=5)).floor("D")
+
+    full_template = template_config.get_template(init_time + pd.Timedelta(days=1))
+    region_job = EcmwfAifsSingleForecastRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=full_template,
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    test_ds = full_template.sel(
+        init_time=[init_time],
+        lead_time=[pd.Timedelta("6h")],
+    )
+
+    def check_data_var(data_var: EcmwfDataVar) -> None:
+        for source_coord in region_job.generate_source_file_coords(test_ds, [data_var]):
+            downloaded_coord = replace(
+                source_coord, downloaded_path=region_job.download_file(source_coord)
+            )
+            data = region_job.read_data(downloaded_coord, data_var)
+            assert data.shape == (721, 1440), (
+                f"{data_var.name}: expected shape (721, 1440), got {data.shape}"
+            )
+            assert np.all(np.isfinite(data)), (
+                f"Non-finite values for {data_var.name} at lead_time={source_coord.lead_time}"
+            )
+
+    all_data_vars = [
+        data_var
+        for group in EcmwfAifsSingleForecastRegionJob.source_groups(
+            template_config.data_vars
+        )
+        for data_var in group
+    ]
+    with ThreadPoolExecutor() as executor:
+        list(executor.map(check_data_var, all_data_vars))

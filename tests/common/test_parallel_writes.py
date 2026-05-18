@@ -135,7 +135,7 @@ class ParallelDataset(DynamicalDataset[ParallelDataVar, ParallelSourceFileCoord]
     template_config: ParallelTemplateConfig = ParallelTemplateConfig()
     region_job_class: type[ParallelRegionJob] = ParallelRegionJob
 
-    def operational_kubernetes_resources(self, image_tag: str) -> Iterable[CronJob]:
+    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         return [
             ReformatCronJob(
                 name=f"{self.dataset_id}-update",
@@ -679,7 +679,7 @@ class TestWorkerEdgeCases:
 
 
 def _run_workers(
-    dataset: "ParallelDataset",
+    dataset: ParallelDataset,
     all_jobs: Sequence,
     template_ds: xr.Dataset,
     *,

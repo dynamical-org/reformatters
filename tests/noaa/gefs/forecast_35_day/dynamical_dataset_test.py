@@ -44,9 +44,8 @@ def test_operational_kubernetes_resources(dataset: GefsForecast35DayDataset) -> 
 def test_validators(dataset: GefsForecast35DayDataset) -> None:
     """Test that validators are properly configured."""
     validators = tuple(dataset.validators())
-    assert len(validators) == 2
+    assert len(validators) == 3
     assert validation.check_forecast_current_data in validators
-    assert validation.check_forecast_recent_nans in validators
     assert all(isinstance(v, validation.DataValidator) for v in validators)
 
 

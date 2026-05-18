@@ -26,12 +26,14 @@ def forecast_dataset(rng: np.random.Generator) -> xr.Dataset:
                 rng.standard_normal(
                     (len(init_times), len(lead_times), len(lats), len(lons))
                 ),
+                {"step_type": "instant"},
             ),
             "precipitation": (
                 ["init_time", "lead_time", "latitude", "longitude"],
                 rng.standard_normal(
                     (len(init_times), len(lead_times), len(lats), len(lons))
                 ),
+                {"step_type": "accum"},
             ),
         },
         coords={
@@ -77,7 +79,7 @@ def test_check_forecast_current_data_passes(
     result = validation.check_forecast_current_data(forecast_dataset)
 
     assert result.passed
-    assert "Data found for the latest day" in result.message
+    assert "Data found within" in result.message
 
 
 def test_check_forecast_current_data_fails(
@@ -90,41 +92,127 @@ def test_check_forecast_current_data_fails(
     result = validation.check_forecast_current_data(forecast_dataset)
 
     assert not result.passed
-    assert "No data found for the latest day" in result.message
+    assert "No data found within" in result.message
 
 
-def test_check_forecast_recent_nans_passes(
+def test_check_forecast_current_data_custom_age(
     monkeypatch: pytest.MonkeyPatch, forecast_dataset: xr.Dataset
 ) -> None:
-    """Test that check_forecast_recent_nans passes when NaN percentage is acceptable."""
-    now = pd.Timestamp("2024-01-01 18:00:00")
+    """Custom max_latest_init_time_age tightens the threshold."""
+    # Dataset latest init_time is 2024-01-02 00:00 (5 * 6h after 2024-01-01)
+    now = pd.Timestamp("2024-01-02 10:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda: now)
 
+    # Default 1 day allows it
+    assert validation.check_forecast_current_data(forecast_dataset).passed
+
+    # 6 hour age threshold should fail (latest init is 10 hours ago)
+    result = validation.check_forecast_current_data(
+        forecast_dataset, max_latest_init_time_age=timedelta(hours=6)
+    )
+    assert not result.passed
+
+
+def test_check_forecast_recent_nans_passes(forecast_dataset: xr.Dataset) -> None:
+    """Default (no NaNs allowed) passes for a clean dataset."""
     result = validation.check_forecast_recent_nans(forecast_dataset)
 
     assert result.passed
-    assert "acceptable NaN percentages" in result.message
+    assert "NaN fraction <=" in result.message
 
 
-def test_check_forecast_recent_nans_fails(
-    monkeypatch: pytest.MonkeyPatch, forecast_dataset: xr.Dataset
-) -> None:
-    """Test that check_forecast_recent_nans fails when NaN percentage is too high."""
-    now = pd.Timestamp("2024-01-01 18:00:00")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda: now)
-
+def test_check_forecast_recent_nans_fails(forecast_dataset: xr.Dataset) -> None:
+    """Fails when NaN fraction exceeds threshold."""
     # Add excessive NaNs to the latest init_time
     forecast_dataset["temperature"].loc[
         {"init_time": forecast_dataset.init_time[-1]}
     ] = np.nan
 
     result = validation.check_forecast_recent_nans(
-        forecast_dataset, max_nan_percentage=10
+        forecast_dataset, max_nan_fraction=0.1
     )
 
     assert not result.passed
-    assert "Excessive NaN values found" in result.message
+    assert "Excessive NaN fraction" in result.message
     assert "temperature" in result.message
+
+
+def test_check_forecast_recent_nans_skips_lead_time_0_for_non_instant(
+    forecast_dataset: xr.Dataset,
+) -> None:
+    """lead_time=0 is dropped for vars with step_type != instant."""
+    # NaN out lead_time=0 of the precipitation (step_type=accum) var at latest init_time
+    forecast_dataset["precipitation"].loc[
+        {
+            "init_time": forecast_dataset.init_time[-1],
+            "lead_time": pd.Timedelta(0),
+        }
+    ] = np.nan
+
+    result = validation.check_forecast_recent_nans(forecast_dataset)
+
+    # Should still pass because lead_time=0 is dropped for non-instant vars.
+    assert result.passed
+
+
+def test_check_forecast_recent_nans_additional_skip_lead_time_0_vars(
+    forecast_dataset: xr.Dataset,
+) -> None:
+    """Vars listed in additional_skip_lead_time_0_vars also drop lead_time=0."""
+    # temperature is step_type=instant but we explicitly request its lead_time=0 be dropped.
+    forecast_dataset["temperature"].loc[
+        {
+            "init_time": forecast_dataset.init_time[-1],
+            "lead_time": pd.Timedelta(0),
+        }
+    ] = np.nan
+
+    failed = validation.check_forecast_recent_nans(forecast_dataset)
+    assert not failed.passed
+
+    passed = validation.check_forecast_recent_nans(
+        forecast_dataset, additional_skip_lead_time_0_vars=["temperature"]
+    )
+    assert passed.passed
+
+
+def test_check_forecast_recent_nans_include_exclude_vars(
+    forecast_dataset: xr.Dataset,
+) -> None:
+    """include_vars / exclude_vars limit which vars are checked."""
+    forecast_dataset["temperature"].loc[
+        {"init_time": forecast_dataset.init_time[-1]}
+    ] = np.nan
+
+    # Excluding temperature should make the check pass
+    result = validation.check_forecast_recent_nans(
+        forecast_dataset, exclude_vars=["temperature"]
+    )
+    assert result.passed
+
+    # Including only precipitation should also pass
+    result = validation.check_forecast_recent_nans(
+        forecast_dataset, include_vars=["precipitation"]
+    )
+    assert result.passed
+
+
+def test_check_forecast_recent_nans_init_time_offset(
+    forecast_dataset: xr.Dataset,
+) -> None:
+    """init_time_offset selects which init_time slice to check."""
+    # NaN only the latest init_time
+    forecast_dataset["temperature"].loc[
+        {"init_time": forecast_dataset.init_time[-1]}
+    ] = np.nan
+
+    # Default (-1) targets the bad init_time and fails
+    assert not validation.check_forecast_recent_nans(forecast_dataset).passed
+
+    # Offset -2 targets the still-clean previous init_time and passes
+    assert validation.check_forecast_recent_nans(
+        forecast_dataset, init_time_offset=-2
+    ).passed
 
 
 def test_check_analysis_current_data_passes(
@@ -176,32 +264,34 @@ def test_check_analysis_current_data_custom_delay(
 def test_check_analysis_recent_nans_passes(
     monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
 ) -> None:
-    """Test that check_analysis_recent_nans passes when NaN percentage is acceptable."""
+    """Default (no NaNs allowed) passes for a clean dataset."""
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
     result = validation.check_analysis_recent_nans(analysis_dataset)
 
     assert result.passed
-    assert "acceptable NaN percentages" in result.message
+    assert "NaN fraction <=" in result.message
 
 
 def test_check_analysis_recent_nans_fails(
     monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
 ) -> None:
-    """Test that check_analysis_recent_nans fails when NaN percentage is too high."""
+    """Fails when NaN fraction exceeds threshold."""
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Set all recent data to NaN to ensure the random sample will catch it
+    # Set all recent data to NaN
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
 
     result = validation.check_analysis_recent_nans(
-        analysis_dataset, max_expected_delay=timedelta(hours=12), max_nan_percentage=5
+        analysis_dataset,
+        max_expected_delay=timedelta(hours=12),
+        max_nan_fraction=0.05,
     )
 
     assert not result.passed
-    assert "Excessive NaN values found" in result.message
+    assert "Excessive NaN fraction" in result.message
     assert "temperature" in result.message
 
 
@@ -212,19 +302,22 @@ def test_check_analysis_recent_nans_custom_parameters(
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Set all recent data to NaN to ensure the random sample will catch it
     recent_slice = {"time": slice("2024-01-02", None)}
     analysis_dataset["temperature"].loc[recent_slice] = np.nan
 
-    # Should fail with 5% threshold
+    # Should fail with 0.05 threshold
     result = validation.check_analysis_recent_nans(
-        analysis_dataset, max_expected_delay=timedelta(hours=12), max_nan_percentage=5
+        analysis_dataset,
+        max_expected_delay=timedelta(hours=12),
+        max_nan_fraction=0.05,
     )
     assert not result.passed
 
-    # Should pass with 100% threshold
+    # Should pass with 1.0 threshold
     result = validation.check_analysis_recent_nans(
-        analysis_dataset, max_expected_delay=timedelta(hours=12), max_nan_percentage=100
+        analysis_dataset,
+        max_expected_delay=timedelta(hours=12),
+        max_nan_fraction=1.0,
     )
     assert result.passed
 
@@ -241,55 +334,52 @@ def test_check_analysis_recent_nans_quarter_sampling_passes(
     )
 
     assert result.passed
-    assert "acceptable NaN percentages" in result.message
 
 
 def test_check_analysis_recent_nans_quarter_sampling_fails(
     monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
 ) -> None:
-    """Test that check_analysis_recent_nans fails with quarter sampling when NaN percentage is too high."""
+    """Quarter sampling catches excessive NaNs covering the dataset."""
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Set all recent data to NaN to ensure the quarter sample will catch it
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
 
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
         max_expected_delay=timedelta(hours=12),
-        max_nan_percentage=5,
+        max_nan_fraction=0.05,
         spatial_sampling="quarter",
     )
 
     assert not result.passed
-    assert "Excessive NaN values found" in result.message
+    assert "Excessive NaN fraction" in result.message
     assert "temperature" in result.message
 
 
 def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
     monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
 ) -> None:
-    """Test that check_analysis_recent_nans samples different quarters based on random selection."""
+    """Quarter sampling selects different quarters based on RNG."""
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    # Add NaNs to all quarters to ensure we can test the sampling
     lat_size = len(analysis_dataset.latitude)
     lon_size = len(analysis_dataset.longitude)
 
-    # Set all recent data to NaN first
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
-
-    # Then set one quarter back to valid data (bottom-right quarter)
     analysis_dataset["temperature"].isel(
-        time=slice(-24, None),  # Last 24 hours
+        time=slice(-24, None),
         latitude=slice(lat_size // 2, lat_size),
         longitude=slice(lon_size // 2, lon_size),
     ).values[:] = 1.0
 
-    # Mock RNG to always select bottom-right quarter (both integers calls return 1)
     class MockRngBottomRight:
-        def integers(self, _low: int, _high: int) -> int:
+        def integers(
+            self, _low: int, _high: int, size: int | None = None
+        ) -> int | np.ndarray:
+            if size is not None:
+                return np.full(size, 1)
             return 1
 
     monkeypatch.setattr(
@@ -300,16 +390,17 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
         max_expected_delay=timedelta(hours=12),
-        max_nan_percentage=5,
+        max_nan_fraction=0.05,
         spatial_sampling="quarter",
     )
-
-    # Should pass because bottom-right quarter has valid data
     assert result.passed
 
-    # Mock RNG to select top-left quarter (both integers calls return 0)
     class MockRngTopLeft:
-        def integers(self, _low: int, _high: int) -> int:
+        def integers(
+            self, _low: int, _high: int, size: int | None = None
+        ) -> int | np.ndarray:
+            if size is not None:
+                return np.zeros(size, dtype=int)
             return 0
 
     monkeypatch.setattr(
@@ -320,18 +411,40 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
         max_expected_delay=timedelta(hours=12),
-        max_nan_percentage=5,
+        max_nan_fraction=0.05,
         spatial_sampling="quarter",
     )
+    assert not result.passed
 
-    # Should fail because top-left quarter has NaNs
+
+def test_check_analysis_recent_nans_random_points_sampling(
+    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+) -> None:
+    """random_points strategy selects N spatial points."""
+    now = pd.Timestamp("2024-01-02 12:00:00")
+    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
+
+    result = validation.check_analysis_recent_nans(
+        analysis_dataset,
+        spatial_sampling="random_points",
+    )
+    assert result.passed
+
+    # Inject NaNs at every point so any random sample sees them
+    analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
+    result = validation.check_analysis_recent_nans(
+        analysis_dataset,
+        max_expected_delay=timedelta(hours=12),
+        max_nan_fraction=0.05,
+        spatial_sampling="random_points",
+    )
     assert not result.passed
 
 
 def test_check_analysis_recent_nans_xy_dimensions(
     monkeypatch: pytest.MonkeyPatch, rng: np.random.Generator
 ) -> None:
-    """Test that check_analysis_recent_nans works with x/y dimensions instead of lat/lon."""
+    """check_analysis_recent_nans works with x/y dimensions instead of lat/lon."""
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
@@ -350,15 +463,13 @@ def test_check_analysis_recent_nans_xy_dimensions(
     )
 
     result = validation.check_analysis_recent_nans(ds, spatial_sampling="quarter")
-
     assert result.passed
-    assert "acceptable NaN percentages" in result.message
 
 
-def test_check_analysis_recent_nans_invalid_spatial_sampling(
+def test_check_analysis_recent_nans_invalid_sampling_strategy(
     monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
 ) -> None:
-    """Test that check_analysis_recent_nans raises error for invalid spatial_sampling mode."""
+    """Invalid spatial_sampling values are rejected by assert_never."""
     now = pd.Timestamp("2024-01-02 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
@@ -367,6 +478,118 @@ def test_check_analysis_recent_nans_invalid_spatial_sampling(
             analysis_dataset,
             spatial_sampling="invalid",  # type: ignore[arg-type]
         )
+
+
+def test_check_analysis_recent_nans_all_sampling(
+    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+) -> None:
+    """spatial_sampling='all' reads the full spatial grid."""
+    now = pd.Timestamp("2024-01-02 12:00:00")
+    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
+
+    # Inject NaNs only outside the bounds a random_2x2/random_points sample
+    # could reliably hit — full-grid sampling must still see them.
+    analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
+
+    result = validation.check_analysis_recent_nans(
+        analysis_dataset,
+        spatial_sampling="all",
+        max_nan_fraction=0.05,
+    )
+    assert not result.passed
+    assert "temperature" in result.message
+
+
+def test_spatial_dims_raises_when_unknown(
+    monkeypatch: pytest.MonkeyPatch, rng: np.random.Generator
+) -> None:
+    """Sampling on a dataset without lat/lon or x/y dims raises ValueError."""
+    now = pd.Timestamp("2024-01-02 12:00:00")
+    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
+
+    times = pd.date_range("2024-01-01", periods=48, freq="1h")
+    ds = xr.Dataset(
+        {"temperature": (["time", "row", "col"], rng.standard_normal((48, 10, 10)))},
+        coords={"time": times, "row": np.arange(10), "col": np.arange(10)},
+    )
+
+    with pytest.raises(ValueError, match="Can't infer spatial dimensions"):
+        validation.check_analysis_recent_nans(ds, spatial_sampling="quarter")
+
+
+def test_truncate_shards_truncation() -> None:
+    """_truncate_shards collapses long lists with head/tail and an ellipsis."""
+    shards = [str(i) for i in range(10)]
+    out = validation._truncate_shards(shards, keep=3)
+    assert out == "[0, 1, 2, ..., 7, 8, 9]"
+
+
+def test_check_for_expected_shards_skips_hrrr_categorical(
+    rng: np.random.Generator,
+) -> None:
+    """HRRR categorical vars are allowed to have missing shards (fill_value 0)."""
+    times = pd.date_range("2024-01-01", periods=8, freq="1h")
+    x = np.arange(6)
+    y = np.arange(4)
+
+    ds = xr.Dataset(
+        {
+            "categorical_rain_surface": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+            "temperature_2m": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+        },
+        coords={"time": times, "y": y, "x": x},
+        attrs={"dataset_id": "noaa-hrrr-forecast-48-hour"},
+    )
+    chunk_sizes = (4, 2, 3)
+    shard_sizes = (4, 2, 3)
+    for var in ds.data_vars.values():
+        var.encoding["chunks"] = chunk_sizes
+        var.encoding["shards"] = shard_sizes
+
+    store = zarr.storage.MemoryStore()
+    ds.to_zarr(store, mode="w", consolidated=False)
+
+    # Delete one shard from each variable
+    zarr.core.sync.sync(store.delete("categorical_rain_surface/c/0/0/0"))
+    zarr.core.sync.sync(store.delete("temperature_2m/c/0/0/0"))
+
+    result = validation.check_for_expected_shards(store, ds)
+
+    # Should fail only on temperature_2m; categorical is skipped
+    assert not result.passed
+    assert "temperature_2m" in result.message
+    assert "categorical_rain_surface" not in result.message
+
+
+def test_validate_dataset_raises_on_failed_validator(
+    rng: np.random.Generator,
+) -> None:
+    """validate_dataset raises ValueError listing failed validator messages."""
+    times = pd.date_range("2024-01-01", periods=4, freq="1h")
+    ds = xr.Dataset(
+        {"temperature": (["time", "y", "x"], rng.standard_normal((4, 4, 4)))},
+        coords={"time": times, "y": np.arange(4), "x": np.arange(4)},
+    )
+    store = zarr.storage.MemoryStore()
+    ds.to_zarr(store, mode="w", consolidated=False)
+
+    def passing(ds: xr.Dataset) -> validation.ValidationResult:
+        return validation.ValidationResult(passed=True, message="ok")
+
+    def failing(ds: xr.Dataset) -> validation.ValidationResult:
+        return validation.ValidationResult(passed=False, message="bad thing")
+
+    with pytest.raises(ValueError, match="bad thing"):
+        validation.validate_dataset(store, validators=[passing, failing])
+
+    # Passing-only validators should not raise.
+    validation.validate_dataset(store, validators=[passing])
 
 
 def test_compare_replica_and_primary_coords_divergence(

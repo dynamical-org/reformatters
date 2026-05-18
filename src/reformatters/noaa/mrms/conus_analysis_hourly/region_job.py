@@ -241,7 +241,7 @@ class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
         all_data_vars: Sequence[NoaaMrmsDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence["RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]"],
+        Sequence[RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]],
         xr.Dataset,
     ]:
         existing_ds = xr.open_zarr(primary_store, chunks=None, decode_timedelta=True)

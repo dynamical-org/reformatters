@@ -24,6 +24,9 @@ from reformatters.contrib.noaa.ndvi_cdr.analysis import (
 )
 from reformatters.contrib.uarizona.swann.analysis import UarizonaSwannAnalysisDataset
 from reformatters.dwd.icon_eu.forecast_5_day import DwdIconEuForecast5DayDataset
+from reformatters.ecmwf.aifs_ens.forecast import (
+    EcmwfAifsEnsForecastDataset,
+)
 from reformatters.ecmwf.aifs_single.forecast import (
     EcmwfAifsSingleForecastDataset,
 )
@@ -90,6 +93,14 @@ class EcmwfAifsSingleIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
     format: DatasetFormat = DatasetFormat.ICECHUNK
 
 
+class EcmwfAifsEnsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
+    """ECMWF AIFS ENS in Icechunk on AWS Open Data."""
+
+    base_path: str = "s3://dynamical-ecmwf-aifs-ens"
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
 class NoaaMrmsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
     """NOAA MRMS in Icechunk on AWS Open Data."""
 
@@ -126,8 +137,6 @@ class UpstreamGriddedZarrsDatasetStorageConfig(StorageConfig):
 
 
 # Registry of all DynamicalDatasets.
-# Datasets that have not yet been ported over to the new DynamicalDataset pattern
-# are excluded here until they are refactored.
 DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     # NOAA
     NoaaGfsForecastDataset(
@@ -169,10 +178,12 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
             EcmwfAifsSingleIcechunkAwsOpenDataDatasetStorageConfig()
         ],
     ),
+    EcmwfAifsEnsForecastDataset(
+        primary_storage_config=EcmwfAifsEnsIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
     # DWD
     DwdIconEuForecast5DayDataset(
         primary_storage_config=DwdIconEuIcechunkAwsOpenDataDatasetStorageConfig(),
-        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     # Contrib
     UarizonaSwannAnalysisDataset(
