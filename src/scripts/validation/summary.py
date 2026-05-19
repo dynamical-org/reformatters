@@ -195,9 +195,7 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
                 )
 
     lines: list[str] = []
-    display_ver = "v" + val_ver.removeprefix("v")
-    lines.append(f"# Dataset validation report — `{val_id}` `{display_ver}`")
-    lines.append("")
+    # No H1 here — the dynamical.org page template generates the title from the catalog entry.
     lines.append(
         f"This dataset validation report plots a sample of values from the "
         f"{val_name} dataset over time and across space, comparing where possible "
