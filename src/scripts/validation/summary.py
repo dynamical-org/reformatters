@@ -52,31 +52,39 @@ def _reference_time_range(ctx: RunContext) -> str:
     return f"time {t_min} → {t_max}"
 
 
-def _stats_line(
+def _stats_row(
     label: str, mn: float | None, mean: float | None, mx: float | None
 ) -> str:
-    return f"- {label}: min={_fmt_num(mn)}, mean={_fmt_num(mean)}, max={_fmt_num(mx)}"
+    return f"| {label} | {_fmt_num(mn)} | {_fmt_num(mean)} | {_fmt_num(mx)} |"
 
 
-def _variable_section(stats: VariableStats, ctx: RunContext) -> str:
-    lines = [
-        f"### `{stats.name}`",
-        "",
+def _metadata_table(stats: VariableStats) -> list[str]:
+    return [
         "**Metadata**",
         "",
-        f"- units: `{stats.units or 'n/a'}`",
-        f"- long_name: {stats.long_name or 'n/a'}",
-        f"- short_name: {stats.short_name or 'n/a'}",
-        f"- standard_name: {stats.standard_name or 'n/a'}",
-        f"- step_type: {stats.step_type or 'n/a'}",
+        "| Field | Value |",
+        "|---|---|",
+        f"| units | `{stats.units or 'n/a'}` |",
+        f"| long_name | {stats.long_name or 'n/a'} |",
+        f"| short_name | {stats.short_name or 'n/a'} |",
+        f"| standard_name | {stats.standard_name or 'n/a'} |",
+        f"| step_type | {stats.step_type or 'n/a'} |",
         "",
-        "**Spatial comparison**",
+    ]
+
+
+def _spatial_table(stats: VariableStats, ctx: RunContext) -> list[str]:
+    if stats.ref_available_spatial:
+        ref_clause = f"reference at {ctx.ref_spatial_time_label or 'n/a'}"
+    else:
+        ref_clause = "reference not available"
+    lines = [
+        f"**Spatial** — snapshot at {stats.spatial_time_label or 'n/a'} ({ref_clause})",
         "",
-        f"- plot: `{stats.spatial_plot or 'n/a'}`",
-        f"- time: {stats.spatial_time_label or 'n/a'} "
-        f"(reference at {ctx.ref_spatial_time_label or 'n/a'})",
-        _stats_line(
-            "validation",
+        "| Source | min | mean | max |",
+        "|---|---|---|---|",
+        _stats_row(
+            "Validation",
             stats.val_spatial_min,
             stats.val_spatial_mean,
             stats.val_spatial_max,
@@ -84,26 +92,25 @@ def _variable_section(stats: VariableStats, ctx: RunContext) -> str:
     ]
     if stats.ref_available_spatial:
         lines.append(
-            _stats_line(
-                "reference",
+            _stats_row(
+                "Reference",
                 stats.ref_spatial_min,
                 stats.ref_spatial_mean,
                 stats.ref_spatial_max,
             )
         )
-    else:
-        lines.append("- reference:  variable not available in reference dataset")
-    lines += [
+    lines.append("")
+    return lines
+
+
+def _temporal_table(stats: VariableStats, ctx: RunContext) -> list[str]:
+    lines = [
+        f"**Temporal** — period {ctx.temporal_period_label or 'n/a'}",
         "",
-        "**Temporal comparison**",
-        "",
-        f"- plot: `{stats.temporal_plot or 'n/a'}`",
-        f"- period: {ctx.temporal_period_label or 'n/a'}",
-        "",
-        f"P1 (lat={ctx.point1_lat:.2f}, lon={ctx.point1_lon:.2f}):",
-        "",
-        _stats_line(
-            "validation",
+        "| Source | min | mean | max |",
+        "|---|---|---|---|",
+        _stats_row(
+            "P1 Validation",
             stats.val_temporal_min_p1,
             stats.val_temporal_mean_p1,
             stats.val_temporal_max_p1,
@@ -111,49 +118,88 @@ def _variable_section(stats: VariableStats, ctx: RunContext) -> str:
     ]
     if stats.ref_available_temporal:
         lines.append(
-            _stats_line(
-                "reference",
+            _stats_row(
+                "P1 Reference",
                 stats.ref_temporal_min_p1,
                 stats.ref_temporal_mean_p1,
                 stats.ref_temporal_max_p1,
             )
         )
-    else:
-        lines.append("- reference:  variable not available in reference dataset")
-    lines += [
-        "",
-        f"P2 (lat={ctx.point2_lat:.2f}, lon={ctx.point2_lon:.2f}):",
-        "",
-        _stats_line(
-            "validation",
+    lines.append(
+        _stats_row(
+            "P2 Validation",
             stats.val_temporal_min_p2,
             stats.val_temporal_mean_p2,
             stats.val_temporal_max_p2,
-        ),
-    ]
+        )
+    )
     if stats.ref_available_temporal:
         lines.append(
-            _stats_line(
-                "reference",
+            _stats_row(
+                "P2 Reference",
                 stats.ref_temporal_min_p2,
                 stats.ref_temporal_mean_p2,
                 stats.ref_temporal_max_p2,
             )
         )
-    else:
-        lines.append("- reference:  variable not available in reference dataset")
+    lines.append("")
+    return lines
 
-    lines += [
-        "",
-        "**Nulls**",
-        "",
-        f"- P1 nulls: {_fmt_count(stats.null_count_p1, stats.total_count_p1)} — "
-        f"{_unavailable_summary(stats.unavailable_timestamps_p1)}",
-        f"- P2 nulls: {_fmt_count(stats.null_count_p2, stats.total_count_p2)} — "
-        f"{_unavailable_summary(stats.unavailable_timestamps_p2)}",
-        "",
-    ]
+
+def _nulls_line(stats: VariableStats) -> str:
+    p1 = (
+        f"P1: {_fmt_count(stats.null_count_p1, stats.total_count_p1)} "
+        f"({_unavailable_summary(stats.unavailable_timestamps_p1)})"
+    )
+    p2 = (
+        f"P2: {_fmt_count(stats.null_count_p2, stats.total_count_p2)} "
+        f"({_unavailable_summary(stats.unavailable_timestamps_p2)})"
+    )
+    return f"**Nulls** — {p1}; {p2}"
+
+
+def _variable_section(stats: VariableStats, ctx: RunContext) -> str:
+    lines = [f"### `{stats.name}`", ""]
+    lines += _metadata_table(stats)
+    lines += _spatial_table(stats, ctx)
+    lines += _temporal_table(stats, ctx)
+    lines += [_nulls_line(stats), ""]
     return "\n".join(lines)
+
+
+def _run_parameters_table(ctx: RunContext) -> list[str]:
+    is_forecast = is_forecast_dataset(ctx.validation_ds)
+
+    scope_line = "full dataset"
+    if ctx.start_date or ctx.end_date:
+        scope_line = (
+            f"start={ctx.start_date or 'dataset start'}, "
+            f"end={ctx.end_date or 'dataset end'}"
+        )
+
+    spatial_time = (
+        f"{ctx.spatial_time_label or 'n/a'} "
+        f"(reference at {ctx.ref_spatial_time_label or 'n/a'})"
+    )
+
+    rows: list[tuple[str, str]] = [
+        ("Validation dataset type", "forecast" if is_forecast else "analysis"),
+        ("Validation time range", _dataset_time_range(ctx)),
+        ("Reference time range", _reference_time_range(ctx)),
+        ("Time scope", scope_line),
+        ("Point 1", f"lat={ctx.point1_lat:.4f}, lon={ctx.point1_lon:.4f}"),
+        ("Point 2", f"lat={ctx.point2_lat:.4f}, lon={ctx.point2_lon:.4f}"),
+    ]
+    if ctx.ensemble_member is not None:
+        rows.append(("Ensemble member", str(ctx.ensemble_member)))
+    rows += [
+        ("Spatial comparison time", spatial_time),
+        ("Timeseries period", ctx.temporal_period_label or "n/a"),
+    ]
+
+    lines = ["| Parameter | Value |", "|---|---|"]
+    lines += [f"| {label} | {value} |" for label, value in rows]
+    return lines
 
 
 def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
@@ -166,12 +212,6 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
     ref_id = ref.attrs.get("dataset_id", "n/a") if ref is not None else "n/a"
     ref_ver = ref.attrs.get("dataset_version", "n/a") if ref is not None else "n/a"
     ref_name = ref.attrs.get("name", ref_id) if ref is not None else "n/a"
-
-    is_forecast = is_forecast_dataset(ds)
-
-    scope_line = "full dataset"
-    if ctx.start_date or ctx.end_date:
-        scope_line = f"start={ctx.start_date or 'dataset start'}, end={ctx.end_date or 'dataset end'}"
 
     unavailable_rows: list[tuple[str, str, int, int, float, str, str]] = []
     for var in ctx.variables:
@@ -195,9 +235,7 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
                 )
 
     lines: list[str] = []
-    display_ver = "v" + val_ver.removeprefix("v")
-    lines.append(f"# Dataset validation report — `{val_id}` `{display_ver}`")
-    lines.append("")
+    # No H1 here — the dynamical.org page template generates the title from the catalog entry.
     lines.append(
         f"This dataset validation report plots a sample of values from the "
         f"{val_name} dataset over time and across space, comparing where possible "
@@ -227,39 +265,10 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
     lines.append("")
     lines.append("## Run parameters")
     lines.append("")
-    lines.append(
-        f"- Validation dataset type: {'forecast' if is_forecast else 'analysis'}"
-    )
-    lines.append(f"- Validation time range: {_dataset_time_range(ctx)}")
-    lines.append(f"- Reference time range:  {_reference_time_range(ctx)}")
-    lines.append(f"- Time scope: {scope_line}")
-    lines.append("")
-    lines.append("### Unavailable values")
-    lines.append("")
-    lines.append(f"- Point 1: lat={ctx.point1_lat:.4f}, lon={ctx.point1_lon:.4f}")
-    lines.append(f"- Point 2: lat={ctx.point2_lat:.4f}, lon={ctx.point2_lon:.4f}")
-    lines.append("")
-    lines.append("### Spatial and distribution")
-    lines.append("")
-    if ctx.ensemble_member is not None:
-        lines.append(f"- Ensemble member: {ctx.ensemble_member}")
-    lines.append(
-        f"- Spatial comparison time: "
-        f"{ctx.spatial_time_label or 'n/a'} (reference at {ctx.ref_spatial_time_label or 'n/a'})"
-    )
-    lines.append("")
-    lines.append("### Time series")
-    lines.append("")
-    if ctx.ensemble_member is not None:
-        lines.append(f"- Ensemble member: {ctx.ensemble_member}")
-    lines.append(f"- Point 1: lat={ctx.point1_lat:.4f}, lon={ctx.point1_lon:.4f}")
-    lines.append(f"- Point 2: lat={ctx.point2_lat:.4f}, lon={ctx.point2_lon:.4f}")
-    lines.append(f"- Timeseries period: {ctx.temporal_period_label or 'n/a'}")
+    lines.extend(_run_parameters_table(ctx))
     lines.append("")
 
     lines.append("## Combined plots")
-    lines.append("")
-    lines.append("All variables combined into a single plot for each type of analysis.")
     lines.append("")
     combined_items = [
         ("Unavailable values", ctx.combined_nulls_plot),
