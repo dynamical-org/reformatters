@@ -191,12 +191,10 @@ def finalize(
             )
             # Amend folds the final metadata into the existing temp-branch tip
             # so it does not become an extra snapshot in main's history.
-            try:
-                new_snapshot = session.amend(commit_message)
-            except icechunk.ConflictError:
-                session.rebase(icechunk.ConflictDetector())
-                new_snapshot = session.amend(commit_message)
-            repo.reset_branch("main", new_snapshot, from_snapshot_id=original_snapshot)
+            storage.amend_if_icechunk(commit_message, session.store, [])
+            repo.reset_branch(
+                "main", session.snapshot_id, from_snapshot_id=original_snapshot
+            )
         # Second pass: clean up temp branches.
         for _role, repo in replicas_first:
             if branch_name in repo.list_branches():

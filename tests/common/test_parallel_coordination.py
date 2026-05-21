@@ -67,24 +67,15 @@ class FakeSession:
         self.branch = branch
         self.repo = repo
         self.store: object = MagicMock(name=f"ic_store-{self.id}")
+        self.snapshot_id = f"snap-{self.id}-base"
         self.commit_calls: list[tuple[str, object]] = []
-        self.amend_calls: list[str] = []
-        self.rebase_calls: list[object] = []
 
     def commit(self, message: str, rebase_with: object = None) -> str:
         self.commit_calls.append((message, rebase_with))
         new_snapshot = f"snap-{self.id}-c{len(self.commit_calls)}"
         self.repo._branches[self.branch] = new_snapshot
+        self.snapshot_id = new_snapshot
         return new_snapshot
-
-    def amend(self, message: str) -> str:
-        self.amend_calls.append(message)
-        new_snapshot = f"snap-{self.id}-a{len(self.amend_calls)}"
-        self.repo._branches[self.branch] = new_snapshot
-        return new_snapshot
-
-    def rebase(self, conflict_solver: object) -> None:
-        self.rebase_calls.append(conflict_solver)
 
 
 class FakeRepo:
@@ -123,19 +114,22 @@ class FakeRepo:
 def stub_io(monkeypatch: pytest.MonkeyPatch) -> dict[str, MagicMock]:
     """Replace all real I/O called from parallel_coordination with mocks.
 
-    Autouse so real write_metadata / copy_zarr_metadata / commit_if_icechunk
-    never run during unit tests. Tests that want to inspect call history
-    request this fixture by name.
+    Autouse so real write_metadata / copy_zarr_metadata / commit_if_icechunk /
+    amend_if_icechunk never run during unit tests. Tests that want to inspect
+    call history request this fixture by name.
     """
     write_metadata = MagicMock(name="write_metadata")
     commit_if_icechunk = MagicMock(name="commit_if_icechunk")
+    amend_if_icechunk = MagicMock(name="amend_if_icechunk")
     copy_zarr_metadata = MagicMock(name="copy_zarr_metadata")
     monkeypatch.setattr(pc.template_utils, "write_metadata", write_metadata)
     monkeypatch.setattr(pc.storage, "commit_if_icechunk", commit_if_icechunk)
+    monkeypatch.setattr(pc.storage, "amend_if_icechunk", amend_if_icechunk)
     monkeypatch.setattr(pc, "copy_zarr_metadata", copy_zarr_metadata)
     return {
         "write_metadata": write_metadata,
         "commit_if_icechunk": commit_if_icechunk,
+        "amend_if_icechunk": amend_if_icechunk,
         "copy_zarr_metadata": copy_zarr_metadata,
     }
 
@@ -521,10 +515,18 @@ class TestFinalize:
         assert primary_repo.reset_calls[0][2] == "snap-primary-init"
         assert replica_repo.reset_calls[0][2] == "snap-replica-init"
 
-        # Amend happened per repo before reset_branch (folds final metadata
-        # into the temp-branch tip rather than adding a new snapshot).
-        assert len(primary_repo.sessions[0].amend_calls) == 1
-        amend_msg = primary_repo.sessions[0].amend_calls[0]
+        # amend_if_icechunk called once per repo with the per-repo session
+        # store as primary_store and an empty replicas list (per-repo work is
+        # serialized in finalize so each call updates exactly one repo).
+        assert stub_io["amend_if_icechunk"].call_count == 2
+        for repo in (replica_repo, primary_repo):
+            session = repo.sessions[0]
+            stub_io["amend_if_icechunk"].assert_any_call(
+                stub_io["amend_if_icechunk"].call_args_list[0].args[0],
+                session.store,
+                [],
+            )
+        amend_msg = stub_io["amend_if_icechunk"].call_args_list[0].args[0]
         assert amend_msg.startswith("Update at ")
         assert amend_msg.endswith("Z")
 

@@ -468,6 +468,40 @@ class TestIcechunkParallelWrites:
         branches = list(repo.list_branches())
         assert branches == ["main"]
 
+    def test_backfill_adds_exactly_one_snapshot_to_main(self, tmp_path: Path) -> None:
+        """Per docs/parallel_processing.md: regardless of how many workers run or
+        how many intermediate writes happen on the temp branch, main's ancestry
+        gains exactly one new snapshot per backfill. Verified by running a
+        multi-worker backfill and comparing main's ancestry before vs after."""
+        dataset = self._make_dataset(tmp_path)
+        self._init_store(dataset)
+        template_ds = _create_template_ds()
+        repo = dataset.store_factory.icechunk_repos(sort="primary-first")[0][1]
+        before = [a.id for a in repo.ancestry(branch="main")]
+
+        all_jobs = ParallelRegionJob.get_jobs(
+            tmp_store=dataset._tmp_store(),
+            template_ds=template_ds,
+            append_dim="time",
+            all_data_vars=ParallelTemplateConfig().data_vars,
+            reformat_job_name="test",
+        )
+        for worker_index in range(3):
+            dataset._process_region_jobs(
+                all_jobs=all_jobs,
+                worker_index=worker_index,
+                workers_total=3,
+                reformat_job_name="test",
+                template_ds=template_ds,
+                tmp_store=dataset._tmp_store(),
+                update_template_with_results=False,
+            )
+
+        after = [a.id for a in repo.ancestry(branch="main")]
+        # Exactly one snapshot was added to main; the prior ancestry is intact.
+        assert len(after) == len(before) + 1
+        assert after[1:] == before
+
 
 class TestReplicaParallelWrites:
     """Test parallel writes with primary + replica icechunk stores."""

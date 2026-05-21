@@ -16,6 +16,7 @@ from reformatters.common.storage import (
     StoreFactory,
     _get_store_path,
     _icechunk_to_s3fs_storage_options,
+    amend_if_icechunk,
     commit_if_icechunk,
 )
 
@@ -509,6 +510,164 @@ class TestCommitIfIcechunkFailureIsolation:
 
         assert replica.session.commit.call_count == 3
         primary.session.commit.assert_called_once()
+
+
+def test_amend_if_icechunk_amends_icechunk_stores() -> None:
+    mock_icechunk_store = MagicMock(spec=IcechunkStore)
+    mock_icechunk_store.session = MagicMock()
+
+    amend_if_icechunk("test message", mock_icechunk_store, [])
+
+    mock_icechunk_store.session.amend.assert_called_once()
+    _, kwargs = mock_icechunk_store.session.amend.call_args
+    assert kwargs["message"] == "test message"
+
+
+def test_amend_if_icechunk_amends_replicas_before_primary() -> None:
+    call_order: list[str] = []
+
+    mock_primary = MagicMock(spec=IcechunkStore)
+    mock_primary.session = MagicMock()
+    mock_primary.session.amend.side_effect = lambda **_kw: call_order.append("primary")
+
+    mock_replica = MagicMock(spec=IcechunkStore)
+    mock_replica.session = MagicMock()
+    mock_replica.session.amend.side_effect = lambda **_kw: call_order.append("replica")
+
+    amend_if_icechunk("msg", mock_primary, [mock_replica])
+
+    assert call_order == ["replica", "primary"]
+
+
+def test_amend_if_icechunk_skips_non_icechunk_stores() -> None:
+    non_icechunk_primary = MagicMock(spec=zarr.storage.LocalStore)
+    non_icechunk_replica = MagicMock(spec=zarr.storage.LocalStore)
+
+    # Should not raise even though neither store is Icechunk
+    amend_if_icechunk("msg", non_icechunk_primary, [non_icechunk_replica])
+
+    non_icechunk_primary.session = MagicMock()
+    assert (
+        not hasattr(non_icechunk_primary, "session")
+        or not non_icechunk_primary.session.amend.called
+    )
+
+
+def test_amend_if_icechunk_noop_for_empty_stores() -> None:
+    non_icechunk = MagicMock(spec=zarr.storage.LocalStore)
+    amend_if_icechunk("msg", non_icechunk, [])
+    # No assertions needed — just verify it does not raise
+
+
+def test_amend_if_icechunk_amends_multiple_replicas_before_primary() -> None:
+    call_order: list[str] = []
+
+    mock_primary = MagicMock(spec=IcechunkStore)
+    mock_primary.session = MagicMock()
+    mock_primary.session.amend.side_effect = lambda **_kw: call_order.append("primary")
+
+    mock_replica1 = MagicMock(spec=IcechunkStore)
+    mock_replica1.session = MagicMock()
+    mock_replica1.session.amend.side_effect = lambda **_kw: call_order.append(
+        "replica1"
+    )
+
+    mock_replica2 = MagicMock(spec=IcechunkStore)
+    mock_replica2.session = MagicMock()
+    mock_replica2.session.amend.side_effect = lambda **_kw: call_order.append(
+        "replica2"
+    )
+
+    amend_if_icechunk("msg", mock_primary, [mock_replica1, mock_replica2])
+
+    assert call_order.index("replica1") < call_order.index("primary")
+    assert call_order.index("replica2") < call_order.index("primary")
+
+
+class TestAmendIfIcechunkConflictHandling:
+    """ConflictError is handled by rebasing once with ConflictDetector and
+    retrying the amend, all inside a single retry attempt. Non-conflict
+    failures use the outer retry(max_attempts=10) just like commit_if_icechunk."""
+
+    @pytest.fixture(autouse=True)
+    def _no_sleep(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(retry_module.time, "sleep", lambda *_a, **_kw: None)
+
+    def test_rebases_and_retries_amend_on_conflict_error(self) -> None:
+        store = MagicMock(spec=IcechunkStore)
+        store.session = MagicMock()
+        conflict = icechunk.ConflictError("snap-expected", "snap-actual")
+        store.session.amend.side_effect = [conflict, "snap-ok"]
+
+        amend_if_icechunk("msg", store, [])
+
+        assert store.session.amend.call_count == 2
+        store.session.rebase.assert_called_once()
+        # ConflictDetector is the configured solver — workers write disjoint
+        # chunks so the solver must reject genuine concurrent edits.
+        (solver,) = store.session.rebase.call_args.args
+        assert isinstance(solver, icechunk.ConflictDetector)
+
+    def test_does_not_rebase_when_first_amend_succeeds(self) -> None:
+        store = MagicMock(spec=IcechunkStore)
+        store.session = MagicMock()
+        store.session.amend.return_value = "snap-ok"
+
+        amend_if_icechunk("msg", store, [])
+
+        store.session.amend.assert_called_once()
+        store.session.rebase.assert_not_called()
+
+    def test_outer_retry_runs_up_to_10_times_on_non_conflict_failure(self) -> None:
+        store = MagicMock(spec=IcechunkStore)
+        store.session = MagicMock()
+        store.session.amend.side_effect = RuntimeError("transient")
+
+        with pytest.raises(RuntimeError, match="transient"):
+            amend_if_icechunk("msg", store, [])
+
+        # retry() runs the inner function 10 times; rebase is never reached
+        # because RuntimeError is not a ConflictError.
+        assert store.session.amend.call_count == 10
+        store.session.rebase.assert_not_called()
+
+    def test_transient_failure_retried_then_succeeds(self) -> None:
+        store = MagicMock(spec=IcechunkStore)
+        store.session = MagicMock()
+        attempts = {"n": 0}
+
+        def flaky_amend(**_kw: object) -> str:
+            attempts["n"] += 1
+            if attempts["n"] < 3:
+                raise RuntimeError("transient")
+            return "snap-ok"
+
+        store.session.amend.side_effect = flaky_amend
+        amend_if_icechunk("msg", store, [])
+        assert store.session.amend.call_count == 3
+
+
+class TestAmendIfIcechunkFailureIsolation:
+    """Same invariant as commit_if_icechunk: a permanently-failing replica must
+    not leave the primary ahead, since primary drives future work."""
+
+    @pytest.fixture(autouse=True)
+    def _no_sleep(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(retry_module.time, "sleep", lambda *_a, **_kw: None)
+
+    def test_primary_not_amended_when_replica_amend_fails(self) -> None:
+        primary = MagicMock(spec=IcechunkStore)
+        primary.session = MagicMock()
+
+        replica = MagicMock(spec=IcechunkStore)
+        replica.session = MagicMock()
+        replica.session.amend.side_effect = RuntimeError("replica unreachable")
+
+        with pytest.raises(RuntimeError, match="replica unreachable"):
+            amend_if_icechunk("msg", primary, [replica])
+
+        assert replica.session.amend.call_count == 10
+        primary.session.amend.assert_not_called()
 
 
 class TestPrimaryStoreReadonly:
