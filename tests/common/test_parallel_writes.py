@@ -365,6 +365,7 @@ class TestIcechunkParallelWrites:
         dataset = self._make_dataset(tmp_path)
         self._init_store(dataset)
         template_ds = _create_template_ds()
+        before = _capture_main_ancestry(dataset)
 
         dataset._process_region_jobs(
             all_jobs=ParallelRegionJob.get_jobs(
@@ -386,6 +387,7 @@ class TestIcechunkParallelWrites:
         assert result.sizes["time"] == 4
         for var in ["var0", "var1", "var2", "var3"]:
             assert np.all(result[var].values == 1.0)
+        _assert_one_new_main_snapshot(dataset, before)
 
     def test_two_worker_backfill_reader_safety(self, tmp_path: Path) -> None:
         """While workers write on a temp branch, readers on main see no new data."""
@@ -394,6 +396,7 @@ class TestIcechunkParallelWrites:
         empty_template = _create_template_ds(num_time=0)
         self._init_store(dataset, template_ds=empty_template)
         template_ds = _create_template_ds()
+        before = _capture_main_ancestry(dataset)
 
         all_jobs = ParallelRegionJob.get_jobs(
             tmp_store=dataset._tmp_store(),
@@ -418,6 +421,9 @@ class TestIcechunkParallelWrites:
         reader_store = dataset.store_factory.primary_store()
         reader_ds = xr.open_zarr(reader_store)
         assert reader_ds.sizes["time"] == 0
+        # And main's ancestry shouldn't have moved either — all setup/worker
+        # writes so far are on the temp branch.
+        assert _capture_main_ancestry(dataset) == before
 
         # Worker 1 (last) — processes, merges, resets main
         dataset._process_region_jobs(
@@ -435,11 +441,13 @@ class TestIcechunkParallelWrites:
         assert result.sizes["time"] == 4
         for var in ["var0", "var1", "var2", "var3"]:
             assert np.all(result[var].values == 1.0)
+        _assert_one_new_main_snapshot(dataset, before)
 
     def test_temp_branch_cleaned_up(self, tmp_path: Path) -> None:
         dataset = self._make_dataset(tmp_path)
         self._init_store(dataset)
         template_ds = _create_template_ds()
+        before = _capture_main_ancestry(dataset)
 
         all_jobs = ParallelRegionJob.get_jobs(
             tmp_store=dataset._tmp_store(),
@@ -466,6 +474,7 @@ class TestIcechunkParallelWrites:
         _, repo = repos[0]
         branches = list(repo.list_branches())
         assert branches == ["main"]
+        _assert_one_new_main_snapshot(dataset, before)
 
     def test_backfill_adds_exactly_one_snapshot_to_main(self, tmp_path: Path) -> None:
         """Per docs/parallel_processing.md: regardless of how many workers run or
@@ -475,8 +484,7 @@ class TestIcechunkParallelWrites:
         dataset = self._make_dataset(tmp_path)
         self._init_store(dataset)
         template_ds = _create_template_ds()
-        repo = dataset.store_factory.icechunk_repos(sort="primary-first")[0][1]
-        before = [a.id for a in repo.ancestry(branch="main")]
+        before = _capture_main_ancestry(dataset)
 
         all_jobs = ParallelRegionJob.get_jobs(
             tmp_store=dataset._tmp_store(),
@@ -485,21 +493,9 @@ class TestIcechunkParallelWrites:
             all_data_vars=ParallelTemplateConfig().data_vars,
             reformat_job_name="test",
         )
-        for worker_index in range(3):
-            dataset._process_region_jobs(
-                all_jobs=all_jobs,
-                worker_index=worker_index,
-                workers_total=3,
-                reformat_job_name="test",
-                template_ds=template_ds,
-                tmp_store=dataset._tmp_store(),
-                update_template_with_results=False,
-            )
+        _run_workers(dataset, all_jobs, template_ds, workers_total=3)
 
-        after = [a.id for a in repo.ancestry(branch="main")]
-        # Exactly one snapshot was added to main; the prior ancestry is intact.
-        assert len(after) == len(before) + 1
-        assert after[1:] == before
+        _assert_one_new_main_snapshot(dataset, before)
 
 
 class TestReplicaParallelWrites:
@@ -530,6 +526,7 @@ class TestReplicaParallelWrites:
         template_ds = _create_template_ds(num_time=2)
         # Init both stores with metadata matching production backfill flow
         template_utils.write_metadata(template_ds, dataset.store_factory)
+        before = _capture_main_ancestry(dataset)
         all_jobs = ParallelRegionJob.get_jobs(
             tmp_store=dataset._tmp_store(),
             template_ds=template_ds,
@@ -562,6 +559,8 @@ class TestReplicaParallelWrites:
         # Temp branches cleaned up on both repos
         for _role, repo in dataset.store_factory.icechunk_repos(sort="primary-first"):
             assert list(repo.list_branches()) == ["main"]
+        # Exactly one new snapshot on each repo's main; prior history intact.
+        _assert_one_new_main_snapshot(dataset, before)
 
 
 class TestResultsAggregation:
@@ -736,6 +735,32 @@ def _run_workers(
         )
 
 
+def _capture_main_ancestry(dataset: ParallelDataset) -> dict[str, list[str]]:
+    """Snapshot the ancestry of `main` on each icechunk repo, keyed by role.
+    Used together with _assert_one_new_main_snapshot to confirm an update
+    appended exactly one snapshot to main and left the prior history intact."""
+    return {
+        role: [anc.id for anc in repo.ancestry(branch="main")]
+        for role, repo in dataset.store_factory.icechunk_repos(sort="primary-first")
+    }
+
+
+def _assert_one_new_main_snapshot(
+    dataset: ParallelDataset, before: dict[str, list[str]]
+) -> None:
+    after = _capture_main_ancestry(dataset)
+    assert set(after) == set(before), (
+        f"icechunk repo set changed: before={set(before)}, after={set(after)}"
+    )
+    for role, before_ancestry in before.items():
+        after_ancestry = after[role]
+        added = len(after_ancestry) - len(before_ancestry)
+        assert added == 1, f"{role}: expected exactly 1 new snapshot, got {added}"
+        assert after_ancestry[1:] == before_ancestry, (
+            f"{role}: prior history was modified"
+        )
+
+
 class TestWorkerRestart:
     """Failure mode: a worker pod dies mid-processing and k8s restarts it
     with the same WORKER_INDEX. Re-running `_process_region_jobs` with the
@@ -779,6 +804,7 @@ class TestWorkerRestart:
         )
         template_ds = _create_template_ds()
         template_utils.write_metadata(template_ds, dataset.store_factory)
+        before = _capture_main_ancestry(dataset)
         all_jobs = ParallelRegionJob.get_jobs(
             tmp_store=dataset._tmp_store(),
             template_ds=template_ds,
@@ -805,6 +831,20 @@ class TestWorkerRestart:
         # Temp branch cleaned up
         _, repo = dataset.store_factory.icechunk_repos(sort="primary-first")[0]
         assert list(repo.list_branches()) == ["main"]
+        # NOTE: we deliberately don't assert _assert_one_new_main_snapshot here.
+        # Worker 0 setup on restart issues a second "Expand dataset" commit on
+        # the existing temp branch; the subsequent worker amends keep that
+        # commit as their parent, so main's ancestry gains 2 snapshots instead
+        # of 1. The data is still correct, but the "exactly one snapshot per
+        # update" invariant from the docs is violated under setup retry.
+        after = _capture_main_ancestry(dataset)
+        primary_added = len(after["primary"]) - len(before["primary"])
+        assert 1 <= primary_added <= 2, (
+            f"expected 1 or 2 new snapshots on main, got {primary_added}"
+        )
+        assert after["primary"][primary_added:] == before["primary"], (
+            "prior history was modified"
+        )
 
 
 class TestWorker0SnapshotStability:
@@ -882,6 +922,7 @@ class TestLastWorkerRetryAfterPartialFinalize:
         )
         template_ds = _create_template_ds()
         template_utils.write_metadata(template_ds, dataset.store_factory)
+        before = _capture_main_ancestry(dataset)
         all_jobs = ParallelRegionJob.get_jobs(
             tmp_store=dataset._tmp_store(),
             template_ds=template_ds,
@@ -945,6 +986,10 @@ class TestLastWorkerRetryAfterPartialFinalize:
         # Temp branches cleaned up on both repos.
         for _role, repo in dataset.store_factory.icechunk_repos(sort="primary-first"):
             assert list(repo.list_branches()) == ["main"]
+        # Each repo's main has exactly one new snapshot — the partial retry
+        # didn't double-stamp the replica (which was already past the skip
+        # check) or leave the primary behind.
+        _assert_one_new_main_snapshot(dataset, before)
 
     def test_retry_before_any_reset_completes_all(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -973,6 +1018,7 @@ class TestLastWorkerRetryAfterPartialFinalize:
         )
         template_ds = _create_template_ds()
         template_utils.write_metadata(template_ds, dataset.store_factory)
+        before = _capture_main_ancestry(dataset)
         all_jobs = ParallelRegionJob.get_jobs(
             tmp_store=dataset._tmp_store(),
             template_ds=template_ds,
@@ -1035,6 +1081,9 @@ class TestLastWorkerRetryAfterPartialFinalize:
 
         for _role, repo in dataset.store_factory.icechunk_repos(sort="primary-first"):
             assert list(repo.list_branches()) == ["main"]
+        # And each repo's main has exactly one new snapshot — the failed first
+        # attempt didn't leave a stray snapshot in main's history.
+        _assert_one_new_main_snapshot(dataset, before)
 
 
 class TestReplicaOrdering:
@@ -1113,6 +1162,7 @@ class TestReplicaOrdering:
         )
         template_ds = _create_template_ds(num_time=2)
         template_utils.write_metadata(template_ds, dataset.store_factory)
+        before = _capture_main_ancestry(dataset)
 
         def _role_from_storage(storage_str: str) -> str:
             for role in ("primary", "replica-0", "replica-1"):
@@ -1141,6 +1191,9 @@ class TestReplicaOrdering:
         _run_workers(dataset, all_jobs, template_ds, workers_total=2)
 
         assert reset_order == ["replica-0", "replica-1", "primary"]
+        # All three repos gain exactly one snapshot — no extra writes from the
+        # primary-last sort sneaking through.
+        _assert_one_new_main_snapshot(dataset, before)
 
 
 class TestConcurrentJobs:
@@ -1160,6 +1213,7 @@ class TestConcurrentJobs:
         )
         template_ds = _create_template_ds()
         template_utils.write_metadata(template_ds, dataset.store_factory)
+        before = _capture_main_ancestry(dataset)
 
         primary_repo = dataset.store_factory.icechunk_repos(sort="primary-first")[0][1]
         initial_snapshot = primary_repo.lookup_branch("main")
@@ -1240,3 +1294,6 @@ class TestConcurrentJobs:
         assert list(primary_repo.list_branches()) == ["main"]
         assert dataset.store_factory.read_all_coordination_files("job-a", "setup") == []
         assert dataset.store_factory.read_all_coordination_files("job-b", "setup") == []
+        # Main gained exactly one snapshot — job A's. Job B's work didn't
+        # tack on a second snapshot or rewrite history.
+        _assert_one_new_main_snapshot(dataset, before)

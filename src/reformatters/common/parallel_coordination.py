@@ -83,10 +83,7 @@ def parallel_setup(
             ]
             for ic_store in ic_stores:
                 copy_zarr_metadata(template_ds, tmp_store, ic_store)
-            # Must be commit, not amend: this is the first write on the fresh
-            # temp branch, and amend would replace the original main snapshot
-            # in the branch's view of history. Subsequent writes (worker chunks
-            # and finalize) use amend so they collapse into this snapshot.
+            # Must be commit, not amend: this is the first write of the update, becoming the snapshot all future changes in this update are amended into
             storage.commit_if_icechunk(
                 "Expand dataset",
                 ic_stores[0],
@@ -169,11 +166,6 @@ def finalize(
     else:
         updated_template = template_ds
 
-    # If update_template_with_results didn't actually change anything (backfill,
-    # or operational update with no read failures), the temp branch tip already
-    # has the right metadata from setup. Skip the redundant copy + amend and
-    # just reset main to the existing tip. This keeps a no-op finalize from
-    # adding a manifest-only "rewrite" snapshot.
     template_unchanged = updated_template.identical(template_ds)
 
     now = pd.Timestamp.now(tz="UTC")
@@ -201,11 +193,6 @@ def finalize(
                     updated_template, tmp_store, session.store, icechunk_only=True
                 )
 
-                # Amend folds the final metadata into the existing temp-branch tip
-                # so it does not become an extra snapshot in main's history.
-                # Inlined rather than via amend_if_icechunk because we already
-                # iterate one repo at a time; amend_if_icechunk's primary/
-                # replicas split would be misleading here.
                 def _amend(s: icechunk.Session = session) -> str:
                     try:
                         return s.amend(commit_message)
@@ -214,6 +201,8 @@ def finalize(
                         return s.amend(commit_message)
 
                 new_snapshot = retry(_amend, max_attempts=10)
+            # Make our update visible to readers of main.
+            # from_snapshot_id=original_snapshot ensures we don't overwrite another uncoordinated update
             repo.reset_branch("main", new_snapshot, from_snapshot_id=original_snapshot)
         # Second pass: clean up temp branches.
         for _role, repo in replicas_first:
