@@ -17,6 +17,7 @@ from pydantic import TypeAdapter
 from reformatters.common import storage, template_utils
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob, SourceFileResult
+from reformatters.common.retry import retry
 from reformatters.common.storage import StoreFactory
 from reformatters.common.zarr import copy_zarr_metadata
 
@@ -199,10 +200,20 @@ def finalize(
                 copy_zarr_metadata(
                     updated_template, tmp_store, session.store, icechunk_only=True
                 )
+
                 # Amend folds the final metadata into the existing temp-branch tip
                 # so it does not become an extra snapshot in main's history.
-                storage.amend_if_icechunk(commit_message, session.store, [])
-                new_snapshot = session.snapshot_id
+                # Inlined rather than via amend_if_icechunk because we already
+                # iterate one repo at a time; amend_if_icechunk's primary/
+                # replicas split would be misleading here.
+                def _amend(s: icechunk.Session = session) -> str:
+                    try:
+                        return s.amend(commit_message)
+                    except icechunk.ConflictError:
+                        s.rebase(icechunk.ConflictDetector())
+                        return s.amend(commit_message)
+
+                new_snapshot = retry(_amend, max_attempts=10)
             repo.reset_branch("main", new_snapshot, from_snapshot_id=original_snapshot)
         # Second pass: clean up temp branches.
         for _role, repo in replicas_first:

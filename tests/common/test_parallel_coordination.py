@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import icechunk
 import pandas as pd
 import pytest
 import xarray as xr
@@ -69,6 +70,8 @@ class FakeSession:
         self.store: object = MagicMock(name=f"ic_store-{self.id}")
         self.snapshot_id = f"snap-{self.id}-base"
         self.commit_calls: list[tuple[str, object]] = []
+        self.amend_calls: list[str] = []
+        self.rebase_calls: list[object] = []
 
     def commit(self, message: str, rebase_with: object = None) -> str:
         self.commit_calls.append((message, rebase_with))
@@ -76,6 +79,16 @@ class FakeSession:
         self.repo._branches[self.branch] = new_snapshot
         self.snapshot_id = new_snapshot
         return new_snapshot
+
+    def amend(self, message: str) -> str:
+        self.amend_calls.append(message)
+        new_snapshot = f"snap-{self.id}-a{len(self.amend_calls)}"
+        self.repo._branches[self.branch] = new_snapshot
+        self.snapshot_id = new_snapshot
+        return new_snapshot
+
+    def rebase(self, conflict_solver: object) -> None:
+        self.rebase_calls.append(conflict_solver)
 
 
 class FakeRepo:
@@ -114,22 +127,19 @@ class FakeRepo:
 def stub_io(monkeypatch: pytest.MonkeyPatch) -> dict[str, MagicMock]:
     """Replace all real I/O called from parallel_coordination with mocks.
 
-    Autouse so real write_metadata / copy_zarr_metadata / commit_if_icechunk /
-    amend_if_icechunk never run during unit tests. Tests that want to inspect
-    call history request this fixture by name.
+    Autouse so real write_metadata / copy_zarr_metadata / commit_if_icechunk
+    never run during unit tests. Tests that want to inspect call history
+    request this fixture by name.
     """
     write_metadata = MagicMock(name="write_metadata")
     commit_if_icechunk = MagicMock(name="commit_if_icechunk")
-    amend_if_icechunk = MagicMock(name="amend_if_icechunk")
     copy_zarr_metadata = MagicMock(name="copy_zarr_metadata")
     monkeypatch.setattr(pc.template_utils, "write_metadata", write_metadata)
     monkeypatch.setattr(pc.storage, "commit_if_icechunk", commit_if_icechunk)
-    monkeypatch.setattr(pc.storage, "amend_if_icechunk", amend_if_icechunk)
     monkeypatch.setattr(pc, "copy_zarr_metadata", copy_zarr_metadata)
     return {
         "write_metadata": write_metadata,
         "commit_if_icechunk": commit_if_icechunk,
-        "amend_if_icechunk": amend_if_icechunk,
         "copy_zarr_metadata": copy_zarr_metadata,
     }
 
@@ -528,7 +538,6 @@ class TestFinalize:
         assert primary_repo.sessions == []
         assert replica_repo.sessions == []
         stub_io["copy_zarr_metadata"].assert_not_called()
-        stub_io["amend_if_icechunk"].assert_not_called()
 
         # Second pass still deletes each repo's temp branch.
         assert primary_repo.delete_branch_calls == ["temp-branch"]
@@ -583,19 +592,17 @@ class TestFinalize:
             update_template_with_results=True,
         )
 
-        # Per-repo: copy_zarr_metadata + amend_if_icechunk + reset to new
-        # session snapshot. amend_if_icechunk is mocked, so session.snapshot_id
-        # stays at the FakeSession initial value.
-        assert stub_io["amend_if_icechunk"].call_count == 2
-        amend_msg = stub_io["amend_if_icechunk"].call_args_list[0].args[0]
-        assert amend_msg.startswith("Update at ")
-        assert amend_msg.endswith("Z")
+        # Per-repo: a session is opened, copy_zarr_metadata writes the trimmed
+        # metadata, then session.amend with retry-on-conflict produces the new
+        # snapshot, then reset_branch points main at it.
         for repo in (replica_repo, primary_repo):
             session = repo.sessions[0]
-            stub_io["amend_if_icechunk"].assert_any_call(amend_msg, session.store, [])
+            assert len(session.amend_calls) == 1
+            amend_msg = session.amend_calls[0]
+            assert amend_msg.startswith("Update at ")
+            assert amend_msg.endswith("Z")
+            assert session.rebase_calls == []
 
-        # reset_branch's new_snapshot is session.snapshot_id (initial value
-        # since amend is mocked), and from_snapshot_id is the setup snapshot.
         assert primary_repo.reset_calls[0] == (
             "main",
             primary_repo.sessions[0].snapshot_id,
@@ -619,6 +626,81 @@ class TestFinalize:
         # Second pass deletes each repo's temp branch.
         assert primary_repo.delete_branch_calls == ["temp-branch"]
         assert replica_repo.delete_branch_calls == ["temp-branch"]
+
+    def test_icechunk_rebases_and_retries_amend_on_conflict_error(
+        self,
+        tmp_path: Path,
+        stub_io: dict[str, MagicMock],  # noqa: ARG002
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """If a concurrent writer moves the temp branch tip between when our
+        session was opened and when we amend, icechunk raises ConflictError.
+        Finalize must rebase the session with ConflictDetector and retry the
+        amend so the operational update doesn't fail on a transient conflict."""
+        # Skip retry sleep so the test stays fast if retry is invoked.
+        monkeypatch.setattr(pc.time, "sleep", lambda *_a, **_kw: None)
+
+        factory = FakeStoreFactory()
+        primary_repo = FakeRepo(initial_main="snap-primary-init")
+        primary_repo._branches["temp-branch"] = "snap-primary-temp-tip"
+        factory.set_icechunk_repos([("primary", primary_repo)])
+        setup_info: pc.SetupInfo = {"repo_snapshots": {"primary": "snap-primary-init"}}
+
+        # Force the first session.amend to raise ConflictError. The handler
+        # must rebase and re-call amend, which succeeds the second time.
+        original_amend = FakeSession.amend
+        amend_call_count = [0]
+
+        def flaky_amend(self: FakeSession, message: str) -> str:
+            amend_call_count[0] += 1
+            if amend_call_count[0] == 1:
+                raise icechunk.ConflictError("snap-expected", "snap-actual")
+            return original_amend(self, message)
+
+        monkeypatch.setattr(FakeSession, "amend", flaky_amend)
+
+        # Make the template differ so we take the copy + amend path.
+        job = MagicMock()
+        job.update_template_with_results.return_value = xr.Dataset(
+            attrs={"trimmed": True}
+        )
+        merged = {
+            "v": [
+                SourceFileResult(
+                    status=SourceFileStatus.Succeeded,
+                    out_loc={"time": pd.Timestamp("2026-04-15")},
+                    url="u",
+                )
+            ]
+        }
+
+        pc.finalize(
+            factory,  # type: ignore[arg-type]
+            all_jobs=[job],
+            merged_results=merged,
+            reformat_job_name="job",
+            branch_name="temp-branch",
+            template_ds=_template(),
+            tmp_store=tmp_path,
+            setup_info=setup_info,
+            workers_total=1,
+            update_template_with_results=True,
+        )
+
+        session = primary_repo.sessions[0]
+        # First amend raised, then rebase was called, then second amend
+        # succeeded. session.amend_calls only records the successful second
+        # call (the raising one returns before appending), so total tracked
+        # amends == 1 and rebase_calls == 1.
+        assert amend_call_count[0] == 2
+        assert len(session.rebase_calls) == 1
+        assert isinstance(session.rebase_calls[0], icechunk.ConflictDetector)
+        # The new snapshot from the successful amend is what main is reset to.
+        assert primary_repo.reset_calls[0] == (
+            "main",
+            session.snapshot_id,
+            "snap-primary-init",
+        )
 
     def test_skips_reset_when_main_already_moved(
         self, tmp_path: Path, stub_io: dict[str, MagicMock]
