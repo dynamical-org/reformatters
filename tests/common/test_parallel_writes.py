@@ -21,7 +21,6 @@ import pytest
 import xarray as xr
 from pydantic import computed_field
 
-from reformatters.common import parallel_coordination as pc_module
 from reformatters.common import region_job as region_job_module
 from reformatters.common import storage as storage_module
 from reformatters.common import template_utils
@@ -891,21 +890,23 @@ class TestLastWorkerRetryAfterPartialFinalize:
             reformat_job_name="test",
         )
 
-        # Patch copy_zarr_metadata to raise on the 2nd icechunk_only call,
-        # simulating a pod death between the replica and primary reset_branch.
-        # icechunk_only=True is only passed by _finalize, not _parallel_setup.
-        original_copy = pc_module.copy_zarr_metadata
-        finalize_count = [0]
+        # Patch reset_branch to raise on the 2nd call, simulating a pod death
+        # between the replica's and primary's reset (i.e., the replica's reset
+        # already advanced its main, but the primary's never ran).
+        original_reset = icechunk.Repository.reset_branch
+        reset_count = [0]
         should_raise = [True]
 
-        def wrapped_copy(*args: object, **kwargs: object) -> None:
-            if kwargs.get("icechunk_only") and should_raise[0]:
-                finalize_count[0] += 1
-                if finalize_count[0] == 2:
+        def wrapped_reset(
+            self: icechunk.Repository, *args: object, **kwargs: object
+        ) -> object:
+            if should_raise[0]:
+                reset_count[0] += 1
+                if reset_count[0] == 2:
                     raise RuntimeError("simulated pod death between resets")
-            return original_copy(*args, **kwargs)  # type: ignore[arg-type]
+            return original_reset(self, *args, **kwargs)  # type: ignore[arg-type]
 
-        monkeypatch.setattr(pc_module, "copy_zarr_metadata", wrapped_copy)
+        monkeypatch.setattr(icechunk.Repository, "reset_branch", wrapped_reset)
 
         _run_workers(
             dataset, all_jobs, template_ds, workers_total=2, worker_indices=[0]
@@ -949,9 +950,9 @@ class TestLastWorkerRetryAfterPartialFinalize:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Mirror of the above: last worker dies during finalize BEFORE any
-        repo's main has been reset (failure on the first copy_zarr_metadata
-        call, which is for the replica). On retry, neither repo's skip fires
-        and both get fully reset."""
+        repo's main has been reset (failure on the first reset_branch call,
+        which is for the replica). On retry, neither repo's skip fires and
+        both get fully reset."""
         monkeypatch.setattr(
             storage_module,
             "_get_store_path",
@@ -985,21 +986,22 @@ class TestLastWorkerRetryAfterPartialFinalize:
         initial_primary = primary_repo.lookup_branch("main")
         initial_replica = replica_repo.lookup_branch("main")
 
-        # Fail on the 1st icechunk_only copy (the replica in replicas-first order)
-        # — pod dies before any reset_branch. icechunk_only=True is only passed
-        # from _finalize, not _parallel_setup.
-        original_copy = pc_module.copy_zarr_metadata
-        finalize_count = [0]
+        # Fail BEFORE the 1st reset_branch (the replica in primary-last order)
+        # — pod dies before any reset_branch ran.
+        original_reset = icechunk.Repository.reset_branch
+        reset_count = [0]
         should_raise = [True]
 
-        def wrapped_copy(*args: object, **kwargs: object) -> None:
-            if kwargs.get("icechunk_only") and should_raise[0]:
-                finalize_count[0] += 1
-                if finalize_count[0] == 1:
+        def wrapped_reset(
+            self: icechunk.Repository, *args: object, **kwargs: object
+        ) -> object:
+            if should_raise[0]:
+                reset_count[0] += 1
+                if reset_count[0] == 1:
                     raise RuntimeError("simulated pod death before first reset")
-            return original_copy(*args, **kwargs)  # type: ignore[arg-type]
+            return original_reset(self, *args, **kwargs)  # type: ignore[arg-type]
 
-        monkeypatch.setattr(pc_module, "copy_zarr_metadata", wrapped_copy)
+        monkeypatch.setattr(icechunk.Repository, "reset_branch", wrapped_reset)
 
         _run_workers(
             dataset, all_jobs, template_ds, workers_total=2, worker_indices=[0]

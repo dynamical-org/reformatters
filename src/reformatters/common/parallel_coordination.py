@@ -168,10 +168,17 @@ def finalize(
     else:
         updated_template = template_ds
 
+    # If update_template_with_results didn't actually change anything (backfill,
+    # or operational update with no read failures), the temp branch tip already
+    # has the right metadata from setup. Skip the redundant copy + amend and
+    # just reset main to the existing tip. This keeps a no-op finalize from
+    # adding a manifest-only "rewrite" snapshot.
+    template_unchanged = updated_template.identical(template_ds)
+
     now = pd.Timestamp.now(tz="UTC")
     commit_message = f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}"
 
-    # Icechunk: write final (possibly trimmed) metadata on temp branch, commit, reset main.
+    # Icechunk: write final (possibly trimmed) metadata on temp branch, amend, reset main.
     # Uses copy_zarr_metadata (not write_metadata) because the zarr arrays already exist
     # on the temp branch from parallel_setup — we only need to update the metadata files.
     # Process replicas before primary so primary (which drives future work) is last to update.
@@ -185,16 +192,18 @@ def finalize(
             if current_main != original_snapshot:
                 log.info(f"Skipping {role}: main already moved past original snapshot")
                 continue
-            session = repo.writable_session(branch_name)
-            copy_zarr_metadata(
-                updated_template, tmp_store, session.store, icechunk_only=True
-            )
-            # Amend folds the final metadata into the existing temp-branch tip
-            # so it does not become an extra snapshot in main's history.
-            storage.amend_if_icechunk(commit_message, session.store, [])
-            repo.reset_branch(
-                "main", session.snapshot_id, from_snapshot_id=original_snapshot
-            )
+            if template_unchanged:
+                new_snapshot = repo.lookup_branch(branch_name)
+            else:
+                session = repo.writable_session(branch_name)
+                copy_zarr_metadata(
+                    updated_template, tmp_store, session.store, icechunk_only=True
+                )
+                # Amend folds the final metadata into the existing temp-branch tip
+                # so it does not become an extra snapshot in main's history.
+                storage.amend_if_icechunk(commit_message, session.store, [])
+                new_snapshot = session.snapshot_id
+            repo.reset_branch("main", new_snapshot, from_snapshot_id=original_snapshot)
         # Second pass: clean up temp branches.
         for _role, repo in replicas_first:
             if branch_name in repo.list_branches():
