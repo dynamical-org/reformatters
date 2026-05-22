@@ -251,9 +251,13 @@ class TestParallelSetupFirstWorker:
         # Returned SetupInfo reflects what was written.
         assert result == ready
 
-    def test_icechunk_retry_preserves_snapshot_from_ready_json(
-        self, tmp_path: Path
+    def test_icechunk_retry_skips_setup_and_preserves_snapshot_from_ready_json(
+        self, tmp_path: Path, stub_io: dict[str, MagicMock]
     ) -> None:
+        """When ready.json already exists, a prior worker 0 attempt completed
+        setup. parallel_setup must skip the metadata copy + commit (otherwise
+        a second "Expand dataset" snapshot would leak into main's ancestry at
+        finalize) and preserve the prior attempt's repo_snapshots."""
         factory = FakeStoreFactory()
         primary_repo = FakeRepo(initial_main="snap-primary-different-on-retry")
         repos = [("primary", primary_repo)]
@@ -275,12 +279,16 @@ class TestParallelSetupFirstWorker:
             icechunk_repos=repos,  # ty: ignore[invalid-argument-type]
         )
 
-        # setdefault must preserve the prior-attempt snapshot, not refresh from main.
+        # The sentinel snapshot is preserved through to the returned setup_info
+        # and the re-written ready.json.
         assert result["repo_snapshots"]["primary"] == sentinel
         ready = json.loads(factory.files["job"]["setup/ready.json"])
         assert ready["repo_snapshots"]["primary"] == sentinel
-        # create_branch still called, with the preserved sentinel as snapshot.
-        assert primary_repo.create_branch_calls == [("temp-branch", sentinel)]
+        # Setup work on the icechunk side is skipped — the prior attempt
+        # already created the branch and wrote the "Expand dataset" commit.
+        assert primary_repo.create_branch_calls == []
+        stub_io["copy_zarr_metadata"].assert_not_called()
+        stub_io["commit_if_icechunk"].assert_not_called()
 
     def test_icechunk_primary_only_passes_empty_replicas(
         self, tmp_path: Path, stub_io: dict[str, MagicMock]

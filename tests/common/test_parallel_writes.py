@@ -831,20 +831,9 @@ class TestWorkerRestart:
         # Temp branch cleaned up
         _, repo = dataset.store_factory.icechunk_repos(sort="primary-first")[0]
         assert list(repo.list_branches()) == ["main"]
-        # NOTE: we deliberately don't assert _assert_one_new_main_snapshot here.
-        # Worker 0 setup on restart issues a second "Expand dataset" commit on
-        # the existing temp branch; the subsequent worker amends keep that
-        # commit as their parent, so main's ancestry gains 2 snapshots instead
-        # of 1. The data is still correct, but the "exactly one snapshot per
-        # update" invariant from the docs is violated under setup retry.
-        after = _capture_main_ancestry(dataset)
-        primary_added = len(after["primary"]) - len(before["primary"])
-        assert 1 <= primary_added <= 2, (
-            f"expected 1 or 2 new snapshots on main, got {primary_added}"
-        )
-        assert after["primary"][primary_added:] == before["primary"], (
-            "prior history was modified"
-        )
+        # Restart of worker 0 sees ready.json and skips the metadata + commit
+        # entirely, so we still gain exactly one snapshot on main.
+        _assert_one_new_main_snapshot(dataset, before)
 
 
 class TestWorker0SnapshotStability:

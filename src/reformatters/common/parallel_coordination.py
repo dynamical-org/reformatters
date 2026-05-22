@@ -54,42 +54,53 @@ def parallel_setup(
     if is_first:
         template_utils.write_metadata(template_ds, tmp_store)
 
-        # On retry, reuse snapshots from the prior attempt's ready.json so
-        # original_snapshot stays stable. This keeps finalize's
-        # from_snapshot_id check correct if main was written externally
-        # between the first attempt and the retry.
         existing_setup = store_factory.read_all_coordination_files(
             reformat_job_name, "setup"
         )
-        setup_info: SetupInfo = json.loads(existing_setup[0]) if existing_setup else {}
 
-        # Icechunk: create temp branch, write full metadata, commit on branch.
-        # This expands the dataset on the temp branch while readers on "main" are unaffected.
-        # Branch name is deterministic so worker 0 retries reuse the same branch.
-        if icechunk_repos:
-            repo_snapshots = setup_info.setdefault("repo_snapshots", {})
-            for role, repo in icechunk_repos:
-                snapshot = repo_snapshots.setdefault(role, repo.lookup_branch("main"))
-                if branch_name in repo.list_branches():
-                    # Branch already exists from a previous worker 0 attempt — reuse it.
-                    log.info(f"Branch {branch_name} already exists on {role}, reusing")
-                else:
-                    repo.create_branch(branch_name, snapshot)
-            # Copy metadata from local tmp_store to icechunk stores,
-            # expanding dimensions by writing updated zarr.json and coordinate arrays.
-            ic_stores = [
-                repo.writable_session(branch_name).store
-                for _role, repo in icechunk_repos
-            ]
-            for ic_store in ic_stores:
-                copy_zarr_metadata(template_ds, tmp_store, ic_store)
-            # Must be commit, not amend: this is the first write of the update, becoming the snapshot all future changes in this update are amended into
-            storage.commit_if_icechunk(
-                "Expand dataset",
-                ic_stores[0],
-                ic_stores[1:],
-            )
-        # Zarr v3: do NOT expand (readers would see empty holes)
+        setup_info: SetupInfo
+        if existing_setup:
+            # ready.json exists, meaning a prior worker 0 attempt completed
+            # setup (branch + "Expand dataset" commit + ready.json) on every
+            # icechunk repo. Redoing the metadata copy + commit here would
+            # stack a second "Expand dataset" snapshot on the temp branch
+            # that subsequent worker amends keep as their parent, leaking
+            # an extra snapshot into main's ancestry at finalize.
+            setup_info = json.loads(existing_setup[0])
+        else:
+            setup_info = {}
+            # Icechunk: create temp branch, write full metadata, commit on branch.
+            # This expands the dataset on the temp branch while readers on "main" are unaffected.
+            if icechunk_repos:
+                repo_snapshots = setup_info.setdefault("repo_snapshots", {})
+                for role, repo in icechunk_repos:
+                    snapshot = repo_snapshots.setdefault(
+                        role, repo.lookup_branch("main")
+                    )
+                    if branch_name in repo.list_branches():
+                        # Branch exists from a prior attempt that died before
+                        # ready.json was written. Reuse it; the commit below
+                        # will land on top.
+                        log.info(
+                            f"Branch {branch_name} already exists on {role}, reusing"
+                        )
+                    else:
+                        repo.create_branch(branch_name, snapshot)
+                # Copy metadata from local tmp_store to icechunk stores,
+                # expanding dimensions by writing updated zarr.json and coordinate arrays.
+                ic_stores = [
+                    repo.writable_session(branch_name).store
+                    for _role, repo in icechunk_repos
+                ]
+                for ic_store in ic_stores:
+                    copy_zarr_metadata(template_ds, tmp_store, ic_store)
+                # Must be commit, not amend: this is the first write of the update, becoming the snapshot all future changes in this update are amended into
+                storage.commit_if_icechunk(
+                    "Expand dataset",
+                    ic_stores[0],
+                    ic_stores[1:],
+                )
+            # Zarr v3: do NOT expand (readers would see empty holes)
 
         if workers_total > 1:
             store_factory.write_coordination_file(
