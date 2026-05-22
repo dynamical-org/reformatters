@@ -61,11 +61,7 @@ def parallel_setup(
         setup_info: SetupInfo
         if existing_setup:
             # ready.json exists, meaning a prior worker 0 attempt completed
-            # setup (branch + "Expand dataset" commit + ready.json) on every
-            # icechunk repo. Redoing the metadata copy + commit here would
-            # stack a second "Expand dataset" snapshot on the temp branch
-            # that subsequent worker amends keep as their parent, leaking
-            # an extra snapshot into main's ancestry at finalize.
+            # setup (branch + "Expand dataset" commit + ready.json) on every icechunk repo.
             setup_info = json.loads(existing_setup[0])
         else:
             setup_info = {}
@@ -212,6 +208,7 @@ def finalize(
                         return s.amend(commit_message)
 
                 new_snapshot = retry(_amend, max_attempts=10)
+
             # Make our update visible to readers of main.
             # from_snapshot_id=original_snapshot ensures we don't overwrite another uncoordinated update
             repo.reset_branch("main", new_snapshot, from_snapshot_id=original_snapshot)
