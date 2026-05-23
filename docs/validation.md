@@ -168,12 +168,12 @@ For a sampling of unexplained nulls, go manually fetch source data files and ins
 - [ ] **Reference availability.** If the reference dataset doesn't cover your window, `validation_summary.md` will show `variable not available in reference dataset` — that is not a bug in the validation dataset, but spatial / temporal comparisons lose their signal. Consider a different reference or re-run on a time range the reference covers.
 - [ ] **Ensemble member is plausible.** For ensemble datasets `validation_summary.md` records the randomly-selected member. Rerun once more to confirm that a different member also looks right.
 
-## 5. Publishing the report
+## 5. Sharing and publishing the report
 
-Once a run is reviewed, render it to a static HTML report and publish it. Two paths exist:
+Once a run is reviewed, render it to a static HTML report, share it as one or more drafts for internal and external review, and finally publish the approved version. Two storage paths exist:
 
-- **Draft** — every render goes here, timestamped, kept forever. Use for sharing a single run for review without committing to it.
-- **Stable** — the canonical report for a dataset, overwritten by each new publish. Embedded in the dynamical-stac catalog and linked from dynamical.org.
+- **Draft** — every non-final upload goes here, timestamped, kept forever. Use for sharing a single run for review without committing to it.
+- **Stable** — the canonical, published report for a dataset, overwritten by each new publish. Embedded in the dynamical-stac catalog and linked from dynamical.org.
 
 Both paths live in the `dataset-validation-reports` Cloudflare R2 bucket, served publicly at `https://dataset-validation-reports.dynamical.org`. Drafts and previously-published reports are archived forever — only the file at the stable path is overwritten.
 
@@ -194,7 +194,7 @@ The HTML mirrors the markdown 1:1 with two viewing affordances:
 
 `upload` re-renders before uploading, so this command is only needed for local-only previews.
 
-### 5b. Upload — drafts and publish
+### 5b. Upload drafts and publish the final
 
 ```bash
 uv run src/scripts/validation/plots.py upload <run-dir>             # draft
@@ -246,14 +246,14 @@ After the first publish for a dataset, add the report URL to the catalog so it s
 2. The STAC generator surfaces it as an asset with role `validation-report` (type `text/html`).
 3. Run `./scripts/generate` and commit `stac/`.
 
-This is a one-time wiring per dataset. Subsequent `publish-stable` runs update the report contents at the same URL — no STAC change needed.
+This is a one-time wiring per dataset. Subsequent `upload --publish` runs update the report contents at the same URL — no STAC change needed.
 
 ### Configuration
 
-`publish-draft` and `publish-stable` read R2 credentials from these environment variables:
+`upload` (both for uploading drafts and for publishing) reads R2 credentials from these environment variables:
 
 - `R2_VALIDATION_REPORTS_ENDPOINT_URL`
 - `R2_VALIDATION_REPORTS_ACCESS_KEY_ID`
 - `R2_VALIDATION_REPORTS_SECRET_ACCESS_KEY`
 
-Scoped to the `dataset-validation-reports` bucket. Set them in the environment before running the publish commands.
+Scoped to the `dataset-validation-reports` bucket. Set them in the environment before running `upload`.
