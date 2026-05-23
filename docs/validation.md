@@ -102,7 +102,18 @@ For any anomaly, reproduce it deterministically so a fix can be verified:
 - If temporal: the timeseries period is randomized — it's in `validation_summary.md`. Narrow with `--start-date` / `--end-date`.
 - If nulls: use the `retry-filter:` line in `unavailable_timestamps.txt` to backfill just those timestamps.
 
-### 3d. Update `validation_summary.md`
+### 3d. Dig into each follow-up item
+
+Before writing the summary, work through every item you flagged during the review and gather enough evidence to either confirm it as an issue, downgrade it to a documented quirk, or resolve it. The goal is that nothing reaches `### For further review` without you having looked at it twice. Use the single-step entry points (`compare-spatial`, `compare-timeseries`, `report-nulls`) rather than re-running the full `run-all` — they're faster and let you target the exact slice that's in question. Useful tactics:
+
+- **Rerun a single plot type targeted at the variable, time, and location in question** to confirm an anomaly is real and not an artifact of the randomly chosen snapshot or timeseries window. For example, `uv run src/scripts/validation/plots.py compare-spatial <DATASET_URL> --variable <name> --time <t> --output-dir <run-dir>` to re-render one spatial plot at a chosen time, or `compare-timeseries` with `--start-date` / `--end-date` and the same lat/lon as the original run to zoom in on a temporal anomaly. Re-rendering into the existing `--output-dir` overwrites the original PNG so the summary's links stay valid.
+- **For unexpected unavailable timesteps**, manually fetch the source files for the affected timestamps before claiming the data is genuinely missing — outages happen, but so do ingestion errors. Compare the source file's contents against what the reformatted archive has at the same timestamp to determine whether to retry the backfill (`retry-filter:` line in `unavailable_timestamps.txt`) or document the gap as a known source outage.
+- **For suspected unit, scale, or coordinate bugs**, cross-check against a third independent source (the raw GRIB/NetCDF file, a public viewer such as NOAA's nowCOAST or ECMWF's open charts, or another reformatted archive) — the GEFS reference is convenient but it's only one comparison and shares some biases with GFS-derived datasets.
+- **For ensemble datasets**, rerun once more without `--variable` filters so a different ensemble member is selected; an anomaly that only appears for one member is structurally different from one that appears across members.
+
+Track what you found per item so the eventual `### For further review` entries cite the evidence (filename, timestamp, source URL) rather than just describing what you saw in the original snapshot.
+
+### 3e. Update `validation_summary.md`
 
 When your review is complete, update `validation_summary.md` with notable findings. Insert a `## Summary` section at the top of the file containing two subsections: `### For further review` (definite and possible issues, each with a link to the image(s) where the issue is apparent) and `### What looks good` (a brief summary).
 
@@ -138,6 +149,7 @@ Look for each of these in every image.
 
 - [ ] **Null fraction is 0 or explained.** Any non-zero null fraction should have a reason: source data unavailable before a date for a specific variable, known source outage, ocean point for a land-only variable. Unexplained nulls are the bug.
 - [ ] **Unavailable pattern is not structural.** Nulls concentrated at specific lead times, specific hours of day, or specific forecast cycles suggest a processing or indexing bug, not a random source outage. Use the earliest/latest unavailable columns in the summary table to spot patterns shared across variables (e.g. a consistent earliest-unavailable date points to source coverage starting later).
+- [ ] **First step of an analysis dataset is NaN for accumulated variables.** For analysis datasets, `step_type` ≠ `instant` variables (accumulation / average / max / min) are structurally NaN at the very first timestamp — there is no prior window to accumulate / average / extremize over. This is expected and not a bug.
 
 Note on `step_type` ≠ `instant` variables (accumulation / average / max): the first lead time of each forecast is structurally NaN (there is no prior window to accumulate/average over). The tool excludes that slice from the null count and from `unavailable_timestamps.txt`, so a "0 / N nulls — none" line for an accumulated variable means *no unexpected* nulls — the structural analysis-step NaN is not counted.
 
@@ -204,7 +216,7 @@ Prints the public URL of `validation_report.html` on completion (e.g. `https://d
 
 ### 5c. Update the summary in place before publishing
 
-Per [3d](#3d-update-validation_summarymd), the run already has a `## Summary` block at the top of `validation_summary.md` written during review. Before running `upload`, edit that block in place: drop `### For further review` items you've followed up on, add notes about specific known issues, and update `### What looks good` if your view has changed. `upload` re-renders the HTML automatically.
+Per [3e](#3e-update-validation_summarymd), the run already has a `## Summary` block at the top of `validation_summary.md` written during review. Before running `upload`, edit that block in place: drop `### For further review` items you've followed up on, add notes about specific known issues, and update `### What looks good` if your view has changed. `upload` re-renders the HTML automatically.
 
 Everything in the `## Summary` section is read by external dataset users, so write it for a public dataset consumer audience. Spell out variable names, expand acronyms, and avoid internal jargon such as "P1"/"P2" (use the explicit lat/lon or describe the point), ticket numbers, internal codenames, or process shorthand. Each item should make sense to someone who has never seen the run directory or our review process.
 
