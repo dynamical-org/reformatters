@@ -115,7 +115,15 @@ Track what you found per item so the eventual `### For further review` entries c
 
 ### 3e. Update `validation_summary.md`
 
-When your review is complete, update `validation_summary.md` with notable findings. Insert a `## Summary` section at the top of the file containing two subsections: `### For further review` (definite and possible issues, each with a link to the image(s) where the issue is apparent) and `### What looks good` (a brief summary).
+When your review is complete, insert a `## Summary` section at the top of `validation_summary.md`. This section is the part of the report that downstream readers actually scan — the rest is reference material — so its job is to answer "is this dataset ready to use, and is there anything I should know?" at a glance.
+
+**Opening sentences (always).** Begin with one or two sentences stating where the dataset stands. In an early draft this might just be "Initial validation pass; see `### For further review` for open items." In a final draft and in published reports it should affirm that the dataset has been reviewed and is ready for use, and briefly call out anything from `### Review notes` that needs special care from a user (ideally there is nothing and the sentence is just "This dataset has been reviewed and is ready for use.").
+
+**Subsections (up to three, included as needed).** Each is a bulleted list.
+
+- **`### For further review`** — issues an expert dataset creator should look into before the report is published, each with a link to the image(s) where the issue is apparent. Audience is the internal reviewer. **Must be removed from final-draft and published reports** — any item that ends up worth surfacing to users belongs under `### Review notes` instead.
+- **`### What looks good`** — short, positive summary confirming the checks in [section 4](#4-data-quality-checklist) passed. These have generally been coming out clean; keep this section brief and don't duplicate detail already covered by the doc.
+- **`### Review notes`** — user-facing notes about quirks or known gaps in the dataset that a downstream consumer would want to know (e.g. "Source data was unavailable for 16 hours on 2022-11-29 → 2022-11-30 across all variables; backfill is not possible from the upstream archive."). Items from `### For further review` that are investigated and turn out to be real but acceptable should be moved here and reworded for an external audience. Omit this section entirely if there is nothing to report.
 
 ## 4. Data quality checklist
 
@@ -214,13 +222,21 @@ The stable path is what the dynamical-stac catalog links to. The archive copy pr
 
 Prints the public URL of `validation_report.html` on completion (e.g. `https://dataset-validation-reports.dynamical.org/<dataset-id>/latest/validation_report.html`).
 
-### 5c. Update the summary in place before publishing
+### 5c. Draft → publish review cycle
 
-Per [3e](#3e-update-validation_summarymd), the run already has a `## Summary` block at the top of `validation_summary.md` written during review. Before running `upload`, edit that block in place: drop `### For further review` items you've followed up on, add notes about specific known issues, and update `### What looks good` if your view has changed. `upload` re-renders the HTML automatically.
+The report moves through three audiences before it can be published. Each phase is just another `upload` (no `--publish` until the final step), but the `## Summary` block is rewritten between phases for the next audience.
 
-Everything in the `## Summary` section is read by external dataset users, so write it for a public dataset consumer audience. Spell out variable names, expand acronyms, and avoid internal jargon such as "P1"/"P2" (use the explicit lat/lon or describe the point), ticket numbers, internal codenames, or process shorthand. Each item should make sense to someone who has never seen the run directory or our review process.
+**Phase 1 — Internal-review drafts.** Audience: internal data reviewers (you and other repo contributors). Upload the initial draft with `upload` (no `--publish`). The summary's `### For further review` section drives the conversation; internal jargon ("P1/P2", filenames, repo paths, ticket numbers) is fine here because every reader has the repo context. Iterate — investigate each item per [3d](#3d-dig-into-each-follow-up-item), update the summary, rerun `run-all` if new plots are needed, re-upload — until `### For further review` is empty (every item is either resolved or has been moved to `### Review notes`).
 
-Do not run `upload --publish` while the report still has a `### For further review` section. Published (non-draft) reports must have every item resolved and the section removed — only `### What looks good` and any user-facing notes about known issues should remain. If items are still unresolved, share a draft (`upload` without `--publish`) instead.
+**Phase 2 — External-audience draft.** Audience: external dataset users who have never seen the run directory or our review process. As soon as `### For further review` is empty, rewrite the `## Summary` block for that audience and upload one more draft (still no `--publish`):
+
+- Update the opening sentences to affirm the dataset is reviewed and ready for use, and to call out anything from `### Review notes` that needs special care.
+- Drop the (now empty) `### For further review` subsection.
+- Reword every remaining bullet for a public dataset consumer: spell out variable names, expand acronyms, avoid `P1`/`P2` (use the explicit lat/lon or describe the point), avoid ticket numbers, internal codenames, file paths, and process shorthand. Each bullet must make sense in isolation to someone with no repo context.
+
+**Phase 3 — Publish.** An expert reviewer reads the Phase 2 draft and gives the go-ahead. Only then run `upload <run-dir> --publish` to write to the stable path. Do not run `--publish` while `### For further review` is non-empty or while the summary still reads as internal-audience prose — share another draft instead.
+
+`upload` re-renders the HTML before uploading, so editing `validation_summary.md` and re-running `upload` is the full iteration loop; no separate `render-report` step is needed.
 
 ### 5d. Wire into dynamical-stac
 
