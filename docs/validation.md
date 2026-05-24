@@ -102,9 +102,28 @@ For any anomaly, reproduce it deterministically so a fix can be verified:
 - If temporal: the timeseries period is randomized — it's in `validation_summary.md`. Narrow with `--start-date` / `--end-date`.
 - If nulls: use the `retry-filter:` line in `unavailable_timestamps.txt` to backfill just those timestamps.
 
-### 3d. Update `validation_summary.md`
+### 3d. Dig into each follow-up item
 
-When your review is complete, update `validation_summary.md` with notable findings. Insert a `## Summary` section at the top of the file containing two subsections: `### For further review` (definite and possible issues, each with a link to the image(s) where the issue is apparent) and `### What looks good` (a brief summary).
+Before writing the summary, work through every item you flagged during the review and gather enough evidence to either confirm it as an issue, downgrade it to a documented quirk, or resolve it. The goal is that nothing reaches `### For further review` without you having looked at it twice. Use the single-step entry points (`compare-spatial`, `compare-timeseries`, `report-nulls`) rather than re-running the full `run-all` — they're faster and let you target the exact slice that's in question. Useful tactics:
+
+- **Rerun a single plot type targeted at the variable, time, and location in question** to confirm an anomaly is real and not an artifact of the randomly chosen snapshot or timeseries window. For example, `uv run src/scripts/validation/plots.py compare-spatial <DATASET_URL> --variable <name> --time <t> --output-dir <run-dir>` to re-render one spatial plot at a chosen time, or `compare-timeseries` with `--start-date` / `--end-date` and the same lat/lon as the original run to zoom in on a temporal anomaly. Re-rendering into the existing `--output-dir` overwrites the original PNG so the summary's links stay valid.
+- **For unexpected unavailable timesteps**, manually fetch the source files for the affected timestamps before claiming the data is genuinely missing — outages happen, but so do ingestion errors. Compare the source file's contents against what the reformatted archive has at the same timestamp to determine whether to retry the backfill (`retry-filter:` line in `unavailable_timestamps.txt`) or document the gap as a known source outage.
+- **For suspected unit, scale, or coordinate bugs**, cross-check against a third independent source (the raw GRIB/NetCDF file, a public viewer such as NOAA's nowCOAST or ECMWF's open charts, or another reformatted archive) — the GEFS reference is convenient but it's only one comparison and shares some biases with GFS-derived datasets.
+- **For ensemble datasets**, rerun once more without `--variable` filters so a different ensemble member is selected; an anomaly that only appears for one member is structurally different from one that appears across members.
+
+Track what you found per item so the eventual `### For further review` entries cite the evidence (filename, timestamp, source URL) rather than just describing what you saw in the original snapshot.
+
+### 3e. Update `validation_summary.md`
+
+When your review is complete, insert a `## Summary` section at the top of `validation_summary.md`. This section is the part of the report that downstream readers actually scan — the rest is reference material — so its job is to answer "is this dataset ready to use, and is there anything I should know?" at a glance.
+
+**Opening sentences (always).** Begin with one or two sentences stating where the dataset stands. In an early draft this might just be "Initial validation pass; see `### For further review` for open items." In a final draft and in published reports it should affirm that the dataset has been reviewed and is ready for use, and briefly call out anything from `### Review notes` that needs special care from a user (ideally there is nothing and the sentence is just "This dataset has been reviewed and is ready for use.").
+
+**Subsections (up to three, included as needed).** Each is a bulleted list.
+
+- **`### For further review`** — issues an expert dataset creator should look into before the report is published, each with a link to the image(s) where the issue is apparent. Audience is the internal reviewer. **Must be removed from final-draft and published reports** — any item that ends up worth surfacing to users belongs under `### Review notes` instead.
+- **`### What looks good`** — short, positive summary confirming the checks in [section 4](#4-data-quality-checklist) that passed. Keep this section brief and don't duplicate detail already covered by the doc.
+- **`### Review notes`** — user-facing notes about quirks or known gaps in the dataset that a downstream consumer would want to know (e.g. "Source data was unavailable for 16 hours on 2022-11-29 → 2022-11-30 across all variables; backfill is not possible from the upstream archive."). Items from `### For further review` that are investigated and turn out to be real but acceptable should be moved here and reworded for an external audience. Omit this section entirely if there is nothing to report.
 
 ## 4. Data quality checklist
 
@@ -138,6 +157,7 @@ Look for each of these in every image.
 
 - [ ] **Null fraction is 0 or explained.** Any non-zero null fraction should have a reason: source data unavailable before a date for a specific variable, known source outage, ocean point for a land-only variable. Unexplained nulls are the bug.
 - [ ] **Unavailable pattern is not structural.** Nulls concentrated at specific lead times, specific hours of day, or specific forecast cycles suggest a processing or indexing bug, not a random source outage. Use the earliest/latest unavailable columns in the summary table to spot patterns shared across variables (e.g. a consistent earliest-unavailable date points to source coverage starting later).
+- [ ] **First step of an analysis dataset is NaN for accumulated variables.** For analysis datasets, `step_type` ≠ `instant` variables (accumulation / average / max / min) are structurally NaN at the very first timestamp — there is no prior window to accumulate / average / extremize over. This is expected and not a bug.
 
 Note on `step_type` ≠ `instant` variables (accumulation / average / max): the first lead time of each forecast is structurally NaN (there is no prior window to accumulate/average over). The tool excludes that slice from the null count and from `unavailable_timestamps.txt`, so a "0 / N nulls — none" line for an accumulated variable means *no unexpected* nulls — the structural analysis-step NaN is not counted.
 
@@ -148,12 +168,12 @@ For a sampling of unexplained nulls, go manually fetch source data files and ins
 - [ ] **Reference availability.** If the reference dataset doesn't cover your window, `validation_summary.md` will show `variable not available in reference dataset` — that is not a bug in the validation dataset, but spatial / temporal comparisons lose their signal. Consider a different reference or re-run on a time range the reference covers.
 - [ ] **Ensemble member is plausible.** For ensemble datasets `validation_summary.md` records the randomly-selected member. Rerun once more to confirm that a different member also looks right.
 
-## 5. Publishing the report
+## 5. Sharing and publishing the report
 
-Once a run is reviewed, render it to a static HTML report and publish it. Two paths exist:
+Once a run is reviewed, render it to a static HTML report, share it as one or more drafts for internal and external review, and finally publish the approved version. Two storage paths exist:
 
-- **Draft** — every render goes here, timestamped, kept forever. Use for sharing a single run for review without committing to it.
-- **Stable** — the canonical report for a dataset, overwritten by each new publish. Embedded in the dynamical-stac catalog and linked from dynamical.org.
+- **Draft** — every non-final upload goes here, timestamped, kept forever. Use for sharing a single run for review without committing to it.
+- **Stable** — the canonical, published report for a dataset, overwritten by each new publish. Embedded in dynamical.org.
 
 Both paths live in the `dataset-validation-reports` Cloudflare R2 bucket, served publicly at `https://dataset-validation-reports.dynamical.org`. Drafts and previously-published reports are archived forever — only the file at the stable path is overwritten.
 
@@ -174,7 +194,7 @@ The HTML mirrors the markdown 1:1 with two viewing affordances:
 
 `upload` re-renders before uploading, so this command is only needed for local-only previews.
 
-### 5b. Upload — drafts and publish
+### 5b. Upload drafts and publish the final
 
 ```bash
 uv run src/scripts/validation/plots.py upload <run-dir>             # draft
@@ -202,30 +222,30 @@ The stable path is what the dynamical-stac catalog links to. The archive copy pr
 
 Prints the public URL of `validation_report.html` on completion (e.g. `https://dataset-validation-reports.dynamical.org/<dataset-id>/latest/validation_report.html`).
 
-### 5c. Update the summary in place before publishing
+### 5c. Draft → publish review cycle
 
-Per [3d](#3d-update-validation_summarymd), the run already has a `## Summary` block at the top of `validation_summary.md` written during review. Before running `upload`, edit that block in place: drop `### For further review` items you've followed up on, add notes about specific known issues, and update `### What looks good` if your view has changed. `upload` re-renders the HTML automatically.
+The report moves through three audiences before it can be published. Each phase is just another `upload` (no `--publish` until the final step), but the `## Summary` block is rewritten between phases for the next audience.
 
-Everything in the `## Summary` section is read by external dataset users, so write it for a public dataset consumer audience. Spell out variable names, expand acronyms, and avoid internal jargon such as "P1"/"P2" (use the explicit lat/lon or describe the point), ticket numbers, internal codenames, or process shorthand. Each item should make sense to someone who has never seen the run directory or our review process.
+**Phase 1 — Internal-review drafts.** Audience: internal data reviewers (you and other repo contributors). Upload the initial draft with `upload` (no `--publish`). The summary's `### For further review` section drives the conversation; internal jargon ("P1/P2", filenames, repo paths, ticket numbers) is fine here because every reader has the repo context. Iterate — investigate each item per [3d](#3d-dig-into-each-follow-up-item), update the summary, rerun `run-all` if new plots are needed, re-upload — until `### For further review` is empty (every item is either resolved or has been moved to `### Review notes`).
 
-Do not run `upload --publish` while the report still has a `### For further review` section. Published (non-draft) reports must have every item resolved and the section removed — only `### What looks good` and any user-facing notes about known issues should remain. If items are still unresolved, share a draft (`upload` without `--publish`) instead.
+**Phase 2 — External-audience draft.** Audience: external dataset users who have never seen the run directory or our review process. As soon as `### For further review` is empty, rewrite the `## Summary` block for that audience and upload one more draft (still no `--publish`):
 
-### 5d. Wire into dynamical-stac
+- Update the opening sentences to affirm the dataset is reviewed and ready for use, and to call out anything from `### Review notes` that needs special care.
+- Drop the (now empty) `### For further review` subsection.
+- Reword every remaining bullet for a public dataset consumer: spell out variable names, expand acronyms, avoid `P1`/`P2` (use the explicit lat/lon or describe the point), avoid ticket numbers, internal codenames, file paths, and process shorthand. Each bullet must make sense in isolation to someone with no repo context.
 
-After the first publish for a dataset, add the report URL to the catalog so it surfaces on dynamical.org. In the `dynamical-org/dynamical-stac` repo:
+**Phase 3 — Publish.** An expert reviewer reads the Phase 2 draft and gives the go-ahead. Only then run `upload <run-dir> --publish` to write to the stable path. Do not run `--publish` while `### For further review` is non-empty or while the summary still reads as internal-audience prose — share another draft instead.
 
-1. Add `validation_report_href` to the relevant `CatalogItem` in `src/catalog.py`. Value is the `latest/` URL.
-2. The STAC generator surfaces it as an asset with role `validation-report` (type `text/html`).
-3. Run `./scripts/generate` and commit `stac/`.
+### 5d. Surfacing the published report on dynamical.org
 
-This is a one-time wiring per dataset. Subsequent `publish-stable` runs update the report contents at the same URL — no STAC change needed.
+Once published, the report is picked up automatically on the next deploy of the dynamical.org site — the site's build pulls the latest published report for each dataset and incorporates it into the catalog page for that data product. No per-dataset wiring is required; just redeploy dynamical.org to refresh the catalog with the new report.
 
 ### Configuration
 
-`publish-draft` and `publish-stable` read R2 credentials from these environment variables:
+`upload` (both for uploading drafts and for publishing) reads R2 credentials from these environment variables:
 
 - `R2_VALIDATION_REPORTS_ENDPOINT_URL`
 - `R2_VALIDATION_REPORTS_ACCESS_KEY_ID`
 - `R2_VALIDATION_REPORTS_SECRET_ACCESS_KEY`
 
-Scoped to the `dataset-validation-reports` bucket. Set them in the environment before running the publish commands.
+Scoped to the `dataset-validation-reports` bucket. Set them in the environment before running `upload`.

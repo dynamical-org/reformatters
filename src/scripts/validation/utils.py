@@ -196,9 +196,20 @@ def get_random_spatial_indices(
     rng = np.random.default_rng()
     lat_size = ds.sizes[lat_dim]
     lon_size = ds.sizes[lon_dim]
-    lat1_idx = int(rng.integers(0, lat_size // 4))
+
+    lat_lo, lat_hi = 0, lat_size
+    if lat_dim == "latitude":
+        lats = ds.latitude.values
+        # Avoid polar grid points where many variables have edge-case behavior
+        # (e.g. wind components degenerate, projections distort).
+        if lats.min() < -80 and lats.max() > 80:
+            valid = np.where((lats >= -70) & (lats <= 70))[0]
+            lat_lo, lat_hi = int(valid.min()), int(valid.max()) + 1
+
+    lat_range = lat_hi - lat_lo
+    lat1_idx = int(rng.integers(lat_lo, lat_lo + lat_range // 4))
+    lat2_idx = int(rng.integers(lat_lo + 3 * lat_range // 4, lat_hi))
     lon1_idx = int(rng.integers(0, lon_size // 4))
-    lat2_idx = int(rng.integers(3 * lat_size // 4, lat_size))
     lon2_idx = int(rng.integers(3 * lon_size // 4, lon_size))
     point1_sel = {lat_dim: lat1_idx, lon_dim: lon1_idx}
     point2_sel = {lat_dim: lat2_idx, lon_dim: lon2_idx}
