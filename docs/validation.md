@@ -209,7 +209,7 @@ Without `--publish`:
 <dataset-id>/drafts/<version>_<YYYY-MM-DDTHH-MM>/
 ```
 
-Use this to share a single run for review without committing to it. Drafts are kept forever; iterate by re-running `run-all` (a new timestamped run dir) and re-uploading.
+Use this to share a single run for review without committing to it. Drafts are kept forever; iterate by re-running `run-all` (a new timestamped run dir) and re-uploading. Drafts go to timestamped paths that are never overwritten, so uploading a draft is non-destructive and does not require confirmation — only `--publish` does.
 
 With `--publish`:
 
@@ -226,15 +226,15 @@ Prints the public URL of `validation_report.html` on completion (e.g. `https://d
 
 The report moves through three audiences before it can be published. Each phase is just another `upload` (no `--publish` until the final step), but the `## Summary` block is rewritten between phases for the next audience.
 
-**Phase 1 — Internal-review drafts.** Audience: internal data reviewers (you and other repo contributors). Upload the initial draft with `upload` (no `--publish`). The summary's `### For further review` section drives the conversation; internal jargon ("P1/P2", filenames, repo paths, ticket numbers) is fine here because every reader has the repo context. Iterate — investigate each item per [3d](#3d-dig-into-each-follow-up-item), update the summary, rerun `run-all` if new plots are needed, re-upload — until `### For further review` is empty (every item is either resolved or has been moved to `### Review notes`).
+**Phase 1 — Internal-review drafts.** End each internal-review pass with `upload <run-dir>` (no `--publish`). Audience: internal data reviewers (you and other repo contributors). The summary's `### For further review` section drives the conversation; internal jargon ("P1/P2", filenames, repo paths, ticket numbers) is fine here because every reader has the repo context. Iterate — investigate each item per [3d](#3d-dig-into-each-follow-up-item), update the summary, rerun `run-all` if new plots are needed, re-upload — until `### For further review` is empty (every item is either resolved or has been moved to `### Review notes`).
 
-**Phase 2 — External-audience draft.** Audience: external dataset users who have never seen the run directory or our review process. As soon as `### For further review` is empty, rewrite the `## Summary` block for that audience and upload one more draft (still no `--publish`):
+**Phase 2 — External-audience draft.** When `### For further review` is empty, rewrite the `## Summary` block for an external audience and upload one more draft (still no `--publish`). Audience: external dataset users who have never seen the run directory or our review process. Rewrite involves:
 
 - Update the opening sentences to affirm the dataset is reviewed and ready for use, and to call out anything from `### Review notes` that needs special care.
 - Drop the (now empty) `### For further review` subsection.
 - Reword every remaining bullet for a public dataset consumer: spell out variable names, expand acronyms, avoid `P1`/`P2` (use the explicit lat/lon or describe the point), avoid ticket numbers, internal codenames, file paths, and process shorthand. Each bullet must make sense in isolation to someone with no repo context.
 
-**Phase 3 — Publish.** An expert reviewer reads the Phase 2 draft and gives the go-ahead. Only then run `upload <run-dir> --publish` to write to the stable path. Do not run `--publish` while `### For further review` is non-empty or while the summary still reads as internal-audience prose — share another draft instead.
+**Phase 3 — Publish.** Only after a human reviewer approves the Phase 2 draft, run `upload <run-dir> --publish` to write to the stable path. Do not run `--publish` while `### For further review` is non-empty or while the summary still reads as internal-audience prose — share another draft instead.
 
 ### 5d. Surfacing the published report on dynamical.org
 
