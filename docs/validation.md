@@ -122,7 +122,7 @@ When your review is complete, insert a `## Summary` section at the top of `valid
 **Subsections (up to three, included as needed).** Each is a bulleted list.
 
 - **`### For further review`** — issues an expert dataset creator should look into before the report is published, each with a link to the image(s) where the issue is apparent. Audience is the internal reviewer. **Must be removed from final-draft and published reports** — any item that ends up worth surfacing to users belongs under `### Review notes` instead.
-- **`### What looks good`** — short, positive summary confirming the checks in [section 4](#4-data-quality-checklist) passed. These have generally been coming out clean; keep this section brief and don't duplicate detail already covered by the doc.
+- **`### What looks good`** — short, positive summary confirming the checks in [section 4](#4-data-quality-checklist) that passed. Keep this section brief and don't duplicate detail already covered by the doc.
 - **`### Review notes`** — user-facing notes about quirks or known gaps in the dataset that a downstream consumer would want to know (e.g. "Source data was unavailable for 16 hours on 2022-11-29 → 2022-11-30 across all variables; backfill is not possible from the upstream archive."). Items from `### For further review` that are investigated and turn out to be real but acceptable should be moved here and reworded for an external audience. Omit this section entirely if there is nothing to report.
 
 ## 4. Data quality checklist
@@ -173,7 +173,7 @@ For a sampling of unexplained nulls, go manually fetch source data files and ins
 Once a run is reviewed, render it to a static HTML report, share it as one or more drafts for internal and external review, and finally publish the approved version. Two storage paths exist:
 
 - **Draft** — every non-final upload goes here, timestamped, kept forever. Use for sharing a single run for review without committing to it.
-- **Stable** — the canonical, published report for a dataset, overwritten by each new publish. Embedded in the dynamical-stac catalog and linked from dynamical.org.
+- **Stable** — the canonical, published report for a dataset, overwritten by each new publish. Embedded in dynamical.org.
 
 Both paths live in the `dataset-validation-reports` Cloudflare R2 bucket, served publicly at `https://dataset-validation-reports.dynamical.org`. Drafts and previously-published reports are archived forever — only the file at the stable path is overwritten.
 
@@ -236,17 +236,9 @@ The report moves through three audiences before it can be published. Each phase 
 
 **Phase 3 — Publish.** An expert reviewer reads the Phase 2 draft and gives the go-ahead. Only then run `upload <run-dir> --publish` to write to the stable path. Do not run `--publish` while `### For further review` is non-empty or while the summary still reads as internal-audience prose — share another draft instead.
 
-`upload` re-renders the HTML before uploading, so editing `validation_summary.md` and re-running `upload` is the full iteration loop; no separate `render-report` step is needed.
+### 5d. Surfacing the published report on dynamical.org
 
-### 5d. Wire into dynamical-stac
-
-After the first publish for a dataset, add the report URL to the catalog so it surfaces on dynamical.org. In the `dynamical-org/dynamical-stac` repo:
-
-1. Add `validation_report_href` to the relevant `CatalogItem` in `src/catalog.py`. Value is the `latest/` URL.
-2. The STAC generator surfaces it as an asset with role `validation-report` (type `text/html`).
-3. Run `./scripts/generate` and commit `stac/`.
-
-This is a one-time wiring per dataset. Subsequent `upload --publish` runs update the report contents at the same URL — no STAC change needed.
+Once published, the report is picked up automatically on the next deploy of the dynamical.org site — the site's build pulls the latest published report for each dataset and incorporates it into the catalog page for that data product. No per-dataset wiring is required; just redeploy dynamical.org to refresh the catalog with the new report.
 
 ### Configuration
 
