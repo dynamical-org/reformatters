@@ -180,12 +180,14 @@ The common `process()` method in `VirtualRegionJob` drives a generator that subc
 def process(self, store: IcechunkStore, session: Session) -> None:
     pending_refs = 0
     last_commit = time.monotonic()
-    dimension_expanded = False
 
     for batch in self.poll_virtual_refs():
-        if not dimension_expanded:
-            self.expand_dimensions(store)
-            dimension_expanded = True
+        # Expand dimensions if this batch introduces new append-dim values.
+        # For forecast datasets this happens once (new init_time at job start).
+        # For analysis datasets this happens per-batch (each batch adds time steps).
+        new_append_coords = batch.new_append_dim_values(self.current_append_coords(store))
+        if new_append_coords:
+            self.expand_dimensions(store, new_append_coords)
 
         for var_name, chunk_key, url, offset, length in batch:
             store.set_virtual_ref(chunk_key, url, offset=offset, length=length)
@@ -237,10 +239,10 @@ For **analysis datasets**: the generator processes a configured number of time s
 
 ### Lazy dimension expansion
 
-Dimension expansion (resizing arrays, appending coordinate values) happens on the first file arrival, not upfront. This ensures:
-- Readers don't see empty holes before any data is available
-- Analysis datasets don't need to pre-allocate unknown lengths
-- The first commit always includes both the expansion and the initial data
+Dimension expansion (resizing arrays, appending coordinate values) happens when a batch introduces append-dim values not yet in the dataset, not upfront. This means:
+- For **forecast datasets**: expansion happens once per job (one new init_time), on the first batch
+- For **analysis datasets**: expansion happens on every batch, since each batch adds new time steps
+- Readers never see empty holes — expansion and the corresponding data refs are always committed together
 
 ### Commit batching
 
