@@ -23,7 +23,7 @@ When the run completes, stdout prints the path of `validation_summary.md` (relat
 
 ### Options
 
-- `--reference-url` Reference dataset for side-by-side comparison (default: NOAA GEFS analysis). Change if your dataset is outside the reference's temporal or spatial coverage. Variables not present in the reference still get validation-only plots and stats.
+- `--reference-url` Reference dataset for side-by-side comparison. Defaults to the NOAA GEFS analysis icechunk asset URL discovered from the STAC catalog at `https://stac.dynamical.org/catalog.json`. Change if your dataset is outside the reference's temporal or spatial coverage. Variables not present in the reference still get validation-only plots and stats.
 - `--variable <name>` (repeatable, alias `-v`) Restrict to specific variables. Especially useful while iterating on a single new variable — brings total runtime down to under a minute. To compare related variables side-by-side, pass `--variable` multiple times: `-v downward_short_wave_radiation_flux_surface -v total_cloud_cover_atmosphere`.
 - `--start-date <YYYY-MM-DD>` / `--end-date <YYYY-MM-DD>` Restrict the append dimension. Useful for reproducing an issue in a specific window.
 - `--init-time` / `--lead-time` (forecast) or `--time` (analysis) Pick the exact spatial snapshot instead of a random one. Use this to reproduce a spatial anomaly deterministically.

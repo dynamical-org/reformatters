@@ -16,7 +16,9 @@ from scripts.validation.utils import (
     is_forecast_dataset,
     load_zarr_dataset,
     output_dir_option,
+    reference_url_option,
     resolve_output_dir,
+    resolve_reference_url,
     scope_time_period,
     select_random_ensemble_member,
     select_variables_for_plotting,
@@ -27,8 +29,6 @@ from scripts.validation.utils import (
 log = get_logger(__name__)
 
 zarr.config.set({"async.concurrency": 32})
-
-GEFS_ANALYSIS_URL = "https://data.dynamical.org/noaa/gefs/analysis/latest.zarr"
 
 
 def select_time_period_for_comparison(
@@ -312,7 +312,7 @@ def run_compare_timeseries(ctx: RunContext) -> None:
 
 def compare_timeseries(
     validation_url: str,
-    reference_url: str = GEFS_ANALYSIS_URL,
+    reference_url: str | None = reference_url_option,
     variables: list[str] | None = variables_option,
     show_plot: bool = False,
     start_date: str | None = start_date_option,
@@ -323,6 +323,7 @@ def compare_timeseries(
     validation_ds = load_zarr_dataset(validation_url)
     if start_date or end_date:
         validation_ds = scope_time_period(validation_ds, start_date, end_date)
+    reference_url = resolve_reference_url(reference_url)
     reference_ds = load_zarr_dataset(reference_url)
 
     selected_vars = select_variables_for_plotting(validation_ds, variables)

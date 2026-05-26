@@ -1,8 +1,10 @@
+import functools
 from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+import httpx
 import icechunk
 import numpy as np
 import obstore
@@ -12,6 +14,40 @@ import xarray as xr
 from zarr.storage import ObjectStore, StoreLike
 
 OUTPUT_DIR = "data/output"
+
+STAC_CATALOG_URL = "https://stac.dynamical.org/catalog.json"
+GEFS_ANALYSIS_COLLECTION_ID = "noaa-gefs-analysis"
+
+
+@functools.cache
+def get_gefs_analysis_reference_url() -> str:
+    """Look up the GEFS analysis icechunk asset URL from the STAC catalog."""
+    with httpx.Client(follow_redirects=True, timeout=30.0) as client:
+        catalog = client.get(STAC_CATALOG_URL).raise_for_status().json()
+        for link in catalog["links"]:
+            if link["rel"] != "child":
+                continue
+            collection = client.get(link["href"]).raise_for_status().json()
+            if collection["id"] == GEFS_ANALYSIS_COLLECTION_ID:
+                return collection["assets"]["icechunk"]["href"]
+    raise ValueError(
+        f"Collection {GEFS_ANALYSIS_COLLECTION_ID!r} not found in STAC catalog at {STAC_CATALOG_URL}"
+    )
+
+
+def resolve_reference_url(reference_url: str | None) -> str:
+    if reference_url is not None:
+        return reference_url
+    return get_gefs_analysis_reference_url()
+
+
+reference_url_option = typer.Option(
+    None,
+    "--reference-url",
+    help="Reference dataset URL "
+    "(default: GEFS analysis icechunk asset looked up from the STAC catalog)",
+)
+
 
 variables_option = typer.Option(
     None,
