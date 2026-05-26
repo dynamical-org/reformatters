@@ -214,13 +214,18 @@ twists tuned for low latency:
    happens lazily inside each region job's `process()`, atomic with
    the corresponding refs. Same model as before.
 
-Net effect on latency:
+Net effect on latency for a single new file:
 
 ```
-latency ≈ poll_interval + index_download + commit + (occasional rebase retry)
-        ≈ 1s          + 100-500ms     + 0.5-1s + (1-2s on conflict)
-        = 2-3s typical, ≤5s worst case
+latency ≈ poll_interval + index_download + commit-batch-wait + commit + (occasional rebase retry)
+        ≈ 1s          + 100-500ms     + ≤1s              + 0.5-1s + (1-2s on conflict)
+        = 2-4s typical, ≤5s worst case
 ```
+
+`commit-batch-wait` is bounded by `max_seconds_between_commits`
+(e.g. 1s for operational), not by accumulating a large batch — when
+files arrive together we commit them together; when they trickle in
+the time threshold fires per file.
 
 `concurrencyPolicy: Forbid` on the CronJob prevents a new fire from
 launching while the previous fire's pod is still polling.
@@ -270,14 +275,19 @@ always commit together.
    2. Drives the `process_virtual_refs()` generator. The generator
       polls source-file availability with `sleep(1)` between
       checks (HEAD requests on the source URLs are fast and cheap)
-      and yields each newly-observed file as a single-file batch
-      immediately. Operational region jobs default to
-      `max_files_per_commit=1` so each file commits on its own for
-      minimum latency.
-   3. Each batch commits via the retry loop: open a fresh session
-      on `main`, expand the dim if still needed, compute chunk
-      keys against current state, `store.set_virtual_ref(...)` for
-      each ref, commit with
+      and yields each newly-observed batch — typically one file at
+      a time, but a dataset can yield several files together if it
+      makes sense (e.g., the source publishes a small burst at
+      once).
+   3. Yielded refs go into a pending buffer. We commit when either
+      `max_seconds_between_commits` elapses (short — e.g. 1s — for
+      operational, so we never delay visibility) or
+      `max_files_per_commit` fills (can be large for operational
+      too; the time threshold drives latency, the file threshold
+      just caps batch size). Commit via the retry loop: open a
+      fresh session on `main`, expand the dim if still needed,
+      compute chunk keys against current state,
+      `store.set_virtual_ref(...)` for each ref, commit with
       `rebase_with=icechunk.ConflictDetector()`. On conflict, throw
       away the session and try again.
    4. The generator exits when all expected files for this job have
@@ -415,13 +425,15 @@ Backfills use the same `VirtualRegionJob.process()` and
    commits. Workers write refs to the branch. Last worker resets
    `main` to the branch. Readers see "empty" or "full," never
    partial state during a backfill.
-2. **Looser commit thresholds**: backfill region jobs are constructed
-   with higher `max_files_per_commit` (e.g. 50) and
-   `max_seconds_between_commits` (e.g. 60s). Operational region jobs
-   default to `max_files_per_commit=1` (commit each file immediately
-   for ≤5s visibility). Backfills don't care about per-file latency
-   so larger batches reduce commit overhead for the much larger
-   volume.
+2. **Looser commit thresholds**: backfill region jobs let the
+   commit-batch grow large before committing. Operational region
+   jobs keep `max_seconds_between_commits` short (e.g. 1s) so newly
+   observed files become visible quickly; `max_files_per_commit`
+   can still be large (the time threshold drives latency, the file
+   threshold just caps any single batch). Backfills don't care
+   about per-file latency, so something like
+   `max_seconds_between_commits=60` and `max_files_per_commit=50`
+   minimizes commit overhead for the much larger volume.
 
 The plumbing for these differences:
 
