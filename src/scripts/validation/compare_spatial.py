@@ -285,11 +285,25 @@ def run_compare_spatial(
 
     fig_c, axes_c = plt.subplots(n_vars, 3, figsize=(15, 3.375 * n_vars), squeeze=False)
 
+    import time as _time
+
+    def _load(da):
+        last = None
+        for attempt in range(6):
+            try:
+                return da.load()
+            except Exception as e:
+                last = e
+                wait = min(2 ** attempt, 30)
+                log.warning(f"  load retry attempt {attempt + 1}: {e!r}; sleeping {wait}s")
+                _time.sleep(wait)
+        raise last
+
     for i, var in enumerate(ctx.variables):
         stats = ctx.stats_for(var)
 
-        data = ds[var].load()
-        ref_data = ref_ds[var].load() if var in ref_ds.data_vars else None
+        data = _load(ds[var])
+        ref_data = _load(ref_ds[var]) if var in ref_ds.data_vars else None
         data_clean, ref_clean = _compute_spatial_stats(data, ref_data, stats)
 
         stats.spatial_time_label = val_time_label

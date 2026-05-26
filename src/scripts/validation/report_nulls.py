@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -151,11 +152,27 @@ def run_report_nulls(ctx: RunContext) -> None:
 
     fig_c, axes_c = plt.subplots(n_vars, 2, figsize=(12, 2.625 * n_vars), squeeze=False)
 
+    def _retry(fn, label):
+        last = None
+        for attempt in range(6):
+            try:
+                return fn()
+            except Exception as e:
+                last = e
+                wait = min(2 ** attempt, 30)
+                log.warning(f"  {label}: attempt {attempt + 1} failed: {e!r}; sleeping {wait}s")
+                time.sleep(wait)
+        raise last
+
     for i, var in enumerate(ctx.variables):
         stats = ctx.stats_for(var)
 
-        null_p1, unavailable_p1, n_p1, total_p1 = _compute_nulls_for_point(ds_p1, var)
-        null_p2, unavailable_p2, n_p2, total_p2 = _compute_nulls_for_point(ds_p2, var)
+        null_p1, unavailable_p1, n_p1, total_p1 = _retry(
+            lambda: _compute_nulls_for_point(ds_p1, var), f"nulls {var} P1"
+        )
+        null_p2, unavailable_p2, n_p2, total_p2 = _retry(
+            lambda: _compute_nulls_for_point(ds_p2, var), f"nulls {var} P2"
+        )
 
         stats.unavailable_timestamps_p1 = unavailable_p1
         stats.unavailable_timestamps_p2 = unavailable_p2

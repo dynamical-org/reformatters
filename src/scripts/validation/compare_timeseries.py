@@ -228,11 +228,26 @@ def run_compare_timeseries(ctx: RunContext) -> None:
     p1_title_suffix = f"(lat={ctx.point1_lat:.2f}, lon={ctx.point1_lon:.2f})"
     p2_title_suffix = f"(lat={ctx.point2_lat:.2f}, lon={ctx.point2_lon:.2f})"
 
+    import time as _time
+
     for i, var in enumerate(ctx.variables):
         stats = ctx.stats_for(var)
-        val_p1, ref_p1, val_p2, ref_p2 = _load_timeseries_for_var(
-            var, ctx, validation_subset, reference_subset
-        )
+        last = None
+        loaded = None
+        for attempt in range(6):
+            try:
+                loaded = _load_timeseries_for_var(
+                    var, ctx, validation_subset, reference_subset
+                )
+                break
+            except Exception as e:
+                last = e
+                wait = min(2 ** attempt, 30)
+                log.warning(f"  temporal {var}: attempt {attempt + 1} failed: {e!r}; sleeping {wait}s")
+                _time.sleep(wait)
+        if loaded is None:
+            raise last  # type: ignore[misc]
+        val_p1, ref_p1, val_p2, ref_p2 = loaded
         _store_temporal_stats(stats, val_p1, val_p2, ref_p1, ref_p2)
         units = stats.units or ""
 
