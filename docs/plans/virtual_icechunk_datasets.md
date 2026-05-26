@@ -167,8 +167,7 @@ All existing dataset region jobs change their base class from
 
 **`VirtualRegionJob` (subclass of `RegionJob`):**
 
-- Extra fields: `is_backfill: bool`,
-  `max_files_per_commit: int`, `max_seconds_between_commits: float`.
+- Extra fields: `is_backfill: bool`, `max_seconds_between_commits: float`.
 - `process()` implementation: opens icechunk session, runs filter
   once, drives generator, lazily expands as needed, sets refs,
   commits with per-batch retry (see [The update process](#the-update-process)).
@@ -217,15 +216,15 @@ twists tuned for low latency:
 Net effect on latency for a single new file:
 
 ```
-latency ≈ poll_interval + index_download + commit-batch-wait + commit + (occasional rebase retry)
-        ≈ 1s          + 100-500ms     + ≤1s              + 0.5-1s + (1-2s on conflict)
+latency ≈ poll_interval + index_download + commit_wait + commit + (occasional rebase retry)
+        ≈ 1s          + 100-500ms     + ≤1s        + 0.5-1s + (1-2s on conflict)
         = 2-4s typical, ≤5s worst case
 ```
 
-`commit-batch-wait` is bounded by `max_seconds_between_commits`
-(e.g. 1s for operational), not by accumulating a large batch — when
-files arrive together we commit them together; when they trickle in
-the time threshold fires per file.
+`commit_wait` is bounded by `max_seconds_between_commits` (~1s for
+operational) — the only knob we need. If the source publishes
+several files in the same poll, they ride the same commit; if
+they trickle in, each gets its own commit within the interval.
 
 `concurrencyPolicy: Forbid` on the CronJob prevents a new fire from
 launching while the previous fire's pod is still polling.
@@ -279,17 +278,18 @@ always commit together.
       a time, but a dataset can yield several files together if it
       makes sense (e.g., the source publishes a small burst at
       once).
-   3. Yielded refs go into a pending buffer. We commit when either
-      `max_seconds_between_commits` elapses (short — e.g. 1s — for
-      operational, so we never delay visibility) or
-      `max_files_per_commit` fills (can be large for operational
-      too; the time threshold drives latency, the file threshold
-      just caps batch size). Commit via the retry loop: open a
-      fresh session on `main`, expand the dim if still needed,
-      compute chunk keys against current state,
-      `store.set_virtual_ref(...)` for each ref, commit with
-      `rebase_with=icechunk.ConflictDetector()`. On conflict, throw
-      away the session and try again.
+   3. Yielded refs go into a pending buffer. We commit when
+      `max_seconds_between_commits` elapses with pending refs —
+      short (e.g. 1s) for operational so visibility is fast, longer
+      (e.g. 60s) for backfill to reduce commit overhead. (No
+      separate file-count threshold; the per-job ref count is
+      bounded by the region size anyway, and we always want to
+      commit everything pending, never drop refs to stay under a
+      cap.) Commit via the retry loop: open a fresh session on
+      `main`, expand the dim if still needed, compute chunk keys
+      against current state, `store.set_virtual_ref(...)` for each
+      ref, commit with `rebase_with=icechunk.ConflictDetector()`.
+      On conflict, throw away the session and try again.
    4. The generator exits when all expected files for this job have
       been ingested (e.g.
       `ingested_forecast_length[init] >= expected_forecast_length[init]`)
@@ -425,15 +425,11 @@ Backfills use the same `VirtualRegionJob.process()` and
    commits. Workers write refs to the branch. Last worker resets
    `main` to the branch. Readers see "empty" or "full," never
    partial state during a backfill.
-2. **Looser commit thresholds**: backfill region jobs let the
-   commit-batch grow large before committing. Operational region
-   jobs keep `max_seconds_between_commits` short (e.g. 1s) so newly
-   observed files become visible quickly; `max_files_per_commit`
-   can still be large (the time threshold drives latency, the file
-   threshold just caps any single batch). Backfills don't care
-   about per-file latency, so something like
-   `max_seconds_between_commits=60` and `max_files_per_commit=50`
-   minimizes commit overhead for the much larger volume.
+2. **Longer commit interval**: backfill region jobs set
+   `max_seconds_between_commits` to e.g. 60s — they don't care
+   about per-file latency and longer intervals reduce commit
+   overhead for the much larger volume. Operational region jobs
+   keep it at ~1s so newly observed files become visible quickly.
 
 The plumbing for these differences:
 
@@ -833,9 +829,9 @@ Smaller and tighter than the previous draft.
   materialized updates keep the existing flow).
 - Add `is_backfill: bool = True` parameter on
   `VirtualRegionJob.get_jobs`; `operational_update_jobs` passes
-  `False`. Each region job carries the flag plus
-  `max_files_per_commit` and `max_seconds_between_commits` model
-  fields with operational vs backfill values.
+  `False`. Each region job carries the flag plus a
+  `max_seconds_between_commits` model field set to operational
+  (~1s) vs backfill (~60s) values.
 - Add the default `_filter_already_ingested` (coord-introspection
   strategy with manifest-probe fallback).
 - Add `_expand_dimensions` helper that resizes coord and data var
@@ -917,8 +913,8 @@ convenience at the time.
    Auto-discovery from the GRIB index, or manual curation? Likely
    manual curation early, with tooling later.
 4. **Polling configuration defaults**: per-dataset
-   `poll_interval_seconds`, `max_files_per_commit`,
-   `max_seconds_between_commits`. Defaults will emerge from PR #3.
+   `poll_interval_seconds` and `max_seconds_between_commits`.
+   Defaults will emerge from PR #3.
 5. **Reforecast / historical archives**: some datasets (GEFS v12
    reforecast) have different URL schemes for historical data.
    Virtual backfills must handle them; operational updates don't.
