@@ -223,24 +223,21 @@ together.
    round-robin slice of region jobs directly.
 5. **Each worker processes its assigned region jobs in parallel**. For
    each region job, `VirtualRegionJob.process()`:
-   1. Opens its own writable session on `main`.
-   2. Calls `_filter_already_ingested(source_coords)` — typically
-      reduces the work to a handful of newly-available files (or zero
-      files if this region job has nothing new).
-   3. Drives the `process_virtual_refs()` generator. For each batch:
-      - If the batch's coords include append-dim values not yet in
-        the store, call `_expand_dimensions(new_values)` to resize
-        coord and data var arrays and write the new coord values.
-        This and the batch's `set_virtual_ref` calls go into the
-        same session.
-      - Issue `store.set_virtual_ref(...)` for each (var, chunk) in
-        the batch.
-      - When the pending-refs counter hits `max_files_per_commit`
-        or `max_seconds_between_commits`, commit with
-        `rebase_with=icechunk.ConflictDetector()` and open a fresh
-        session on `main`.
+   1. Calls `_filter_already_ingested(source_coords)` once at the
+      top — narrows the job to files this pod still needs to ingest.
+      (Other pods never do this pod's work, so we don't need to
+      re-check mid-job.)
+   2. Drives the `process_virtual_refs()` generator. Each batch of
+      refs is buffered.
+   3. When the pending-refs counter hits `max_files_per_commit`
+      or `max_seconds_between_commits`, commit the batch via the
+      retry loop below: open a fresh session on `main`, expand the
+      dim if still needed, compute chunk keys against current state,
+      `store.set_virtual_ref(...)` for each ref, commit with
+      `rebase_with=icechunk.ConflictDetector()`. On conflict, throw
+      away the session and try again.
    4. After the generator exhausts (or the pod's
-      `pod_active_deadline` approaches), commits any pending refs.
+      `pod_active_deadline` approaches), commit any pending refs.
 6. **No finalize step**. There's no temp branch to merge. The driver
    may still wait for all workers (via the existing coordination-file
    mechanism) before exiting, but there's no `reset_branch`.
@@ -254,95 +251,96 @@ manage its own session and commit cadence.
 
 ### Why lazy expansion works with parallel pods
 
-Each batch's commit is its own self-contained transaction: open a
-fresh session on `main`, decide what refs to set (recomputing chunk
-keys against current state), expand the dim if needed, set the refs,
-commit. On conflict, throw away the session and run the transaction
-again on a fresh session.
+Region jobs partition the append dim by construction — different pods
+get different `init_time` (or `time`) ranges. So **two pods never write
+the same chunks**, only ever the metadata files involved in dim
+expansion (`init_time/zarr.json`, the chunk holding `init_time` values,
+each data var's `zarr.json`).
 
-Concretely:
+`_filter_already_ingested` runs once at the start of `process()` to
+decide what files this job will ingest. We don't re-run it per batch —
+no other pod is going to process our work.
+
+The only conflict that can happen is on dim expansion. The scenario:
+
+- Pod A (init T-6h, new): opens session at shape N, expands to N+1
+  with `T-6h` at index N, sets refs for T-6h's chunks, tries to commit.
+- Pod B (init T, new): in parallel, opens session at shape N, expands
+  to N+1 (or further) with both `T-6h` and `T` in sorted order
+  (computed from the template — Pod B knows T-6h exists in the
+  expected coords even though Pod B isn't ingesting it), sets refs
+  for T's chunks, commits first.
+- Pod A's commit now conflicts on `init_time/c/0` and the resized
+  `<var>/zarr.json` files.
+
+Pod A's response is just: throw away the session, open a fresh one,
+re-check whether expansion is still needed (it isn't — Pod B's commit
+already added T-6h), re-set the same virtual refs against the current
+chunk indices, commit.
 
 ```python
-# Pseudocode inside VirtualRegionJob.process()
-for batch in self.process_virtual_refs():
-    for attempt in range(MAX_RETRIES):  # ~5-10 attempts with backoff
-        session = repo.writable_session("main")
-        store = session.store
+# Inside VirtualRegionJob.process(), per commit cycle:
+for attempt in range(MAX_RETRIES):
+    session = repo.writable_session("main")
+    store = session.store
 
-        # Recompute against current state — handles the "another pod
-        # already added an init at this index" case naturally.
-        relevant_refs = self._refs_against_current_state(batch, store)
-        if not relevant_refs:
-            break  # already ingested by someone else; skip
+    new_coords = self._compute_dim_expansion_needed(store, refs)
+    if new_coords:
+        self._expand_dimensions(store, new_coords)
+    for ref in refs:
+        # Recompute the chunk key from the current store state in case
+        # another pod's prior expansion shifted our index.
+        key = self._chunk_key(ref, store)
+        store.set_virtual_ref(key, ref.url, offset=ref.offset, length=ref.length)
 
-        new_coords = self._needs_dim_expansion(store, relevant_refs)
-        if new_coords:
-            self._expand_dimensions(store, new_coords)
-
-        for ref in relevant_refs:
-            store.set_virtual_ref(ref.key, ref.url, offset=ref.offset, length=ref.length)
-
-        try:
-            session.commit("...", rebase_with=icechunk.ConflictDetector())
-            break
-        except icechunk.ConflictError:
-            # Discard session, retry with a fresh one. The retry's
-            # _refs_against_current_state() will see the other pod's
-            # commit and recompute target indices accordingly.
-            time.sleep(0.1 * (2 ** attempt))
+    try:
+        session.commit("...", rebase_with=icechunk.ConflictDetector())
+        break
+    except icechunk.ConflictError:
+        time.sleep(0.1 * (2 ** attempt))
 ```
 
-This makes the conflict story uniform — there is no "steady state vs
-catchup" distinction. A conflict just means "another pod committed
-between when I opened my session and when I tried to commit," and
-the response is always the same: throw away, recompute, retry. In
-steady state this almost never fires; in catchup it fires more
-often but is still cheap (recomputing keys and re-issuing
-`set_virtual_ref` calls is microseconds; the byte ranges we already
-have from the parsed index files).
+A few important properties of this model:
 
-#### Why this isn't expensive
-
-Each retry redoes:
-
-- One icechunk session open (cheap — metadata only).
-- One pass through `_refs_against_current_state` (a small array read).
-- A handful of `set_virtual_ref` calls (microseconds each).
-- One commit attempt.
-
-No re-downloading of GRIB index files, no re-parsing — we already
-have the parsed `(starts, ends)` from when the generator yielded the
-batch. The only thing that changes between attempts is which
-append-dim indices the refs land at, and that's a small recomputation
-from the current `init_time` (or `time`) coord values.
-
-In practice the steady-state path has at most one pod expanding
-per cron fire (the one with the newest init / newest time chunk).
-Other pods write to existing append-dim positions only and never
-collide. Conflicts only occur during catchup-like scenarios
-(multiple new inits arriving in one fire after downtime), and the
-retry handles them transparently.
+- **Expansion is idempotent across pods**. Each pod expands the dim to
+  cover everything in the template that it depends on — including
+  values it isn't ingesting but that must exist to keep sorted order.
+  After any pod commits its expansion, the dim is in the same target
+  state. Losers' retries see "expansion already done" and skip it.
+- **Filter is once-per-job**, not per-batch. Other pods aren't doing
+  our work, so we don't need to re-check what's done mid-job.
+- **Retries are cheap**. Byte ranges (from parsed index files) are
+  already in hand. The retry recomputes chunk-key indices against the
+  current dim shape and re-issues `set_virtual_ref` calls; that's
+  microseconds per ref.
+- **Conflicts only happen during multi-new-init scenarios**. Single
+  new init per fire = single expanding pod = no conflict. Multiple
+  new inits = conflicts that converge via the retry loop above. No
+  special-case code path.
 
 ### Concurrency and ConflictDetector (summary)
 
 `ConflictDetector` rejects a commit when two sessions wrote to the
-same path. The retry loop above is the response — it always works
-because lazy expansion + the filter-against-current-state step
-naturally recomputes target indices on each attempt.
+same path. The per-batch retry loop is the response — it always
+converges because:
 
-The existing `storage.commit_if_icechunk` already retries up to 10×
-on rebase failure, but that retry just re-runs `session.commit()`
-without rebuilding the session's writes. For virtual operational
-updates we need a different retry shape (open new session, redo the
-batch's writes, commit) which lives inside `VirtualRegionJob.process()`.
+1. Filter ran once at job start; this pod's work is fixed.
+2. Other pods never write this pod's chunks.
+3. The only path collisions are on dim-expansion metadata files,
+   which are idempotent across pods (everyone targets the same final
+   dim state derived from the template).
+
+The existing `storage.commit_if_icechunk` re-runs `session.commit()`
+without rebuilding the session's writes, which doesn't help us
+here — for virtual operational updates we need to rebuild the
+session (fresh write set against the new base) on each attempt.
+That logic lives inside `VirtualRegionJob.process()`.
 
 > **TBD-by-impl**: confirm icechunk 2.x's `ConflictDetector` accepts
 > rebases when one session resized an array (wrote `<var>/zarr.json`)
-> and another session wrote chunks under that array. Assumed
-> behavior: writes-only conflict tracking, so the rebase passes if
-> the write sets don't intersect. If `ConflictDetector` is stricter
-> than that, the retry loop above still handles it — we just see
-> more conflicts than expected and pay slightly more retries.
+> and another session wrote chunks under that array. The retry loop
+> above handles either answer; we just want to know how often
+> conflicts fire operationally.
 
 ### Latency tradeoff
 
