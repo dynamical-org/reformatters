@@ -21,9 +21,13 @@ byte ranges within the original GRIB files.
   `-spatial` dataset for map/spatial queries over the same underlying data.
 - **All source variables**: ~zero storage cost per variable means we can
   include every variable in the source archive, not just a curated subset.
-- **Very low latency updates**: target < 30s (60s acceptable). Writing
-  virtual references is near-instant since we're only recording byte
-  offsets, not transferring data.
+- **Very low latency updates**: target ≤ 5s end-to-end from a new
+  source file appearing to its virtual refs being visible. We hit
+  this by scheduling the pod to be up and polling *before* new files
+  start dropping (init publication times are predictable), polling
+  with `sleep(1)` between checks, and committing each newly-observed
+  file immediately. Writing virtual references is near-instant since
+  we're only recording byte offsets, not transferring data.
 
 The PR #511 prototype proved the approach: 15.5 KB on disk for what would
 be 350 MB materialized, with real reads via S3 + GribberishCodec working
@@ -71,19 +75,22 @@ just the byte offsets.
 
 ## Class architecture
 
-### Single `DynamicalDataset`; `VirtualRegionJob` as a sibling of `RegionJob`
+### Single `DynamicalDataset`; `MaterializedRegionJob` and `VirtualRegionJob` as siblings under `RegionJob`
 
 The current `DynamicalDataset` base already abstracts the right things
 for both variants — we keep one `DynamicalDataset` hierarchy. CLI,
 store factory, kubernetes resources, validation, Sentry — none fork.
 
-`RegionJob` today *is* the materialized base: the default `process()`
-body is the download/read/shared-memory/write/upload pipeline, and
-its hooks (`download_file`, `read_data`, `apply_data_transformations`,
-parallelism tunables) only make sense for materialized variants.
-Rather than rename the existing class (which would touch every
-dataset's region job file for zero behavior change), we keep `RegionJob`
-as the materialized base and add `VirtualRegionJob` as a sibling.
+`RegionJob`, on the other hand, has a substantial set of variant-specific
+concerns (materialized has the download/read/shared-memory/write/upload
+pipeline and its hooks; virtual has the watcher loop, set-virtual-ref
+helpers, and source container declarations). It also has a meaningful
+set of shared concerns (get_jobs partitioning, source_groups, the
+operational_update_jobs contract). The clearest expression of this is a
+three-class hierarchy with `RegionJob` as the shared base and
+`MaterializedRegionJob` / `VirtualRegionJob` as siblings. The
+materialized/virtual pairing in the names makes the distinction
+explicit at every reference site.
 
 ```
 DynamicalDataset                     # unchanged single base
@@ -93,33 +100,33 @@ DynamicalDataset                     # unchanged single base
 ├── NoaaGefsForecast35DaySpatialDataset (virtual; new)
 └── …
 
-RegionJob                            # materialized base (unchanged)
-├── NoaaGfsCommonRegionJob           # existing provider-specific subclasses
-├── NoaaHrrrRegionJob                #   stay rooted on RegionJob; no rename.
-└── …
-
-VirtualRegionJob                     # new sibling class
-├── NoaaGfsForecastSpatialRegionJob       (overrides process_virtual_refs)
-├── NoaaGefsForecast35DaySpatialRegionJob (overrides process_virtual_refs)
-└── …
+RegionJob                            # shared base: fields, get_jobs,
+                                     #   source_groups, update_template_with_results,
+                                     #   abstract process(), abstract operational_update_jobs(),
+                                     #   abstract generate_source_file_coords()
+├── MaterializedRegionJob            # the existing process() pipeline,
+│                                    #   download_file/read_data/transform hooks,
+│                                    #   download/read parallelism tunables
+│   ├── NoaaGfsCommonRegionJob       # provider-specific shared bits
+│   │   └── NoaaGfsForecastRegionJob (existing, base swap RegionJob → MaterializedRegionJob)
+│   ├── NoaaHrrrRegionJob            (existing, base swap)
+│   │   ├── NoaaHrrrForecast48HourRegionJob
+│   │   └── NoaaHrrrAnalysisRegionJob
+│   └── …
+└── VirtualRegionJob                 # the watcher loop, set_virtual_ref helpers,
+                                     #   process_virtual_refs (abstract),
+                                     #   _filter_already_ingested (default impl),
+                                     #   _expand_dimensions, _update_ingested_forecast_length,
+                                     #   source_virtual_chunk_containers ClassVar
+    ├── NoaaGfsForecastSpatialRegionJob       (overrides process_virtual_refs)
+    ├── NoaaGefsForecast35DaySpatialRegionJob (overrides process_virtual_refs)
+    └── …
 ```
 
-`VirtualRegionJob` reuses the small set of `RegionJob` concerns that
-genuinely generalize — region × variable-group fan-out via
-`get_jobs()`, `source_groups()`, `generate_source_file_coords()`,
-`operational_update_jobs()` — by being a thin parallel implementation
-of the same surface. PR #2 either:
-
-- (a) extracts the truly-common bits (the `get_jobs` algorithm,
-  filter-by-time, worker-round-robin) into a module-level helper that
-  both classes call, or
-- (b) leaves `VirtualRegionJob` to import and call `RegionJob.get_jobs`
-  as a classmethod with `is_virtual=True`-ish branching.
-
-Either is fine; pick whichever has the smaller diff. We deliberately
-don't introduce an abstract third class above both — there's not
-enough genuinely shared *runtime* behavior to justify it (the shared
-bits are pure helper functions).
+Moving the materialized `process()` body and helpers down one level
+(from today's `RegionJob` to the new `MaterializedRegionJob`) is a
+mechanical refactor — base class swap in each existing dataset's
+region job file, no semantic change.
 
 #### What lives where
 
@@ -134,13 +141,33 @@ bits are pure helper functions).
   no-temp-branch path for virtual operational updates.
 - Sentry monitoring wrapper.
 
-**`RegionJob` (unchanged):** today's class, including the materialized
-`process()` body and its hooks. No mechanical move.
-
-**`VirtualRegionJob` (new):**
+**`RegionJob` (shared base):**
 
 - Fields: `tmp_store`, `template_ds`, `data_vars`, `append_dim`,
-  `region`, `reformat_job_name`, `is_backfill`,
+  `region`, `reformat_job_name`.
+- `get_jobs()` — region × variable-group fan-out with filters and
+  worker round-robin. Shared verbatim today and continues to apply
+  to both variants.
+- `source_groups()`, `get_processing_region()`,
+  `update_template_with_results()`.
+- Abstract: `operational_update_jobs()`, `generate_source_file_coords()`,
+  `process()`.
+
+**`MaterializedRegionJob` (subclass of `RegionJob`):**
+
+- Hooks: `download_file()`, `read_data()`, `apply_data_transformations()`.
+- Tunables: `download_parallelism`, `read_parallelism`,
+  `max_vars_per_download_group`.
+- `process()` implementation: the current shared-memory pipeline
+  plus helpers (`_download_processing_group`, `_read_into_data_array`,
+  `_write_shards`, `_cleanup_local_files`).
+
+All existing dataset region jobs change their base class from
+`RegionJob` to `MaterializedRegionJob`. Tests pass unchanged.
+
+**`VirtualRegionJob` (subclass of `RegionJob`):**
+
+- Extra fields: `is_backfill: bool`,
   `max_files_per_commit: int`, `max_seconds_between_commits: float`.
 - `process()` implementation: opens icechunk session, runs filter
   once, drives generator, lazily expands as needed, sets refs,
@@ -163,23 +190,40 @@ bits are pure helper functions).
   current store's coord arrays.
 - `source_virtual_chunk_containers` ClassVar for store-factory
   wiring (see [Storage configuration](#storage-configuration)).
-- `operational_update_jobs()` and `get_jobs()` — parallel to
-  `RegionJob`'s but constructing `VirtualRegionJob` instances with
-  `is_backfill=False` and `is_backfill=True` respectively.
+- `operational_update_jobs()` calls inherited `get_jobs(...)` with
+  `is_backfill=False`; backfill callers go through `get_jobs(...)`
+  with `is_backfill=True` (the default).
 - `update_template_with_results()`: no-op for virtual. Lazy
   expansion means the committed dim length already matches reality;
   no trim needed.
 
 ## The update process
 
-The whole point of this is sub-60s updates, so the lifecycle deserves a
-clean walkthrough. Virtual operational updates use the **same Kubernetes
-scheduling pattern as materialized updates** — `ReformatCronJob` →
-indexed Job → N parallel worker pods. The differences from materialized
-are localized: no temp branch, commits go straight to `main`, and dim
-expansion happens **lazily inside each region job's `process()`** — only
-when that job needs to write to an append-dim position that doesn't yet
-exist, atomic with the corresponding refs.
+The whole point of this is ≤ 5s updates, so the lifecycle deserves a
+clean walkthrough. The same `ReformatCronJob` → indexed Job → N
+worker pods scheduling primitive as materialized, but with two key
+twists tuned for low latency:
+
+1. The CronJob is **scheduled to fire just before a publication
+   window starts** (e.g. 5 minutes before GFS init T begins
+   publishing). Each pod is long-lived within its fire — runs for
+   the duration of the publication window (hours, not seconds),
+   polling with `sleep(1)` for new files. This means the pod is
+   already up and watching when the source agency drops a file.
+2. Commits go straight to `main` (no temp branch) and dim expansion
+   happens lazily inside each region job's `process()`, atomic with
+   the corresponding refs. Same model as before.
+
+Net effect on latency:
+
+```
+latency ≈ poll_interval + index_download + commit + (occasional rebase retry)
+        ≈ 1s          + 100-500ms     + 0.5-1s + (1-2s on conflict)
+        = 2-3s typical, ≤5s worst case
+```
+
+`concurrencyPolicy: Forbid` on the CronJob prevents a new fire from
+launching while the previous fire's pod is still polling.
 
 ### No NaN-padded future
 
@@ -198,46 +242,54 @@ from seeing empty future time steps:
 
 The materialized flow protects readers from "expanded but empty" via a
 temp branch. We can't do that for virtual operational updates without
-losing the latency advantage (the whole point is sub-minute visibility).
-Lazy expansion is the alternative: data and structure always commit
-together.
+losing the latency advantage (the whole point is per-file visibility
+in seconds). Lazy expansion is the alternative: data and structure
+always commit together.
 
 ### Step-by-step
 
-1. **CronJob fires** on its schedule (typically once per minute; see
-   [Latency tradeoff](#latency-tradeoff) below). `concurrencyPolicy: Forbid`
-   prevents overlapping fires.
+1. **CronJob fires** on a schedule timed to publication windows
+   (per dataset; e.g. for GFS, fire ~5 min before each 6h init's
+   publication starts). `concurrencyPolicy: Forbid` prevents
+   overlapping fires.
 2. **Indexed Job spawns N workers**. Same env vars as today
    (`JOB_NAME`, `WORKER_INDEX`, `WORKERS_TOTAL`).
 3. **Each worker runs `update()`** on the `DynamicalDataset`, which
    calls `operational_update_jobs()` and then `_process_region_jobs()`.
 4. **The driver detects this is a virtual operational update** —
    `region_job_class` is a `VirtualRegionJob` subclass and
-   `update_template_with_results=True`. It takes the virtual operational
-   path: no temp branch, no shared setup step. Each pod handles its
-   round-robin slice of region jobs directly.
+   `update_template_with_results=True`. It takes the virtual
+   operational path: no temp branch, no shared setup step. Each pod
+   handles its round-robin slice of region jobs directly.
 5. **Each worker processes its assigned region jobs in parallel**. For
    each region job, `VirtualRegionJob.process()`:
    1. Calls `_filter_already_ingested(source_coords)` once at the
       top — narrows the job to files this pod still needs to ingest.
       (Other pods never do this pod's work, so we don't need to
       re-check mid-job.)
-   2. Drives the `process_virtual_refs()` generator. Each batch of
-      refs is buffered.
-   3. When the pending-refs counter hits `max_files_per_commit`
-      or `max_seconds_between_commits`, commit the batch via the
-      retry loop below: open a fresh session on `main`, expand the
-      dim if still needed, compute chunk keys against current state,
-      `store.set_virtual_ref(...)` for each ref, commit with
+   2. Drives the `process_virtual_refs()` generator. The generator
+      polls source-file availability with `sleep(1)` between
+      checks (HEAD requests on the source URLs are fast and cheap)
+      and yields each newly-observed file as a single-file batch
+      immediately. Operational region jobs default to
+      `max_files_per_commit=1` so each file commits on its own for
+      minimum latency.
+   3. Each batch commits via the retry loop: open a fresh session
+      on `main`, expand the dim if still needed, compute chunk
+      keys against current state, `store.set_virtual_ref(...)` for
+      each ref, commit with
       `rebase_with=icechunk.ConflictDetector()`. On conflict, throw
       away the session and try again.
-   4. After the generator exhausts (or the pod's
-      `pod_active_deadline` approaches), commit any pending refs.
+   4. The generator exits when all expected files for this job have
+      been ingested (e.g.
+      `ingested_forecast_length[init] >= expected_forecast_length[init]`)
+      or the pod's `pod_active_deadline` approaches.
 6. **No finalize step**. There's no temp branch to merge. The driver
    may still wait for all workers (via the existing coordination-file
    mechanism) before exiting, but there's no `reset_branch`.
-7. **Pods exit**. The next cron fire picks up any files that weren't
-   yet published (or were skipped because the pod hit its deadline).
+7. **Pod exits** when its work is done. The next scheduled cron fire
+   (for the next publication window) starts a fresh pod that picks
+   up any unfinished work via `_filter_already_ingested`.
 
 This flow is intentionally close to the existing materialized flow.
 What changes is small: skip the temp branch, expand `main` lazily
@@ -337,30 +389,6 @@ That logic lives inside `VirtualRegionJob.process()`.
 > above handles either answer; we just want to know how often
 > conflicts fire operationally.
 
-### Latency tradeoff
-
-Kubernetes CronJobs fire at most once per minute. End-to-end latency
-for a single new file is roughly:
-
-```
-latency ≈ cron_interval + pod_startup + source_file_published_to_observed + processing
-        ≈ 60s + 5-15s + 0-30s + <5s
-        = 70-110s in the typical case
-```
-
-For 60s targets this is tight; we accept it. For < 30s targets it
-doesn't fit — that would require a different mechanism (long-running
-watcher pod, event-driven trigger) which we're explicitly not
-building yet. Document the achievable latency per dataset as part of
-PR #3.
-
-`process_virtual_refs()` does not poll within a fire. Each fire
-processes what's available now and exits. This keeps the
-generator's behavior simple and identical between operational and
-backfill paths; the only difference is `is_backfill` controlling
-commit-batching thresholds. If a file shows up mid-fire and isn't
-yet observable, the next cron fire (60s later) catches it.
-
 ### Crash recovery
 
 `_filter_already_ingested` makes crash recovery trivial in steady
@@ -389,9 +417,11 @@ Backfills use the same `VirtualRegionJob.process()` and
    partial state during a backfill.
 2. **Looser commit thresholds**: backfill region jobs are constructed
    with higher `max_files_per_commit` (e.g. 50) and
-   `max_seconds_between_commits` (e.g. 60s) than operational ones
-   (e.g. 5 and 10s). Fewer commits, more refs per commit, less
-   overhead for the much larger volume.
+   `max_seconds_between_commits` (e.g. 60s). Operational region jobs
+   default to `max_files_per_commit=1` (commit each file immediately
+   for ≤5s visibility). Backfills don't care about per-file latency
+   so larger batches reduce commit overhead for the much larger
+   volume.
 
 The plumbing for these differences:
 
@@ -763,23 +793,28 @@ Smaller and tighter than the previous draft.
 - Add `serializer: dict[str, Any] | None = None` to
   `common/config_models.py::Encoding`. Plumb it through
   `template_utils.assign_var_metadata`.
-- Add `gribberish` dependency to `pyproject.toml`. Verify the
-  version that works with icechunk 2.0.3 (PR #511 used
-  `gribberish>=0.29.0` against icechunk 1.1.15; smoke-test on 2.x
-  before pinning).
+- Add `gribberish` dependency to `pyproject.toml` using a `~=`
+  version specifier (same style as the existing `icechunk~=2.0`,
+  `dask~=2026.0`, `kubernetes~=33.1` pins). PR #511 used
+  `gribberish>=0.29.0` against icechunk 1.1.15; smoke-test the
+  current `~=0.X` release on icechunk 2.0.3 and pin to that.
 - Add `VirtualChunkContainerConfig` to `common/storage.py`, plus the
   `virtual_chunk_containers` field on `StoreFactory` and the
   open-time wiring through `_get_icechunk_storage`. Assert
   icechunk-only when set.
-
-**No `MaterializedRegionJob` rename.** The existing `RegionJob` keeps
-its materialized `process()` body and hooks — `VirtualRegionJob`
-is a sibling, not a refactor of the existing class.
+- **Extract `MaterializedRegionJob`** from today's `RegionJob`: move
+  the materialized `process()` body, the `download_file` /
+  `read_data` / `apply_data_transformations` hooks, the parallelism
+  tunables, and the `_download_processing_group` /
+  `_read_into_data_array` / `_write_shards` / `_cleanup_local_files`
+  helpers into a new `MaterializedRegionJob(RegionJob)` class. Swap
+  every existing dataset's region job base from `RegionJob` to
+  `MaterializedRegionJob`. Mechanical refactor; tests pass unchanged.
 
 ### PR #2 — VirtualRegionJob and driver hooks
 
-- Add `VirtualRegionJob` as a sibling of `RegionJob` (not a subclass),
-  with the operational flow described in
+- Add `VirtualRegionJob` as a sibling of `MaterializedRegionJob`
+  under `RegionJob`, with the operational flow described in
   [The update process](#the-update-process).
 - Extend `_process_region_jobs` to branch on `region_job_class`
   (virtual operational updates skip the temp branch; backfills and
@@ -1038,10 +1073,10 @@ scanner.
   only used at array-metadata write time to label the codec; decode
   reads whatever GRIB bytes the chunk reference points to.
 - **Dependency set added by the prototypes**: `icechunk==1.1.15` (now
-  superseded by `~=2.0` in this repo), `zarr 3.1.3`,
-  `gribberish>=0.29.0`. VirtualiZarr was used in PR #510 but is **not**
-  needed by our adopted PR #511 approach — that's a deliberate
-  simplification.
+  superseded by `~=2.0` in this repo), `zarr 3.1.3`, `gribberish`
+  (PR #511 used `>=0.29.0`; PR #1 in this plan will use `~=` style).
+  VirtualiZarr was used in PR #510 but is **not** needed by our
+  adopted PR #511 approach — that's a deliberate simplification.
 - **Mixed storage in one Icechunk store**: coordinate arrays are real
   zarr data (with zstd compression); data variables are virtual GRIB
   refs. Both live in the same icechunk store. This is the model we
