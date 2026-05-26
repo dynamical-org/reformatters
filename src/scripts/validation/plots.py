@@ -5,7 +5,6 @@ import typer
 
 from reformatters.common.logging import get_logger
 from scripts.validation.compare_spatial import (
-    GEFS_ANALYSIS_URL,
     compare_spatial,
     run_compare_spatial,
 )
@@ -25,6 +24,8 @@ from scripts.validation.utils import (
     is_forecast_dataset,
     load_zarr_dataset,
     output_dir_option,
+    reference_url_option,
+    resolve_reference_url,
     scope_time_period,
     select_variables_for_plotting,
     start_date_option,
@@ -60,9 +61,7 @@ app.command(
 )
 def run_all(
     dataset_url: str,
-    reference_url: str = typer.Option(
-        GEFS_ANALYSIS_URL, "--reference-url", help="Reference dataset URL"
-    ),
+    reference_url: str | None = reference_url_option,
     variables: list[str] | None = variables_option,
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
@@ -89,6 +88,7 @@ def run_all(
     if start_date or end_date:
         validation_ds = scope_time_period(validation_ds, start_date, end_date)
 
+    reference_url = resolve_reference_url(reference_url)
     log.info(f"Loading reference dataset:  {reference_url}")
     reference_ds = load_zarr_dataset(reference_url)
 
