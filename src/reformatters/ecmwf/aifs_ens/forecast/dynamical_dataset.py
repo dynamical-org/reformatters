@@ -30,7 +30,7 @@ class EcmwfAifsEnsForecastDataset(
             # AIFS-ENS publishes the last file ~H+6h00m to H+6h40m after init across
             # normal cycles (sample of 11 v2 cycles 2026-05-12 through 05-14).
             # Run at H+6h43m for a 3 min margin past the worst-observed last-file lag.
-            schedule="43 6/6 * * *",
+            schedule="43 */6 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -45,7 +45,7 @@ class EcmwfAifsEnsForecastDataset(
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
             # Validation runs 30 minutes after each update run: 01:13, 07:13, 13:13, and 19:13.
-            schedule="13 7/6 * * *",
+            schedule="13 1-23/6 * * *",
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
