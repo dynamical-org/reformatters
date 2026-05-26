@@ -159,11 +159,14 @@ Every existing dataset's `RegionJob` subclass changes its base from
 **`VirtualRegionJob` (new):**
 
 - `process()` implementation: opens icechunk session, runs filter, drives
-  generator, sets refs, commits (see [The update process](#the-update-process)).
+  generator, lazily expands as needed, sets refs, commits (see
+  [The update process](#the-update-process)).
 - `process_virtual_refs()` (abstract — the generator subclasses implement).
 - `_filter_already_ingested()` default implementation (see
   [Filtering](#filtering-already-ingested-coordinates)).
-- `_expand_dimensions()` helper used by the driver during setup.
+- `_expand_dimensions(new_append_values)` helper called from `process()`
+  when a batch introduces new append-dim values — resizes coord and data
+  var arrays and writes the new coord values into the current session.
 - `_should_commit()` helper using ClassVar commit thresholds.
 - ClassVar tuples: `max_files_per_commit`, `max_seconds_between_commits`
   (operational vs backfill values).
@@ -179,7 +182,30 @@ clean walkthrough. Virtual operational updates use the **same Kubernetes
 scheduling pattern as materialized updates** — `ReformatCronJob` →
 indexed Job → N parallel worker pods. The differences from materialized
 are localized: no temp branch, commits go straight to `main`, and dim
-expansion happens in worker 0 instead of a temp-branch metadata write.
+expansion happens **lazily inside each region job's `process()`** — only
+when that job needs to write to an append-dim position that doesn't yet
+exist, atomic with the corresponding refs.
+
+### No NaN-padded future
+
+Lazy expansion is the deliberate design choice that protects consumers
+from seeing empty future time steps:
+
+- **Analysis datasets**: the `time` array grows exactly to match the
+  data actually ingested. We never pre-expand to "now" or any other
+  forward boundary. Consumers querying past the end see "out of range,"
+  not NaN.
+- **Forecast datasets**: each new `init_time` slot is created in the
+  same commit that lands its first virtual refs. Consumers querying a
+  newly-published init see the lead times that have been published so
+  far (and NaN for ones that haven't yet — same as today's materialized
+  forecasts mid-update).
+
+The materialized flow protects readers from "expanded but empty" via a
+temp branch. We can't do that for virtual operational updates without
+losing the latency advantage (the whole point is sub-minute visibility).
+Lazy expansion is the alternative: data and structure always commit
+together.
 
 ### Step-by-step
 
@@ -193,93 +219,113 @@ expansion happens in worker 0 instead of a temp-branch metadata write.
 4. **The driver detects this is a virtual operational update** —
    `region_job_class` is a `VirtualRegionJob` subclass and
    `update_template_with_results=True`. It takes the virtual operational
-   path:
-   - **Worker 0**: opens a writable session on `main`, computes the new
-     append-dim range from `operational_update_jobs()`'s `template_ds`
-     vs the current dataset, calls `_expand_dimensions(...)` (resize
-     coord array, write new coord values, resize each data var array),
-     commits. Writes `setup/ready.json` to the coordination store.
-   - **Workers 1+**: poll for `setup/ready.json` (same coordination
-     primitive as today's materialized flow).
-5. **All workers process their assigned region jobs in parallel**. Each
-   `VirtualRegionJob.process()`:
+   path: no temp branch, no shared setup step. Each pod handles its
+   round-robin slice of region jobs directly.
+5. **Each worker processes its assigned region jobs in parallel**. For
+   each region job, `VirtualRegionJob.process()`:
    1. Opens its own writable session on `main`.
    2. Calls `_filter_already_ingested(source_coords)` — typically
-      reduces the work to a handful of newly-available files.
-   3. Drives the `process_virtual_refs()` generator. Each yielded batch
-      becomes one or more `store.set_virtual_ref(...)` calls. When the
-      pending-refs counter hits `max_files_per_commit` or
-      `max_seconds_between_commits`, the worker commits with
-      `rebase_with=icechunk.ConflictDetector()` and opens a fresh
-      session on `main`.
+      reduces the work to a handful of newly-available files (or zero
+      files if this region job has nothing new).
+   3. Drives the `process_virtual_refs()` generator. For each batch:
+      - If the batch's coords include append-dim values not yet in
+        the store, call `_expand_dimensions(new_values)` to resize
+        coord and data var arrays and write the new coord values.
+        This and the batch's `set_virtual_ref` calls go into the
+        same session.
+      - Issue `store.set_virtual_ref(...)` for each (var, chunk) in
+        the batch.
+      - When the pending-refs counter hits `max_files_per_commit`
+        or `max_seconds_between_commits`, commit with
+        `rebase_with=icechunk.ConflictDetector()` and open a fresh
+        session on `main`.
    4. After the generator exhausts (or the pod's
       `pod_active_deadline` approaches), commits any pending refs.
 6. **No finalize step**. There's no temp branch to merge. The driver
-   may still call `parallel_coordination.wait_for_workers` so worker N
-   can clear coordination files, but there's no `reset_branch`.
+   may still wait for all workers (via the existing coordination-file
+   mechanism) before exiting, but there's no `reset_branch`.
 7. **Pods exit**. The next cron fire picks up any files that weren't
    yet published (or were skipped because the pod hit its deadline).
 
 This flow is intentionally close to the existing materialized flow.
-What changes is small: skip the temp branch, expand `main` directly,
-let each worker manage its own session and commit cadence.
+What changes is small: skip the temp branch, expand `main` lazily
+inside each region job's process() as data arrives, let each worker
+manage its own session and commit cadence.
 
-### Why worker-0 expansion (instead of lazy per-batch expansion)
+### Why lazy expansion works with parallel pods
 
-Append-dim coordinates live in one or few chunks (e.g.,
-`init_time/c/0` holds ~14600 values in a single chunk for HRRR). Two
-worker pods that both need to expand the same dim would both rewrite
-`init_time/c/0` and `init_time/zarr.json` with different values —
-write-write conflict on the same paths.
+The concern with lazy expansion + parallel pods is concurrent writes
+to the same metadata files (`init_time/zarr.json`, the chunk holding
+the `init_time` coord values, each data var's `zarr.json`). In
+practice this isn't an issue, for a structural reason:
 
-Concentrating expansion in worker 0 sidesteps this entirely. After
-worker 0 commits, the dim shape and coord values are settled, and
-workers 1+ only ever write to **chunks** (which are disjoint between
-workers by region-job assignment, so chunk writes never collide).
+> **In steady state, only one region job per cron fire ever needs to
+> expand.** Other region jobs are processing append-dim positions that
+> already exist in the dataset (filling in missing lead times for older
+> inits, etc.) and write only to chunk paths, not metadata.
 
-Tradeoff: readers may briefly see "expanded but empty" — the new dim
-positions exist with NaN/fill values until workers fill them. This is
-acceptable for forecasts that publish `ingested_forecast_length` as a
-progress signal, and for analyses that update infrequently. If a
-dataset can't tolerate this, it can fall back to the temp-branch flow
-(losing some latency).
+Concretely:
 
-### Concurrency and ConflictDetector
+- **Forecast steady state**: one new init publishes per fire. The
+  region job for that init expands; jobs for older inits (still
+  catching up on lead times) don't.
+- **Analysis steady state**: one region job per fire processes the
+  newest time-window shard, expanding `time` by the just-published
+  steps. Other region jobs (if any) write to existing time positions.
 
-After worker 0's expansion commit, the remaining workers write chunks
-in parallel. Their write sets are disjoint by construction (different
-region jobs cover different parts of the append dim, and different
-variables write to different array paths). `ConflictDetector` accepts
-disjoint-write rebases automatically. The existing
-`storage.commit_if_icechunk` already retries up to 10× on rebase
-failures.
+Because workers' write sets are disjoint by construction (different
+region jobs cover different append-dim positions), `ConflictDetector`
+accepts the concurrent commits without retries.
 
-Scenarios to keep in mind (and the integration test in PR #2 should
-cover):
+### The catchup edge case
 
-- **Two pods writing to disjoint chunks of the same array** (e.g.
-  pod A: `temperature_2m/c/N-2/*/0/0`, pod B:
-  `temperature_2m/c/N-1/*/0/0`). Chunk paths differ; rebase passes;
-  both commits land.
-- **Worker 0 expanding while a worker 1 from a previous cron is still
-  finishing**. Possible if the previous cron's pods overran their
-  deadline. Worker 0's expansion only modifies metadata + coord
-  chunks; the previous-cron worker is writing data chunks. Paths are
-  disjoint; safe.
-- **Two pods both trying to expand the same dim**. Should NOT happen
-  if only worker 0 expands. If it does (e.g., due to a logic bug),
-  `ConflictDetector` rejects the second commit; the second pod's
-  retry sees the dim is already expanded and proceeds. Worth asserting
-  in code.
+After downtime — or any other scenario with multiple unprocessed
+new inits / time chunks — multiple region jobs may each want to
+expand. The conflict pattern is:
+
+- Pod A (init T-6h, new): opens session at S0 (shape N). Expands to
+  N+1 with `init_time[N] = T-6h`. Sets refs for T-6h's chunks at
+  index N. Commits → S1.
+- Pod B (init T, new): opens session at S0 (shape N) in parallel.
+  Computes "T goes at index N" from S0's shape. Expands to N+1
+  with `init_time[N] = T`. Sets refs at index N. Commits → conflict
+  with S1 (different values written to same chunk path
+  `init_time/c/0`).
+
+There are two workable answers for this. **PR #3 picks one** based
+on what feels right for the first concrete dataset:
+
+1. **App-level retry**: catch the conflict, throw away pod B's
+   session, re-run `_filter_already_ingested` (which now sees Pod A's
+   commit), recompute target indices, retry. Implementable as a try
+   / except wrapper around `process()`. Requires `process()` to be
+   re-runnable, which it already is in spirit.
+2. **Route catchup through backfill**: if `operational_update_jobs()`
+   detects "too many new append-dim values" (say, more than 1 or
+   more than a configurable threshold), the dataset's `update()` is a
+   no-op for this fire and a separate backfill job (using the
+   existing temp-branch flow) catches up. Slower recovery but
+   trivially correct.
+
+The plan does not specify which to use — pick at PR #3. Whichever
+we pick, we add an integration test that simulates the catchup
+scenario and asserts the eventual state is correct.
+
+### Concurrency and ConflictDetector (summary)
+
+For the steady-state path (one expanding job, several non-expanding
+jobs), the write sets are disjoint and `ConflictDetector` is enough.
+Existing `storage.commit_if_icechunk` already retries up to 10× on
+rebase failure, which covers transient races.
+
+For catchup, the app-level retry (option 1 above) or backfill route
+(option 2) is required.
 
 > **TBD-by-impl**: confirm icechunk 2.x's `ConflictDetector` accepts
-> rebases when one session resized an array (wrote
-> `<var>/zarr.json`) and the other session wrote chunks under that
-> array. The model assumed here is writes-only conflict tracking, but
-> we want to verify with a small integration test before relying on
-> it. Fallbacks if it's stricter: (a) switch to a looser rebase
-> strategy, or (b) commit expansion + filling together in worker 0
-> for the very first batch, then let workers 1+ proceed.
+> rebases when one session resized an array (wrote `<var>/zarr.json`)
+> and another session wrote chunks under that array. Assumed behavior:
+> writes-only conflict tracking, so a rebase passes if the write sets
+> don't intersect. The integration test in PR #2 verifies this.
 
 ### Latency tradeoff
 
@@ -294,13 +340,14 @@ latency ≈ cron_interval + pod_startup + source_file_published_to_observed + pr
 
 For 60s targets this is tight; we accept it. For < 30s targets it
 doesn't fit — that would require a different mechanism (long-running
-watcher pod, event-driven trigger) which we're explicitly not building
-yet. Document the achievable latency per dataset as part of PR #3.
+watcher pod, event-driven trigger) which we're explicitly not
+building yet. Document the achievable latency per dataset as part of
+PR #3.
 
 Within a single fire, `process_virtual_refs()` MAY briefly poll
 (check, sleep ~5-10s, check again) up to its pod budget so files
-arriving mid-fire still get processed. This trades pod CPU for lower
-average latency; appropriate for high-update-rate datasets.
+arriving mid-fire still get processed. This trades pod CPU for
+lower average latency; appropriate for high-update-rate datasets.
 
 ### Crash recovery
 
@@ -308,14 +355,15 @@ average latency; appropriate for high-update-rate datasets.
 state — a re-run picks up where the last commit left off. Specific
 crash scenarios:
 
-- **Worker 0 crashes mid-expansion**: expansion is one commit; either
-  it landed (next cron sees the new dim and skips re-expanding) or it
-  didn't (next cron re-expands cleanly).
-- **Worker 0 crashes after expansion but before `setup/ready.json`**:
-  other workers wait for the file and time out; next cron retries.
-  The expansion is durable in icechunk regardless.
-- **Worker N crashes mid-processing**: committed refs are durable;
-  next cron's `_filter_already_ingested` skips the work that's done.
+- **Worker crashes mid-batch (before commit)**: pending refs are
+  lost; the next cron fire re-discovers them via filter and re-sets
+  them. Idempotent.
+- **Worker crashes after some commits but before others**: committed
+  refs and expansions are durable; uncommitted ones are not.
+  `_filter_already_ingested` skips what's done, processes the rest.
+- **Worker crashes mid-expansion (after `_expand_dimensions` but
+  before commit)**: expansion is part of the session, not yet
+  visible. Next fire sees the unchanged dataset and re-expands.
 
 ## The backfill process
 
@@ -712,14 +760,21 @@ Smaller and tighter than the previous draft.
 - Add the `is_backfill` field on `VirtualRegionJob`, set by
   `get_jobs(...)` (True) and `operational_update_jobs(...)` (False).
 - Add the default `_filter_already_ingested` with both strategies.
-- Add `_expand_dimensions` helper invoked from worker 0 during
-  virtual operational update setup.
+- Add `_expand_dimensions` helper, called lazily from `process()`
+  when a batch's append-dim values exceed the current store shape.
 - Add commit-batching ClassVar tuples.
-- Integration tests:
-  - Concurrent disjoint-chunk writes against a local icechunk repo,
-    verifying ConflictDetector + retry succeed.
-  - Backfill-to-update transition (backfill leaves a partial state;
-    update fills the rest) using a mocked source layer.
+- Integration tests against a local icechunk 2.x repo:
+  - **Concurrent disjoint-chunk writes** — two pods writing chunks
+    at different `init_time` indices, one of them also expanding
+    the dim. Verifies `ConflictDetector` accepts a rebase when one
+    session resized an array and another wrote chunks under it.
+  - **Catchup conflict** — two pods both expanding for new inits
+    simultaneously. Verifies the chosen catchup strategy (app-level
+    retry vs backfill route) eventually converges to a correct
+    state.
+  - **Backfill-to-update transition** — backfill leaves a partial
+    state; update fills the rest. Verifies the temp-branch and
+    direct-to-main paths interoperate cleanly.
 
 ### PR #3 — First concrete virtual dataset (end to end)
 
@@ -784,6 +839,11 @@ convenience at the time.
    reject a rebase when one session resized an array and another
    wrote chunks under that array? The integration test in PR #2
    answers this.
+7. **Catchup strategy** (TBD-by-impl): when multiple new append-dim
+   values arrive in one cron fire (after downtime or for a slow
+   recovery), do we use app-level retry inside `process()` to handle
+   concurrent expansions, or route catchup through the backfill flow?
+   Decide at PR #3 based on what feels right for the first dataset.
 
 ---
 
@@ -967,7 +1027,7 @@ section enumerates it so an implementer can find each piece quickly.
 | Worker round-robin | `iterating.get_worker_jobs()` | Used unchanged |
 | Icechunk store creation, anonymous credentials | `storage._get_icechunk_store`, `_get_icechunk_storage` | Extended with `virtual_chunk_containers` |
 | Temp-branch backfill flow | `parallel_coordination.parallel_setup`, `finalize` | Used unchanged for virtual backfills |
-| Coordination files (`setup/ready.json`, `results/*`) | `StoreFactory.write/read/count_coordination_files` | Used in worker-0 setup for virtual operational updates |
+| Coordination files (`setup/ready.json`, `results/*`) | `StoreFactory.write/read/count_coordination_files` | Used by virtual backfills (same as materialized); not used by virtual operational updates (no shared setup step) |
 | Icechunk commit with rebase | `storage.commit_if_icechunk` | Used inside `VirtualRegionJob.process()` |
 | GRIB index parsing | `noaa/noaa_grib_index.py`, `ecmwf/ecmwf_grib_index.py` | Rename ECMWF function for naming consistency in PR #1 |
 | Operational job factory | `RegionJob.operational_update_jobs` | Implemented per dataset, virtual or materialized |
