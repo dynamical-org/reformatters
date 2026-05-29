@@ -499,7 +499,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         xr.open_zarr(
                             replica_store,
                             chunks=None,
-                            # Icechunk ignores consolidated metadata; see validation.validate_dataset.
                             consolidated=not isinstance(replica_store, IcechunkStore),
                         ),
                     )

@@ -64,9 +64,6 @@ def validate_dataset(
     """
     log.info(f"Validating zarr {store}")
 
-    # Icechunk ignores consolidated metadata, so reading it always falls back to
-    # the (slower) unconsolidated path with a warning; pass consolidated=False.
-    # Our zarr3 stores always carry consolidated metadata, so require it there.
     consolidated = not isinstance(store, IcechunkStore)
 
     # Run all validators
