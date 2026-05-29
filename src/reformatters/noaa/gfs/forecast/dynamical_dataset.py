@@ -20,8 +20,9 @@ class NoaaGfsForecastDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            # GFS f384 (full forecast) available ~5h12m after init on NOMADS. +3 min buffer.
-            schedule="15 5,11,17,23 * * *",
+            # GFS f384 (full forecast) lands ~init+5h12m-5h19m on S3/NOMADS (drifting
+            # later; not-found is not retried), so fetch at init+5h22m for margin.
+            schedule="22 5,11,17,23 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -35,7 +36,7 @@ class NoaaGfsForecastDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="45 5,11,17,23 * * *",  # 30m (pod_active_deadline) after reformat at :15
+            schedule="52 5,11,17,23 * * *",  # 30m (pod_active_deadline) after reformat at :22
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,

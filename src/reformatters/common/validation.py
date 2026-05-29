@@ -321,9 +321,11 @@ def _check_nan_fractions(
     }
 
     if problem_vars:
+        # Sort by variable name so the message is deterministic regardless of thread
+        # completion order, letting Sentry collapse these into a single issue.
         message = f"Excessive NaN fraction (> {max_nan_fraction}):\n" + "\n".join(
             f"- {var}: {fraction:.6f} NaN fraction"
-            for var, fraction in problem_vars.items()
+            for var, fraction in sorted(problem_vars.items())
         )
         return ValidationResult(passed=False, message=message)
 
