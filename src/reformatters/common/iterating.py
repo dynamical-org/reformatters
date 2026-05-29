@@ -26,7 +26,7 @@ def shard_slice_indexers(da: xr.DataArray) -> Sequence[tuple[slice, ...]]:
     Returns tuples of integer offset slices which correspond to each shard of `da` across all dimensions.
     Each tuple can be used to index into `da` to extract a shard, e.g. `da[shard_indexer]`.
     """
-    dim_slices = map(chunk_slices, da.shape, da.encoding["shards"])
+    dim_slices = map(chunk_slices, da.shape, da.encoding["shards"], strict=True)
     return tuple(product(*dim_slices))
 
 
