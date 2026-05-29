@@ -721,6 +721,9 @@ def _make_forecast_region_job() -> GefsForecast35DayRegionJob:
     )
 
 
+# read_rasterio reprojects GEFS GRIB and suppresses the expected NotGeoreferencedWarning per-call,
+# but warnings.catch_warnings is not thread-safe so it leaks under the ThreadPoolExecutor below.
+@pytest.mark.filterwarnings("ignore::rasterio.errors.NotGeoreferencedWarning")
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "lead_time",

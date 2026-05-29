@@ -12,6 +12,7 @@ import xarray as xr
 import zarr
 import zarr.core.sync
 import zarr.storage
+from icechunk.store import IcechunkStore
 from zarr.abc.store import Store
 
 from reformatters.common import iterating
@@ -63,10 +64,12 @@ def validate_dataset(
     """
     log.info(f"Validating zarr {store}")
 
+    consolidated = not isinstance(store, IcechunkStore)
+
     # Run all validators
     failed_validations = []
     for validator in validators:
-        ds = xr.open_zarr(store, chunks=None)
+        ds = xr.open_zarr(store, chunks=None, consolidated=consolidated)
 
         result = validator(ds)
         if not result.passed:

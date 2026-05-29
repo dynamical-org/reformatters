@@ -350,7 +350,9 @@ def test_validate_dataset_calls_validators(
 
     mock_replica_store_ds = Mock()
     monkeypatch.setattr(
-        xr, "open_zarr", lambda store, chunks=None: mock_replica_store_ds
+        xr,
+        "open_zarr",
+        lambda store, chunks=None, consolidated=None: mock_replica_store_ds,
     )
 
     dataset.validate_dataset("example-job-name")
