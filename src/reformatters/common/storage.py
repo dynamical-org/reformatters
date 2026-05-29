@@ -22,7 +22,7 @@ from reformatters.common import kubernetes
 from reformatters.common.config import Config, Env
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
-from reformatters.common.retry import retry
+from reformatters.common.retry import constant_jitter_delay, retry
 
 log = get_logger(__name__)
 
@@ -413,10 +413,12 @@ def amend_if_icechunk(
             retry(
                 functools.partial(_amend, store),
                 max_attempts=100,
+                delay_seconds=constant_jitter_delay,
             )
 
     if isinstance(primary_store, IcechunkStore):
         retry(
             functools.partial(_amend, primary_store),
             max_attempts=100,
+            delay_seconds=constant_jitter_delay,
         )

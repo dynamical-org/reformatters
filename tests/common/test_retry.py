@@ -2,7 +2,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from reformatters.common.retry import retry
+from reformatters.common.retry import constant_jitter_delay, retry
 
 
 def test_retry_succeeds_on_first_attempt() -> None:
@@ -35,3 +35,21 @@ def test_retryable_exceptions_propagates_non_matching() -> None:
     with pytest.raises(TypeError, match="not retryable"):
         retry(mock_func, max_attempts=3, retryable_exceptions=(ValueError,))
     assert mock_func.call_count == 1
+
+
+def test_retry_uses_custom_delay_seconds() -> None:
+    attempts_seen: list[int] = []
+
+    def delay(attempt: int) -> float:
+        attempts_seen.append(attempt)
+        return 0.0
+
+    mock_func = Mock(side_effect=[ValueError("a"), ValueError("b"), "success"])
+    result = retry(mock_func, max_attempts=3, delay_seconds=delay)
+    assert result == "success"
+    assert attempts_seen == [0, 1]
+
+
+def test_constant_jitter_delay_does_not_grow() -> None:
+    delays = [constant_jitter_delay(attempt) for attempt in range(100)]
+    assert all(0.05 <= d <= 0.2 for d in delays)

@@ -17,7 +17,7 @@ from pydantic import TypeAdapter
 from reformatters.common import storage, template_utils
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob, SourceFileResult
-from reformatters.common.retry import retry
+from reformatters.common.retry import constant_jitter_delay, retry
 from reformatters.common.storage import StoreFactory
 from reformatters.common.zarr import copy_zarr_metadata
 
@@ -210,7 +210,9 @@ def finalize(
                         s.rebase(icechunk.ConflictDetector())
                         return s.amend(commit_message)
 
-                new_snapshot = retry(_amend, max_attempts=100)
+                new_snapshot = retry(
+                    _amend, max_attempts=100, delay_seconds=constant_jitter_delay
+                )
 
             # Make our update visible to readers of main.
             # from_snapshot_id=original_snapshot ensures we don't overwrite another uncoordinated update
