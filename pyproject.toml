@@ -137,10 +137,3 @@ markers = [
     "slow: slow running tests.",
     "skip_set_local_zarr_store_base_path: opt out of automatically writing zarrs to a tmp directory during tests",
 ]
-filterwarnings = [
-    # GRIB2 files carry their own georeferencing rather than a GDAL geotransform, so rasterio emits
-    # NotGeoreferencedWarning when we reproject in read_rasterio. read_rasterio suppresses it per-call,
-    # but warnings.catch_warnings is process-global and not thread-safe, so the suppression leaks under
-    # the ThreadPoolExecutor concurrency in the download/read tests. The warning is expected and harmless.
-    "ignore::rasterio.errors.NotGeoreferencedWarning",
-]

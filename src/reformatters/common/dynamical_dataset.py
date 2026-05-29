@@ -14,6 +14,7 @@ import sentry_sdk
 import sentry_sdk.crons
 import typer
 import xarray as xr
+from icechunk.store import IcechunkStore
 from pydantic import Field, computed_field
 
 from reformatters.common import (
@@ -495,7 +496,12 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     partial(
                         validation.compare_replica_and_primary,
                         self.template_config.append_dim,
-                        xr.open_zarr(replica_store, chunks=None),
+                        xr.open_zarr(
+                            replica_store,
+                            chunks=None,
+                            # Icechunk ignores consolidated metadata; see validation.validate_dataset.
+                            consolidated=not isinstance(replica_store, IcechunkStore),
+                        ),
                     )
                 )
 
