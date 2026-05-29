@@ -1,3 +1,4 @@
+import warnings
 from datetime import timedelta
 
 import icechunk
@@ -577,7 +578,16 @@ def test_validate_dataset_raises_on_failed_validator(
         coords={"time": times, "y": np.arange(4), "x": np.arange(4)},
     )
     store = zarr.storage.MemoryStore()
-    ds.to_zarr(store, mode="w", consolidated=False)
+    # Match production stores, which carry consolidated metadata (see template_utils.write_metadata),
+    # so validate_dataset opens them without the consolidated-fallback warning. Writing it emits a
+    # spec-compatibility UserWarning that production suppresses too.
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Consolidated metadata is currently not part in the Zarr format 3 specification",
+            category=UserWarning,
+        )
+        ds.to_zarr(store, mode="w")
 
     def passing(ds: xr.Dataset) -> validation.ValidationResult:
         return validation.ValidationResult(passed=True, message="ok")
