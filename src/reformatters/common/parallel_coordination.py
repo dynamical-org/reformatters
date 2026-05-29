@@ -210,7 +210,7 @@ def finalize(
                         s.rebase(icechunk.ConflictDetector())
                         return s.amend(commit_message)
 
-                new_snapshot = retry(_amend, max_attempts=10)
+                new_snapshot = retry(_amend, max_attempts=100)
 
             # Make our update visible to readers of main.
             # from_snapshot_id=original_snapshot ensures we don't overwrite another uncoordinated update

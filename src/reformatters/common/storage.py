@@ -412,11 +412,11 @@ def amend_if_icechunk(
         if isinstance(store, IcechunkStore):
             retry(
                 functools.partial(_amend, store),
-                max_attempts=10,
+                max_attempts=100,
             )
 
     if isinstance(primary_store, IcechunkStore):
         retry(
             functools.partial(_amend, primary_store),
-            max_attempts=10,
+            max_attempts=100,
         )

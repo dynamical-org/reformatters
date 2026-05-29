@@ -3,6 +3,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import icechunk
+import numpy as np
 import pytest
 import zarr
 import zarr.storage
@@ -587,7 +588,7 @@ def test_amend_if_icechunk_amends_multiple_replicas_before_primary() -> None:
 class TestAmendIfIcechunkConflictHandling:
     """ConflictError is handled by rebasing once with ConflictDetector and
     retrying the amend, all inside a single retry attempt. Non-conflict
-    failures use the outer retry(max_attempts=10) just like commit_if_icechunk."""
+    failures use the outer retry(max_attempts=100) just like commit_if_icechunk."""
 
     @pytest.fixture(autouse=True)
     def _no_sleep(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -618,7 +619,7 @@ class TestAmendIfIcechunkConflictHandling:
         store.session.amend.assert_called_once()
         store.session.rebase.assert_not_called()
 
-    def test_outer_retry_runs_up_to_10_times_on_non_conflict_failure(self) -> None:
+    def test_outer_retry_runs_up_to_100_times_on_non_conflict_failure(self) -> None:
         store = MagicMock(spec=IcechunkStore)
         store.session = MagicMock()
         store.session.amend.side_effect = RuntimeError("transient")
@@ -626,9 +627,9 @@ class TestAmendIfIcechunkConflictHandling:
         with pytest.raises(RuntimeError, match="transient"):
             amend_if_icechunk("msg", store, [])
 
-        # retry() runs the inner function 10 times; rebase is never reached
+        # retry() runs the inner function 100 times; rebase is never reached
         # because RuntimeError is not a ConflictError.
-        assert store.session.amend.call_count == 10
+        assert store.session.amend.call_count == 100
         store.session.rebase.assert_not_called()
 
     def test_transient_failure_retried_then_succeeds(self) -> None:
@@ -666,8 +667,61 @@ class TestAmendIfIcechunkFailureIsolation:
         with pytest.raises(RuntimeError, match="replica unreachable"):
             amend_if_icechunk("msg", primary, [replica])
 
-        assert replica.session.amend.call_count == 10
+        assert replica.session.amend.call_count == 100
         primary.session.amend.assert_not_called()
+
+
+def test_amend_if_icechunk_handles_concurrent_amend_with_real_icechunk() -> None:
+    """Two writable sessions opened on the same branch before either amends.
+    Each writes to a disjoint array, then both go through amend_if_icechunk.
+    The second one's first amend hits ConflictError; amend_if_icechunk must
+    rebase with ConflictDetector and retry the amend. Both writes must end up
+    in the final snapshot.
+
+    Production parity: kubernetes workers open writable sessions in parallel
+    before any has amended. The sequential _process_region_jobs loop in the
+    other parallel-write tests never exercises this race."""
+    repo = icechunk.Repository.create(icechunk.in_memory_storage())
+
+    init_session = repo.writable_session("main")
+    root = zarr.open_group(init_session.store, mode="a")
+    root.create_array("arr0", shape=(10,), dtype="float32", fill_value=0.0)
+    root.create_array("arr1", shape=(10,), dtype="float32", fill_value=0.0)
+    init_session.commit("init")
+
+    main_snap = repo.lookup_branch("main")
+    repo.create_branch("temp", main_snap)
+    # Mirror parallel_setup's "Expand dataset" commit so workers amend onto a
+    # non-initial snapshot (icechunk forbids amending the repo's first commit).
+    setup_session = repo.writable_session("temp")
+    zarr.open_group(setup_session.store, mode="a").attrs["expanded"] = True
+    setup_session.commit("Expand dataset")
+
+    session_a = repo.writable_session("temp")
+    session_b = repo.writable_session("temp")
+    zarr.open_array(session_a.store, path="arr0")[:] = 1.0
+    zarr.open_array(session_b.store, path="arr1")[:] = 2.0
+
+    amend_if_icechunk("worker a", session_a.store, [])
+    # session_b's session base is now stale; first inner amend must raise
+    # ConflictError, trigger rebase + retry, then succeed.
+    amend_if_icechunk("worker b", session_b.store, [])
+
+    read_session = repo.readonly_session(branch="temp")
+    np.testing.assert_array_equal(
+        zarr.open_array(read_session.store, path="arr0")[:],
+        np.ones(10, dtype=np.float32),
+    )
+    np.testing.assert_array_equal(
+        zarr.open_array(read_session.store, path="arr1")[:],
+        2 * np.ones(10, dtype=np.float32),
+    )
+
+    # Each amend replaces the previous tip, so both "Expand dataset" and
+    # "worker a" are folded away — temp's ancestry past "init" has just one
+    # snapshot from this whole sequence.
+    ancestry = [a.message for a in repo.ancestry(branch="temp")]
+    assert ancestry == ["worker b", "init", "Repository initialized"]
 
 
 class TestPrimaryStoreReadonly:
