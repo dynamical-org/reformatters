@@ -477,7 +477,7 @@ def test_check_analysis_recent_nans_invalid_sampling_strategy(
     with pytest.raises(AssertionError, match="Expected code to be unreachable"):
         validation.check_analysis_recent_nans(
             analysis_dataset,
-            spatial_sampling="invalid",  # type: ignore[arg-type]
+            spatial_sampling="invalid",  # ty: ignore[invalid-argument-type]
         )
 
 

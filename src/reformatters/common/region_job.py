@@ -93,7 +93,7 @@ class SourceFileCoord(FrozenBaseModel):
         - For an analysis dataset created from forecast data: {"time": self.init_time + self.lead_time}
         """
         # .model_dump() returns a dict from attribute names to values
-        return self.model_dump(exclude=["status", "downloaded_path"])  # type: ignore[arg-type,return-value]
+        return self.model_dump(exclude={"status", "downloaded_path"})
 
     @property
     def append_dim_coord(self) -> CoordinateValue:
@@ -594,7 +594,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         return results
 
     def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
-        ds: xr.Dataset = self.template_ds[[v.name for v in self.data_vars]]  # type: ignore[assignment]
+        ds: xr.Dataset = self.template_ds[[v.name for v in self.data_vars]]  # ty: ignore[invalid-assignment]
         processing_region = self.get_processing_region()
         processing_region_ds = ds.isel({self.append_dim: processing_region})
         output_region_ds = ds.isel({self.append_dim: self.region})

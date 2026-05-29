@@ -869,7 +869,7 @@ class TestLastWorkerRetryAfterPartialFinalize:
                 finalize_count[0] += 1
                 if finalize_count[0] == 2:
                     raise RuntimeError("simulated pod death between resets")
-            return original_copy(*args, **kwargs)  # type: ignore[arg-type]
+            return original_copy(*args, **kwargs)  # ty: ignore[invalid-argument-type]
 
         monkeypatch.setattr(pc_module, "copy_zarr_metadata", wrapped_copy)
 
@@ -963,7 +963,7 @@ class TestLastWorkerRetryAfterPartialFinalize:
                 finalize_count[0] += 1
                 if finalize_count[0] == 1:
                     raise RuntimeError("simulated pod death before first reset")
-            return original_copy(*args, **kwargs)  # type: ignore[arg-type]
+            return original_copy(*args, **kwargs)  # ty: ignore[invalid-argument-type]
 
         monkeypatch.setattr(pc_module, "copy_zarr_metadata", wrapped_copy)
 
@@ -1091,7 +1091,7 @@ class TestReplicaOrdering:
             self: icechunk.Repository, *args: object, **kwargs: object
         ) -> object:
             reset_order.append(_role_from_storage(str(self.storage)))
-            return original_reset(self, *args, **kwargs)  # type: ignore[arg-type]
+            return original_reset(self, *args, **kwargs)  # ty: ignore[invalid-argument-type]
 
         monkeypatch.setattr(icechunk.Repository, "reset_branch", recording_reset)
 

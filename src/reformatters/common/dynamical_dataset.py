@@ -493,7 +493,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     partial(validation.check_for_expected_shards, replica_store)
                 )
                 replica_store_validators.append(
-                    partial(
+                    partial(  # ty: ignore[invalid-argument-type]
                         validation.compare_replica_and_primary,
                         self.template_config.append_dim,
                         xr.open_zarr(
