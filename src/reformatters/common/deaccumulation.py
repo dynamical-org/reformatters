@@ -79,7 +79,7 @@ def deaccumulate_to_rates_inplace(
     # Support timedelta or datetime dimension values, converting either to seconds
     times = data_array[dim].values
     if np.issubdtype(times.dtype, np.datetime64):
-        start_time = np.datetime64(pd.Timestamp(times[0]).floor(reset_frequency))  # type: ignore[arg-type]
+        start_time = np.datetime64(pd.Timestamp(times[0]).floor(reset_frequency))  # ty: ignore[invalid-argument-type]
         timedeltas = times - start_time
     else:
         assert np.issubdtype(times.dtype, np.timedelta64)

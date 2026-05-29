@@ -468,7 +468,7 @@ def test_region_job_read_data_mars_applies_scale_factor(
     gh_var = item(
         v for v in template_config.data_vars if v.name == "geopotential_height_500hpa"
     )
-    expected_factor = gh_var.internal_attrs.mars.scale_factor  # type: ignore[union-attr]
+    expected_factor = gh_var.internal_attrs.mars.scale_factor  # ty: ignore[unresolved-attribute]
     assert expected_factor is not None
 
     source_file_coord = MarsSourceFileCoord(

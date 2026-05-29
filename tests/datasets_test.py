@@ -186,7 +186,7 @@ def test_cronjob_commands_match_cli_commands(
     # Get the actual command names from the typer app
     registered_command_names = set()
     for command in cli.registered_commands:
-        name = command.name or command.callback.__name__  # type: ignore[union-attr]
+        name = command.name or command.callback.__name__  # ty: ignore[unresolved-attribute]
         # typer converts underscores to hyphens
         registered_command_names.add(name.replace("_", "-"))
 

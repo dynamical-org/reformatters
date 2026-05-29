@@ -142,7 +142,7 @@ class TestParallelSetupFirstWorker:
         ds = _template()
 
         result = pc.parallel_setup(
-            factory,  # type: ignore[arg-type]
+            factory,  # ty: ignore[invalid-argument-type]
             is_first=True,
             workers_total=1,
             reformat_job_name="job",
@@ -163,7 +163,7 @@ class TestParallelSetupFirstWorker:
         factory = FakeStoreFactory()
 
         result = pc.parallel_setup(
-            factory,  # type: ignore[arg-type]
+            factory,  # ty: ignore[invalid-argument-type]
             is_first=True,
             workers_total=3,
             reformat_job_name="job",
@@ -189,7 +189,7 @@ class TestParallelSetupFirstWorker:
         ds = _template()
 
         result = pc.parallel_setup(
-            factory,  # type: ignore[arg-type]
+            factory,  # ty: ignore[invalid-argument-type]
             is_first=True,
             workers_total=2,
             reformat_job_name="job",
@@ -250,7 +250,7 @@ class TestParallelSetupFirstWorker:
         )
 
         result = pc.parallel_setup(
-            factory,  # type: ignore[arg-type]
+            factory,  # ty: ignore[invalid-argument-type]
             is_first=True,
             workers_total=2,
             reformat_job_name="job",
@@ -277,7 +277,7 @@ class TestParallelSetupFirstWorker:
         primary_repo = FakeRepo(initial_main="snap-primary-init")
 
         result = pc.parallel_setup(
-            factory,  # type: ignore[arg-type]
+            factory,  # ty: ignore[invalid-argument-type]
             is_first=True,
             workers_total=2,
             reformat_job_name="job",
@@ -306,7 +306,7 @@ class TestParallelSetupFirstWorker:
         repos = [("primary", primary_repo)]
 
         pc.parallel_setup(
-            factory,  # type: ignore[arg-type]
+            factory,  # ty: ignore[invalid-argument-type]
             is_first=True,
             workers_total=2,
             reformat_job_name="job",
@@ -327,7 +327,7 @@ class TestParallelSetupLaterWorker:
         # If the code polled, it would read from an empty store_factory and
         # spin forever — so reaching an empty return proves it did not poll.
         result = pc.parallel_setup(
-            factory,  # type: ignore[arg-type]
+            factory,  # ty: ignore[invalid-argument-type]
             is_first=False,
             workers_total=1,
             reformat_job_name="job",
@@ -359,7 +359,7 @@ class TestParallelSetupLaterWorker:
         monkeypatch.setattr(pc.time, "sleep", fake_sleep)
 
         result = pc.parallel_setup(
-            factory,  # type: ignore[arg-type]
+            factory,  # ty: ignore[invalid-argument-type]
             is_first=False,
             workers_total=3,
             reformat_job_name="job",
@@ -380,7 +380,7 @@ class TestWaitForWorkers:
         factory = FakeStoreFactory()
         # If time.sleep were called we'd notice — raise to fail loudly.
         monkeypatch.setattr(pc.time, "sleep", lambda *_: pytest.fail("should not poll"))
-        pc.wait_for_workers(factory, "job", workers_total=1)  # type: ignore[arg-type]
+        pc.wait_for_workers(factory, "job", workers_total=1)  # ty: ignore[invalid-argument-type]
 
     def test_polls_until_all_results_present(
         self, monkeypatch: pytest.MonkeyPatch
@@ -397,7 +397,7 @@ class TestWaitForWorkers:
 
         monkeypatch.setattr(pc.time, "sleep", fake_sleep)
 
-        pc.wait_for_workers(factory, "job", workers_total=3)  # type: ignore[arg-type]
+        pc.wait_for_workers(factory, "job", workers_total=3)  # ty: ignore[invalid-argument-type]
 
         # Started with 1 file, needs 3 → 2 polls.
         assert sleep_calls == [10, 10]
@@ -429,7 +429,7 @@ class TestCollectResults:
             "job", "results/worker-1.json", pc.dump_worker_results_json(worker_1)
         )
 
-        merged = pc.collect_results(factory, "job", workers_total=2)  # type: ignore[arg-type]
+        merged = pc.collect_results(factory, "job", workers_total=2)  # ty: ignore[invalid-argument-type]
 
         # URLs identify each result unambiguously; check the merged set per var.
         merged_urls = {v: [r.url for r in rs] for v, rs in merged.items()}
@@ -452,7 +452,7 @@ class TestFinalize:
         factory.set_icechunk_repos([("primary", FakeRepo()), ("replica-0", FakeRepo())])
 
         pc.finalize(
-            factory,  # type: ignore[arg-type]
+            factory,  # ty: ignore[invalid-argument-type]
             all_jobs=[],
             merged_results={},
             reformat_job_name="job",
@@ -492,7 +492,7 @@ class TestFinalize:
         }
 
         pc.finalize(
-            factory,  # type: ignore[arg-type]
+            factory,  # ty: ignore[invalid-argument-type]
             all_jobs=[],
             merged_results={},
             reformat_job_name="job",
@@ -535,7 +535,7 @@ class TestFinalize:
         setup_info: pc.SetupInfo = {"repo_snapshots": {"primary": "snap-original"}}
 
         pc.finalize(
-            factory,  # type: ignore[arg-type]
+            factory,  # ty: ignore[invalid-argument-type]
             all_jobs=[],
             merged_results={},
             reformat_job_name="job",
@@ -561,7 +561,7 @@ class TestFinalize:
 
         # Backfill path: update_template_with_results=False → no zarr3 copy.
         pc.finalize(
-            factory,  # type: ignore[arg-type]
+            factory,  # ty: ignore[invalid-argument-type]
             all_jobs=[],
             merged_results={},
             reformat_job_name="job",
@@ -587,7 +587,7 @@ class TestFinalize:
             ]
         }
         pc.finalize(
-            factory,  # type: ignore[arg-type]
+            factory,  # ty: ignore[invalid-argument-type]
             all_jobs=[job],
             merged_results=merged,
             reformat_job_name="job",
@@ -612,7 +612,7 @@ class TestFinalize:
         factory.write_coordination_file("job", "results/worker-0.json", b"x")
 
         pc.finalize(
-            factory,  # type: ignore[arg-type]
+            factory,  # ty: ignore[invalid-argument-type]
             all_jobs=[],
             merged_results={},
             reformat_job_name="job",
@@ -626,7 +626,7 @@ class TestFinalize:
         assert "job" in factory.files  # not cleared
 
         pc.finalize(
-            factory,  # type: ignore[arg-type]
+            factory,  # ty: ignore[invalid-argument-type]
             all_jobs=[],
             merged_results={},
             reformat_job_name="job",

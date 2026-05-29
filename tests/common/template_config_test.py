@@ -42,7 +42,7 @@ class ExampleConfig(TemplateConfig[ExampleDataVar]):
 
     @property
     def dataset_attributes(self) -> ExampleDatasetAttributes:
-        return SimpleNamespace(dataset_id="simple_dataset")  # type: ignore[return-value]
+        return SimpleNamespace(dataset_id="simple_dataset")  # ty: ignore[invalid-return-type]
 
     @property
     def coords(self) -> list[Coordinate]:
@@ -70,7 +70,7 @@ class BadCoordsConfig(ExampleConfig):
     @property
     def coords(self) -> list[Coordinate]:
         # name "bad" is not in self.dims
-        return [SimpleNamespace(name="bad")]  # type: ignore[list-item]
+        return [SimpleNamespace(name="bad")]  # ty: ignore[invalid-return-type]
 
 
 @pytest.fixture
@@ -118,7 +118,7 @@ def test_append_dim_coordinate_chunk_size_varies_with_start(
         append_dim_frequency=pd.Timedelta(days=1),
     )
     # total days = 365 * expected_years, freq = 1 day
-    result: float = pd.Timedelta(days=365 * expected_years) / inst.append_dim_frequency  # type: ignore[assignment]
+    result: float = pd.Timedelta(days=365 * expected_years) / inst.append_dim_frequency  # ty: ignore[invalid-assignment]
     expected = int(result)
     assert inst.append_dim_coordinate_chunk_size() == expected
 
