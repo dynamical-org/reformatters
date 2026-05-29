@@ -59,12 +59,15 @@ def parallel_setup(
         )
 
         setup_info: SetupInfo
-        if existing_setup:
+        setup_branches_exist = all(
+            branch_name in repo.list_branches() for _role, repo in icechunk_repos
+        )
+        if existing_setup and setup_branches_exist:
             # ready.json exists, meaning a prior worker 0 attempt completed
             # setup (branch + "Expand dataset" commit + ready.json) on every icechunk repo.
             setup_info = json.loads(existing_setup[0])
         else:
-            setup_info = {}
+            setup_info = json.loads(existing_setup[0]) if existing_setup else {}
             # Icechunk: create temp branch, write full metadata, commit on branch.
             # This expands the dataset on the temp branch while readers on "main" are unaffected.
             if icechunk_repos:

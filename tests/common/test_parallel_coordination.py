@@ -260,6 +260,7 @@ class TestParallelSetupFirstWorker:
         finalize) and preserve the prior attempt's repo_snapshots."""
         factory = FakeStoreFactory()
         primary_repo = FakeRepo(initial_main="snap-primary-different-on-retry")
+        primary_repo._branches["temp-branch"] = "snap-temp-branch"
         repos = [("primary", primary_repo)]
         sentinel = "SENTINEL_FROM_ATTEMPT_1"
         factory.write_coordination_file(
@@ -289,6 +290,47 @@ class TestParallelSetupFirstWorker:
         assert primary_repo.create_branch_calls == []
         stub_io["copy_zarr_metadata"].assert_not_called()
         stub_io["commit_if_icechunk"].assert_not_called()
+
+    def test_icechunk_retry_recreates_missing_branch_from_ready_json(
+        self, tmp_path: Path, stub_io: dict[str, MagicMock]
+    ) -> None:
+        """After a last-worker crash in finalize after deleting the temp branch
+        but before clearing coordination files, recreate the branch from the
+        saved original snapshot instead of refreshing from main."""
+        factory = FakeStoreFactory()
+        primary_repo = FakeRepo(initial_main="snap-primary-after-finalize")
+        template = _template()
+        sentinel = "SENTINEL_FROM_ATTEMPT_1"
+        factory.write_coordination_file(
+            "job",
+            "setup/ready.json",
+            json.dumps({"repo_snapshots": {"primary": sentinel}}).encode(),
+        )
+
+        result = pc.parallel_setup(
+            factory,  # type: ignore[arg-type]
+            is_first=True,
+            workers_total=2,
+            reformat_job_name="job",
+            branch_name="temp-branch",
+            template_ds=template,
+            tmp_store=tmp_path,
+            icechunk_repos=[("primary", primary_repo)],  # ty: ignore[invalid-argument-type]
+        )
+
+        assert result["repo_snapshots"]["primary"] == sentinel
+        assert primary_repo.create_branch_calls == [("temp-branch", sentinel)]
+        primary_session = primary_repo.sessions[0]
+        stub_io["copy_zarr_metadata"].assert_called_once_with(
+            template,
+            tmp_path,
+            primary_session.store,
+        )
+        stub_io["commit_if_icechunk"].assert_called_once_with(
+            "Expand dataset",
+            primary_session.store,
+            [],
+        )
 
     def test_icechunk_primary_only_passes_empty_replicas(
         self, tmp_path: Path, stub_io: dict[str, MagicMock]
