@@ -308,7 +308,7 @@ class TestParallelSetupFirstWorker:
         )
 
         result = pc.parallel_setup(
-            factory,  # type: ignore[arg-type]
+            factory,  # ty: ignore[invalid-argument-type]
             is_first=True,
             workers_total=2,
             reformat_job_name="job",
@@ -630,7 +630,7 @@ class TestFinalize:
         }
 
         pc.finalize(
-            factory,  # type: ignore[arg-type]
+            factory,  # ty: ignore[invalid-argument-type]
             all_jobs=[job],
             merged_results=merged,
             reformat_job_name="job",
@@ -725,7 +725,7 @@ class TestFinalize:
         }
 
         pc.finalize(
-            factory,  # type: ignore[arg-type]
+            factory,  # ty: ignore[invalid-argument-type]
             all_jobs=[job],
             merged_results=merged,
             reformat_job_name="job",
