@@ -105,6 +105,20 @@ Vertical levels: Our current datasets include selected vertical levels, which we
 
 Spatial dimensions: If the source data uses a geographic projection we use dimensions latitude and longitude, else y and x are used for projected datasets.
 
+## Inspecting a dataset's data (read-only)
+
+To open a dataset's stored data as an xarray `Dataset`, get a read-only store from its `StoreFactory` — `store_factory.primary_store()` returns a read-only store by default (`writable=False`) — and pass it to `xr.open_zarr`:
+
+```python
+import xarray as xr
+from reformatters.__main__ import DYNAMICAL_DATASETS
+
+dataset = next(d for d in DYNAMICAL_DATASETS if d.dataset_id == "noaa-gfs-forecast")
+ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None, decode_timedelta=True)
+```
+
+For an Icechunk store (e.g. a replica) use `store_factory.replica_stores()[0]`, pass `consolidated=False`, and optionally `primary_store(branch="...")` to read a non-`main` branch. In dev these resolve to `data/output/`; in prod they read the production bucket, loading credentials from the configured secret.
+
 ## CLI commands
 
 Run via `uv run main`.
