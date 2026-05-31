@@ -16,7 +16,7 @@ import zarr
 import zarr.errors
 from pydantic import computed_field
 
-from reformatters.common import docker, storage, template_utils, validation
+from reformatters.common import dynamical_dataset, storage, template_utils, validation
 from reformatters.common.config import Config, Env
 from reformatters.common.config_models import (
     BaseInternalAttrs,
@@ -134,6 +134,7 @@ def test_dynamical_dataset_methods_exist() -> None:
         "backfill",
         "update",
         "validate_dataset",
+        "dataset_urls",
     ]
     for method in methods:
         assert hasattr(DynamicalDataset, method), f"{method} missing"
@@ -349,7 +350,9 @@ def test_validate_dataset_calls_validators(
 
     mock_replica_store_ds = Mock()
     monkeypatch.setattr(
-        xr, "open_zarr", lambda store, chunks=None: mock_replica_store_ds
+        xr,
+        "open_zarr",
+        lambda store, chunks=None, consolidated=None: mock_replica_store_ds,
     )
 
     dataset.validate_dataset("example-job-name")
@@ -571,7 +574,9 @@ def test_backfill_kubernetes_overwrite_existing_flag(
     monkeypatch.setattr(xr, "open_zarr", Mock())
 
     monkeypatch.setattr(
-        docker, "build_and_push_image", Mock(return_value="test-image-tag")
+        dynamical_dataset,
+        "get_deployed_cronjob_image",
+        Mock(return_value="test-image-tag"),
     )
     monkeypatch.setattr(subprocess, "run", Mock())
     monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
@@ -618,7 +623,9 @@ def test_backfill_kubernetes_overwrite_existing_flag_fails_if_not_all_stores_exi
     monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
 
     monkeypatch.setattr(
-        docker, "build_and_push_image", Mock(return_value="test-image-tag")
+        dynamical_dataset,
+        "get_deployed_cronjob_image",
+        Mock(return_value="test-image-tag"),
     )
     monkeypatch.setattr(subprocess, "run", Mock())
 

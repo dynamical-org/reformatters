@@ -1,5 +1,6 @@
 import itertools
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import timedelta
 from functools import partial
 from typing import Literal, Protocol, assert_never, runtime_checkable
@@ -11,6 +12,7 @@ import xarray as xr
 import zarr
 import zarr.core.sync
 import zarr.storage
+from icechunk.store import IcechunkStore
 from zarr.abc.store import Store
 
 from reformatters.common import iterating
@@ -18,6 +20,19 @@ from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
 
 log = get_logger(__name__)
+
+
+SpatialSamplingStrategy = Literal["all", "quarter", "random_points"]
+
+# Default ThreadPool size per sampling strategy. Random points are tiny so we
+# can saturate S3 with many concurrent reads; "all" reads big slabs so keep
+# parallelism low to bound memory; "quarter" is in between.
+_DEFAULT_MAX_WORKERS: dict[SpatialSamplingStrategy, int] = {
+    "random_points": 12,
+    "quarter": 4,
+    "all": 2,
+}
+_NUM_RANDOM_POINTS = 2
 
 
 class ValidationResult(pydantic.BaseModel):
@@ -49,10 +64,12 @@ def validate_dataset(
     """
     log.info(f"Validating zarr {store}")
 
+    consolidated = not isinstance(store, IcechunkStore)
+
     # Run all validators
     failed_validations = []
     for validator in validators:
-        ds = xr.open_zarr(store, chunks=None)
+        ds = xr.open_zarr(store, chunks=None, consolidated=consolidated)
 
         result = validator(ds)
         if not result.passed:
@@ -73,61 +90,22 @@ def validate_dataset(
     log.info("Zarr validation passed all checks")
 
 
-def check_forecast_current_data(ds: xr.Dataset) -> ValidationResult:
-    """Check for data in the most recent day. Fails if no data is found."""
+def check_forecast_current_data(
+    ds: xr.Dataset,
+    max_latest_init_time_age: timedelta = timedelta(days=1),
+) -> ValidationResult:
+    """Check that the latest init_time is within max_latest_init_time_age. Fails if no recent init_time."""
     now = pd.Timestamp.now()
-    latest_init_time_ds = ds.sel(init_time=slice(now - timedelta(days=1), None))
+    latest_init_time_ds = ds.sel(init_time=slice(now - max_latest_init_time_age, None))
     if latest_init_time_ds.sizes["init_time"] == 0:
         return ValidationResult(
-            passed=False, message="No data found for the latest day"
+            passed=False,
+            message=f"No data found within {max_latest_init_time_age} of now",
         )
 
     return ValidationResult(
         passed=True,
-        message="Data found for the latest day",
-    )
-
-
-def check_forecast_recent_nans(
-    ds: xr.Dataset, max_nan_percentage: float = 30
-) -> ValidationResult:
-    """Check for NaN values in the most recent day of data. Fails if more than max_nan_percentage of sampled data is NaN."""
-
-    now = pd.Timestamp.now()
-    rng = np.random.default_rng()
-
-    # We want to show that the latest init time has valid data going out up to 10 days (we may not have forecasts
-    # past that, depending on the ensemble member and init time). To avoid needing to load a rediculous amount of data
-    # we'll choose a random lead_time within that range.
-    lead_time_day = rng.integers(0, 10)  # [0, 10) since we add 1 below
-    sample_ds = ds.sel(
-        init_time=slice(now - timedelta(days=1), None),
-        lead_time=slice(
-            pd.Timedelta(days=lead_time_day), pd.Timedelta(days=lead_time_day + 1)
-        ),
-    )
-
-    problem_vars = []
-    for var_name, sample_da in sample_ds.data_vars.items():
-        # Create a deep copy to avoid sharing memory with the original dataset
-        # We observed that this helps avoid memory leaks as we iterate and check
-        # nulls across variables.
-        da = sample_da.copy(deep=True)
-        nan_percentage = da.isnull().mean().compute() * 100
-        if nan_percentage > max_nan_percentage:
-            problem_vars.append((var_name, nan_percentage))
-        da.close()
-        del da
-
-    if problem_vars:
-        message = "Excessive NaN values found:\n"
-        for var, pct in problem_vars:
-            message += f"- {var}: {pct:.1f}% NaN\n"
-        return ValidationResult(passed=False, message=message)
-
-    return ValidationResult(
-        passed=True,
-        message=f"All variables have acceptable NaN percentages (<{max_nan_percentage}%) in sampled locations of latest data",
+        message=f"Data found within {max_latest_init_time_age} of now",
     )
 
 
@@ -149,74 +127,228 @@ def check_analysis_current_data(
     )
 
 
-def check_analysis_recent_nans(  # noqa: PLR0912
+def check_forecast_recent_nans(
     ds: xr.Dataset,
-    max_expected_delay: timedelta = timedelta(hours=12),
-    max_nan_percentage: float = 5,
-    spatial_sampling: Literal["random", "quarter"] = "random",
-    include_vars: Sequence[str] | None = None,
-    exclude_vars: Sequence[str] | None = None,
+    *,
+    init_time_offset: int = -1,
+    max_nan_fraction: float = 0.0,
+    include_vars: Sequence[str] | Literal["all"] = "all",
+    exclude_vars: Sequence[str] = (),
+    spatial_sampling: SpatialSamplingStrategy = "random_points",
+    additional_skip_lead_time_0_vars: Sequence[str] = (),
+    max_workers: int | None = None,
 ) -> ValidationResult:
-    """Check for NaN values in the most recent day of data. Fails if more than max_nan_percentage of sampled data is NaN."""
+    """
+    Check the NaN fraction of a recent init_time in a forecast dataset.
 
+    `init_time_offset` selects which init_time to check from the end
+    (`-1` = latest, `-2` = previous, etc.). Use `-2` for datasets whose
+    latest init is still being filled in (e.g. long-horizon ensembles).
+
+    Default `spatial_sampling="random_points"` reads all lead_times (and any
+    ensemble members) at 2 random spatial points per variable — cheap when
+    data is chunked by init_time. Use `"all"` only for small datasets.
+
+    Variables with `step_type != "instant"` always have their lead_time=0 slice
+    dropped before computing the NaN fraction (these vars do not have valid
+    hour 0 data). `additional_skip_lead_time_0_vars` adds extra names on top
+    (e.g. HRRR categorical vars which are step_type=instant but have no hour 0 data).
+    """
+    sample_ds = ds.isel(init_time=[init_time_offset])
+    sample_ds = _apply_spatial_sampling(sample_ds, spatial_sampling)
+
+    return _check_nan_fractions(
+        sample_ds,
+        max_nan_fraction=max_nan_fraction,
+        include_vars=include_vars,
+        exclude_vars=exclude_vars,
+        additional_skip_lead_time_0_vars=additional_skip_lead_time_0_vars,
+        max_workers=max_workers or _DEFAULT_MAX_WORKERS[spatial_sampling],
+    )
+
+
+def check_analysis_recent_nans(
+    ds: xr.Dataset,
+    *,
+    max_expected_delay: timedelta = timedelta(hours=12),
+    max_nan_fraction: float = 0.0,
+    include_vars: Sequence[str] | Literal["all"] = "all",
+    exclude_vars: Sequence[str] = (),
+    spatial_sampling: SpatialSamplingStrategy = "random_points",
+    max_workers: int | None = None,
+) -> ValidationResult:
+    """
+    Check the NaN fraction of recent timesteps in an analysis dataset.
+
+    Default `spatial_sampling="random_points"` reads 2 random spatial points
+    (across all timesteps in the window) — cheap and covers independent
+    locations. Use `"quarter"` for structural-NaN datasets and `"all"` only
+    when small.
+    """
     now = pd.Timestamp.now()
+    sample_ds = ds.sel(time=slice(now - max_expected_delay, None))
+    sample_ds = _apply_spatial_sampling(sample_ds, spatial_sampling)
+
+    return _check_nan_fractions(
+        sample_ds,
+        max_nan_fraction=max_nan_fraction,
+        include_vars=include_vars,
+        exclude_vars=exclude_vars,
+        additional_skip_lead_time_0_vars=(),
+        max_workers=max_workers or _DEFAULT_MAX_WORKERS[spatial_sampling],
+    )
+
+
+def _spatial_dims(ds: xr.Dataset) -> tuple[str, str]:
+    if "latitude" in ds.dims and "longitude" in ds.dims:
+        return "longitude", "latitude"
+    if "x" in ds.dims and "y" in ds.dims:
+        return "x", "y"
+    raise ValueError("Can't infer spatial dimensions from dataset")
+
+
+def _apply_spatial_sampling(
+    ds: xr.Dataset,
+    sampling_strategy: SpatialSamplingStrategy,
+) -> xr.Dataset:
     rng = np.random.default_rng()
 
-    if "latitude" in ds.dims and "longitude" in ds.dims:
-        x_dim, y_dim = "longitude", "latitude"
-    elif "x" in ds.dims and "y" in ds.dims:
-        x_dim, y_dim = "x", "y"
-    else:
-        raise ValueError("Can't infer spatial dimensions from dataset")
+    if sampling_strategy == "all":
+        return ds
 
+    x_dim, y_dim = _spatial_dims(ds)
     x_size = ds.sizes[x_dim]
     y_size = ds.sizes[y_dim]
-    if spatial_sampling == "random":
-        # Use positional indexing to sample a small spatial region
-        x_idx = rng.integers(0, max(1, x_size - 2))
-        y_idx = rng.integers(0, max(1, y_size - 2))
 
-        sample_ds = ds.sel(time=slice(now - max_expected_delay, None)).isel(
-            {x_dim: slice(x_idx, x_idx + 2), y_dim: slice(y_idx, y_idx + 2)}
+    if sampling_strategy == "quarter":
+        x_slice = (
+            slice(0, x_size // 2)
+            if rng.integers(0, 2) == 0
+            else slice(x_size // 2, x_size)
+        )
+        y_slice = (
+            slice(0, y_size // 2)
+            if rng.integers(0, 2) == 0
+            else slice(y_size // 2, y_size)
+        )
+        return ds.isel({x_dim: x_slice, y_dim: y_slice})
+
+    if sampling_strategy == "random_points":
+        x_idxs = rng.integers(0, x_size, size=_NUM_RANDOM_POINTS)
+        y_idxs = rng.integers(0, y_size, size=_NUM_RANDOM_POINTS)
+        # Pair each x with each y to form N points (use a synthetic "point" dim).
+        return ds.isel(
+            {
+                x_dim: xr.DataArray(x_idxs, dims="point"),
+                y_dim: xr.DataArray(y_idxs, dims="point"),
+            }
         )
 
-    elif spatial_sampling == "quarter":
-        if rng.integers(0, 2) == 0:
-            x_slice = slice(0, x_size // 2)
+    assert_never(sampling_strategy)
+
+
+def _format_coord_value(value: object) -> str:
+    if isinstance(value, np.datetime64):
+        return pd.Timestamp(value).isoformat()
+    if isinstance(value, np.timedelta64):
+        return str(pd.Timedelta(value))
+    if isinstance(value, float | np.floating):
+        return f"{float(value):.4f}"
+    return str(value)
+
+
+def _summarize_coords(ds: xr.Dataset) -> str:
+    parts = []
+    for name in ds.coords:
+        values = np.atleast_1d(ds.coords[name].values)
+        if values.size == 0:
+            parts.append(f"{name}=<empty>")
+        elif values.size == 1:
+            parts.append(f"{name}={_format_coord_value(values[0])}")
+        elif values.size <= 4:
+            joined = ", ".join(_format_coord_value(v) for v in values)
+            parts.append(f"{name}=[{joined}]")
         else:
-            x_slice = slice(x_size // 2, x_size)
+            parts.append(
+                f"{name}=[{_format_coord_value(values[0])}..{_format_coord_value(values[-1])}] (n={values.size})"
+            )
+    return ", ".join(parts)
 
-        if rng.integers(0, 2) == 0:
-            y_slice = slice(0, y_size // 2)
-        else:
-            y_slice = slice(y_size // 2, y_size)
 
-        sample_ds = ds.sel(time=slice(now - max_expected_delay, None)).isel(
-            {x_dim: x_slice, y_dim: y_slice}
-        )
-    else:
-        assert_never(spatial_sampling)
+def _check_nan_fractions(
+    sample_ds: xr.Dataset,
+    *,
+    max_nan_fraction: float,
+    include_vars: Sequence[str] | Literal["all"],
+    exclude_vars: Sequence[str],
+    additional_skip_lead_time_0_vars: Sequence[str],
+    max_workers: int,
+) -> ValidationResult:
+    var_names = [
+        var_name
+        for var_name in map(str, sample_ds.data_vars)
+        if (include_vars == "all" or var_name in include_vars)
+        and var_name not in exclude_vars
+    ]
 
-    problem_vars = []
-    for var_name, da in sample_ds.data_vars.items():
-        if include_vars is not None and var_name not in include_vars:
-            continue
-        if exclude_vars is not None and var_name in exclude_vars:
-            continue
-        nan_percentage = da.isnull().mean().compute() * 100
-        if nan_percentage > max_nan_percentage:
-            problem_vars.append((var_name, nan_percentage))
+    log.info(
+        f"Computing NaN fraction for {len(var_names)} variables: {sorted(var_names)} "
+        f"over coordinates: {_summarize_coords(sample_ds)}"
+    )
+
+    skip_lead_time_0_vars = set(additional_skip_lead_time_0_vars)
+    fractions: dict[str, float] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_var = {
+            executor.submit(
+                _compute_var_nan_fraction,
+                sample_ds,
+                var_name,
+                additional_skip_lead_time_0_vars=skip_lead_time_0_vars,
+            ): var_name
+            for var_name in var_names
+        }
+        for future in as_completed(future_to_var):
+            var_name = future_to_var[future]
+            fraction = future.result()
+            fractions[var_name] = fraction
+            log.info(f"NaN fraction for {var_name}: {fraction:.6f}")
+
+    problem_vars = {
+        var_name: fraction
+        for var_name, fraction in fractions.items()
+        if fraction > max_nan_fraction
+    }
 
     if problem_vars:
-        message = "Excessive NaN values found:\n"
-        for var, pct in problem_vars:
-            message += f"- {var}: {pct:.1f}% NaN\n"
+        message = f"Excessive NaN fraction (> {max_nan_fraction}):\n" + "\n".join(
+            f"- {var}: {fraction:.6f} NaN fraction"
+            for var, fraction in sorted(problem_vars.items())
+        )
         return ValidationResult(passed=False, message=message)
 
     return ValidationResult(
         passed=True,
-        message=f"All variables have acceptable NaN percentages (<{max_nan_percentage}%) in sampled location of latest data",
+        message=f"All {len(var_names)} variables have NaN fraction <= {max_nan_fraction}",
     )
+
+
+def _compute_var_nan_fraction(
+    ds: xr.Dataset,
+    var_name: str,
+    *,
+    additional_skip_lead_time_0_vars: set[str],
+) -> float:
+    da = ds[var_name]
+    if "lead_time" in da.dims and (
+        var_name in additional_skip_lead_time_0_vars
+        or da.attrs.get("step_type", "instant") != "instant"
+    ):
+        da = da.isel(lead_time=slice(1, None))
+    # Deep copy after slicing to force eager load of just the needed region
+    # (helps avoid memory leaks observed iterating null checks across vars).
+    da = da.copy(deep=True)
+    return float(da.isnull().mean().compute().item())
 
 
 def compare_replica_and_primary(

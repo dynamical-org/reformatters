@@ -37,4 +37,4 @@ def retry[T](
             if attempt < max_attempts - 1:  # sleep unless we're out of attempts
                 time.sleep(delay_seconds(attempt))
 
-    raise last_exception if last_exception else AssertionError("unreachable")
+    raise last_exception or AssertionError("unreachable")

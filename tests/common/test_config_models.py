@@ -137,5 +137,5 @@ class TestDataVarAttrs:
                 long_name="Temperature",
                 short_name="t",
                 units="K",
-                step_type="invalid",  # type: ignore[arg-type]
+                step_type="invalid",  # ty: ignore[invalid-argument-type]
             )

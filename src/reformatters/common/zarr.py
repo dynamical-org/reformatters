@@ -16,6 +16,11 @@ log = get_logger(__name__)
 
 _LOCAL_ZARR_STORE_BASE_PATH = "data/output"
 
+
+def _store_repr(store: Store) -> str:
+    return str(store).replace("\n", " ")
+
+
 BLOSC_2BYTE_ZSTD_LEVEL3_SHUFFLE = BloscCodec(
     typesize=2,
     cname="zstd",
@@ -56,19 +61,19 @@ def copy_data_var(
 
     for replica_store in replica_stores:
         log.info(
-            f"Copying data var chunks to replica store ({replica_store}) for {relative_dir}."
+            f"Copying data var chunks to replica store ({_store_repr(replica_store)}) for {relative_dir}."
         )
         _copy_data_var_chunks(tmp_store, relative_dir, replica_store)
         log.info(
-            f"Done copying data var chunks to replica store ({replica_store}) for {relative_dir}."
+            f"Done copying data var chunks to replica store ({_store_repr(replica_store)}) for {relative_dir}."
         )
 
     log.info(
-        f"Copying data var chunks to primary store ({primary_store}) for {relative_dir}."
+        f"Copying data var chunks to primary store ({_store_repr(primary_store)}) for {relative_dir}."
     )
     _copy_data_var_chunks(tmp_store, relative_dir, primary_store)
     log.info(
-        f"Done copying data var chunks to primary store ({primary_store}) for {relative_dir}."
+        f"Done copying data var chunks to primary store ({_store_repr(primary_store)}) for {relative_dir}."
     )
 
     try:
@@ -135,14 +140,16 @@ def copy_zarr_metadata(
             continue
 
         log.info(
-            f"Copying metadata to replica store ({replica_store}) from {tmp_store}"
+            f"Copying metadata to replica store ({_store_repr(replica_store)}) from {tmp_store}"
         )
         _copy_metadata_files(metadata_files, tmp_store, replica_store)
 
     if _should_skip(primary_store):
         return
 
-    log.info(f"Copying metadata to primary store ({primary_store}) from {tmp_store}")
+    log.info(
+        f"Copying metadata to primary store ({_store_repr(primary_store)}) from {tmp_store}"
+    )
     _copy_metadata_files(metadata_files, tmp_store, primary_store)
 
 

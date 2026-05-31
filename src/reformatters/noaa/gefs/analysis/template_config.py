@@ -54,7 +54,7 @@ class GefsAnalysisTemplateConfig(TemplateConfig[GEFSDataVar]):
         """
         # Use 50 years (instead of the default impl) to match the existing dataset
         # that existed before refactoring things to use TemplateConfig/etc.
-        result: float = pd.Timedelta(days=365 * 50) / self.append_dim_frequency  # type: ignore[assignment]
+        result: float = pd.Timedelta(days=365 * 50) / self.append_dim_frequency  # ty: ignore[invalid-assignment]
         return int(result)
 
     def dimension_coordinates(self) -> dict[str, Any]:

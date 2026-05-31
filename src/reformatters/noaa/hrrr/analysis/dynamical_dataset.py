@@ -32,7 +32,7 @@ class NoaaHrrrAnalysisDataset(
             # HRRR f001 (last lead time used) available ~54m after init on NOMADS. +3 min buffer.
             # We could of course increase this to hourly.
             schedule="57 */3 * * *",
-            pod_active_deadline=timedelta(minutes=20),
+            pod_active_deadline=timedelta(minutes=25),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="7",
@@ -44,9 +44,9 @@ class NoaaHrrrAnalysisDataset(
 
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            # 20m (pod_active_deadline) after reformat at :57 = :77 = :17 of the next hour.
-            # "17 1-23/3 * * *" gives 01:17, 04:17, 07:17, ... matching reformat at 00:57, 03:57, 06:57, ...
-            schedule="17 1-23/3 * * *",
+            # 25m (pod_active_deadline) after reformat at :57 = :82 = :22 of the next hour.
+            # "22 1-23/3 * * *" gives 01:22, 04:22, 07:22, ... matching reformat at 00:57, 03:57, 06:57, ...
+            schedule="22 1-23/3 * * *",
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,

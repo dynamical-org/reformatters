@@ -152,7 +152,7 @@ def test_backfill_local_and_operational_update(
         "now",
         classmethod(lambda *args, **kwargs: pd.Timestamp("2021-05-01T14:00")),
     )
-    orig_download_from_source = dataset.region_job_class._download_from_source  # ty: ignore[unresolved-attribute]
+    orig_download_from_source = dataset.region_job_class._download_from_source
     monkeypatch.setattr(
         dataset.region_job_class,
         "_download_from_source",

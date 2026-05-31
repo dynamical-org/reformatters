@@ -48,7 +48,7 @@ def template_setup(
 
     # Monkeypatch the template_path method for this template_config's class
     original_template_path = type(template_config).template_path
-    type(template_config).template_path = lambda _self: test_template_path  # type: ignore[assignment]
+    type(template_config).template_path = lambda _self: test_template_path  # ty: ignore[invalid-assignment]
 
     try:
         template_config.update_template()

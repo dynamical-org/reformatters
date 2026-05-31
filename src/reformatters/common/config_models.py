@@ -106,7 +106,7 @@ def codecs_to_dicts(
     result: list[dict[str, Any]] = []
     for codec in codecs:
         if hasattr(codec, "to_dict"):
-            result.append(codec.to_dict())  # type: ignore[union-attr]
+            result.append(codec.to_dict())  # ty: ignore[call-non-callable]
         else:
             result.append(dict(codec.__dict__))
     return result

@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 import pytest
@@ -82,6 +83,48 @@ def test_cli_has_backfill_command(dataset_id: str) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "dataset",
+    DYNAMICAL_DATASETS,
+    ids=DATASET_IDS,
+)
+def test_cli_dataset_urls_text_format(dataset: DynamicalDataset[Any, Any]) -> None:
+    result = runner.invoke(app, [dataset.dataset_id, "dataset-urls"])
+    assert result.exit_code == 0, (
+        f"{dataset.dataset_id} dataset-urls failed: {result.output}\n{result.exception}"
+    )
+    expected_primary = dataset.store_factory.primary_url()
+    assert "Primary:" in result.output
+    assert expected_primary in result.output
+    assert "Replicas:" in result.output
+    replica_urls = dataset.store_factory.replica_urls()
+    if replica_urls:
+        for replica_url in replica_urls:
+            assert replica_url in result.output
+    else:
+        assert "(none)" in result.output
+
+
+@pytest.mark.parametrize(
+    "dataset",
+    DYNAMICAL_DATASETS,
+    ids=DATASET_IDS,
+)
+def test_cli_dataset_urls_json_format(dataset: DynamicalDataset[Any, Any]) -> None:
+    result = runner.invoke(
+        app, [dataset.dataset_id, "dataset-urls", "--format", "json"]
+    )
+    assert result.exit_code == 0, (
+        f"{dataset.dataset_id} dataset-urls --format json failed: "
+        f"{result.output}\n{result.exception}"
+    )
+    parsed = json.loads(result.output)
+    assert parsed == {
+        "primary": dataset.store_factory.primary_url(),
+        "replicas": dataset.store_factory.replica_urls(),
+    }
+
+
 def test_cli_has_deploy_command() -> None:
     result = runner.invoke(app, ["deploy", "--help"])
     assert result.exit_code == 0, f"deploy --help failed: {result.output}"
@@ -143,7 +186,7 @@ def test_cronjob_commands_match_cli_commands(
     # Get the actual command names from the typer app
     registered_command_names = set()
     for command in cli.registered_commands:
-        name = command.name or command.callback.__name__  # type: ignore[union-attr]
+        name = command.name or command.callback.__name__  # ty: ignore[unresolved-attribute]
         # typer converts underscores to hyphens
         registered_command_names.add(name.replace("_", "-"))
 

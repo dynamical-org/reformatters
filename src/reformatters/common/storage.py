@@ -76,6 +76,19 @@ class StoreFactory(FrozenBaseModel):
             *[config.k8s_secret_name for config in self.replica_storage_configs],
         ]
 
+    def primary_url(self) -> str:
+        """Canonical production URL for the primary store, regardless of environment."""
+        return _build_dataset_url(
+            self.dataset_id, self.template_config_version, self.primary_storage_config
+        )
+
+    def replica_urls(self) -> list[str]:
+        """Canonical production URLs for replica stores, regardless of environment."""
+        return [
+            _build_dataset_url(self.dataset_id, self.template_config_version, config)
+            for config in self.replica_storage_configs
+        ]
+
     def primary_store(self, writable: bool = False, branch: str = "main") -> Store:
         store_path = _get_store_path(
             self.dataset_id,
@@ -238,23 +251,40 @@ def get_local_tmp_store() -> Path:
     return Path(f"data/tmp/{uuid4()}-tmp.zarr").absolute()
 
 
-def _get_store_path(
-    dataset_id: str, version: str, storage_config: StorageConfig
+def _format_dataset_path(
+    base_path: str, dataset_id: str, version: str, dataset_format: DatasetFormat
 ) -> str:
-    if Config.is_prod:
-        base_path = storage_config.base_path
-    else:
-        base_path = _LOCAL_ZARR_STORE_BASE_PATH
-
-    match storage_config.format:
+    match dataset_format:
         case DatasetFormat.ZARR3:
             extension = "zarr"
         case DatasetFormat.ICECHUNK:
             extension = "icechunk"
         case _ as unreachable:
             assert_never(unreachable)
-
     return f"{base_path}/{dataset_id}/v{version}.{extension}"
+
+
+def _get_store_path(
+    dataset_id: str, version: str, storage_config: StorageConfig
+) -> str:
+    base_path = (
+        storage_config.base_path if Config.is_prod else _LOCAL_ZARR_STORE_BASE_PATH
+    )
+    return _format_dataset_path(base_path, dataset_id, version, storage_config.format)
+
+
+def _build_dataset_url(
+    dataset_id: str, version: str, storage_config: StorageConfig
+) -> str:
+    """Canonical production URL for a dataset, regardless of `Config.env`.
+
+    Unlike `_get_store_path`, this always uses `storage_config.base_path` and
+    is intended for human-readable output (e.g. the `dataset-urls` CLI),
+    not for opening a store.
+    """
+    return _format_dataset_path(
+        storage_config.base_path, dataset_id, version, storage_config.format
+    )
 
 
 def _get_store(

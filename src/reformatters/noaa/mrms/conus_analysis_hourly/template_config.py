@@ -309,7 +309,7 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                     long_name="Precipitation type",
                     units="1",
                     step_type="instant",
-                    comment="Precipitation type flag. 0=no precipitation, 1=warm stratiform rain, 3=snow, 6=convective, 7=hail, 10=cold stratiform rain, 91=tropical.",
+                    comment="Precipitation type flag. 0=no precipitation, 1=warm stratiform rain, 3=snow, 6=convective, 7=hail, 10=cold stratiform rain, 91=tropical, -3=no data.",
                 ),
                 internal_attrs=NoaaMrmsInternalAttrs(
                     mrms_product="PrecipFlag",

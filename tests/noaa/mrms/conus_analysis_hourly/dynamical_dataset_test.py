@@ -58,7 +58,7 @@ def _patch_write_first_shard_only(monkeypatch: pytest.MonkeyPatch) -> None:
             if all(s.start == 0 for s in si):
                 _orig_write_shard_to_zarr(
                     processing_region_da_template,
-                    shared_buffer.name,  # type: ignore[union-attr]
+                    shared_buffer.name,  # ty: ignore[unresolved-attribute]
                     append_dim,
                     output_region_ds,
                     store,

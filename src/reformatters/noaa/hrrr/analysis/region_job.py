@@ -55,7 +55,7 @@ class NoaaHrrrAnalysisRegionJob(NoaaHrrrRegionJob):
                 init_time=init_time,
                 lead_time=lead_time,
                 domain="conus",
-                file_type=file_type,  # ty: ignore[invalid-argument-type]
+                file_type=file_type,
                 data_vars=data_var_group,
             )
             for init_time in init_times

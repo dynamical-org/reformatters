@@ -67,7 +67,7 @@ def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
     # They are last in the list so their results don't impact the indexes we verify below.
     test_datasets: list[DynamicalDataset[Any, Any]] = example_datasets + list(
         DYNAMICAL_DATASETS
-    )  # type: ignore[assignment]
+    )  # ty: ignore[invalid-assignment]
 
     deploy.deploy_operational_resources(test_datasets, docker_image="test-image-tag")
 
