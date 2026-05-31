@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import icechunk
 import pandas as pd
 import pytest
 import xarray as xr
@@ -67,13 +68,27 @@ class FakeSession:
         self.branch = branch
         self.repo = repo
         self.store: object = MagicMock(name=f"ic_store-{self.id}")
+        self.snapshot_id = f"snap-{self.id}-base"
         self.commit_calls: list[tuple[str, object]] = []
+        self.amend_calls: list[str] = []
+        self.rebase_calls: list[object] = []
 
     def commit(self, message: str, rebase_with: object = None) -> str:
         self.commit_calls.append((message, rebase_with))
-        new_snapshot = f"snap-{self.id}-{len(self.commit_calls)}"
+        new_snapshot = f"snap-{self.id}-c{len(self.commit_calls)}"
         self.repo._branches[self.branch] = new_snapshot
+        self.snapshot_id = new_snapshot
         return new_snapshot
+
+    def amend(self, message: str) -> str:
+        self.amend_calls.append(message)
+        new_snapshot = f"snap-{self.id}-a{len(self.amend_calls)}"
+        self.repo._branches[self.branch] = new_snapshot
+        self.snapshot_id = new_snapshot
+        return new_snapshot
+
+    def rebase(self, conflict_solver: object) -> None:
+        self.rebase_calls.append(conflict_solver)
 
 
 class FakeRepo:
@@ -236,11 +251,16 @@ class TestParallelSetupFirstWorker:
         # Returned SetupInfo reflects what was written.
         assert result == ready
 
-    def test_icechunk_retry_preserves_snapshot_from_ready_json(
-        self, tmp_path: Path
+    def test_icechunk_retry_skips_setup_and_preserves_snapshot_from_ready_json(
+        self, tmp_path: Path, stub_io: dict[str, MagicMock]
     ) -> None:
+        """When ready.json already exists, a prior worker 0 attempt completed
+        setup. parallel_setup must skip the metadata copy + commit (otherwise
+        a second "Expand dataset" snapshot would leak into main's ancestry at
+        finalize) and preserve the prior attempt's repo_snapshots."""
         factory = FakeStoreFactory()
         primary_repo = FakeRepo(initial_main="snap-primary-different-on-retry")
+        primary_repo._branches["temp-branch"] = "snap-temp-branch"
         repos = [("primary", primary_repo)]
         sentinel = "SENTINEL_FROM_ATTEMPT_1"
         factory.write_coordination_file(
@@ -260,12 +280,57 @@ class TestParallelSetupFirstWorker:
             icechunk_repos=repos,  # ty: ignore[invalid-argument-type]
         )
 
-        # setdefault must preserve the prior-attempt snapshot, not refresh from main.
+        # The sentinel snapshot is preserved through to the returned setup_info
+        # and the re-written ready.json.
         assert result["repo_snapshots"]["primary"] == sentinel
         ready = json.loads(factory.files["job"]["setup/ready.json"])
         assert ready["repo_snapshots"]["primary"] == sentinel
-        # create_branch still called, with the preserved sentinel as snapshot.
+        # Setup work on the icechunk side is skipped — the prior attempt
+        # already created the branch and wrote the "Expand dataset" commit.
+        assert primary_repo.create_branch_calls == []
+        stub_io["copy_zarr_metadata"].assert_not_called()
+        stub_io["commit_if_icechunk"].assert_not_called()
+
+    def test_icechunk_retry_recreates_missing_branch_from_ready_json(
+        self, tmp_path: Path, stub_io: dict[str, MagicMock]
+    ) -> None:
+        """After a last-worker crash in finalize after deleting the temp branch
+        but before clearing coordination files, recreate the branch from the
+        saved original snapshot instead of refreshing from main."""
+        factory = FakeStoreFactory()
+        primary_repo = FakeRepo(initial_main="snap-primary-after-finalize")
+        template = _template()
+        sentinel = "SENTINEL_FROM_ATTEMPT_1"
+        factory.write_coordination_file(
+            "job",
+            "setup/ready.json",
+            json.dumps({"repo_snapshots": {"primary": sentinel}}).encode(),
+        )
+
+        result = pc.parallel_setup(
+            factory,  # ty: ignore[invalid-argument-type]
+            is_first=True,
+            workers_total=2,
+            reformat_job_name="job",
+            branch_name="temp-branch",
+            template_ds=template,
+            tmp_store=tmp_path,
+            icechunk_repos=[("primary", primary_repo)],  # ty: ignore[invalid-argument-type]
+        )
+
+        assert result["repo_snapshots"]["primary"] == sentinel
         assert primary_repo.create_branch_calls == [("temp-branch", sentinel)]
+        primary_session = primary_repo.sessions[0]
+        stub_io["copy_zarr_metadata"].assert_called_once_with(
+            template,
+            tmp_path,
+            primary_session.store,
+        )
+        stub_io["commit_if_icechunk"].assert_called_once_with(
+            "Expand dataset",
+            primary_session.store,
+            [],
+        )
 
     def test_icechunk_primary_only_passes_empty_replicas(
         self, tmp_path: Path, stub_io: dict[str, MagicMock]
@@ -472,15 +537,21 @@ class TestFinalize:
             assert repo.reset_calls == []
             assert repo.delete_branch_calls == []
 
-    def test_icechunk_commits_metadata_resets_main_and_cleans_up(
+    def test_icechunk_skips_copy_and_amend_when_template_unchanged(
         self, tmp_path: Path, stub_io: dict[str, MagicMock]
     ) -> None:
+        """Backfills and operational updates with no read failures produce an
+        updated_template that is `identical` to the input template. In that case
+        the temp branch tip already has the right metadata, and finalize must
+        skip copy_zarr_metadata + amend_if_icechunk and reset main directly to
+        the existing tip — avoiding a redundant manifest-rewrite snapshot."""
         factory = FakeStoreFactory()
+        # Distinct snapshot for the temp tip so we can prove main is reset to
+        # *that* (the worker amends' result) rather than the original main.
         primary_repo = FakeRepo(initial_main="snap-primary-init")
         replica_repo = FakeRepo(initial_main="snap-replica-init")
-        # Temp branches already exist (set up by parallel_setup in production).
-        primary_repo._branches["temp-branch"] = "snap-primary-init"
-        replica_repo._branches["temp-branch"] = "snap-replica-init"
+        primary_repo._branches["temp-branch"] = "snap-primary-temp-tip"
+        replica_repo._branches["temp-branch"] = "snap-replica-temp-tip"
         factory.set_icechunk_repos(
             [("primary", primary_repo), ("replica-0", replica_repo)]
         )
@@ -504,26 +575,182 @@ class TestFinalize:
             update_template_with_results=False,
         )
 
-        # Replica processed before primary per primary-last order.
-        roles_reset = [call[0] for call in primary_repo.reset_calls]
-        assert roles_reset == ["main"]
-        assert primary_repo.reset_calls[0][2] == "snap-primary-init"
-        assert replica_repo.reset_calls[0][2] == "snap-replica-init"
+        # reset_branch advances main from original to the existing temp tip,
+        # in primary-last order.
+        assert replica_repo.reset_calls == [
+            ("main", "snap-replica-temp-tip", "snap-replica-init")
+        ]
+        assert primary_repo.reset_calls == [
+            ("main", "snap-primary-temp-tip", "snap-primary-init")
+        ]
 
-        # Commit happened per repo before reset_branch.
-        assert len(primary_repo.sessions[0].commit_calls) == 1
-        commit_msg = primary_repo.sessions[0].commit_calls[0][0]
-        assert commit_msg.startswith("Update at ")
-        assert commit_msg.endswith("Z")
+        # Skip path: no session opened, no metadata copy, no amend.
+        assert primary_repo.sessions == []
+        assert replica_repo.sessions == []
+        stub_io["copy_zarr_metadata"].assert_not_called()
+
+        # Second pass still deletes each repo's temp branch.
+        assert primary_repo.delete_branch_calls == ["temp-branch"]
+        assert replica_repo.delete_branch_calls == ["temp-branch"]
+
+    def test_icechunk_copies_and_amends_when_template_changed(
+        self, tmp_path: Path, stub_io: dict[str, MagicMock]
+    ) -> None:
+        """When update_template_with_results returns a trimmed template
+        (because some reads failed), finalize must write the new metadata to
+        the temp branch and amend so readers see the trimmed view."""
+        factory = FakeStoreFactory()
+        primary_repo = FakeRepo(initial_main="snap-primary-init")
+        replica_repo = FakeRepo(initial_main="snap-replica-init")
+        primary_repo._branches["temp-branch"] = "snap-primary-temp-tip"
+        replica_repo._branches["temp-branch"] = "snap-replica-temp-tip"
+        factory.set_icechunk_repos(
+            [("primary", primary_repo), ("replica-0", replica_repo)]
+        )
+        setup_info: pc.SetupInfo = {
+            "repo_snapshots": {
+                "primary": "snap-primary-init",
+                "replica-0": "snap-replica-init",
+            }
+        }
+
+        # Make the updated_template differ from template_ds so the skip path
+        # doesn't fire.
+        trimmed = xr.Dataset(attrs={"trimmed": True})
+        job = MagicMock()
+        job.update_template_with_results.return_value = trimmed
+        merged = {
+            "v": [
+                SourceFileResult(
+                    status=SourceFileStatus.Succeeded,
+                    out_loc={"time": pd.Timestamp("2026-04-15")},
+                    url="u",
+                )
+            ]
+        }
+
+        pc.finalize(
+            factory,  # ty: ignore[invalid-argument-type]
+            all_jobs=[job],
+            merged_results=merged,
+            reformat_job_name="job",
+            branch_name="temp-branch",
+            template_ds=_template(),
+            tmp_store=tmp_path,
+            setup_info=setup_info,
+            workers_total=1,
+            update_template_with_results=True,
+        )
+
+        # Per-repo: a session is opened, copy_zarr_metadata writes the trimmed
+        # metadata, then session.amend with retry-on-conflict produces the new
+        # snapshot, then reset_branch points main at it.
+        for repo in (replica_repo, primary_repo):
+            session = repo.sessions[0]
+            assert len(session.amend_calls) == 1
+            amend_msg = session.amend_calls[0]
+            assert amend_msg.startswith("Update at ")
+            assert amend_msg.endswith("Z")
+            assert session.rebase_calls == []
+
+        assert primary_repo.reset_calls[0] == (
+            "main",
+            primary_repo.sessions[0].snapshot_id,
+            "snap-primary-init",
+        )
+        assert replica_repo.reset_calls[0] == (
+            "main",
+            replica_repo.sessions[0].snapshot_id,
+            "snap-replica-init",
+        )
+
+        # icechunk copy_zarr_metadata fires once per repo (the zarr3-only path
+        # also calls it, hence the +1 below).
+        icechunk_only_calls = [
+            c
+            for c in stub_io["copy_zarr_metadata"].call_args_list
+            if c.kwargs.get("icechunk_only") is True
+        ]
+        assert len(icechunk_only_calls) == 2
 
         # Second pass deletes each repo's temp branch.
         assert primary_repo.delete_branch_calls == ["temp-branch"]
         assert replica_repo.delete_branch_calls == ["temp-branch"]
 
-        # copy_zarr_metadata called once per repo with icechunk_only=True.
-        assert stub_io["copy_zarr_metadata"].call_count == 2
-        for call in stub_io["copy_zarr_metadata"].call_args_list:
-            assert call.kwargs == {"icechunk_only": True}
+    def test_icechunk_rebases_and_retries_amend_on_conflict_error(
+        self,
+        tmp_path: Path,
+        stub_io: dict[str, MagicMock],  # noqa: ARG002
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """If a concurrent writer moves the temp branch tip between when our
+        session was opened and when we amend, icechunk raises ConflictError.
+        Finalize must rebase the session with ConflictDetector and retry the
+        amend so the operational update doesn't fail on a transient conflict."""
+        # Skip retry sleep so the test stays fast if retry is invoked.
+        monkeypatch.setattr(pc.time, "sleep", lambda *_a, **_kw: None)
+
+        factory = FakeStoreFactory()
+        primary_repo = FakeRepo(initial_main="snap-primary-init")
+        primary_repo._branches["temp-branch"] = "snap-primary-temp-tip"
+        factory.set_icechunk_repos([("primary", primary_repo)])
+        setup_info: pc.SetupInfo = {"repo_snapshots": {"primary": "snap-primary-init"}}
+
+        # Force the first session.amend to raise ConflictError. The handler
+        # must rebase and re-call amend, which succeeds the second time.
+        original_amend = FakeSession.amend
+        amend_call_count = [0]
+
+        def flaky_amend(self: FakeSession, message: str) -> str:
+            amend_call_count[0] += 1
+            if amend_call_count[0] == 1:
+                raise icechunk.ConflictError("snap-expected", "snap-actual")
+            return original_amend(self, message)
+
+        monkeypatch.setattr(FakeSession, "amend", flaky_amend)
+
+        # Make the template differ so we take the copy + amend path.
+        job = MagicMock()
+        job.update_template_with_results.return_value = xr.Dataset(
+            attrs={"trimmed": True}
+        )
+        merged = {
+            "v": [
+                SourceFileResult(
+                    status=SourceFileStatus.Succeeded,
+                    out_loc={"time": pd.Timestamp("2026-04-15")},
+                    url="u",
+                )
+            ]
+        }
+
+        pc.finalize(
+            factory,  # ty: ignore[invalid-argument-type]
+            all_jobs=[job],
+            merged_results=merged,
+            reformat_job_name="job",
+            branch_name="temp-branch",
+            template_ds=_template(),
+            tmp_store=tmp_path,
+            setup_info=setup_info,
+            workers_total=1,
+            update_template_with_results=True,
+        )
+
+        session = primary_repo.sessions[0]
+        # First amend raised, then rebase was called, then second amend
+        # succeeded. session.amend_calls only records the successful second
+        # call (the raising one returns before appending), so total tracked
+        # amends == 1 and rebase_calls == 1.
+        assert amend_call_count[0] == 2
+        assert len(session.rebase_calls) == 1
+        assert isinstance(session.rebase_calls[0], icechunk.ConflictDetector)
+        # The new snapshot from the successful amend is what main is reset to.
+        assert primary_repo.reset_calls[0] == (
+            "main",
+            session.snapshot_id,
+            "snap-primary-init",
+        )
 
     def test_skips_reset_when_main_already_moved(
         self, tmp_path: Path, stub_io: dict[str, MagicMock]

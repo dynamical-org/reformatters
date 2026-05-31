@@ -17,6 +17,7 @@ from pydantic import TypeAdapter
 from reformatters.common import storage, template_utils
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob, SourceFileResult
+from reformatters.common.retry import constant_jitter_delay, retry
 from reformatters.common.storage import StoreFactory
 from reformatters.common.zarr import copy_zarr_metadata
 
@@ -53,41 +54,52 @@ def parallel_setup(
     if is_first:
         template_utils.write_metadata(template_ds, tmp_store)
 
-        # On retry, reuse snapshots from the prior attempt's ready.json so
-        # original_snapshot stays stable. This keeps finalize's
-        # from_snapshot_id check correct if main was written externally
-        # between the first attempt and the retry.
         existing_setup = store_factory.read_all_coordination_files(
             reformat_job_name, "setup"
         )
-        setup_info: SetupInfo = json.loads(existing_setup[0]) if existing_setup else {}
 
-        # Icechunk: create temp branch, write full metadata, commit on branch.
-        # This expands the dataset on the temp branch while readers on "main" are unaffected.
-        # Branch name is deterministic so worker 0 retries reuse the same branch.
-        if icechunk_repos:
-            repo_snapshots = setup_info.setdefault("repo_snapshots", {})
-            for role, repo in icechunk_repos:
-                snapshot = repo_snapshots.setdefault(role, repo.lookup_branch("main"))
-                if branch_name in repo.list_branches():
-                    # Branch already exists from a previous worker 0 attempt — reuse it.
-                    log.info(f"Branch {branch_name} already exists on {role}, reusing")
-                else:
-                    repo.create_branch(branch_name, snapshot)
-            # Copy metadata from local tmp_store to icechunk stores,
-            # expanding dimensions by writing updated zarr.json and coordinate arrays.
-            ic_stores = [
-                repo.writable_session(branch_name).store
-                for _role, repo in icechunk_repos
-            ]
-            for ic_store in ic_stores:
-                copy_zarr_metadata(template_ds, tmp_store, ic_store)
-            storage.commit_if_icechunk(
-                "Expand dataset",
-                ic_stores[0],
-                ic_stores[1:],
-            )
-        # Zarr v3: do NOT expand (readers would see empty holes)
+        setup_info: SetupInfo
+        setup_branches_exist = all(
+            branch_name in repo.list_branches() for _role, repo in icechunk_repos
+        )
+        if existing_setup and setup_branches_exist:
+            # ready.json exists, meaning a prior worker 0 attempt completed
+            # setup (branch + "Expand dataset" commit + ready.json) on every icechunk repo.
+            setup_info = json.loads(existing_setup[0])
+        else:
+            setup_info = json.loads(existing_setup[0]) if existing_setup else {}
+            # Icechunk: create temp branch, write full metadata, commit on branch.
+            # This expands the dataset on the temp branch while readers on "main" are unaffected.
+            if icechunk_repos:
+                repo_snapshots = setup_info.setdefault("repo_snapshots", {})
+                for role, repo in icechunk_repos:
+                    snapshot = repo_snapshots.setdefault(
+                        role, repo.lookup_branch("main")
+                    )
+                    if branch_name in repo.list_branches():
+                        # Branch exists from a prior attempt that died before
+                        # ready.json was written. Reuse it; the commit below
+                        # will land on top.
+                        log.info(
+                            f"Branch {branch_name} already exists on {role}, reusing"
+                        )
+                    else:
+                        repo.create_branch(branch_name, snapshot)
+                # Copy metadata from local tmp_store to icechunk stores,
+                # expanding dimensions by writing updated zarr.json and coordinate arrays.
+                ic_stores = [
+                    repo.writable_session(branch_name).store
+                    for _role, repo in icechunk_repos
+                ]
+                for ic_store in ic_stores:
+                    copy_zarr_metadata(template_ds, tmp_store, ic_store)
+                # Must be commit, not amend: this is the first write of the update, becoming the snapshot all future changes in this update are amended into
+                storage.commit_if_icechunk(
+                    "Expand dataset",
+                    ic_stores[0],
+                    ic_stores[1:],
+                )
+            # Zarr v3: do NOT expand (readers would see empty holes)
 
         if workers_total > 1:
             store_factory.write_coordination_file(
@@ -164,10 +176,12 @@ def finalize(
     else:
         updated_template = template_ds
 
+    template_unchanged = updated_template.identical(template_ds)
+
     now = pd.Timestamp.now(tz="UTC")
     commit_message = f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}"
 
-    # Icechunk: write final (possibly trimmed) metadata on temp branch, commit, reset main.
+    # Icechunk: write final (possibly trimmed) metadata on temp branch, amend, reset main.
     # Uses copy_zarr_metadata (not write_metadata) because the zarr arrays already exist
     # on the temp branch from parallel_setup — we only need to update the metadata files.
     # Process replicas before primary so primary (which drives future work) is last to update.
@@ -181,13 +195,27 @@ def finalize(
             if current_main != original_snapshot:
                 log.info(f"Skipping {role}: main already moved past original snapshot")
                 continue
-            session = repo.writable_session(branch_name)
-            copy_zarr_metadata(
-                updated_template, tmp_store, session.store, icechunk_only=True
-            )
-            new_snapshot = session.commit(
-                commit_message, rebase_with=icechunk.ConflictDetector()
-            )
+            if template_unchanged:
+                new_snapshot = repo.lookup_branch(branch_name)
+            else:
+                session = repo.writable_session(branch_name)
+                copy_zarr_metadata(
+                    updated_template, tmp_store, session.store, icechunk_only=True
+                )
+
+                def _amend(s: icechunk.Session = session) -> str:
+                    try:
+                        return s.amend(commit_message)
+                    except icechunk.ConflictError:
+                        s.rebase(icechunk.ConflictDetector())
+                        return s.amend(commit_message)
+
+                new_snapshot = retry(
+                    _amend, max_attempts=100, delay_seconds=constant_jitter_delay
+                )
+
+            # Make our update visible to readers of main.
+            # from_snapshot_id=original_snapshot ensures we don't overwrite another uncoordinated update
             repo.reset_branch("main", new_snapshot, from_snapshot_id=original_snapshot)
         # Second pass: clean up temp branches.
         for _role, repo in replicas_first:

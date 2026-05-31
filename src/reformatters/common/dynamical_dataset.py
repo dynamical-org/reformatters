@@ -429,7 +429,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     )
 
             now = pd.Timestamp.now(tz="UTC")
-            storage.commit_if_icechunk(
+            storage.amend_if_icechunk(
                 f"Update worker {worker_index} at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
                 primary_store,
                 replica_stores,
