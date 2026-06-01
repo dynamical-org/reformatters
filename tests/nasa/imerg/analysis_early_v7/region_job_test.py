@@ -7,24 +7,26 @@ import pytest
 import xarray as xr
 from zarr.abc.store import Store
 
-from reformatters.common.config import Config, Env
 from reformatters.common.pydantic import replace
 from reformatters.common.types import ArrayFloat32
 from reformatters.nasa.imerg.analysis_early_v7.region_job import (
     NasaImergAnalysisEarlyV7RegionJob,
+    NasaImergAnalysisEarlyV7SourceFileCoord,
 )
 from reformatters.nasa.imerg.analysis_early_v7.template_config import (
     NasaImergAnalysisEarlyV7TemplateConfig,
 )
 from reformatters.nasa.imerg.region_job import (
-    NasaImergSourceFileCoord,
     _candidate_versions,
     _reorient_imerg_array,
 )
+from tests.integration import require_secret
 
 
 def test_get_url_early() -> None:
-    coord = NasaImergSourceFileCoord(time=pd.Timestamp("2026-05-26T00:00"), run="early")
+    coord = NasaImergAnalysisEarlyV7SourceFileCoord(
+        time=pd.Timestamp("2026-05-26T00:00")
+    )
     assert coord.get_url("V07C") == (
         "https://data.gesdisc.earthdata.nasa.gov/data/GPM_L3/GPM_3IMERGHHE.07/"
         "2026/146/3B-HHR-E.MS.MRG.3IMERG.20260526-S000000-E002959.0000.V07C.HDF5"
@@ -32,7 +34,9 @@ def test_get_url_early() -> None:
 
 
 def test_get_url_uses_run_code_and_minutes_of_day() -> None:
-    coord = NasaImergSourceFileCoord(time=pd.Timestamp("2024-01-15T00:30"), run="early")
+    coord = NasaImergAnalysisEarlyV7SourceFileCoord(
+        time=pd.Timestamp("2024-01-15T00:30")
+    )
     assert coord.get_url("V07B") == (
         "https://data.gesdisc.earthdata.nasa.gov/data/GPM_L3/GPM_3IMERGHHE.07/"
         "2024/015/3B-HHR-E.MS.MRG.3IMERG.20240115-S003000-E005959.0030.V07B.HDF5"
@@ -45,7 +49,9 @@ def test_candidate_versions() -> None:
 
 
 def test_out_loc() -> None:
-    coord = NasaImergSourceFileCoord(time=pd.Timestamp("2024-01-15T00:30"), run="early")
+    coord = NasaImergAnalysisEarlyV7SourceFileCoord(
+        time=pd.Timestamp("2024-01-15T00:30")
+    )
     assert coord.out_loc() == {"time": pd.Timestamp("2024-01-15T00:30")}
 
 
@@ -96,9 +102,8 @@ def test_read_data_precipitation_orientation_fill_and_scale(
 
     _mock_rasterio_open(monkeypatch, raw)
 
-    coord = NasaImergSourceFileCoord(
+    coord = NasaImergAnalysisEarlyV7SourceFileCoord(
         time=pd.Timestamp("2024-01-15T00:00"),
-        run="early",
         downloaded_path=tmp_path / "fake.HDF5",
     )
     data = _region_job(tmp_path).read_data(coord, precip)
@@ -129,9 +134,8 @@ def test_read_data_probability_int_fill_no_scale(
 
     _mock_rasterio_open(monkeypatch, raw)
 
-    coord = NasaImergSourceFileCoord(
+    coord = NasaImergAnalysisEarlyV7SourceFileCoord(
         time=pd.Timestamp("2024-01-15T00:00"),
-        run="early",
         downloaded_path=tmp_path / "fake.HDF5",
     )
     data = _region_job(tmp_path).read_data(coord, prob)
@@ -150,7 +154,7 @@ def test_generate_source_file_coords(tmp_path: Path) -> None:
         processing_region_ds, region_job.data_vars
     )
     assert len(coords) == 3
-    assert all(c.run == "early" for c in coords)
+    assert all(isinstance(c, NasaImergAnalysisEarlyV7SourceFileCoord) for c in coords)
     assert [c.time for c in coords] == list(times)
 
 
@@ -159,7 +163,9 @@ def test_download_file_falls_back_to_other_version(
 ) -> None:
     region_job = _region_job(tmp_path)
     # >= 2026-03-04 so the primary candidate is V07C, fallback V07B.
-    coord = NasaImergSourceFileCoord(time=pd.Timestamp("2026-05-26T00:00"), run="early")
+    coord = NasaImergAnalysisEarlyV7SourceFileCoord(
+        time=pd.Timestamp("2026-05-26T00:00")
+    )
 
     mock_404 = Mock(status_code=404)
     mock_ok = Mock(status_code=200)
@@ -219,7 +225,7 @@ def test_operational_update_jobs(
     assert template_ds["time"].max().values >= np.datetime64("2024-01-15T06:00")
     for job in jobs:
         assert isinstance(job, NasaImergAnalysisEarlyV7RegionJob)
-        assert job.run == "early"
+        assert job.source_file_coord_class is NasaImergAnalysisEarlyV7SourceFileCoord
 
 
 @pytest.mark.slow
@@ -229,13 +235,15 @@ def test_download_and_read_early(
     """Download a real IMERG Early granule from GES DISC and read each variable.
 
     Requires NASA Earthdata credentials (the nasa-earthdata secret, available via a
-    local kubectl context or a mounted secret in prod).
+    local kubectl context or a mounted secret in prod); skipped otherwise.
     """
-    monkeypatch.setattr(Config, "env", Env.prod)
+    require_secret(monkeypatch, "nasa-earthdata")
 
     config = NasaImergAnalysisEarlyV7TemplateConfig()
     region_job = _region_job(tmp_path)
-    coord = NasaImergSourceFileCoord(time=pd.Timestamp("2024-01-15T00:00"), run="early")
+    coord = NasaImergAnalysisEarlyV7SourceFileCoord(
+        time=pd.Timestamp("2024-01-15T00:00")
+    )
     coord = replace(coord, downloaded_path=region_job.download_file(coord))
 
     by_name = {v.name: v for v in config.data_vars}

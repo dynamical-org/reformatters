@@ -1,6 +1,6 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import ClassVar
 from urllib.parse import urlparse
 
 import numpy as np
@@ -30,14 +30,6 @@ from .template_config import LATITUDE_SIZE, LONGITUDE_SIZE, NasaImergDataVar
 
 log = get_logger(__name__)
 
-type ImergRun = Literal["early", "late"]
-
-# Per run: (filename run code, GES DISC product directory id).
-IMERG_RUN_CONFIG: dict[ImergRun, tuple[str, str]] = {
-    "early": ("E", "GPM_3IMERGHHE.07"),
-    "late": ("L", "GPM_3IMERGHHL.07"),
-}
-
 _GESDISC_BASE = "https://data.gesdisc.earthdata.nasa.gov/data/GPM_L3"
 
 # Early/Late filenames switched from the V07B to the V07C label on 2026-03-04.
@@ -61,28 +53,35 @@ def _reorient_imerg_array(raw: ArrayFloat32) -> ArrayFloat32:
 
 
 class NasaImergSourceFileCoord(SourceFileCoord):
-    """Coordinates of a single IMERG half-hourly granule (one HDF5 file)."""
+    """Base coordinates of a single IMERG half-hourly granule (one HDF5 file).
+
+    The filename/path layout is identical across runs; the per-run subclasses
+    (in each variant's region_job.py) set the GES DISC product id and the run
+    code that appears in the filename.
+    """
 
     time: Timestamp
-    run: ImergRun
+
+    # Set by per-run subclasses.
+    gesdisc_product_id: ClassVar[str]
+    run_code: ClassVar[str]
 
     def get_url(self, version: str = "V07C") -> str:
-        code, product_id = IMERG_RUN_CONFIG[self.run]
         end = self.time + pd.Timedelta(minutes=29, seconds=59)
         minutes_of_day = self.time.hour * 60 + self.time.minute
         filename = (
-            f"3B-HHR-{code}.MS.MRG.3IMERG.{self.time:%Y%m%d}-S{self.time:%H%M%S}-"
+            f"3B-HHR-{self.run_code}.MS.MRG.3IMERG.{self.time:%Y%m%d}-S{self.time:%H%M%S}-"
             f"E{end:%H%M%S}.{minutes_of_day:04d}.{version}.HDF5"
         )
-        return f"{_GESDISC_BASE}/{product_id}/{self.time:%Y}/{self.time.dayofyear:03d}/{filename}"
+        return f"{_GESDISC_BASE}/{self.gesdisc_product_id}/{self.time:%Y}/{self.time.dayofyear:03d}/{filename}"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {"time": self.time}
 
 
 class NasaImergRegionJob(RegionJob[NasaImergDataVar, NasaImergSourceFileCoord]):
-    # Set by the per-run subclasses to "early" or "late".
-    run: ClassVar[ImergRun]
+    # Set by the per-run subclasses to their NasaImergSourceFileCoord subclass.
+    source_file_coord_class: ClassVar[type[NasaImergSourceFileCoord]]
 
     def generate_source_file_coords(
         self,
@@ -95,7 +94,7 @@ class NasaImergRegionJob(RegionJob[NasaImergDataVar, NasaImergSourceFileCoord]):
         single source group (one file per timestamp) is used.
         """
         return [
-            NasaImergSourceFileCoord(time=pd.Timestamp(time), run=self.run)
+            self.source_file_coord_class(time=pd.Timestamp(time))
             for time in processing_region_ds["time"].values
         ]
 
