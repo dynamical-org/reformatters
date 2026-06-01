@@ -341,6 +341,9 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "qa",
     # snowfall_surface is a snow depth rate (m s-1); CF has no standard name for this quantity
     "snowfall_surface",
+    # NASA IMERG: CF has no standard name for precipitation phase probability or quality index
+    "probability_of_liquid_precipitation_surface",
+    "precipitation_quality_index_surface",
 }
 
 # (standard_name, units) pairs that are intentionally non-canonical but allowed for all datasets.
@@ -473,6 +476,9 @@ ECMWF_SHORTNAME_EXEMPT: set[str] = {
     "80v",
     # NOAA MRMS FLASH system (no ECMWF equivalent)
     "FLASH_QPE_FFGMAX",
+    # NASA IMERG (no ECMWF equivalent)
+    "plp",
+    "pqi",
 }
 
 ECMWF_LONGNAME_EXEMPT: set[str] = {
@@ -486,6 +492,9 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     "80 metre V wind component",
     # NOAA MRMS FLASH system (no ECMWF equivalent)
     "FLASH QPE-to-FFG percentage maximum",
+    # NASA IMERG (no ECMWF equivalent)
+    "Probability of liquid precipitation phase",
+    "Precipitation quality index",
 }
 
 
