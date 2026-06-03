@@ -45,6 +45,14 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
 
     scale_factor: float | None = None
 
+    # Scale factor applied only to source files in the dataset's legacy open-data
+    # format (those before the format-change date; the RegionJob decides which files
+    # are legacy). Used for AIFS total precipitation: the legacy "aifs" format encoded
+    # accumulation in metres while the current "aifs-single" format uses mm (kg m-2),
+    # so legacy precip needs a x1000 conversion before deaccumulation and current
+    # precip needs none.
+    legacy_format_scale_factor: float | None = None
+
     # Date when this variable became available for the time period being processed.
     # Source-specific overrides (e.g. _resolve_mars_data_var) may clear this when
     # the source has the variable regardless of the original availability date.
