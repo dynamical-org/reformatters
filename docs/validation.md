@@ -117,7 +117,7 @@ Track what you found per item so the eventual `### For further review` entries c
 
 ### 3e. Update `validation_summary.md`
 
-When your review is complete, insert a `## Summary` section at the top of `validation_summary.md`. This section is the part of the report that downstream readers actually scan — the rest is reference material — so its job is to answer "is this dataset ready to use, and is there anything I should know?" at a glance.
+When your review is complete, insert a `## Summary` section into `validation_summary.md`, placed immediately below the `Report generation start time: …` line and directly above the `## Datasets` section (i.e. right after the report's introductory paragraph and timestamp, not above them). This keeps the report's identifying header — the intro sentence and generation time — first, with your summary as the first content section that follows. This section is the part of the report that downstream readers actually scan — the rest is reference material — so its job is to answer "is this dataset ready to use, and is there anything I should know?" at a glance.
 
 **Opening sentences (always).** Begin with one or two sentences stating where the dataset stands. In an early draft this might just be "Initial validation pass; see `### For further review` for open items." In a final draft and in published reports it should affirm that the dataset has been reviewed and is ready for use, and briefly call out anything from `### Review notes` that needs special care from a user (ideally there is nothing and the sentence is just "This dataset has been reviewed and is ready for use.").
 
