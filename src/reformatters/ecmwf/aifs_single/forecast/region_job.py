@@ -193,7 +193,7 @@ class EcmwfAifsSingleForecastRegionJob(
             # scaling the accumulation is equivalent to scaling the resulting rate).
             for factor in data_var.internal_attrs.init_time_scale_factors:
                 if factor.applies_to(coord.init_time):
-                    result = result * factor.scale_factor
+                    result *= factor.scale_factor
 
             return result
 
