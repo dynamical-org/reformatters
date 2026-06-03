@@ -107,6 +107,17 @@ class VariableStats:
     ref_spatial_mean: float | None = None
     ref_available_spatial: bool = False
 
+    # Value time series over the full period (per-timestep mean ± std at each point)
+    value_ts_plot: str | None = None
+    value_mean_p1: float | None = None
+    value_std_p1: float | None = None
+    value_min_p1: float | None = None
+    value_max_p1: float | None = None
+    value_mean_p2: float | None = None
+    value_std_p2: float | None = None
+    value_min_p2: float | None = None
+    value_max_p2: float | None = None
+
     # Timeseries comparison
     temporal_plot: str | None = None
     val_temporal_min_p1: float | None = None
@@ -150,8 +161,14 @@ class RunContext:
     temporal_period_label: str | None = None
     unavailable_timestamps_file: str | None = None
     combined_nulls_plot: str | None = None
+    combined_value_timeseries_plot: str | None = None
     combined_spatial_plot: str | None = None
     combined_temporal_plot: str | None = None
+    # Point arrays loaded once by run_report_nulls (var -> (point1, point2)) and reused
+    # by run_value_timeseries to avoid reading the point data a second time.
+    loaded_point_data: dict[str, tuple[xr.DataArray, xr.DataArray]] = field(
+        default_factory=dict
+    )
     stats: dict[str, VariableStats] = field(default_factory=dict)
 
     def stats_for(self, var: str) -> VariableStats:

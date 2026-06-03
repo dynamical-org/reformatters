@@ -103,6 +103,20 @@ def _spatial_table(stats: VariableStats, ctx: RunContext) -> list[str]:
     return lines
 
 
+def _value_ts_table(stats: VariableStats) -> list[str]:
+    return [
+        "**Value time series** — per-timestep mean ± std over the full period",
+        "",
+        "| Point | min | mean | std | max |",
+        "|---|---|---|---|---|",
+        f"| P1 | {_fmt_num(stats.value_min_p1)} | {_fmt_num(stats.value_mean_p1)} "
+        f"| {_fmt_num(stats.value_std_p1)} | {_fmt_num(stats.value_max_p1)} |",
+        f"| P2 | {_fmt_num(stats.value_min_p2)} | {_fmt_num(stats.value_mean_p2)} "
+        f"| {_fmt_num(stats.value_std_p2)} | {_fmt_num(stats.value_max_p2)} |",
+        "",
+    ]
+
+
 def _temporal_table(stats: VariableStats, ctx: RunContext) -> list[str]:
     lines = [
         f"**Temporal** — period {ctx.temporal_period_label or 'n/a'}",
@@ -161,6 +175,7 @@ def _nulls_line(stats: VariableStats) -> str:
 def _variable_section(stats: VariableStats, ctx: RunContext) -> str:
     lines = [f"### `{stats.name}`", ""]
     lines += _metadata_table(stats)
+    lines += _value_ts_table(stats)
     lines += _spatial_table(stats, ctx)
     lines += _temporal_table(stats, ctx)
     lines += [_nulls_line(stats), ""]
@@ -272,6 +287,7 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
     lines.append("")
     combined_items = [
         ("Unavailable values", ctx.combined_nulls_plot),
+        ("Value time series (full period)", ctx.combined_value_timeseries_plot),
         ("Spatial and distributions", ctx.combined_spatial_plot),
         ("Time series", ctx.combined_temporal_plot),
     ]

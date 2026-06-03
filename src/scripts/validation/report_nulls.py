@@ -26,24 +26,19 @@ zarr.config.set({"async.concurrency": 32})
 
 
 def _compute_nulls_for_point(
-    ds_point: xr.Dataset, var: str
+    da_point: xr.DataArray,
 ) -> tuple[xr.DataArray, list[str], int, int]:
     """Compute null fraction over time, plus (filtered) unavailable timestamps + counts.
 
     For accumulated/avg variables, excludes the first lead_time (analysis step) from the
     "unexpected nulls" tally — it's structurally NaN by design.
     """
-    non_time_dims = [
-        dim for dim in ds_point[var].dims if dim not in ("time", "init_time")
-    ]
-    null_mask = ds_point[var].isnull()
+    non_time_dims = [dim for dim in da_point.dims if dim not in ("time", "init_time")]
+    null_mask = da_point.isnull()
     null_frac = null_mask.mean(dim=non_time_dims)
 
     check_mask = null_mask
-    if (
-        ds_point[var].attrs.get("step_type") != "instant"
-        and "lead_time" in ds_point[var].dims
-    ):
+    if da_point.attrs.get("step_type") != "instant" and "lead_time" in da_point.dims:
         check_mask = null_mask.isel(lead_time=slice(1, None))
 
     if check_mask.any():
@@ -154,8 +149,14 @@ def run_report_nulls(ctx: RunContext) -> None:
     for i, var in enumerate(ctx.variables):
         stats = ctx.stats_for(var)
 
-        null_p1, unavailable_p1, n_p1, total_p1 = _compute_nulls_for_point(ds_p1, var)
-        null_p2, unavailable_p2, n_p2, total_p2 = _compute_nulls_for_point(ds_p2, var)
+        # Load each point's values once and cache them so run_value_timeseries can
+        # reuse the same read instead of loading the point data a second time.
+        da_p1 = ds_p1[var].load()
+        da_p2 = ds_p2[var].load()
+        ctx.loaded_point_data[var] = (da_p1, da_p2)
+
+        null_p1, unavailable_p1, n_p1, total_p1 = _compute_nulls_for_point(da_p1)
+        null_p2, unavailable_p2, n_p2, total_p2 = _compute_nulls_for_point(da_p2)
 
         stats.unavailable_timestamps_p1 = unavailable_p1
         stats.unavailable_timestamps_p2 = unavailable_p2
