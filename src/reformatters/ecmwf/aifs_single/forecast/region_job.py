@@ -186,6 +186,15 @@ class EcmwfAifsSingleForecastRegionJob(
                 f"{expected_comment=}, {expected_description=}, {coord.downloaded_path=}"
             )
             result: ArrayFloat32 = reader.read(matching_bands[0], out_dtype=np.float32)
+
+            # Apply any init_time-ranged scale factors here, per message, rather than in
+            # apply_data_transformations: a region can straddle a format change, and the
+            # scale must be applied before deaccumulation (deaccumulation is linear, so
+            # scaling the accumulation is equivalent to scaling the resulting rate).
+            for factor in data_var.internal_attrs.init_time_scale_factors:
+                if factor.applies_to(coord.init_time):
+                    result *= factor.scale_factor
+
             return result
 
     def apply_data_transformations(

@@ -8,6 +8,7 @@ from reformatters.common.zarr import BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE
 from reformatters.ecmwf.ecmwf_config_models import (
     EcmwfDataVar,
     EcmwfInternalAttrs,
+    InitTimeScaleFactor,
     has_hour_0_values,
     vars_available,
 )
@@ -104,3 +105,25 @@ def test_has_hour_0_values_override_false_overrides_step_type() -> None:
         has_hour_0_values(_make_data_var("instant", hour_0_values_override=False))
         is False
     )
+
+
+def test_init_time_scale_factor_applies_to_half_open_range() -> None:
+    factor = InitTimeScaleFactor(
+        scale_factor=1000, end=pd.Timestamp("2025-02-26T00:00")
+    )
+    assert factor.applies_to(pd.Timestamp("2025-02-25T18:00")) is True
+    # end is exclusive
+    assert factor.applies_to(pd.Timestamp("2025-02-26T00:00")) is False
+    assert factor.applies_to(pd.Timestamp("2025-03-01T00:00")) is False
+
+
+def test_init_time_scale_factor_bounded_range() -> None:
+    factor = InitTimeScaleFactor(
+        scale_factor=2,
+        start=pd.Timestamp("2024-01-01"),
+        end=pd.Timestamp("2024-02-01"),
+    )
+    assert factor.applies_to(pd.Timestamp("2023-12-31")) is False
+    assert factor.applies_to(pd.Timestamp("2024-01-01")) is True  # start inclusive
+    assert factor.applies_to(pd.Timestamp("2024-01-15")) is True
+    assert factor.applies_to(pd.Timestamp("2024-02-01")) is False  # end exclusive

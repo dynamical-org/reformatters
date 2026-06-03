@@ -58,9 +58,8 @@ def test_backfill_local_and_operational_update(
         init_time="2024-04-01T00:00:00", latitude=0, longitude=0, lead_time="6h"
     )
     assert float(point_6h["temperature_2m"]) == 28.75
-    assert float(point_6h["precipitation_surface"]) == pytest.approx(
-        7.59027898311615e-08
-    )
+    # Legacy "aifs" precip is stored in metres and scaled x1000 to mm (kg m-2).
+    assert float(point_6h["precipitation_surface"]) == pytest.approx(7.62939453125e-05)
 
     # Operational update
     monkeypatch.setattr(
@@ -99,12 +98,13 @@ def test_backfill_local_and_operational_update(
     )
     np.testing.assert_array_equal(t2m_updated, t2m_expected)
 
+    # Legacy "aifs" precip is stored in metres and scaled x1000 to mm (kg m-2).
     precip_expected = np.array(
         [
             # init_time=2024-04-01T00, lead_time=[0h, 6h]
-            [np.nan, 7.590279e-08],
+            [np.nan, 7.629395e-05],
             # init_time=2024-04-01T06, lead_time=[0h, 6h]
-            [np.nan, 9.371433e-09],
+            [np.nan, 9.357929e-06],
         ],
         dtype=np.float32,
     )
