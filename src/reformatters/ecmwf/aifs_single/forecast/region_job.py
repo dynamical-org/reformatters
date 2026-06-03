@@ -187,16 +187,13 @@ class EcmwfAifsSingleForecastRegionJob(
             )
             result: ArrayFloat32 = reader.read(matching_bands[0], out_dtype=np.float32)
 
-            # Apply the legacy-format scale factor here, per message, rather than in
-            # apply_data_transformations: a region can straddle the format change, and the
+            # Apply any init_time-ranged scale factors here, per message, rather than in
+            # apply_data_transformations: a region can straddle a format change, and the
             # scale must be applied before deaccumulation (deaccumulation is linear, so
             # scaling the accumulation is equivalent to scaling the resulting rate).
-            legacy_scale = data_var.internal_attrs.legacy_format_scale_factor
-            if (
-                legacy_scale is not None
-                and coord.init_time < AIFS_SINGLE_PATH_CHANGE_DATE
-            ):
-                result = result * legacy_scale
+            for factor in data_var.internal_attrs.init_time_scale_factors:
+                if factor.applies_to(coord.init_time):
+                    result = result * factor.scale_factor
 
             return result
 

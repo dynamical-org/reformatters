@@ -23,6 +23,25 @@ class MarsSourceOverrides(FrozenBaseModel):
     scale_factor: float | None = None
 
 
+class InitTimeScaleFactor(FrozenBaseModel):
+    """A scale factor applied only to source files whose init_time falls in [start, end).
+
+    Used when a source changes encoding/units over time. For example AIFS total
+    precipitation accumulation was stored in metres in the legacy "aifs" open-data format
+    and in mm (kg m-2) in the current "aifs-single" format (from 2025-02-26), so the legacy
+    range needs a x1000 conversion. `start` and `end` are open-ended when None.
+    """
+
+    scale_factor: float
+    start: Timestamp | None = None  # inclusive
+    end: Timestamp | None = None  # exclusive
+
+    def applies_to(self, init_time: Timestamp) -> bool:
+        return (self.start is None or init_time >= self.start) and (
+            self.end is None or init_time < self.end
+        )
+
+
 class EcmwfInternalAttrs(BaseInternalAttrs):
     """Variable specific attributes used internally to drive processing. Not written to the dataset."""
 
@@ -45,13 +64,11 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
 
     scale_factor: float | None = None
 
-    # Scale factor applied only to source files in the dataset's legacy open-data
-    # format (those before the format-change date; the RegionJob decides which files
-    # are legacy). Used for AIFS total precipitation: the legacy "aifs" format encoded
-    # accumulation in metres while the current "aifs-single" format uses mm (kg m-2),
-    # so legacy precip needs a x1000 conversion before deaccumulation and current
-    # precip needs none.
-    legacy_format_scale_factor: float | None = None
+    # Scale factors applied only to source files whose init_time falls in each entry's
+    # [start, end) range, before deaccumulation. Use this for sources that changed encoding
+    # or units over time (e.g. AIFS total precipitation, stored in metres in the legacy
+    # "aifs" format and mm in the current "aifs-single" format). Ranges should be disjoint.
+    init_time_scale_factors: tuple[InitTimeScaleFactor, ...] = ()
 
     # Date when this variable became available for the time period being processed.
     # Source-specific overrides (e.g. _resolve_mars_data_var) may clear this when
