@@ -144,7 +144,7 @@ def run_report_nulls(ctx: RunContext) -> None:
 
     log.info(f"report-nulls: {n_vars} variables at {p1_label} / {p2_label}")
 
-    fig_c, axes_c = plt.subplots(n_vars, 2, figsize=(12, 2.625 * n_vars), squeeze=False)
+    fig_c, axes_c = plt.subplots(n_vars, 2, figsize=(14, 2.625 * n_vars), squeeze=False)
 
     for i, var in enumerate(ctx.variables):
         stats = ctx.stats_for(var)
@@ -166,7 +166,7 @@ def run_report_nulls(ctx: RunContext) -> None:
         stats.total_count_p2 = total_p2
 
         # Per-variable figure.
-        fig_v, axes_v = plt.subplots(1, 2, figsize=(12, 3), squeeze=False)
+        fig_v, axes_v = plt.subplots(1, 2, figsize=(14, 3), squeeze=False)
         _draw_null_trace(axes_v[0, 0], null_p1, "blue", p1_label)
         _draw_null_trace(axes_v[0, 1], null_p2, "orange", p2_label)
         fig_v.suptitle(var, fontsize=11)

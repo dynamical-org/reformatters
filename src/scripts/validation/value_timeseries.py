@@ -46,18 +46,34 @@ def _draw_value_trace(
     color: str,
     title: str,
     units: str,
+    has_std: bool,
 ) -> None:
     time_dim = next(d for d in ("time", "init_time") if d in mean_series.dims)
     times = mean_series[time_dim]
     mean = mean_series.values
-    std = std_series.values
-    ax.fill_between(times, mean - std, mean + std, color=color, alpha=0.2)
-    ax.plot(times, mean, marker="o", linestyle="-", markersize=2, color=color)
+    (mean_line,) = ax.plot(
+        times, mean, marker="o", linestyle="-", markersize=2, color=color, label="mean"
+    )
     ax.set_xlabel(time_dim.replace("_", " ").title())
     ax.set_ylabel(units or "")
     ax.set_title(title, fontsize=10)
     ax.grid(True, alpha=0.3)
     ax.tick_params(axis="x", rotation=45)
+
+    if has_std:
+        # std on a secondary right axis, same hue as the mean but lighter (matching the
+        # tone the ±std shading used to have).
+        ax_std = ax.twinx()
+        (std_line,) = ax_std.plot(
+            times,
+            std_series.values,
+            linestyle="-",
+            color=color,
+            alpha=0.4,
+            label="std dev",
+        )
+        ax_std.set_ylabel(f"std dev {units}".strip())
+        ax.legend(handles=[mean_line, std_line], fontsize=8, loc="upper right")
 
 
 def _store_value_stats(
@@ -115,11 +131,21 @@ def run_value_timeseries(ctx: RunContext) -> None:
         _store_value_stats(stats, mean_p1, std_p1, 1)
         _store_value_stats(stats, mean_p2, std_p2, 2)
 
+        # std is only meaningful when there are non-time dims (lead_time / ensemble) to
+        # reduce over — for analysis datasets there's a single value per timestep.
+        has_std = any(d not in ("time", "init_time") for d in da_p1.dims)
+
         # Per-variable figure.
         fig_v, axes_v = plt.subplots(1, 2, figsize=(14, 3.375), squeeze=False)
-        _draw_value_trace(axes_v[0, 0], mean_p1, std_p1, "blue", p1_label, units)
-        _draw_value_trace(axes_v[0, 1], mean_p2, std_p2, "orange", p2_label, units)
-        fig_v.suptitle(f"{var} — full-period mean ± std", fontsize=11)
+        _draw_value_trace(
+            axes_v[0, 0], mean_p1, std_p1, "blue", p1_label, units, has_std
+        )
+        _draw_value_trace(
+            axes_v[0, 1], mean_p2, std_p2, "orange", p2_label, units, has_std
+        )
+        fig_v.suptitle(
+            f"{var} — full-period mean ± std" if has_std else var, fontsize=11
+        )
         fig_v.tight_layout()
         out_path = ctx.output_dir / f"value_timeseries_{var}.png"
         fig_v.savefig(out_path, dpi=80, bbox_inches="tight")
@@ -128,10 +154,16 @@ def run_value_timeseries(ctx: RunContext) -> None:
 
         # Combined figure row.
         _draw_value_trace(
-            axes_c[i, 0], mean_p1, std_p1, "blue", f"{var} — {p1_label}", units
+            axes_c[i, 0], mean_p1, std_p1, "blue", f"{var} — {p1_label}", units, has_std
         )
         _draw_value_trace(
-            axes_c[i, 1], mean_p2, std_p2, "orange", f"{var} — {p2_label}", units
+            axes_c[i, 1],
+            mean_p2,
+            std_p2,
+            "orange",
+            f"{var} — {p2_label}",
+            units,
+            has_std,
         )
 
     fig_c.suptitle("Full-period value time series — all variables", fontsize=13)

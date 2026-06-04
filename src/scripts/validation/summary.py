@@ -33,6 +33,13 @@ def _unavailable_summary(unavailable: list[str]) -> str:
     return f"{len(unavailable)} unavailable (first: {head} … last: {tail})"
 
 
+def _append_dim_range(ctx: RunContext) -> tuple[str, str]:
+    """Min and max of the append dimension (already scoped if start/end were applied)."""
+    ds = ctx.validation_ds
+    dim = "init_time" if is_forecast_dataset(ds) else "time"
+    return str(ds[dim].min().values)[:16], str(ds[dim].max().values)[:16]
+
+
 def _dataset_time_range(ctx: RunContext) -> str:
     ds = ctx.validation_ds
     if is_forecast_dataset(ds):
@@ -103,9 +110,10 @@ def _spatial_table(stats: VariableStats, ctx: RunContext) -> list[str]:
     return lines
 
 
-def _value_ts_table(stats: VariableStats) -> list[str]:
+def _value_ts_table(stats: VariableStats, ctx: RunContext) -> list[str]:
+    lo, hi = _append_dim_range(ctx)
     return [
-        "**Value time series** — per-timestep mean ± std over the full period",
+        f"**Point time series statistics for the full period ({lo} - {hi})**",
         "",
         "| Point | min | mean | std | max |",
         "|---|---|---|---|---|",
@@ -175,7 +183,7 @@ def _nulls_line(stats: VariableStats) -> str:
 def _variable_section(stats: VariableStats, ctx: RunContext) -> str:
     lines = [f"### `{stats.name}`", ""]
     lines += _metadata_table(stats)
-    lines += _value_ts_table(stats)
+    lines += _value_ts_table(stats, ctx)
     lines += _spatial_table(stats, ctx)
     lines += _temporal_table(stats, ctx)
     lines += [_nulls_line(stats), ""]
@@ -184,13 +192,6 @@ def _variable_section(stats: VariableStats, ctx: RunContext) -> str:
 
 def _run_parameters_table(ctx: RunContext) -> list[str]:
     is_forecast = is_forecast_dataset(ctx.validation_ds)
-
-    scope_line = "full dataset"
-    if ctx.start_date or ctx.end_date:
-        scope_line = (
-            f"start={ctx.start_date or 'dataset start'}, "
-            f"end={ctx.end_date or 'dataset end'}"
-        )
 
     spatial_time = (
         f"{ctx.spatial_time_label or 'n/a'} "
@@ -201,7 +202,6 @@ def _run_parameters_table(ctx: RunContext) -> list[str]:
         ("Validation dataset type", "forecast" if is_forecast else "analysis"),
         ("Validation time range", _dataset_time_range(ctx)),
         ("Reference time range", _reference_time_range(ctx)),
-        ("Time scope", scope_line),
         ("Point 1", f"lat={ctx.point1_lat:.4f}, lon={ctx.point1_lon:.4f}"),
         ("Point 2", f"lat={ctx.point2_lat:.4f}, lon={ctx.point2_lon:.4f}"),
     ]

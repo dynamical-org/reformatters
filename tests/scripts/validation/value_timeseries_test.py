@@ -91,3 +91,14 @@ def test_run_value_timeseries_writes_plots_and_stats(tmp_path: Path) -> None:
     assert stats.value_ts_plot == "value_timeseries_temperature_2m.png"
     assert stats.value_mean_p1 is not None
     assert stats.value_std_p1 == 0.0
+
+
+def test_run_value_timeseries_forecast_draws_std(tmp_path: Path) -> None:
+    ds = _forecast_dataset()
+    ctx = _ctx(ds, tmp_path)
+    run_value_timeseries(ctx)
+
+    assert (tmp_path / "value_timeseries_temperature_2m.png").exists()
+    stats = ctx.stats["temperature_2m"]
+    assert stats.value_std_p1 is not None
+    assert stats.value_std_p1 > 0.0
