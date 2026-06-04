@@ -44,6 +44,7 @@ def _draw_value_trace(
     mean_series: xr.DataArray,
     std_series: xr.DataArray,
     color: str,
+    std_color: str,
     title: str,
     units: str,
     has_std: bool,
@@ -61,14 +62,14 @@ def _draw_value_trace(
     ax.tick_params(axis="x", rotation=45)
 
     if has_std:
-        # std on a secondary right axis, same hue as the mean but lighter (matching the
-        # tone the ±std shading used to have).
+        # std on a secondary right axis, in a contrasting color drawn on top of the mean
+        # at partial opacity so the mean still shows through where they overlap.
         ax_std = ax.twinx()
         (std_line,) = ax_std.plot(
             times,
             std_series.values,
             linestyle="-",
-            color=color,
+            color=std_color,
             alpha=0.4,
             label="std dev",
         )
@@ -138,10 +139,10 @@ def run_value_timeseries(ctx: RunContext) -> None:
         # Per-variable figure.
         fig_v, axes_v = plt.subplots(1, 2, figsize=(14, 3.375), squeeze=False)
         _draw_value_trace(
-            axes_v[0, 0], mean_p1, std_p1, "blue", p1_label, units, has_std
+            axes_v[0, 0], mean_p1, std_p1, "blue", "fuchsia", p1_label, units, has_std
         )
         _draw_value_trace(
-            axes_v[0, 1], mean_p2, std_p2, "orange", p2_label, units, has_std
+            axes_v[0, 1], mean_p2, std_p2, "orange", "red", p2_label, units, has_std
         )
         fig_v.suptitle(
             f"{var} — full-period mean ± std" if has_std else var, fontsize=11
@@ -154,13 +155,21 @@ def run_value_timeseries(ctx: RunContext) -> None:
 
         # Combined figure row.
         _draw_value_trace(
-            axes_c[i, 0], mean_p1, std_p1, "blue", f"{var} — {p1_label}", units, has_std
+            axes_c[i, 0],
+            mean_p1,
+            std_p1,
+            "blue",
+            "fuchsia",
+            f"{var} — {p1_label}",
+            units,
+            has_std,
         )
         _draw_value_trace(
             axes_c[i, 1],
             mean_p2,
             std_p2,
             "orange",
+            "red",
             f"{var} — {p2_label}",
             units,
             has_std,
