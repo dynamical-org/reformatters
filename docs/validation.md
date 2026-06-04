@@ -29,7 +29,7 @@ When the run completes, stdout prints the path of `validation_summary.md` (relat
 - `--init-time` / `--lead-time` (forecast) or `--time` (analysis) Pick the exact spatial snapshot instead of a random one. Use this to reproduce a spatial anomaly deterministically.
 - `--output-dir <path>` Write into an existing directory instead of a new one (useful if rerunning a single plot type into an existing run dir).
 
-You can also run a single plot type with `compare-spatial`, `compare-timeseries`, or `report-nulls`. The primary entry point `run-all` runs all three of those steps and is the only command that produces the `validation_summary.md` index.
+You can also run a single plot type with `compare-spatial`, `compare-timeseries`, `report-nulls`, or `value-timeseries`. The primary entry point `run-all` runs all of those steps and is the only command that produces the `validation_summary.md` index.
 
 ## 2. Output layout
 
@@ -39,9 +39,11 @@ Each run writes to a fresh directory under `data/output/`:
 data/output/<dataset-id>/<version>_<YYYY-MM-DDTHH-MM>/
 ├── validation_summary.md           # start here
 ├── combined_nulls.png              # all variables, one image
+├── combined_value_timeseries.png   # all variables, one image
 ├── combined_spatial.png            # all variables, one image
 ├── combined_temporal.png           # all variables, one image
 ├── nulls_<var>.png                 # one per variable
+├── value_timeseries_<var>.png      # one per variable
 ├── spatial_<var>.png               # one per variable
 ├── temporal_<var>.png              # one per variable
 └── unavailable_timestamps.txt      # only if any nulls were detected
@@ -52,9 +54,10 @@ The directory path itself is dense enough to identify the run: dataset id + vers
 ### What each plot type shows
 
 - **`nulls_<var>.png`** — null fraction over time at two spatial points. A flat line at 0 on both panels is the healthy outcome. Catches missing source files, partial writes, or a variable that's silently all-NaN at a subset of timestamps. Unavailable data is expected for some variables; note the pattern.
+- **`value_timeseries_<var>.png`** — the variable's value over the **entire** dataset time range at two spatial points: the per-timestep mean (line, left y-axis). For forecast / ensemble datasets the per-timestep standard deviation across the non-time dims (lead time, ensemble member) is drawn as a second, lighter line on a secondary right y-axis, with a `mean` / `std dev` legend. For analysis datasets (a single value per timestep) std isn't meaningful, so only the mean line is shown — no second axis or legend. Reads the same point data as the nulls check (no extra read). Unlike `temporal_<var>.png` (a short window vs the reference), this spans all time and is meant to surface slow drifts and sudden discontinuities — e.g. a source that begins emitting a variable in different units shows up as a sharp step change in the mean line; a distribution change shows up as a step change in the std line.
 - **`spatial_<var>.png`** — 3 panels at one time step: reference map (left), validation map (middle), value distribution histogram (right). If the variable isn't in the reference dataset, the left panel reads "Variable not available" and the histogram plots only the validation distribution. Catches flipped / rotated / mis-projected maps, wrong coordinate extents, unit-scale mismatches (different histograms), and over-quantization (visible as banding).
 - **`temporal_<var>.png`** — time series at two spatial points, validation (red) vs reference (blue). If the variable isn't in the reference, only the validation series is plotted. Catches time misalignment, diurnal-cycle phase errors, unit mismatches, trend-level biases, missing/incorrect deaccumulation, and projection errors (uncorrelated / offset timeseries).
-- **`combined_*.png`** — every variable stacked into one tall image per plot type. Use these for a first scroll through the run (seeing multiple variables together helps spot cross-variable inconsistencies — e.g. radiation peaking while cloud cover is also high — and is fast to open in a single viewer). The per-variable PNGs are higher-resolution for detailed inspection.
+- **`combined_*.png`** — every variable stacked into one tall image per plot type (nulls, value time series, spatial, temporal). Use these for a first scroll through the run (seeing multiple variables together helps spot cross-variable inconsistencies — e.g. radiation peaking while cloud cover is also high — and is fast to open in a single viewer). The per-variable PNGs are higher-resolution for detailed inspection.
 
 ### `validation_summary.md`
 
@@ -62,10 +65,10 @@ The entry point for every run. It contains, in order:
 
 - Validation and reference dataset identity (name, id, version, URL), time ranges, and scope.
 - Run parameters: spatial points used by the null analysis (all ensemble members), and for each of the spatial and time series sections the picked ensemble member plus the chosen init/lead/time (spatial) or timeseries period.
-- Links to the three `combined_*.png` images.
+- Links to the `combined_*.png` images.
 - Unavailable-timestamp summary (count, earliest/latest unavailable per (variable, point), pointer to `unavailable_timestamps.txt` if any were detected).
-- A variables table with nulls at the two points and links to the three per-variable images.
-- Per-variable details: metadata (units, long/short/standard name, step type), spatial + temporal min/max/mean for both validation and reference, and nulls.
+- A variables table with nulls at the two points and links to the per-variable images.
+- Per-variable details: metadata (units, long/short/standard name, step type), full-period value min/mean/std/max at each point, spatial + temporal min/max/mean for both validation and reference, and nulls.
 
 ## 3. Step-by-step inspection
 
@@ -85,12 +88,12 @@ Open `validation_summary.md` first. It provides text-based information which can
 
 Statistics miss the visual failure modes. Open the images and walk through the checklist in section 4.
 
-Every per-variable PNG must be reviewed: for each variable, open all three of `nulls_<var>.png`, `spatial_<var>.png`, and `temporal_<var>.png`. Do not stop after a representative sample — issues can be variable-specific (a unit bug at one level, a flipped map for one field) and only surface when every plot is checked. The only plots you may skip are the three `combined_*.png` files, and only as noted below.
+Every per-variable PNG must be reviewed: for each variable, open all four of `nulls_<var>.png`, `value_timeseries_<var>.png`, `spatial_<var>.png`, and `temporal_<var>.png`. Do not stop after a representative sample — issues can be variable-specific (a unit bug at one level, a flipped map for one field) and only surface when every plot is checked. The only plots you may skip are the `combined_*.png` files, and only as noted below.
 
 A good working rhythm:
 
 1. If you are a human, open the three `combined_*.png` files first. Scroll through each to get an overview of all variables together — this quickly surfaces patterns across variables (e.g. radiation peaks coinciding with cloud cover minima) and spots any variable that looks dramatically off relative to its neighbors. Skip this step if you are an AI assistant, the `combined_*.png` image pixel dimensions exceeds standard limits and attempting to read them can blow up your context or stall the session.
-2. Open `nulls_<var>.png`, `spatial_<var>.png`, and `temporal_<var>.png` for **every** variable in the dataset — not a sample. The per-variable PNGs are higher-resolution. Filenames are consistent, so a pattern like `*_<var>.png` opens all three at once in most viewers.
+2. Open `nulls_<var>.png`, `value_timeseries_<var>.png`, `spatial_<var>.png`, and `temporal_<var>.png` for **every** variable in the dataset — not a sample. The per-variable PNGs are higher-resolution. Filenames are consistent, so a pattern like `*_<var>.png` opens all of them at once in most viewers.
 3. Cross-check against the variable's row in `validation_summary.md` (units, long_name, stats).
 4. Apply the checklist below. Note anomalies as `<variable> + <file> + what's wrong` so they can be acted on.
 
@@ -100,6 +103,7 @@ For any anomaly, reproduce it deterministically so a fix can be verified:
 
 - If spatial: rerun `run-all` with `--variable <name> --init-time <t> --lead-time <h>` (forecast) or `--time <t>` (analysis).
 - If temporal: the timeseries period is randomized — it's in `validation_summary.md`. Narrow with `--start-date` / `--end-date`.
+- If a discontinuity in `value_timeseries_<var>.png`: narrow the full-period plot to the transition with `value-timeseries <DATASET_URL> --variable <name> --start-date / --end-date`, then fetch the source files on either side of the step to confirm a unit/scale change at the source.
 - If nulls: use the `retry-filter:` line in `unavailable_timestamps.txt` to backfill just those timestamps.
 
 ### 3d. Dig into each follow-up item
@@ -159,6 +163,12 @@ Look for each of these in every image.
 - [ ] **Accumulated variables reset as expected.** Precipitation and radiation accumulators should typically reset each forecast — check the `step_type` in `validation_summary.md` and confirm the shape.
 - [ ] **No obvious quantization in time series.** Time series which are snapped or binned to a limited set of values or "staircasing" in what should be smooth time series indicates `keep_mantissa_bits` is too low.
 - [ ] **Whole plot matches meteorological expectations.** Look closely for subtly or obviously wrong new types of problems not enumerated here. Visual plots are a ley layer of our defense in depth approach to catching data quality issues. We can't list every possible issue, rather use your meterological knowlege to first define what you expect to see and compare that to what you actually see in the plots.
+
+### Full-period value time series (from `value_timeseries_<var>.png`)
+
+- [ ] **No sharp discontinuities in the mean line.** A sudden step up or down in the value across the full time range — not explained by a real seasonal/physical transition — is the signature of a source data change such as a unit switch (e.g. a GRIB file that begins emitting Kelvin instead of Celsius, or kg m⁻² instead of mm). These step changes are invisible to the short-window `temporal_<var>.png` plot, which is the reason this plot exists.
+- [ ] **No step change in the std line (forecast / ensemble datasets).** The secondary-axis std line reflects the spread across lead time / ensemble members at each timestep. An abrupt rise or drop that persists indicates a distribution change in the source (e.g. a change in precision, smoothing, or member generation). Analysis datasets have no std line, so only the mean-line check applies.
+- [ ] **Whole plot matches expectations across time.** Drifts, ramps, or level shifts that don't correspond to a known seasonal cycle or source transition warrant investigation — cross-check against the source archive at the timestamps where the change appears.
 
 ### Unavailable data (from `nulls_<var>.png` and `unavailable_timestamps.txt`)
 

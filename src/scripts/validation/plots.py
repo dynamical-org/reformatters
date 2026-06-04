@@ -31,6 +31,10 @@ from scripts.validation.utils import (
     start_date_option,
     variables_option,
 )
+from scripts.validation.value_timeseries import (
+    run_value_timeseries,
+    value_timeseries,
+)
 
 log = get_logger(__name__)
 
@@ -45,6 +49,10 @@ app.command("compare-timeseries", help="Timeseries comparison, one PNG per varia
     compare_timeseries
 )
 app.command("report-nulls", help="Null analysis, one PNG per variable")(report_nulls)
+app.command(
+    "value-timeseries",
+    help="Full-period value time series (mean ± std), one PNG per variable",
+)(value_timeseries)
 app.command(
     "render-report",
     help="Render validation_summary.md to a static HTML report in the run directory.",
@@ -133,6 +141,7 @@ def run_all(
     )
 
     run_report_nulls(ctx)
+    run_value_timeseries(ctx)
     run_compare_timeseries(ctx)
     run_compare_spatial(ctx, init_time=init_time, lead_time=lead_time, time=time)
 

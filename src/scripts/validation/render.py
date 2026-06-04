@@ -33,6 +33,8 @@ def _wrap_variable_sections(html: str) -> str:
             '<div class="plots">'
             f'<a href="nulls_{var}.png" target="_blank">'
             f'<img src="nulls_{var}.png" alt="{var} — null fraction"></a>'
+            f'<a href="value_timeseries_{var}.png" target="_blank">'
+            f'<img src="value_timeseries_{var}.png" alt="{var} — full-period value time series"></a>'
             f'<a href="spatial_{var}.png" target="_blank">'
             f'<img src="spatial_{var}.png" alt="{var} — spatial comparison"></a>'
             f'<a href="temporal_{var}.png" target="_blank">'

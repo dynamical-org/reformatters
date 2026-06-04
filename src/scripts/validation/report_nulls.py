@@ -26,24 +26,19 @@ zarr.config.set({"async.concurrency": 32})
 
 
 def _compute_nulls_for_point(
-    ds_point: xr.Dataset, var: str
+    da_point: xr.DataArray,
 ) -> tuple[xr.DataArray, list[str], int, int]:
     """Compute null fraction over time, plus (filtered) unavailable timestamps + counts.
 
     For accumulated/avg variables, excludes the first lead_time (analysis step) from the
     "unexpected nulls" tally — it's structurally NaN by design.
     """
-    non_time_dims = [
-        dim for dim in ds_point[var].dims if dim not in ("time", "init_time")
-    ]
-    null_mask = ds_point[var].isnull()
+    non_time_dims = [dim for dim in da_point.dims if dim not in ("time", "init_time")]
+    null_mask = da_point.isnull()
     null_frac = null_mask.mean(dim=non_time_dims)
 
     check_mask = null_mask
-    if (
-        ds_point[var].attrs.get("step_type") != "instant"
-        and "lead_time" in ds_point[var].dims
-    ):
+    if da_point.attrs.get("step_type") != "instant" and "lead_time" in da_point.dims:
         check_mask = null_mask.isel(lead_time=slice(1, None))
 
     if check_mask.any():
@@ -149,13 +144,19 @@ def run_report_nulls(ctx: RunContext) -> None:
 
     log.info(f"report-nulls: {n_vars} variables at {p1_label} / {p2_label}")
 
-    fig_c, axes_c = plt.subplots(n_vars, 2, figsize=(12, 2.625 * n_vars), squeeze=False)
+    fig_c, axes_c = plt.subplots(n_vars, 2, figsize=(14, 2.625 * n_vars), squeeze=False)
 
     for i, var in enumerate(ctx.variables):
         stats = ctx.stats_for(var)
 
-        null_p1, unavailable_p1, n_p1, total_p1 = _compute_nulls_for_point(ds_p1, var)
-        null_p2, unavailable_p2, n_p2, total_p2 = _compute_nulls_for_point(ds_p2, var)
+        # Load each point's values once and cache them so run_value_timeseries can
+        # reuse the same read instead of loading the point data a second time.
+        da_p1 = ds_p1[var].load()
+        da_p2 = ds_p2[var].load()
+        ctx.loaded_point_data[var] = (da_p1, da_p2)
+
+        null_p1, unavailable_p1, n_p1, total_p1 = _compute_nulls_for_point(da_p1)
+        null_p2, unavailable_p2, n_p2, total_p2 = _compute_nulls_for_point(da_p2)
 
         stats.unavailable_timestamps_p1 = unavailable_p1
         stats.unavailable_timestamps_p2 = unavailable_p2
@@ -165,7 +166,7 @@ def run_report_nulls(ctx: RunContext) -> None:
         stats.total_count_p2 = total_p2
 
         # Per-variable figure.
-        fig_v, axes_v = plt.subplots(1, 2, figsize=(12, 3), squeeze=False)
+        fig_v, axes_v = plt.subplots(1, 2, figsize=(14, 3), squeeze=False)
         _draw_null_trace(axes_v[0, 0], null_p1, "blue", p1_label)
         _draw_null_trace(axes_v[0, 1], null_p2, "orange", p2_label)
         fig_v.suptitle(var, fontsize=11)

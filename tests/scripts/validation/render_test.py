@@ -64,7 +64,7 @@ def test_render_html_structure() -> None:
     ) in html
 
     # Each variable section embeds its three plot images, each wrapped in <a target=_blank>.
-    for plot_type in ("nulls", "spatial", "temporal"):
+    for plot_type in ("nulls", "value_timeseries", "spatial", "temporal"):
         assert (
             f'<a href="{plot_type}_temperature_2m.png" target="_blank">'
             f'<img src="{plot_type}_temperature_2m.png"'
