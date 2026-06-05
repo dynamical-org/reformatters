@@ -732,9 +732,21 @@ commits replicas-then-primary per the existing
 `storage.commit_if_icechunk(message, primary_store, replica_stores)` ordering.
 On any commit failure the batch retries with fresh sessions on all stores,
 keeping them aligned; if the retry budget exhausts, the pod fails and the next
-fire re-runs the filtered (skip-what-committed) work. For datasets without
-replicas (the expected common case early), this is one session, one commit per
-batch. Backfill replicas follow the existing temp-branch reset ordering.
+fire re-runs the filtered (skip-what-committed) work. "What's committed" is
+defined by the **primary** — the filter probes the primary's manifest via
+`exists(key)`, because the primary is what readers consume — and committing
+replicas-then-primary is what makes that definition safe: if a pod dies in the
+window after some replicas have committed but before the primary commits, the
+primary is unchanged, so the next fire's filter re-derives the same batch and
+replays it on every store. The replica work is identical refs rewritten to
+identical entries (idempotent — see [Filtering](#filtering-already-present-coordinates)),
+and the primary finally lands its commit. The replicas can briefly be a commit
+ahead of the primary across pod restarts; they catch back up via this idempotent
+replay, never the other way around.
+
+For datasets without replicas (the expected common case early), this is one
+session, one commit per batch. Backfill replicas follow the existing temp-branch
+reset ordering.
 
 ## Dataset identity
 
