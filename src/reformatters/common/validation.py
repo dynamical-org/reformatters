@@ -260,7 +260,7 @@ def _format_coord_value(value: object) -> str:
 def _summarize_coords(ds: xr.Dataset) -> str:
     parts = []
     for name in ds.coords:
-        values = np.atleast_1d(ds.coords[name].values)
+        values = ds.coords[name].values.ravel()
         if values.size == 0:
             parts.append(f"{name}=<empty>")
         elif values.size == 1:
