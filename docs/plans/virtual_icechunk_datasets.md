@@ -492,11 +492,12 @@ computed from the manifest, but it is never read back to make decisions.)
 
 ```python
 def filter_already_present(self, candidates, store, ds):
-    present = self._present_chunk_keys(store, window)   # manifest probe, scoped
+    # store.exists is async; the real implementation fans out across candidates
+    # concurrently. Shown serially for clarity.
     return [
         c for c in candidates
         if (key := self.chunk_key(c.out_loc, self.representative_var(c), ds)) is None
-        or key not in present                           # label not yet a coord → remaining
+        or not store.exists(key)                            # ref absent from manifest
     ]
 ```
 
@@ -532,13 +533,16 @@ high-water-mark coord *does* false-positive on gappy leads — which is why we
 don't use one. The `chunk_key` contract **"label not in coords ⟹ remaining"**
 guarantees a brand-new position (not yet expanded) is never mistaken for done.
 
-The cheap "is there a ref at key K, without decoding" primitive underpins both
-this filter and the manifest-check validator. Mechanically it is likely
-`store.list_prefix(f"{var}/c/…")` scoped to the active window → key set →
-membership (index-space in the basement, label-space `chunk_key` at the surface).
-
-> **Spike-to-confirm:** icechunk 2.x exposes a ref-presence check that doesn't
-> fetch/decode, and scoping it to the active manifest split keeps it bounded.
+The "is there a ref at key K, without decoding" primitive is
+[`IcechunkStore.exists(key)`](https://icechunk.io/en/stable/reference/#icechunk.store.IcechunkStore.exists)
+— a per-key probe that hits the manifest (specifically, the relevant split; see
+[Manifest splitting](#manifest-splitting)) without fetching or decoding any
+chunk bytes. It's `async`, so the filter fans out across the candidate keys
+concurrently. The candidate set per fire is small in steady state, so per-key
+point lookups beat a bulk `list_prefix` and avoid the "what window to list"
+question that scoping would otherwise force. (`list_prefix` remains the right
+primitive for bulk scans like the manifest-check validator, which wants the
+whole window's present-set at once.)
 
 ## Chunk keys
 
@@ -572,9 +576,10 @@ assertion would otherwise fire on an unknown label, so `chunk_key` returns
 "absent" for labels not present in the current coord arrays, and the filter
 treats that as not-yet-ingested.
 
-> **Spike-to-confirm:** the cleanest zarr-internal API to (a) read a chunk's key
-> encoding and (b) test ref presence at a key without decoding — so neither the
-> emit key nor the filter key is a hand-rolled string.
+> **Spike-to-confirm:** the cleanest zarr-internal API to read a chunk's key
+> encoding, so neither the emit key nor the filter key is a hand-rolled string.
+> (Ref presence is resolved: `IcechunkStore.exists(key)`, see
+> [Filtering](#filtering-already-present-coordinates).)
 
 ## Derived coordinates
 
@@ -904,10 +909,10 @@ assumptions before the first dataset ships:
    constant against commit latency.
 3. **Empty commit** — committing a session with no net change is a no-op (not an
    error); the loop must skip "nothing new."
-4. **Ref-presence + key encoding without decode** — a presence check that
-   doesn't fetch/decode, and the zarr-internal API to read a chunk's key
-   encoding, so neither emit nor filter hand-rolls the key string (see
-   [Chunk keys](#chunk-keys)).
+4. **Chunk-key encoding API** — the zarr-internal API to read an array's chunk
+   key encoding, so neither emit nor filter hand-rolls the key string (see
+   [Chunk keys](#chunk-keys)). (Ref-presence-without-decode is already resolved:
+   `IcechunkStore.exists(key)`.)
 5. **float64 round-trip** — GribberishCodec decode dtype; confirm float64 arrays
    read back correctly.
 6. **`serializer` through `to_zarr`** — `zarr~=3.1` honors a `serializer`
