@@ -7,6 +7,7 @@ from zarr.abc.store import Store
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValue,
+    MaterializedRegionJob,
     RegionJob,
     SourceFileCoord,
     SourceFileResult,
@@ -47,7 +48,7 @@ class ExampleSourceFileCoord(SourceFileCoord):
         return super().out_loc()
 
 
-class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
+class ExampleRegionJob(MaterializedRegionJob[ExampleDataVar, ExampleSourceFileCoord]):
     # Optionally, limit the number of variables downloaded together.
     # If set to a value less than len(data_vars), downloading, reading/recompressing,
     # and uploading steps will be pipelined within a region job.

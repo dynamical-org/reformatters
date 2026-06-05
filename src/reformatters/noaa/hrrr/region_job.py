@@ -16,6 +16,7 @@ from reformatters.common.iterating import digest, group_by, item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValue,
+    MaterializedRegionJob,
     RegionJob,
     SourceFileCoord,
 )
@@ -78,7 +79,9 @@ class NoaaHrrrSourceFileCoord(SourceFileCoord):
         raise NotImplementedError  # depends on if the dataset is a forecast or analysis
 
 
-class NoaaHrrrRegionJob(RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]):
+class NoaaHrrrRegionJob(
+    MaterializedRegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]
+):
     """Base RegionJob for HRRR based datasets.  Subclassed by specific HRRR datasets."""
 
     max_vars_per_download_group = 5

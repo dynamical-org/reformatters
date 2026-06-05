@@ -14,7 +14,7 @@ from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import digest, item
 from reformatters.common.logging import get_logger
-from reformatters.common.region_job import RegionJob
+from reformatters.common.region_job import MaterializedRegionJob, RegionJob
 from reformatters.common.types import (
     AppendDim,
     ArrayFloat32,
@@ -43,7 +43,7 @@ log = get_logger(__name__)
 
 
 class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
-    RegionJob[EcmwfDataVar, IfsEnsSourceFileCoord]
+    MaterializedRegionJob[EcmwfDataVar, IfsEnsSourceFileCoord]
 ):
     # Limits the number of variables downloaded together.
     # All variables are scattered throughout the grib file without any organization,

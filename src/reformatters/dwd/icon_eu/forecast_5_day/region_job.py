@@ -16,6 +16,7 @@ from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValue,
+    MaterializedRegionJob,
     RegionJob,
     SourceFileCoord,
 )
@@ -87,7 +88,7 @@ class DwdIconEuForecast5DaySourceFileCoord(SourceFileCoord):
 
 
 class DwdIconEuForecast5DayRegionJob(
-    RegionJob[DwdIconEuDataVar, DwdIconEuForecast5DaySourceFileCoord]
+    MaterializedRegionJob[DwdIconEuDataVar, DwdIconEuForecast5DaySourceFileCoord]
 ):
     @classmethod
     def source_groups(

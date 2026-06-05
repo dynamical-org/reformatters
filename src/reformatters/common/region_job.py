@@ -9,7 +9,7 @@ from http import HTTPStatus
 from itertools import chain, pairwise
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Generic, TypeVar, get_args
+from typing import Annotated, Any, ClassVar, Generic, Self, TypeVar, get_args
 
 import httpx
 import numpy as np
@@ -128,20 +128,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     # Rule of thumb: leave unset unless a job takes > 15 minutes.
     max_vars_per_job: ClassVar[int | None] = None
 
-    # Limit the number of variables processed in each download group if set.
-    # If value is less than len(data_vars), downloading, reading/recompressing, and writing steps
-    # will be pipelined within a region job.
-    max_vars_per_download_group: ClassVar[int | None] = None
-
-    # Subclasses can override this to control download parallelism
-    # This particularly useful of the data source cannot handle a large number of concurrent requests
-    download_parallelism: int = (os.cpu_count() or 1) * 2
-
-    # Subclasses can override this to control read parallelism.
-    # This is useful in cases where many threads reading data into shared memory
-    # causes deadlocks or resource contention.
-    read_parallelism: int = os.cpu_count() or 1
-
     @classmethod
     def source_groups(
         cls,
@@ -177,67 +163,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         raise NotImplementedError(
             "Return a sequence of SourceFileCoord objects, one for each source file required to process the data covered by processing_region_ds."
         )
-
-    def download_file(self, coord: SOURCE_FILE_COORD) -> Path:
-        """Download the file for the given coordinate and return the local path."""
-        raise NotImplementedError(
-            "Download the file for the given coordinate and return the local path."
-        )
-
-    def read_data(
-        self,
-        coord: SOURCE_FILE_COORD,
-        data_var: DATA_VAR,
-    ) -> ArrayND[np.generic]:
-        """
-        Read and return the data chunk for the given variable and source file coordinate.
-
-        Subclasses must implement this to load the data (e.g., from a file or remote source)
-        for the specified coord and data_var. The returned array will be written into the shared
-        output array by the base class.
-
-        Parameters
-        ----------
-        coord : SOURCE_FILE_COORD
-            The coordinate specifying which file and region to read.
-        data_var : DATA_VAR
-            The data variable metadata.
-
-        Returns
-        -------
-        ArrayFloat32 | ArrayInt16
-            The loaded data.
-        """
-        raise NotImplementedError(
-            "Read and return data for the given variable and source file coordinate."
-        )
-
-    def apply_data_transformations(
-        self, data_array: xr.DataArray, data_var: DATA_VAR
-    ) -> None:
-        """
-        Apply in-place data transformations to the output data array for a given data variable.
-
-        This method is called after reading all data for a variable into the shared-memory array,
-        and before writing shards to the output store. The default implementation applies binary
-        rounding to float32 arrays if `data_var.internal_attrs.keep_mantissa_bits` is set.
-
-        Subclasses may override this method to implement additional transformations such as
-        deaccumulation, interpolation or other custom logic. All transformations should be
-        performed in-place (don't copy `data_array`, it's large).
-
-        Parameters
-        ----------
-        data_array : xr.DataArray
-            The output data array to be transformed in-place.
-        data_var : DATA_VAR
-            The data variable metadata object, which may contain transformation parameters.
-        """
-        keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
-        if isinstance(keep_mantissa_bits, int):
-            round_float32_inplace(
-                data_array.values, keep_mantissa_bits=keep_mantissa_bits
-            )
 
     def update_template_with_results(
         self, process_results: Mapping[str, Sequence[SourceFileResult]]
@@ -360,7 +285,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         filter_end: Timestamp | None = None,
         filter_contains: list[Timestamp] | None = None,
         filter_variable_names: list[str] | None = None,
-    ) -> Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]:
+    ) -> Sequence[Self]:
         """
         Return a sequence of RegionJob instances to process.
 
@@ -395,7 +320,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         Returns
         -------
-        Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
+        Sequence[Self]
             All RegionJob instances matching the filters. Worker partitioning
             is handled by the caller via get_worker_jobs.
         """
@@ -481,6 +406,107 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             for data_var_group in data_var_groups
         ]
         return all_jobs
+
+    def process(
+        self,
+        primary_store: Store,
+        replica_stores: list[Store],
+    ) -> Mapping[str, Sequence[SOURCE_FILE_COORD]]:
+        """
+        Process this region, writing chunk data to primary_store (and replica_stores)
+        and returning the per-variable source file coordinates with their final status.
+
+        Implemented by the MaterializedRegionJob and VirtualRegionJob subclasses.
+        """
+        raise NotImplementedError(
+            "Subclasses implement process() with variant-specific logic"
+        )
+
+    def __repr__(self) -> str:
+        return f"RegionJob(region=({self.region.start}, {self.region.stop}), data_vars={[v.name for v in self.data_vars]})"
+
+
+class MaterializedRegionJob(
+    RegionJob[DATA_VAR, SOURCE_FILE_COORD], Generic[DATA_VAR, SOURCE_FILE_COORD]
+):
+    # Reformats source data into rechunked (materialized) chunk data: download
+    # source files, read them into shared-memory arrays, write output shards.
+    # Base class for all existing rechunked datasets.
+
+    # Limit the number of variables processed in each download group if set.
+    # If value is less than len(data_vars), downloading, reading/recompressing, and writing steps
+    # will be pipelined within a region job.
+    max_vars_per_download_group: ClassVar[int | None] = None
+
+    # Subclasses can override this to control download parallelism
+    # This particularly useful of the data source cannot handle a large number of concurrent requests
+    download_parallelism: int = (os.cpu_count() or 1) * 2
+
+    # Subclasses can override this to control read parallelism.
+    # This is useful in cases where many threads reading data into shared memory
+    # causes deadlocks or resource contention.
+    read_parallelism: int = os.cpu_count() or 1
+
+    def download_file(self, coord: SOURCE_FILE_COORD) -> Path:
+        """Download the file for the given coordinate and return the local path."""
+        raise NotImplementedError(
+            "Download the file for the given coordinate and return the local path."
+        )
+
+    def read_data(
+        self,
+        coord: SOURCE_FILE_COORD,
+        data_var: DATA_VAR,
+    ) -> ArrayND[np.generic]:
+        """
+        Read and return the data chunk for the given variable and source file coordinate.
+
+        Subclasses must implement this to load the data (e.g., from a file or remote source)
+        for the specified coord and data_var. The returned array will be written into the shared
+        output array by the base class.
+
+        Parameters
+        ----------
+        coord : SOURCE_FILE_COORD
+            The coordinate specifying which file and region to read.
+        data_var : DATA_VAR
+            The data variable metadata.
+
+        Returns
+        -------
+        ArrayFloat32 | ArrayInt16
+            The loaded data.
+        """
+        raise NotImplementedError(
+            "Read and return data for the given variable and source file coordinate."
+        )
+
+    def apply_data_transformations(
+        self, data_array: xr.DataArray, data_var: DATA_VAR
+    ) -> None:
+        """
+        Apply in-place data transformations to the output data array for a given data variable.
+
+        This method is called after reading all data for a variable into the shared-memory array,
+        and before writing shards to the output store. The default implementation applies binary
+        rounding to float32 arrays if `data_var.internal_attrs.keep_mantissa_bits` is set.
+
+        Subclasses may override this method to implement additional transformations such as
+        deaccumulation, interpolation or other custom logic. All transformations should be
+        performed in-place (don't copy `data_array`, it's large).
+
+        Parameters
+        ----------
+        data_array : xr.DataArray
+            The output data array to be transformed in-place.
+        data_var : DATA_VAR
+            The data variable metadata object, which may contain transformation parameters.
+        """
+        keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
+        if isinstance(keep_mantissa_bits, int):
+            round_float32_inplace(
+                data_array.values, keep_mantissa_bits=keep_mantissa_bits
+            )
 
     def process(
         self,
@@ -718,9 +744,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             if coord.downloaded_path:
                 with suppress(FileNotFoundError):
                     coord.downloaded_path.unlink()
-
-    def __repr__(self) -> str:
-        return f"RegionJob(region=({self.region.start}, {self.region.stop}), data_vars={[v.name for v in self.data_vars]})"
 
 
 class SourceFileResult(FrozenBaseModel):
