@@ -1,1118 +1,943 @@
 # Virtual Icechunk Datasets
 
-> Design plan. Some details are deliberately deferred to PR #3 (first concrete
-> dataset) where they will be settled by experience rather than speculation;
-> those are marked **TBD-by-impl**.
+> Design plan. The architecture below is settled. A small set of icechunk 2.x
+> behaviors are called out as **spike-to-confirm** — they are verified by a
+> focused spike in PR #3 (see [Spike bundle](#spike-bundle)). The retry/commit
+> design does not depend on their answers; we just want to know the operational
+> numbers before the first dataset ships.
 
 ## Goals
 
 Create virtual Icechunk datasets that complement our existing materialized
-(rechunked) time-series datasets. For datasets where source data lives in a
-publicly accessible GRIB archive (NOAA NODD, ECMWF and DWD archives on
-Source Coop), a virtual dataset stores only Icechunk metadata pointing at
-byte ranges within the original GRIB files.
+(rechunked) time-series datasets. For datasets whose source data lives in a
+publicly readable GRIB archive (NOAA NODD, ECMWF and DWD archives on Source
+Coop), a virtual dataset stores only Icechunk metadata — virtual chunk
+references pointing at byte ranges inside the original GRIB files. No copy of
+the data lives in our store.
 
 **Why:**
 
-- **Spatial/map-optimized chunking, complementary to time-series**: chunks
-  follow the native GRIB message shape (1 time step, full spatial grid),
-  ideal for spatial queries and map rendering. Users choose the
-  materialized `-timeseries` dataset for time-series extraction and the
-  `-spatial` dataset for map/spatial queries over the same underlying data.
-- **All source variables**: ~zero storage cost per variable means we can
-  include every variable in the source archive, not just a curated subset.
-- **Very low latency updates**: target ≤ 5s end-to-end from a new
-  source file appearing to its virtual refs being visible. We hit
-  this by scheduling the pod to be up and polling *before* new files
-  start dropping (init publication times are predictable), polling
-  with `sleep(1)` between checks, and committing each newly-observed
-  file immediately. Writing virtual references is near-instant since
-  we're only recording byte offsets, not transferring data.
+- **Spatial/map-optimized chunking, complementary to time-series.** Chunks
+  follow the native GRIB message shape (one time step, full spatial grid),
+  ideal for spatial queries and map rendering. Users pick the materialized
+  time-series dataset for time-series extraction and the `-spatial` virtual
+  dataset for map/spatial queries over the same underlying data.
+- **Every curated source variable.** The marginal storage cost of a variable
+  is a handful of byte-range refs, not a rechunked copy, so we can include
+  every variable we have metadata for — not just the curated materialized
+  subset. (Expansion to "all source variables" is gated on per-variable
+  metadata; see [Open questions](#open-questions).)
+- **Very low latency updates.** Target ≤ 5 s end-to-end from a new source
+  file appearing to its refs being visible. We hit this by keeping a pod up
+  and polling *before* files start dropping (publication times are
+  predictable), and committing each newly-observed file immediately. Writing
+  refs is near-instant — we record byte offsets, we don't move data.
 
-The PR #511 prototype proved the approach: 15.5 KB on disk for what would
-be 350 MB materialized, with real reads via S3 + GribberishCodec working
-end-to-end. See [Appendix A](#appendix-a-prototype-reference-pr-511).
+The PR #511 prototype proved the core read/write path end-to-end against real
+NOAA GFS S3 GRIB files (see [Appendix A](#appendix-a-prototype-pr-511)). The
+prototype is a 63-ref toy; the [Scale](#scale) section below sizes the real
+thing.
 
-## The set_virtual_ref loop
+## Scale
 
-This is the entire core operation. Everything else in this plan is
-plumbing around it.
+Virtual datasets are *metadata-heavy*, not storage-heavy. One GRIB message
+(one field for one `(init, member, lead)` or one `(time)`) becomes one virtual
+chunk, so ref counts track the full Cartesian product of the dataset's
+non-spatial dimensions.
+
+Worked example — **GEFS 16-day, 31 members, ~200 var/level combos, 4 inits/day,
+6-year archive**:
+
+| quantity | value |
+|---|---|
+| refs per init (`200 × 31 × 100 leads`) | ~620,000 |
+| inits (`6 yr × 365 × 4`) | 8,760 |
+| **total refs** | **~5.4 billion** |
+| source index files (one `.idx` per `(init, member, lead)`) | **~27.2 million** |
+
+Two consequences drive the rest of this design:
+
+1. **Manifests are large (tens of GB), not "tiny."** The plan must size for
+   billions of refs. This is why [manifest splitting](#manifest-splitting) is
+   load-bearing rather than a nice-to-have, and why the old "stores are KBs–MBs,
+   co-location is free" framing is wrong.
+2. **Backfill is bound by index-file count, not ref count.** ~27 M index
+   downloads is hours of work even at high concurrency, so **backfills must run
+   parallel across pods** (see [Backfill](#backfill)). Operational updates touch
+   a handful of files per fire and run single-writer.
+
+## The set_virtual_refs loop
+
+This is the entire core operation. Everything else is plumbing around it.
 
 ```python
-for source_file_coord in source_file_coords:
-    # 1. Download the lightweight GRIB index file (~10KB)
-    index_path = download_index(source_file_coord)
+for source_file in source_files:                       # one GRIB file == one .idx
+    index_path = download_index(source_file)           # ~30 KB
+    byte_ranges = parse_index(index_path, data_vars)   # existing parsers, reused
 
-    # 2. Parse byte ranges for each variable (existing parsers reused)
-    starts, ends = parse_index(index_path, data_vars)
-
-    # 3. Record a virtual reference per (variable, chunk) pair
-    grib_url = source_file_coord.get_url()  # e.g. s3://noaa-gfs-bdp-pds/...
-    for var, start, end in zip(data_vars, starts, ends, strict=True):
-        chunk_key = make_chunk_key(var, source_file_coord, template_ds)
-        store.set_virtual_ref(
-            chunk_key, location=grib_url, offset=start, length=end - start
+    refs = [
+        VirtualRef(
+            key=chunk_key(var, source_file, store),     # f"{var}/c/{i}/{j}/..."
+            location=source_file.get_url(),             # s3://noaa-gefs-pds/...
+            offset=start,
+            length=end - start,
         )
+        for var, (start, end) in zip(data_vars, byte_ranges, strict=True)
+    ]
+    store.set_virtual_refs(refs)                        # batch API (one call/file)
 
-# 4. Commit — readers immediately see the new data
-session.commit("...", rebase_with=icechunk.ConflictDetector())
+session.commit("...")                                   # readers see new data
 ```
 
-At read time, `GribberishCodec` (a zarr v3 `ArrayBytesCodec` serializer)
-decodes the raw GRIB messages. No copy of the data lives in our store —
-just the byte offsets.
+At read time `GribberishCodec` (a zarr v3 `ArrayBytesCodec` serializer) decodes
+the raw GRIB message the ref points at. One file's refs are produced and
+committed together — that atomicity is a stated invariant (see
+[Reader safety](#reader-safety)).
 
-**Existing code we reuse directly:**
+**Existing code reused directly:**
 
 | Need | Existing code |
 |---|---|
 | GRIB URLs | `SourceFileCoord.get_url()` per dataset |
-| NOAA `.idx` parsing → `(starts, ends)` | `noaa/noaa_grib_index.py::grib_message_byte_ranges_from_index` |
-| ECMWF JSON Lines `.index` parsing | `ecmwf/ecmwf_grib_index.py::get_message_byte_ranges_from_index` (renamed to `grib_message_byte_ranges_from_index` in PR #1) |
-| Per-variable GRIB element / level metadata | `<dataset>InternalAttrs.grib_element`, `grib_index_level`, etc. |
-| Index download helper | `common/download.py::http_download_to_disk` |
-| Icechunk commit with auto-rebase | `common/storage.py::commit_if_icechunk` |
+| NOAA `.idx` → `(starts, ends)` | `noaa/noaa_grib_index.py::grib_message_byte_ranges_from_index` |
+| ECMWF `.index` → `(starts, ends)` | `ecmwf/ecmwf_grib_index.py` parser (renamed for consistency in PR #2) |
+| Per-variable GRIB element / level | `<dataset>InternalAttrs.grib_element`, `grib_index_level`, … |
+| Index download | `common/download.py::http_download_to_disk` |
+| Candidate source files for a region | `RegionJob.generate_source_file_coords()` (shared with materialized) |
 
 ## Class architecture
 
-### Single `DynamicalDataset`; `MaterializedRegionJob` and `VirtualRegionJob` as siblings under `RegionJob`
+One `DynamicalDataset` hierarchy; `MaterializedRegionJob` and `VirtualRegionJob`
+as siblings under a shared `RegionJob` base.
 
-The current `DynamicalDataset` base already abstracts the right things
-for both variants — we keep one `DynamicalDataset` hierarchy. CLI,
-store factory, kubernetes resources, validation, Sentry — none fork.
-
-`RegionJob`, on the other hand, has a substantial set of variant-specific
-concerns (materialized has the download/read/shared-memory/write/upload
-pipeline and its hooks; virtual has the watcher loop, set-virtual-ref
-helpers, and source container declarations). It also has a meaningful
-set of shared concerns (get_jobs partitioning, source_groups, the
-operational_update_jobs contract). The clearest expression of this is a
-three-class hierarchy with `RegionJob` as the shared base and
-`MaterializedRegionJob` / `VirtualRegionJob` as siblings. The
-materialized/virtual pairing in the names makes the distinction
-explicit at every reference site.
+The current `DynamicalDataset` base already abstracts the right things for both
+variants. CLI, store factory, kubernetes resources, validation, Sentry — none
+fork. `RegionJob` is where the variant-specific work lives (materialized has the
+download/read/shared-memory/write/upload pipeline; virtual has the
+poll-and-emit loop and ref helpers), alongside a meaningful shared surface
+(`get_jobs` partitioning, `source_groups`, `generate_source_file_coords`, the
+`operational_update_jobs` contract). A three-class hierarchy expresses that
+cleanly.
 
 ```
-DynamicalDataset                     # unchanged single base
-├── NoaaGfsForecastDataset             (materialized; existing)
-├── NoaaGfsForecastSpatialDataset      (virtual; new)
-├── NoaaGefsForecast35DayDataset       (materialized; existing)
-├── NoaaGefsForecast35DaySpatialDataset (virtual; new)
+DynamicalDataset                          # unchanged single base
+├── NoaaGefsForecast35DayDataset            (materialized; existing)
+├── NoaaGefsForecast35DaySpatialDataset     (virtual; new)
 └── …
 
-RegionJob                            # shared base: fields, get_jobs,
-                                     #   source_groups, update_template_with_results,
-                                     #   abstract process(), abstract operational_update_jobs(),
-                                     #   abstract generate_source_file_coords()
-├── MaterializedRegionJob            # the existing process() pipeline,
-│                                    #   download_file/read_data/transform hooks,
-│                                    #   download/read parallelism tunables
-│   ├── NoaaGfsCommonRegionJob       # provider-specific shared bits
-│   │   └── NoaaGfsForecastRegionJob (existing, base swap RegionJob → MaterializedRegionJob)
-│   ├── NoaaHrrrRegionJob            (existing, base swap)
-│   │   ├── NoaaHrrrForecast48HourRegionJob
-│   │   └── NoaaHrrrAnalysisRegionJob
+RegionJob                                 # shared base: fields, get_jobs,
+│                                         #   source_groups, generate_source_file_coords,
+│                                         #   operational_update_jobs (abstract), process (abstract)
+├── MaterializedRegionJob                 # existing process() pipeline + hooks + tunables
+│   ├── NoaaGfsCommonRegionJob → NoaaGfsForecastRegionJob   (base swap only)
+│   ├── NoaaHrrrRegionJob → …                                (base swap only)
 │   └── …
-└── VirtualRegionJob                 # the watcher loop, set_virtual_ref helpers,
-                                     #   process_virtual_refs (abstract),
-                                     #   _filter_already_ingested (default impl),
-                                     #   _expand_dimensions, _update_ingested_forecast_length,
-                                     #   source_virtual_chunk_containers ClassVar
-    ├── NoaaGfsForecastSpatialRegionJob       (overrides process_virtual_refs)
-    ├── NoaaGefsForecast35DaySpatialRegionJob (overrides process_virtual_refs)
+└── VirtualRegionJob                      # the one virtual write loop, ref helpers,
+    │                                     #   process_virtual_refs (abstract generator),
+    │                                     #   filter_already_present (default impl),
+    │                                     #   sync_dims_to, chunk_key
+    ├── NoaaGfsForecastSpatialRegionJob
     └── …
 ```
 
-Moving the materialized `process()` body and helpers down one level
-(from today's `RegionJob` to the new `MaterializedRegionJob`) is a
-mechanical refactor — base class swap in each existing dataset's
-region job file, no semantic change.
+`process()` is defined once today and called from exactly one place (the
+driver); no dataset overrides it or its materialized helpers
+(`_download_processing_group`, `_read_into_data_array`, `_write_shards`,
+`_cleanup_local_files`), and nothing calls `super().process()`. So extracting
+`MaterializedRegionJob` is a mechanical base-class swap on the ~13 region jobs
+that inherit `RegionJob` directly; the four intermediate HRRR/GFS subclasses
+ride their parent's swap. Tests pass unchanged. This is PR #1 on its own.
 
-#### What lives where
+### What lives where
 
-**`DynamicalDataset` (unchanged surface):**
+**`DynamicalDataset` (near-unchanged surface):**
 
-- Fields: `template_config`, `region_job_class`, `store_factory`,
-  `dataset_id`, `primary_storage_config`, `replica_storage_configs`.
-- CLI: `update_template`, `update`, `backfill_kubernetes`,
-  `backfill_local`, `backfill`, `validate_dataset`, `dataset_urls`.
-- `_process_region_jobs` driver — extended by checking
-  `issubclass(region_job_class, VirtualRegionJob)` to take the
-  no-temp-branch path for virtual operational updates.
-- Sentry monitoring wrapper.
+- Fields: `template_config`, `region_job_class`, storage configs, plus the new
+  `icechunk_virtual_config` (see [Storage configuration](#storage-configuration)).
+- CLI, Sentry, `validators()`, `operational_kubernetes_resources()` — unchanged.
+- `_process_region_jobs` driver — gains **one** fork: a virtual operational
+  update (region job class is a `VirtualRegionJob` subclass *and* this is an
+  operational update) takes the single-writer-to-`main` path; everything else
+  (materialized backfill/update, **and virtual backfill**) keeps the existing
+  temp-branch path.
+- A model validator: if `region_job_class` is virtual then every storage
+  config must be `ICECHUNK` and `icechunk_virtual_config` must be present with a
+  non-empty container set.
 
 **`RegionJob` (shared base):**
 
-- Fields: `tmp_store`, `template_ds`, `data_vars`, `append_dim`,
-  `region`, `reformat_job_name`.
-- `get_jobs()` — region × variable-group fan-out with filters and
-  worker round-robin. Shared verbatim today and continues to apply
-  to both variants.
-- `source_groups()`, `get_processing_region()`,
-  `update_template_with_results()`.
-- Abstract: `operational_update_jobs()`, `generate_source_file_coords()`,
-  `process()`.
+- Fields: `tmp_store`, `template_ds`, `data_vars`, `append_dim`, `region`,
+  `reformat_job_name`.
+- `get_jobs()` — region × variable-group fan-out (see
+  [Partitioning](#partitioning)).
+- `source_groups()`, `get_processing_region()`, `generate_source_file_coords()`
+  (abstract), `operational_update_jobs()` (abstract), `process()` (abstract).
 
-**`MaterializedRegionJob` (subclass of `RegionJob`):**
+**`MaterializedRegionJob` (subclass):** today's `process()` body, the
+`download_file` / `read_data` / `apply_data_transformations` hooks, the
+parallelism tunables, and the shared-memory helpers. The existing datasets'
+region jobs change base class here and nothing else.
 
-- Hooks: `download_file()`, `read_data()`, `apply_data_transformations()`.
-- Tunables: `download_parallelism`, `read_parallelism`,
-  `max_vars_per_download_group`.
-- `process()` implementation: the current shared-memory pipeline
-  plus helpers (`_download_processing_group`, `_read_into_data_array`,
-  `_write_shards`, `_cleanup_local_files`).
+**`VirtualRegionJob` (subclass):**
 
-All existing dataset region jobs change their base class from
-`RegionJob` to `MaterializedRegionJob`. Tests pass unchanged.
+- `process()` — runs [the one virtual write loop](#the-virtual-write-loop).
+- `process_virtual_refs(remaining, deadline)` — abstract generator: discover
+  available source files and yield one file's refs at a time.
+- `filter_already_present(candidates, store, ds)` — default impl
+  (see [Filtering](#filtering-already-present-coordinates)); overridable.
+- `sync_dims_to(store, extent)` — idempotent dim/coord/derived-coord expansion
+  (see [The virtual write loop](#the-virtual-write-loop)).
+- `chunk_key(coord, var, store)` — coord labels → chunk key, shared by filter
+  and emit (see [Filtering](#filtering-already-present-coordinates)).
 
-**`VirtualRegionJob` (subclass of `RegionJob`):**
+## Storage configuration
 
-- Extra fields: `is_backfill: bool`, `max_seconds_between_commits: float`.
-- `process()` implementation: opens icechunk session, runs filter
-  once, drives generator, lazily expands as needed, sets refs,
-  commits with per-batch retry (see [The update process](#the-update-process)).
-- `process_virtual_refs()` (abstract — the generator subclasses
-  implement).
-- `_filter_already_ingested()` default implementation (see
-  [Filtering](#filtering-already-ingested-coordinates)).
-- `_expand_dimensions(new_append_values)` helper: resizes coord and
-  data var arrays, writes new coord values, **also recomputes
-  derived coords** (valid_time, ingested_forecast_length placeholder,
-  expected_forecast_length) by calling the template config's
-  `derive_coordinates` with the expanded ds.
-- `_update_ingested_forecast_length(init_time, new_max_lead)`
-  helper: bumps the per-init progress coord during a batch commit.
-- `download_index()` default implementation calling
-  `http_download_to_disk` against a coord-supplied URL.
-- `_chunk_key(ref, store)` helper: computes
-  `f"{var}/c/{idx0}/{idx1}/..."` from the ref's coord values and the
-  current store's coord arrays.
-- `source_virtual_chunk_containers` ClassVar for store-factory
-  wiring (see [Storage configuration](#storage-configuration)).
-- `operational_update_jobs()` calls inherited `get_jobs(...)` with
-  `is_backfill=False`; backfill callers go through `get_jobs(...)`
-  with `is_backfill=True` (the default).
-- `update_template_with_results()`: no-op for virtual. Lazy
-  expansion means the committed dim length already matches reality;
-  no trim needed.
+Virtual datasets carry one new declarative, per-dataset config object on the
+`DynamicalDataset`:
 
-## The update process
+```python
+class IcechunkVirtualConfig(FrozenBaseModel):
+    # Source buckets the refs point into. Registered as icechunk virtual chunk
+    # containers at every repo open (writer AND reader).
+    containers: Sequence[VirtualChunkContainerConfig]
+    # Manifest splitting policy (see "Manifest splitting").
+    manifest_split: ManifestSplitConfig
 
-The whole point of this is ≤ 5s updates, so the lifecycle deserves a
-clean walkthrough. The same `ReformatCronJob` → indexed Job → N
-worker pods scheduling primitive as materialized, but with two key
-twists tuned for low latency:
-
-1. The CronJob is **scheduled to fire just before a publication
-   window starts** (e.g. 5 minutes before GFS init T begins
-   publishing). Each pod is long-lived within its fire — runs for
-   the duration of the publication window (hours, not seconds),
-   polling with `sleep(1)` for new files. This means the pod is
-   already up and watching when the source agency drops a file.
-2. Commits go straight to `main` (no temp branch) and dim expansion
-   happens lazily inside each region job's `process()`, atomic with
-   the corresponding refs. Same model as before.
-
-Net effect on latency for a single new file:
-
-```
-latency ≈ poll_interval + index_download + commit_wait + commit + (occasional rebase retry)
-        ≈ 1s          + 100-500ms     + ≤1s        + 0.5-1s + (1-2s on conflict)
-        = 2-4s typical, ≤5s worst case
+class VirtualChunkContainerConfig(FrozenBaseModel):
+    prefix: str            # e.g. "s3://noaa-gefs-pds/"
+    region: str            # e.g. "us-east-1"
+    anonymous: bool = True # all current targets are publicly readable
 ```
 
-`commit_wait` is bounded by `max_seconds_between_commits` (~1s for
-operational) — the only knob we need. If the source publishes
-several files in the same poll, they ride the same commit; if
-they trickle in, each gets its own commit within the interval.
+This config is held on `DynamicalDataset` (not on the region job, not on the
+template) for three reasons:
 
-`concurrencyPolicy: Forbid` on the CronJob prevents a new fire from
-launching while the previous fire's pod is still polling.
+1. **Cardinality.** Containers and split policy are *per-dataset* and identical
+   across the primary store and every replica. A per-store home
+   (`StorageConfig`) would force duplicating the container set on each store and
+   risk drift; a per-region-job home is invisible to readers.
+2. **Readers need it.** Opening a virtual store requires registering the same
+   containers and wiring `authorize_virtual_chunk_access` to anonymous
+   credentials. Readers (and the `dynamical_catalog` / STAC path) have no
+   `RegionJob`, so the container set must live in a declarative model they can
+   serialize and reconstruct.
+3. **It is the unit of repointing.** See below.
 
-### No NaN-padded future
+`StoreFactory` takes `icechunk_virtual_config` as a single field and applies it
+uniformly to every repo it opens, building the `icechunk.RepositoryConfig`
+(registered containers + manifest-split policy) and the
+`authorize_virtual_chunk_access` credentials map. `__main__.py` registration is
+identical to materialized.
 
-Lazy expansion is the deliberate design choice that protects consumers
-from seeing empty future time steps:
+### Containers as indirection, not just auth
 
-- **Analysis datasets**: the `time` array grows exactly to match the
-  data actually ingested. We never pre-expand to "now" or any other
-  forward boundary. Consumers querying past the end see "out of range,"
-  not NaN.
-- **Forecast datasets**: each new `init_time` slot is created in the
-  same commit that lands its first virtual refs. Consumers querying a
-  newly-published init see the lead times that have been published so
-  far (and NaN for ones that haven't yet — same as today's materialized
-  forecasts mid-update).
+Virtual chunk containers do more than hold anonymous credentials — they are an
+indirection layer:
 
-The materialized flow protects readers from "expanded but empty" via a
-temp branch. We can't do that for virtual operational updates without
-losing the latency advantage (the whole point is per-file visibility
-in seconds). Lazy expansion is the alternative: data and structure
-always commit together.
+- **Dedup.** Refs are stored relative to a registered container prefix, so the
+  repeated `s3://noaa-gefs-pds/...` bucket+prefix isn't copied into every ref.
+  On an all-virtual store that dedup is most of the on-disk footprint.
+- **En-masse repoint.** Swapping a container registration (e.g. NODD-on-AWS → a
+  GCP mirror, or a Source Coop move) repoints every ref at once.
+
+> **Spike-to-confirm:** whether icechunk persists refs resolvably-relative to the
+> container prefix (repoint is free) or bakes absolute URLs (repoint needs a
+> rewrite pass). Either is workable; this only changes how strongly we lean on
+> repoint.
+
+### Manifest splitting
+
+With billions of refs (see [Scale](#scale)), a single per-array manifest would
+be tens of GB and every commit would rewrite the whole thing. icechunk manifests
+are per-array, immutable, and content-addressed; a commit rewrites only the
+split file(s) whose chunk-index range changed. We therefore **split each array's
+manifest along the append dimension**:
+
+- An operational append lands only in the current (highest-index) split; every
+  historical split is referenced unchanged. **Commit cost = size of the active
+  split, not the whole array.** This is what makes the ≤ 5 s budget real — see
+  [Operational updates](#operational-updates).
+- New appends only ever add higher indices, so splitting stays clean under
+  expansion — older splits never shift.
+
+Size the split by the operational commit-cost ceiling (small enough that
+rewriting the active split is well under a second), then confirm it's
+comfortably under the read-memory ceiling (it will be — the commit-cost
+constraint binds first). For GEFS-scale arrays the commit-cost ceiling lands
+around 1–3 weeks of inits per split; the exact constant is measured in the
+[spike](#spike-bundle).
+
+> **Spike-to-confirm:** that splitting is configured per-array along a named
+> dimension, and that a commit rewrites only the boundary-crossing split rather
+> than all splits.
+
+## Partitioning
+
+`get_jobs()` partitions the append dimension into region jobs. Today it always
+reads `encoding["shards"]`. Virtual arrays have **no shards** (one ref per GRIB
+message — sharding a virtual ref is meaningless, and the PR #511 prototype uses
+`shards=None`, `compressors=()`, `filters=()`). So the partition unit becomes:
+
+> **Use `encoding["shards"]` along the append dim if set, else
+> `encoding["chunks"]`.**
+
+This is a two-line policy at the `get_jobs` call site:
+
+```python
+kind = "shards" if "shards" in encoding else "chunks"
+regions = dimension_slices(template_ds, append_dim, kind=kind)
+```
+
+`dimension_slices` stays strict (it is told exactly which key to read), so
+`check_for_expected_shards` and every other physical-shard reader keep meaning
+*physical shards*. No new config attribute is introduced, and materialized
+behavior is byte-for-byte unchanged.
+
+Consequences by flow:
+
+- **Materialized backfill + materialized/virtual** — shards set → shards
+  (unchanged).
+- **Virtual backfill** — `shards=None` → chunks → one init (or one timestep)
+  per job, distributed round-robin across pods. Granularity is fine: backfill
+  commits on a time cadence, not per job, so tiny jobs cost nothing, and
+  `workers_total` already tunes throughput.
+- **Virtual operational** — does not use `get_jobs` partitioning at all; it runs
+  a single active-window job (see [Operational updates](#operational-updates)).
+
+## The virtual write loop
+
+Both virtual flows — backfill and operational — run the **same** loop. The only
+differences are *where the session is opened* and *how often it commits*:
+
+```python
+candidates = self.generate_source_file_coords(scope)          # shared w/ materialized
+remaining  = self.filter_already_present(candidates, store, ds)
+
+for file_refs in self.process_virtual_refs(remaining, deadline):
+    self.sync_dims_to(store, file_refs.extent)   # idempotent; no-op if already covered
+    store.set_virtual_refs(file_refs.refs)       # batch (plural API)
+    if commit_due(max_seconds_between_commits):
+        commit(store)                            # whole files only, never a partial file
+commit(store)                                    # flush remainder
+```
+
+`sync_dims_to(store, extent)` is the single primitive that unifies pre-sizing
+and lazy expansion. It grows the append-dim coord, the data-var arrays, and the
+derived coords (via the template config's `derive_coordinates`) to cover
+`extent`, **writing only the new positions** and leaving existing positions
+untouched. It is a **no-op when the extent is already covered**.
+
+That single primitive is why the two flows don't need separate write paths:
+
+- **Backfill** pre-sizes the full template up front (worker 0, existing
+  `parallel_setup`), so every `sync_dims_to` is a no-op — the resize never
+  fires, which is exactly why parallel workers writing disjoint chunks is safe.
+- **Operational** is single-writer, so `sync_dims_to` actually grows `main` as
+  new inits appear — and being single-writer, that resize is **never
+  concurrent**.
+
+`commit_due` reads one value field, `max_seconds_between_commits` — tight (~1 s)
+for operational, loose (e.g. 60 s) for backfill. It is a *cadence value*, not a
+mode flag. There is no `is_backfill` boolean anywhere.
+
+## Operational updates
+
+The whole point is ≤ 5 s visibility, so the operational lifecycle is tuned for
+it and runs **single-writer**.
+
+### Single writer, single active-window job
+
+`operational_update_jobs()` for a virtual dataset returns **one** region job
+spanning the recent, still-incomplete portion of the append dimension (the
+"active window" — the dataset knows its publication cadence). One pod, one
+icechunk session on `main`, one commit loop.
+
+What multiple pods bought materialized updates was not compute — a fire ingests
+a handful of files, and the prototype set 63 refs in ~1 s. It was N concurrent
+long-lived poll loops. We preserve that with a **single** loop whose generator
+polls the *union* of all still-missing files across the active window each
+iteration:
+
+- Filling out a still-incomplete earlier init's late leads and ingesting a brand
+  new init's first leads interleave naturally — they're just entries in the same
+  missing set the one loop checks each second.
+- A brand new init expands the append dim with **zero possibility of a
+  concurrent resize**, because there is exactly one writer. The entire
+  concurrent-resize hazard — and the per-batch session-rebuild retry loop the
+  earlier draft needed — simply does not exist.
+
+The only parallelism worth having is the *read-only* fan-out (existence checks +
+index downloads), which a plain threadpool inside one poll iteration provides.
+All `set_virtual_refs` + commits stay single-threaded.
+
+> If an operational fire ever falls far behind (extended downtime), do **not**
+> scale it to N writers. Run a [backfill](#backfill) to catch up, then resume
+> operational. Operational stays permanently single-writer.
+
+### Latency budget
+
+```
+latency ≈ poll_interval + index_download + commit_wait + commit
+        ≈ 1 s          + 100–500 ms     + ≤ 1 s       + active-split rewrite
+        = 2–4 s typical, ≤ 5 s worst case
+```
+
+`commit` cost is the active manifest split rewrite (see
+[Manifest splitting](#manifest-splitting)), **not** the whole array — this is
+why splitting is load-bearing for the budget. `commit_wait` is bounded by
+`max_seconds_between_commits` (~1 s). Several files in one poll ride one commit;
+trickling files each get a commit within the interval.
 
 ### Step-by-step
 
-1. **CronJob fires** on a schedule timed to publication windows
-   (per dataset; e.g. for GFS, fire ~5 min before each 6h init's
-   publication starts). `concurrencyPolicy: Forbid` prevents
-   overlapping fires.
-2. **Indexed Job spawns N workers**. Same env vars as today
-   (`JOB_NAME`, `WORKER_INDEX`, `WORKERS_TOTAL`).
-3. **Each worker runs `update()`** on the `DynamicalDataset`, which
-   calls `operational_update_jobs()` and then `_process_region_jobs()`.
-4. **The driver detects this is a virtual operational update** —
-   `region_job_class` is a `VirtualRegionJob` subclass and
-   `update_template_with_results=True`. It takes the virtual
-   operational path: no temp branch, no shared setup step. Each pod
-   handles its round-robin slice of region jobs directly.
-5. **Each worker processes its assigned region jobs in parallel**. For
-   each region job, `VirtualRegionJob.process()`:
-   1. Calls `_filter_already_ingested(source_coords)` once at the
-      top — narrows the job to files this pod still needs to ingest.
-      (Other pods never do this pod's work, so we don't need to
-      re-check mid-job.)
-   2. Drives the `process_virtual_refs()` generator. The generator
-      polls source-file availability with `sleep(1)` between
-      checks (HEAD requests on the source URLs are fast and cheap)
-      and yields each newly-observed batch — typically one file at
-      a time, but a dataset can yield several files together if it
-      makes sense (e.g., the source publishes a small burst at
-      once).
-   3. Yielded refs go into a pending buffer. We commit when
-      `max_seconds_between_commits` elapses with pending refs —
-      short (e.g. 1s) for operational so visibility is fast, longer
-      (e.g. 60s) for backfill to reduce commit overhead. (No
-      separate file-count threshold; the per-job ref count is
-      bounded by the region size anyway, and we always want to
-      commit everything pending, never drop refs to stay under a
-      cap.) Commit via the retry loop: open a fresh session on
-      `main`, expand the dim if still needed, compute chunk keys
-      against current state, `store.set_virtual_ref(...)` for each
-      ref, commit with `rebase_with=icechunk.ConflictDetector()`.
-      On conflict, throw away the session and try again.
-   4. The generator exits when all expected files for this job have
-      been ingested (e.g.
-      `ingested_forecast_length[init] >= expected_forecast_length[init]`)
-      or the pod's `pod_active_deadline` approaches.
-6. **No finalize step**. There's no temp branch to merge. The driver
-   may still wait for all workers (via the existing coordination-file
-   mechanism) before exiting, but there's no `reset_branch`.
-7. **Pod exits** when its work is done. The next scheduled cron fire
-   (for the next publication window) starts a fresh pod that picks
-   up any unfinished work via `_filter_already_ingested`.
+1. **CronJob fires** ~5 min before a publication window opens (per dataset).
+   `concurrencyPolicy: Forbid` prevents overlapping fires.
+2. **A single worker runs `update()`**, which calls `operational_update_jobs()`
+   (→ one active-window job) and `_process_region_jobs()`.
+3. **The driver detects virtual + operational** and takes the
+   single-writer-to-`main` path: no temp branch, no shared setup, no
+   coordination files. It opens one writable session on `main` and runs
+   [the virtual write loop](#the-virtual-write-loop).
+4. **The loop** filters to what's still missing, drives
+   `process_virtual_refs(..., deadline)`, lazily expands via `sync_dims_to`,
+   batches refs, and commits on the ~1 s cadence.
+5. **The generator exits** when the window is complete or the pod deadline
+   approaches.
+6. **The pod exits.** The next fire starts fresh and resumes via the filter.
 
-This flow is intentionally close to the existing materialized flow.
-What changes is small: skip the temp branch, expand `main` lazily
-inside each region job's process() as data arrives, let each worker
-manage its own session and commit cadence.
+### No NaN-padded future
 
-### Why lazy expansion works with parallel pods
+Lazy expansion (never pre-sizing `main` toward "now") is what protects consumers:
 
-Region jobs partition the append dim by construction — different pods
-get different `init_time` (or `time`) ranges. So **two pods never write
-the same chunks**, only ever the metadata files involved in dim
-expansion (`init_time/zarr.json`, the chunk holding `init_time` values,
-each data var's `zarr.json`).
-
-`_filter_already_ingested` runs once at the start of `process()` to
-decide what files this job will ingest. We don't re-run it per batch —
-no other pod is going to process our work.
-
-The only conflict that can happen is on dim expansion. The scenario:
-
-- Pod A (init T-6h, new): opens session at shape N, expands to N+1
-  with `T-6h` at index N, sets refs for T-6h's chunks, tries to commit.
-- Pod B (init T, new): in parallel, opens session at shape N, expands
-  to N+1 (or further) with both `T-6h` and `T` in sorted order
-  (computed from the template — Pod B knows T-6h exists in the
-  expected coords even though Pod B isn't ingesting it), sets refs
-  for T's chunks, commits first.
-- Pod A's commit now conflicts on `init_time/c/0` and the resized
-  `<var>/zarr.json` files.
-
-Pod A's response is just: throw away the session, open a fresh one,
-re-check whether expansion is still needed (it isn't — Pod B's commit
-already added T-6h), re-set the same virtual refs against the current
-chunk indices, commit.
-
-```python
-# Inside VirtualRegionJob.process(), per commit cycle:
-for attempt in range(MAX_RETRIES):
-    session = repo.writable_session("main")
-    store = session.store
-
-    new_coords = self._compute_dim_expansion_needed(store, refs)
-    if new_coords:
-        self._expand_dimensions(store, new_coords)
-    for ref in refs:
-        # Recompute the chunk key from the current store state in case
-        # another pod's prior expansion shifted our index.
-        key = self._chunk_key(ref, store)
-        store.set_virtual_ref(key, ref.url, offset=ref.offset, length=ref.length)
-
-    try:
-        session.commit("...", rebase_with=icechunk.ConflictDetector())
-        break
-    except icechunk.ConflictError:
-        time.sleep(0.1 * (2 ** attempt))
-```
-
-A few important properties of this model:
-
-- **Expansion is idempotent across pods**. Each pod expands the dim to
-  cover everything in the template that it depends on — including
-  values it isn't ingesting but that must exist to keep sorted order.
-  After any pod commits its expansion, the dim is in the same target
-  state. Losers' retries see "expansion already done" and skip it.
-- **Filter is once-per-job**, not per-batch. Other pods aren't doing
-  our work, so we don't need to re-check what's done mid-job.
-- **Retries are cheap**. Byte ranges (from parsed index files) are
-  already in hand. The retry recomputes chunk-key indices against the
-  current dim shape and re-issues `set_virtual_ref` calls; that's
-  microseconds per ref.
-- **Conflicts only happen during multi-new-init scenarios**. Single
-  new init per fire = single expanding pod = no conflict. Multiple
-  new inits = conflicts that converge via the retry loop above. No
-  special-case code path.
-
-### Concurrency and ConflictDetector (summary)
-
-`ConflictDetector` rejects a commit when two sessions wrote to the
-same path. The per-batch retry loop is the response — it always
-converges because:
-
-1. Filter ran once at job start; this pod's work is fixed.
-2. Other pods never write this pod's chunks.
-3. The only path collisions are on dim-expansion metadata files,
-   which are idempotent across pods (everyone targets the same final
-   dim state derived from the template).
-
-The existing `storage.commit_if_icechunk` re-runs `session.commit()`
-without rebuilding the session's writes, which doesn't help us
-here — for virtual operational updates we need to rebuild the
-session (fresh write set against the new base) on each attempt.
-That logic lives inside `VirtualRegionJob.process()`.
-
-> **TBD-by-impl**: confirm icechunk 2.x's `ConflictDetector` accepts
-> rebases when one session resized an array (wrote `<var>/zarr.json`)
-> and another session wrote chunks under that array. The retry loop
-> above handles either answer; we just want to know how often
-> conflicts fire operationally.
+- **Analysis** — `time` grows exactly to the data ingested. Querying past the
+  end is "out of range," never NaN.
+- **Forecast** — a new `init_time` slot is created in the same commit that lands
+  its first refs. Querying a new init shows the leads published so far (and NaN
+  for unpublished ones — same as materialized forecasts mid-update).
 
 ### Crash recovery
 
-`_filter_already_ingested` makes crash recovery trivial in steady
-state — a re-run picks up where the last commit left off. Specific
-crash scenarios:
+`filter_already_present` makes recovery trivial — a re-run picks up from the
+last commit.
 
-- **Worker crashes mid-batch (before commit)**: pending refs are
-  lost; the next cron fire re-discovers them via filter and re-sets
-  them. Idempotent.
-- **Worker crashes after some commits but before others**: committed
-  refs and expansions are durable; uncommitted ones are not.
-  `_filter_already_ingested` skips what's done, processes the rest.
-- **Worker crashes mid-expansion (after `_expand_dimensions` but
-  before commit)**: expansion is part of the session, not yet
-  visible. Next fire sees the unchanged dataset and re-expands.
+- **Crash mid-poll (before commit):** pending refs are dropped; the next fire
+  re-discovers and re-emits them. Idempotent.
+- **Crash after some commits:** committed refs and expansions are durable; the
+  filter skips them and processes the rest.
+- **Crash mid-expansion (after `sync_dims_to`, before commit):** the expansion
+  is part of the uncommitted session and vanishes; the next fire re-expands.
 
-## The backfill process
+## Backfill
 
-Backfills use the same `VirtualRegionJob.process()` and
-`process_virtual_refs()` code paths — with two differences:
+Backfills run the **same** virtual write loop but on the **existing parallel
+temp-branch flow** — they are required to be parallel (see [Scale](#scale):
+~27 M index files), and parallel writers are safe precisely because the template
+is pre-sized.
 
-1. **Temp branch flow** (same as materialized backfills): worker 0
-   creates `_job_<job_name>`, expands metadata fully on the branch,
-   commits. Workers write refs to the branch. Last worker resets
-   `main` to the branch. Readers see "empty" or "full," never
-   partial state during a backfill.
-2. **Longer commit interval**: backfill region jobs set
-   `max_seconds_between_commits` to e.g. 60s — they don't care
-   about per-file latency and longer intervals reduce commit
-   overhead for the much larger volume. Operational region jobs
-   keep it at ~1s so newly observed files become visible quickly.
+- **Worker 0 setup** = existing `parallel_setup`: pre-size the full template on
+  the `_job_<name>` branch and commit. Because the dims are written at full size
+  up front, every worker's `sync_dims_to` is a no-op — no worker ever resizes,
+  so workers write **disjoint** chunk refs with no expansion conflict (the
+  proven materialized-backfill case, `ConflictDetector` rebase over disjoint
+  paths).
+- **All workers** write their round-robin slice of refs to the branch with a
+  loose commit cadence (e.g. 60 s).
+- **Last worker** resets `main` to the branch tip — a cheap pointer move even
+  for a 5.4 B-ref store. Readers see "empty" or "full," never partial.
 
-The plumbing for these differences:
+The **only** thing that differs from materialized backfill is `process()`'s body
+(set refs vs. materialize). No new orchestration, no `is_backfill` flag — the
+existing flow is variant-general. This answers the earlier "is backfill
+materialized/virtual-specific?" → **general**.
 
-- `VirtualRegionJob.get_jobs(...)` accepts an `is_backfill: bool = True`
-  parameter (backfill is the more common caller).
-  `VirtualRegionJob.operational_update_jobs(...)` calls
-  `cls.get_jobs(..., is_backfill=False)`. Each constructed region
-  job carries the flag and the appropriate threshold values as
-  model fields.
-- `_process_region_jobs` checks the region jobs' `is_backfill` flag
-  (or, equivalently, `update_template_with_results=False`) to take
-  the temp-branch path for backfill and the direct-to-main path
-  for operational updates.
+If single-pod-per-range throughput ever pinches, the scaling path stays
+branch-based: more workers, each owning a disjoint append-dim range on the
+pre-sized branch. Pre-sizing is what makes any of this safe; that's the dividing
+line from operational (which can't pre-size `main` without showing NaN futures,
+hence single-writer).
 
-Parallelism comes from Kubernetes indexed jobs and
-`get_worker_jobs(...)`, identical to materialized backfills.
+## Filtering already-present coordinates
 
-## Filtering already-ingested coordinates
+Filtering is what makes operational updates fast in steady state and is the
+crash-recovery / idempotency backbone. **There is no auxiliary progress
+coordinate** — the icechunk manifest is the source of truth for what's ingested.
+(A high-water-mark coord like `ingested_forecast_length` is a denormalized cache
+that drifts from truth on out-of-order/gappy lead arrival; deriving "remaining"
+straight from the store removes the only thing that could disagree.
+`ingested_forecast_length` may still be *published* as a reader-facing output
+computed from the manifest, but it is never read back to make decisions.)
 
-Filtering is what makes operational updates *fast* in the steady state.
-It's not just a crash-recovery fallback.
+```python
+def filter_already_present(self, candidates, store, ds):
+    present = self._present_chunk_keys(store, self.indicator_var, window)  # manifest probe, scoped
+    return [
+        c for c in candidates
+        if (key := self.chunk_key(c, self.indicator_var, ds)) is None  # label not yet a coord → remaining
+        or key not in present
+    ]
+```
 
-Region jobs cover whole shards along the append dim. For analysis
-datasets and for forecasts issued over multiple days (e.g. GEFS 35-day,
-where a shard's worth of init times spans many days), the region job
-responsible for the current shard is usually already mostly populated.
-Filtering identifies the small subset of source files that are
-genuinely new, so the job's effective work is "ingest what's missing"
-— typically a handful of files per fire, not a whole shard.
+One overridable hook, one mechanism for both variants:
 
-`_filter_already_ingested(source_coords) -> source_coords_remaining`
-is a method on `VirtualRegionJob` that subclasses can override. The
-default implementation reads the icechunk store and detects which
-append-dim positions are already populated. Two interchangeable
-strategies:
+- The author expresses intent in **coordinate labels** (timestamps /
+  timedeltas); `chunk_key` translates label → chunk key. The check is **ref
+  existence in the manifest**, never a value read.
+- **Never `.isnull()` on a virtual data var.** A present chunk's value read
+  triggers an S3 fetch + GRIB decode; in steady state the recent region is
+  mostly populated, so `.isnull()` would decode a near-full region every poll.
+  This is the same "manifest check, not decode" the plan applies to NaN
+  validation.
+- `chunk_key` and the emitter share the same implementation, so filter and emit
+  can never disagree about where a coord maps.
 
-1. **Coordinate-array introspection** (default, no extra metadata
-   needed): open the icechunk store readonly, read the relevant
-   coordinate(s) and any "progress" coord (e.g.
-   `ingested_forecast_length`), compute which (append_dim_value, …)
-   tuples are present, filter out matching `source_coords`. For
-   forecasts, "present" means
-   `ingested_forecast_length[init_time] >= source_coord.lead_time`.
-   For analyses, "present" means `time` contains
-   `source_coord.init_time + source_coord.lead_time`.
-2. **Manifest probe** (fallback for datasets without a progress
-   coord): for each candidate chunk key, ask the icechunk session
-   whether a virtual ref exists. Slower (one probe per candidate)
-   but completely generic.
+**Correctness rests on no false-positives, not on filter precision:**
 
-The default goes in `VirtualRegionJob` and uses strategy 1 if the
-template has `ingested_forecast_length`, otherwise strategy 2. Per
-dataset, subclasses can override.
+- A filter **false-negative** (re-emits done work) → `set_virtual_refs` rewrites
+  an identical entry. Idempotent. A pure performance papercut.
+- A filter **false-positive** (skips undone work) → permanent miss.
 
-Three independent things this gives us:
+The manifest probe has no false-positives (a key is present **iff** we emitted
+it; keys are unique per `(var, init, member, lead)` / `(var, time)`). A
+high-water-mark coord *does* false-positive on gappy leads — which is why we
+don't use one. The `chunk_key` contract **"label not in coords ⟹ remaining"**
+guarantees a brand-new position (not yet expanded) is never mistaken for done.
 
-- **Fast steady-state updates** — only a few files are actually new.
-- **Crash recovery** — restart sees post-crash state, resumes.
-- **Idempotency across overlapping cron fires** — even with
-  `concurrencyPolicy: Forbid`, if a previous fire partially
-  completed, the next fire skips its committed work.
+The cheap "is there a ref at key K, without decoding" primitive underpins both
+this filter and the manifest-check validator. Mechanically it is likely
+`store.list_prefix(f"{var}/c/…")` scoped to the active window → key set →
+membership (index-space in the basement, label-space `chunk_key` at the surface).
 
-## Derived coordinates and progress tracking
+> **Spike-to-confirm:** icechunk 2.x exposes a ref-presence check that doesn't
+> fetch/decode, and scoping it to the active manifest split keeps it bounded.
 
-A virtual region job's commits modify three things in the icechunk
-store, not just the data variable chunks:
+## Derived coordinates
 
-1. **Dim coord values** (`init_time` or `time`) when `_expand_dimensions`
-   adds new positions. Atomic with the same commit as the
-   corresponding refs.
-2. **Derived coords** that depend on the append dim. For HRRR-style
-   forecasts these are `valid_time = init_time + lead_time`,
-   `expected_forecast_length` (per init hour), and the
-   `ingested_forecast_length` placeholder (all-NaT until filled).
-   `_expand_dimensions` calls the template config's
-   `derive_coordinates(ds)` with the expanded ds and writes the
-   computed values for the new positions only (leaving existing
-   positions untouched).
-3. **Progress signal** (`ingested_forecast_length` for forecasts;
-   nothing extra for analyses). Each batch commit calls
-   `_update_ingested_forecast_length(init_time_idx, new_max_lead)`
-   which bumps the per-init lead-time progress coord. This is what
-   `_filter_already_ingested` reads on the next fire.
+A virtual commit modifies more than data-var chunks; `sync_dims_to` keeps the
+following consistent and atomic with the refs:
 
-For analyses, lazy expansion adds new `time` positions; no
-per-position derived coord needs updating beyond what
-`derive_coordinates` returns. The progress signal is implicit in
-the current `time` array length — `_filter_already_ingested`
-checks `time` directly.
-
-Static derived coords (`latitude`, `longitude`, `spatial_ref`) are
-written once at dataset creation and don't change with dim
-expansion.
+1. **Append-dim coord values** (`init_time` / `time`) for new positions.
+2. **Derived coords** that depend on the append dim (`valid_time`,
+   `expected_forecast_length`, etc.), recomputed by calling the template
+   config's `derive_coordinates(ds)` on the expanded dataset and writing only
+   the new positions. `derive_coordinates` is pure with respect to the passed
+   `ds` (it reads only dataset contents plus static config), so calling it
+   incrementally is sound — today it is only called on the full template at
+   generation, so the incremental call path is new and covered by tests.
+3. **Static derived coords** (`latitude`, `longitude`, `spatial_ref`) are
+   written once at creation and don't change.
 
 ## Per-variable serializer
 
-The single non-trivial template-layer change for virtual datasets:
-each virtual data variable has its own `GribberishCodec(var=grib_element)`
-serializer. Materialized datasets share one encoding across vars;
-virtual datasets cannot.
+The one non-trivial template-layer change: each virtual data variable declares
+its own `GribberishCodec(var=<grib_element>)` as its zarr **serializer** (the
+single `ArrayBytesCodec` slot in `filters → serializer → compressors`).
+Materialized arrays use zarr's default `BytesCodec` and never name a serializer.
 
-A mechanical prerequisite (lands in PR #1): `Encoding` gets one new
-optional field, since `GribberishCodec` is a zarr v3 `ArrayBytesCodec`
-(the serializer slot in `filters → serializer → compressors`):
+`Encoding` gains one optional field (PR #2):
 
 ```python
 class Encoding(pydantic.BaseModel):
     ...
-    # None means zarr's default BytesCodec.
-    serializer: dict[str, Any] | None = None
+    serializer: dict[str, Any] | None = None   # None ⇒ zarr's default BytesCodec
 ```
 
-`template_utils.assign_var_metadata` (wherever encoding flows into
-xarray's `encoding` dict) passes `serializer` through to zarr.
-Materialized datasets leave it `None` and behavior is unchanged.
+It threads through with no extra plumbing: `assign_var_metadata` already does
+`var.encoding = var_config.encoding.model_dump(exclude_none=True)`, so the field
+flows into xarray's `.encoding` and on to `to_zarr`.
 
-### Recommended pattern: encoding factory
+> **Spike-to-confirm:** `zarr~=3.1` honors a `serializer` key written through
+> `to_zarr` this way.
 
-Extend HRRR's existing `get_data_vars(encoding)` to take a per-var
-encoding factory:
+### Encoding factory
+
+Each virtual variable needs its *own* `Encoding` (different `var=` per
+variable), which the single-`Encoding`-shared-across-all-vars pattern can't
+express. Extend the existing `get_data_vars(encoding)` to take a per-var
+factory:
 
 ```python
-class NoaaGefsCommonTemplateConfig(TemplateConfig[GefsDataVar]):
-    def get_data_vars(
-        self, make_encoding: Callable[[GefsDataVar], Encoding]
-    ) -> Sequence[GefsDataVar]: ...
-
-# Materialized variant: same encoding for every var.
-class NoaaGefsForecast35DayTemplateConfig(NoaaGefsCommonTemplateConfig):
-    @computed_field
-    @cached_property
-    def data_vars(self) -> Sequence[GefsDataVar]:
-        enc = Encoding(dtype="float32", chunks=(1, 49, 721, 1440), ...)
-        return self.get_data_vars(make_encoding=lambda _var: enc)
-
-# Virtual variant: per-var serializer.
-class NoaaGefsForecast35DaySpatialTemplateConfig(NoaaGefsCommonTemplateConfig):
-    @computed_field
-    @cached_property
-    def data_vars(self) -> Sequence[GefsDataVar]:
-        def make_encoding(var: GefsDataVar) -> Encoding:
-            return Encoding(
-                dtype="float32",
-                chunks=(1, 1, 721, 1440),
-                # shards drives region-job partitioning, not storage layout.
-                # See "Encoding rules for virtual datasets" below.
-                shards=(1, lead_time_count, 721, 1440),
-                serializer={"name": "gribberish", "configuration": {"var": var.internal_attrs.grib_element}},
-                compressors=None, filters=None, ...,
-            )
-        return self.get_data_vars(make_encoding=make_encoding)
+def get_data_vars(
+    self, make_encoding: Callable[[DataVar], Encoding]
+) -> Sequence[DataVar]: ...
 ```
 
-Touches only datasets that grow a virtual variant; HRRR's existing
-call sites change `lambda _var: encoding` and that's it.
+- **Materialized** call sites pass `make_encoding=lambda _var: encoding` — a
+  one-line change at ~4 sites.
+- **Virtual** builds per-var:
 
-### Alternatives considered
+  ```python
+  def make_encoding(var: GefsDataVar) -> Encoding:
+      return Encoding(
+          dtype="float64",                 # GribberishCodec decodes to float64; see below
+          chunks=(1, 1, 721, 1440),        # one GRIB message
+          shards=None,                     # virtual refs are not sharded
+          serializer={"name": "gribberish",
+                      "configuration": {"var": var.internal_attrs.grib_element}},
+          compressors=None, filters=None, fill_value=np.nan, ...,
+      )
+  ```
 
-- **Common config exposes `_data_vars_metadata` (no encoding); variants
-  build `DataVar`s separately.** Equivalent power, but doesn't fit
-  HRRR's existing `get_data_vars(encoding)` cleanly — we'd reshape it.
-- **Virtual variant inherits from materialized and `replace()`s
-  encoding per var.** Smallest diff but couples the two configs and
-  forces awkward `dataset_attributes` overrides for the differing
-  id/version.
+We keep the factory even though, technically, gribberish ignores `var=` at
+decode time (it decodes whatever bytes the ref points at, so a shared
+placeholder would still read correct *data*). The factory is still the right
+choice because:
 
-We do not retrofit every template config eagerly. Only datasets that
-grow a virtual variant adopt the factory pattern.
+1. **Honest metadata now.** `var=` is written into each array's `zarr.json`. A
+   shared placeholder would label every array with the same wrong element —
+   data decodes fine, metadata lies to anyone inspecting the store.
+2. **Robustness.** "`var=` is decode-irrelevant" is a current gribberish
+   property, not a contract; writing the honest label means a future gribberish
+   that *does* consult `var=` can't break us.
+3. **Flexibility.** Future per-var differences in dtype/fill/serializer are free.
 
-## Encoding rules for virtual datasets
+### Encoding rules
 
-All virtual variants follow the same encoding rules, regardless of
-provider:
+- **Serializer:** `GribberishCodec(var=<grib_element>)` per variable.
+- **Chunk shape:** `(1, 1, lat, lon)` forecast (one `(init, lead)` message) or
+  `(1, lat, lon)` analysis. (Plus the ensemble dim where present.)
+- **`shards = None`** — virtual refs are standalone messages; partitioning falls
+  back to chunks (see [Partitioning](#partitioning)).
+- **No compressors or filters** — GribberishCodec does the full decode.
+- **dtype = float64.** GribberishCodec decodes to float64. (Appendix A's
+  prototype declared float32; that is likely a prototype bug.
+  **Spike-to-confirm** the float64 round-trip before pinning.)
+- **Exception (DWD bz2 GRIBs):** chain zarr's `Bz2Codec` as a filter before
+  GribberishCodec. Deferred until verified end-to-end.
 
-- **Serializer**: `GribberishCodec(var=<grib_element>)` per variable.
-  See `gribberish.zarr.codec.GribberishCodec`.
-- **Chunk shape**: `(1, 1, lat, lon)` for forecast (one chunk per
-  (init_time, lead_time) GRIB message) or `(1, lat, lon)` for analysis
-  (one chunk per time step).
-- **`shards` is set equal to the desired *region partition unit***,
-  not to the chunk shape. Icechunk doesn't shard virtual refs (each
-  ref is a standalone GRIB message), but `RegionJob.get_jobs()` uses
-  `encoding["shards"]` to partition the append dim into region jobs.
-  For a forecast with `chunks=(1, 1, lat, lon)`, set
-  `shards=(1, full_lead_time, lat, lon)` so one region job covers one
-  init time's worth of work — a natural unit for filtering and
-  parallelism. The dimension_slices logic in `iterating.py` treats
-  this as the partition size; the icechunk store ignores the field.
-- **No compressors or filters**: GribberishCodec handles the full
-  decode.
-- **Exception (DWD, bz2-compressed GRIBs)**: chain zarr's built-in
-  `Bz2Codec` as a filter before `GribberishCodec` as the serializer.
-  Needs end-to-end verification (see [Open questions](#open-questions)).
+## Reader safety
 
-## Storage configuration
+Virtual operational updates commit straight to `main` (no temp branch — that's
+how we get per-file visibility in seconds). The reader guarantee rests on one
+invariant:
 
-Source-bucket virtual chunk containers are declared once as a
-`ClassVar` on the `VirtualRegionJob` subclass (where URL construction
-also lives) and picked up automatically by `DynamicalDataset.store_factory`.
-`__main__.py` gets no new surface — virtual dataset registration looks
-identical to materialized.
+> **One source file → one atomic commit.** All refs originating from a single
+> source file (every variable, every ensemble member in that file), together
+> with any append-dim expansion their position requires, are written and
+> committed in a single icechunk commit. A reader on `main` sees either none of
+> a source file's data or all of it.
 
-```python
-class NoaaGefsForecast35DaySpatialRegionJob(VirtualRegionJob[...]):
-    source_virtual_chunk_containers: ClassVar[Sequence[VirtualChunkContainerConfig]] = (
-        VirtualChunkContainerConfig(prefix="s3://noaa-gefs-pds/", region="us-east-1"),
-    )
-```
+This is **structural**, not a discipline: `process_virtual_refs` yields one
+whole file's refs as the indivisible unit (one `.idx` → one `Sequence[ref]`),
+and the commit loop only ever bundles *whole* yields — it can't split a file
+because it never holds less than one. `sync_dims_to` + `set_virtual_refs` +
+`commit` for an extent are one session, never "expand, commit, then fill."
 
-`VirtualChunkContainerConfig` is intentionally minimal — `prefix`,
-`region`, and `anonymous: bool = True`. All current targets
-(NOAA/ECMWF/DWD) are publicly readable; adding credentialed sources
-is a small additive change later. `StoreFactory` opens the icechunk
-repo with an `icechunk.RepositoryConfig` that registers the containers
-and wires `authorize_virtual_chunk_access` to
-`s3_anonymous_credentials()`.
+This is the invariant that licenses [filtering](#filtering-already-present-coordinates)'s
+single-`indicator_var` probe: one variable's presence at a position implies the
+whole file's data is present. A dataset that can't guarantee per-file atomic
+commit overrides its filter to check all variables.
 
-Hard constraints enforced at construction:
+**Honest caveat:** atomicity is **per file**, not per init. If an init publishes
+as several files over time (leads trickling in), a reader sees lead 3 before
+lead 6 — a partial init, exactly as with materialized forecasts mid-update, and
+exactly the granularity the filter keys on. GribberishCodec refs are
+metadata-only writes (a chunk either has a complete `(location, offset, length)`
+or it doesn't — no torn-bytes failure mode), so per-file atomicity reduces
+cleanly to "commit the file's refs together," which icechunk's transactional
+commit provides.
 
-- Virtual variants must use `DatasetFormat.ICECHUNK` for the primary
-  store and any replica stores. Mixing zarr v3 + virtual refs isn't
-  supported; we assert and fail loudly.
-- A virtual `DynamicalDataset` whose `region_job_class` is a
-  `VirtualRegionJob` subclass with empty
-  `source_virtual_chunk_containers` is a configuration error.
-
-Not yet supported (additive when needed): credentialed source buckets,
-HTTP-only source containers, runtime container switching.
-
-> **TBD-by-impl**: confirm icechunk persists the `VirtualChunkContainer`
-> list inside the repo config so readers don't need to re-register
-> containers. If not, readers construct the same `RepositoryConfig`
-> we use here (see Appendix A's reader code).
-
-## Validation
-
-Materialized datasets run validators from `common/validation.py`
-(`check_for_expected_shards`, `check_analysis_current_data`,
-`check_analysis_recent_nans`, etc.) via the `validate` CLI on a
-schedule, with the validator suite returned by the dataset's
-`validators()` method.
-
-Virtual datasets keep the same shape — `validators()` returns a
-sequence of `DataValidator`s — but the set differs:
-
-- `check_for_expected_shards` — **N/A**. Virtual datasets set
-  `shards` only for region-job partitioning (see Encoding rules);
-  there are no physical shard objects to check.
-- `check_analysis_current_data` / `check_analysis_recent_data` —
-  **applicable as-is**. They check that the `time` array contains
-  recent timestamps. Lazy expansion guarantees `time` reflects
-  ingested data, so this is exactly the right check.
-- `check_analysis_recent_nans` / NaN-fraction checks —
-  **need adaptation**. Reading "is this chunk NaN?" requires
-  fetching the GRIB bytes and decoding, which is much slower than
-  reading a real materialized chunk. Two reasonable replacements:
-  1. **Manifest check** (cheap): for each chunk position the
-     validator wants to inspect, ask the icechunk session whether
-     a virtual ref exists. If yes, assume non-NaN (the ref points
-     at a real GRIB message). If no, the chunk reads as fill
-     value, which IS the NaN condition.
-  2. **Sample read** (medium): pick N random chunks from the
-     recent window, fetch + decode via GribberishCodec, check
-     min/max for sanity. Catches "ref points at garbage" bugs
-     that the manifest check would miss.
-- Progress coord validation (new): for forecasts, check
-  `ingested_forecast_length[recent_init_times]` against
-  `expected_forecast_length`. Catches "fire ran but didn't make
-  progress."
-
-PR #3 adds the manifest-check and progress-coord validators to
-`common/validation.py` and uses them in the first virtual dataset's
-`validators()`. The sample-read validator is a follow-up.
+**On containment.** The materialized temp branch is *not* a correctness gate we
+inspect — finalization resets `main` unconditionally, trusting tested code. So
+committing virtual operational updates straight to `main` doesn't remove a check
+we relied on. We hold the bar with **tests, not runtime asserts**: PR #3's
+integration suite covers yield-count/grouping (one file → one yield of exactly
+its vars×members, all at one append-dim position) and an
+emit → commit → reopen → read-back round-trip that catches bad chunk keys or
+byte ranges in CI. Single-writer operation (only one resizer ever) removes the
+scariest corruption class outright. Backfill retains the temp branch and its
+atomic reveal.
 
 ## Replica writes
 
-For datasets with replica stores (both primary and replicas are
-icechunk), each batch commit writes refs to every store. The existing
-`storage.commit_if_icechunk(message, primary_store, replica_stores)`
-already commits replicas first, then primary, with `ConflictDetector`
-retry — that pattern carries over to virtual updates.
-
-The per-batch retry loop in `VirtualRegionJob.process()` opens
-sessions on **all** stores, sets refs on all of them, then commits
-replicas-then-primary. On any commit failure (`ConflictError`,
-network error, etc.), the whole batch retries with fresh sessions
-on all stores — keeping replicas and primary aligned. If the retry
-budget exhausts on one store, the pod fails; the next cron fire
-re-runs the work (filtered to skip what already committed).
-
-For virtual datasets without replicas (the expected common case
-for our first virtual datasets), this collapses to one session,
-one commit per batch.
+With a single writer, replica handling collapses: the operational loop opens a
+session on every store (primary + replicas), `set_virtual_refs` on each, and
+commits replicas-then-primary per the existing
+`storage.commit_if_icechunk(message, primary_store, replica_stores)` ordering.
+On any commit failure the batch retries with fresh sessions on all stores,
+keeping them aligned; if the retry budget exhausts, the pod fails and the next
+fire re-runs the filtered (skip-what-committed) work. For datasets without
+replicas (the expected common case early), this is one session, one commit per
+batch. Backfill replicas follow the existing temp-branch reset ordering.
 
 ## Dataset identity
 
 ### Naming
 
-Virtual variants get a `-spatial` suffix on the dataset ID. This is
-**tentative** — it captures the access-pattern optimization without
-exposing "virtual" as an implementation detail. Examples:
+Virtual variants get a `-spatial` suffix (tentative — captures the
+access-pattern optimization without leaking "virtual"):
 
 - `noaa-gefs-forecast-35-day` (materialized, time-series optimized)
 - `noaa-gefs-forecast-35-day-spatial` (virtual, spatial/map optimized)
 
-Class names follow the same pattern:
-`NoaaGefsForecast35DayDataset` → `NoaaGefsForecast35DaySpatialDataset`,
-plus the matching region job and template config classes.
+Class names follow:
+`NoaaGefsForecast35DayDataset` → `NoaaGefsForecast35DaySpatialDataset`, plus
+matching region job and template config classes.
 
-> Open question: confirm `-spatial` survives first-customer feedback.
-> If a better name emerges (`-grib`, `-native`), rename before the
-> first dataset goes public.
+> Open question: confirm `-spatial` survives first-customer feedback; rename
+> before the first public dataset if a better name emerges.
 
 ### Storage location
 
-Virtual Icechunk stores live in the same S3 buckets as the
-materialized datasets, with new dataset IDs and paths. The stores are
-tiny (KBs–MBs of metadata) so co-location has no cost concern.
+Virtual Icechunk stores live in the same S3 buckets as the materialized
+datasets, with new dataset IDs and paths. The stores are metadata-only but
+**not tiny** — manifests run to tens of GB at multi-year scale (see
+[Scale](#scale)). Co-location is still fine, but size monitoring matters.
 
 ### Reader experience
 
-All source GRIB archives targeted have anonymous read access. When
-opening a virtual dataset, the reader needs the
-`VirtualChunkContainer` configuration and the
-`containers_credentials` mapping. We hide this behind whatever client
-library we point users at (today, the `dynamical_catalog` Python
-library wraps our STAC catalog and configures this at open time). For
-the bare path, the reader code looks like the example in
-[Appendix A](#appendix-a-prototype-reference-pr-511).
+All targeted source archives have anonymous read access. A reader needs the
+container registration + anonymous credentials map — the same
+`IcechunkVirtualConfig` the writer uses, reconstructed from the declarative
+model (today via the `dynamical_catalog` library wrapping our STAC catalog;
+bare-path code is in [Appendix A](#appendix-a-prototype-pr-511)).
 
 ## Provider-specific considerations
 
 **NOAA (GFS, GEFS, HRRR):**
 
-- Index format: plain text `.idx` files, parsed by
+- Plain-text `.idx` files, parsed by
   `noaa/noaa_grib_index.py::grib_message_byte_ranges_from_index`.
-- Source buckets: `s3://noaa-gfs-bdp-pds/`, `s3://noaa-gefs-pds/`,
-  `s3://noaa-hrrr-bdp-pds/`. All `us-east-1`, anonymous reads.
-- Straightforward — one container per bucket.
+- Buckets `s3://noaa-gfs-bdp-pds/`, `s3://noaa-gefs-pds/`,
+  `s3://noaa-hrrr-bdp-pds/` — all `us-east-1`, anonymous.
 
 **ECMWF (IFS-ENS, AIFS):**
 
-- Index format: JSON Lines `.index` files, parsed by the ECMWF-side
-  index parser (renamed in PR #1 for naming consistency with NOAA).
-- Source: `s3://ecmwf-forecasts/` in `eu-central-1`, plus Source Coop
-  archives.
-- Archive transition: IFS-ENS has separate MARS archive (pre-2024-04)
-  and open-data (post-2024-04) URL schemes. The virtual dataset
-  likely only covers the open-data era. **TBD-by-impl**.
+- JSON Lines `.index` files; ECMWF parser renamed for naming consistency in
+  PR #2.
+- `s3://ecmwf-forecasts/` (`eu-central-1`) plus Source Coop archives.
+- IFS-ENS has separate MARS (pre-2024-04) and open-data (post-2024-04) URL
+  schemes; the virtual dataset likely covers only the open-data era. **TBD.**
 
 **DWD (ICON-EU):**
 
-- No index files: one variable per `.bz2`-compressed GRIB file.
-- Codec pipeline: chain zarr's `Bz2Codec` as a filter before
-  `GribberishCodec` as the serializer.
-- **Blocks DWD virtual datasets until the chained codec is verified
-  end-to-end.**
+- No index files: one variable per `.bz2`-compressed GRIB.
+- Chain `Bz2Codec` (filter) before GribberishCodec (serializer). **Blocks DWD
+  virtual datasets until verified end-to-end.**
 
 ## Implementation plan
 
-Smaller and tighter than the previous draft.
+### PR #1 — Extract `MaterializedRegionJob`
 
-### PR #1 — Prep work (small, mechanical)
+Move today's `process()` body, the `download_file` / `read_data` /
+`apply_data_transformations` hooks, the parallelism tunables, and the
+shared-memory helpers into `MaterializedRegionJob(RegionJob)`. Swap each
+existing dataset's region job base from `RegionJob` to `MaterializedRegionJob`.
+Mechanical; tests pass unchanged.
 
-- Rename `get_message_byte_ranges_from_index()` to
-  `grib_message_byte_ranges_from_index()` in
-  `ecmwf/ecmwf_grib_index.py` and update callers (NOAA and ECMWF
-  parsers share a name).
+### PR #2 — Prep
+
+- Rename the ECMWF index parser to `grib_message_byte_ranges_from_index` to
+  match NOAA; update callers.
 - Add `serializer: dict[str, Any] | None = None` to
-  `common/config_models.py::Encoding`. Plumb it through
-  `template_utils.assign_var_metadata`.
-- Add `gribberish` dependency to `pyproject.toml` using a `~=`
-  version specifier (same style as the existing `icechunk~=2.0`,
-  `dask~=2026.0`, `kubernetes~=33.1` pins). PR #511 used
-  `gribberish>=0.29.0` against icechunk 1.1.15; smoke-test the
-  current `~=0.X` release on icechunk 2.0.3 and pin to that.
-- Add `VirtualChunkContainerConfig` to `common/storage.py`, plus the
-  `virtual_chunk_containers` field on `StoreFactory` and the
-  open-time wiring through `_get_icechunk_storage`. Assert
-  icechunk-only when set.
-- **Extract `MaterializedRegionJob`** from today's `RegionJob`: move
-  the materialized `process()` body, the `download_file` /
-  `read_data` / `apply_data_transformations` hooks, the parallelism
-  tunables, and the `_download_processing_group` /
-  `_read_into_data_array` / `_write_shards` / `_cleanup_local_files`
-  helpers into a new `MaterializedRegionJob(RegionJob)` class. Swap
-  every existing dataset's region job base from `RegionJob` to
-  `MaterializedRegionJob`. Mechanical refactor; tests pass unchanged.
+  `common/config_models.py::Encoding` (threads through `assign_var_metadata`
+  automatically).
+- Add the `gribberish` dependency (`~=` pin; smoke-test against the current
+  `icechunk~=2.0`, `zarr~=3.1`).
+- Add `IcechunkVirtualConfig` + `VirtualChunkContainerConfig` +
+  `ManifestSplitConfig` to `common/storage.py`; thread `icechunk_virtual_config`
+  through `StoreFactory` and repo open/create (register containers, set split
+  policy, wire anonymous credentials). Add the `DynamicalDataset` validator
+  (virtual ⇒ all stores ICECHUNK ∧ non-empty containers).
 
-### PR #2 — VirtualRegionJob and driver hooks
+### PR #3 — `VirtualRegionJob` + driver + spike
 
-- Add `VirtualRegionJob` as a sibling of `MaterializedRegionJob`
-  under `RegionJob`, with the operational flow described in
-  [The update process](#the-update-process).
-- Extend `_process_region_jobs` to branch on `region_job_class`
-  (virtual operational updates skip the temp branch; backfills and
-  materialized updates keep the existing flow).
-- Add `is_backfill: bool = True` parameter on
-  `VirtualRegionJob.get_jobs`; `operational_update_jobs` passes
-  `False`. Each region job carries the flag plus a
-  `max_seconds_between_commits` model field set to operational
-  (~1s) vs backfill (~60s) values.
-- Add the default `_filter_already_ingested` (coord-introspection
-  strategy with manifest-probe fallback).
-- Add `_expand_dimensions` helper that resizes coord and data var
-  arrays AND recomputes derived coords via the template config's
-  `derive_coordinates`.
-- Add `_update_ingested_forecast_length` helper called per batch
-  commit.
-- Add the per-batch commit retry loop (open fresh session, recompute,
-  set refs, commit, retry on conflict).
-- Integration tests against a local icechunk 2.x repo:
-  - **Concurrent disjoint-chunk writes** — two pods writing chunks
-    at different `init_time` indices, one of them also expanding
-    the dim. Verifies `ConflictDetector` accepts a rebase when one
-    session resized an array and another wrote chunks under it.
-  - **Concurrent expansion conflict** — two pods both expanding for
-    new inits simultaneously. Verifies the per-batch retry loop
-    converges to a correct final state (both inits present, all
-    refs landed at correct indices, derived coords consistent).
-  - **Backfill-to-update transition** — backfill leaves a partial
-    state; update fills the rest. Verifies the temp-branch and
-    direct-to-main paths interoperate cleanly.
+- Add `VirtualRegionJob` (the virtual write loop, `process_virtual_refs`
+  abstract generator, `filter_already_present` default, `sync_dims_to`,
+  `chunk_key`).
+- Extend `_process_region_jobs` with the single fork (virtual + operational →
+  single-writer-to-`main`; else existing path).
+- `max_seconds_between_commits` as a cadence value field (tight operational /
+  loose backfill), set by the respective job factory.
+- Run the **[spike bundle](#spike-bundle)**.
+- Integration tests: yield-count/grouping; concurrent disjoint-chunk backfill on
+  a branch; emit → commit → reopen → read-back round-trip.
 
-### PR #3 — First concrete virtual dataset (end to end)
+### PR #4 — First concrete virtual dataset (end to end)
 
-- Pick from the candidates below.
-- Refactor that dataset's `TemplateConfig` to use the encoding-factory
-  pattern recommended above.
-- Implement `<dataset>SpatialTemplateConfig` with virtual encoding
-  rules.
-- Implement `<dataset>SpatialRegionJob` with
-  `process_virtual_refs()` and the dataset-specific
-  `_filter_already_ingested` if needed. Declare
-  `source_virtual_chunk_containers`.
-- Implement `<dataset>SpatialDataset` with
-  `operational_kubernetes_resources()` returning a
-  `ReformatCronJob` + `ValidationCronJob`. **Resource sizing differs
-  from materialized**: virtual pods need ~1 CPU, ~2G memory, no
-  shared memory, minimal ephemeral storage (a few MB for downloaded
-  index files). Use sane minimums and tune from there.
-- Implement `validators()` using the new manifest-check and
-  progress-coord validators (see [Validation](#validation)).
-- Integration tests: backfill a small slice, verify read-back via
-  GribberishCodec; simulate two consecutive cron fires (first does
-  expansion, second sees no new work).
+- Pick from the [candidates](#candidate-first-datasets).
+- Refactor its `TemplateConfig` to the `make_encoding` factory; add
+  `<dataset>SpatialTemplateConfig` (virtual encoding rules).
+- Add `<dataset>SpatialRegionJob` (`process_virtual_refs`, dataset-specific
+  `filter_already_present` if needed) and `<dataset>SpatialDataset`
+  (`IcechunkVirtualConfig`, `operational_kubernetes_resources`).
+- **Resource sizing differs by flow** (see below). Ship only **minimal**
+  validators — reuse the existing 2-random-point NaN validators as-is (bounded;
+  just slower per point because gribberish decodes a whole message).
+- Integration tests: backfill a small slice + read-back; two consecutive
+  operational fires (first expands, second sees no new work).
 
-### PR #4 — Second concrete virtual dataset
+### PR #5 — Second concrete virtual dataset
 
-- Pick a different provider (NOAA vs ECMWF) to validate that the
-  abstractions generalize. Refine `VirtualRegionJob` defaults based
-  on what the second dataset needs.
+Different provider (NOAA ↔ ECMWF) to prove the abstractions generalize; refine
+`VirtualRegionJob` defaults from what it needs.
+
+### PR #6 — Validation phase
+
+Two sub-phases, sequenced after the first datasets are operationally stable:
+
+1. **Operational, spatial-chunk-optimized validators** — a manifest-presence
+   check (shares [filtering](#filtering-already-present-coordinates)'s
+   `chunk_key` + ref-existence primitive) plus a bounded sample-decode, designed
+   for the one-message-per-chunk access pattern rather than the materialized
+   shard layout.
+2. **Offline tooling** — update `docs/validation.md` and its plotting/scan
+   tooling to be feasible on a virtual store (millions of refs, decode-on-read),
+   rather than assuming materialized read economics.
 
 ### Later (separate PR per dataset)
 
-- Expand variable coverage to "all source variables" per dataset,
-  after operational stability is established.
-- DWD virtual datasets, once the bz2 + GribberishCodec chain is
-  verified.
+- Expand to all curated source variables per dataset, once operationally stable.
+- DWD virtual datasets, once the bz2 + GribberishCodec chain is verified.
+
+### Resource sizing (operational vs backfill)
+
+The two flows have different profiles and the dataset's k8s resources should
+reflect both:
+
+- **Operational** — single pod, a handful of `.idx`/sec: ~1 CPU, ~2 G memory, no
+  shared memory, a few MB ephemeral.
+- **Backfill** — index-download-bound at high concurrency: more CPU for parse +
+  fd/network headroom, and **stream-and-discard** index files (tens of KB ×
+  millions) — never accumulate them.
 
 ### Candidate first datasets
 
 | Dataset | Pros | Cons |
 |---|---|---|
-| GFS forecast | PR #511 prototype exists; simplest structure | Lower spatial-access demand than HRRR or IFS-ENS? |
-| GEFS forecast 35-day | Tests ensemble dimension; high demand | More complex URL/file-type logic |
-| IFS-ENS forecast | High demand; exercises ECMWF index format | MARS / open-data archive split |
-| HRRR 18-hour forecast | 24 inits/day stresses high-frequency updates | Projected grid (y/x not lat/lon) |
+| GFS forecast | PR #511 prototype exists; simplest structure | Lower spatial demand than HRRR/IFS-ENS? |
+| GEFS forecast 35-day | Ensemble dim; high demand | More complex URL/file-type logic |
+| IFS-ENS forecast | High demand; exercises ECMWF index | MARS / open-data split |
+| HRRR 18-hour forecast | 24 inits/day stresses high-frequency updates | Projected grid (y/x) |
 
-Decision deferred to PR #3 — pick by user demand and implementation
-convenience at the time.
+Decision deferred to PR #4 — pick by demand and convenience at the time.
+
+## Spike bundle
+
+Run once in PR #3, against a local icechunk 2.x repo. The retry/commit design
+handles either answer for each; we want the operational numbers and to validate
+assumptions before the first dataset ships:
+
+1. **Manifest split semantics** — per-array, along a named (append) dim; a
+   commit rewrites only the boundary-crossing split. Measure the split-size
+   constant against commit latency.
+2. **Container resolution** — refs stored resolvably-relative to the container
+   prefix (repoint free) vs. absolute (repoint needs rewrite).
+3. **Empty commit** — committing a session with no net change is a no-op (not an
+   error); the loop must skip "nothing new."
+4. **Ref-presence without decode** — a presence check that doesn't fetch/decode,
+   scoped to the active split.
+5. **float64 round-trip** — GribberishCodec decode dtype; confirm float64 arrays
+   read back correctly.
+6. **`serializer` through `to_zarr`** — `zarr~=3.1` honors a `serializer`
+   encoding key written via xarray.
+7. **`set_virtual_refs` (plural)** — batch API availability and semantics.
 
 ## Open questions
 
-1. **DWD bz2 + GribberishCodec chained codec**: needs end-to-end
-   verification before we start DWD virtual datasets.
-2. **`-spatial` suffix**: tentative naming; revisit after first
-   customer feedback.
-3. **Variable expansion**: when expanding to all source variables, how
-   do we handle variables we don't yet have internal attrs for?
-   Auto-discovery from the GRIB index, or manual curation? Likely
-   manual curation early, with tooling later.
-4. **Polling configuration defaults**: per-dataset
-   `poll_interval_seconds` and `max_seconds_between_commits`.
-   Defaults will emerge from PR #3.
-5. **Reforecast / historical archives**: some datasets (GEFS v12
-   reforecast) have different URL schemes for historical data.
-   Virtual backfills must handle them; operational updates don't.
-   Scope this per-dataset.
-6. **ConflictDetector behavior** (TBD-by-impl, called out in the
-   update process section): does icechunk 2.x's `ConflictDetector`
-   reject a rebase when one session resized an array and another
-   wrote chunks under that array? The integration test in PR #2
-   answers this. Either answer is fine — the per-batch retry loop in
-   `process()` handles both cleanly; we just want to know what to
-   expect operationally.
+1. **DWD bz2 + GribberishCodec chain** — verify end-to-end before DWD datasets.
+2. **`-spatial` suffix** — tentative; revisit after first-customer feedback.
+3. **Variable expansion** — extending to all source variables needs per-variable
+   internal attrs (`grib_element`, etc.). Manual curation early; auto-discovery
+   from the GRIB index is later tooling.
+4. **Polling/cadence defaults** — per-dataset `poll_interval` and
+   `max_seconds_between_commits`; defaults emerge from PR #4.
+5. **Reforecast / historical archives** — some datasets (e.g. GEFS v12
+   reforecast) use different URL schemes for historical data. Virtual backfills
+   must handle them; operational updates don't. Scope per dataset.
 
 ---
 
-## Appendix A: Prototype reference (PR #511)
+## Appendix A: Prototype (PR #511)
 
-PR #511 (closed, prototype only) demonstrated the full set-virtual-ref
-loop end-to-end against real NOAA GFS S3 GRIB files. The single-file
-script `prototypes/gfs_icechunk_virtual.py` covers three phases:
+PR #511 (closed, prototype only) demonstrated the full set-virtual-ref loop
+end-to-end against real NOAA GFS S3 GRIB files: backfill 3 inits × 7 leads, add
+a partial new init via `resize()` + refs, then fill the remaining leads. NaN
+fill covered unfilled chunks automatically. It used icechunk 1.1.15; the repo is
+now on `icechunk~=2.0` — hence the [spike bundle](#spike-bundle).
 
-1. **Backfill**: initialize zarr metadata for 3 init times × 7 lead
-   times, fill all virtual refs, commit.
-2. **Add new init time (partial)**: `resize()` the `init_time` coord
-   and every data variable array to grow `init_time` by 1, set
-   virtual refs for 3 of 7 new lead times, commit. (NaN fill values
-   automatically cover the unfilled chunks.)
-3. **Fill missing lead times**: set the remaining lead times for the
-   new init time, commit.
-
-Repository on-disk size after all three phases: **15.5 KB** (vs
-~350 MB if materialized).
-
-### Concrete patterns to reuse
-
-**Repository creation with virtual chunk container:**
+**Repository creation with a virtual chunk container:**
 
 ```python
-storage = icechunk.local_filesystem_storage(str(output_dir))
-
+storage = icechunk.local_filesystem_storage(str(output_dir))  # or s3_storage(...)
 config = icechunk.RepositoryConfig.default()
-s3_store = icechunk.s3_store(region="us-east-1")
-container = icechunk.VirtualChunkContainer("s3://noaa-gfs-bdp-pds/", s3_store)
-config.set_virtual_chunk_container(container)
-
+config.set_virtual_chunk_container(
+    icechunk.VirtualChunkContainer("s3://noaa-gfs-bdp-pds/", icechunk.s3_store(region="us-east-1"))
+)
 repo = icechunk.Repository.create(
-    storage,
-    config=config,
+    storage, config=config,
     authorize_virtual_chunk_access=icechunk.containers_credentials(
         {"s3://noaa-gfs-bdp-pds/": icechunk.s3_anonymous_credentials()}
     ),
 )
 ```
 
-**Zarr metadata for a virtual data variable** (chunk shape = native
-GRIB message shape):
+**Virtual data variable metadata** (chunk shape = native GRIB message; one ref
+per message):
 
 ```python
-codec = GribberishCodec(var=var.internal_attrs.grib_element)
 arr = root.create_array(
     var.name,
     shape=(len(init_times), len(lead_times), N_LAT, N_LON),
     chunks=(1, 1, N_LAT, N_LON),
-    dtype="float32",
+    dtype="float64",                                   # see Encoding rules
     fill_value=np.nan,
-    serializer=codec,
-    compressors=(),
-    filters=(),
+    serializer=GribberishCodec(var=var.internal_attrs.grib_element),
+    compressors=(), filters=(),
     dimension_names=("init_time", "lead_time", "latitude", "longitude"),
 )
 ```
 
-**Setting virtual refs for a single GRIB file (one chunk per variable):**
+**Batch ref setting + reader** (the production loop uses `set_virtual_refs`):
 
 ```python
-s3_url = f"s3://noaa-gfs-bdp-pds/{gfs_s3_path(init_time, lead_time)}"
-for var in data_vars:
-    offset, length = byte_ranges[var.name]
-    chunk_key = f"{var.name}/c/{init_time_idx}/{lead_time_idx}/0/0"
-    store.set_virtual_ref(chunk_key, location=s3_url, offset=offset, length=length)
-```
+# write
+refs = [(f"{var.name}/c/{i}/{j}/0/0", url, offset, length) for var, (offset, length) in ...]
+store.set_virtual_refs(refs)
+session.commit("...")
 
-**Resizing for dimension expansion** (this is what
-`_expand_dimensions()` does in the production code):
-
-```python
-root = zarr.open_group(store, mode="r+")
-
-# Resize and write to the append-dim coordinate array
-init_time_arr = root["init_time"]
-init_time_arr.resize((new_init_time_count,))
-init_time_arr[new_init_time_count - 1] = new_value_seconds_since_epoch
-
-# Resize all data variable arrays
-for var in data_vars:
-    arr = root[var.name]
-    arr.resize((new_init_time_count, lead_time_count, N_LAT, N_LON))
-```
-
-**Reader code (the entire bare-path read flow):**
-
-```python
-storage = icechunk.local_filesystem_storage(str(repo_path))  # or s3_storage(...)
-config = icechunk.RepositoryConfig.default()
-config.set_virtual_chunk_container(
-    icechunk.VirtualChunkContainer(
-        "s3://noaa-gfs-bdp-pds/", icechunk.s3_store(region="us-east-1")
-    )
-)
-repo = icechunk.Repository.open(
-    storage,
-    config=config,
+# read
+repo = icechunk.Repository.open(storage, config=config,
     authorize_virtual_chunk_access=icechunk.containers_credentials(
-        {"s3://noaa-gfs-bdp-pds/": icechunk.s3_anonymous_credentials()}
-    ),
-)
-session = repo.readonly_session(branch="main")
-ds = xr.open_zarr(session.store, consolidated=False)
-# Accessing .values on a chunk triggers S3 fetch + gribberish decode.
+        {"s3://noaa-gfs-bdp-pds/": icechunk.s3_anonymous_credentials()}))
+ds = xr.open_zarr(repo.readonly_session(branch="main").store, consolidated=False)
+# .values on a chunk triggers S3 fetch + gribberish decode
 ```
 
-### Empirical observations from PR #511
-
-- Setting virtual refs is fast (~1s per phase of 3 inits × 7 lead times
-  × 3 vars = 63 refs). Bottleneck is the index download, not the
-  set_virtual_ref calls.
-- Each read fetches one GRIB message (~1 MB compressed). Decoding via
-  GribberishCodec adds a small CPU cost; remote latency dominates.
-- `resize()` + `set_virtual_ref()` is a valid pattern for incremental
-  growth; missing chunks return the fill value automatically.
-- Existing `grib_message_byte_ranges_from_index()` (NOAA) works
-  without modification — `.idx` byte offsets map 1:1 to virtual chunk
-  refs.
-- Note: the prototype used icechunk 1.1.15; the repo is now on 2.0.3.
-  Most calls should still work, but the integration test in PR #2
-  verifies the rebase/conflict semantics under 2.x.
-
----
+**Empirical (PR #511):** setting refs is fast; the bottleneck is index download,
+not ref-setting (the plural batch API widens that gap further). Each read fetches
+one GRIB message (~1 MB); decode adds small CPU, remote latency dominates.
+`resize()` + refs is a valid incremental-growth pattern; missing chunks return
+the fill value.
 
 ## Appendix B: Earlier prototype (PR #510)
 
-PR #510 (closed) was an earlier, more exploratory prototype with two
-scripts and a longer report:
+PR #510 (closed) explored a VirtualiZarr-based path (`ManifestArray` /
+`ChunkManifest`, `vds.virtualize.to_icechunk`) and a NetCDF4/HDFParser path. We
+adopted PR #511's simpler approach instead: `store.set_virtual_refs` directly,
+leaning on our existing index parsers, skipping VirtualiZarr entirely.
 
-1. `prototypes/virtual_grib_gribberish.py` — direct GRIB approach using
-   gribberish's `_split_file()` to scan messages and VirtualiZarr's
-   `ManifestArray` / `ChunkManifest` API to build a virtual dataset,
-   then `vds.virtualize.to_icechunk(session.store)` to write.
-2. `prototypes/virtual_zarr_icechunk.py` — NetCDF4 approach using
-   `virtualizarr.open_virtual_dataset()` with `HDFParser()` to
-   virtualize each file, then `xr.concat` along `step` dim, write to
-   a local icechunk repo, and append new init times with
-   `to_icechunk(append_dim="lead_time")`.
+Key details carried forward:
 
-PR #511 (Appendix A) is the simpler, lower-dependency approach we
-adopted: it skips VirtualiZarr entirely and uses
-`store.set_virtual_ref()` directly, leaning on our existing
-`grib_message_byte_ranges_from_index()` parser instead of gribberish's
-scanner.
+- **`GribberishCodec` is read/decode-only**, a zarr v3 `ArrayBytesCodec`. It
+  decodes to **float64**. `var=` only labels the codec at array-creation; decode
+  reads whatever bytes the ref points at (see
+  [the factory rationale](#encoding-factory)).
+- **Mixed storage in one store:** coordinate arrays are real (compressed) zarr
+  data; data variables are virtual GRIB refs. Both live in the same icechunk
+  store. This is the model we adopt.
 
-### Key technical details from PR #510 worth carrying forward
-
-- **`GribberishCodec` is read-only**: a zarr v3 `ArrayBytesCodec`
-  (serializer). It always outputs `float64`. The `var=` parameter is
-  only used at array-metadata write time to label the codec; decode
-  reads whatever GRIB bytes the chunk reference points to.
-- **Dependency set added by the prototypes**: `icechunk==1.1.15` (now
-  superseded by `~=2.0` in this repo), `zarr 3.1.3`, `gribberish`
-  (PR #511 used `>=0.29.0`; PR #1 in this plan will use `~=` style).
-  VirtualiZarr was used in PR #510 but is **not** needed by our
-  adopted PR #511 approach — that's a deliberate simplification.
-- **Mixed storage in one Icechunk store**: coordinate arrays are real
-  zarr data (with zstd compression); data variables are virtual GRIB
-  refs. Both live in the same icechunk store. This is the model we
-  adopt.
-- **`set_virtual_ref` vs `to_icechunk(region=...)`**: PR #510 explored
-  both. Our adopted approach uses `set_virtual_ref` because it's a
-  more explicit, direct mapping from "one GRIB message in S3" to
-  "one chunk ref in icechunk," and avoids the round-trip through
-  VirtualiZarr's in-memory `ManifestArray`.
-
----
-
-## Appendix C: Existing infrastructure we reuse
-
-The plan leans heavily on infrastructure that already exists. This
-section enumerates it so an implementer can find each piece quickly.
+## Appendix C: Existing infrastructure reused
 
 | Concern | Existing module / class | Notes |
 |---|---|---|
-| CLI commands | `DynamicalDataset.get_cli()` | Add no new commands; variant differences live in `process()` |
-| Region × variable-group fan-out and filtering | `RegionJob.get_jobs()` | Used unchanged |
-| Worker round-robin | `iterating.get_worker_jobs()` | Used unchanged |
-| Icechunk store creation, anonymous credentials | `storage._get_icechunk_store`, `_get_icechunk_storage` | Extended with `virtual_chunk_containers` |
+| CLI commands | `DynamicalDataset.get_cli()` | No new commands; variant differences live in `process()` |
+| Region × variable-group fan-out | `RegionJob.get_jobs()` | Partition unit: shards-else-chunks (see [Partitioning](#partitioning)) |
+| Worker round-robin | `iterating.get_worker_jobs()` | Backfill only (operational is single-writer) |
+| Candidate source files | `RegionJob.generate_source_file_coords()` | Shared with materialized |
+| Icechunk store creation | `storage` (StoreFactory, repo open/create) | Extended with `IcechunkVirtualConfig` |
 | Temp-branch backfill flow | `parallel_coordination.parallel_setup`, `finalize` | Used unchanged for virtual backfills |
-| Coordination files (`setup/ready.json`, `results/*`) | `StoreFactory.write/read/count_coordination_files` | Used by virtual backfills (same as materialized); not used by virtual operational updates (no shared setup step) |
-| Icechunk commit with rebase | `storage.commit_if_icechunk` | Used inside `VirtualRegionJob.process()` |
-| GRIB index parsing | `noaa/noaa_grib_index.py`, `ecmwf/ecmwf_grib_index.py` | Rename ECMWF function for naming consistency in PR #1 |
-| Operational job factory | `RegionJob.operational_update_jobs` | Implemented per dataset, virtual or materialized |
-| `update_template_with_results` | `RegionJob.update_template_with_results` | Default behavior trims to last processed coord; virtual variants typically don't need to override |
-| Existing per-dataset internal attrs | `noaa/models.py::NoaaInternalAttrs`, etc. | Already contain `grib_element`, `grib_index_level`, etc. — exactly what GribberishCodec and the index parsers need |
-| Kubernetes resource definitions | `common/kubernetes.py::ReformatCronJob`, `ValidationCronJob`, `Job` | Reused; no new resource types needed |
+| Coordination files | `StoreFactory.*_coordination_files` | Backfill only; virtual operational uses none |
+| Icechunk commit w/ rebase | `storage.commit_if_icechunk` | Replica-then-primary ordering carries over |
+| GRIB index parsing | `noaa/noaa_grib_index.py`, `ecmwf/ecmwf_grib_index.py` | ECMWF fn renamed in PR #2 |
+| Per-dataset internal attrs | `noaa/models.py::NoaaInternalAttrs`, etc. | Already carry `grib_element`, `grib_index_level` |
+| Kubernetes resources | `common/kubernetes.py::ReformatCronJob`, `ValidationCronJob`, `Job` | Reused; no new types |
