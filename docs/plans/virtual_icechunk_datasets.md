@@ -909,6 +909,7 @@ reflect both:
 | GEFS forecast 35-day | Ensemble dim; high demand | More complex URL/file-type logic |
 | IFS-ENS forecast | High demand; exercises ECMWF index | MARS / open-data split |
 | HRRR 18-hour forecast | 24 inits/day stresses high-frequency updates | Projected grid (y/x) |
+| MRMS 2-minute analysis | 2-min cadence is the toughest test of the ≤5s budget; analysis structure is simplest (one time axis); existing `NoaaMrmsRegionJob` to subclass | High commit cadence (~720/day) stresses the active manifest split |
 
 Decision deferred to PR #4 — pick by demand and convenience at the time.
 
