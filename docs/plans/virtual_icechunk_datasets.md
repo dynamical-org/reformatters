@@ -722,9 +722,7 @@ we relied on. We hold the bar with **tests, not runtime asserts**: PR #3's
 integration suite covers yield-count/grouping (one file → one yield holding
 exactly the cells that file covers, per the dataset's packing) and an
 emit → commit → reopen → read-back round-trip that catches bad chunk keys or
-byte ranges in CI. Single-writer operation (only one resizer ever) removes the
-scariest corruption class outright. Backfill retains the temp branch and its
-atomic reveal.
+byte ranges in CI.
 
 ## Replica writes
 
