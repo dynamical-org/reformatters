@@ -640,7 +640,7 @@ def get_data_vars(
   def make_encoding(var: GefsDataVar) -> Encoding:
       return Encoding(
           dtype="float64",                 # GribberishCodec decodes to float64; see below
-          chunks=(1, 1, 721, 1440),        # one GRIB message
+          chunks=(1, 1, 721, 1440),        # match the GRIB message shape exactly
           shards=None,                     # virtual refs are not sharded
           serializer={"name": "gribberish",
                       "configuration": {"var": var.internal_attrs.grib_element}},
@@ -664,8 +664,10 @@ choice because:
 ### Encoding rules
 
 - **Serializer:** `GribberishCodec(var=<grib_element>)` per variable.
-- **Chunk shape:** `(1, 1, lat, lon)` forecast (one `(init, lead)` message) or
-  `(1, lat, lon)` analysis. (Plus the ensemble dim where present.)
+- **Chunk shape:** matches the GRIB message shape exactly — one chunk per
+  message. Common examples: `(1, 1, lat, lon)` for a deterministic forecast,
+  `(1, 1, 1, y, x)` for an ensemble forecast on a non-geographic CRS, or
+  `(1, lat, lon)` for analysis.
 - **`shards = None`** — virtual refs are standalone messages; partitioning falls
   back to chunks (see [Partitioning](#partitioning)).
 - **No compressors or filters** — GribberishCodec does the full decode.
