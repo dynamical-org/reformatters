@@ -260,9 +260,6 @@ def _format_coord_value(value: object) -> str:
 def _summarize_coords(ds: xr.Dataset) -> str:
     parts = []
     for name in ds.coords:
-        # ravel so multi-dimensional coords (e.g. valid_time over init_time x
-        # lead_time) summarize as a concise first..last range instead of
-        # indexing whole sub-arrays and dumping the full nested array.
         values = ds.coords[name].values.ravel()
         if values.size == 0:
             parts.append(f"{name}=<empty>")
