@@ -762,7 +762,7 @@ Class names follow:
 `NoaaGefsForecast35DayDataset` → `NoaaGefsForecast35DaySpatialDataset`, plus
 matching region job and template config classes.
 
-> Open question: confirm `-spatial` survives first-customer feedback; rename
+> Open question: confirm `-spatial` survives first-user feedback; rename
 > before the first public dataset if a better name emerges.
 
 ### Storage location
@@ -941,7 +941,7 @@ assumptions before the first dataset ships:
 ## Open questions
 
 1. **DWD bz2 + GribberishCodec chain** — verify end-to-end before DWD datasets.
-2. **`-spatial` suffix** — tentative; revisit after first-customer feedback.
+2. **`-spatial` suffix** — tentative; revisit after first-user feedback.
 3. **Variable expansion** — extending to all source variables needs per-variable
    internal attrs (`grib_element`, etc.). Manual curation early; auto-discovery
    from the GRIB index is later tooling.
