@@ -74,20 +74,20 @@ Two consequences drive the rest of this design:
 This is the entire core operation. Everything else is plumbing around it.
 
 ```python
-for source_file in source_files:                       # one GRIB file == one .idx
+for source_file in source_files:                       # see "what a file covers" below
     index_path = download_index(source_file)           # ~30 KB
-    byte_ranges = parse_index(index_path, data_vars)   # existing parsers, reused
+    messages = parse_index(index_path, data_vars)       # one entry per GRIB message in the file
 
     refs = [
         VirtualRef(
-            key=chunk_key(source_file, var, ds),        # derived from array metadata; see below
+            key=chunk_key(msg.out_loc, msg.var, ds),    # msg.out_loc: the cell this message fills
             location=source_file.get_url(),             # s3://noaa-gefs-pds/...
-            offset=start,
-            length=end - start,
+            offset=msg.start,
+            length=msg.end - msg.start,
         )
-        for var, (start, end) in zip(data_vars, byte_ranges, strict=True)
+        for msg in messages
     ]
-    store.set_virtual_refs(refs)                        # batch API (one call/file)
+    store.set_virtual_refs(refs)                        # all of this file's refs, one batch
 
 session.commit("...")                                   # readers see new data
 ```
@@ -96,6 +96,20 @@ At read time `GribberishCodec` (a zarr v3 `ArrayBytesCodec` serializer) decodes
 the raw GRIB message the ref points at. One file's refs are produced and
 committed together — that atomicity is a stated invariant (see
 [Reader safety](#reader-safety)).
+
+**What a single file+index covers is dataset-specific — don't assume.** A source
+file maps to an *opaque set* of `(var, init, member, lead)` (or `(var, time)`)
+cells, and `parse_index` yields one entry per GRIB message it contains. The
+packing varies by provider:
+
+- **GEFS** — one file per `(init, member, lead)`, all variables inside.
+- **ECMWF open-data** — all ensemble members packed into one file.
+- **GEFS v12 reforecast** — all lead times for a *single* variable in one file.
+
+Everything downstream — the per-file commit unit, `chunk_key`, `sync_dims_to`,
+the filter — treats a file as that opaque cell set. **No part of the design bakes
+in "one `.idx` per `X`";** where this document uses GEFS for concrete numbers, it
+says so.
 
 **Existing code reused directly:**
 
@@ -478,11 +492,11 @@ computed from the manifest, but it is never read back to make decisions.)
 
 ```python
 def filter_already_present(self, candidates, store, ds):
-    present = self._present_chunk_keys(store, self.indicator_var, window)  # manifest probe, scoped
+    present = self._present_chunk_keys(store, window)   # manifest probe, scoped
     return [
         c for c in candidates
-        if (key := self.chunk_key(c, self.indicator_var, ds)) is None  # label not yet a coord → remaining
-        or key not in present
+        if (key := self.chunk_key(c.out_loc, self.representative_var(c), ds)) is None
+        or key not in present                           # label not yet a coord → remaining
     ]
 ```
 
@@ -491,6 +505,13 @@ One overridable hook, one mechanism for both variants:
 - The author expresses intent in **coordinate labels** (timestamps /
   timedeltas); `chunk_key` translates label → chunk key. The check is **ref
   existence in the manifest**, never a value read.
+- **The representative cell must be one the candidate file actually covers.**
+  `representative_var(c)` picks a variable *present in that file* (for
+  all-vars-per-file packings, any fixed sentinel; for one-var-per-file packings
+  like GEFS v12 reforecast, the candidate's own variable). Probing a global
+  indicator var that a given file doesn't contain would never see that file land
+  — so the choice is packing-dependent, which is exactly why it's an overridable
+  method rather than a fixed `indicator_var` field.
 - **Never `.isnull()` on a virtual data var.** A present chunk's value read
   triggers an S3 fetch + GRIB decode; in steady state the recent region is
   mostly populated, so `.isnull()` would decode a near-full region every poll.
@@ -667,10 +688,12 @@ and the commit loop only ever bundles *whole* yields — it can't split a file
 because it never holds less than one. `sync_dims_to` + `set_virtual_refs` +
 `commit` for an extent are one session, never "expand, commit, then fill."
 
-This is the invariant that licenses [filtering](#filtering-already-present-coordinates)'s
-single-`indicator_var` probe: one variable's presence at a position implies the
-whole file's data is present. A dataset that can't guarantee per-file atomic
-commit overrides its filter to check all variables.
+This is the invariant that lets [filtering](#filtering-already-present-coordinates)
+probe a *single representative cell* per file: because a file's refs land
+atomically, one cell the file covers being present implies the whole file is
+present. (Which cell is representative depends on what the file covers — see the
+filter's `representative_var`; that's a packing question, separate from this
+atomicity guarantee.)
 
 **Honest caveat:** atomicity is **per file**, not per init. If an init publishes
 as several files over time (leads trickling in), a reader sees lead 3 before
@@ -685,8 +708,8 @@ commit provides.
 inspect — finalization resets `main` unconditionally, trusting tested code. So
 committing virtual operational updates straight to `main` doesn't remove a check
 we relied on. We hold the bar with **tests, not runtime asserts**: PR #3's
-integration suite covers yield-count/grouping (one file → one yield of exactly
-its vars×members, all at one append-dim position) and an
+integration suite covers yield-count/grouping (one file → one yield holding
+exactly the cells that file covers, per the dataset's packing) and an
 emit → commit → reopen → read-back round-trip that catches bad chunk keys or
 byte ranges in CI. Single-writer operation (only one resizer ever) removes the
 scariest corruption class outright. Backfill retains the temp branch and its
@@ -738,18 +761,28 @@ bare-path code is in [Appendix A](#appendix-a-prototype-pr-511)).
 
 ## Provider-specific considerations
 
+File packing (what a single file+index covers) varies by provider and even by
+dataset within a provider; it's captured per dataset by
+`generate_source_file_coords` + `parse_index`, and nothing downstream assumes a
+particular shape (see [the loop](#the-set_virtual_refs-loop)).
+
 **NOAA (GFS, GEFS, HRRR):**
 
 - Plain-text `.idx` files, parsed by
   `noaa/noaa_grib_index.py::grib_message_byte_ranges_from_index`.
 - Buckets `s3://noaa-gfs-bdp-pds/`, `s3://noaa-gefs-pds/`,
   `s3://noaa-hrrr-bdp-pds/` — all `us-east-1`, anonymous.
+- Packing: GEFS forecast is one file per `(init, member, lead)`, all variables
+  inside. GEFS v12 reforecast is one variable per file, all lead times inside —
+  so its filter keys on the candidate's own variable, not a global sentinel.
 
 **ECMWF (IFS-ENS, AIFS):**
 
 - JSON Lines `.index` files; ECMWF parser renamed for naming consistency in
   PR #2.
 - `s3://ecmwf-forecasts/` (`eu-central-1`) plus Source Coop archives.
+- Packing: open-data files pack all ensemble members together (one file covers
+  the whole member axis at a given `(init, lead)`).
 - IFS-ENS has separate MARS (pre-2024-04) and open-data (post-2024-04) URL
   schemes; the virtual dataset likely covers only the open-data era. **TBD.**
 
