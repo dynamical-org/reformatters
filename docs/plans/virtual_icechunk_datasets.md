@@ -702,14 +702,18 @@ present. (Which cell is representative depends on what the file covers — see t
 filter's `representative_var`; that's a packing question, separate from this
 atomicity guarantee.)
 
-**Honest caveat:** atomicity is **per file**, not per init. If an init publishes
-as several files over time (leads trickling in), a reader sees lead 3 before
-lead 6 — a partial init, exactly as with materialized forecasts mid-update, and
-exactly the granularity the filter keys on. GribberishCodec refs are
-metadata-only writes (a chunk either has a complete `(location, offset, length)`
-or it doesn't — no torn-bytes failure mode), so per-file atomicity reduces
-cleanly to "commit the file's refs together," which icechunk's transactional
-commit provides.
+**Per-file is the intended granularity.** Atomicity is **per file**, not per
+init — and that's a feature, not a caveat. The whole low-latency value
+proposition is that consumers see new data *as each source file becomes
+available*, not at init-complete boundaries: when a forecast's leads trickle in
+over the publication window, a reader sees lead 3 the moment its file is
+ingested, then lead 6, and so on. Same partial-init shape as today's
+materialized forecasts mid-update, but visible in seconds rather than minutes,
+and exactly the granularity the filter keys on. GribberishCodec refs are
+metadata-only writes — a chunk either has a complete
+`(location, offset, length)` or it doesn't, with no torn-bytes failure mode — so
+per-file atomicity reduces cleanly to "commit the file's refs together," which
+icechunk's transactional commit provides.
 
 **On containment.** The materialized temp branch is *not* a correctness gate we
 inspect — finalization resets `main` unconditionally, trusting tested code. So
