@@ -40,28 +40,31 @@ thing.
 
 ## Scale
 
-Virtual datasets are *metadata-heavy*, not storage-heavy. One GRIB message
-(one field for one `(init, member, lead)` or one `(time)`) becomes one virtual
-chunk, so ref counts track the full Cartesian product of the dataset's
-non-spatial dimensions.
+Virtual datasets are *metadata-heavy*, not storage-heavy. One GRIB message —
+one field for a single `(var, init, member, lead)` (forecast) or `(var, time)`
+(analysis) — becomes one virtual chunk, so ref counts track the full Cartesian
+product of the dataset's dimensions, *including the variable axis*.
 
-Worked example — **GEFS 16-day, 31 members, ~200 var/level combos, 4 inits/day,
-6-year archive**:
+Rough order-of-magnitude — **GEFS 16-day, 31 members, ~200 var/level combos,
+4 inits/day, 6-year archive**. These are back-of-envelope (lead count is
+approximate, etc.), meant only to fix the order of magnitude:
 
-| quantity | value |
+| quantity | approx |
 |---|---|
-| refs per init (`200 × 31 × 100 leads`) | ~620,000 |
-| inits (`6 yr × 365 × 4`) | 8,760 |
-| **total refs** | **~5.4 billion** |
-| source index files (one `.idx` per `(init, member, lead)`) | **~27.2 million** |
+| refs per init (`~200 vars × 31 members × ~100 leads`) | ~6 × 10⁵ |
+| inits (`6 yr × 365 × 4`) | ~9 × 10³ |
+| **total refs** | **~10⁹ (billions)** |
+| source index files (one `.idx` per `(init, member, lead)`) | **~10⁷ (tens of millions)** |
 
 Two consequences drive the rest of this design:
 
-1. **Manifests are large (tens of GB), not "tiny."** The plan must size for
-   billions of refs. This is why [manifest splitting](#manifest-splitting) is
-   load-bearing rather than a nice-to-have, and why the old "stores are KBs–MBs,
-   co-location is free" framing is wrong.
-2. **Backfill is bound by index-file count, not ref count.** ~27 M index
+1. **A single unsplit manifest is impractical at this ref count.** We have *not*
+   measured icechunk's bytes-per-ref, so the absolute manifest size is unknown
+   (a [spike](#spike-bundle) item). But at order 10⁹ refs, even a few tens of
+   bytes per ref makes one per-array manifest large enough that
+   [splitting](#manifest-splitting) is necessary, not a nice-to-have — and makes
+   the old "stores are KBs–MBs, co-location is free" framing wrong.
+2. **Backfill is bound by index-file count, not ref count.** Order 10⁷ index
    downloads is hours of work even at high concurrency, so **backfills must run
    parallel across pods** (see [Backfill](#backfill)). Operational updates touch
    a handful of files per fire and run single-writer.
@@ -77,7 +80,7 @@ for source_file in source_files:                       # one GRIB file == one .i
 
     refs = [
         VirtualRef(
-            key=chunk_key(var, source_file, store),     # f"{var}/c/{i}/{j}/..."
+            key=chunk_key(source_file, var, ds),        # derived from array metadata; see below
             location=source_file.get_url(),             # s3://noaa-gefs-pds/...
             offset=start,
             length=end - start,
@@ -187,8 +190,9 @@ region jobs change base class here and nothing else.
   (see [Filtering](#filtering-already-present-coordinates)); overridable.
 - `sync_dims_to(store, extent)` — idempotent dim/coord/derived-coord expansion
   (see [The virtual write loop](#the-virtual-write-loop)).
-- `chunk_key(coord, var, store)` — coord labels → chunk key, shared by filter
-  and emit (see [Filtering](#filtering-already-present-coordinates)).
+- `chunk_key(coord, var, ds)` — coord labels → chunk key, derived from array
+  metadata so it can't drift from zarr (see [Chunk keys](#chunk-keys)). Shared
+  by filter and emit.
 
 ## Storage configuration
 
@@ -199,15 +203,22 @@ Virtual datasets carry one new declarative, per-dataset config object on the
 class IcechunkVirtualConfig(FrozenBaseModel):
     # Source buckets the refs point into. Registered as icechunk virtual chunk
     # containers at every repo open (writer AND reader).
-    containers: Sequence[VirtualChunkContainerConfig]
+    containers: Sequence[icechunk.VirtualChunkContainer]
     # Manifest splitting policy (see "Manifest splitting").
-    manifest_split: ManifestSplitConfig
-
-class VirtualChunkContainerConfig(FrozenBaseModel):
-    prefix: str            # e.g. "s3://noaa-gefs-pds/"
-    region: str            # e.g. "us-east-1"
-    anonymous: bool = True # all current targets are publicly readable
+    manifest_split: icechunk.ManifestSplittingConfig
 ```
+
+Prefer icechunk's own `VirtualChunkContainer` / `ManifestSplittingConfig` types
+directly rather than wrapping them in parallel models we'd have to keep in sync —
+the whole point is to hand them to `RepositoryConfig` unchanged. The one thing to
+**spike-to-confirm** is serialization: `IcechunkVirtualConfig` must round-trip
+declaratively (the reader/catalog reconstructs it from published metadata, see
+reason 2 below), and a `VirtualChunkContainer` carries a live store object
+(`icechunk.s3_store(region=…)`), not just plain fields. If those types serialize
+cleanly (e.g. to/from a dict of prefix+region+credential-kind), use them as-is;
+if not, the minimal wrapper is a thin pydantic model holding exactly
+`prefix`/`region`/`anonymous` that *constructs* the icechunk objects at repo-open
+— a serialization shim, not a reimplementation.
 
 This config is held on `DynamicalDataset` (not on the region job, not on the
 template) for three reasons:
@@ -237,21 +248,19 @@ indirection layer:
 - **Dedup.** Refs are stored relative to a registered container prefix, so the
   repeated `s3://noaa-gefs-pds/...` bucket+prefix isn't copied into every ref.
   On an all-virtual store that dedup is most of the on-disk footprint.
-- **En-masse repoint.** Swapping a container registration (e.g. NODD-on-AWS → a
-  GCP mirror, or a Source Coop move) repoints every ref at once.
-
-> **Spike-to-confirm:** whether icechunk persists refs resolvably-relative to the
-> container prefix (repoint is free) or bakes absolute URLs (repoint needs a
-> rewrite pass). Either is workable; this only changes how strongly we lean on
-> repoint.
+- **En-masse repoint.** icechunk persists refs resolvably-relative to the
+  container prefix, so swapping a container registration (e.g. NODD-on-AWS → a
+  GCP mirror, or a Source Coop move) repoints every ref at once, with no manifest
+  rewrite.
 
 ### Manifest splitting
 
-With billions of refs (see [Scale](#scale)), a single per-array manifest would
-be tens of GB and every commit would rewrite the whole thing. icechunk manifests
-are per-array, immutable, and content-addressed; a commit rewrites only the
-split file(s) whose chunk-index range changed. We therefore **split each array's
-manifest along the append dimension**:
+With order 10⁹ refs (see [Scale](#scale)), a single per-array manifest would be
+large enough that every commit rewriting the whole thing is untenable (the exact
+size depends on icechunk's per-ref overhead, which we [spike](#spike-bundle)).
+icechunk manifests are per-array, immutable, and content-addressed; a commit
+rewrites only the split file(s) whose chunk-index range changed. We therefore
+**split each array's manifest along the append dimension**:
 
 - An operational append lands only in the current (highest-index) split; every
   historical split is referenced unchanged. **Commit cost = size of the active
@@ -431,8 +440,8 @@ last commit.
 
 Backfills run the **same** virtual write loop but on the **existing parallel
 temp-branch flow** — they are required to be parallel (see [Scale](#scale):
-~27 M index files), and parallel writers are safe precisely because the template
-is pre-sized.
+order 10⁷ index files), and parallel writers are safe precisely because the
+template is pre-sized.
 
 - **Worker 0 setup** = existing `parallel_setup`: pre-size the full template on
   the `_job_<name>` branch and commit. Because the dims are written at full size
@@ -442,8 +451,8 @@ is pre-sized.
   paths).
 - **All workers** write their round-robin slice of refs to the branch with a
   loose commit cadence (e.g. 60 s).
-- **Last worker** resets `main` to the branch tip — a cheap pointer move even
-  for a 5.4 B-ref store. Readers see "empty" or "full," never partial.
+- **Last worker** resets `main` to the branch tip — a cheap pointer move
+  regardless of store size. Readers see "empty" or "full," never partial.
 
 The **only** thing that differs from materialized backfill is `process()`'s body
 (set refs vs. materialize). No new orchestration, no `is_backfill` flag — the
@@ -509,6 +518,42 @@ membership (index-space in the basement, label-space `chunk_key` at the surface)
 
 > **Spike-to-confirm:** icechunk 2.x exposes a ref-presence check that doesn't
 > fetch/decode, and scoping it to the active manifest split keeps it bounded.
+
+## Chunk keys
+
+`chunk_key(coord, var, ds)` maps a source file's coordinate labels to the zarr
+chunk key its ref is written under. It is the one place coord labels become chunk
+indices, and it is shared by both the emitter and the filter — so the only thing
+we must guarantee is that **our index math matches zarr's**, exactly, with no
+parallel reimplementation of the chunk-key format that could silently drift.
+
+Two design rules enforce that:
+
+1. **Derive geometry from array metadata, not from constants.** `chunk_key`
+   reads the variable's `chunks` (and dim order) off `ds[var]` rather than
+   assuming `(1, 1, lat, lon)`. The append-dim index is
+   `position // chunk_size_along_append_dim` (which is 1 for virtual forecast and
+   analysis arrays, but we compute it, not assume it), and it **asserts** the
+   coord label resolves to an exact, in-range index — catching any drift between
+   our lookup and the array's actual shape immediately rather than writing a
+   mis-keyed ref.
+2. **Encode the key with zarr's own machinery, not an f-string.** The
+   `f"{var}/c/{i}/{j}/…"` form is zarr v3's default-separator chunk-key encoding;
+   rather than hardcode it, build the key via the array's
+   `chunk_key_encoding` (the same encoder zarr uses at read time). If a future
+   array ever used a different separator or encoding, the key would still match
+   what readers resolve — by construction, not by our remembering to keep two
+   formatters in sync.
+
+The contract **"label not in `ds`'s coords ⟹ remaining"** (a brand-new position
+not yet expanded by `sync_dims_to`) is part of this method: rule 1's exact-index
+assertion would otherwise fire on an unknown label, so `chunk_key` returns
+"absent" for labels not present in the current coord arrays, and the filter
+treats that as not-yet-ingested.
+
+> **Spike-to-confirm:** the cleanest zarr-internal API to (a) read a chunk's key
+> encoding and (b) test ref presence at a key without decoding — so neither the
+> emit key nor the filter key is a hand-rolled string.
 
 ## Derived coordinates
 
@@ -680,8 +725,8 @@ matching region job and template config classes.
 
 Virtual Icechunk stores live in the same S3 buckets as the materialized
 datasets, with new dataset IDs and paths. The stores are metadata-only but
-**not tiny** — manifests run to tens of GB at multi-year scale (see
-[Scale](#scale)). Co-location is still fine, but size monitoring matters.
+**not tiny** — order 10⁹ refs at multi-year scale (see [Scale](#scale)), so
+manifest size (once measured) is worth monitoring. Co-location is still fine.
 
 ### Reader experience
 
@@ -733,11 +778,13 @@ Mechanical; tests pass unchanged.
   automatically).
 - Add the `gribberish` dependency (`~=` pin; smoke-test against the current
   `icechunk~=2.0`, `zarr~=3.1`).
-- Add `IcechunkVirtualConfig` + `VirtualChunkContainerConfig` +
-  `ManifestSplitConfig` to `common/storage.py`; thread `icechunk_virtual_config`
-  through `StoreFactory` and repo open/create (register containers, set split
-  policy, wire anonymous credentials). Add the `DynamicalDataset` validator
-  (virtual ⇒ all stores ICECHUNK ∧ non-empty containers).
+- Add `IcechunkVirtualConfig` to `common/storage.py` (holding icechunk's
+  `VirtualChunkContainer` / `ManifestSplittingConfig`, or a thin serialization
+  shim if those don't round-trip — see [Storage configuration](#storage-configuration));
+  thread `icechunk_virtual_config` through `StoreFactory` and repo open/create
+  (register containers, set split policy, wire anonymous credentials). Add the
+  `DynamicalDataset` validator (virtual ⇒ all stores ICECHUNK ∧ non-empty
+  containers).
 
 ### PR #3 — `VirtualRegionJob` + driver + spike
 
@@ -817,20 +864,25 @@ Run once in PR #3, against a local icechunk 2.x repo. The retry/commit design
 handles either answer for each; we want the operational numbers and to validate
 assumptions before the first dataset ships:
 
-1. **Manifest split semantics** — per-array, along a named (append) dim; a
+1. **Bytes per ref** — measure icechunk's manifest overhead per virtual ref, so
+   the [Scale](#scale) manifest-size and split-size numbers stop being guesses.
+2. **Manifest split semantics** — per-array, along a named (append) dim; a
    commit rewrites only the boundary-crossing split. Measure the split-size
    constant against commit latency.
-2. **Container resolution** — refs stored resolvably-relative to the container
-   prefix (repoint free) vs. absolute (repoint needs rewrite).
 3. **Empty commit** — committing a session with no net change is a no-op (not an
    error); the loop must skip "nothing new."
-4. **Ref-presence without decode** — a presence check that doesn't fetch/decode,
-   scoped to the active split.
+4. **Ref-presence + key encoding without decode** — a presence check that
+   doesn't fetch/decode, and the zarr-internal API to read a chunk's key
+   encoding, so neither emit nor filter hand-rolls the key string (see
+   [Chunk keys](#chunk-keys)).
 5. **float64 round-trip** — GribberishCodec decode dtype; confirm float64 arrays
    read back correctly.
 6. **`serializer` through `to_zarr`** — `zarr~=3.1` honors a `serializer`
    encoding key written via xarray.
 7. **`set_virtual_refs` (plural)** — batch API availability and semantics.
+8. **`IcechunkVirtualConfig` serialization** — whether icechunk's
+   `VirtualChunkContainer` / `ManifestSplittingConfig` round-trip declaratively,
+   or need the thin shim (see [Storage configuration](#storage-configuration)).
 
 ## Open questions
 
