@@ -330,18 +330,17 @@ Consequences by flow:
 ## The virtual write loop
 
 Both virtual flows — backfill and operational — run the **same** loop. The only
-differences are *where the session is opened* and *how often it commits*:
+differences are *where the session is opened* and *how big a batch the generator
+yields*:
 
 ```python
 candidates = self.generate_source_file_coords(scope)          # shared w/ materialized
 remaining  = self.filter_already_present(candidates, store, ds)
 
-for file_refs in self.process_virtual_refs(remaining, deadline):
-    self.sync_dims_to(store, file_refs.extent)   # idempotent; no-op if already covered
-    store.set_virtual_refs(file_refs.refs)       # batch (plural API)
-    if commit_due(max_seconds_between_commits):
-        commit(store)                            # whole files only, never a partial file
-commit(store)                                    # flush remainder
+for batch in self.process_virtual_refs(remaining, deadline):  # batch == 1+ whole files
+    self.sync_dims_to(store, batch.extent)                    # idempotent; no-op if already covered
+    store.set_virtual_refs(batch.refs)                        # batch (plural API)
+    commit(store)                                             # one commit per yield
 ```
 
 `sync_dims_to(store, extent)` is the single primitive that unifies pre-sizing
@@ -359,9 +358,26 @@ That single primitive is why the two flows don't need separate write paths:
   new inits appear — and being single-writer, that resize is **never
   concurrent**.
 
-`commit_due` reads one value field, `max_seconds_between_commits` — tight (~1 s)
-for operational, loose (e.g. 60 s) for backfill. It is a *cadence value*, not a
-mode flag. There is no `is_backfill` boolean anywhere.
+**The yield is the commit unit.** There is no timer, no pending buffer between
+yields, no `max_seconds_between_commits` knob. The driver commits on every yield
+and the generator owns the batching policy — *it* is the thing that knows what's
+available, what cadence files arrive on, and whether to wait-and-batch or
+yield-immediately. The atomicity invariant (see
+[Reader safety](#reader-safety)) says each yield is **whole files** — never
+splitting a file across yields — but a yield can contain one file or many.
+
+The two flows fall out naturally:
+
+- **Operational** yields one file (or a small burst that landed in one poll
+  iteration) → one commit per yield → per-file visibility, ≤5s budget intact.
+- **Backfill** yields a chunk of N whole files sized for one commit's overhead
+  (e.g. ~50) → millions of files collapse to ~thousands of commits without any
+  outer batcher.
+
+This dodges the only-obvious-but-actually-nasty race the timer model implies
+(commit becoming "due" while the generator is blocked on the next file's
+availability — needs a committer thread or asyncio `next(gen, timeout=…)`
+machinery). There's nothing to flush between yields, so there's nothing to race.
 
 ## Operational updates
 
@@ -400,16 +416,17 @@ All `set_virtual_refs` + commits stay single-threaded.
 ### Latency budget
 
 ```
-latency ≈ poll_interval + index_download + commit_wait + commit
-        ≈ 1 s          + 100–500 ms     + ≤ 1 s       + active-split rewrite
+latency ≈ poll_interval + index_download + commit
+        ≈ 1 s          + 100–500 ms     + active-split rewrite
         = 2–4 s typical, ≤ 5 s worst case
 ```
 
-`commit` cost is the active manifest split rewrite (see
-[Manifest splitting](#manifest-splitting)), **not** the whole array — this is
-why splitting is load-bearing for the budget. `commit_wait` is bounded by
-`max_seconds_between_commits` (~1 s). Several files in one poll ride one commit;
-trickling files each get a commit within the interval.
+Each new file lands in its own commit (the generator yields per file; the driver
+commits per yield — see [The virtual write loop](#the-virtual-write-loop)), so
+there is no "wait for batch" latency. `commit` cost is the active manifest split
+rewrite (see [Manifest splitting](#manifest-splitting)), **not** the whole array
+— this is why splitting is load-bearing for the budget. Several files appearing
+in one poll iteration can ride one yield if the generator chooses.
 
 ### Step-by-step
 
@@ -847,8 +864,11 @@ Mechanical; tests pass unchanged.
   `chunk_key`).
 - Extend `_process_region_jobs` with the single fork (virtual + operational →
   single-writer-to-`main`; else existing path).
-- `max_seconds_between_commits` as a cadence value field (tight operational /
-  loose backfill), set by the respective job factory.
+- Document the `process_virtual_refs` generator contract: each yield is one
+  commit's worth of whole files; operational yields ~1 file at a time for
+  per-file visibility, backfill yields batches of ~N files to amortize commit
+  overhead. No timer, no `max_seconds_between_commits` knob — the driver commits
+  on every yield.
 - Run the **[spike bundle](#spike-bundle)**.
 - Integration tests: yield-count/grouping; concurrent disjoint-chunk backfill on
   a branch; emit → commit → reopen → read-back round-trip.
@@ -946,8 +966,8 @@ assumptions before the first dataset ships:
 3. **Variable expansion** — extending to all source variables needs per-variable
    internal attrs (`grib_element`, etc.). Manual curation early; auto-discovery
    from the GRIB index is later tooling.
-4. **Polling/cadence defaults** — per-dataset `poll_interval` and
-   `max_seconds_between_commits`; defaults emerge from PR #4.
+4. **Polling and backfill batch-size defaults** — per-dataset `poll_interval`
+   and the backfill generator's files-per-yield size; defaults emerge from PR #4.
 5. **Reforecast / historical archives** — some datasets (e.g. GEFS v12
    reforecast) use different URL schemes for historical data. Virtual backfills
    must handle them; operational updates don't. Scope per dataset.
