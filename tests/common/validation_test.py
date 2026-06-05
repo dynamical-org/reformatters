@@ -525,6 +525,31 @@ def test_truncate_shards_truncation() -> None:
     assert out == "[0, 1, 2, ..., 7, 8, 9]"
 
 
+def test_summarize_coords_multidimensional() -> None:
+    """Multi-dimensional coords (e.g. valid_time) collapse to a first..last range."""
+    init_times = pd.date_range("2026-06-05T12:00", periods=1, freq="6h")
+    lead_times = pd.timedelta_range(start="0h", periods=209, freq="1h")
+    valid_time = xr.DataArray(
+        init_times.values[:, None] + lead_times.values[None, :],
+        dims=("init_time", "lead_time"),
+    )
+    ds = xr.Dataset(
+        coords={
+            "init_time": ("init_time", init_times),
+            "lead_time": ("lead_time", lead_times),
+            "valid_time": valid_time,
+        }
+    )
+
+    summary = validation._summarize_coords(ds)
+
+    assert "valid_time=[2026-06-05T12:00:00..2026-06-14T04:00:00] (n=209)" in summary
+    # The full nested array must not be dumped.
+    assert "\n" not in summary
+    assert "init_time=2026-06-05T12:00:00" in summary
+    assert "lead_time=[0 days 00:00:00..8 days 16:00:00] (n=209)" in summary
+
+
 def test_check_for_expected_shards_skips_hrrr_categorical(
     rng: np.random.Generator,
 ) -> None:
