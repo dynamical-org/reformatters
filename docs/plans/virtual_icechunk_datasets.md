@@ -1,10 +1,12 @@
 # Virtual Icechunk Datasets
 
-> Design plan. The architecture below is settled. A small set of icechunk 2.x
-> behaviors are called out as **spike-to-confirm** — they are verified by a
-> focused spike in PR #3 (see [Spike bundle](#spike-bundle)). The retry/commit
-> design does not depend on their answers; we just want to know the operational
-> numbers before the first dataset ships.
+> Design plan. The architecture below is settled. Every icechunk-2.x behavior it
+> leans on has been **derisked up front** against icechunk 2.0.5 / zarr 3.1.3 /
+> gribberish 0.30.3 on Python 3.14 — the former "spike-to-confirm" items are now
+> measured results, folded into each section and collected in
+> [Spike results](#spike-results). The retry/commit design did not depend on the
+> answers; the one finding that changed code is that **empty commits raise** (see
+> [the write loop](#the-virtual-write-loop)).
 
 ## Goals
 
@@ -58,12 +60,15 @@ approximate, etc.), meant only to fix the order of magnitude:
 
 Two consequences drive the rest of this design:
 
-1. **A single unsplit manifest is impractical at this ref count.** We have *not*
-   measured icechunk's bytes-per-ref, so the absolute manifest size is unknown
-   (a [spike](#spike-bundle) item). But at order 10⁹ refs, even a few tens of
-   bytes per ref makes one per-array manifest large enough that
-   [splitting](#manifest-splitting) is necessary, not a nice-to-have — and makes
-   the old "stores are KBs–MBs, co-location is free" framing wrong.
+1. **A single unsplit manifest is impractical at this ref count.** Measured
+   manifest overhead is **~25 bytes/ref** for realistic distinct GRIB URLs with
+   icechunk's default location compression on (~19 with sequential offsets, ~9
+   when every ref shares one URL; see [Spike results](#spike-results)). At order
+   10⁹ refs that is **~25 GB** of manifest across the dataset — tiny as raw
+   bytes, but far past the point where rewriting one per-array manifest per
+   commit is viable, so [splitting](#manifest-splitting) is necessary, not a
+   nice-to-have, and the old "stores are KBs–MBs, co-location is free" framing is
+   wrong.
 2. **Backfill is bound by index-file count, not ref count.** Order 10⁷ index
    downloads is hours of work even at high concurrency, so **backfills must run
    parallel across pods** (see [Backfill](#backfill)). Operational updates touch
@@ -222,17 +227,27 @@ class IcechunkVirtualConfig(FrozenBaseModel):
     manifest_split: icechunk.ManifestSplittingConfig
 ```
 
-Prefer icechunk's own `VirtualChunkContainer` / `ManifestSplittingConfig` types
-directly rather than wrapping them in parallel models we'd have to keep in sync —
-the whole point is to hand them to `RepositoryConfig` unchanged. The one thing to
-**spike-to-confirm** is serialization: `IcechunkVirtualConfig` must round-trip
-declaratively (the reader/catalog reconstructs it from published metadata, see
-reason 2 below), and a `VirtualChunkContainer` carries a live store object
-(`icechunk.s3_store(region=…)`), not just plain fields. If those types serialize
-cleanly (e.g. to/from a dict of prefix+region+credential-kind), use them as-is;
-if not, the minimal wrapper is a thin pydantic model holding exactly
-`prefix`/`region`/`anonymous` that *constructs* the icechunk objects at repo-open
-— a serialization shim, not a reimplementation.
+**Measured: the icechunk types do not round-trip declaratively, so the thin-shim
+path is the one we take** (not "use them as-is"). A `VirtualChunkContainer`
+exposes `.name` / `.url_prefix` as plain fields, but its `.store` is an opaque
+`ObjectStoreConfig` that does not surface `region` / `anonymous` for read-back;
+`ManifestSplittingConfig.to_dict()` is keyed by condition *objects* with no value
+equality, so `from_dict(to_dict(...))` reconstructs structurally but is not a
+clean JSON round-trip. `IcechunkVirtualConfig` is therefore a thin pydantic model
+holding exactly `prefix` / `region` / `anonymous` per container and the split
+`dim` / `size`, which *constructs* the icechunk objects (`VirtualChunkContainer`,
+`s3_store(...)`, `ManifestSplittingConfig.from_dict(...)`) at repo-open — a
+serialization shim, not a reimplementation.
+
+**Persistence shrinks the reader's job.** `repo.save_config()` writes the
+container set and split policy into the repo itself; both `Repository.open(storage)`
+(no config passed) and `Repository.fetch_config(storage)` recover them. Credentials
+are *not* persisted: reading a virtual chunk requires
+`authorize_virtual_chunk_access={prefix: credential}` at every open — a read
+without it raises, and `authorized_virtual_container_prefixes` is empty. So a
+reader can `fetch_config` to recover the container prefixes and only needs to
+supply the anonymous-credentials map; the minimal reader-facing config is the
+credential policy, not the full container definition.
 
 This config is held on `DynamicalDataset` (not on the region job, not on the
 template) for three reasons:
@@ -269,12 +284,12 @@ indirection layer:
 
 ### Manifest splitting
 
-With order 10⁹ refs (see [Scale](#scale)), a single per-array manifest would be
-large enough that every commit rewriting the whole thing is untenable (the exact
-size depends on icechunk's per-ref overhead, which we [spike](#spike-bundle)).
-icechunk manifests are per-array, immutable, and content-addressed; a commit
-rewrites only the split file(s) whose chunk-index range changed. We therefore
-**split each array's manifest along the append dimension**:
+With order 10⁹ refs (see [Scale](#scale)) — ~25 GB of manifest at the measured
+~25 bytes/ref — a single per-array manifest would be large enough that every
+commit rewriting the whole thing is untenable. icechunk manifests are per-array,
+immutable, and content-addressed; a commit rewrites only the split file(s) whose
+chunk-index range changed (measured — see [Spike results](#spike-results)). We
+therefore **split each array's manifest along the append dimension**:
 
 - An operational append lands only in the current (highest-index) split; every
   historical split is referenced unchanged. **Commit cost = size of the active
@@ -286,13 +301,20 @@ rewrites only the split file(s) whose chunk-index range changed. We therefore
 Size the split by the operational commit-cost ceiling (small enough that
 rewriting the active split is well under a second), then confirm it's
 comfortably under the read-memory ceiling (it will be — the commit-cost
-constraint binds first). For GEFS-scale arrays the commit-cost ceiling lands
-around 1–3 weeks of inits per split; the exact constant is measured in the
-[spike](#spike-bundle).
+constraint binds first). Measured active-split rewrite cost is ~11 bytes × the
+split's ref count (a 200-ref split rewrote ~2.2 KB), so even a multi-week split
+holding ~10⁵ refs rewrites ~1 MB per commit — trivially sub-second. For
+GEFS-scale arrays the commit-cost ceiling lands around 1–3 weeks of inits per
+split.
 
-> **Spike-to-confirm:** that splitting is configured per-array along a named
-> dimension, and that a commit rewrites only the boundary-crossing split rather
-> than all splits.
+> **Confirmed (icechunk 2.0.5).** Splitting is per-array along a named dimension:
+> `ManifestSplittingConfig.from_dict({ManifestSplitCondition.AnyArray():
+> {ManifestSplitDimCondition.DimensionName("init_time"): SPLIT}})`. A commit
+> rewrites **only** the split(s) whose chunk-index range changed: appending a new
+> init wrote one new ~440 B split manifest while all five historical split
+> manifests were carried over unchanged by id; touching an existing split rewrote
+> only that one split (~2.2 KB), leaving the other five untouched. The policy is
+> persisted in repo config and recovered on reopen.
 
 ## Partitioning
 
@@ -339,8 +361,9 @@ remaining  = self.filter_already_present(candidates, store, ds)
 
 for batch in self.process_virtual_refs(remaining, deadline):  # batch == 1+ whole files
     self.sync_dims_to(store, batch.extent)                    # idempotent; no-op if already covered
-    store.set_virtual_refs(batch.refs)                        # batch (plural API)
-    commit(store)                                             # one commit per yield
+    store.set_virtual_refs(path, batch.refs)                  # plural API, per array path
+    if store.session.has_uncommitted_changes:                 # guard: empty commit raises
+        commit(store)                                         # one commit per yield
 ```
 
 `sync_dims_to(store, extent)` is the single primitive that unifies pre-sizing
@@ -365,6 +388,17 @@ available, what cadence files arrive on, and whether to wait-and-batch or
 yield-immediately. The atomicity invariant (see
 [Reader safety](#reader-safety)) says each yield is **whole files** — never
 splitting a file across yields — but a yield can contain one file or many.
+
+> **Empty commits raise — guard them.** icechunk's `session.commit` raises
+> `IcechunkError` ("no changes made to the session") rather than no-opping, and
+> the shared `storage.commit_if_icechunk` helper commits unconditionally. A
+> well-behaved generator never yields an empty batch, but the driver still guards
+> on `session.has_uncommitted_changes` before committing (the alternative,
+> `allow_empty=True`, would litter the history with empty snapshots). This pairs
+> with the idempotency story: **setting refs always dirties the session — even
+> re-emitting byte-identical refs** — so the guard fires only on a genuinely
+> empty poll, never on idempotent replay (a filter false-negative just rewrites
+> an identical, content-addressed manifest and commits a no-content snapshot).
 
 The two flows fall out naturally:
 
@@ -564,10 +598,12 @@ whole window's present-set at once.)
 ## Chunk keys
 
 `chunk_key(coord, var, ds)` maps a source file's coordinate labels to the zarr
-chunk key its ref is written under. It is the one place coord labels become chunk
-indices, and it is shared by both the emitter and the filter — so the only thing
-we must guarantee is that **our index math matches zarr's**, exactly, with no
-parallel reimplementation of the chunk-key format that could silently drift.
+chunk index its ref is written under — and, for the filter, the string key that
+index encodes to. It is the one place coord labels become chunk indices, shared
+by both the emitter (which passes the index to `set_virtual_refs`) and the filter
+(which encodes the index to a key for `exists()`) — so the only thing we must
+guarantee is that **our index math matches zarr's**, exactly, with no parallel
+reimplementation of the chunk-key format that could silently drift.
 
 Two design rules enforce that:
 
@@ -593,10 +629,15 @@ assertion would otherwise fire on an unknown label, so `chunk_key` returns
 "absent" for labels not present in the current coord arrays, and the filter
 treats that as not-yet-ingested.
 
-> **Spike-to-confirm:** the cleanest zarr-internal API to read a chunk's key
-> encoding, so neither the emit key nor the filter key is a hand-rolled string.
-> (Ref presence is resolved: `IcechunkStore.exists(key)`, see
-> [Filtering](#filtering-already-present-coordinates).)
+> **Confirmed.** The encoder is `array.metadata.chunk_key_encoding` (a
+> `DefaultChunkKeyEncoding`); `.encode_chunk_key((i, j, k, l))` returns
+> `"c/i/j/k/l"`, and the full store key is `f"{array.path}/{encode_chunk_key(...)}"`.
+> A probe with the derived key — `await store.exists(key)` — returns True for a
+> set ref and False otherwise. **Emit never needs the string:**
+> `set_virtual_refs` / `set_virtual_refs_arr` take chunk *indices*, not key
+> strings (`VirtualChunkSpec(index=[i, j, k, l], …)`), so the only hand-rollable
+> string lives in the filter's `exists()` probe — and it is built from the
+> array's own encoder, not an f-string.
 
 ## Derived coordinates
 
@@ -633,8 +674,14 @@ It threads through with no extra plumbing: `assign_var_metadata` already does
 `var.encoding = var_config.encoding.model_dump(exclude_none=True)`, so the field
 flows into xarray's `.encoding` and on to `to_zarr`.
 
-> **Spike-to-confirm:** `zarr~=3.1` honors a `serializer` key written through
-> `to_zarr` this way.
+> **Confirmed (zarr 3.1.3 + xarray 2026.1).** `to_zarr` threads the `serializer`
+> encoding dict straight into the array's `zarr.json` codecs —
+> `{"name": "gribberish", "configuration": {"var": "TMP"}}` persisted and reopened
+> intact. One caveat: `to_zarr` would push data-var *chunk values* through the
+> codec, and `GribberishCodec` is decode-only (`_encode_single` raises). The
+> existing template path is already safe — `write_metadata` calls
+> `to_zarr(..., compute=False)` over **dask-backed** `make_empty_variable` data
+> vars, so no chunk is ever materialized through the read-only codec.
 
 ### Encoding factory
 
@@ -688,9 +735,14 @@ choice because:
 - **`shards = None`** — virtual refs are standalone messages; partitioning falls
   back to chunks (see [Partitioning](#partitioning)).
 - **No compressors or filters** — GribberishCodec does the full decode.
-- **dtype = float64.** GribberishCodec decodes to float64. (Appendix A's
-  prototype declared float32; that is likely a prototype bug.
-  **Spike-to-confirm** the float64 round-trip before pinning.)
+- **dtype = float64 (native — no cast).** Confirmed: `parse_grib_array` returns
+  float64 natively, so declaring float64 keeps the decoded values verbatim —
+  `GribberishCodec`'s dtype-cast (`data.astype(declared)`) is skipped because
+  declared == native. We declare float64 *to avoid* any astype: a non-float64
+  declaration like float32 (Appendix A's prototype) is the only thing that would
+  force a lossy downcast. End-to-end read-back (virtual ref → icechunk 2.0.5 →
+  xarray `.values`) returned float64 values byte-equal to a direct gribberish
+  decode (see [Spike results](#spike-results)).
 - **Exception (DWD bz2 GRIBs):** chain zarr's `Bz2Codec` as a filter before
   GribberishCodec. Deferred until verified end-to-end.
 
@@ -795,7 +847,12 @@ All targeted source archives have anonymous read access. A reader needs the
 container registration + anonymous credentials map — the same
 `IcechunkVirtualConfig` the writer uses, reconstructed from the declarative
 model (today via the `dynamical_catalog` library wrapping our STAC catalog;
-bare-path code is in [Appendix A](#appendix-a-prototype-pr-511)).
+bare-path code is in [Appendix A](#appendix-a-prototype-pr-511)). Confirmed: the
+container *definitions* are recoverable straight from the store via
+`Repository.fetch_config`, so the only thing a reader must supply is the
+anonymous credentials map passed to `authorize_virtual_chunk_access` at open — a
+virtual read without it raises with a "you need to authorize the virtual chunk
+container" error.
 
 ## Provider-specific considerations
 
@@ -847,31 +904,44 @@ Mechanical; tests pass unchanged.
 - Add `serializer: dict[str, Any] | None = None` to
   `common/config_models.py::Encoding` (threads through `assign_var_metadata`
   automatically).
-- Add the `gribberish` dependency (`~=` pin; smoke-test against the current
-  `icechunk~=2.0`, `zarr~=3.1`).
-- Add `IcechunkVirtualConfig` to `common/storage.py` (holding icechunk's
-  `VirtualChunkContainer` / `ManifestSplittingConfig`, or a thin serialization
-  shim if those don't round-trip — see [Storage configuration](#storage-configuration));
-  thread `icechunk_virtual_config` through `StoreFactory` and repo open/create
-  (register containers, set split policy, wire anonymous credentials). Add the
-  `DynamicalDataset` validator (virtual ⇒ all stores ICECHUNK ∧ non-empty
-  containers).
+- Add the `gribberish` dependency (`~=0.30` pin). No Python-version blocker:
+  gribberish 0.30.3 ships cp311–cp314 wheels (incl. `cp314` manylinux/musl/macos/win),
+  so it installs cleanly on the project's Python 3.14; the decode path is already
+  smoke-tested against `icechunk 2.0.5` / `zarr 3.1.3` (see
+  [Spike results](#spike-results)).
+- Add `IcechunkVirtualConfig` to `common/storage.py` as a **thin serialization
+  shim** — confirmed required, since icechunk's `VirtualChunkContainer` /
+  `ManifestSplittingConfig` don't round-trip declaratively (see
+  [Storage configuration](#storage-configuration)). Hold `prefix` / `region` /
+  `anonymous` per container + split `dim` / `size`, and construct the icechunk
+  objects at repo-open. Thread `icechunk_virtual_config` through `StoreFactory`
+  and repo open/create (register containers, set split policy, wire anonymous
+  credentials via `authorize_virtual_chunk_access`). Add the `DynamicalDataset`
+  validator (virtual ⇒ all stores ICECHUNK ∧ non-empty containers).
 
-### PR #3 — `VirtualRegionJob` + driver + spike
+### PR #3 — `VirtualRegionJob` + driver
+
+The spike is already done (run ahead of this PR — see
+[Spike results](#spike-results)), so PR #3 is just the implementation it derisked.
 
 - Add `VirtualRegionJob` (the virtual write loop, `process_virtual_refs`
   abstract generator, `filter_already_present` default, `sync_dims_to`,
-  `chunk_key`).
+  `chunk_key`). Use `set_virtual_refs_arr` (columnar, zero-copy) for the emit
+  batches; `array.metadata.chunk_key_encoding.encode_chunk_key` + `store.exists`
+  for the filter.
 - Extend `_process_region_jobs` with the single fork (virtual + operational →
-  single-writer-to-`main`; else existing path).
+  single-writer-to-`main`; else existing path). **Guard commits on
+  `session.has_uncommitted_changes`** — empty commits raise, and the shared
+  `storage.commit_if_icechunk` currently commits unconditionally, so either teach
+  it the guard or wrap the call.
 - Document the `process_virtual_refs` generator contract: each yield is one
   commit's worth of whole files; operational yields ~1 file at a time for
   per-file visibility, backfill yields batches of ~N files to amortize commit
   overhead. No timer, no `max_seconds_between_commits` knob — the driver commits
   on every yield.
-- Run the **[spike bundle](#spike-bundle)**.
 - Integration tests: yield-count/grouping; concurrent disjoint-chunk backfill on
-  a branch; emit → commit → reopen → read-back round-trip.
+  a branch; emit → commit → reopen → read-back round-trip (the spike already
+  proves this round-trip works on 2.0.5; the test pins it in CI).
 
 ### PR #4 — First concrete virtual dataset (end to end)
 
@@ -933,31 +1003,65 @@ reflect both:
 
 Decision deferred to PR #4 — pick by demand and convenience at the time.
 
-## Spike bundle
+## Spike results
 
-Run once in PR #3, against a local icechunk 2.x repo. The retry/commit design
-handles either answer for each; we want the operational numbers and to validate
-assumptions before the first dataset ships:
+Run **before** PR #3 (derisked up front rather than during implementation),
+against local-filesystem icechunk repos. Environment: **icechunk 2.0.5, zarr
+3.1.3, xarray 2026.1.0, numpy 2.4.6, gribberish 0.30.3, Python 3.14.** Every item
+landed; none forced a design change except #3 (empty commits raise).
 
-1. **Bytes per ref** — measure icechunk's manifest overhead per virtual ref, so
-   the [Scale](#scale) manifest-size and split-size numbers stop being guesses.
-2. **Manifest split semantics** — per-array, along a named (append) dim; a
-   commit rewrites only the boundary-crossing split. Measure the split-size
-   constant against commit latency.
-3. **Empty commit** — committing a session with no net change is a no-op (not an
-   error); the loop must skip "nothing new."
-4. **Chunk-key encoding API** — the zarr-internal API to read an array's chunk
-   key encoding, so neither emit nor filter hand-rolls the key string (see
-   [Chunk keys](#chunk-keys)). (Ref-presence-without-decode is already resolved:
-   `IcechunkStore.exists(key)`.)
-5. **float64 round-trip** — GribberishCodec decode dtype; confirm float64 arrays
-   read back correctly.
-6. **`serializer` through `to_zarr`** — `zarr~=3.1` honors a `serializer`
-   encoding key written via xarray.
-7. **`set_virtual_refs` (plural)** — batch API availability and semantics.
-8. **`IcechunkVirtualConfig` serialization** — whether icechunk's
-   `VirtualChunkContainer` / `ManifestSplittingConfig` round-trip declaratively,
-   or need the thin shim (see [Storage configuration](#storage-configuration)).
+1. **Bytes per ref → ~25 bytes/ref.** Realistic distinct GRIB URLs (~79 chars)
+   with random offsets/lengths and icechunk's default location compression:
+   **25.4 B/ref** (50 k refs → 1.27 MB manifest). Sequential offsets: 18.6;
+   single shared URL: 9.2. At 10⁹ refs → ~25 GB of manifest dataset-wide. Fixes
+   the [Scale](#scale) and split-size numbers.
+2. **Manifest split semantics → confirmed, as designed.** Per-array along a named
+   dim via `ManifestSplittingConfig.from_dict({AnyArray(): {DimensionName("init_time"): N}})`.
+   A commit rewrites **only** the split(s) whose index range changed: a new init
+   wrote one ~440 B split and carried all 5 historical splits over unchanged by
+   id; touching one existing split rewrote ~2.2 KB and left the other 5 untouched.
+   Commit cost = active-split size (~11 B × split ref count). Policy persists in
+   repo config. (See [Manifest splitting](#manifest-splitting).)
+3. **Empty commit → RAISES (design change).** `session.commit` on an unchanged
+   session raises `IcechunkError` ("no changes made to the session"), *not* a
+   no-op. Guard with the `session.has_uncommitted_changes` bool property (or
+   `allow_empty=True`). Re-emitting byte-identical refs *does* dirty the session,
+   so idempotent replay still commits (harmless, content-addressed); the guard
+   only fires on an empty poll. (See [the write loop](#the-virtual-write-loop).)
+4. **Chunk-key encoding API → `array.metadata.chunk_key_encoding`.**
+   `.encode_chunk_key((i,j,k,l)) → "c/i/j/k/l"`; full key `f"{array.path}/{…}"`;
+   `await store.exists(key)` True/False against the manifest, no decode. Emit uses
+   chunk *indices* directly (`VirtualChunkSpec(index=…)` / `set_virtual_refs_arr`),
+   so only the filter touches the string key. (See [Chunk keys](#chunk-keys).)
+5. **float64 round-trip → confirmed, native (no cast).** `parse_grib_array`
+   returns float64 natively, so declaring float64 keeps the values verbatim — the
+   codec's `astype` is skipped (declared == native); only a non-float64
+   declaration like Appendix A's float32 would downcast. Full path (virtual ref →
+   icechunk 2.0.5 → xarray `.values`) returned float64 byte-equal to a direct
+   decode of an HRRR TMP message (260.4–317.1 K).
+6. **`serializer` through `to_zarr` → confirmed.** xarray writes
+   `{"name":"gribberish","configuration":{"var":…}}` straight into `zarr.json`
+   codecs and reopens it intact — so each array's grib element (`var`) is
+   persisted honestly in its metadata. Caveat: keep data vars **lazy** (dask)
+   under `compute=False` so the read-only codec isn't invoked — which
+   `write_metadata` already does via `make_empty_variable`. (See
+   [Per-variable serializer](#per-variable-serializer).)
+7. **`set_virtual_refs` (plural) → confirmed, three forms.**
+   `set_virtual_refs(path, list[VirtualChunkSpec], validate_containers)` and the
+   columnar `set_virtual_refs_arr(path, chunk_grid_shape, locations, offsets_u64,
+   lengths_u64, *, validate_containers, arr_offset, checksum)` (zero-copy;
+   empty-string locations silently skipped; `arr_offset` writes a sub-block for
+   appends). Both return `None` on success or a list of validation-failed indices.
+8. **`IcechunkVirtualConfig` serialization → thin shim required.** icechunk's
+   types don't round-trip (opaque `.store` on `VirtualChunkContainer`; object-keyed
+   `ManifestSplittingConfig.to_dict()`). But `save_config` persists containers +
+   split policy into the repo (recovered by `Repository.open` / `fetch_config`),
+   so the shim is small and readers recover containers from the store, supplying
+   only the credentials map. (See [Storage configuration](#storage-configuration).)
+
+Spike scripts live under `/tmp/spike/` for the run that produced these numbers;
+they are throwaway (local-FS repos, synthetic refs, gribberish via `uv run --with`)
+and are not checked in — PR #3's integration tests are the durable versions.
 
 ## Open questions
 
@@ -980,7 +1084,8 @@ PR #511 (closed, prototype only) demonstrated the full set-virtual-ref loop
 end-to-end against real NOAA GFS S3 GRIB files: backfill 3 inits × 7 leads, add
 a partial new init via `resize()` + refs, then fill the remaining leads. NaN
 fill covered unfilled chunks automatically. It used icechunk 1.1.15; the repo is
-now on `icechunk~=2.0` — hence the [spike bundle](#spike-bundle).
+now on `icechunk~=2.0`, and the [spike results](#spike-results) re-verified the
+read/write path (including the float64 read-back) on icechunk 2.0.5.
 
 **Repository creation with a virtual chunk container:**
 
