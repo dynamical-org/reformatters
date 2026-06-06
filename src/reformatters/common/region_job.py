@@ -423,7 +423,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
 
     def __repr__(self) -> str:
-        return f"RegionJob(region=({self.region.start}, {self.region.stop}), data_vars={[v.name for v in self.data_vars]})"
+        return f"{type(self).__name__}(region=({self.region.start}, {self.region.stop}), data_vars={[v.name for v in self.data_vars]})"
 
 
 class MaterializedRegionJob(
@@ -474,7 +474,7 @@ class MaterializedRegionJob(
 
         Returns
         -------
-        ArrayFloat32 | ArrayInt16
+        ArrayND[np.generic]
             The loaded data.
         """
         raise NotImplementedError(

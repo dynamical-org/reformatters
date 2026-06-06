@@ -79,7 +79,7 @@ uv run pytest tests/$DATASET_PATH/template_config_test.py
 
 ### 4. Implement `RegionJob` subclass
 
-Work through `src/reformatters/$DATASET_PATH/region_job.py`, implementing the attributes and method definitions based on the unique structure and processing required for your dataset. A materialized (rechunked) dataset subclasses `MaterializedRegionJob` (the download → read → write pipeline); the scaffolded example already does this.
+Work through `src/reformatters/$DATASET_PATH/region_job.py`, implementing the attributes and method definitions based on the unique structure and processing required for your dataset. This guide walks through implementing a `MaterializedRegionJob`, the `RegionJob` subclass used for rechunked Icechunk Zarr data (as opposed to `VirtualRegionJob` for virtual Icechunk datasets).
 
 There are four required methods:
 
