@@ -27,6 +27,7 @@ from reformatters.noaa.gefs.forecast_35_day.template_config import (
     GefsForecast35DayTemplateConfig,
 )
 from reformatters.noaa.gefs.gefs_config_models import (
+    GEFS_S_FILE_MAX,
     GEFSDataVar,
     GefsEnsembleSourceFileCoord,
     GEFSInternalAttrs,
@@ -749,6 +750,21 @@ def test_download_and_read_all_vars_current(lead_time: pd.Timedelta) -> None:
         for data_var in group:
             data = region_job.read_data(coord, data_var)
             assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
+            if lead_time > GEFS_S_FILE_MAX:
+                # a/b files are 0.5° upsampled to 0.25°. The easternmost column (179.75°)
+                # must wrap across the antimeridian, interpolating halfway between the
+                # 179.5° column and the -180° column. A bug in longitude wrapping instead
+                # zero-filled this column (finite, so the isfinite check above misses it).
+                data = data.astype(np.float64)
+                east_column = data[..., -1]
+                wrap_interpolation = (data[..., -2] + data[..., 0]) / 2
+                np.testing.assert_allclose(
+                    east_column,
+                    wrap_interpolation,
+                    rtol=1e-4,
+                    atol=1e-2,
+                    err_msg=f"Eastern column not longitude-wrapped for {data_var.name}",
+                )
 
     groups = list(GefsForecast35DayRegionJob.source_groups(template_config.data_vars))
     with ThreadPoolExecutor() as pool:
