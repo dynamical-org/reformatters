@@ -386,10 +386,10 @@ candidates = self.generate_source_file_coords(scope)          # shared w/ materi
 remaining  = self.filter_already_present(candidates, store, ds)
 
 for batch in self.process_virtual_refs(remaining, deadline):  # batch == 1+ whole files
-    self.sync_dims_to(store, batch.extent)                    # idempotent; no-op if already covered
-    store.set_virtual_refs(path, batch.refs)                  # plural API, per array path
-    if store.session.has_uncommitted_changes:                 # guard: empty commit raises
-        commit(store)                                         # one commit per yield
+    assert batch.refs                                         # contract: never an empty yield
+    self.sync_dims_to(stores, batch.extent)                  # idempotent; no-op if already covered
+    self.set_virtual_refs(stores, batch.refs)                # per array path, all stores
+    commit(stores)                                           # one commit per yield (never empty)
 ```
 
 `sync_dims_to(store, extent)` is the single primitive that unifies pre-sizing
@@ -415,16 +415,18 @@ yield-immediately. The atomicity invariant (see
 [Reader safety](#reader-safety)) says each yield is **whole files** — never
 splitting a file across yields — but a yield can contain one file or many.
 
-> **Empty commits raise — guard them.** icechunk's `session.commit` raises
-> `IcechunkError` ("no changes made to the session") rather than no-opping, and
-> the shared `storage.commit_if_icechunk` helper commits unconditionally. A
-> well-behaved generator never yields an empty batch, but the driver still guards
-> on `session.has_uncommitted_changes` before committing (the alternative,
-> `allow_empty=True`, would litter the history with empty snapshots). This pairs
-> with the idempotency story: **setting refs always dirties the session — even
-> re-emitting byte-identical refs** — so the guard fires only on a genuinely
-> empty poll, never on idempotent replay (a filter false-negative just rewrites
-> an identical, content-addressed manifest and commits a no-content snapshot).
+> **Empty commits raise — so the contract forbids empty yields.** icechunk's
+> `session.commit` raises `IcechunkError` ("no changes made to the session")
+> rather than no-opping. Rather than guard each commit on
+> `session.has_uncommitted_changes`, the loop relies on the generator contract:
+> each yield is one commit's worth of **whole files**, so a batch always has refs,
+> and **setting refs always dirties the session — even re-emitting byte-identical
+> refs** — so the commit is never empty. The loop **asserts** `batch.refs` (a
+> loud, early failure if a generator ever violates the contract) and leaves
+> `commit_if_icechunk` committing unconditionally. The empty-poll and
+> everything-already-present cases never reach the commit at all — they yield no
+> batch, so the loop body simply doesn't run (a filter false-negative still
+> re-emits and commits an idempotent, content-addressed no-content snapshot).
 
 The two flows fall out naturally:
 
@@ -950,24 +952,46 @@ Mechanical; tests pass unchanged.
 The spike is already done (run ahead of this PR — see
 [Spike results](#spike-results)), so PR #3 is just the implementation it derisked.
 
-- Add `VirtualRegionJob` (the virtual write loop, `process_virtual_refs`
+- Add `VirtualRegionJob` (the `process_virtual` write loop, `process_virtual_refs`
   abstract generator, `filter_already_present` default, `sync_dims_to`,
-  `chunk_key`). Use `set_virtual_refs_arr` (columnar, zero-copy) for the emit
-  batches; `array.metadata.chunk_key_encoding.encode_chunk_key` + `store.exists`
-  for the filter.
-- Extend `_process_region_jobs` with the single fork (virtual + operational →
-  single-writer-to-`main`; else existing path). **Guard commits on
-  `session.has_uncommitted_changes`** — empty commits raise, and the shared
-  `storage.commit_if_icechunk` currently commits unconditionally, so either teach
-  it the guard or wrap the call.
+  `chunk_key`). Emit with `set_virtual_refs` (explicit `VirtualChunkSpec` per ref)
+  — it handles arbitrary sparse cell sets directly, which the common
+  one-message-per-`(var, cell)` packing produces; `set_virtual_refs_arr`'s dense
+  columnar block is a later optimization for contiguous backfill ranges. The
+  filter builds keys from `array.metadata.chunk_key_encoding.encode_chunk_key` +
+  `store.exists`.
+- `process_virtual` is driven from the `icechunk.Repository` objects (not a
+  pre-opened store): a committed icechunk session is read-only, so each yielded
+  batch opens a **fresh writable session** on the branch, emits, and commits.
+- Extend `_process_region_jobs` with the virtual fork: virtual + operational →
+  single-writer-to-`main` (no temp branch / `parallel_setup` / `finalize`);
+  virtual backfill → the existing temp-branch flow, but route the per-job middle
+  through `process_virtual` (fresh sessions) rather than the materialized
+  per-job-store loop. **No commit guard** — the generator contract forbids empty
+  yields, so the loop `assert`s `batch.refs` and `commit_if_icechunk` stays
+  unconditional (see [the write loop](#the-virtual-write-loop)).
+- Partitioning: `get_jobs` partitions by `encoding["shards"]` if present, else by
+  `encoding["chunks"]` (virtual arrays have no shards). Materialized behavior is
+  unchanged.
+- `sync_dims_to` appends the new slice of the (already-derived) template via
+  `to_zarr(append_dim=…, compute=False)`, keeping data vars dask-lazy so the
+  decode-only serializer is never invoked; `chunk_key` derives indices from the
+  full-size template, so it never re-reads the growing store.
+- Storage: `_virtual_repository_config_and_credentials` also accepts
+  local-filesystem containers (no credentials) so dev/test virtual datasets can
+  point at local files.
 - Document the `process_virtual_refs` generator contract: each yield is one
   commit's worth of whole files; operational yields ~1 file at a time for
   per-file visibility, backfill yields batches of ~N files to amortize commit
   overhead. No timer, no `max_seconds_between_commits` knob — the driver commits
   on every yield.
-- Integration tests: yield-count/grouping; concurrent disjoint-chunk backfill on
-  a branch; emit → commit → reopen → read-back round-trip (the spike already
-  proves this round-trip works on 2.0.5; the test pins it in CI).
+- Tests: a synthetic virtual dataset (local-filesystem container, raw-float64
+  "messages" file, default `BytesCodec`) drives unit tests (`chunk_key`,
+  sizing) and integration tests — yield-count/grouping, two-worker disjoint
+  backfill on a branch, operational single-writer expansion + idempotent second
+  fire, and an emit → commit → reopen → **value** read-back round-trip (catches
+  bad chunk keys *and* byte ranges in CI). A separate test pins that a
+  `GribberishCodec` serializer threads through expansion without being invoked.
 
 ### PR #4 — First concrete virtual dataset (end to end)
 
@@ -1050,10 +1074,12 @@ landed; none forced a design change except #3 (empty commits raise).
    repo config. (See [Manifest splitting](#manifest-splitting).)
 3. **Empty commit → RAISES (design change).** `session.commit` on an unchanged
    session raises `IcechunkError` ("no changes made to the session"), *not* a
-   no-op. Guard with the `session.has_uncommitted_changes` bool property (or
-   `allow_empty=True`). Re-emitting byte-identical refs *does* dirty the session,
-   so idempotent replay still commits (harmless, content-addressed); the guard
-   only fires on an empty poll. (See [the write loop](#the-virtual-write-loop).)
+   no-op. The implementation avoids this not by guarding the commit but by the
+   generator contract: every yield is a non-empty batch and re-emitting
+   byte-identical refs *does* dirty the session, so the commit is never empty
+   (idempotent replay still commits a harmless, content-addressed snapshot). The
+   loop `assert`s `batch.refs`; the empty-poll / all-present cases yield no batch
+   and never reach the commit. (See [the write loop](#the-virtual-write-loop).)
 4. **Chunk-key encoding API → `array.metadata.chunk_key_encoding`.**
    `.encode_chunk_key((i,j,k,l)) → "c/i/j/k/l"`; full key `f"{array.path}/{…}"`;
    `await store.exists(key)` True/False against the manifest, no decode. Emit uses
