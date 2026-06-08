@@ -29,7 +29,7 @@ from reformatters.common.types import (
     Timestamp,
 )
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, vars_available
-from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
+from reformatters.ecmwf.ecmwf_grib_index import grib_message_byte_ranges_from_index
 from reformatters.ecmwf.ecmwf_utils import (
     EcmwfOpenDataSource,
     ecmwf_download_with_fallback,
@@ -141,7 +141,7 @@ class EcmwfAifsSingleForecastRegionJob(
             coord.get_index_url(source), self.dataset_id, disk_cache=True
         )
 
-        byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(
+        byte_range_starts, byte_range_ends = grib_message_byte_ranges_from_index(
             idx_local_path,
             coord.data_var_group,
         )

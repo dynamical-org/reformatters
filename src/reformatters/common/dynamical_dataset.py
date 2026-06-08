@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Annotated, Any, Generic, Literal, TypeVar
+from typing import Annotated, Any, Generic, Literal, Self, TypeVar
 
 import numpy as np
 import pandas as pd
@@ -15,7 +15,7 @@ import sentry_sdk.crons
 import typer
 import xarray as xr
 from icechunk.store import IcechunkStore
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, model_validator
 
 from reformatters.common import (
     parallel_coordination,
@@ -40,7 +40,13 @@ from reformatters.common.region_job import (
     SourceFileCoord,
     SourceFileResult,
 )
-from reformatters.common.storage import StorageConfig, StoreFactory, get_local_tmp_store
+from reformatters.common.storage import (
+    DatasetFormat,
+    IcechunkVirtualConfig,
+    StorageConfig,
+    StoreFactory,
+    get_local_tmp_store,
+)
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike
 
@@ -58,6 +64,30 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     primary_storage_config: StorageConfig
     replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
+    # Set for virtual datasets only; threaded through to every store this dataset opens.
+    icechunk_virtual_config: IcechunkVirtualConfig | None = None
+
+    @model_validator(mode="after")
+    def _validate_virtual_storage(self) -> Self:
+        # Virtual datasets store icechunk metadata + virtual chunk refs, so every
+        # store must be icechunk. The complementary direction (a virtual
+        # region_job_class requires icechunk_virtual_config) lands with
+        # VirtualRegionJob in PR #3.
+        if self.icechunk_virtual_config is not None:
+            non_icechunk = [
+                config
+                for config in (
+                    self.primary_storage_config,
+                    *self.replica_storage_configs,
+                )
+                if config.format != DatasetFormat.ICECHUNK
+            ]
+            if non_icechunk:
+                raise ValueError(
+                    "icechunk_virtual_config requires every storage config to use "
+                    f"the ICECHUNK format, but found: {non_icechunk}"
+                )
+        return self
 
     @computed_field
     @property
@@ -67,6 +97,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             replica_storage_configs=self.replica_storage_configs,
             dataset_id=self.dataset_id,
             template_config_version=self.template_config.version,
+            icechunk_virtual_config=self.icechunk_virtual_config,
         )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:

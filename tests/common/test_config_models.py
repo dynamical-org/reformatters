@@ -78,6 +78,21 @@ class TestEncodingValidation:
                 fill_value=-1,
             )
 
+    def test_serializer_defaults_to_none(self) -> None:
+        enc = Encoding(dtype="float64", chunks=(1, 1), shards=None, fill_value=0.0)
+        assert enc.serializer is None
+
+    def test_serializer_dict_is_retained(self) -> None:
+        serializer = {"name": "gribberish", "configuration": {"var": "TMP"}}
+        enc = Encoding(
+            dtype="float64",
+            chunks=(1, 1),
+            shards=None,
+            fill_value=0.0,
+            serializer=serializer,
+        )
+        assert enc.serializer == serializer
+
 
 class TestDatasetAttributes:
     def test_valid_attributes(self) -> None:

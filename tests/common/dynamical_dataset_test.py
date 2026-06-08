@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import ClassVar
 from unittest.mock import Mock
 
+import icechunk
 import numpy as np
 import pandas as pd
 import pytest
@@ -14,7 +15,7 @@ import sentry_sdk.crons
 import xarray as xr
 import zarr
 import zarr.errors
-from pydantic import computed_field
+from pydantic import ValidationError, computed_field
 
 from reformatters.common import dynamical_dataset, storage, template_utils, validation
 from reformatters.common.config import Config, Env
@@ -27,7 +28,13 @@ from reformatters.common.config_models import (
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.common.region_job import MaterializedRegionJob, SourceFileCoord
-from reformatters.common.storage import _NO_SECRET_NAME, DatasetFormat, StorageConfig
+from reformatters.common.storage import (
+    _NO_SECRET_NAME,
+    DatasetFormat,
+    IcechunkVirtualConfig,
+    StorageConfig,
+    append_dim_split,
+)
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 
@@ -145,6 +152,51 @@ def test_dynamical_dataset_init() -> None:
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
     )
+
+
+class TestIcechunkVirtualConfigValidation:
+    @staticmethod
+    def _virtual_config() -> IcechunkVirtualConfig:
+        container = icechunk.VirtualChunkContainer(
+            "s3://noaa-gfs-bdp-pds/",
+            icechunk.s3_store(region="us-east-1", anonymous=True),
+        )
+        return IcechunkVirtualConfig(
+            containers=(container,), manifest_split=append_dim_split(1000, dim="time")
+        )
+
+    def test_rejects_non_icechunk_primary(self) -> None:
+        # ExampleDataset's default primary_storage_config uses the ZARR3 format.
+        with pytest.raises(ValidationError, match="ICECHUNK"):
+            ExampleDataset(icechunk_virtual_config=self._virtual_config())
+
+    def test_rejects_non_icechunk_replica(self) -> None:
+        with pytest.raises(ValidationError, match="ICECHUNK"):
+            ExampleDataset(
+                primary_storage_config=ExampleDatasetStorageConfig(
+                    format=DatasetFormat.ICECHUNK
+                ),
+                replica_storage_configs=[
+                    StorageConfig(
+                        base_path="s3://bucket/replica", format=DatasetFormat.ZARR3
+                    )
+                ],
+                icechunk_virtual_config=self._virtual_config(),
+            )
+
+    def test_accepts_all_icechunk_stores(self) -> None:
+        dataset = ExampleDataset(
+            primary_storage_config=ExampleDatasetStorageConfig(
+                format=DatasetFormat.ICECHUNK
+            ),
+            icechunk_virtual_config=self._virtual_config(),
+        )
+        assert dataset.store_factory.icechunk_virtual_config is not None
+
+    def test_materialized_dataset_needs_no_virtual_config(self) -> None:
+        dataset = ExampleDataset()
+        assert dataset.icechunk_virtual_config is None
+        assert dataset.store_factory.icechunk_virtual_config is None
 
 
 def test_update_template(monkeypatch: pytest.MonkeyPatch) -> None:
