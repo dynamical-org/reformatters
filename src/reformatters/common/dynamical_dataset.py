@@ -202,15 +202,23 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 reformat_job_name=reformat_job_name,
             )
 
-            self._process_region_jobs(
-                all_jobs=all_jobs,
-                worker_index=worker_index,
-                workers_total=workers_total,
-                reformat_job_name=reformat_job_name,
-                template_ds=template_ds,
-                tmp_store=tmp_store,
-                update_template_with_results=True,
-            )
+            is_virtual = issubclass(self.region_job_class, VirtualRegionJob)
+            if is_virtual:
+                # Virtual operational updates are single-writer streaming (whole
+                # files committed straight to main as they arrive) — a different
+                # lifecycle from the parallel temp-branch coordinator, so they
+                # don't go through _process_region_jobs.
+                self._run_virtual_operational_update(all_jobs, workers_total)
+            else:
+                self._process_region_jobs(
+                    all_jobs=all_jobs,
+                    worker_index=worker_index,
+                    workers_total=workers_total,
+                    reformat_job_name=reformat_job_name,
+                    template_ds=template_ds,
+                    tmp_store=tmp_store,
+                    update_template_with_results=True,
+                )
 
         log.info(
             f"Operational update complete. Wrote to primary store: {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()} replicas"
@@ -409,24 +417,20 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         *,
         update_template_with_results: bool,
     ) -> None:
-        """Shared processing loop for both updates and backfills.
+        """Parallel temp-branch coordinator: worker 0 sets up, all workers
+        process, the last worker finalizes (resets main / writes deferred metadata).
 
         Coordinates parallel writes across multiple workers:
         - Icechunk stores: uses a temp branch so readers on "main" never see partial data
         - Zarr v3 stores: defers metadata write until all workers finish
 
-        Virtual datasets fork here: a virtual *operational* update commits whole
-        source files straight to "main" (single writer, no temp branch) for ~5 s
-        visibility; a virtual *backfill* reuses the temp-branch flow but routes job
+        Shared by materialized backfill, materialized operational, and virtual
+        backfill. A virtual *backfill* reuses the temp-branch flow but routes job
         processing through process_virtual (per-batch sessions) instead of the
-        materialized per-job-store loop.
+        materialized per-job-store loop. Virtual *operational* updates are
+        single-writer streaming and run via update(), not here.
         """
         is_virtual = issubclass(self.region_job_class, VirtualRegionJob)
-
-        if is_virtual and update_template_with_results:
-            self._process_virtual_operational_jobs(all_jobs, workers_total)
-            return
-
         is_first = worker_index == 0
         is_last = worker_index == workers_total - 1
         worker_jobs = get_worker_jobs(all_jobs, worker_index, workers_total)
@@ -525,7 +529,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 update_template_with_results=update_template_with_results,
             )
 
-    def _process_virtual_operational_jobs(
+    def _run_virtual_operational_update(
         self,
         all_jobs: Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]],
         workers_total: int,

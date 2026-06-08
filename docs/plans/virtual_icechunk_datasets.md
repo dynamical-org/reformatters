@@ -963,10 +963,13 @@ The spike is already done (run ahead of this PR — see
 - `process_virtual` is driven from the `icechunk.Repository` objects (not a
   pre-opened store): a committed icechunk session is read-only, so each yielded
   batch opens a **fresh writable session** on the branch, emits, and commits.
-- Extend `_process_region_jobs` with the virtual fork: virtual + operational →
-  single-writer-to-`main` (no temp branch / `parallel_setup` / `finalize`);
-  virtual backfill → the existing temp-branch flow, but route the per-job middle
-  through `process_virtual` (fresh sessions) rather than the materialized
+- Two coordination lifecycles, forked at the entry points (not deep in one
+  method): **single-writer streaming** (virtual operational) forks in `update()`
+  → `_run_virtual_operational_update`, committing whole files straight to `main`
+  with no temp branch / `parallel_setup` / `finalize`; the **parallel temp-branch
+  coordinator** (`_process_region_jobs`, shared by materialized backfill,
+  materialized operational, and virtual backfill) routes its per-job middle
+  through `process_virtual` (fresh sessions) for virtual, else the materialized
   per-job-store loop. **No commit guard** — the generator contract forbids empty
   yields, so the loop `assert`s `batch.refs` and `commit_if_icechunk` stays
   unconditional (see [the write loop](#the-virtual-write-loop)).

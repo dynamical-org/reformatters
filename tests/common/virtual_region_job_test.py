@@ -560,15 +560,7 @@ def test_virtual_operational_single_writer_expands_main(tmp_path: Path) -> None:
         full_template, region=slice(0, 4), deadline=pd.Timestamp("2100-01-01")
     )
 
-    dataset._process_region_jobs(
-        all_jobs=[job],
-        worker_index=0,
-        workers_total=1,
-        reformat_job_name="test",
-        template_ds=full_template,
-        tmp_store=dataset._tmp_store(),
-        update_template_with_results=True,
-    )
+    dataset._run_virtual_operational_update([job], workers_total=1)
 
     # Single writer committed straight to main (no temp branch ever created).
     assert list(_primary_repo(dataset.store_factory).list_branches()) == ["main"]
@@ -584,15 +576,7 @@ def test_virtual_operational_second_fire_sees_no_new_work(tmp_path: Path) -> Non
         job = _make_region_job(
             full_template, region=slice(0, 4), deadline=pd.Timestamp("2100-01-01")
         )
-        dataset._process_region_jobs(
-            all_jobs=[job],
-            worker_index=0,
-            workers_total=1,
-            reformat_job_name="test",
-            template_ds=full_template,
-            tmp_store=dataset._tmp_store(),
-            update_template_with_results=True,
-        )
+        dataset._run_virtual_operational_update([job], workers_total=1)
 
     fire()
     repo = _primary_repo(dataset.store_factory)
