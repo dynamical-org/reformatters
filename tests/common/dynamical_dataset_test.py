@@ -26,7 +26,7 @@ from reformatters.common.config_models import (
 )
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
-from reformatters.common.region_job import RegionJob, SourceFileCoord
+from reformatters.common.region_job import MaterializedRegionJob, SourceFileCoord
 from reformatters.common.storage import _NO_SECRET_NAME, DatasetFormat, StorageConfig
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
@@ -66,7 +66,7 @@ class ExampleSourceFileCoord(SourceFileCoord):
     pass
 
 
-class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoord]):
+class ExampleRegionJob(MaterializedRegionJob[ExampleDataVar, ExampleSourceFileCoord]):
     max_vars_per_job: ClassVar[int] = 2
 
 

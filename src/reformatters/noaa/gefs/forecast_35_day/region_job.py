@@ -11,7 +11,7 @@ from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
-from reformatters.common.region_job import RegionJob
+from reformatters.common.region_job import MaterializedRegionJob, RegionJob
 from reformatters.common.types import AppendDim, ArrayND, DatetimeLike
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFSDataVar,
@@ -34,7 +34,7 @@ class GefsForecast35DaySourceFileCoord(GefsEnsembleSourceFileCoord):
 
 
 class GefsForecast35DayRegionJob(
-    RegionJob[GEFSDataVar, GefsForecast35DaySourceFileCoord]
+    MaterializedRegionJob[GEFSDataVar, GefsForecast35DaySourceFileCoord]
 ):
     """RegionJob for GEFS Forecast 35-Day dataset processing."""
 

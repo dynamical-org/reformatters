@@ -22,7 +22,7 @@ from reformatters.common.config_models import (
 )
 from reformatters.common.iterating import get_worker_jobs
 from reformatters.common.region_job import (
-    RegionJob,
+    MaterializedRegionJob,
     SourceFileCoord,
     SourceFileResult,
     SourceFileStatus,
@@ -62,7 +62,7 @@ class ExampleSourceFileCoords(SourceFileCoord):
         return f"https://test.org/testfile{self.time.strftime('%Y%m%d%H%M')}"
 
 
-class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoords]):
+class ExampleRegionJob(MaterializedRegionJob[ExampleDataVar, ExampleSourceFileCoords]):
     max_vars_per_job: ClassVar[int] = 2
 
     @classmethod

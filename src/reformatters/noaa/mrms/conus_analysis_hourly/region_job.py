@@ -18,6 +18,7 @@ from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import replace
 from reformatters.common.region_job import (
     CoordinateValue,
+    MaterializedRegionJob,
     RegionJob,
     SourceFileCoord,
 )
@@ -78,7 +79,9 @@ class NoaaMrmsSourceFileCoord(SourceFileCoord):
         return {"time": self.time}
 
 
-class NoaaMrmsRegionJob(RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]):
+class NoaaMrmsRegionJob(
+    MaterializedRegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]
+):
     def get_processing_region(self) -> slice:
         """Buffer start by one step to allow deaccumulation without gaps in resulting output."""
         return slice(max(0, self.region.start - 1), self.region.stop)

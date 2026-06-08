@@ -34,7 +34,7 @@ from reformatters.common.config_models import (
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.common.region_job import (
-    RegionJob,
+    MaterializedRegionJob,
     SourceFileCoord,
 )
 from reformatters.common.storage import DatasetFormat, StorageConfig
@@ -80,7 +80,9 @@ class ParallelSourceFileCoord(SourceFileCoord):
         return f"https://test.org/{self.time.isoformat()}"
 
 
-class ParallelRegionJob(RegionJob[ParallelDataVar, ParallelSourceFileCoord]):
+class ParallelRegionJob(
+    MaterializedRegionJob[ParallelDataVar, ParallelSourceFileCoord]
+):
     max_vars_per_job: ClassVar[int] = 2
 
     def generate_source_file_coords(

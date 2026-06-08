@@ -13,6 +13,7 @@ from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValue,
+    MaterializedRegionJob,
     RegionJob,
     SourceFileResult,
 )
@@ -60,7 +61,9 @@ class GefsAnalysisSourceFileCoord(GefsEnsembleSourceFileCoord):
         }
 
 
-class GefsAnalysisRegionJob(RegionJob[GEFSDataVar, GefsAnalysisSourceFileCoord]):
+class GefsAnalysisRegionJob(
+    MaterializedRegionJob[GEFSDataVar, GefsAnalysisSourceFileCoord]
+):
     """RegionJob for GEFS Analysis dataset processing."""
 
     # 1 makes logic simpler when accessing GEFSv12 reforecast which has a file per variable

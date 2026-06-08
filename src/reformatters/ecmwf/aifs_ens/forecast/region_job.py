@@ -15,6 +15,7 @@ from reformatters.common.iterating import digest, group_by
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValue,
+    MaterializedRegionJob,
     RegionJob,
     SourceFileCoord,
 )
@@ -96,7 +97,7 @@ class EcmwfAifsEnsForecastSourceFileCoord(SourceFileCoord):
 
 
 class EcmwfAifsEnsForecastRegionJob(
-    RegionJob[EcmwfDataVar, EcmwfAifsEnsForecastSourceFileCoord]
+    MaterializedRegionJob[EcmwfDataVar, EcmwfAifsEnsForecastSourceFileCoord]
 ):
     max_vars_per_download_group: ClassVar[int] = 2
     max_vars_per_job: ClassVar[int] = 4
