@@ -15,7 +15,7 @@ import zarr
 import zarr.abc.store
 import zarr.storage
 from icechunk.store import IcechunkStore
-from pydantic import Field, computed_field
+from pydantic import Field, InstanceOf, computed_field
 from zarr.abc.store import Store
 
 from reformatters.common import kubernetes
@@ -23,6 +23,7 @@ from reformatters.common.config import Config, Env
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.retry import retry
+from reformatters.common.types import AppendDim
 
 log = get_logger(__name__)
 
@@ -58,6 +59,9 @@ class StoreFactory(FrozenBaseModel):
     replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
     dataset_id: str
     template_config_version: str
+    icechunk_virtual_config: IcechunkVirtualConfig | None = (
+        None  # None for materialized datasets
+    )
 
     @computed_field
     @property
@@ -96,7 +100,13 @@ class StoreFactory(FrozenBaseModel):
             self.primary_storage_config,
         )
 
-        return _get_store(store_path, self.primary_storage_config, writable, branch)
+        return _get_store(
+            store_path,
+            self.primary_storage_config,
+            writable,
+            branch,
+            self.icechunk_virtual_config,
+        )
 
     def replica_stores(
         self, writable: bool = False, branch: str = "main"
@@ -108,7 +118,9 @@ class StoreFactory(FrozenBaseModel):
         stores = []
         for config in self.replica_storage_configs:
             store_path = _get_store_path(self.dataset_id, self.version, config)
-            store = _get_store(store_path, config, writable, branch)
+            store = _get_store(
+                store_path, config, writable, branch, self.icechunk_virtual_config
+            )
             stores.append(store)
 
         return stores
@@ -151,7 +163,14 @@ class StoreFactory(FrozenBaseModel):
                 continue
             store_path = _get_store_path(self.dataset_id, self.version, config)
             ic_storage = _get_icechunk_storage(store_path, config)
-            repo = icechunk.Repository.open_or_create(ic_storage)
+            repo_config, credentials = _virtual_repository_config_and_credentials(
+                self.icechunk_virtual_config
+            )
+            repo = icechunk.Repository.open_or_create(
+                ic_storage,
+                config=repo_config,
+                authorize_virtual_chunk_access=credentials,
+            )
             repos.append((role, repo))
 
         match sort:
@@ -288,12 +307,18 @@ def _build_dataset_url(
 
 
 def _get_store(
-    store_path: str, storage_config: StorageConfig, writable: bool, branch: str = "main"
+    store_path: str,
+    storage_config: StorageConfig,
+    writable: bool,
+    branch: str = "main",
+    virtual_config: IcechunkVirtualConfig | None = None,
 ) -> Store:
     match storage_config.format:
         case DatasetFormat.ICECHUNK:
             assert store_path.endswith(".icechunk")
-            return _get_icechunk_store(store_path, storage_config, writable, branch)
+            return _get_icechunk_store(
+                store_path, storage_config, writable, branch, virtual_config
+            )
         case DatasetFormat.ZARR3:
             assert store_path.endswith(".zarr")
             return _get_zarr3_store(store_path, storage_config, writable)
@@ -351,21 +376,29 @@ def _get_icechunk_store(
     storage_config: StorageConfig,
     writable: bool,
     branch: str = "main",
+    virtual_config: IcechunkVirtualConfig | None = None,
 ) -> IcechunkStore:
     storage = _get_icechunk_storage(store_path, storage_config)
+    repo_config, credentials = _virtual_repository_config_and_credentials(
+        virtual_config
+    )
 
     if writable:
         log.info(
             f"Opening icechunk store {store_path} on branch {branch} in writable mode"
         )
-        repo = icechunk.Repository.open_or_create(storage)
+        repo = icechunk.Repository.open_or_create(
+            storage, config=repo_config, authorize_virtual_chunk_access=credentials
+        )
         session = repo.writable_session(branch)
         return session.store
     else:
         log.info(
             f"Opening icechunk store {store_path} on branch {branch} in readonly mode"
         )
-        repo = icechunk.Repository.open(storage)
+        repo = icechunk.Repository.open(
+            storage, config=repo_config, authorize_virtual_chunk_access=credentials
+        )
         session = repo.readonly_session(branch)
         return session.store
 
@@ -410,3 +443,77 @@ def commit_if_icechunk(
             functools.partial(_commit, primary_store),
             max_attempts=10,
         )
+
+
+def manifest_append_dim_split(
+    *, split_size: int, dim: AppendDim
+) -> icechunk.ManifestSplittingConfig:
+    """Split every array's manifest along `dim` every `split_size` indices.
+
+    The common-case terse constructor for `IcechunkVirtualConfig.manifest_split`;
+    drop to `icechunk.ManifestSplittingConfig.from_dict` for per-array or
+    multi-dimensional split policies.
+    """
+    return icechunk.ManifestSplittingConfig.from_dict(
+        {
+            icechunk.ManifestSplitCondition.AnyArray(): {
+                icechunk.ManifestSplitDimCondition.DimensionName(dim): split_size
+            }
+        }
+    )
+
+
+class IcechunkVirtualConfig(FrozenBaseModel):
+    """Per-dataset configuration for an icechunk virtual-chunk store."""
+
+    # Source buckets the refs point into, registered as virtual chunk containers.
+    containers: tuple[InstanceOf[icechunk.VirtualChunkContainer], ...] = Field(
+        min_length=1
+    )
+    # Per-array manifest splitting policy (see manifest_append_dim_split).
+    manifest_split: InstanceOf[icechunk.ManifestSplittingConfig]
+
+
+def _virtual_repository_config_and_credentials(
+    virtual_config: IcechunkVirtualConfig | None,
+) -> tuple[icechunk.RepositoryConfig | None, dict[str, Any] | None]:
+    """Build the icechunk `RepositoryConfig` override and anonymous authorize map for a
+    virtual dataset, or `(None, None)` for a materialized one (icechunk uses defaults)."""
+    if virtual_config is None:
+        return None, None
+
+    config = icechunk.RepositoryConfig.default()
+    for container in virtual_config.containers:
+        config.set_virtual_chunk_container(container)
+    config.manifest = icechunk.ManifestConfig(splitting=virtual_config.manifest_split)
+
+    # Every source we target today is S3 or S3-compatible (NOAA NODD, ECMWF,
+    # Source Coop) and anonymous-read, and icechunk only ships an S3 anonymous
+    # credential constructor. Assert that here rather than silently handing an S3
+    # credential to a GCS/Azure container. To support a non-S3 or private /
+    # requester-pays source, add an optional per-container credentials field to
+    # IcechunkVirtualConfig and prefer it over this anonymous default.
+    s3_compatible_stores = (
+        icechunk.ObjectStoreConfig.S3,
+        icechunk.ObjectStoreConfig.S3Compatible,
+        icechunk.ObjectStoreConfig.Tigris,
+    )
+    for container in virtual_config.containers:
+        assert isinstance(container.store, s3_compatible_stores), (
+            f"Virtual chunk container {container.url_prefix} uses a non-S3 store "
+            f"({type(container.store).__name__}); only S3-compatible anonymous "
+            "sources are supported. Add explicit credentials to IcechunkVirtualConfig."
+        )
+
+    credentials = icechunk.containers_credentials(
+        {
+            container.url_prefix: icechunk.s3_anonymous_credentials()
+            for container in virtual_config.containers
+        }
+    )
+    return config, credentials
+
+
+# IcechunkVirtualConfig is defined below StoreFactory (which references it), so
+# resolve the forward reference now that the name exists.
+StoreFactory.model_rebuild()

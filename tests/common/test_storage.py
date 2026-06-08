@@ -7,17 +7,30 @@ import pytest
 import zarr
 import zarr.storage
 from icechunk.store import IcechunkStore
+from pydantic import ValidationError
 
 from reformatters.common import retry as retry_module
 from reformatters.common.config import Config, Env
 from reformatters.common.storage import (
     DatasetFormat,
+    IcechunkVirtualConfig,
     StorageConfig,
     StoreFactory,
     _get_store_path,
     _icechunk_to_s3fs_storage_options,
     commit_if_icechunk,
+    manifest_append_dim_split,
 )
+
+
+def _example_virtual_config() -> IcechunkVirtualConfig:
+    container = icechunk.VirtualChunkContainer(
+        "s3://noaa-gfs-bdp-pds/", icechunk.s3_store(region="us-east-1", anonymous=True)
+    )
+    return IcechunkVirtualConfig(
+        containers=(container,),
+        manifest_split=manifest_append_dim_split(split_size=1000, dim="init_time"),
+    )
 
 
 @pytest.mark.parametrize(
@@ -373,6 +386,73 @@ class TestIcechunkRepos:
         assert len(repos) == 2
         assert repos[0][0] == "primary"
         assert repos[1][0] == "replica-0"
+
+
+class TestIcechunkVirtualConfig:
+    def test_manifest_append_dim_split_structure(self) -> None:
+        split = manifest_append_dim_split(split_size=500, dim="init_time")
+        assert isinstance(split, icechunk.ManifestSplittingConfig)
+        # One AnyArray rule splitting the named dim every `split_size` indices.
+        [(condition, dim_splits)] = split.split_sizes
+        assert condition == icechunk.ManifestSplitCondition.AnyArray()
+        [(dim_condition, size)] = dim_splits
+        assert "init_time" in repr(dim_condition)
+        assert size == 500
+
+    def test_requires_at_least_one_container(self) -> None:
+        with pytest.raises(ValidationError):
+            IcechunkVirtualConfig(
+                containers=(),
+                manifest_split=manifest_append_dim_split(split_size=1, dim="init_time"),
+            )
+
+    def test_store_factory_registers_containers_and_split(self) -> None:
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/data", format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+            icechunk_virtual_config=_example_virtual_config(),
+        )
+        # icechunk_repos opens (and so creates) the repo with our override config.
+        repo = factory.icechunk_repos(sort="primary-first")[0][1]
+        containers = repo.config.virtual_chunk_containers
+        assert containers is not None
+        assert "s3://noaa-gfs-bdp-pds/" in containers
+        manifest = repo.config.manifest
+        assert manifest is not None
+        assert manifest.splitting is not None
+        assert manifest.splitting.split_sizes
+
+    def test_non_s3_container_rejected(self) -> None:
+        gcs_container = icechunk.VirtualChunkContainer(
+            "gs://bucket/", icechunk.gcs_store()
+        )
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/data", format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+            icechunk_virtual_config=IcechunkVirtualConfig(
+                containers=(gcs_container,),
+                manifest_split=manifest_append_dim_split(split_size=1, dim="init_time"),
+            ),
+        )
+        with pytest.raises(AssertionError, match="non-S3 store"):
+            factory.icechunk_repos(sort="primary-first")
+
+    def test_materialized_factory_registers_no_containers(self) -> None:
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/data", format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+        )
+        repo = factory.icechunk_repos(sort="primary-first")[0][1]
+        assert not repo.config.virtual_chunk_containers
 
 
 class TestBranchSupport:

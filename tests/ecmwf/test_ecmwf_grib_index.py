@@ -14,7 +14,7 @@ from reformatters.common.config_models import (
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, EcmwfInternalAttrs
 from reformatters.ecmwf.ecmwf_grib_index import (
     _parse_index_file,
-    get_message_byte_ranges_from_index,
+    grib_message_byte_ranges_from_index,
 )
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -97,7 +97,7 @@ def test_parse_index_file_correct_perturbed_member_offset(index_file: Path) -> N
 
 
 # ---------------------------------------------------------------------------
-# get_message_byte_ranges_from_index tests
+# grib_message_byte_ranges_from_index tests
 # ---------------------------------------------------------------------------
 
 
@@ -135,7 +135,7 @@ def _make_ecmwf_var(
 
 def test_get_byte_ranges_control_member_surface_var(index_file: Path) -> None:
     var = _make_ecmwf_var("temperature_2m", "2t", "sfc")
-    starts, ends = get_message_byte_ranges_from_index(
+    starts, ends = grib_message_byte_ranges_from_index(
         index_file, [var], ensemble_member=0
     )
     assert len(starts) == 1
@@ -146,7 +146,7 @@ def test_get_byte_ranges_control_member_surface_var(index_file: Path) -> None:
 
 def test_get_byte_ranges_perturbed_member(index_file: Path) -> None:
     var = _make_ecmwf_var("temperature_2m", "2t", "sfc")
-    starts, ends = get_message_byte_ranges_from_index(
+    starts, ends = grib_message_byte_ranges_from_index(
         index_file, [var], ensemble_member=1
     )
     assert starts[0] == 1554442
@@ -157,7 +157,7 @@ def test_get_byte_ranges_pressure_level_var(index_file: Path) -> None:
     var = _make_ecmwf_var(
         "geopotential_500hpa", "gh", "pl", grib_index_level_value=500.0
     )
-    starts, ends = get_message_byte_ranges_from_index(
+    starts, ends = grib_message_byte_ranges_from_index(
         index_file, [var], ensemble_member=2
     )
     assert starts[0] == 674936844
@@ -166,7 +166,7 @@ def test_get_byte_ranges_pressure_level_var(index_file: Path) -> None:
 
 def test_get_byte_ranges_returns_ints(index_file: Path) -> None:
     var = _make_ecmwf_var("temperature_2m", "2t", "sfc")
-    starts, ends = get_message_byte_ranges_from_index(
+    starts, ends = grib_message_byte_ranges_from_index(
         index_file, [var], ensemble_member=0
     )
     assert all(isinstance(s, int) for s in starts)
@@ -176,7 +176,9 @@ def test_get_byte_ranges_returns_ints(index_file: Path) -> None:
 def test_get_byte_ranges_raises_for_missing_var(index_file: Path) -> None:
     missing_var = _make_ecmwf_var("missing", "nonexistent_param", "sfc")
     with pytest.raises((KeyError, AssertionError)):
-        get_message_byte_ranges_from_index(index_file, [missing_var], ensemble_member=0)
+        grib_message_byte_ranges_from_index(
+            index_file, [missing_var], ensemble_member=0
+        )
 
 
 def test_get_byte_ranges_multiple_vars(index_file: Path) -> None:
@@ -187,10 +189,10 @@ def test_get_byte_ranges_multiple_vars(index_file: Path) -> None:
     )
 
     # Test each independently since they require different ensemble members
-    starts1, ends1 = get_message_byte_ranges_from_index(
+    starts1, ends1 = grib_message_byte_ranges_from_index(
         index_file, [var1], ensemble_member=0
     )
-    starts2, ends2 = get_message_byte_ranges_from_index(
+    starts2, ends2 = grib_message_byte_ranges_from_index(
         index_file, [var2], ensemble_member=2
     )
 
@@ -223,7 +225,7 @@ def test_parse_mars_index_with_step_filter() -> None:
 def test_get_byte_ranges_mars_cf_sfc_with_step() -> None:
     """Extract byte ranges for 2t from a MARS control sfc index, filtering by step."""
     var = _make_ecmwf_var("temperature_2m", "2t", "sfc")
-    starts, ends = get_message_byte_ranges_from_index(
+    starts, ends = grib_message_byte_ranges_from_index(
         FIXTURES_DIR / "mars_cf_sfc.idx", [var], ensemble_member=0, step=3
     )
     assert starts == [30071109]
@@ -235,7 +237,7 @@ def test_get_byte_ranges_mars_cf_pl_with_step() -> None:
     var = _make_ecmwf_var(
         "geopotential_500hpa", "z", "pl", grib_index_level_value=500.0
     )
-    starts, ends = get_message_byte_ranges_from_index(
+    starts, ends = grib_message_byte_ranges_from_index(
         FIXTURES_DIR / "mars_cf_pl.idx", [var], ensemble_member=0, step=0
     )
     assert starts == [0]
@@ -245,7 +247,7 @@ def test_get_byte_ranges_mars_cf_pl_with_step() -> None:
 def test_get_byte_ranges_mars_pf_sfc_with_step() -> None:
     """Extract byte ranges for perturbed member 1 from MARS pf_sfc index."""
     var = _make_ecmwf_var("temperature_2m", "2t", "sfc")
-    starts, ends = get_message_byte_ranges_from_index(
+    starts, ends = grib_message_byte_ranges_from_index(
         FIXTURES_DIR / "mars_pf_sfc.idx", [var], ensemble_member=1, step=0
     )
     assert starts == [2076642]
@@ -273,7 +275,7 @@ def test_parse_oper_fc_index_fills_number_with_0(oper_fc_index_file: Path) -> No
 
 def test_get_byte_ranges_oper_fc_surface_var(oper_fc_index_file: Path) -> None:
     var = _make_ecmwf_var("temperature_2m", "2t", "sfc")
-    starts, ends = get_message_byte_ranges_from_index(
+    starts, ends = grib_message_byte_ranges_from_index(
         oper_fc_index_file, [var], ensemble_member=0
     )
     assert starts == [0]
@@ -284,7 +286,7 @@ def test_get_byte_ranges_oper_fc_pressure_level_var(oper_fc_index_file: Path) ->
     var = _make_ecmwf_var(
         "geopotential_height_500hpa", "gh", "pl", grib_index_level_value=500.0
     )
-    starts, ends = get_message_byte_ranges_from_index(
+    starts, ends = grib_message_byte_ranges_from_index(
         oper_fc_index_file, [var], ensemble_member=0
     )
     assert starts == [1000000]
@@ -296,7 +298,7 @@ def test_get_byte_ranges_mars_multiple_vars_single_step() -> None:
     var_2t = _make_ecmwf_var("temperature_2m", "2t", "sfc")
     var_tp = _make_ecmwf_var("total_precipitation", "tp", "sfc")
 
-    starts, ends = get_message_byte_ranges_from_index(
+    starts, ends = grib_message_byte_ranges_from_index(
         FIXTURES_DIR / "mars_cf_sfc.idx", [var_2t, var_tp], ensemble_member=0, step=6
     )
     assert starts == [58065503, 68448713]

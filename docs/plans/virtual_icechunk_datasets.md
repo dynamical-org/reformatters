@@ -216,58 +216,84 @@ region jobs change base class here and nothing else.
 ## Storage configuration
 
 Virtual datasets carry one new declarative, per-dataset config object on the
-`DynamicalDataset`:
+`DynamicalDataset`, holding the **real icechunk objects** directly:
 
 ```python
 class IcechunkVirtualConfig(FrozenBaseModel):
-    # Source buckets the refs point into. Registered as icechunk virtual chunk
-    # containers at every repo open (writer AND reader).
-    containers: Sequence[icechunk.VirtualChunkContainer]
+    # Hold icechunk's own objects. `InstanceOf` relaxes ONLY these fields to an
+    # isinstance check — no model-level `arbitrary_types_allowed`, and the
+    # DynamicalDataset that holds this config is untouched.
+    containers: tuple[InstanceOf[icechunk.VirtualChunkContainer], ...]
     # Manifest splitting policy (see "Manifest splitting").
-    manifest_split: icechunk.ManifestSplittingConfig
+    manifest_split: InstanceOf[icechunk.ManifestSplittingConfig]
+    # No credentials field: every source we point at is public/anonymous-read, so
+    # StoreFactory derives anonymous credentials per container. Add an optional
+    # per-container credentials field here if a private source ever appears.
 ```
 
-**Measured: the icechunk types do not round-trip declaratively, so the thin-shim
-path is the one we take** (not "use them as-is"). A `VirtualChunkContainer`
-exposes `.name` / `.url_prefix` as plain fields, but its `.store` is an opaque
-`ObjectStoreConfig` that does not surface `region` / `anonymous` for read-back;
-`ManifestSplittingConfig.to_dict()` is keyed by condition *objects* with no value
-equality, so `from_dict(to_dict(...))` reconstructs structurally but is not a
-clean JSON round-trip. `IcechunkVirtualConfig` is therefore a thin pydantic model
-holding exactly `prefix` / `region` / `anonymous` per container and the split
-`dim` / `size`, which *constructs* the icechunk objects (`VirtualChunkContainer`,
-`s3_store(...)`, `ManifestSplittingConfig.from_dict(...)`) at repo-open — a
-serialization shim, not a reimplementation.
+**Why hold the icechunk objects, not plain fields.** Plain
+`prefix`/`region`/`anonymous` + `split_dim`/`split_size` fields are a *lossy
+subset*, and the lost pieces are ones we target: a Source Coop container needs
+`endpoint_url` + `s3_compatible` (an `s3_store(...)` that resolves to an
+S3-compatible store, not plain region); an en-masse repoint to a GCP mirror needs
+`gcs_store`; and `ManifestSplittingConfig` supports per-array rules
+(`name_matches("temperature.*"): 7` vs `AnyArray(): 30`) and multi-dim splits a
+single `split_dim`/`split_size` can't express. Holding the real objects avoids
+re-extending a shim the day a non-AWS source appears. `InstanceOf` keeps this
+clean under `FrozenBaseModel` (verified: builds with no model-wide
+`arbitrary_types_allowed`, still isinstance-validated, survives
+`revalidate_instances="always"`). The split verbosity has a terse escape hatch
+that still returns the full object — e.g. a helper
+`append_dim_split(size, dim="init_time") -> ManifestSplittingConfig` for the
+common case, dropping to `from_dict(...)` only when a dataset needs more.
 
-**Persistence shrinks the reader's job.** `repo.save_config()` writes the
-container set and split policy into the repo itself; both `Repository.open(storage)`
-(no config passed) and `Repository.fetch_config(storage)` recover them. Credentials
-are *not* persisted: reading a virtual chunk requires
-`authorize_virtual_chunk_access={prefix: credential}` at every open — a read
-without it raises, and `authorized_virtual_container_prefixes` is empty. So a
-reader can `fetch_config` to recover the container prefixes and only needs to
-supply the anonymous-credentials map; the minimal reader-facing config is the
-credential policy, not the full container definition.
+**Nothing serializes this config; `StoreFactory` consumes it directly.** It is
+in-code config like `StorageConfig` — k8s workers rebuild the whole dataset
+(this included) from the in-code registry by `dataset_id`, never from a
+serialized copy. `StoreFactory` holds the whole `IcechunkVirtualConfig`, so at
+repo open/create it just uses what's there: register each container with
+`set_virtual_chunk_container(c)`, assemble the `RepositoryConfig` (containers +
+`manifest_split`), and authorize each container anonymously —
+`authorize_virtual_chunk_access=icechunk.containers_credentials({c.url_prefix:
+icechunk.s3_anonymous_credentials() for c in cfg.containers})`. No round-trip,
+and no introspecting the (opaque) container `.store`.
+
+**Credentials are derived, not configured.** Every source we target is public,
+anonymous-read (NOAA NODD, ECMWF, Source Coop), so there is no credentials field —
+`StoreFactory` builds an anonymous authorize map straight from the container set.
+If a private / requester-pays source ever appears, add an optional per-container
+credentials field (held the same way, via `InstanceOf`) and have `StoreFactory`
+prefer it; nothing else changes.
+
+**Reader-facing exposure is a separate concern.** External public readers still
+need to know which containers to register and authorize (anonymously); that is
+surfaced through our STAC catalog + example dataset-open code, not by serializing
+`IcechunkVirtualConfig`. icechunk helps: it persists the container set into the
+repo (`save_config` → recovered by `Repository.open` / `fetch_config`), so the
+published surface can be minimal. Credentials are *not* persisted — a read
+without `authorize_virtual_chunk_access` raises, and
+`authorized_virtual_container_prefixes` is empty — so the example open code always
+supplies the anonymous-credentials map.
 
 This config is held on `DynamicalDataset` (not on the region job, not on the
 template) for three reasons:
 
 1. **Cardinality.** Containers and split policy are *per-dataset* and identical
-   across the primary store and every replica. A per-store home
-   (`StorageConfig`) would force duplicating the container set on each store and
-   risk drift; a per-region-job home is invisible to readers.
-2. **Readers need it.** Opening a virtual store requires registering the same
-   containers and wiring `authorize_virtual_chunk_access` to anonymous
-   credentials. Readers (and the `dynamical_catalog` / STAC path) have no
-   `RegionJob`, so the container set must live in a declarative model they can
-   serialize and reconstruct.
+   across the primary store and every replica. A per-store home (`StorageConfig`)
+   would force duplicating them on each store and risk drift; a per-region-job
+   home is invisible to the reader/STAC path.
+2. **One declarative home, writer and reader.** Opening a virtual store needs the
+   same containers + authorize map whether writing or reading. Keeping them in one
+   per-dataset object gives the writer a single source and lets the STAC /
+   example-open path mirror it (it can also recover the container set from the repo
+   via `fetch_config`).
 3. **It is the unit of repointing.** See below.
 
 `StoreFactory` takes `icechunk_virtual_config` as a single field and applies it
-uniformly to every repo it opens, building the `icechunk.RepositoryConfig`
-(registered containers + manifest-split policy) and the
-`authorize_virtual_chunk_access` credentials map. `__main__.py` registration is
-identical to materialized.
+uniformly to every repo it opens (primary + replicas), building the
+`icechunk.RepositoryConfig` (registered containers + manifest-split policy) and an
+anonymous `authorize_virtual_chunk_access` map (one `s3_anonymous_credentials()`
+per container). `__main__.py` registration is identical to materialized.
 
 ### Containers as indirection, not just auth
 
@@ -844,12 +870,11 @@ manifest size (once measured) is worth monitoring. Co-location is still fine.
 ### Reader experience
 
 All targeted source archives have anonymous read access. A reader needs the
-container registration + anonymous credentials map — the same
-`IcechunkVirtualConfig` the writer uses, reconstructed from the declarative
-model (today via the `dynamical_catalog` library wrapping our STAC catalog;
-bare-path code is in [Appendix A](#appendix-a-prototype-pr-511)). Confirmed: the
-container *definitions* are recoverable straight from the store via
-`Repository.fetch_config`, so the only thing a reader must supply is the
+container registration + anonymous credentials map. It does **not** reconstruct
+our in-code `IcechunkVirtualConfig`: the container *definitions* are recoverable
+straight from the store via `Repository.fetch_config` (confirmed), so the reader
+path (today the `dynamical_catalog` library wrapping our STAC catalog; bare-path
+code is in [Appendix A](#appendix-a-prototype-pr-511)) only has to supply the
 anonymous credentials map passed to `authorize_virtual_chunk_access` at open — a
 virtual read without it raises with a "you need to authorize the virtual chunk
 container" error.
@@ -909,15 +934,16 @@ Mechanical; tests pass unchanged.
   so it installs cleanly on the project's Python 3.14; the decode path is already
   smoke-tested against `icechunk 2.0.5` / `zarr 3.1.3` (see
   [Spike results](#spike-results)).
-- Add `IcechunkVirtualConfig` to `common/storage.py` as a **thin serialization
-  shim** — confirmed required, since icechunk's `VirtualChunkContainer` /
-  `ManifestSplittingConfig` don't round-trip declaratively (see
-  [Storage configuration](#storage-configuration)). Hold `prefix` / `region` /
-  `anonymous` per container + split `dim` / `size`, and construct the icechunk
-  objects at repo-open. Thread `icechunk_virtual_config` through `StoreFactory`
-  and repo open/create (register containers, set split policy, wire anonymous
-  credentials via `authorize_virtual_chunk_access`). Add the `DynamicalDataset`
-  validator (virtual ⇒ all stores ICECHUNK ∧ non-empty containers).
+- Add `IcechunkVirtualConfig` to `common/storage.py` holding the **real icechunk
+  objects** directly via `InstanceOf` (containers + split policy) — plain fields
+  would be a lossy subset (no Source Coop `s3_compatible`, no GCS mirror, no
+  per-array/multi-dim splits; see [Storage configuration](#storage-configuration)).
+  No credentials field (all sources public/anonymous). Nothing serializes it:
+  `StoreFactory` consumes the config directly to register containers and build an
+  anonymous `authorize_virtual_chunk_access` map (one `s3_anonymous_credentials()`
+  per container). Thread `icechunk_virtual_config` through `StoreFactory` and repo
+  open/create. Add the `DynamicalDataset` validator (virtual ⇒ all stores ICECHUNK
+  ∧ non-empty containers).
 
 ### PR #3 — `VirtualRegionJob` + driver
 
@@ -1052,12 +1078,18 @@ landed; none forced a design change except #3 (empty commits raise).
    lengths_u64, *, validate_containers, arr_offset, checksum)` (zero-copy;
    empty-string locations silently skipped; `arr_offset` writes a sub-block for
    appends). Both return `None` on success or a list of validation-failed indices.
-8. **`IcechunkVirtualConfig` serialization → thin shim required.** icechunk's
-   types don't round-trip (opaque `.store` on `VirtualChunkContainer`; object-keyed
-   `ManifestSplittingConfig.to_dict()`). But `save_config` persists containers +
-   split policy into the repo (recovered by `Repository.open` / `fetch_config`),
-   so the shim is small and readers recover containers from the store, supplying
-   only the credentials map. (See [Storage configuration](#storage-configuration).)
+8. **`IcechunkVirtualConfig` → hold the real icechunk objects in-code; nothing
+   serializes it.** The icechunk types don't round-trip declaratively (opaque
+   `.store` on `VirtualChunkContainer`; object-keyed `ManifestSplittingConfig.to_dict()`)
+   — but that's moot, because nothing needs to: k8s workers rebuild the config
+   from the in-code registry by `dataset_id`, and `StoreFactory` uses the config
+   directly. So hold the real objects via pydantic `InstanceOf` (verified: works
+   under `FrozenBaseModel` with no model-wide `arbitrary_types_allowed`, scoped to
+   the field, isinstance-validated) — plain fields would be a lossy subset.
+   Separately, `save_config` persists containers + split into the repo (recovered
+   by `Repository.open` / `fetch_config`), so the reader/STAC exposure can be
+   minimal; credentials are never persisted (a read without
+   `authorize_virtual_chunk_access` raises). (See [Storage configuration](#storage-configuration).)
 
 Spike scripts live under `/tmp/spike/` for the run that produced these numbers;
 they are throwaway (local-FS repos, synthetic refs, gribberish via `uv run --with`)

@@ -507,6 +507,26 @@ wheels = [
 ]
 
 [[package]]
+name = "gribberish"
+version = "0.30.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/aa/ad/9b61e2c24eae0827c3b7eb9a46197a0a831b1b62fcff349ac69852fe2f48/gribberish-0.30.3.tar.gz", hash = "sha256:38740e9e4e0e68069a1c7600d8700473f317bf9678714ab260ce86b38392f022", size = 3732116, upload-time = "2026-05-21T18:25:53.764Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c4/86/70a3f845ec4033538e25241807f82e41a5bed394415308ced5e376ef5451/gribberish-0.30.3-cp314-cp314-macosx_10_12_x86_64.whl", hash = "sha256:6ca26b572ca4c2523d6606442cc703282a79fb8a84a8288db5a509fb254d0a46", size = 670687, upload-time = "2026-05-21T18:25:29.315Z" },
+    { url = "https://files.pythonhosted.org/packages/f9/fe/c5dbd2f4483772a6b1d91b3678314713021442f2ac22bc0533b94e399552/gribberish-0.30.3-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:4bde0c6f3cbb4d82daa989dd600e0456cd283f95c2abf9b5baed94beb0cef0e3", size = 623823, upload-time = "2026-05-21T18:25:22.417Z" },
+    { url = "https://files.pythonhosted.org/packages/fc/55/63e7acca372588120e433e93d8b0e7fd2390374a1ba2bb41b72e94a509f5/gribberish-0.30.3-cp314-cp314-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:fc1a4648c4c93cb7d8ffb39ad955e648c60493b5ce1e6fcfba8ad7a5a7fd6541", size = 657889, upload-time = "2026-05-21T18:25:00.445Z" },
+    { url = "https://files.pythonhosted.org/packages/10/80/91b501b29dbc8261fc8d047b0a195097b1b1f823cb19654369cbe3d0d47d/gribberish-0.30.3-cp314-cp314-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:7a16a9d876a2ff3742b18b0af9e9e855eaf9ef31c23f1f79b368706c086dbdcf", size = 677882, upload-time = "2026-05-21T18:25:08.02Z" },
+    { url = "https://files.pythonhosted.org/packages/0b/97/55bc761f1e4f5baedead846015d0bddab2962e1e9896a2dca387371e93e3/gribberish-0.30.3-cp314-cp314-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5780834acb02eb6e50ed7c9e7070b95f9a618ce95b5836e264a57aba67fc135f", size = 697737, upload-time = "2026-05-21T18:25:14.715Z" },
+    { url = "https://files.pythonhosted.org/packages/b9/46/940f1ab44ac4f4b918336154c660c154ceb2ab561b2f8fdb560437a8f96b/gribberish-0.30.3-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:51457481208dc3c07b44217ce56babac08ee5ece36fcfc3ad03f2925c27ddf36", size = 842609, upload-time = "2026-05-21T18:25:36.482Z" },
+    { url = "https://files.pythonhosted.org/packages/b2/cf/aa2d5126b65702a0eb69f9888523db67b3c46315d1e4d7f765fd03c8f06e/gribberish-0.30.3-cp314-cp314-musllinux_1_2_armv7l.whl", hash = "sha256:18fefd287c643a376d82af50cf5f2c613c31d98395fb37863767562a264e3d4a", size = 955347, upload-time = "2026-05-21T18:25:43.699Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/f5/cfcda5e15e8c4b9155e4f6182f8dc15198907e308b2fe466b7af8c5066c9/gribberish-0.30.3-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:bc0ce27f0b7f761cb8333d369d3a2ef8fb43777d35546fc0276889ad881419b2", size = 910744, upload-time = "2026-05-21T18:25:50.901Z" },
+    { url = "https://files.pythonhosted.org/packages/3d/df/258efac20f9d553d5a2c09754fb4fdd3df54d1153cf843f943427d303cdc/gribberish-0.30.3-cp314-cp314-win_amd64.whl", hash = "sha256:ecf0bf42b8ab818529bf147b6230e6e7a7dbe06ca4d1abf01647bcd443180a79", size = 591502, upload-time = "2026-05-21T18:25:59.995Z" },
+]
+
+[[package]]
 name = "h11"
 version = "0.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1330,6 +1350,7 @@ source = { editable = "." }
 dependencies = [
     { name = "dask" },
     { name = "google-crc32c" },
+    { name = "gribberish" },
     { name = "httpx" },
     { name = "icechunk" },
     { name = "kubernetes" },
@@ -1371,6 +1392,7 @@ dev = [
 requires-dist = [
     { name = "dask", specifier = "~=2026.0" },
     { name = "google-crc32c", specifier = ">=1.8.0" },
+    { name = "gribberish", specifier = "~=0.30" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "icechunk", specifier = "~=2.0" },
     { name = "kubernetes", specifier = ">=36.0.1,<37" },

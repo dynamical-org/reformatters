@@ -5,6 +5,7 @@ import dask.array
 import numpy as np
 import pytest
 import xarray as xr
+from gribberish.zarr import GribberishCodec
 
 from reformatters.common.config_models import (
     BaseInternalAttrs,
@@ -166,6 +167,44 @@ def test_assign_var_metadata_units_not_duplicated_when_in_encoding() -> None:
     # units in encoding but not in attrs (to avoid duplication)
     assert "units" not in result.attrs
     assert "units" in result.encoding
+
+
+def test_assign_var_metadata_includes_serializer_when_set() -> None:
+    codec = GribberishCodec(var="TMP")
+
+    class SerializerVar(DataVar[BaseInternalAttrs]):
+        encoding: Encoding = Encoding(
+            dtype="float64",
+            fill_value=np.nan,
+            chunks=(1,),
+            shards=None,
+            serializer=codec.to_dict(),
+        )
+        attrs: DataVarAttrs = DataVarAttrs(
+            units="K",
+            long_name="Temperature 2m",
+            short_name="2t",
+            step_type="instant",
+        )
+        internal_attrs: BaseInternalAttrs = BaseInternalAttrs(
+            keep_mantissa_bits="no-rounding"
+        )
+
+    da = xr.DataArray([1.0, 2.0], name="temperature_2m")
+    result = assign_var_metadata(da, SerializerVar(name="temperature_2m"))
+
+    assert result.encoding["serializer"] == codec.to_dict()
+
+
+def test_assign_var_metadata_omits_serializer_when_none() -> None:
+    # Materialized vars don't declare a serializer; model_dump(exclude_none=True)
+    # drops it so zarr falls back to its default BytesCodec.
+    var_config = _TestDataVar(name="temperature_2m")
+    da = xr.DataArray([1.0, 2.0], name="temperature_2m")
+
+    result = assign_var_metadata(da, var_config)
+
+    assert "serializer" not in result.encoding
 
 
 # --- empty_copy_with_reindex tests ---
