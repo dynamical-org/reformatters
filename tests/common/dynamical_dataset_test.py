@@ -33,7 +33,7 @@ from reformatters.common.storage import (
     DatasetFormat,
     IcechunkVirtualConfig,
     StorageConfig,
-    append_dim_split,
+    manifest_append_dim_split,
 )
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
@@ -162,7 +162,8 @@ class TestIcechunkVirtualConfigValidation:
             icechunk.s3_store(region="us-east-1", anonymous=True),
         )
         return IcechunkVirtualConfig(
-            containers=(container,), manifest_split=append_dim_split(1000, dim="time")
+            containers=(container,),
+            manifest_split=manifest_append_dim_split(split_size=1000, dim="time"),
         )
 
     def test_rejects_non_icechunk_primary(self) -> None:

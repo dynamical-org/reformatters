@@ -5,6 +5,7 @@ import dask.array
 import numpy as np
 import pytest
 import xarray as xr
+from gribberish.zarr import GribberishCodec
 
 from reformatters.common.config_models import (
     BaseInternalAttrs,
@@ -175,7 +176,7 @@ def test_assign_var_metadata_includes_serializer_when_set() -> None:
             fill_value=np.nan,
             chunks=(1,),
             shards=None,
-            serializer={"name": "gribberish", "configuration": {"var": "TMP"}},
+            serializer=GribberishCodec(var="TMP").to_dict(),
         )
         attrs: DataVarAttrs = DataVarAttrs(
             units="K",
@@ -190,6 +191,7 @@ def test_assign_var_metadata_includes_serializer_when_set() -> None:
     da = xr.DataArray([1.0, 2.0], name="temperature_2m")
     result = assign_var_metadata(da, SerializerVar(name="temperature_2m"))
 
+    assert result.encoding["serializer"] == GribberishCodec(var="TMP").to_dict()
     assert result.encoding["serializer"] == {
         "name": "gribberish",
         "configuration": {"var": "TMP"},

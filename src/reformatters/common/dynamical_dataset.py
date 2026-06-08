@@ -64,15 +64,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     primary_storage_config: StorageConfig
     replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
-    # Set for virtual datasets only; threaded through to every store this dataset opens.
     icechunk_virtual_config: IcechunkVirtualConfig | None = None
 
     @model_validator(mode="after")
     def _validate_virtual_storage(self) -> Self:
-        # Virtual datasets store icechunk metadata + virtual chunk refs, so every
-        # store must be icechunk. The complementary direction (a virtual
-        # region_job_class requires icechunk_virtual_config) lands with
-        # VirtualRegionJob in PR #3.
+        # Virtual datasets store icechunk metadata + virtual chunk refs, so every store must be icechunk.
         if self.icechunk_virtual_config is not None:
             non_icechunk = [
                 config

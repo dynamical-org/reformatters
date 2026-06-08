@@ -18,8 +18,8 @@ from reformatters.common.storage import (
     StoreFactory,
     _get_store_path,
     _icechunk_to_s3fs_storage_options,
-    append_dim_split,
     commit_if_icechunk,
+    manifest_append_dim_split,
 )
 
 
@@ -28,7 +28,8 @@ def _example_virtual_config() -> IcechunkVirtualConfig:
         "s3://noaa-gfs-bdp-pds/", icechunk.s3_store(region="us-east-1", anonymous=True)
     )
     return IcechunkVirtualConfig(
-        containers=(container,), manifest_split=append_dim_split(1000)
+        containers=(container,),
+        manifest_split=manifest_append_dim_split(split_size=1000, dim="init_time"),
     )
 
 
@@ -388,13 +389,22 @@ class TestIcechunkRepos:
 
 
 class TestIcechunkVirtualConfig:
-    def test_append_dim_split_returns_splitting_config(self) -> None:
-        split = append_dim_split(500, dim="init_time")
+    def test_manifest_append_dim_split_structure(self) -> None:
+        split = manifest_append_dim_split(split_size=500, dim="init_time")
         assert isinstance(split, icechunk.ManifestSplittingConfig)
+        # One AnyArray rule splitting the named dim every `split_size` indices.
+        [(condition, dim_splits)] = split.split_sizes
+        assert condition == icechunk.ManifestSplitCondition.AnyArray()
+        [(dim_condition, size)] = dim_splits
+        assert "init_time" in repr(dim_condition)
+        assert size == 500
 
     def test_requires_at_least_one_container(self) -> None:
         with pytest.raises(ValidationError):
-            IcechunkVirtualConfig(containers=(), manifest_split=append_dim_split(1))
+            IcechunkVirtualConfig(
+                containers=(),
+                manifest_split=manifest_append_dim_split(split_size=1, dim="init_time"),
+            )
 
     def test_store_factory_registers_containers_and_split(self) -> None:
         factory = StoreFactory(
@@ -414,6 +424,24 @@ class TestIcechunkVirtualConfig:
         assert manifest is not None
         assert manifest.splitting is not None
         assert manifest.splitting.split_sizes
+
+    def test_non_s3_container_rejected(self) -> None:
+        gcs_container = icechunk.VirtualChunkContainer(
+            "gs://bucket/", icechunk.gcs_store()
+        )
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/data", format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+            icechunk_virtual_config=IcechunkVirtualConfig(
+                containers=(gcs_container,),
+                manifest_split=manifest_append_dim_split(split_size=1, dim="init_time"),
+            ),
+        )
+        with pytest.raises(AssertionError, match="non-S3 store"):
+            factory.icechunk_repos(sort="primary-first")
 
     def test_materialized_factory_registers_no_containers(self) -> None:
         factory = StoreFactory(
