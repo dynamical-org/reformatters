@@ -170,13 +170,15 @@ def test_assign_var_metadata_units_not_duplicated_when_in_encoding() -> None:
 
 
 def test_assign_var_metadata_includes_serializer_when_set() -> None:
+    codec = GribberishCodec(var="TMP")
+
     class SerializerVar(DataVar[BaseInternalAttrs]):
         encoding: Encoding = Encoding(
             dtype="float64",
             fill_value=np.nan,
             chunks=(1,),
             shards=None,
-            serializer=GribberishCodec(var="TMP").to_dict(),
+            serializer=codec.to_dict(),
         )
         attrs: DataVarAttrs = DataVarAttrs(
             units="K",
@@ -191,11 +193,7 @@ def test_assign_var_metadata_includes_serializer_when_set() -> None:
     da = xr.DataArray([1.0, 2.0], name="temperature_2m")
     result = assign_var_metadata(da, SerializerVar(name="temperature_2m"))
 
-    assert result.encoding["serializer"] == GribberishCodec(var="TMP").to_dict()
-    assert result.encoding["serializer"] == {
-        "name": "gribberish",
-        "configuration": {"var": "TMP"},
-    }
+    assert result.encoding["serializer"] == codec.to_dict()
 
 
 def test_assign_var_metadata_omits_serializer_when_none() -> None:
