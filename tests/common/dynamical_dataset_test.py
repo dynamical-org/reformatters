@@ -215,9 +215,13 @@ def test_update_template(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_backfill(monkeypatch: pytest.MonkeyPatch) -> None:
+    # __class__ spoof so the driver's isinstance(job, MaterializedRegionJob) passes
+    # while keeping auto-mocked attributes.
     mock_job0 = Mock()
+    mock_job0.__class__ = ExampleRegionJob
     mock_job0.summary = lambda: "job0-summary"
     mock_job1 = Mock()
+    mock_job1.__class__ = ExampleRegionJob
     mock_job1.summary = lambda: "job1-summary"
     monkeypatch.setattr(
         ExampleRegionJob,

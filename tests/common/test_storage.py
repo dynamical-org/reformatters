@@ -355,7 +355,7 @@ class TestIcechunkRepos:
             dataset_id="test-dataset",
             template_config_version="v1.0",
         )
-        repos = factory.icechunk_repos(sort="primary-first")
+        repos = factory.all_icechunk_repos(sort="primary-first")
         assert len(repos) == 1
         assert repos[0][0] == "replica-0"
 
@@ -367,7 +367,7 @@ class TestIcechunkRepos:
             dataset_id="test-dataset",
             template_config_version="v1.0",
         )
-        assert factory.icechunk_repos(sort="primary-first") == []
+        assert factory.all_icechunk_repos(sort="primary-first") == []
 
     def test_primary_comes_first(self) -> None:
         factory = StoreFactory(
@@ -382,7 +382,7 @@ class TestIcechunkRepos:
             dataset_id="test-dataset",
             template_config_version="v1.0",
         )
-        repos = factory.icechunk_repos(sort="primary-first")
+        repos = factory.all_icechunk_repos(sort="primary-first")
         assert len(repos) == 2
         assert repos[0][0] == "primary"
         assert repos[1][0] == "replica-0"
@@ -416,7 +416,7 @@ class TestIcechunkVirtualConfig:
             icechunk_virtual_config=_example_virtual_config(),
         )
         # icechunk_repos opens (and so creates) the repo with our override config.
-        repo = factory.icechunk_repos(sort="primary-first")[0][1]
+        repo = factory.all_icechunk_repos(sort="primary-first")[0][1]
         containers = repo.config.virtual_chunk_containers
         assert containers is not None
         assert "s3://noaa-gfs-bdp-pds/" in containers
@@ -441,7 +441,7 @@ class TestIcechunkVirtualConfig:
             ),
         )
         with pytest.raises(AssertionError, match="unsupported store"):
-            factory.icechunk_repos(sort="primary-first")
+            factory.all_icechunk_repos(sort="primary-first")
 
     def test_local_filesystem_container_accepted(self) -> None:
         # Local-filesystem containers (dev/test sources) need no credentials.
@@ -459,7 +459,7 @@ class TestIcechunkVirtualConfig:
                 manifest_split=manifest_append_dim_split(split_size=1, dim="init_time"),
             ),
         )
-        repo = factory.icechunk_repos(sort="primary-first")[0][1]
+        repo = factory.all_icechunk_repos(sort="primary-first")[0][1]
         containers = repo.config.virtual_chunk_containers
         assert containers is not None
         assert "file:///data/" in containers
@@ -472,7 +472,7 @@ class TestIcechunkVirtualConfig:
             dataset_id="test-dataset",
             template_config_version="v1.0",
         )
-        repo = factory.icechunk_repos(sort="primary-first")[0][1]
+        repo = factory.all_icechunk_repos(sort="primary-first")[0][1]
         assert not repo.config.virtual_chunk_containers
 
 
@@ -492,7 +492,7 @@ class TestBranchSupport:
         snapshot = store.session.commit(message="init")
 
         # Create a branch at the current snapshot
-        repo = factory.icechunk_repos(sort="primary-first")[0][1]
+        repo = factory.all_icechunk_repos(sort="primary-first")[0][1]
         repo.create_branch("test-branch", snapshot)
 
         # Open on the new branch
@@ -579,7 +579,7 @@ class TestIcechunkPrimaryWithZarr3Replica:
             dataset_id="test-dataset",
             template_config_version="v1.0",
         )
-        repos = factory.icechunk_repos(sort="primary-first")
+        repos = factory.all_icechunk_repos(sort="primary-first")
         assert len(repos) == 1
         assert repos[0][0] == "primary"
 
@@ -594,8 +594,31 @@ class TestIcechunkPrimaryWithZarr3Replica:
             dataset_id="test-dataset",
             template_config_version="v1.0",
         )
-        repos = factory.icechunk_repos(sort="primary-last")
+        repos = factory.all_icechunk_repos(sort="primary-last")
         assert [role for role, _repo in repos] == ["primary"]
+
+    def test_icechunk_repos_returns_primary_and_replicas(self) -> None:
+        """The no-arg icechunk_repos returns (primary_repo, (replica_repos, ...))."""
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/primary", format=DatasetFormat.ICECHUNK
+            ),
+            replica_storage_configs=[
+                StorageConfig(
+                    base_path="s3://bucket/replica-0", format=DatasetFormat.ICECHUNK
+                ),
+            ],
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+        )
+        primary_repo, replica_repos = factory.icechunk_repos()
+        assert isinstance(primary_repo, icechunk.Repository)
+        assert len(replica_repos) == 1
+        assert isinstance(replica_repos[0], icechunk.Repository)
+        # primary + replicas accounts for every repo the role-based accessor returns.
+        assert 1 + len(replica_repos) == len(
+            factory.all_icechunk_repos(sort="primary-first")
+        )
 
 
 class TestCommitIfIcechunkFailureIsolation:
@@ -668,7 +691,7 @@ class TestPrimaryStoreReadonly:
         # Create a branch so we can open readonly on something other than main.
         # Point it at the initial snapshot so we can distinguish it from main
         # after a subsequent commit on main.
-        repo = factory.icechunk_repos(sort="primary-first")[0][1]
+        repo = factory.all_icechunk_repos(sort="primary-first")[0][1]
         repo.create_branch("ro-branch", branch_snapshot)
         # Advance main past the branch point.
         writable_again = factory.primary_store(writable=True)

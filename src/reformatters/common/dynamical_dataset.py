@@ -6,9 +6,8 @@ from contextlib import contextmanager
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Annotated, Any, Generic, Literal, Self, TypeVar, cast
+from typing import Annotated, Any, Generic, Literal, Self, TypeVar
 
-import icechunk
 import numpy as np
 import pandas as pd
 import sentry_sdk
@@ -59,13 +58,15 @@ SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
 log = get_logger(__name__)
 
 
-def _split_primary_repo(
-    repos: list[tuple[str, icechunk.Repository]],
-) -> tuple[icechunk.Repository, list[icechunk.Repository]]:
-    """Split the (role, repo) list (sorted primary-first) into (primary, replicas)."""
-    primary = next(repo for role, repo in repos if role == "primary")
-    replicas = [repo for role, repo in repos if role != "primary"]
-    return primary, replicas
+def _virtual_jobs(
+    jobs: Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]],
+) -> list[VirtualRegionJob[DATA_VAR, SOURCE_FILE_COORD]]:
+    """Narrow a sequence of region jobs to virtual ones (asserting each is)."""
+    virtual_jobs: list[VirtualRegionJob[DATA_VAR, SOURCE_FILE_COORD]] = []
+    for job in jobs:
+        assert isinstance(job, VirtualRegionJob)
+        virtual_jobs.append(job)
+    return virtual_jobs
 
 
 class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
@@ -209,7 +210,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 # files committed straight to main as they arrive) — a different
                 # lifecycle from the parallel temp-branch coordinator, so they
                 # don't go through _process_region_jobs.
-                self._run_virtual_operational_update(all_jobs, workers_total)
+                self._run_virtual_operational_update(
+                    _virtual_jobs(all_jobs), workers_total
+                )
             else:
                 self._process_region_jobs(
                     all_jobs=all_jobs,
@@ -442,7 +445,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             f"{len(worker_jobs)} of {len(all_jobs)} total jobs, {jobs_summary}"
         )
 
-        icechunk_repos = self.store_factory.icechunk_repos(sort="primary-first")
+        icechunk_repos = self.store_factory.all_icechunk_repos(sort="primary-first")
         has_icechunk = len(icechunk_repos) > 0
         branch_name = f"_job_{reformat_job_name}" if has_icechunk else "main"
 
@@ -462,16 +465,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         worker_results: dict[str, list[SourceFileResult]] = {}
         if worker_jobs and is_virtual:
             # Virtual backfill: pre-sized branch (parallel_setup), per-batch commits
-            # via fresh sessions, then finalize resets main (existing temp-branch flow).
-            worker_results = self._process_virtual_backfill_jobs(
-                worker_jobs, icechunk_repos, branch_name
-            )
+            # via fresh sessions, then finalize resets main (existing temp-branch
+            # flow). worker_results stays empty — virtual refs live in the manifest,
+            # not result files.
+            self._process_virtual_backfill_jobs(_virtual_jobs(worker_jobs), branch_name)
         elif worker_jobs:
-            # Not virtual (handled above), so process() is defined on these jobs.
-            materialized_jobs = cast(
-                "Sequence[MaterializedRegionJob[DATA_VAR, SOURCE_FILE_COORD]]",
-                worker_jobs,
-            )
             primary_store = self.store_factory.primary_store(
                 writable=True, branch=branch_name
             )
@@ -479,7 +477,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 writable=True, branch=branch_name
             )
 
-            for job in materialized_jobs:
+            for job in worker_jobs:
+                # Not virtual (handled above), so process() is defined here.
+                assert isinstance(job, MaterializedRegionJob)
                 template_utils.write_metadata(job.template_ds, job.tmp_store)
                 results = job.process(
                     primary_store=primary_store, replica_stores=replica_stores
@@ -537,42 +537,27 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def _run_virtual_operational_update(
         self,
-        all_jobs: Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]],
+        all_jobs: Sequence[VirtualRegionJob[DATA_VAR, SOURCE_FILE_COORD]],
         workers_total: int,
     ) -> None:
         """Single-writer virtual operational update: commit whole source files
         straight to "main" as they arrive (no temp branch, no parallel_setup, no
         finalize), so readers see each file within seconds."""
         assert workers_total == 1, "Virtual operational updates run single-writer"
-        repos = self.store_factory.icechunk_repos(sort="primary-first")
-        primary_repo, replica_repos = _split_primary_repo(repos)
+        primary_repo, replica_repos = self.store_factory.icechunk_repos()
         for job in all_jobs:
-            assert isinstance(job, VirtualRegionJob)
             job.process_virtual(primary_repo, replica_repos, branch="main")
 
     def _process_virtual_backfill_jobs(
         self,
-        worker_jobs: Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]],
-        icechunk_repos: list[tuple[str, icechunk.Repository]],
+        worker_jobs: Sequence[VirtualRegionJob[DATA_VAR, SOURCE_FILE_COORD]],
         branch_name: str,
-    ) -> dict[str, list[SourceFileResult]]:
+    ) -> None:
         """Process a worker's virtual backfill jobs on the pre-sized temp branch,
         each committing its batches via fresh sessions on the repos."""
-        primary_repo, replica_repos = _split_primary_repo(icechunk_repos)
-        worker_results: dict[str, list[SourceFileResult]] = {}
+        primary_repo, replica_repos = self.store_factory.icechunk_repos()
         for job in worker_jobs:
-            assert isinstance(job, VirtualRegionJob)
-            results = job.process_virtual(primary_repo, replica_repos, branch_name)
-            for var_name, coords in results.items():
-                worker_results.setdefault(var_name, []).extend(
-                    SourceFileResult(
-                        status=c.status,
-                        out_loc={**c.out_loc()},
-                        url=c.get_url(),
-                    )
-                    for c in coords
-                )
-        return worker_results
+            job.process_virtual(primary_repo, replica_repos, branch_name)
 
     def validate_dataset(
         self,

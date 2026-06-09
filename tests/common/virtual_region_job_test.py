@@ -40,7 +40,6 @@ from reformatters.common.region_job import (
     CoordinateValue,
     SourceFileCoord,
     VirtualRef,
-    VirtualRefBatch,
     VirtualRegionJob,
 )
 from reformatters.common.storage import (
@@ -196,11 +195,11 @@ class VirtualTestRegionJob(
     def process_virtual_refs(
         self,
         remaining: Sequence[VirtualTestSourceFileCoord],
-    ) -> Iterator[VirtualRefBatch]:
-        batch_files = self.backfill_batch_files
+    ) -> Iterator[Sequence[VirtualRef]]:
+        data_var = self.data_vars[0]
         init_index = self.template_ds.get_index("init_time")
         lead_index = self.template_ds.get_index("lead_time")
-        for group in batched(remaining, batch_files, strict=False):
+        for group in batched(remaining, self.backfill_batch_files, strict=False):
             refs: list[VirtualRef] = []
             for coord in group:
                 init_idx = int(init_index.get_indexer(pd.Index([coord.init_time]))[0])
@@ -208,14 +207,14 @@ class VirtualTestRegionJob(
                 offset, length = _message_offset_length(init_idx, lead_idx)
                 refs.append(
                     VirtualRef(
-                        var_name="temperature_2m",
+                        data_var=data_var,
                         out_loc=coord.out_loc(),
                         location=self.messages_url,
                         offset=offset,
                         length=length,
                     )
                 )
-            yield VirtualRefBatch(source_coords=list(group), refs=refs)
+            yield refs
 
 
 class VirtualTestTemplateConfig(TemplateConfig[VirtualTestDataVar]):
@@ -319,7 +318,7 @@ def _make_region_job(
 
 
 def _primary_repo(factory: StoreFactory) -> icechunk.Repository:
-    return factory.icechunk_repos(sort="primary-first")[0][1]
+    return factory.all_icechunk_repos(sort="primary-first")[0][1]
 
 
 def _snapshot_count(repo: icechunk.Repository, branch: str = "main") -> int:
@@ -388,7 +387,7 @@ def test_needed_append_dim_size() -> None:
     job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
     refs = [
         VirtualRef(
-            "temperature_2m",
+            VirtualTestDataVar(name="temperature_2m"),
             {
                 "init_time": APPEND_DIM_START + 2 * APPEND_DIM_FREQ,
                 "lead_time": LEAD_TIMES[0],
@@ -414,8 +413,8 @@ def test_process_virtual_rejects_empty_batch(tmp_path: Path) -> None:
         def process_virtual_refs(
             self,
             remaining: Sequence[VirtualTestSourceFileCoord],  # noqa: ARG002
-        ) -> Iterator[VirtualRefBatch]:
-            yield VirtualRefBatch(source_coords=[], refs=[])
+        ) -> Iterator[Sequence[VirtualRef]]:
+            yield []
 
     job = EmptyBatchJob(
         tmp_store=Path("unused-tmp.zarr"),
@@ -440,8 +439,7 @@ def test_backfill_emits_refs_and_reads_back_values(tmp_path: Path) -> None:
 
     repo = _primary_repo(dataset.store_factory)
     job = _make_region_job(template_ds, region=slice(0, 4))
-    results = job.process_virtual(repo, [], "main")
-    assert set(results) == {"temperature_2m"}
+    job.process_virtual(repo, [], "main")
 
     _assert_all_values(dataset, n_inits=4)
 
@@ -458,8 +456,7 @@ def test_filter_skips_already_present_refs(tmp_path: Path) -> None:
 
     # Second run: every candidate is already present, so the filter drops them
     # all, the generator yields nothing, and no new commit is made.
-    results = job.process_virtual(repo, [], "main")
-    assert results == {}
+    job.process_virtual(repo, [], "main")
     assert _snapshot_count(repo) == snapshots_after_first
 
     candidates = job.generate_source_file_coords(
@@ -599,7 +596,7 @@ def test_serializer_threads_through_expansion_without_decoding(tmp_path: Path) -
         [session.store],
         [
             VirtualRef(
-                "temperature_2m",
+                job.data_vars[0],
                 {"init_time": new_init, "lead_time": LEAD_TIMES[0]},
                 VirtualTestRegionJob.messages_url,
                 *_message_offset_length(1, 0),

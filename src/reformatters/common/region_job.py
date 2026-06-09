@@ -516,7 +516,7 @@ class MaterializedRegionJob(
         self,
         primary_store: Store,
         replica_stores: list[Store],
-    ) -> Mapping[str, Sequence[SOURCE_FILE_COORD]]:
+    ) -> Mapping[str, Sequence[SourceFileCoord]]:
         """
         Orchestrate the full region job processing pipeline.
 
@@ -755,26 +755,15 @@ class VirtualRef(NamedTuple):
 
     `out_loc` is the output cell the message fills (e.g. {init_time, lead_time});
     the chunk index it maps to is computed by VirtualRegionJob.chunk_key, so the
-    generator never reimplements zarr's chunk-key math.
+    generator never reimplements zarr's chunk-key math. `data_var` identifies the
+    array the ref belongs to (and supplies the chunk geometry for chunk_key).
     """
 
-    var_name: str
+    data_var: DataVar[Any]
     out_loc: Mapping[Dim, CoordinateValue]
     location: str
     offset: int
     length: int
-
-
-class VirtualRefBatch(NamedTuple):
-    """One commit's worth of *whole* source files.
-
-    `refs` are the messages to emit; `source_coords` are the source files they
-    came from (whole, never split across batches), carried for result tracking and
-    to make per-file atomicity structural.
-    """
-
-    source_coords: Sequence[SourceFileCoord]
-    refs: Sequence[VirtualRef]
 
 
 class VirtualRegionJob(
@@ -785,17 +774,20 @@ class VirtualRegionJob(
     def process_virtual_refs(
         self,
         remaining: Sequence[SOURCE_FILE_COORD],
-    ) -> Iterator[VirtualRefBatch]:
+    ) -> Iterator[Sequence[VirtualRef]]:
         """Discover available source files among `remaining` and yield their refs.
 
-        Each yielded VirtualRefBatch holds one commit's worth of *whole* source
-        files (never a partial file - see "Reader safety" in the design doc); the
-        driver commits once per yield. The generator owns the batching policy:
-        backfill yields batches of ~N whole files to amortize commit overhead;
-        operational yields ~1 file at a time for per-file visibility.
+        Each yield is one commit's worth of refs. The contract is that a yield
+        holds *whole* source files — every ref of a file is emitted in the same
+        batch, never split across yields — so a reader on `main` sees all of a
+        file's data or none of it (see "Reader safety" in the design doc). This is
+        a discipline the generator must keep (and tests check); it is not encoded
+        in the type. The generator owns the batching policy: backfill yields
+        batches of ~N whole files to amortize commit overhead; operational yields
+        ~1 file at a time for per-file visibility.
         """
         raise NotImplementedError(
-            "Yield VirtualRefBatch objects, each one commit's worth of whole source files."
+            "Yield batches of VirtualRefs, each one commit's worth of whole source files."
         )
 
     def representative_var(self, coord: SOURCE_FILE_COORD) -> DATA_VAR:  # noqa: ARG002
@@ -813,7 +805,7 @@ class VirtualRegionJob(
         primary_repo: icechunk.Repository,
         replica_repos: Sequence[icechunk.Repository],
         branch: str,
-    ) -> Mapping[str, Sequence[SourceFileCoord]]:
+    ) -> None:
         """Run the virtual write loop, committing each yielded batch atomically.
 
         Same loop for backfill and operational; the only difference is the
@@ -829,23 +821,21 @@ class VirtualRegionJob(
         remaining = self.filter_already_present(candidates, readonly_store)
         current_size = self._append_dim_size(readonly_store)
 
-        results: dict[str, list[SourceFileCoord]] = {}
-        for batch in self.process_virtual_refs(remaining):
-            # The generator contract is one commit's worth of whole files per
-            # yield, so a batch always has refs; emitting them always dirties the
-            # session, so the commit below is never empty (an empty icechunk commit
-            # raises rather than no-ops).
-            assert batch.refs, "process_virtual_refs yielded an empty batch"
+        for refs in self.process_virtual_refs(remaining):
+            # The generator yields whole files, so a batch always has refs; emitting
+            # them always dirties the session, so the commit below is never empty
+            # (an empty icechunk commit raises rather than no-ops).
+            assert refs, "process_virtual_refs yielded an empty batch"
             primary_session = primary_repo.writable_session(branch)
             replica_sessions = [repo.writable_session(branch) for repo in replica_repos]
             stores = [primary_session.store, *(s.store for s in replica_sessions)]
 
-            needed_size = self._needed_append_dim_size(batch.refs)
+            needed_size = self._needed_append_dim_size(refs)
             if needed_size > current_size:
                 self.sync_dims_to(stores, needed_size)
                 current_size = needed_size
 
-            self._emit_refs(stores, batch.refs)
+            self._emit_refs(stores, refs)
 
             now = pd.Timestamp.now(tz="UTC")
             commit_if_icechunk(
@@ -853,13 +843,6 @@ class VirtualRegionJob(
                 primary_session.store,
                 [s.store for s in replica_sessions],
             )
-
-            batch_var_names = {ref.var_name for ref in batch.refs}
-            for coord in batch.source_coords:
-                succeeded = replace(coord, status=SourceFileStatus.Succeeded)
-                for var_name in batch_var_names:
-                    results.setdefault(var_name, []).append(succeeded)
-        return results
 
     def filter_already_present(
         self,
@@ -893,7 +876,7 @@ class VirtualRegionJob(
         return [coord for coord, key in keyed if key is None or not present[key]]
 
     def chunk_key(
-        self, out_loc: Mapping[Dim, CoordinateValue], var: DATA_VAR
+        self, out_loc: Mapping[Dim, CoordinateValue], var: DataVar[Any]
     ) -> tuple[int, ...] | None:
         """Map a source message's coordinate labels to its zarr chunk index.
 
@@ -958,15 +941,14 @@ class VirtualRegionJob(
     def _emit_refs(
         self, stores: Sequence[IcechunkStore], refs: Sequence[VirtualRef]
     ) -> None:
-        var_by_name = {v.name: v for v in self.data_vars}
         specs_by_var: dict[str, list[VirtualChunkSpec]] = {}
         for ref in refs:
-            index = self.chunk_key(ref.out_loc, var_by_name[ref.var_name])
+            index = self.chunk_key(ref.out_loc, ref.data_var)
             assert index is not None, (
-                f"ref {ref.var_name} {dict(ref.out_loc)} did not resolve to a chunk "
-                "index after expansion"
+                f"ref {ref.data_var.name} {dict(ref.out_loc)} did not resolve to a "
+                "chunk index after expansion"
             )
-            specs_by_var.setdefault(ref.var_name, []).append(
+            specs_by_var.setdefault(ref.data_var.name, []).append(
                 VirtualChunkSpec(
                     index=list(index),
                     location=ref.location,

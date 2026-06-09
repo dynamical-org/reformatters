@@ -85,7 +85,8 @@ for source_file in source_files:                       # see "what a file covers
 
     refs = [
         VirtualRef(
-            key=chunk_key(msg.out_loc, msg.var, ds),    # msg.out_loc: the cell this message fills
+            data_var=msg.var,                           # which array this message fills
+            out_loc=msg.out_loc,                        # the cell this message fills
             location=source_file.get_url(),             # s3://noaa-gefs-pds/...
             offset=msg.start,
             length=msg.end - msg.start,
@@ -212,7 +213,7 @@ and nothing else.
   source files and yield whole files' refs a batch at a time. The generator owns
   its own stopping (backfill exhausts `remaining`; an operational generator polls
   and the pod's k8s active-deadline bounds the run).
-- `filter_already_present(candidates, store, ds)` — default impl
+- `filter_already_present(candidates, store)` — default impl
   (see [Filtering](#filtering-already-present-coordinates)); overridable.
 - `sync_dims_to(store, extent)` — idempotent dim/coord/derived-coord expansion
   (see [The virtual write loop](#the-virtual-write-loop)).
@@ -390,12 +391,12 @@ yields*:
 
 ```python
 candidates = self.generate_source_file_coords(scope)          # shared w/ materialized
-remaining  = self.filter_already_present(candidates, store, ds)
+remaining  = self.filter_already_present(candidates, store)
 
-for batch in self.process_virtual_refs(remaining):           # batch == 1+ whole files
-    assert batch.refs                                         # contract: never an empty yield
-    self.sync_dims_to(stores, batch.extent)                  # idempotent; no-op if already covered
-    self.set_virtual_refs(stores, batch.refs)                # per array path, all stores
+for refs in self.process_virtual_refs(remaining):            # refs == 1+ whole files' refs
+    assert refs                                              # contract: never an empty yield
+    self.sync_dims_to(stores, needed_size(refs))            # idempotent; no-op if already covered
+    self.set_virtual_refs(stores, refs)                     # per array path, all stores
     commit(stores)                                           # one commit per yield (never empty)
 ```
 
@@ -428,7 +429,7 @@ splitting a file across yields — but a yield can contain one file or many.
 > `session.has_uncommitted_changes`, the loop relies on the generator contract:
 > each yield is one commit's worth of **whole files**, so a batch always has refs,
 > and **setting refs always dirties the session — even re-emitting byte-identical
-> refs** — so the commit is never empty. The loop **asserts** `batch.refs` (a
+> refs** — so the commit is never empty. The loop **asserts** `refs` (a
 > loud, early failure if a generator ever violates the contract) and leaves
 > `commit_if_icechunk` committing unconditionally. The empty-poll and
 > everything-already-present cases never reach the commit at all — they yield no
@@ -962,15 +963,27 @@ The spike is already done (run ahead of this PR — see
 
 - Add `VirtualRegionJob` (the `process_virtual` write loop, `process_virtual_refs`
   abstract generator, `filter_already_present` default, `sync_dims_to`,
-  `chunk_key`). Emit with `set_virtual_refs` (explicit `VirtualChunkSpec` per ref)
-  — it handles arbitrary sparse cell sets directly, which the common
-  one-message-per-`(var, cell)` packing produces; `set_virtual_refs_arr`'s dense
-  columnar block is a later optimization for contiguous backfill ranges. The
-  filter builds keys from `array.metadata.chunk_key_encoding.encode_chunk_key` +
-  `store.exists`.
+  `chunk_key`). `process_virtual_refs` yields `Sequence[VirtualRef]` — one commit's
+  worth of refs; a `VirtualRef` is `(data_var, out_loc, location, offset, length)`,
+  carrying its `DataVar` so `chunk_key` reads the array geometry straight off it.
+  The whole-file atomicity invariant (all of a file's refs in one yield) is a
+  generator discipline checked by tests, not encoded in a batch type. Emit with
+  `set_virtual_refs` (explicit `VirtualChunkSpec` per ref) — it handles arbitrary
+  sparse cell sets directly, which the common one-message-per-`(var, cell)`
+  packing produces; `set_virtual_refs_arr`'s dense columnar block is a later
+  optimization for contiguous backfill ranges. The filter builds keys from
+  `array.metadata.chunk_key_encoding.encode_chunk_key` + `store.exists`.
+- The per-region write entry point lives on each subclass: `process()` on
+  `MaterializedRegionJob`, `process_virtual()` on `VirtualRegionJob` — the
+  `RegionJob` base carries neither, so neither subclass needs a raising stub for
+  the other's method.
 - `process_virtual` is driven from the `icechunk.Repository` objects (not a
   pre-opened store): a committed icechunk session is read-only, so each yielded
-  batch opens a **fresh writable session** on the branch, emits, and commits.
+  batch opens a **fresh writable session** on the branch, emits, and commits. The
+  driver gets `(primary_repo, replica_repos)` from `StoreFactory.icechunk_repos()`;
+  the role-tagged, sort-ordered list (for `parallel_setup`/`finalize`) is
+  `all_icechunk_repos(sort=…)`. `process_virtual` returns nothing — virtual refs
+  live in the manifest, so no per-file result tracking is threaded back.
 - Two coordination lifecycles, forked at the entry points (not deep in one
   method): **single-writer streaming** (virtual operational) forks in `update()`
   → `_run_virtual_operational_update`, committing whole files straight to `main`
@@ -979,7 +992,7 @@ The spike is already done (run ahead of this PR — see
   materialized operational, and virtual backfill) routes its per-job middle
   through `process_virtual` (fresh sessions) for virtual, else the materialized
   per-job-store loop. **No commit guard** — the generator contract forbids empty
-  yields, so the loop `assert`s `batch.refs` and `commit_if_icechunk` stays
+  yields, so the loop `assert`s `refs` and `commit_if_icechunk` stays
   unconditional (see [the write loop](#the-virtual-write-loop)).
 - Partitioning: `get_jobs` partitions by `encoding["shards"]` if present, else by
   `encoding["chunks"]` (virtual arrays have no shards). Materialized behavior is
@@ -1089,7 +1102,7 @@ landed; none forced a design change except #3 (empty commits raise).
    generator contract: every yield is a non-empty batch and re-emitting
    byte-identical refs *does* dirty the session, so the commit is never empty
    (idempotent replay still commits a harmless, content-addressed snapshot). The
-   loop `assert`s `batch.refs`; the empty-poll / all-present cases yield no batch
+   loop `assert`s `refs`; the empty-poll / all-present cases yield no batch
    and never reach the commit. (See [the write loop](#the-virtual-write-loop).)
 4. **Chunk-key encoding API → `array.metadata.chunk_key_encoding`.**
    `.encode_chunk_key((i,j,k,l)) → "c/i/j/k/l"`; full key `f"{array.path}/{…}"`;
