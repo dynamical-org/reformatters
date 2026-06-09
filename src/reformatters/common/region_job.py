@@ -14,6 +14,7 @@ from typing import (
     Annotated,
     Any,
     ClassVar,
+    Final,
     Generic,
     NamedTuple,
     Self,
@@ -837,6 +838,12 @@ class VirtualRegionJob(
     RegionJob[DATA_VAR, SOURCE_FILE_COORD], Generic[DATA_VAR, SOURCE_FILE_COORD]
 ):
     """Base class for processing a region of virtual Icechunk datasets that point to external files."""
+
+    # Locked to None (ty flags any override): max_vars_per_job would split one
+    # source file's variables across separate jobs that commit independently,
+    # breaking the per-file commit atomicity virtual readers rely on. Virtual jobs
+    # are tiny (byte-range refs) and parallelize along the append dim, not variables.
+    max_vars_per_job: ClassVar[Final[int | None]] = None
 
     def process_virtual_refs(
         self,

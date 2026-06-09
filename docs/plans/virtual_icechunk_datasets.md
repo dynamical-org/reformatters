@@ -1194,12 +1194,18 @@ would make adjacent backfill workers emit into each other's regions.
 mis-place refs (filter and emit would consistently compute the same *wrong* index
 without detection).
 
-**`max_vars_per_job` is forbidden for virtual region jobs** (review round 2,
-enforced in the `DynamicalDataset` validator). It splits one source file's
-variables across separate jobs that commit independently, breaking the
-one-file-per-commit atomicity virtual readers rely on. Virtual jobs are tiny
-(byte-range refs) and parallelize along the append dim, not variables, so they
-never need it.
+**`max_vars_per_job` is locked to `None` on `VirtualRegionJob`** (review round 2).
+It splits one source file's variables across separate jobs that commit
+independently, breaking the one-file-per-commit atomicity virtual readers rely on
+(virtual jobs are tiny byte-range refs and parallelize along the append dim, not
+variables, so they never need it). Enforced statically via
+`max_vars_per_job: ClassVar[Final[int | None]] = None` — `ty` flags any subclass
+override (`override-of-final-variable`). `ty` is the chosen mechanism over a
+runtime `model_validator` (it lives on the class that owns the rule, costs
+nothing at runtime, and is caught pre-merge); a `Field(ge=1, le=1)` or
+`field_validator` can't apply here because `max_vars_per_job` is a `ClassVar`, not
+a model field. Bare `Final` also works but trips a pydantic "shadows an attribute"
+warning, so `ClassVar[Final[...]]` is used.
 
 **Virtual operational updates assert exactly one active-window job** (review round
 2), not just one worker. Multiple jobs run sequentially, so the first job's

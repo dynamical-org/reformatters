@@ -603,28 +603,6 @@ def test_virtual_region_job_requires_virtual_config(tmp_path: Path) -> None:
         )
 
 
-def test_virtual_dataset_rejects_max_vars_per_job(tmp_path: Path) -> None:
-    # max_vars_per_job would split one source file's variables across separate
-    # jobs (each committing independently), breaking per-file atomicity.
-    class _SplitVarsJob(VirtualTestRegionJob):
-        max_vars_per_job = 1
-
-    container = icechunk.VirtualChunkContainer(
-        f"file://{tmp_path}/", icechunk.local_filesystem_store(str(tmp_path))
-    )
-    with pytest.raises(ValidationError, match="max_vars_per_job"):
-        VirtualTestDataset(
-            region_job_class=_SplitVarsJob,
-            primary_storage_config=StorageConfig(
-                base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
-            ),
-            icechunk_virtual_config=IcechunkVirtualConfig(
-                containers=(container,),
-                manifest_split=manifest_append_dim_split(split_size=2, dim="init_time"),
-            ),
-        )
-
-
 def test_two_worker_backfill_disjoint(tmp_path: Path) -> None:
     dataset = _make_dataset(tmp_path)
     template_ds = _create_template_ds(4)
