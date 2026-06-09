@@ -85,16 +85,16 @@ for source_file in source_files:                       # see "what a file covers
 
     refs = [
         VirtualRef(
-            key=chunk_key(msg.out_loc, msg.var, ds),    # msg.out_loc: the cell this message fills
+            data_var=msg.var,                           # which array this message fills
+            out_loc=msg.out_loc,                        # the cell it fills; chunk_key maps it to an index
             location=source_file.get_url(),             # s3://noaa-gefs-pds/...
             offset=msg.start,
             length=msg.end - msg.start,
         )
         for msg in messages
     ]
-    store.set_virtual_refs(refs)                        # all of this file's refs, one batch
-
-session.commit("...")                                   # readers see new data
+    yield refs                                          # all of this file's refs, one batch
+    # the driver emits via set_virtual_refs + commits — readers see new data
 ```
 
 At read time `GribberishCodec` (a zarr v3 `ArrayBytesCodec` serializer) decodes
@@ -177,11 +177,14 @@ ride their parent's swap. Tests pass unchanged. This is PR #1 on its own.
 - Fields: `template_config`, `region_job_class`, storage configs, plus the new
   `icechunk_virtual_config` (see [Storage configuration](#storage-configuration)).
 - CLI, Sentry, `validators()`, `operational_kubernetes_resources()` — unchanged.
-- `_process_region_jobs` driver — gains **one** fork: a virtual operational
-  update (region job class is a `VirtualRegionJob` subclass *and* this is an
-  operational update) takes the single-writer-to-`main` path; everything else
-  (materialized backfill/update, **and virtual backfill**) keeps the existing
-  temp-branch path.
+- The per-worker processing seam is polymorphic: `_process_region_jobs` (the
+  parallel temp-branch coordinator) calls
+  `region_job_class.process_worker_jobs(...)` and names no variant — materialized
+  backfill/update and **virtual backfill** all flow through it unchanged. The
+  **one** driver fork lives in `update()`: a virtual operational update routes to
+  `_run_virtual_operational_update` (single-writer-streaming-to-`main`, which
+  reuses the same `process_worker_jobs` on `branch="main"` with no
+  `parallel_setup`/`finalize`). See [the seam](#the-worker-processing-seam).
 - A model validator: if `region_job_class` is virtual then every storage
   config must be `ICECHUNK` and `icechunk_virtual_config` must be present with a
   non-empty container set.
@@ -193,25 +196,51 @@ ride their parent's swap. Tests pass unchanged. This is PR #1 on its own.
 - `get_jobs()` — region × variable-group fan-out (see
   [Partitioning](#partitioning)).
 - `source_groups()`, `get_processing_region()`, `generate_source_file_coords()`
-  (abstract), `operational_update_jobs()` (abstract), `process()` (abstract).
+  (abstract), `operational_update_jobs()` (abstract), `process()` (abstract),
+  `process_worker_jobs()` (abstract; the per-worker seam).
 
 **`MaterializedRegionJob` (subclass):** today's `process()` body, the
 `download_file` / `read_data` / `apply_data_transformations` hooks, the
-parallelism tunables, and the shared-memory helpers. The existing datasets'
-region jobs change base class here and nothing else.
+parallelism tunables, and the shared-memory helpers, plus a
+`process_worker_jobs()` that writes all of a worker's jobs to the branch in a
+single commit. The existing datasets' region jobs change base class here and
+nothing else.
 
 **`VirtualRegionJob` (subclass):**
 
-- `process()` — runs [the one virtual write loop](#the-virtual-write-loop).
-- `process_virtual_refs(remaining, deadline)` — abstract generator: discover
-  available source files and yield one file's refs at a time.
-- `filter_already_present(candidates, store, ds)` — default impl
+- `process_worker_jobs()` — opens the icechunk repos and drives each job's
+  `process_virtual()` (many commits per worker vs the materialized variant's one).
+- `process_virtual(primary_repo, replica_repos, branch)` — runs
+  [the one virtual write loop](#the-virtual-write-loop) for a single job.
+- `process_virtual_refs(remaining)` — abstract generator: discover available
+  source files and yield whole files' refs a batch at a time.
+- `filter_already_present(candidates, store)` — default impl
   (see [Filtering](#filtering-already-present-coordinates)); overridable.
-- `sync_dims_to(store, extent)` — idempotent dim/coord/derived-coord expansion
-  (see [The virtual write loop](#the-virtual-write-loop)).
-- `chunk_key(coord, var, ds)` — coord labels → chunk key, derived from array
+- `sync_dims_to(stores, extent)` — idempotent dim/coord/derived-coord expansion,
+  sized per-store (see [The virtual write loop](#the-virtual-write-loop)).
+- `chunk_key(out_loc, var)` — coord labels → chunk index, derived from array
   metadata so it can't drift from zarr (see [Chunk keys](#chunk-keys)). Shared
   by filter and emit.
+
+### The worker-processing seam
+
+The materialized and virtual variants differ in **commit-batch size**, not in
+mechanism: a materialized worker writes one commit's worth (all its jobs); a
+virtual worker writes many (one per yielded source-file batch, because a
+committed icechunk session is read-only). That single difference is expressed by
+one polymorphic method — `RegionJob.process_worker_jobs(worker_jobs,
+store_factory, branch_name, worker_index) -> dict[str, list[SourceFileResult]]` —
+so the coordinator drives every variant through one call and names none of them.
+Each variant owns its own store/session lifecycle and commit cadence behind it
+(materialized opens stores once and commits once; virtual opens the repos and
+runs the per-batch loop). The only genuinely irreducible fork is the
+*coordination lifecycle* — parallel-temp-branch (everything) vs
+single-writer-to-`main` (virtual operational) — which lives at the `update()`
+entry point, not inside the shared coordinator.
+
+This seam landed first as a behavior-preserving, materialized-only refactor (PR
+3a, #649) so it could be reviewed without virtual code; PR 3b adds
+`VirtualRegionJob.process_worker_jobs` and the coordinator stays variant-free.
 
 ## Storage configuration
 
@@ -377,19 +406,20 @@ Consequences by flow:
 
 ## The virtual write loop
 
-Both virtual flows — backfill and operational — run the **same** loop. The only
-differences are *where the session is opened* and *how big a batch the generator
-yields*:
+Both virtual flows — backfill and operational — run the **same** loop (in
+`process_virtual`). The only differences are the `branch` the driver opened and
+*how big a batch the generator yields*:
 
 ```python
-candidates = self.generate_source_file_coords(scope)          # shared w/ materialized
-remaining  = self.filter_already_present(candidates, store, ds)
+candidates = self.generate_source_file_coords(self._processing_region_ds(), self.data_vars)
+remaining  = self.filter_already_present(candidates, readonly_store)
 
-for batch in self.process_virtual_refs(remaining, deadline):  # batch == 1+ whole files
-    self.sync_dims_to(store, batch.extent)                    # idempotent; no-op if already covered
-    store.set_virtual_refs(path, batch.refs)                  # plural API, per array path
-    if store.session.has_uncommitted_changes:                 # guard: empty commit raises
-        commit(store)                                         # one commit per yield
+for refs in self.process_virtual_refs(remaining):             # refs == 1+ whole files' refs
+    assert refs                                               # contract: never an empty yield
+    stores = fresh writable sessions (a committed session is read-only)
+    self.sync_dims_to(stores, needed_size(refs))             # idempotent; per-store, no-op if covered
+    self._emit_refs(stores, refs)                            # set_virtual_refs per array path
+    commit(stores)                                           # one commit per yield (never empty)
 ```
 
 `sync_dims_to(store, extent)` is the single primitive that unifies pre-sizing
@@ -415,16 +445,18 @@ yield-immediately. The atomicity invariant (see
 [Reader safety](#reader-safety)) says each yield is **whole files** — never
 splitting a file across yields — but a yield can contain one file or many.
 
-> **Empty commits raise — guard them.** icechunk's `session.commit` raises
-> `IcechunkError` ("no changes made to the session") rather than no-opping, and
-> the shared `storage.commit_if_icechunk` helper commits unconditionally. A
-> well-behaved generator never yields an empty batch, but the driver still guards
-> on `session.has_uncommitted_changes` before committing (the alternative,
-> `allow_empty=True`, would litter the history with empty snapshots). This pairs
-> with the idempotency story: **setting refs always dirties the session — even
-> re-emitting byte-identical refs** — so the guard fires only on a genuinely
-> empty poll, never on idempotent replay (a filter false-negative just rewrites
-> an identical, content-addressed manifest and commits a no-content snapshot).
+> **Empty commits raise — so the contract forbids empty yields.** icechunk's
+> `session.commit` raises `IcechunkError` ("no changes made to the session")
+> rather than no-opping. Rather than guard each commit on
+> `session.has_uncommitted_changes`, the loop relies on the generator contract:
+> each yield is one commit's worth of **whole files**, so a batch always has refs,
+> and **setting refs always dirties the session — even re-emitting byte-identical
+> refs** — so the commit is never empty. The loop **asserts** `refs` (a loud,
+> early failure if a generator ever violates the contract) and leaves
+> `commit_if_icechunk` committing unconditionally. The empty-poll and
+> everything-already-present cases never reach the commit — they yield no batch,
+> so the loop body simply doesn't run (a filter false-negative still re-emits and
+> commits an idempotent, content-addressed no-content snapshot).
 
 The two flows fall out naturally:
 
@@ -493,13 +525,15 @@ in one poll iteration can ride one yield if the generator chooses.
 1. **CronJob fires** ~5 min before a publication window opens (per dataset).
    `concurrencyPolicy: Forbid` prevents overlapping fires.
 2. **A single worker runs `update()`**, which calls `operational_update_jobs()`
-   (→ one active-window job) and `_process_region_jobs()`.
-3. **The driver detects virtual + operational** and takes the
-   single-writer-to-`main` path: no temp branch, no shared setup, no
-   coordination files. It opens one writable session on `main` and runs
+   (→ one active-window job).
+3. **`update()` detects virtual + operational** and routes to
+   `_run_virtual_operational_update` — the single-writer-to-`main` path: no temp
+   branch, no shared setup, no coordination files, no `_process_region_jobs`. It
+   runs the variant's `process_worker_jobs` on `branch="main"`, which opens a
+   fresh writable session per batch and runs
    [the virtual write loop](#the-virtual-write-loop).
 4. **The loop** filters to what's still missing, drives
-   `process_virtual_refs(..., deadline)`, lazily expands via `sync_dims_to`,
+   `process_virtual_refs(remaining)`, lazily expands via `sync_dims_to`,
    batches refs, and commits on the ~1 s cadence.
 5. **The generator exits** when the window is complete or the pod deadline
    approaches.

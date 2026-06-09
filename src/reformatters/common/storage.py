@@ -139,6 +139,17 @@ class StoreFactory(FrozenBaseModel):
         return True
 
     def icechunk_repos(
+        self,
+    ) -> tuple[icechunk.Repository, tuple[icechunk.Repository, ...]]:
+        """Returns (primary_repo, (replica_repos, ...)) for the common case where
+        the caller just wants the primary and its replicas. Use all_icechunk_repos
+        when you also need roles or a specific primary-first/last ordering."""
+        repos = self.all_icechunk_repos(sort="primary-first")
+        primary = next(repo for role, repo in repos if role == "primary")
+        replicas = tuple(repo for role, repo in repos if role != "primary")
+        return primary, replicas
+
+    def all_icechunk_repos(
         self, *, sort: Literal["primary-first", "primary-last"]
     ) -> list[tuple[str, icechunk.Repository]]:
         """Returns (role, Repository) for each icechunk store in the specified order.
@@ -487,30 +498,35 @@ def _virtual_repository_config_and_credentials(
         config.set_virtual_chunk_container(container)
     config.manifest = icechunk.ManifestConfig(splitting=virtual_config.manifest_split)
 
-    # Every source we target today is S3 or S3-compatible (NOAA NODD, ECMWF,
-    # Source Coop) and anonymous-read, and icechunk only ships an S3 anonymous
-    # credential constructor. Assert that here rather than silently handing an S3
-    # credential to a GCS/Azure container. To support a non-S3 or private /
+    # Every production source is S3 or S3-compatible (NOAA NODD, ECMWF, Source
+    # Coop) and anonymous-read, and icechunk only ships an S3 anonymous credential
+    # constructor; local-filesystem containers (dev/test) need no credentials. Map
+    # each container to the right credential explicitly rather than silently handing
+    # an S3 credential to a GCS/Azure container. To support a non-S3 or private /
     # requester-pays source, add an optional per-container credentials field to
-    # IcechunkVirtualConfig and prefer it over this anonymous default.
+    # IcechunkVirtualConfig and prefer it over these defaults.
     s3_compatible_stores = (
         icechunk.ObjectStoreConfig.S3,
         icechunk.ObjectStoreConfig.S3Compatible,
         icechunk.ObjectStoreConfig.Tigris,
     )
+    credentials_by_prefix: dict[str, Any] = {}
     for container in virtual_config.containers:
-        assert isinstance(container.store, s3_compatible_stores), (
-            f"Virtual chunk container {container.url_prefix} uses a non-S3 store "
-            f"({type(container.store).__name__}); only S3-compatible anonymous "
-            "sources are supported. Add explicit credentials to IcechunkVirtualConfig."
-        )
+        if isinstance(container.store, s3_compatible_stores):
+            credentials_by_prefix[container.url_prefix] = (
+                icechunk.s3_anonymous_credentials()
+            )
+        elif isinstance(container.store, icechunk.ObjectStoreConfig.LocalFileSystem):
+            credentials_by_prefix[container.url_prefix] = None  # local files: no creds
+        else:
+            raise AssertionError(
+                f"Virtual chunk container {container.url_prefix} uses an unsupported "
+                f"store ({type(container.store).__name__}); only S3-compatible "
+                "(anonymous) and local-filesystem sources are supported. Add explicit "
+                "credentials to IcechunkVirtualConfig."
+            )
 
-    credentials = icechunk.containers_credentials(
-        {
-            container.url_prefix: icechunk.s3_anonymous_credentials()
-            for container in virtual_config.containers
-        }
-    )
+    credentials = icechunk.containers_credentials(credentials_by_prefix)
     return config, credentials
 
 

@@ -1,6 +1,7 @@
+import asyncio
 import concurrent.futures
 import os
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import suppress
 from copy import deepcopy
@@ -9,13 +10,26 @@ from http import HTTPStatus
 from itertools import chain, pairwise
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Generic, Self, TypeVar, get_args
+from typing import (
+    Annotated,
+    Any,
+    ClassVar,
+    Generic,
+    NamedTuple,
+    Self,
+    TypeVar,
+    get_args,
+)
 
 import httpx
+import icechunk
 import numpy as np
 import pandas as pd
 import pydantic
 import xarray as xr
+import zarr
+from icechunk import VirtualChunkSpec
+from icechunk.store import IcechunkStore
 from pydantic import (
     AfterValidator,
     Field,
@@ -24,6 +38,7 @@ from pydantic import (
     field_validator,
 )
 from zarr.abc.store import Store
+from zarr.core.metadata import ArrayV3Metadata
 
 from reformatters.common import storage, template_utils
 from reformatters.common.binary_rounding import round_float32_inplace
@@ -343,8 +358,11 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         else:
             data_var_groups = [data_vars]
 
-        # Regions along append dimension
-        regions = dimension_slices(template_ds, append_dim, kind="shards")
+        # Regions along append dimension.
+        # Materialized arrays partition by shard; virtual arrays use chunks.
+        sample_encoding = next(iter(template_ds.data_vars.values())).encoding
+        kind = "shards" if sample_encoding.get("shards") is not None else "chunks"
+        regions = dimension_slices(template_ds, append_dim, kind=kind)
 
         # Filter regions by time
         if (
@@ -801,6 +819,283 @@ class MaterializedRegionJob(
             if coord.downloaded_path:
                 with suppress(FileNotFoundError):
                     coord.downloaded_path.unlink()
+
+
+class VirtualRef(NamedTuple):
+    """A single virtual chunk reference: one GRIB message -> one zarr chunk.
+
+    `out_loc` is the output cell the message fills (e.g. {init_time, lead_time});
+    the chunk index it maps to is computed by VirtualRegionJob.chunk_key, so the
+    generator never reimplements zarr's chunk-key math. `data_var` identifies the
+    array the ref belongs to (and supplies the chunk geometry for chunk_key).
+    """
+
+    data_var: DataVar[Any]
+    out_loc: Mapping[Dim, CoordinateValue]
+    location: str
+    offset: int
+    length: int
+
+
+class VirtualRegionJob(
+    RegionJob[DATA_VAR, SOURCE_FILE_COORD], Generic[DATA_VAR, SOURCE_FILE_COORD]
+):
+    """Base class for processing a region of virtual Icechunk datasets that point to external files."""
+
+    @classmethod
+    def process_worker_jobs(
+        cls,
+        worker_jobs: Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]],
+        store_factory: storage.StoreFactory,
+        branch_name: str,
+        worker_index: int,  # noqa: ARG003 - virtual jobs commit per batch with their own messages
+    ) -> dict[str, list[SourceFileResult]]:
+        """Drive each job's per-batch virtual write loop on ``branch_name``.
+
+        Returns no results: virtual refs live in the icechunk manifest, so there is
+        nothing to thread back to finalize. Many commits per worker (one per yielded
+        batch) vs the materialized variant's single commit — same seam, the only
+        difference is batch count.
+        """
+        primary_repo, replica_repos = store_factory.icechunk_repos()
+        for job in worker_jobs:
+            assert isinstance(job, VirtualRegionJob)
+            job.process_virtual(primary_repo, replica_repos, branch_name)
+        return {}
+
+    def process_virtual_refs(
+        self,
+        remaining: Sequence[SOURCE_FILE_COORD],
+    ) -> Iterator[Sequence[VirtualRef]]:
+        """Discover available source files among `remaining` and yield their refs.
+
+        Each yield is one commit's worth of refs. The contract is that a yield
+        holds *whole* source files — every ref of a file is emitted in the same
+        batch, never split across yields — so a reader on `main` sees all of a
+        file's data or none of it (see "Reader safety" in the design doc). This is
+        a discipline the generator must keep (and tests check); it is not encoded
+        in the type. The generator owns the batching policy: backfill yields
+        batches of ~N whole files to amortize commit overhead; operational yields
+        ~1 file at a time for per-file visibility.
+        """
+        raise NotImplementedError(
+            "Yield batches of VirtualRefs, each one commit's worth of whole source files."
+        )
+
+    def representative_var(self, coord: SOURCE_FILE_COORD) -> DATA_VAR:  # noqa: ARG002
+        """The variable whose chunk presence means `coord`'s file is fully ingested.
+
+        Used by filter_already_present to probe a single representative cell per
+        file. Default: the first data var, valid when every file contains every
+        variable. Override for one-variable-per-file packings (e.g. GEFS v12
+        reforecast) to return the candidate's own variable.
+        """
+        return self.data_vars[0]
+
+    def process_virtual(
+        self,
+        primary_repo: icechunk.Repository,
+        replica_repos: Sequence[icechunk.Repository],
+        branch: str,
+    ) -> None:
+        """Run the virtual write loop, committing each yielded batch atomically.
+
+        Same loop for backfill and operational; the only difference is the
+        `branch` the driver opened (a temp branch for backfill, "main" for the
+        single-writer operational update). sync_dims_to grows the store lazily (a
+        no-op on the pre-sized backfill branch). A fresh writable session is opened
+        per batch because committing an icechunk session makes it read-only.
+        """
+        readonly_store = primary_repo.readonly_session(branch).store
+        candidates = self.generate_source_file_coords(
+            self._processing_region_ds(), self.data_vars
+        )
+        remaining = self.filter_already_present(candidates, readonly_store)
+        current_size = self._append_dim_size(readonly_store)
+
+        for refs in self.process_virtual_refs(remaining):
+            # The generator yields whole files, so a batch always has refs; emitting
+            # them always dirties the session, so the commit below is never empty
+            # (an empty icechunk commit raises rather than no-ops).
+            assert refs, "process_virtual_refs yielded an empty batch"
+            primary_session = primary_repo.writable_session(branch)
+            replica_sessions = [repo.writable_session(branch) for repo in replica_repos]
+            stores = [primary_session.store, *(s.store for s in replica_sessions)]
+
+            needed_size = self._needed_append_dim_size(refs)
+            if needed_size > current_size:
+                self.sync_dims_to(stores, needed_size)
+                current_size = needed_size
+
+            self._emit_refs(stores, refs)
+
+            now = pd.Timestamp.now(tz="UTC")
+            storage.commit_if_icechunk(
+                f"Virtual refs at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+                primary_session.store,
+                [s.store for s in replica_sessions],
+            )
+
+    def filter_already_present(
+        self,
+        candidates: Sequence[SOURCE_FILE_COORD],
+        store: IcechunkStore,
+    ) -> list[SOURCE_FILE_COORD]:
+        """Drop candidates whose representative chunk is already in the manifest.
+
+        Probes ref existence (store.exists) - never reads or decodes a chunk, which
+        would trigger an S3 fetch + GRIB decode. A false-negative (re-emitting done
+        work) is a harmless idempotent rewrite; the manifest probe has no
+        false-positives (a key is present iff we emitted it), so no work is ever
+        skipped undone.
+        """
+        group = zarr.open_group(store, mode="r")
+        keyed: list[tuple[SOURCE_FILE_COORD, str | None]] = []
+        for coord in candidates:
+            var = self.representative_var(coord)
+            index = self.chunk_key(coord.out_loc(), var)
+            if index is None:
+                keyed.append((coord, None))
+                continue
+            array = group[var.name]
+            assert isinstance(array, zarr.Array)
+            metadata = array.metadata
+            assert isinstance(metadata, ArrayV3Metadata)
+            key = f"{array.path}/{metadata.chunk_key_encoding.encode_chunk_key(index)}"
+            keyed.append((coord, key))
+
+        present = _exists_many(store, [key for _, key in keyed if key is not None])
+        return [coord for coord, key in keyed if key is None or not present[key]]
+
+    def chunk_key(
+        self, out_loc: Mapping[Dim, CoordinateValue], var: DataVar[Any]
+    ) -> tuple[int, ...] | None:
+        """Map a source message's coordinate labels to its zarr chunk index.
+
+        Geometry (dim order, chunk sizes, coord positions) is read from the
+        full-size template, so the index matches what readers resolve and does not
+        depend on how far the store has been expanded. Shared by the filter and the
+        emitter so they cannot disagree. Returns None if a label is not in the
+        template's coords, which the filter treats as "remaining".
+
+        Asserts each label lands on an exact chunk boundary - a virtual chunk is
+        exactly one GRIB message, so any non-aligned position is a bug.
+        """
+        dims = tuple(str(d) for d in self.template_ds[var.name].dims)
+        chunks = var.encoding.chunks
+        chunks = (chunks,) if isinstance(chunks, int) else chunks
+        assert len(chunks) == len(dims)
+        labels = {str(dim): label for dim, label in out_loc.items()}
+
+        index: list[int] = []
+        for dim, chunk_size in zip(dims, chunks, strict=True):
+            if dim in labels:
+                position = int(
+                    self.template_ds.get_index(dim).get_indexer(
+                        pd.Index([labels[dim]])
+                    )[0]
+                )
+                if position < 0:
+                    return None  # label not in coords -> not yet a position in this dataset
+            else:
+                position = 0  # dims absent from out_loc (e.g. lat/lon) are one chunk
+            chunk_index, remainder = divmod(position, chunk_size)
+            assert remainder == 0, (
+                f"{dim}={labels.get(dim)} maps to position {position}, which is not "
+                f"on a chunk boundary (chunk size {chunk_size}); a virtual chunk must "
+                "be exactly one GRIB message."
+            )
+            index.append(chunk_index)
+        return tuple(index)
+
+    def sync_dims_to(
+        self, stores: Sequence[IcechunkStore], needed_append_dim_size: int
+    ) -> None:
+        """Grow the append dim (and its dependent coords) to `needed_append_dim_size`.
+
+        Writes only the new positions by appending the corresponding slice of the
+        already-derived template; existing positions are untouched. Data vars stay
+        dask-lazy under compute=False, so the decode-only serializer is never
+        invoked. A no-op for any store already covering the size (so backfill's
+        pre-sized branch never resizes, and parallel workers never conflict). Each
+        store's missing slice is computed from its own committed size: replicas
+        commit before the primary, so a partial commit can leave a replica ahead,
+        and appending the primary's slice to it would duplicate positions.
+        """
+        for store in stores:
+            current_size = self._append_dim_size(store)
+            if needed_append_dim_size <= current_size:
+                continue
+            slice_ds = self.template_ds.isel(
+                {self.append_dim: slice(current_size, needed_append_dim_size)}
+            )
+            slice_ds.to_zarr(
+                store, append_dim=self.append_dim, compute=False, consolidated=False
+            )
+
+    def _emit_refs(
+        self, stores: Sequence[IcechunkStore], refs: Sequence[VirtualRef]
+    ) -> None:
+        specs_by_var: dict[str, list[VirtualChunkSpec]] = {}
+        for ref in refs:
+            index = self.chunk_key(ref.out_loc, ref.data_var)
+            assert index is not None, (
+                f"ref {ref.data_var.name} {dict(ref.out_loc)} did not resolve to a "
+                "chunk index after expansion"
+            )
+            specs_by_var.setdefault(ref.data_var.name, []).append(
+                VirtualChunkSpec(
+                    index=list(index),
+                    location=ref.location,
+                    offset=ref.offset,
+                    length=ref.length,
+                )
+            )
+        for store in stores:
+            for var_name, specs in specs_by_var.items():
+                failed = store.set_virtual_refs(
+                    var_name, specs, validate_containers=True
+                )
+                assert failed is None, (
+                    f"{len(failed)} virtual ref(s) for {var_name} did not match a "
+                    f"registered container, e.g. {failed[:3]}"
+                )
+
+    def _needed_append_dim_size(self, refs: Sequence[VirtualRef]) -> int:
+        positions = self.template_ds.get_index(self.append_dim).get_indexer(
+            pd.Index([ref.out_loc[self.append_dim] for ref in refs])
+        )
+        assert (positions >= 0).all(), (
+            "a ref's append-dim label is not present in the template"
+        )
+        return int(positions.max()) + 1
+
+    def _append_dim_size(self, store: IcechunkStore) -> int:
+        array = zarr.open_group(store, mode="r")[self.append_dim]
+        assert isinstance(array, zarr.Array)
+        return int(array.shape[0])
+
+    def _processing_region_ds(self) -> xr.Dataset:
+        processing_region = self.get_processing_region()
+        # Virtual refs point at raw source bytes, so no surrounding buffer is ever
+        # needed; a buffered region would make adjacent backfill workers generate
+        # overlapping candidates and emit refs into each other's regions.
+        assert processing_region == self.region, (
+            "VirtualRegionJob.get_processing_region must equal self.region"
+        )
+        ds: xr.Dataset = self.template_ds[[v.name for v in self.data_vars]]  # ty: ignore[invalid-assignment]
+        return ds.isel({self.append_dim: processing_region})
+
+
+def _exists_many(store: IcechunkStore, keys: Sequence[str]) -> dict[str, bool]:
+    """Probe many chunk keys concurrently (store.exists is async)."""
+    if not keys:
+        return {}
+
+    async def _check() -> list[bool]:
+        return list(await asyncio.gather(*(store.exists(key) for key in keys)))
+
+    return dict(zip(keys, asyncio.run(_check()), strict=True))
 
 
 class SourceFileResult(FrozenBaseModel):

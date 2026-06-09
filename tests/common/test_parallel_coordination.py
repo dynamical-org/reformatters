@@ -48,7 +48,7 @@ class FakeStoreFactory:
     def clear_coordination_files(self, job_name: str) -> None:
         self.files.pop(job_name, None)
 
-    def icechunk_repos(self, *, sort: str) -> list[tuple[str, FakeRepo]]:
+    def all_icechunk_repos(self, *, sort: str) -> list[tuple[str, FakeRepo]]:
         return list(self._icechunk_repos_by_sort[sort])
 
     def primary_store(self, writable: bool = False) -> object:  # noqa: ARG002
@@ -467,7 +467,7 @@ class TestFinalize:
         # No metadata copies, no commits, and no replicas/primary stores queried.
         stub_io["copy_zarr_metadata"].assert_not_called()
         # One primary + one replica repo configured; none should have been touched.
-        for _role, repo in factory.icechunk_repos(sort="primary-first"):
+        for _role, repo in factory.all_icechunk_repos(sort="primary-first"):
             assert repo.sessions == []
             assert repo.reset_calls == []
             assert repo.delete_branch_calls == []

@@ -38,6 +38,7 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
     SourceFileResult,
+    VirtualRegionJob,
 )
 from reformatters.common.storage import (
     DatasetFormat,
@@ -67,6 +68,16 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     @model_validator(mode="after")
     def _validate_virtual_storage(self) -> Self:
+        # A virtual region job emits chunk refs into icechunk and needs the source
+        # containers registered, so the virtual config is mandatory for it.
+        if (
+            issubclass(self.region_job_class, VirtualRegionJob)
+            and self.icechunk_virtual_config is None
+        ):
+            raise ValueError(
+                f"{self.region_job_class.__name__} is a VirtualRegionJob but no "
+                "icechunk_virtual_config was provided; virtual datasets require it."
+            )
         # Virtual datasets store icechunk metadata + virtual chunk refs, so every store must be icechunk.
         if self.icechunk_virtual_config is not None:
             non_icechunk = [
@@ -190,15 +201,22 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 reformat_job_name=reformat_job_name,
             )
 
-            self._process_region_jobs(
-                all_jobs=all_jobs,
-                worker_index=worker_index,
-                workers_total=workers_total,
-                reformat_job_name=reformat_job_name,
-                template_ds=template_ds,
-                tmp_store=tmp_store,
-                update_template_with_results=True,
-            )
+            if issubclass(self.region_job_class, VirtualRegionJob):
+                # Virtual operational updates are single-writer streaming (whole
+                # files committed straight to main as they arrive) — a different
+                # lifecycle from the parallel temp-branch coordinator, so they
+                # don't go through _process_region_jobs.
+                self._run_virtual_operational_update(all_jobs, workers_total)
+            else:
+                self._process_region_jobs(
+                    all_jobs=all_jobs,
+                    worker_index=worker_index,
+                    workers_total=workers_total,
+                    reformat_job_name=reformat_job_name,
+                    template_ds=template_ds,
+                    tmp_store=tmp_store,
+                    update_template_with_results=True,
+                )
 
         log.info(
             f"Operational update complete. Wrote to primary store: {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()} replicas"
@@ -413,7 +431,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             f"{len(worker_jobs)} of {len(all_jobs)} total jobs, {jobs_summary}"
         )
 
-        icechunk_repos = self.store_factory.icechunk_repos(sort="primary-first")
+        icechunk_repos = self.store_factory.all_icechunk_repos(sort="primary-first")
         has_icechunk = len(icechunk_repos) > 0
         branch_name = f"_job_{reformat_job_name}" if has_icechunk else "main"
 
@@ -472,6 +490,20 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 workers_total=workers_total,
                 update_template_with_results=update_template_with_results,
             )
+
+    def _run_virtual_operational_update(
+        self,
+        all_jobs: Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]],
+        workers_total: int,
+    ) -> None:
+        """Single-writer virtual operational update: commit whole source files
+        straight to "main" as they arrive (no temp branch, no parallel_setup, no
+        finalize), so readers see each file within seconds. Reuses the variant's
+        per-batch write loop via process_worker_jobs on branch "main"."""
+        assert workers_total == 1, "Virtual operational updates run single-writer"
+        self.region_job_class.process_worker_jobs(
+            all_jobs, self.store_factory, "main", 0
+        )
 
     def validate_dataset(
         self,
