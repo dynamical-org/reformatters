@@ -842,27 +842,6 @@ class VirtualRegionJob(
 ):
     """Base class for processing a region of virtual Icechunk datasets that point to external files."""
 
-    @classmethod
-    def process_worker_jobs(
-        cls,
-        worker_jobs: Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]],
-        store_factory: storage.StoreFactory,
-        branch_name: str,
-        worker_index: int,  # noqa: ARG003 - virtual jobs commit per batch with their own messages
-    ) -> dict[str, list[SourceFileResult]]:
-        """Drive each job's per-batch virtual write loop on ``branch_name``.
-
-        Returns no results: virtual refs live in the icechunk manifest, so there is
-        nothing to thread back to finalize. Many commits per worker (one per yielded
-        batch) vs the materialized variant's single commit — same seam, the only
-        difference is batch count.
-        """
-        primary_repo, replica_repos = store_factory.icechunk_repos()
-        for job in worker_jobs:
-            assert isinstance(job, VirtualRegionJob)
-            job.process_virtual(primary_repo, replica_repos, branch_name)
-        return {}
-
     def process_virtual_refs(
         self,
         remaining: Sequence[SOURCE_FILE_COORD],
@@ -891,6 +870,60 @@ class VirtualRegionJob(
         reforecast) to return the candidate's own variable.
         """
         return self.data_vars[0]
+
+    def filter_already_present(
+        self,
+        candidates: Sequence[SOURCE_FILE_COORD],
+        store: IcechunkStore,
+    ) -> list[SOURCE_FILE_COORD]:
+        """Drop candidates whose representative chunk is already in the manifest.
+
+        Probes ref existence (store.exists) - never reads or decodes a chunk, which
+        would trigger an S3 fetch + GRIB decode. A false-negative (re-emitting done
+        work) is a harmless idempotent rewrite; the manifest probe has no
+        false-positives (a key is present iff we emitted it), so no work is ever
+        skipped undone.
+        """
+        group = zarr.open_group(store, mode="r")
+        keyed: list[tuple[SOURCE_FILE_COORD, str | None]] = []
+        for coord in candidates:
+            var = self.representative_var(coord)
+            index = self.chunk_key(coord.out_loc(), var)
+            if index is None:
+                keyed.append((coord, None))
+                continue
+            array = group[var.name]
+            assert isinstance(array, zarr.Array)
+            metadata = array.metadata
+            assert isinstance(metadata, ArrayV3Metadata)
+            key = f"{array.path}/{metadata.chunk_key_encoding.encode_chunk_key(index)}"
+            keyed.append((coord, key))
+
+        present = _exists_many(store, [key for _, key in keyed if key is not None])
+        return [coord for coord, key in keyed if key is None or not present[key]]
+
+    # ----- Most subclasses will not need to override the attributes and methods below -----
+
+    @classmethod
+    def process_worker_jobs(
+        cls,
+        worker_jobs: Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]],
+        store_factory: storage.StoreFactory,
+        branch_name: str,
+        worker_index: int,  # noqa: ARG003 - virtual jobs commit per batch with their own messages
+    ) -> dict[str, list[SourceFileResult]]:
+        """Drive each job's per-batch virtual write loop on ``branch_name``.
+
+        Returns no results: virtual refs live in the icechunk manifest, so there is
+        nothing to thread back to finalize. Many commits per worker (one per yielded
+        batch) vs the materialized variant's single commit — same seam, the only
+        difference is batch count.
+        """
+        primary_repo, replica_repos = store_factory.icechunk_repos()
+        for job in worker_jobs:
+            assert isinstance(job, VirtualRegionJob)
+            job.process_virtual(primary_repo, replica_repos, branch_name)
+        return {}
 
     def process_virtual(
         self,
@@ -936,36 +969,33 @@ class VirtualRegionJob(
                 [s.store for s in replica_sessions],
             )
 
-    def filter_already_present(
-        self,
-        candidates: Sequence[SOURCE_FILE_COORD],
-        store: IcechunkStore,
-    ) -> list[SOURCE_FILE_COORD]:
-        """Drop candidates whose representative chunk is already in the manifest.
-
-        Probes ref existence (store.exists) - never reads or decodes a chunk, which
-        would trigger an S3 fetch + GRIB decode. A false-negative (re-emitting done
-        work) is a harmless idempotent rewrite; the manifest probe has no
-        false-positives (a key is present iff we emitted it), so no work is ever
-        skipped undone.
-        """
-        group = zarr.open_group(store, mode="r")
-        keyed: list[tuple[SOURCE_FILE_COORD, str | None]] = []
-        for coord in candidates:
-            var = self.representative_var(coord)
-            index = self.chunk_key(coord.out_loc(), var)
-            if index is None:
-                keyed.append((coord, None))
-                continue
-            array = group[var.name]
-            assert isinstance(array, zarr.Array)
-            metadata = array.metadata
-            assert isinstance(metadata, ArrayV3Metadata)
-            key = f"{array.path}/{metadata.chunk_key_encoding.encode_chunk_key(index)}"
-            keyed.append((coord, key))
-
-        present = _exists_many(store, [key for _, key in keyed if key is not None])
-        return [coord for coord, key in keyed if key is None or not present[key]]
+    def _emit_refs(
+        self, stores: Sequence[IcechunkStore], refs: Sequence[VirtualRef]
+    ) -> None:
+        specs_by_var: dict[str, list[VirtualChunkSpec]] = {}
+        for ref in refs:
+            index = self.chunk_key(ref.out_loc, ref.data_var)
+            assert index is not None, (
+                f"ref {ref.data_var.name} {dict(ref.out_loc)} did not resolve to a "
+                "chunk index after expansion"
+            )
+            specs_by_var.setdefault(ref.data_var.name, []).append(
+                VirtualChunkSpec(
+                    index=list(index),
+                    location=ref.location,
+                    offset=ref.offset,
+                    length=ref.length,
+                )
+            )
+        for store in stores:
+            for var_name, specs in specs_by_var.items():
+                failed = store.set_virtual_refs(
+                    var_name, specs, validate_containers=True
+                )
+                assert failed is None, (
+                    f"{len(failed)} virtual ref(s) for {var_name} did not match a "
+                    f"registered container, e.g. {failed[:3]}"
+                )
 
     def chunk_key(
         self, out_loc: Mapping[Dim, CoordinateValue], var: DataVar[Any]
@@ -1032,34 +1062,6 @@ class VirtualRegionJob(
             slice_ds.to_zarr(
                 store, append_dim=self.append_dim, compute=False, consolidated=False
             )
-
-    def _emit_refs(
-        self, stores: Sequence[IcechunkStore], refs: Sequence[VirtualRef]
-    ) -> None:
-        specs_by_var: dict[str, list[VirtualChunkSpec]] = {}
-        for ref in refs:
-            index = self.chunk_key(ref.out_loc, ref.data_var)
-            assert index is not None, (
-                f"ref {ref.data_var.name} {dict(ref.out_loc)} did not resolve to a "
-                "chunk index after expansion"
-            )
-            specs_by_var.setdefault(ref.data_var.name, []).append(
-                VirtualChunkSpec(
-                    index=list(index),
-                    location=ref.location,
-                    offset=ref.offset,
-                    length=ref.length,
-                )
-            )
-        for store in stores:
-            for var_name, specs in specs_by_var.items():
-                failed = store.set_virtual_refs(
-                    var_name, specs, validate_containers=True
-                )
-                assert failed is None, (
-                    f"{len(failed)} virtual ref(s) for {var_name} did not match a "
-                    f"registered container, e.g. {failed[:3]}"
-                )
 
     def _needed_append_dim_size(self, refs: Sequence[VirtualRef]) -> int:
         positions = self.template_ds.get_index(self.append_dim).get_indexer(
