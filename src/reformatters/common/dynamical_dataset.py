@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Annotated, Any, Generic, Literal, Self, TypeVar
+from typing import Annotated, Any, Generic, Literal, Self, TypeVar, cast
 
 import icechunk
 import numpy as np
@@ -37,6 +37,7 @@ from reformatters.common.kubernetes import (
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.region_job import (
+    MaterializedRegionJob,
     RegionJob,
     SourceFileCoord,
     SourceFileResult,
@@ -466,6 +467,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 worker_jobs, icechunk_repos, branch_name
             )
         elif worker_jobs:
+            # Not virtual (handled above), so process() is defined on these jobs.
+            materialized_jobs = cast(
+                "Sequence[MaterializedRegionJob[DATA_VAR, SOURCE_FILE_COORD]]",
+                worker_jobs,
+            )
             primary_store = self.store_factory.primary_store(
                 writable=True, branch=branch_name
             )
@@ -473,7 +479,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 writable=True, branch=branch_name
             )
 
-            for job in worker_jobs:
+            for job in materialized_jobs:
                 template_utils.write_metadata(job.template_ds, job.tmp_store)
                 results = job.process(
                     primary_store=primary_store, replica_stores=replica_stores

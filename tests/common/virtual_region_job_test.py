@@ -196,9 +196,8 @@ class VirtualTestRegionJob(
     def process_virtual_refs(
         self,
         remaining: Sequence[VirtualTestSourceFileCoord],
-        deadline: Timestamp | None,
     ) -> Iterator[VirtualRefBatch]:
-        batch_files = 1 if deadline is not None else self.backfill_batch_files
+        batch_files = self.backfill_batch_files
         init_index = self.template_ds.get_index("init_time")
         lead_index = self.template_ds.get_index("lead_time")
         for group in batched(remaining, batch_files, strict=False):
@@ -308,7 +307,6 @@ def _make_region_job(
     template_ds: xr.Dataset,
     *,
     region: slice,
-    deadline: Timestamp | None = None,
 ) -> VirtualTestRegionJob:
     return VirtualTestRegionJob(
         tmp_store=Path("unused-tmp.zarr"),
@@ -317,7 +315,6 @@ def _make_region_job(
         append_dim="init_time",
         region=region,
         reformat_job_name="test",
-        deadline=deadline,
     )
 
 
@@ -417,7 +414,6 @@ def test_process_virtual_rejects_empty_batch(tmp_path: Path) -> None:
         def process_virtual_refs(
             self,
             remaining: Sequence[VirtualTestSourceFileCoord],  # noqa: ARG002
-            deadline: Timestamp | None,  # noqa: ARG002
         ) -> Iterator[VirtualRefBatch]:
             yield VirtualRefBatch(source_coords=[], refs=[])
 
@@ -556,9 +552,7 @@ def test_virtual_operational_single_writer_expands_main(tmp_path: Path) -> None:
     # Start with an empty main (no future NaNs), then operationally expand it.
     template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
     full_template = _create_template_ds(4)
-    job = _make_region_job(
-        full_template, region=slice(0, 4), deadline=pd.Timestamp("2100-01-01")
-    )
+    job = _make_region_job(full_template, region=slice(0, 4))
 
     dataset._run_virtual_operational_update([job], workers_total=1)
 
@@ -573,9 +567,7 @@ def test_virtual_operational_second_fire_sees_no_new_work(tmp_path: Path) -> Non
     full_template = _create_template_ds(4)
 
     def fire() -> None:
-        job = _make_region_job(
-            full_template, region=slice(0, 4), deadline=pd.Timestamp("2100-01-01")
-        )
+        job = _make_region_job(full_template, region=slice(0, 4))
         dataset._run_virtual_operational_update([job], workers_total=1)
 
     fire()

@@ -358,9 +358,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         else:
             data_var_groups = [data_vars]
 
-        # Regions along append dimension. Materialized arrays partition by physical
-        # shard; virtual arrays have no shards (one ref per GRIB message), so they
-        # fall back to chunks. dimension_slices stays strict about which key it reads.
+        # Regions along append dimension.
+        # Materialized arrays partition by shard; virtual arrays use chunks.
         sample_encoding = next(iter(template_ds.data_vars.values())).encoding
         kind = "shards" if sample_encoding.get("shards") is not None else "chunks"
         regions = dimension_slices(template_ds, append_dim, kind=kind)
@@ -426,21 +425,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             for data_var_group in data_var_groups
         ]
         return all_jobs
-
-    def process(
-        self,
-        primary_store: Store,
-        replica_stores: list[Store],
-    ) -> Mapping[str, Sequence[SOURCE_FILE_COORD]]:
-        """
-        Process this region, writing chunk data to primary_store (and replica_stores)
-        and returning the per-variable source file coordinates with their final status.
-
-        Implemented by the MaterializedRegionJob and VirtualRegionJob subclasses.
-        """
-        raise NotImplementedError(
-            "Subclasses implement process() with variant-specific logic"
-        )
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(region=({self.region.start}, {self.region.stop}), data_vars={[v.name for v in self.data_vars]})"
@@ -796,34 +780,19 @@ class VirtualRefBatch(NamedTuple):
 class VirtualRegionJob(
     RegionJob[DATA_VAR, SOURCE_FILE_COORD], Generic[DATA_VAR, SOURCE_FILE_COORD]
 ):
-    # Writes virtual chunk references (byte ranges into public GRIB files) into an
-    # icechunk store rather than materializing rechunked data. Base class for
-    # spatial/map-optimized virtual datasets. The driver routes virtual jobs to
-    # process_virtual() (not process()), because each yielded batch is committed
-    # on its own writable session - a committed icechunk session is read-only, so
-    # the per-batch commit loop must reopen a session from the repository.
-
-    # Operational poll deadline. None for backfills, which exhaust their candidate
-    # set and return; set by operational_update_jobs for operational updates, which
-    # poll for newly published files until the deadline approaches.
-    deadline: Timestamp | None = None
+    """Base class for processing a region of virtual Icechunk datasets that point to external files."""
 
     def process_virtual_refs(
         self,
         remaining: Sequence[SOURCE_FILE_COORD],
-        deadline: Timestamp | None,
     ) -> Iterator[VirtualRefBatch]:
         """Discover available source files among `remaining` and yield their refs.
 
         Each yielded VirtualRefBatch holds one commit's worth of *whole* source
         files (never a partial file - see "Reader safety" in the design doc); the
         driver commits once per yield. The generator owns the batching policy:
-
-        - `deadline is None` (backfill): yield all of `remaining`, grouped into
-          batches of ~N whole files to amortize commit overhead, then return.
-        - `deadline` set (operational): poll for newly-available files, yielding
-          ~1 file per batch for per-file visibility, until the active window is
-          complete or `deadline` approaches; then return.
+        backfill yields batches of ~N whole files to amortize commit overhead;
+        operational yields ~1 file at a time for per-file visibility.
         """
         raise NotImplementedError(
             "Yield VirtualRefBatch objects, each one commit's worth of whole source files."
@@ -839,16 +808,6 @@ class VirtualRegionJob(
         """
         return self.data_vars[0]
 
-    def process(
-        self,
-        primary_store: Store,
-        replica_stores: list[Store],
-    ) -> Mapping[str, Sequence[SOURCE_FILE_COORD]]:
-        raise NotImplementedError(
-            "VirtualRegionJob is driven via process_virtual(); the dataset driver "
-            "routes virtual jobs there so each batch can commit on its own session."
-        )
-
     def process_virtual(
         self,
         primary_repo: icechunk.Repository,
@@ -857,12 +816,11 @@ class VirtualRegionJob(
     ) -> Mapping[str, Sequence[SourceFileCoord]]:
         """Run the virtual write loop, committing each yielded batch atomically.
 
-        Same loop for backfill and operational; the only differences are the
+        Same loop for backfill and operational; the only difference is the
         `branch` the driver opened (a temp branch for backfill, "main" for the
-        single-writer operational update) and whether `self.deadline` makes the
-        generator poll. sync_dims_to grows the store lazily (a no-op on the
-        pre-sized backfill branch). A fresh writable session is opened per batch
-        because committing an icechunk session makes it read-only.
+        single-writer operational update). sync_dims_to grows the store lazily (a
+        no-op on the pre-sized backfill branch). A fresh writable session is opened
+        per batch because committing an icechunk session makes it read-only.
         """
         readonly_store = primary_repo.readonly_session(branch).store
         candidates = self.generate_source_file_coords(
@@ -872,7 +830,7 @@ class VirtualRegionJob(
         current_size = self._append_dim_size(readonly_store)
 
         results: dict[str, list[SourceFileCoord]] = {}
-        for batch in self.process_virtual_refs(remaining, self.deadline):
+        for batch in self.process_virtual_refs(remaining):
             # The generator contract is one commit's worth of whole files per
             # yield, so a batch always has refs; emitting them always dirties the
             # session, so the commit below is never empty (an empty icechunk commit

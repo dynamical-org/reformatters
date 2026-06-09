@@ -149,8 +149,8 @@ DynamicalDataset                          # unchanged single base
 
 RegionJob                                 # shared base: fields, get_jobs,
 │                                         #   source_groups, generate_source_file_coords,
-│                                         #   operational_update_jobs (abstract), process (abstract)
-├── MaterializedRegionJob                 # existing process() pipeline + hooks + tunables
+│                                         #   operational_update_jobs (abstract)
+├── MaterializedRegionJob                 # process() pipeline + hooks + tunables
 │   ├── NoaaGfsCommonRegionJob → NoaaGfsForecastRegionJob   (base swap only)
 │   ├── NoaaHrrrRegionJob → …                                (base swap only)
 │   └── …
@@ -193,18 +193,25 @@ ride their parent's swap. Tests pass unchanged. This is PR #1 on its own.
 - `get_jobs()` — region × variable-group fan-out (see
   [Partitioning](#partitioning)).
 - `source_groups()`, `get_processing_region()`, `generate_source_file_coords()`
-  (abstract), `operational_update_jobs()` (abstract), `process()` (abstract).
+  (abstract), `operational_update_jobs()` (abstract). The per-region write entry
+  point lives on each subclass, not the base — `process()` on
+  `MaterializedRegionJob`, `process_virtual()` on `VirtualRegionJob` — so neither
+  carries a stub for the other variant's method.
 
-**`MaterializedRegionJob` (subclass):** today's `process()` body, the
-`download_file` / `read_data` / `apply_data_transformations` hooks, the
-parallelism tunables, and the shared-memory helpers. The existing datasets'
-region jobs change base class here and nothing else.
+**`MaterializedRegionJob` (subclass):** today's `process(primary_store,
+replica_stores)` body, the `download_file` / `read_data` /
+`apply_data_transformations` hooks, the parallelism tunables, and the
+shared-memory helpers. The existing datasets' region jobs change base class here
+and nothing else.
 
 **`VirtualRegionJob` (subclass):**
 
-- `process()` — runs [the one virtual write loop](#the-virtual-write-loop).
-- `process_virtual_refs(remaining, deadline)` — abstract generator: discover
-  available source files and yield one file's refs at a time.
+- `process_virtual(primary_repo, replica_repos, branch)` — runs
+  [the one virtual write loop](#the-virtual-write-loop).
+- `process_virtual_refs(remaining)` — abstract generator: discover available
+  source files and yield whole files' refs a batch at a time. The generator owns
+  its own stopping (backfill exhausts `remaining`; an operational generator polls
+  and the pod's k8s active-deadline bounds the run).
 - `filter_already_present(candidates, store, ds)` — default impl
   (see [Filtering](#filtering-already-present-coordinates)); overridable.
 - `sync_dims_to(store, extent)` — idempotent dim/coord/derived-coord expansion
@@ -385,7 +392,7 @@ yields*:
 candidates = self.generate_source_file_coords(scope)          # shared w/ materialized
 remaining  = self.filter_already_present(candidates, store, ds)
 
-for batch in self.process_virtual_refs(remaining, deadline):  # batch == 1+ whole files
+for batch in self.process_virtual_refs(remaining):           # batch == 1+ whole files
     assert batch.refs                                         # contract: never an empty yield
     self.sync_dims_to(stores, batch.extent)                  # idempotent; no-op if already covered
     self.set_virtual_refs(stores, batch.refs)                # per array path, all stores
@@ -495,16 +502,17 @@ in one poll iteration can ride one yield if the generator chooses.
 1. **CronJob fires** ~5 min before a publication window opens (per dataset).
    `concurrencyPolicy: Forbid` prevents overlapping fires.
 2. **A single worker runs `update()`**, which calls `operational_update_jobs()`
-   (→ one active-window job) and `_process_region_jobs()`.
-3. **The driver detects virtual + operational** and takes the
-   single-writer-to-`main` path: no temp branch, no shared setup, no
-   coordination files. It opens one writable session on `main` and runs
+   (→ one active-window job).
+3. **`update()` detects a virtual dataset** and routes to
+   `_run_virtual_operational_update` — the single-writer-to-`main` path: no temp
+   branch, no shared setup, no coordination files, no `_process_region_jobs`. It
+   opens one writable session on `main` per batch and runs
    [the virtual write loop](#the-virtual-write-loop).
 4. **The loop** filters to what's still missing, drives
-   `process_virtual_refs(..., deadline)`, lazily expands via `sync_dims_to`,
+   `process_virtual_refs(remaining)`, lazily expands via `sync_dims_to`,
    batches refs, and commits on the ~1 s cadence.
-5. **The generator exits** when the window is complete or the pod deadline
-   approaches.
+5. **The generator exits** when the window is complete; the pod's k8s
+   active-deadline bounds the run.
 6. **The pod exits.** The next fire starts fresh and resumes via the filter.
 
 ### No NaN-padded future
