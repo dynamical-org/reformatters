@@ -1111,7 +1111,7 @@ issue **#513** (its body holds the 6-PR checklist; items are written "PR 1" not
 | PR 1 — extract `MaterializedRegionJob` | **merged** (#643) | `RegionJob` base + `MaterializedRegionJob(RegionJob)`; all datasets swapped base. |
 | PR 2 — prep | **merged** (#647) | ECMWF parser → `grib_message_byte_ranges_from_index`; `Encoding.serializer`; `gribberish~=0.30` (`gribberish.zarr.GribberishCodec`, `.to_dict()` → `{"name":"gribberish","configuration":{"var":...}}`); `IcechunkVirtualConfig` (real icechunk objects via `InstanceOf`) + `manifest_append_dim_split(*, split_size, dim)`; threaded through `StoreFactory`; validator (config present ⇒ all ICECHUNK). |
 | PR 3a — worker-processing seam (materialized only) | **merged** (#649) | See [B-method](#decision-b-method). |
-| PR 3b — `VirtualRegionJob` on the seam | **open** (#650) | Supersedes #648 (closed). Review round 1 addressed. |
+| PR 3b — `VirtualRegionJob` on the seam | **open** (#650) | Supersedes #648 (closed). Review rounds 1–2 addressed. |
 | PR 4–6 | not started | First `-spatial` dataset, then second provider, then validation. |
 
 PR 3 was originally one combined PR (#648) but was resequenced into 3a + 3b after
@@ -1186,6 +1186,45 @@ yields, so the loop `assert`s `refs` and `commit_if_icechunk` stays unconditiona
 **`VirtualRegionJob._processing_region_ds` asserts `get_processing_region() ==
 region`.** Buffering is meaningless for virtual refs (they point at raw bytes) and
 would make adjacent backfill workers emit into each other's regions.
+
+**`chunk_key` reads chunk geometry from the checked-in template, not the in-code
+`DataVar.encoding`** (review round 2). The repo trusts the *checked-in*
+`templates/latest.zarr` (git-reviewable) over in-code `TemplateConfig`; reading
+`template_ds[var].encoding["chunks"]` means a code/template drift can't silently
+mis-place refs (filter and emit would consistently compute the same *wrong* index
+without detection).
+
+**`max_vars_per_job` is forbidden for virtual region jobs** (review round 2,
+enforced in the `DynamicalDataset` validator). It splits one source file's
+variables across separate jobs that commit independently, breaking the
+one-file-per-commit atomicity virtual readers rely on. Virtual jobs are tiny
+(byte-range refs) and parallelize along the append dim, not variables, so they
+never need it.
+
+**Virtual operational updates assert exactly one active-window job** (review round
+2), not just one worker. Multiple jobs run sequentially, so the first job's
+polling generator could consume the pod's k8s deadline and starve the rest.
+
+**Append-dim "leaps" are not a framework bug — deliberately not guarded** (review
+round 2 pushback). A batch growing the append dim to a later position while an
+earlier one is unfilled is the *intended* interleave for forecasts: the
+operational job spans the whole active window and its generator polls the union
+of still-missing files, so an earlier init's late leads and a newer init's first
+leads fill in together, and the filter skips done work. An earlier slot showing
+fill values meanwhile is the same accepted partial-init state as a materialized
+forecast mid-update, and a crash does **not** leave it indefinitely (the next
+fire re-polls the window and the filter re-discovers the gap). The reviewer's
+suggested "reject append-dim leaps" would *break* this interleave. The one place
+contiguity genuinely matters is **analysis** datasets (append dim `time`, which
+must not have interior gaps) — there the generator must maintain a contiguous
+frontier and stop at the first missing time step; that's a per-dataset generator
+responsibility to enforce when the first analysis `-spatial` dataset is built,
+not a framework-level rule.
+
+**Virtual `validate_dataset` skips `check_for_expected_shards`** (review round 2):
+virtual arrays have no shards (one ref per chunk) and intentionally-missing chunks
+for partially-published inits. A manifest-aware virtual validator is deferred to
+the validation PR (#513 PR 6).
 
 ### Conventions & gotchas
 
