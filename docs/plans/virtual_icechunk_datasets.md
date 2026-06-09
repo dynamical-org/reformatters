@@ -1209,7 +1209,13 @@ warning, so `ClassVar[Final[...]]` is used.
 
 **Virtual operational updates assert exactly one active-window job** (review round
 2), not just one worker. Multiple jobs run sequentially, so the first job's
-polling generator could consume the pod's k8s deadline and starve the rest.
+polling generator could consume the pod's k8s deadline and starve the rest. The
+single-writer requirement is enforced only at *fire time* by this runtime assert
+(`workers_total == 1` + one job); there is no guard at CronJob-definition time
+(no concrete virtual cronjob exists yet — that's PR 4). When the first virtual
+operational cronjob is written, give its `ReformatCronJob` `parallelism == 1` and
+consider a definition-time check so a misconfigured `parallelism > 1` fails before
+deploy rather than crashing N pods loudly.
 
 **Append-dim "leaps" are not a framework bug — deliberately not guarded** (review
 round 2 pushback). A batch growing the append dim to a later position while an
@@ -1227,10 +1233,14 @@ frontier and stop at the first missing time step; that's a per-dataset generator
 responsibility to enforce when the first analysis `-spatial` dataset is built,
 not a framework-level rule.
 
-**Virtual `validate_dataset` skips `check_for_expected_shards`** (review round 2):
-virtual arrays have no shards (one ref per chunk) and intentionally-missing chunks
-for partially-published inits. A manifest-aware virtual validator is deferred to
-the validation PR (#513 PR 6).
+**Virtual `validate_dataset` skips the materialized validators** (review rounds
+2–3): `check_for_expected_shards` (virtual arrays have no shards, and missing
+chunks for partially-published inits are expected) and `compare_replica_and_primary`
+(it would S3-fetch + GRIB-decode every compared chunk — the exact decode-in-steady-
+state cost the design avoids). Both are skipped for virtual; a manifest-aware
+virtual validator is deferred to the validation PR (#513 PR 6). The replica
+comparator skip is latent until a virtual dataset gets a replica, but is removed
+now so it can't fire decode-heavy when that day comes.
 
 ### Conventions & gotchas
 

@@ -47,6 +47,7 @@ from reformatters.common.storage import (
     IcechunkVirtualConfig,
     StorageConfig,
     StoreFactory,
+    _virtual_repository_config_and_credentials,
     manifest_append_dim_split,
 )
 from reformatters.common.template_config import TemplateConfig
@@ -328,8 +329,8 @@ def _snapshot_count(repo: icechunk.Repository, branch: str = "main") -> int:
     return sum(1 for _ in repo.ancestry(branch=branch))
 
 
-def _assert_all_values(dataset: VirtualTestDataset, n_inits: int) -> None:
-    result = xr.open_zarr(dataset.store_factory.primary_store(), decode_timedelta=True)
+def _assert_store_values(store: object, n_inits: int) -> None:
+    result = xr.open_zarr(store, decode_timedelta=True)
     assert result.sizes["init_time"] == n_inits
     for init_idx in range(n_inits):
         for lead_idx in range(N_LEADS):
@@ -339,6 +340,25 @@ def _assert_all_values(dataset: VirtualTestDataset, n_inits: int) -> None:
                 .values,
                 _block_values(init_idx, lead_idx),
             )
+
+
+def _assert_all_values(dataset: VirtualTestDataset, n_inits: int) -> None:
+    _assert_store_values(dataset.store_factory.primary_store(), n_inits)
+
+
+def _make_replica_repo(
+    tmp_path: Path, dataset: VirtualTestDataset
+) -> icechunk.Repository:
+    """An independent icechunk repo (the test harness collapses a dataset's own
+    primary+replica to one path) registered with the same virtual container."""
+    repo_config, credentials = _virtual_repository_config_and_credentials(
+        dataset.icechunk_virtual_config
+    )
+    return icechunk.Repository.create(
+        icechunk.local_filesystem_storage(str(tmp_path / "replica.icechunk")),
+        config=repo_config,
+        authorize_virtual_chunk_access=credentials,
+    )
 
 
 # --- unit tests (chunk_key, sizing, commit guard) ---
@@ -503,6 +523,32 @@ def test_filter_skips_already_present_refs(tmp_path: Path) -> None:
     )
     readonly = repo.readonly_session("main").store
     assert job.filter_already_present(candidates, readonly) == []
+
+
+def test_filter_already_present_mixed_candidates(tmp_path: Path) -> None:
+    # One filter call over a mix: already-emitted (dropped), not-yet-emitted (kept),
+    # and an out-of-template label whose chunk_key is None (kept as remaining).
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    # Emit only init 0's files.
+    _make_region_job(template_ds, region=slice(0, 1)).process_virtual(repo, [], "main")
+
+    present = VirtualTestSourceFileCoord(
+        init_time=APPEND_DIM_START, lead_time=LEAD_TIMES[0]
+    )
+    absent = VirtualTestSourceFileCoord(
+        init_time=APPEND_DIM_START + APPEND_DIM_FREQ, lead_time=LEAD_TIMES[0]
+    )
+    out_of_coords = VirtualTestSourceFileCoord(
+        init_time=pd.Timestamp("2031-01-01"), lead_time=LEAD_TIMES[0]
+    )
+
+    job = _make_region_job(template_ds, region=slice(0, 4))
+    readonly = repo.readonly_session("main").store
+    remaining = job.filter_already_present([present, absent, out_of_coords], readonly)
+    assert remaining == [absent, out_of_coords]
 
 
 def test_sync_dims_to_grows_then_is_noop(tmp_path: Path) -> None:
@@ -673,6 +719,53 @@ def test_validate_dataset_on_virtual_skips_shard_check(tmp_path: Path) -> None:
         repo, [], "main"
     )
     dataset.validate_dataset("test")  # must not raise
+
+
+def test_process_virtual_writes_refs_to_replica(tmp_path: Path) -> None:
+    # Replica emit path + replicas-then-primary commit: both stores get every ref.
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    primary_repo = _primary_repo(dataset.store_factory)
+    replica_repo = _make_replica_repo(tmp_path, dataset)
+    template_utils.write_metadata(
+        _create_template_ds(0), replica_repo.writable_session("main").store, mode="w-"
+    )
+
+    job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
+    job.process_virtual(primary_repo, [replica_repo], "main")
+
+    for repo in (primary_repo, replica_repo):
+        _assert_store_values(repo.readonly_session("main").store, n_inits=4)
+
+
+def test_process_virtual_recovers_when_replica_ahead(tmp_path: Path) -> None:
+    # Replicas commit before the primary, so a partial commit can leave a replica
+    # ahead. The next fire derives work from the (behind) primary and replays on
+    # both stores; the replica replay is idempotent (no duplicate positions).
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    primary_repo = _primary_repo(dataset.store_factory)
+    replica_repo = _make_replica_repo(tmp_path, dataset)
+    template_utils.write_metadata(
+        _create_template_ds(0), replica_repo.writable_session("main").store, mode="w-"
+    )
+
+    # Partial commit: the replica committed (grew to 4 + refs); the primary did not.
+    _make_region_job(_create_template_ds(4), region=slice(0, 4)).process_virtual(
+        replica_repo, [], "main"
+    )
+    primary_now = xr.open_zarr(
+        primary_repo.readonly_session("main").store, decode_timedelta=True
+    )
+    assert primary_now.sizes["init_time"] == 0
+    _assert_store_values(replica_repo.readonly_session("main").store, n_inits=4)
+
+    # Next fire catches the primary up and idempotently replays on the replica.
+    _make_region_job(_create_template_ds(4), region=slice(0, 4)).process_virtual(
+        primary_repo, [replica_repo], "main"
+    )
+    for repo in (primary_repo, replica_repo):
+        _assert_store_values(repo.readonly_session("main").store, n_inits=4)
 
 
 def test_virtual_operational_second_fire_sees_no_new_work(tmp_path: Path) -> None:

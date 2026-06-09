@@ -483,9 +483,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
-        # Virtual datasets have no shards (one ref per chunk) and intentionally
-        # have missing chunks for partially-published inits, so check_for_expected_shards
-        # does not apply. A manifest-aware virtual validator comes in the validation PR.
+        # Virtual datasets get their own manifest-aware validators. The materialized
+        # ones don't apply: check_for_expected_shards (no shards; missing chunks for
+        # partially-published inits are expected) and compare_replica_and_primary
+        # (would S3-fetch + GRIB-decode every compared chunk).
         is_virtual = issubclass(self.region_job_class, VirtualRegionJob)
         with self._monitor(ValidationCronJob, reformat_job_name):
             primary_store = self.store_factory.primary_store()
@@ -507,17 +508,19 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     replica_store_validators.append(
                         partial(validation.check_for_expected_shards, replica_store)
                     )
-                replica_store_validators.append(
-                    partial(  # ty: ignore[invalid-argument-type]
-                        validation.compare_replica_and_primary,
-                        self.template_config.append_dim,
-                        xr.open_zarr(
-                            replica_store,
-                            chunks=None,
-                            consolidated=not isinstance(replica_store, IcechunkStore),
-                        ),
+                    replica_store_validators.append(
+                        partial(  # ty: ignore[invalid-argument-type]
+                            validation.compare_replica_and_primary,
+                            self.template_config.append_dim,
+                            xr.open_zarr(
+                                replica_store,
+                                chunks=None,
+                                consolidated=not isinstance(
+                                    replica_store, IcechunkStore
+                                ),
+                            ),
+                        )
                     )
-                )
 
                 validation.validate_dataset(
                     replica_store,
