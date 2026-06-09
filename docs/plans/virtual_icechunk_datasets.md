@@ -400,11 +400,16 @@ for refs in self.process_virtual_refs(remaining):            # refs == 1+ whole 
     commit(stores)                                           # one commit per yield (never empty)
 ```
 
-`sync_dims_to(store, extent)` is the single primitive that unifies pre-sizing
+`sync_dims_to(stores, extent)` is the single primitive that unifies pre-sizing
 and lazy expansion. It grows the append-dim coord, the data-var arrays, and the
 derived coords (via the template config's `derive_coordinates`) to cover
 `extent`, **writing only the new positions** and leaving existing positions
-untouched. It is a **no-op when the extent is already covered**.
+untouched. It is a **no-op for any store already covering the extent**, and it
+computes each store's missing slice from **that store's own committed size** —
+not the primary's. That per-store sizing is what makes the
+[replica replay](#replica-writes) safe: replicas commit before the primary, so a
+partial commit can leave a replica ahead, and appending the primary's slice to an
+already-grown replica would duplicate positions.
 
 That single primitive is why the two flows don't need separate write paths:
 
@@ -1000,7 +1005,17 @@ The spike is already done (run ahead of this PR — see
 - `sync_dims_to` appends the new slice of the (already-derived) template via
   `to_zarr(append_dim=…, compute=False)`, keeping data vars dask-lazy so the
   decode-only serializer is never invoked; `chunk_key` derives indices from the
-  full-size template, so it never re-reads the growing store.
+  full-size template, so it never re-reads the growing store. It sizes each store
+  from that store's own committed size (not the primary's) so an ahead-of-primary
+  replica after a partial commit is never double-appended (see
+  [Replica writes](#replica-writes)).
+- The `DynamicalDataset` validator gains the virtual-region-job direction of the
+  invariant: a `VirtualRegionJob` `region_job_class` requires a non-null
+  `icechunk_virtual_config` (the container set is already `min_length=1`), so a
+  misconfigured virtual dataset fails at construction rather than at first emit.
+- `VirtualRegionJob._processing_region_ds` asserts `get_processing_region() ==
+  self.region`: buffering is meaningless for virtual refs (they point at raw
+  bytes) and would make adjacent backfill workers emit into each other's regions.
 - Storage: `_virtual_repository_config_and_credentials` also accepts
   local-filesystem containers (no credentials) so dev/test virtual datasets can
   point at local files.
@@ -1016,6 +1031,11 @@ The spike is already done (run ahead of this PR — see
   fire, and an emit → commit → reopen → **value** read-back round-trip (catches
   bad chunk keys *and* byte ranges in CI). A separate test pins that a
   `GribberishCodec` serializer threads through expansion without being invoked.
+  Edge-case coverage: `sync_dims_to` sizing each store from its own committed
+  size (a second independent repo stands in for an ahead replica, since the test
+  harness maps every store of one dataset to one path), the
+  virtual-region-job-needs-config validator, and the buffered-processing-region
+  assertion.
 
 ### PR #4 — First concrete virtual dataset (end to end)
 

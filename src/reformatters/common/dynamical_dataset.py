@@ -81,6 +81,16 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     @model_validator(mode="after")
     def _validate_virtual_storage(self) -> Self:
+        # A virtual region job emits chunk refs into icechunk and needs the source
+        # containers registered, so the virtual config is mandatory for it.
+        if (
+            issubclass(self.region_job_class, VirtualRegionJob)
+            and self.icechunk_virtual_config is None
+        ):
+            raise ValueError(
+                f"{self.region_job_class.__name__} is a VirtualRegionJob but no "
+                "icechunk_virtual_config was provided; virtual datasets require it."
+            )
         # Virtual datasets store icechunk metadata + virtual chunk refs, so every store must be icechunk.
         if self.icechunk_virtual_config is not None:
             non_icechunk = [

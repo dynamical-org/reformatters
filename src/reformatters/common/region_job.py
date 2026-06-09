@@ -924,16 +924,19 @@ class VirtualRegionJob(
         Writes only the new positions by appending the corresponding slice of the
         already-derived template; existing positions are untouched. Data vars stay
         dask-lazy under compute=False, so the decode-only serializer is never
-        invoked. A no-op when the store already covers the size (so backfill's
-        pre-sized branch never resizes, and parallel workers never conflict).
+        invoked. A no-op for any store already covering the size (so backfill's
+        pre-sized branch never resizes, and parallel workers never conflict). Each
+        store's missing slice is computed from its own committed size: replicas
+        commit before the primary, so a partial commit can leave a replica ahead,
+        and appending the primary's slice to it would duplicate positions.
         """
-        current_size = self._append_dim_size(stores[0])
-        if needed_append_dim_size <= current_size:
-            return
-        slice_ds = self.template_ds.isel(
-            {self.append_dim: slice(current_size, needed_append_dim_size)}
-        )
         for store in stores:
+            current_size = self._append_dim_size(store)
+            if needed_append_dim_size <= current_size:
+                continue
+            slice_ds = self.template_ds.isel(
+                {self.append_dim: slice(current_size, needed_append_dim_size)}
+            )
             slice_ds.to_zarr(
                 store, append_dim=self.append_dim, compute=False, consolidated=False
             )
@@ -981,8 +984,15 @@ class VirtualRegionJob(
         return int(array.shape[0])
 
     def _processing_region_ds(self) -> xr.Dataset:
+        processing_region = self.get_processing_region()
+        # Virtual refs point at raw source bytes, so no surrounding buffer is ever
+        # needed; a buffered region would make adjacent backfill workers generate
+        # overlapping candidates and emit refs into each other's regions.
+        assert processing_region == self.region, (
+            "VirtualRegionJob.get_processing_region must equal self.region"
+        )
         ds: xr.Dataset = self.template_ds[[v.name for v in self.data_vars]]  # ty: ignore[invalid-assignment]
-        return ds.isel({self.append_dim: self.get_processing_region()})
+        return ds.isel({self.append_dim: processing_region})
 
 
 def _exists_many(store: IcechunkStore, keys: Sequence[str]) -> dict[str, bool]:

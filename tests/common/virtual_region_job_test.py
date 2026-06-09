@@ -24,7 +24,7 @@ import pytest
 import xarray as xr
 import zarr
 from gribberish.zarr import GribberishCodec
-from pydantic import computed_field
+from pydantic import ValidationError, computed_field
 from zarr.core.metadata import ArrayV3Metadata
 
 from reformatters.common import template_utils, validation
@@ -400,6 +400,25 @@ def test_needed_append_dim_size() -> None:
     assert job._needed_append_dim_size(refs) == 3  # init index 2 -> size 3
 
 
+def test_processing_region_rejects_buffered_region() -> None:
+    # Buffering is meaningless for virtual datasets and would make adjacent
+    # backfill workers emit refs into each other's regions.
+    class BufferedJob(VirtualTestRegionJob):
+        def get_processing_region(self) -> slice:
+            return slice(self.region.start - 1, self.region.stop + 1)
+
+    job = BufferedJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=_create_template_ds(4),
+        data_vars=[VirtualTestDataVar(name="temperature_2m")],
+        append_dim="init_time",
+        region=slice(1, 3),
+        reformat_job_name="test",
+    )
+    with pytest.raises(AssertionError, match="get_processing_region must equal"):
+        job._processing_region_ds()
+
+
 def test_process_virtual_rejects_empty_batch(tmp_path: Path) -> None:
     # The generator contract is one commit's worth of whole files per yield, so an
     # empty batch is a bug (and an empty icechunk commit would raise). The loop
@@ -496,6 +515,48 @@ def test_sync_dims_to_grows_then_is_noop(tmp_path: Path) -> None:
     assert not session.has_uncommitted_changes
 
 
+def test_sync_dims_to_resizes_each_store_from_its_own_size(tmp_path: Path) -> None:
+    """Replicas commit before the primary, so a partial commit can leave a replica
+    ahead. sync_dims_to must append each store's own missing slice; appending the
+    primary's slice to an already-grown store would duplicate positions.
+
+    The test harness maps every store of one dataset to a single path, so we stand
+    in for the ahead replica with a second, independent repo.
+    """
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    primary_repo = _primary_repo(dataset.store_factory)
+
+    ahead_repo = icechunk.Repository.create(
+        icechunk.local_filesystem_storage(str(tmp_path / "ahead.icechunk"))
+    )
+    template_utils.write_metadata(
+        _create_template_ds(0), ahead_repo.writable_session("main").store, mode="w-"
+    )
+
+    full_template = _create_template_ds(4)
+    job = _make_region_job(full_template, region=slice(0, 4))
+
+    # The ahead store committed a grow to 3 while the primary stayed at 0.
+    ahead_session = ahead_repo.writable_session("main")
+    job.sync_dims_to([ahead_session.store], 3)
+    ahead_session.commit("ahead store grew before a partial commit")
+
+    primary_session = primary_repo.writable_session("main")
+    ahead_session = ahead_repo.writable_session("main")
+    job.sync_dims_to([primary_session.store, ahead_session.store], 3)
+    # The ahead store already covers 3 -> untouched; only the primary grows.
+    assert not ahead_session.has_uncommitted_changes
+    primary_session.commit("primary catches up")
+
+    for repo in (primary_repo, ahead_repo):
+        ds = xr.open_zarr(repo.readonly_session("main").store, decode_timedelta=True)
+        assert ds.sizes["init_time"] == 3
+        np.testing.assert_array_equal(
+            ds["init_time"].values, full_template["init_time"].values[:3]
+        )
+
+
 def test_yield_is_the_commit_unit(tmp_path: Path) -> None:
     dataset = _make_dataset(tmp_path)
     template_ds = _create_template_ds(4)
@@ -511,6 +572,15 @@ def test_yield_is_the_commit_unit(tmp_path: Path) -> None:
 
 
 # --- driver fork integration (operational + backfill routing) ---
+
+
+def test_virtual_region_job_requires_virtual_config(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError, match="icechunk_virtual_config"):
+        VirtualTestDataset(
+            primary_storage_config=StorageConfig(
+                base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+            ),
+        )
 
 
 def test_two_worker_backfill_disjoint(tmp_path: Path) -> None:
