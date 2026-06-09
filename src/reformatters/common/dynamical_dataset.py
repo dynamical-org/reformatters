@@ -468,6 +468,12 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         whole source files straight to the "main" icechunk branch as they arrive
         (no parallel_coordination), so readers see each file within seconds."""
         assert workers_total == 1, "Virtual operational updates run single-writer"
+        # A single active-window job whose generator polls the union of all
+        # still-missing files; multiple jobs would run sequentially and the first
+        # one's polling could consume the pod's deadline and starve the rest.
+        assert len(all_jobs) == 1, (
+            f"Virtual operational updates run a single active-window job, got {len(all_jobs)}"
+        )
         self.region_job_class.process_worker_jobs(
             all_jobs, self.store_factory, "main", 0
         )
@@ -477,12 +483,17 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
+        # Virtual datasets have no shards (one ref per chunk) and intentionally
+        # have missing chunks for partially-published inits, so check_for_expected_shards
+        # does not apply. A manifest-aware virtual validator comes in the validation PR.
+        is_virtual = issubclass(self.region_job_class, VirtualRegionJob)
         with self._monitor(ValidationCronJob, reformat_job_name):
             primary_store = self.store_factory.primary_store()
             primary_store_validators = list(self.validators())
-            primary_store_validators.append(
-                partial(validation.check_for_expected_shards, primary_store)
-            )
+            if not is_virtual:
+                primary_store_validators.append(
+                    partial(validation.check_for_expected_shards, primary_store)
+                )
 
             validation.validate_dataset(
                 primary_store,
@@ -492,9 +503,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
             for replica_store in self.store_factory.replica_stores():
                 replica_store_validators = list(self.validators())
-                replica_store_validators.append(
-                    partial(validation.check_for_expected_shards, replica_store)
-                )
+                if not is_virtual:
+                    replica_store_validators.append(
+                        partial(validation.check_for_expected_shards, replica_store)
+                    )
                 replica_store_validators.append(
                     partial(  # ty: ignore[invalid-argument-type]
                         validation.compare_replica_and_primary,
@@ -622,16 +634,25 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     @model_validator(mode="after")
     def _validate_virtual_storage(self) -> Self:
-        # A virtual region job emits chunk refs into icechunk and needs the source
-        # containers registered, so the virtual config is mandatory for it.
-        if (
-            issubclass(self.region_job_class, VirtualRegionJob)
-            and self.icechunk_virtual_config is None
-        ):
-            raise ValueError(
-                f"{self.region_job_class.__name__} is a VirtualRegionJob but no "
-                "icechunk_virtual_config was provided; virtual datasets require it."
-            )
+        if issubclass(self.region_job_class, VirtualRegionJob):
+            # A virtual region job emits chunk refs into icechunk and needs the
+            # source containers registered, so the virtual config is mandatory.
+            if self.icechunk_virtual_config is None:
+                raise ValueError(
+                    f"{self.region_job_class.__name__} is a VirtualRegionJob but no "
+                    "icechunk_virtual_config was provided; virtual datasets require it."
+                )
+            # max_vars_per_job splits a source file's variables across separate jobs,
+            # each of which commits independently — breaking the one-file-per-commit
+            # atomicity virtual readers rely on. Forbid it; virtual jobs are tiny
+            # (byte-range refs) and parallelize along the append dim, not variables.
+            if self.region_job_class.max_vars_per_job is not None:
+                raise ValueError(
+                    f"{self.region_job_class.__name__} sets max_vars_per_job="
+                    f"{self.region_job_class.max_vars_per_job}, but virtual region "
+                    "jobs must keep each source file's variables in one job for "
+                    "per-file commit atomicity; leave max_vars_per_job unset (None)."
+                )
         # Virtual datasets store icechunk metadata + virtual chunk refs, so every store must be icechunk.
         if self.icechunk_virtual_config is not None:
             non_icechunk = [

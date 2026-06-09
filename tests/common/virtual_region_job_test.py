@@ -85,13 +85,16 @@ def _write_messages_file(path: Path, n_inits: int) -> None:
 
 
 def _create_template_ds(
-    n_inits: int, *, serializer: dict[str, Any] | None = None
+    n_inits: int,
+    *,
+    serializer: dict[str, Any] | None = None,
+    chunks: tuple[int, ...] = (1, 1, N_LAT, N_LON),
 ) -> xr.Dataset:
     """Forecast-shaped virtual template (no shards; one chunk per message)."""
     init_times = pd.date_range(APPEND_DIM_START, periods=n_inits, freq=APPEND_DIM_FREQ)
     encoding: dict[str, Any] = {
         "dtype": "float64",
-        "chunks": (1, 1, N_LAT, N_LON),
+        "chunks": chunks,
         "fill_value": np.nan,
         "compressors": None,
         "filters": None,
@@ -362,14 +365,30 @@ def test_chunk_key_returns_none_for_unknown_label() -> None:
 
 
 def test_chunk_key_asserts_on_unaligned_position() -> None:
-    job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
-    # A var whose lead_time chunk size is 2; lead index 1 falls mid-chunk.
-    var = VirtualTestDataVar(
+    # Template whose lead_time chunk size is 2; lead index 1 falls mid-chunk.
+    job = _make_region_job(
+        _create_template_ds(4, chunks=(1, 2, N_LAT, N_LON)), region=slice(0, 4)
+    )
+    out_loc: Mapping[Dim, CoordinateValue] = {
+        "init_time": APPEND_DIM_START,
+        "lead_time": LEAD_TIMES[1],
+    }
+    with pytest.raises(AssertionError, match="chunk boundary"):
+        job.chunk_key(out_loc, job.data_vars[0])
+
+
+def test_chunk_key_uses_template_geometry_not_datavar_encoding() -> None:
+    # The checked-in template is authoritative: a DataVar.encoding that disagrees
+    # with it must be ignored so filtering and emission can't drift from readers.
+    job = _make_region_job(
+        _create_template_ds(4, chunks=(1, 1, N_LAT, N_LON)), region=slice(0, 4)
+    )
+    misconfigured_var = VirtualTestDataVar(
         name="temperature_2m",
         encoding=Encoding(
             dtype="float64",
             fill_value=np.nan,
-            chunks=(1, 2, N_LAT, N_LON),
+            chunks=(1, 2, N_LAT, N_LON),  # disagrees with the template's (1, 1, ...)
             shards=None,
             compressors=None,
             filters=None,
@@ -379,8 +398,9 @@ def test_chunk_key_asserts_on_unaligned_position() -> None:
         "init_time": APPEND_DIM_START,
         "lead_time": LEAD_TIMES[1],
     }
-    with pytest.raises(AssertionError, match="chunk boundary"):
-        job.chunk_key(out_loc, var)
+    # Uses the template's chunk size of 1 (lead index 1 -> chunk 1), not the
+    # DataVar's 2 (which would assert on the mid-chunk position).
+    assert job.chunk_key(out_loc, misconfigured_var) == (0, 1, 0, 0)
 
 
 def test_needed_append_dim_size() -> None:
@@ -583,6 +603,28 @@ def test_virtual_region_job_requires_virtual_config(tmp_path: Path) -> None:
         )
 
 
+def test_virtual_dataset_rejects_max_vars_per_job(tmp_path: Path) -> None:
+    # max_vars_per_job would split one source file's variables across separate
+    # jobs (each committing independently), breaking per-file atomicity.
+    class _SplitVarsJob(VirtualTestRegionJob):
+        max_vars_per_job = 1
+
+    container = icechunk.VirtualChunkContainer(
+        f"file://{tmp_path}/", icechunk.local_filesystem_store(str(tmp_path))
+    )
+    with pytest.raises(ValidationError, match="max_vars_per_job"):
+        VirtualTestDataset(
+            region_job_class=_SplitVarsJob,
+            primary_storage_config=StorageConfig(
+                base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+            ),
+            icechunk_virtual_config=IcechunkVirtualConfig(
+                containers=(container,),
+                manifest_split=manifest_append_dim_split(split_size=2, dim="init_time"),
+            ),
+        )
+
+
 def test_two_worker_backfill_disjoint(tmp_path: Path) -> None:
     dataset = _make_dataset(tmp_path)
     template_ds = _create_template_ds(4)
@@ -626,6 +668,33 @@ def test_virtual_operational_single_writer_expands_main(tmp_path: Path) -> None:
     # Single writer committed straight to main (no temp branch ever created).
     assert list(_primary_repo(dataset.store_factory).list_branches()) == ["main"]
     _assert_all_values(dataset, n_inits=4)
+
+
+def test_virtual_operational_rejects_multiple_jobs(tmp_path: Path) -> None:
+    # One active-window job whose generator polls all still-missing files; a
+    # second job would run sequentially and could be starved by the first's poll.
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    full_template = _create_template_ds(4)
+    jobs = [
+        _make_region_job(full_template, region=slice(0, 2)),
+        _make_region_job(full_template, region=slice(2, 4)),
+    ]
+    with pytest.raises(AssertionError, match="single active-window job"):
+        dataset._run_virtual_operational_update(jobs, workers_total=1)
+
+
+def test_validate_dataset_on_virtual_skips_shard_check(tmp_path: Path) -> None:
+    # Virtual stores have shards=None and intentionally-missing chunks for
+    # partially-published inits, so check_for_expected_shards must be skipped.
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(4), dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    # Emit only inits 0-1; inits 2-3 stay missing (a partially-published state).
+    _make_region_job(_create_template_ds(4), region=slice(0, 2)).process_virtual(
+        repo, [], "main"
+    )
+    dataset.validate_dataset("test")  # must not raise
 
 
 def test_virtual_operational_second_fire_sees_no_new_work(tmp_path: Path) -> None:

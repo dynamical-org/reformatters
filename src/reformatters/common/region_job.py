@@ -1001,12 +1001,13 @@ class VirtualRegionJob(
         a bug.
         """
         # Geometry (dim order, chunk sizes, coord positions) is read from the
-        # full-size template, so the index matches what readers resolve and does not
-        # depend on how far the store has been expanded. Shared by the filter and the
-        # emitter so they cannot disagree.
-        dims = tuple(str(d) for d in self.template_ds[var.name].dims)
-        chunks = var.encoding.chunks
-        chunks = (chunks,) if isinstance(chunks, int) else chunks
+        # checked-in template (the authoritative metadata, git-reviewable), not the
+        # in-code DataVar.encoding which could drift from it. So the index matches
+        # what readers resolve and does not depend on how far the store has been
+        # expanded. Shared by the filter and the emitter so they cannot disagree.
+        template_var = self.template_ds[var.name]
+        dims = tuple(str(d) for d in template_var.dims)
+        chunks = template_var.encoding["chunks"]
         assert len(chunks) == len(dims)
         labels = {str(dim): label for dim, label in out_loc.items()}
 
