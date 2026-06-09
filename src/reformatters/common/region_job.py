@@ -823,11 +823,7 @@ class MaterializedRegionJob(
 
 class VirtualRef(NamedTuple):
     """A single virtual chunk reference: one GRIB message -> one zarr chunk.
-
-    `out_loc` is the output cell the message fills (e.g. {init_time, lead_time});
-    the chunk index it maps to is computed by VirtualRegionJob.chunk_key, so the
-    generator never reimplements zarr's chunk-key math. `data_var` identifies the
-    array the ref belongs to (and supplies the chunk geometry for chunk_key).
+    `out_loc` is the output cell the message fills (e.g. {init_time, lead_time}).
     """
 
     data_var: DataVar[Any]
@@ -846,14 +842,13 @@ class VirtualRegionJob(
         self,
         remaining: Sequence[SOURCE_FILE_COORD],
     ) -> Iterator[Sequence[VirtualRef]]:
-        """Discover available source files among `remaining` and yield their refs.
+        """Discover available source files among `remaining` and yield their virtual references.
 
         Each yield is one commit's worth of refs. The contract is that a yield
         holds *whole* source files — every ref of a file is emitted in the same
         batch, never split across yields — so a reader on `main` sees all of a
-        file's data or none of it (see "Reader safety" in the design doc). This is
-        a discipline the generator must keep (and tests check); it is not encoded
-        in the type. The generator owns the batching policy: backfill yields
+        file's data or none of it. This is a discipline the generator must keep
+        (and tests check). The generator owns the batching policy: backfill yields
         batches of ~N whole files to amortize commit overhead; operational yields
         ~1 file at a time for per-file visibility.
         """
@@ -914,10 +909,8 @@ class VirtualRegionJob(
     ) -> dict[str, list[SourceFileResult]]:
         """Drive each job's per-batch virtual write loop on ``branch_name``.
 
-        Returns no results: virtual refs live in the icechunk manifest, so there is
-        nothing to thread back to finalize. Many commits per worker (one per yielded
-        batch) vs the materialized variant's single commit — same seam, the only
-        difference is batch count.
+        Always returns an empty dict of results: virtual refs live in the icechunk
+        manifest, so there is nothing to thread back to finalize.
         """
         primary_repo, replica_repos = store_factory.icechunk_repos()
         for job in worker_jobs:
@@ -937,7 +930,7 @@ class VirtualRegionJob(
         `branch` the driver opened (a temp branch for backfill, "main" for the
         single-writer operational update). sync_dims_to grows the store lazily (a
         no-op on the pre-sized backfill branch). A fresh writable session is opened
-        per batch because committing an icechunk session makes it read-only.
+        per batch because an icechunk session becomes read-only after commit.
         """
         readonly_store = primary_repo.readonly_session(branch).store
         candidates = self.generate_source_file_coords(
@@ -964,7 +957,7 @@ class VirtualRegionJob(
 
             now = pd.Timestamp.now(tz="UTC")
             storage.commit_if_icechunk(
-                f"Virtual refs at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+                f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
                 primary_session.store,
                 [s.store for s in replica_sessions],
             )
@@ -1002,15 +995,15 @@ class VirtualRegionJob(
     ) -> tuple[int, ...] | None:
         """Map a source message's coordinate labels to its zarr chunk index.
 
-        Geometry (dim order, chunk sizes, coord positions) is read from the
-        full-size template, so the index matches what readers resolve and does not
-        depend on how far the store has been expanded. Shared by the filter and the
-        emitter so they cannot disagree. Returns None if a label is not in the
-        template's coords, which the filter treats as "remaining".
-
-        Asserts each label lands on an exact chunk boundary - a virtual chunk is
-        exactly one GRIB message, so any non-aligned position is a bug.
+        Returns None if a label is not in the template's coords, which the filter
+        treats as "remaining". Asserts each label lands on an exact chunk boundary -
+        a virtual chunk is exactly one GRIB message, so any non-aligned position is
+        a bug.
         """
+        # Geometry (dim order, chunk sizes, coord positions) is read from the
+        # full-size template, so the index matches what readers resolve and does not
+        # depend on how far the store has been expanded. Shared by the filter and the
+        # emitter so they cannot disagree.
         dims = tuple(str(d) for d in self.template_ds[var.name].dims)
         chunks = var.encoding.chunks
         chunks = (chunks,) if isinstance(chunks, int) else chunks
@@ -1041,17 +1034,15 @@ class VirtualRegionJob(
     def sync_dims_to(
         self, stores: Sequence[IcechunkStore], needed_append_dim_size: int
     ) -> None:
-        """Grow the append dim (and its dependent coords) to `needed_append_dim_size`.
-
-        Writes only the new positions by appending the corresponding slice of the
-        already-derived template; existing positions are untouched. Data vars stay
-        dask-lazy under compute=False, so the decode-only serializer is never
-        invoked. A no-op for any store already covering the size (so backfill's
-        pre-sized branch never resizes, and parallel workers never conflict). Each
-        store's missing slice is computed from its own committed size: replicas
-        commit before the primary, so a partial commit can leave a replica ahead,
-        and appending the primary's slice to it would duplicate positions.
-        """
+        """Grow the append dim (and its dependent coords) to `needed_append_dim_size`."""
+        # Writes only the new positions by appending the corresponding slice of the
+        # already-derived template; existing positions are untouched. Data vars stay
+        # dask-lazy under compute=False, so the decode-only serializer is never
+        # invoked. A no-op for any store already covering the size (so backfill's
+        # pre-sized branch never resizes, and parallel workers never conflict). Each
+        # store's missing slice is computed from its own committed size: replicas
+        # commit before the primary, so a partial commit can leave a replica ahead,
+        # and appending the primary's slice to it would duplicate positions.
         for store in stores:
             current_size = self._append_dim_size(store)
             if needed_append_dim_size <= current_size:

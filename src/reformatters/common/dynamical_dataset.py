@@ -66,46 +66,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
     icechunk_virtual_config: IcechunkVirtualConfig | None = None
 
-    @model_validator(mode="after")
-    def _validate_virtual_storage(self) -> Self:
-        # A virtual region job emits chunk refs into icechunk and needs the source
-        # containers registered, so the virtual config is mandatory for it.
-        if (
-            issubclass(self.region_job_class, VirtualRegionJob)
-            and self.icechunk_virtual_config is None
-        ):
-            raise ValueError(
-                f"{self.region_job_class.__name__} is a VirtualRegionJob but no "
-                "icechunk_virtual_config was provided; virtual datasets require it."
-            )
-        # Virtual datasets store icechunk metadata + virtual chunk refs, so every store must be icechunk.
-        if self.icechunk_virtual_config is not None:
-            non_icechunk = [
-                config
-                for config in (
-                    self.primary_storage_config,
-                    *self.replica_storage_configs,
-                )
-                if config.format != DatasetFormat.ICECHUNK
-            ]
-            if non_icechunk:
-                raise ValueError(
-                    "icechunk_virtual_config requires every storage config to use "
-                    f"the ICECHUNK format, but found: {non_icechunk}"
-                )
-        return self
-
-    @computed_field
-    @property
-    def store_factory(self) -> StoreFactory:
-        return StoreFactory(
-            primary_storage_config=self.primary_storage_config,
-            replica_storage_configs=self.replica_storage_configs,
-            dataset_id=self.dataset_id,
-            template_config_version=self.template_config.version,
-            icechunk_virtual_config=self.icechunk_virtual_config,
-        )
-
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """
         Return the kubernetes cron job definitions to operationally
@@ -170,6 +130,17 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """Generate and persist the dataset template using the template_config."""
         self.template_config.update_template()
 
+    @computed_field
+    @property
+    def store_factory(self) -> StoreFactory:
+        return StoreFactory(
+            primary_storage_config=self.primary_storage_config,
+            replica_storage_configs=self.replica_storage_configs,
+            dataset_id=self.dataset_id,
+            template_config_version=self.template_config.version,
+            icechunk_virtual_config=self.icechunk_virtual_config,
+        )
+
     def num_variable_groups(self) -> int:
         """Number of variable groups for parallel updates."""
         return self.region_job_class.num_variable_groups(self.template_config.data_vars)
@@ -202,10 +173,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
 
             if issubclass(self.region_job_class, VirtualRegionJob):
-                # Virtual operational updates are single-writer streaming (whole
-                # files committed straight to main as they arrive) — a different
-                # lifecycle from the parallel temp-branch coordinator, so they
-                # don't go through _process_region_jobs.
+                # Virtual operational updates are single-writer streaming (see docs/parallel_processing.md)
                 self._run_virtual_operational_update(all_jobs, workers_total)
             else:
                 self._process_region_jobs(
@@ -496,10 +464,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         all_jobs: Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]],
         workers_total: int,
     ) -> None:
-        """Single-writer virtual operational update: commit whole source files
-        straight to "main" as they arrive (no temp branch, no parallel_setup, no
-        finalize), so readers see each file within seconds. Reuses the variant's
-        per-batch write loop via process_worker_jobs on branch "main"."""
+        """Single-writer virtual dataset operational update: commit one or more
+        whole source files straight to the "main" icechunk branch as they arrive
+        (no parallel_coordination), so readers see each file within seconds."""
         assert workers_total == 1, "Virtual operational updates run single-writer"
         self.region_job_class.process_worker_jobs(
             all_jobs, self.store_factory, "main", 0
@@ -652,3 +619,32 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         else:
             if send_result:
                 capture_checkin("ok")
+
+    @model_validator(mode="after")
+    def _validate_virtual_storage(self) -> Self:
+        # A virtual region job emits chunk refs into icechunk and needs the source
+        # containers registered, so the virtual config is mandatory for it.
+        if (
+            issubclass(self.region_job_class, VirtualRegionJob)
+            and self.icechunk_virtual_config is None
+        ):
+            raise ValueError(
+                f"{self.region_job_class.__name__} is a VirtualRegionJob but no "
+                "icechunk_virtual_config was provided; virtual datasets require it."
+            )
+        # Virtual datasets store icechunk metadata + virtual chunk refs, so every store must be icechunk.
+        if self.icechunk_virtual_config is not None:
+            non_icechunk = [
+                config
+                for config in (
+                    self.primary_storage_config,
+                    *self.replica_storage_configs,
+                )
+                if config.format != DatasetFormat.ICECHUNK
+            ]
+            if non_icechunk:
+                raise ValueError(
+                    "icechunk_virtual_config requires every storage config to use "
+                    f"the ICECHUNK format, but found: {non_icechunk}"
+                )
+        return self

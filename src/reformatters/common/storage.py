@@ -145,9 +145,12 @@ class StoreFactory(FrozenBaseModel):
         the caller just wants the primary and its replicas. Use all_icechunk_repos
         when you also need roles or a specific primary-first/last ordering."""
         repos = self.all_icechunk_repos(sort="primary-first")
-        primary = next(repo for role, repo in repos if role == "primary")
+        primaries = [repo for role, repo in repos if role == "primary"]
+        assert len(primaries) == 1, (
+            f"expected exactly one primary, got {len(primaries)}"
+        )
         replicas = tuple(repo for role, repo in repos if role != "primary")
-        return primary, replicas
+        return primaries[0], replicas
 
     def all_icechunk_repos(
         self, *, sort: Literal["primary-first", "primary-last"]
