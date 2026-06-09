@@ -1094,6 +1094,127 @@ reflect both:
 
 Decision deferred to PR #4 — pick by demand and convenience at the time.
 
+## Implementation notes & decision log
+
+> Running log of implementation status, decisions, and gotchas. Kept here (in the
+> repo) rather than in machine-local notes so it survives across machines and
+> contributors. Append to it as the work proceeds.
+
+### Status (PR log)
+
+The PR sequence in the [implementation plan](#implementation-plan) is tracked on
+issue **#513** (its body holds the 6-PR checklist; items are written "PR 1" not
+"PR #1" so GitHub doesn't auto-link to issues 1–6).
+
+| PR | State | Notes |
+|---|---|---|
+| PR 1 — extract `MaterializedRegionJob` | **merged** (#643) | `RegionJob` base + `MaterializedRegionJob(RegionJob)`; all datasets swapped base. |
+| PR 2 — prep | **merged** (#647) | ECMWF parser → `grib_message_byte_ranges_from_index`; `Encoding.serializer`; `gribberish~=0.30` (`gribberish.zarr.GribberishCodec`, `.to_dict()` → `{"name":"gribberish","configuration":{"var":...}}`); `IcechunkVirtualConfig` (real icechunk objects via `InstanceOf`) + `manifest_append_dim_split(*, split_size, dim)`; threaded through `StoreFactory`; validator (config present ⇒ all ICECHUNK). |
+| PR 3a — worker-processing seam (materialized only) | **merged** (#649) | See [B-method](#decision-b-method). |
+| PR 3b — `VirtualRegionJob` on the seam | **open** (#650) | Supersedes #648 (closed). Review round 1 addressed. |
+| PR 4–6 | not started | First `-spatial` dataset, then second provider, then validation. |
+
+PR 3 was originally one combined PR (#648) but was resequenced into 3a + 3b after
+the [B-method](#decision-b-method) design review; #648 is closed/superseded by #650.
+
+### Decision log
+
+**<a name="decision-b-method"></a>Driver design = "B-method" (2026-06-09).** The
+materialized-vs-virtual difference is **just commit-batch size**, not a different
+mechanism: a materialized worker writes one commit's worth (all its jobs); a
+virtual worker writes many (one per yielded source-file batch, because a committed
+icechunk session is read-only). So both variants implement one polymorphic
+`RegionJob.process_worker_jobs(worker_jobs, store_factory, branch_name,
+worker_index)` and the coordinator (`_process_region_jobs`) names no variant. The
+only irreducible fork is the *coordination lifecycle* (axis a): the parallel
+temp-branch coordinator vs single-writer-straight-to-`main`, which lives at the
+`update()` entry point. Batch size (axis b) is *not* a fork — virtual backfill can
+even do one commit-batch per worker (coarser crash recovery, fewer snapshots), so
+"many small batches" is exclusively the single-writer *operational* property.
+
+We considered **"B-loop"** (driver owns a shared commit loop; each job yields
+write-closure "batches") and rejected it: it needs a batch/closure abstraction plus
+in-loop default-arg capture — *more* machinery than the two ~6-line
+`process_worker_jobs` methods — and the dataset-author surface is identical either
+way. See the [worker-processing seam](#the-worker-processing-seam).
+
+**<a name="decision-virtualref-namedtuple"></a>`VirtualRef` is a `NamedTuple`, not
+a `FrozenBaseModel`.** It is a pure ephemeral in-process carrier — never
+serialized (the reason `SourceFileResult` is pydantic) and has no methods (the
+reason `SourceFileCoord`/`DataVar` are pydantic) — so pydantic's machinery would be
+unused weight. Decisive technical blocker: under `FrozenBaseModel`'s config
+(`strict=True`, **no `arbitrary_types_allowed`**), a field typed
+`Mapping[Dim, CoordinateValue]` **fails at class definition** with
+`PydanticSchemaGenerationError`, because `CoordinateValue` includes bare
+`pd.Timestamp`/`pd.Timedelta`, which pydantic can't build a schema for. The repo's
+own pydantic carrier sidesteps this with `SourceFileResult.out_loc: dict[str, Any]`
+(losing the precise typing). Swapping the union to the `Annotated[...,
+PlainValidator]` `Timestamp`/`Timedelta` from `types.py` *defines* but **fails at
+construction**: the two `PlainValidator` pandas types cross-contaminate — a
+`pd.Timedelta` value hits the `pd.Timestamp` validator (`pd.Timestamp(<td>)` →
+`TypeError`), which pydantic's union does not catch (it only advances on
+`ValueError`/`AssertionError`). The `NamedTuple` keeps the honest
+`Mapping[Dim, CoordinateValue]` static type with none of this, and downstream
+already validates (chunk_key boundary assert, icechunk `VirtualChunkSpec` byte
+ranges, container-match assert).
+
+**`process_worker_jobs`'s `worker_jobs` param is `Sequence[RegionJob[...]]`, not
+`Sequence[Self]`.** `Self` in a *parameter* position breaks override compatibility
+(contravariance — a subclass would demand more-specific input than the base
+promises); ty flags `invalid-method-override`. Typing the param as the concrete
+generic base in both base and subclass makes the override compatible and needs no
+narrowing at the call site (it's called via `self.region_job_class`, statically
+`type[RegionJob[...]]`).
+
+**Base `RegionJob.process` stub is kept** (not removed). `MaterializedRegionJob.
+process_worker_jobs` loops `job.process(...)` over base-typed jobs, so the base
+needs `process` for that to type-check. The virtual side instead needs one
+`assert isinstance(job, VirtualRegionJob)` in its `process_worker_jobs` to call
+`process_virtual` — the asymmetry is intentional and minimal.
+
+**`sync_dims_to` sizes each store from its *own* committed size**, not the
+primary's. Replicas commit before the primary, so a partial commit can leave a
+replica a commit ahead; appending the primary's missing slice to an already-grown
+replica would duplicate append-dim positions. This is what makes the documented
+[replica replay](#replica-writes) idempotent for the *expansion* (not just the
+refs).
+
+**No commit guard.** The `process_virtual_refs` generator contract forbids empty
+yields, so the loop `assert`s `refs` and `commit_if_icechunk` stays unconditional
+(an empty icechunk commit raises). See [the write loop](#the-virtual-write-loop).
+
+**`VirtualRegionJob._processing_region_ds` asserts `get_processing_region() ==
+region`.** Buffering is meaningless for virtual refs (they point at raw bytes) and
+would make adjacent backfill workers emit into each other's regions.
+
+### Conventions & gotchas
+
+**PR ↔ issue linkage** (chosen 2026-06-05): link each PR in the #513 checklist item
+(`— #NNN`) and put `Part of #513` in the PR body. Do **not** use `Closes/Fixes
+#513` on PRs 1–5 — GitHub's "Development" sidebar link only exists via a closing
+reference, which would auto-close the #513 tracker on the first merge. Cross-ref +
+checklist is the accepted tradeoff (no Development-sidebar entry).
+
+**`StoreFactory.primary_store(writable=True, branch=…)` opens a fresh
+`repo.writable_session(branch)` on every call** (`storage.py`). This is why the
+driver/job can own a session-per-batch lifecycle through `store_factory` rather
+than threading a single session.
+
+**Commit signing (dev workflow).** Commits are SSH-signed via the 1Password agent
+(`commit.gpgsign=true`, `gpg.format=ssh`). If 1Password is locked, `git commit`
+fails with `1Password: failed to fill whole buffer` / `failed to write commit
+object` *after* the pre-commit hooks pass — unlock 1Password and retry the same
+commit.
+
+### TODO
+
+- **Before PR 4 — move-only refactor:** pull `VirtualRegionJob` into
+  `common/virtual_region_job.py` and `MaterializedRegionJob` into
+  `common/materialized_region_job.py`, out of the shared `common/region_job.py`.
+  Pure moves, no logic changes.
+- **PR 4:** first concrete `-spatial` dataset end to end (pick from
+  [candidates](#candidate-first-datasets)).
+
 ## Spike results
 
 Run **before** PR #3 (derisked up front rather than during implementation),
