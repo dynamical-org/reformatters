@@ -19,7 +19,6 @@ from pydantic import Field, computed_field, model_validator
 
 from reformatters.common import (
     parallel_coordination,
-    storage,
     template_utils,
     validation,
 )
@@ -430,37 +429,15 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             icechunk_repos=icechunk_repos,
         )
 
-        # 2. Get stores and process jobs
-        worker_results: dict[str, list[SourceFileResult]] = {}
-        if worker_jobs:
-            primary_store = self.store_factory.primary_store(
-                writable=True, branch=branch_name
+        # 2. Process jobs. Each region job variant owns its own store/session
+        # lifecycle and commit cadence behind this one call.
+        worker_results: dict[str, list[SourceFileResult]] = (
+            self.region_job_class.process_worker_jobs(
+                worker_jobs, self.store_factory, branch_name, worker_index
             )
-            replica_stores = self.store_factory.replica_stores(
-                writable=True, branch=branch_name
-            )
-
-            for job in worker_jobs:
-                template_utils.write_metadata(job.template_ds, job.tmp_store)
-                results = job.process(
-                    primary_store=primary_store, replica_stores=replica_stores
-                )
-                for var_name, coords in results.items():
-                    worker_results.setdefault(var_name, []).extend(
-                        SourceFileResult(
-                            status=c.status,
-                            out_loc={**c.out_loc()},
-                            url=c.get_url(),
-                        )
-                        for c in coords
-                    )
-
-            now = pd.Timestamp.now(tz="UTC")
-            storage.commit_if_icechunk(
-                f"Update worker {worker_index} at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
-                primary_store,
-                replica_stores,
-            )
+            if worker_jobs
+            else {}
+        )
 
         # 3. Write results and finalize
         if workers_total > 1:

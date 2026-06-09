@@ -945,29 +945,60 @@ Mechanical; tests pass unchanged.
   open/create. Add the `DynamicalDataset` validator (virtual ⇒ all stores ICECHUNK
   ∧ non-empty containers).
 
-### PR #3 — `VirtualRegionJob` + driver
+### PR #3a — Worker-processing seam (materialized only)
+
+A behavior-preserving refactor that introduces the polymorphic seam 3b slots
+into, with **no virtual code** so it can land and be reviewed against the
+materialized test suite alone.
+
+- Add an abstract `process_worker_jobs(worker_jobs, store_factory, branch_name,
+  worker_index) -> dict[str, list[SourceFileResult]]` to `RegionJob`.
+- Move the open-stores → per-job `process()` → accumulate-results → commit body
+  out of `DynamicalDataset._process_region_jobs` and into
+  `MaterializedRegionJob.process_worker_jobs` (one commit per worker, exactly as
+  today). `_process_region_jobs` step 2 collapses to a single polymorphic call:
+  `self.region_job_class.process_worker_jobs(worker_jobs, self.store_factory,
+  branch_name, worker_index)`.
+- Each variant now owns its store/session lifecycle and commit cadence behind
+  this one call, so the coordinator names no concrete subclass. Materialized
+  region jobs (and their datasets/tests) are untouched; the seam is the only
+  change.
+
+### PR #3b — `VirtualRegionJob` (on the seam, B-method)
 
 The spike is already done (run ahead of this PR — see
-[Spike results](#spike-results)), so PR #3 is just the implementation it derisked.
+[Spike results](#spike-results)), so 3b is just the implementation it derisked,
+slotted onto 3a's seam.
 
-- Add `VirtualRegionJob` (the virtual write loop, `process_virtual_refs`
-  abstract generator, `filter_already_present` default, `sync_dims_to`,
-  `chunk_key`). Use `set_virtual_refs_arr` (columnar, zero-copy) for the emit
-  batches; `array.metadata.chunk_key_encoding.encode_chunk_key` + `store.exists`
-  for the filter.
-- Extend `_process_region_jobs` with the single fork (virtual + operational →
-  single-writer-to-`main`; else existing path). **Guard commits on
-  `session.has_uncommitted_changes`** — empty commits raise, and the shared
-  `storage.commit_if_icechunk` currently commits unconditionally, so either teach
-  it the guard or wrap the call.
+- Add `VirtualRegionJob` implementing `process_worker_jobs`: filter →
+  `process_virtual_refs` batches → per-batch **fresh writable session** (a
+  committed icechunk session is read-only) → `sync_dims_to` + emit + commit. The
+  variant difference from materialized is purely *batch count* (materialized
+  yields one commit's worth per worker; virtual yields many) — same seam, so
+  `_process_region_jobs` stays **variant-free**.
+- The **one** remaining driver fork is in `update()`: a virtual operational
+  update routes to the single-writer-streaming-to-`main` path
+  (`_run_virtual_operational_update`, which reuses the same per-batch loop on
+  `branch="main"` with no `parallel_setup`/`finalize`); everything else
+  (materialized backfill/update, virtual backfill) goes through the temp-branch
+  coordinator.
+- `VirtualRef` carries `(data_var, out_loc, location, offset, length)`; emit via
+  `set_virtual_refs` (explicit `VirtualChunkSpec`s);
+  `array.metadata.chunk_key_encoding.encode_chunk_key` + `store.exists` for the
+  filter. **No commit guard** — the generator contract forbids empty yields, so
+  the loop `assert`s `refs` and `commit_if_icechunk` stays unconditional.
+- Also lands: shards-else-chunks partitioning, the per-variable serializer
+  threading, the `StoreFactory.icechunk_repos()` accessor + local-filesystem
+  container support, per-store `sync_dims_to`, the virtual-region-job ⇒
+  `icechunk_virtual_config` validator, and the buffered-processing-region guard.
 - Document the `process_virtual_refs` generator contract: each yield is one
   commit's worth of whole files; operational yields ~1 file at a time for
-  per-file visibility, backfill yields batches of ~N files to amortize commit
-  overhead. No timer, no `max_seconds_between_commits` knob — the driver commits
-  on every yield.
+  per-file visibility, backfill can yield one big batch per worker (coarser
+  crash-recovery, fewer snapshots) — the generator owns batch size and stopping
+  (exhaust vs poll-until-deadline). No timer, no `max_seconds_between_commits`.
 - Integration tests: yield-count/grouping; concurrent disjoint-chunk backfill on
-  a branch; emit → commit → reopen → read-back round-trip (the spike already
-  proves this round-trip works on 2.0.5; the test pins it in CI).
+  a branch; operational single-writer expansion + idempotent second fire;
+  emit → commit → reopen → **value** read-back round-trip.
 
 ### PR #4 — First concrete virtual dataset (end to end)
 
