@@ -25,6 +25,7 @@ from pydantic import (
 )
 from zarr.abc.store import Store
 
+from reformatters.common import storage, template_utils
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config_models import DataVar
 from reformatters.common.iterating import dimension_slices, split_groups
@@ -422,6 +423,26 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             "Subclasses implement process() with variant-specific logic"
         )
 
+    @classmethod
+    def process_worker_jobs(
+        cls,
+        worker_jobs: Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]],
+        store_factory: storage.StoreFactory,
+        branch_name: str,
+        worker_index: int,
+    ) -> dict[str, list[SourceFileResult]]:
+        """Process one worker's region jobs against ``branch_name`` and return the
+        per-variable source file results.
+
+        Each variant owns its own store/session lifecycle and commit cadence, so the
+        shared coordinator (``DynamicalDataset._process_region_jobs``) drives every
+        variant through this one call. Implemented by the MaterializedRegionJob and
+        VirtualRegionJob subclasses.
+        """
+        raise NotImplementedError(
+            "Subclasses implement process_worker_jobs with variant-specific logic"
+        )
+
     def __repr__(self) -> str:
         return f"{type(self).__name__}(region=({self.region.start}, {self.region.stop}), data_vars={[v.name for v in self.data_vars]})"
 
@@ -507,6 +528,42 @@ class MaterializedRegionJob(
             round_float32_inplace(
                 data_array.values, keep_mantissa_bits=keep_mantissa_bits
             )
+
+    @classmethod
+    def process_worker_jobs(
+        cls,
+        worker_jobs: Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]],
+        store_factory: storage.StoreFactory,
+        branch_name: str,
+        worker_index: int,
+    ) -> dict[str, list[SourceFileResult]]:
+        """Write all of this worker's jobs to ``branch_name`` in a single commit."""
+        primary_store = store_factory.primary_store(writable=True, branch=branch_name)
+        replica_stores = store_factory.replica_stores(writable=True, branch=branch_name)
+
+        worker_results: dict[str, list[SourceFileResult]] = {}
+        for job in worker_jobs:
+            template_utils.write_metadata(job.template_ds, job.tmp_store)
+            results = job.process(
+                primary_store=primary_store, replica_stores=replica_stores
+            )
+            for var_name, coords in results.items():
+                worker_results.setdefault(var_name, []).extend(
+                    SourceFileResult(
+                        status=c.status,
+                        out_loc={**c.out_loc()},
+                        url=c.get_url(),
+                    )
+                    for c in coords
+                )
+
+        now = pd.Timestamp.now(tz="UTC")
+        storage.commit_if_icechunk(
+            f"Update worker {worker_index} at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+            primary_store,
+            replica_stores,
+        )
+        return worker_results
 
     def process(
         self,
