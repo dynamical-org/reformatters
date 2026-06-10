@@ -10,9 +10,11 @@ from pydantic import Field
 from zarr.abc.store import Store
 
 from reformatters.common.download import http_download_to_disk
+from reformatters.common.materialized_region_job import (
+    MaterializedRegionJob,
+)
 from reformatters.common.region_job import (
     CoordinateValue,
-    MaterializedRegionJob,
     RegionJob,
     SourceFileCoord,
 )

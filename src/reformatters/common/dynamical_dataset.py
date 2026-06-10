@@ -38,7 +38,6 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
     SourceFileResult,
-    VirtualRegionJob,
 )
 from reformatters.common.storage import (
     DatasetFormat,
@@ -49,6 +48,7 @@ from reformatters.common.storage import (
 )
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike
+from reformatters.common.virtual_region_job import VirtualRegionJob
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)

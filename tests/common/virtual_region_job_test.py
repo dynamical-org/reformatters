@@ -39,8 +39,6 @@ from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationC
 from reformatters.common.region_job import (
     CoordinateValue,
     SourceFileCoord,
-    VirtualRef,
-    VirtualRegionJob,
 )
 from reformatters.common.storage import (
     DatasetFormat,
@@ -52,6 +50,10 @@ from reformatters.common.storage import (
 )
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.virtual_region_job import (
+    VirtualRef,
+    VirtualRegionJob,
+)
 
 pytestmark = pytest.mark.slow
 

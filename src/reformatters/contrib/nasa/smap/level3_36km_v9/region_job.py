@@ -10,8 +10,10 @@ from zarr.abc.store import Store
 
 from reformatters.common.download import get_local_path
 from reformatters.common.logging import get_logger
-from reformatters.common.region_job import (
+from reformatters.common.materialized_region_job import (
     MaterializedRegionJob,
+)
+from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
 )

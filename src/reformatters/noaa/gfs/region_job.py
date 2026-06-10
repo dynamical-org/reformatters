@@ -18,9 +18,11 @@ from reformatters.common.download import (
 )
 from reformatters.common.iterating import digest, group_by
 from reformatters.common.logging import get_logger
+from reformatters.common.materialized_region_job import (
+    MaterializedRegionJob,
+)
 from reformatters.common.region_job import (
     CoordinateValue,
-    MaterializedRegionJob,
     RegionJob,
     SourceFileCoord,
 )
