@@ -21,8 +21,10 @@ import pytest
 import xarray as xr
 from pydantic import computed_field
 
+from reformatters.common import (
+    materialized_region_job as materialized_region_job_module,
+)
 from reformatters.common import parallel_coordination as pc_module
-from reformatters.common import region_job as region_job_module
 from reformatters.common import storage as storage_module
 from reformatters.common import template_utils
 from reformatters.common.config_models import (
@@ -33,10 +35,8 @@ from reformatters.common.config_models import (
 )
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
-from reformatters.common.region_job import (
-    MaterializedRegionJob,
-    SourceFileCoord,
-)
+from reformatters.common.materialized_region_job import MaterializedRegionJob
+from reformatters.common.region_job import SourceFileCoord
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, ArrayFloat32, Dim, Timedelta, Timestamp
@@ -46,10 +46,12 @@ pytestmark = pytest.mark.slow
 
 @pytest.fixture(autouse=True)
 def _use_thread_pool_for_shard_writes(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Substitute ThreadPoolExecutor for ProcessPoolExecutor in region_job so
-    shard writes skip spawn overhead. SharedMemory works in-process, and the
+    """Substitute ThreadPoolExecutor for ProcessPoolExecutor in materialized_region_job
+    so shard writes skip spawn overhead. SharedMemory works in-process, and the
     zarr writes are I/O-bound — threads are fine for these tests."""
-    monkeypatch.setattr(region_job_module, "ProcessPoolExecutor", ThreadPoolExecutor)
+    monkeypatch.setattr(
+        materialized_region_job_module, "ProcessPoolExecutor", ThreadPoolExecutor
+    )
 
 
 _LAT_SIZE = 3

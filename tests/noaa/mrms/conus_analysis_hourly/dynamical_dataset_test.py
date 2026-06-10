@@ -7,7 +7,9 @@ import xarray as xr
 from numpy.testing import assert_allclose, assert_array_equal
 from zarr.abc.store import Store
 
-from reformatters.common import region_job as region_job_module
+from reformatters.common import (
+    materialized_region_job as materialized_region_job_module,
+)
 from reformatters.common import shared_memory_utils, validation
 from reformatters.common.iterating import shard_slice_indexers
 from reformatters.common.storage import DatasetFormat, StorageConfig
@@ -66,7 +68,7 @@ def _patch_write_first_shard_only(monkeypatch: pytest.MonkeyPatch) -> None:
                 )
 
     monkeypatch.setattr(
-        region_job_module, "write_shards", _first_shard_only_write_shards
+        materialized_region_job_module, "write_shards", _first_shard_only_write_shards
     )
 
 

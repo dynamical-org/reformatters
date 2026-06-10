@@ -27,7 +27,8 @@ from reformatters.common.config_models import (
 )
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
-from reformatters.common.region_job import MaterializedRegionJob, SourceFileCoord
+from reformatters.common.materialized_region_job import MaterializedRegionJob
+from reformatters.common.region_job import SourceFileCoord
 from reformatters.common.storage import (
     _NO_SECRET_NAME,
     DatasetFormat,

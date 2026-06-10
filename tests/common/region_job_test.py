@@ -21,8 +21,8 @@ from reformatters.common.config_models import (
     Encoding,
 )
 from reformatters.common.iterating import get_worker_jobs
+from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
-    MaterializedRegionJob,
     SourceFileCoord,
     SourceFileResult,
     SourceFileStatus,
@@ -1032,12 +1032,14 @@ class TestDownloadErrorLogging:
         coord = ExampleSourceFileCoords(
             time=pd.Timestamp(job.template_ds.time.values[0])
         )
-        with caplog.at_level(logging.DEBUG, logger="reformatters.common.region_job"):
+        with caplog.at_level(
+            logging.DEBUG, logger="reformatters.common.materialized_region_job"
+        ):
             job._download_processing_group([coord], ["var0"])
         return [
             r.levelno
             for r in caplog.records
-            if r.name == "reformatters.common.region_job"
+            if r.name == "reformatters.common.materialized_region_job"
             and r.message != "Downloading ['var0'] in 1 files..."
         ]
 
