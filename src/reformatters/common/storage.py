@@ -138,6 +138,12 @@ class StoreFactory(FrozenBaseModel):
                 return False
         return True
 
+    def all_stores_icechunk(self) -> bool:
+        return all(
+            config.format == DatasetFormat.ICECHUNK
+            for config in (self.primary_storage_config, *self.replica_storage_configs)
+        )
+
     def icechunk_primary_and_replica_repos(
         self,
     ) -> tuple[icechunk.Repository, tuple[icechunk.Repository, ...]]:

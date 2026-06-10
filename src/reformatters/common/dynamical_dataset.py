@@ -231,7 +231,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 "Not all stores exist, cannot run with overwrite_existing=True"
             )
             log.info("Writing to existing stores, skipping metadata write.")
-        elif not self._all_stores_icechunk():
+        elif not self.store_factory.all_stores_icechunk():
             # Zarr v3 needs metadata in the final store before workers run. Icechunk
             # gets it from parallel_setup (local tmp store + temp branch), and
             # pre-writing the full template to main here would publish a NaN-padded
@@ -322,7 +322,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         template_ds = self._get_template(append_dim_end)
         # Zarr v3 needs metadata in the final store before workers run; icechunk gets
         # it from parallel_setup (see backfill_kubernetes).
-        if not self._all_stores_icechunk():
+        if not self.store_factory.all_stores_icechunk():
             template_utils.write_metadata(template_ds, self.store_factory)
 
         self.backfill(
@@ -580,12 +580,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def _get_template(self, append_dim_end: DatetimeLike) -> xr.Dataset:
         return self.template_config.get_template(pd.Timestamp(append_dim_end))
-
-    def _all_stores_icechunk(self) -> bool:
-        return all(
-            config.format == DatasetFormat.ICECHUNK
-            for config in (self.primary_storage_config, *self.replica_storage_configs)
-        )
 
     def _can_run_in_kubernetes(self) -> bool:
         # This is a method to support testing without changing the Config.env
