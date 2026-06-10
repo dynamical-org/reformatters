@@ -10,6 +10,7 @@ from reformatters.common import validation
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast15Day025DegreeDataset,
 )
+from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 
 
@@ -40,7 +41,15 @@ def test_backfill_local_and_operational_update(
     monkeypatch.setattr(
         type(dataset.template_config),
         "get_template",
-        lambda self, end_time: orig_get_template(end_time).sel(
+        lambda self, end_time: shrink_chunks_and_shards(
+            orig_get_template(end_time),
+            {
+                "lead_time": (4, 4),
+                "ensemble_member": (2, 2),
+                "latitude": (361, 361),
+                "longitude": (720, 1440),
+            },
+        ).sel(
             lead_time=slice("0h", "6h"), ensemble_member=slice(0, 1)
         )[variables_to_check],
     )

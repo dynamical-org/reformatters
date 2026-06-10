@@ -9,6 +9,7 @@ from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.noaa.hrrr.analysis.dynamical_dataset import (
     NoaaHrrrAnalysisDataset,
 )
+from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 from tests.xarray_testing import assert_no_nulls
 
@@ -37,6 +38,16 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
         "temperature_2m",
         "precipitation_surface",
     ]
+
+    orig_get_template = dataset.template_config.get_template
+    monkeypatch.setattr(
+        type(dataset.template_config),
+        "get_template",
+        lambda self, end_time: shrink_chunks_and_shards(
+            orig_get_template(end_time),
+            {"time": (8, 8), "y": (530, 530), "x": (900, 1800)},
+        ),
+    )
 
     dataset.backfill_local(
         append_dim_end=pd.Timestamp("2014-10-01T02:00"),

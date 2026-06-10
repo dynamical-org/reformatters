@@ -7,6 +7,7 @@ import xarray as xr
 
 from reformatters.common import validation
 from reformatters.noaa.gefs.analysis.dynamical_dataset import GefsAnalysisDataset
+from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 
 
@@ -102,6 +103,17 @@ def test_backfill_local_and_operational_update(
     ]
     init_time_start = dataset.template_config.append_dim_start
     init_time_end = init_time_start + timedelta(days=1)
+
+    orig_get_template = dataset.template_config.get_template
+    monkeypatch.setattr(
+        type(dataset.template_config),
+        "get_template",
+        lambda self, end_time: shrink_chunks_and_shards(
+            orig_get_template(end_time),
+            {"time": (24, 24), "latitude": (361, 361), "longitude": (720, 1440)},
+        ),
+    )
+
     dataset.backfill_local(
         append_dim_end=init_time_end, filter_variable_names=filter_variable_names
     )

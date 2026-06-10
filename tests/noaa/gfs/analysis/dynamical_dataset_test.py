@@ -9,6 +9,7 @@ from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.noaa.gfs.analysis.dynamical_dataset import (
     NoaaGfsAnalysisDataset,
 )
+from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 from tests.xarray_testing import assert_no_nulls
 
@@ -37,6 +38,16 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
         "temperature_2m",
         "precipitation_surface",
     ]
+
+    orig_get_template = dataset.template_config.get_template
+    monkeypatch.setattr(
+        type(dataset.template_config),
+        "get_template",
+        lambda self, end_time: shrink_chunks_and_shards(
+            orig_get_template(end_time),
+            {"time": (24, 24), "latitude": (361, 361), "longitude": (720, 1440)},
+        ),
+    )
 
     dataset.backfill_local(
         append_dim_end=pd.Timestamp("2021-05-01T03:00"),

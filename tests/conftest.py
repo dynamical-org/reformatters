@@ -39,6 +39,18 @@ def pytest_xdist_auto_num_workers(config: pytest.Config) -> int | None:
     return None  # use default behavior (all CPUs)
 
 
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """
+    Order files containing slow tests first so xdist's loadfile scheduler
+    starts them immediately. A slow file picked up late by an otherwise
+    free worker extends the total run time of the suite.
+    """
+    files_with_slow_tests = {
+        item.path for item in items if item.get_closest_marker("slow") is not None
+    }
+    items.sort(key=lambda item: item.path not in files_with_slow_tests)
+
+
 @pytest.fixture(autouse=True)
 def set_local_zarr_store_base_path(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, request: pytest.FixtureRequest
