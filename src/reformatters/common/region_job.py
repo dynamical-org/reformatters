@@ -878,11 +878,15 @@ class VirtualRegionJob(
         """The variable whose chunk presence means `coord`'s file is fully ingested.
 
         Used by filter_already_present to probe a single representative cell per
-        file. Default: the first data var, valid when every file contains every
+        file. Default: the first instant var (most likely to have data at every
+        step), else the first data var; valid when every file contains every
         variable. Override for one-variable-per-file packings (e.g. GEFS v12
         reforecast) to return the candidate's own variable.
         """
-        return self.data_vars[0]
+        return next(
+            (var for var in self.data_vars if var.attrs.step_type == "instant"),
+            self.data_vars[0],
+        )
 
     def filter_already_present(
         self,
@@ -892,10 +896,7 @@ class VirtualRegionJob(
         """Drop candidates whose representative chunk is already in the manifest.
 
         Probes ref existence (store.exists) - never reads or decodes a chunk, which
-        would trigger an S3 fetch + GRIB decode. A false-negative (re-emitting done
-        work) is a harmless idempotent rewrite; the manifest probe has no
-        false-positives (a key is present iff we emitted it), so no work is ever
-        skipped undone.
+        would trigger a download + decode.
         """
         group = zarr.open_group(store, mode="r")
         keyed: list[tuple[SOURCE_FILE_COORD, str | None]] = []

@@ -687,7 +687,7 @@ def test_virtual_operational_single_writer_expands_main(tmp_path: Path) -> None:
     full_template = _create_template_ds(4)
     job = _make_region_job(full_template, region=slice(0, 4))
 
-    dataset._run_virtual_operational_update([job], workers_total=1)
+    dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
 
     # Single writer committed straight to main (no temp branch ever created).
     assert list(_primary_repo(dataset.store_factory).list_branches()) == ["main"]
@@ -726,7 +726,7 @@ def test_virtual_operational_rejects_multiple_jobs(tmp_path: Path) -> None:
         _make_region_job(full_template, region=slice(2, 4)),
     ]
     with pytest.raises(AssertionError, match="single active-window job"):
-        dataset._run_virtual_operational_update(jobs, workers_total=1)
+        dataset._run_virtual_operational_update(jobs, worker_index=0, workers_total=1)
 
 
 def test_validate_dataset_on_virtual_skips_shard_check(tmp_path: Path) -> None:
@@ -796,7 +796,7 @@ def test_virtual_operational_second_fire_sees_no_new_work(tmp_path: Path) -> Non
 
     def fire() -> None:
         job = _make_region_job(full_template, region=slice(0, 4))
-        dataset._run_virtual_operational_update([job], workers_total=1)
+        dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
 
     fire()
     repo = _primary_repo(dataset.store_factory)

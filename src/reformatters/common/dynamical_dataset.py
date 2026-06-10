@@ -174,7 +174,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
             if issubclass(self.region_job_class, VirtualRegionJob):
                 # Virtual operational updates are single-writer streaming (see docs/parallel_processing.md)
-                self._run_virtual_operational_update(all_jobs, workers_total)
+                self._run_virtual_operational_update(
+                    all_jobs, worker_index, workers_total
+                )
             else:
                 self._process_region_jobs(
                     all_jobs=all_jobs,
@@ -463,12 +465,14 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def _run_virtual_operational_update(
         self,
         all_jobs: Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]],
+        worker_index: int,
         workers_total: int,
     ) -> None:
         """Single-writer virtual dataset operational update: commit one or more
         whole source files straight to the "main" icechunk branch as they arrive
         (no parallel_coordination), so readers see each file within seconds."""
         assert workers_total == 1, "Virtual operational updates run single-writer"
+        assert worker_index == 0, "Virtual operational updates run single-writer"
         # A single active-window job whose generator polls the union of all
         # still-missing files; multiple jobs would run sequentially and the first
         # one's polling could consume the pod's deadline and starve the rest.
@@ -476,7 +480,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             f"Virtual operational updates run a single active-window job, got {len(all_jobs)}"
         )
         self.region_job_class.process_worker_jobs(
-            all_jobs, self.store_factory, "main", 0
+            all_jobs, self.store_factory, "main", worker_index
         )
 
     def validate_dataset(
