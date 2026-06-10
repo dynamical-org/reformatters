@@ -1034,6 +1034,25 @@ slotted onto 3a's seam.
   a branch; operational single-writer expansion + idempotent second fire;
   emit → commit → reopen → **value** read-back round-trip.
 
+### PR #3c — Move-only refactor (split `region_job.py`)
+
+Pull `VirtualRegionJob` into `common/virtual_region_job.py` and
+`MaterializedRegionJob` into `common/materialized_region_job.py`, out of the
+shared `common/region_job.py` (base `RegionJob` stays). Pure moves, no logic
+changes; tests pass unchanged. While doing it, **revisit `RegionJob.process`**:
+it's an abstract stub on the base that only `MaterializedRegionJob` implements
+(virtual writes via `process_virtual`). It currently stays on the base so the
+materialized `process_worker_jobs` loop — which receives base-typed jobs — type-
+checks; decide whether the split lets it live on `MaterializedRegionJob` instead.
+
+### PR #3d — Consolidate processing-loop docs
+
+How materialized and virtual datasets run their per-worker processing (the
+[seam](#the-worker-processing-seam), the two coordination lifecycles, commit
+cadence) is currently explained across code docstrings/comments *and* this plan.
+Pull the authoritative version into the docs (e.g. a `docs/parallel_processing.md`
+section) and link to it from the code, rather than scattering the explanation.
+
 ### PR #4 — First concrete virtual dataset (end to end)
 
 - Pick from the [candidates](#candidate-first-datasets).
@@ -1048,12 +1067,27 @@ slotted onto 3a's seam.
 - Integration tests: backfill a small slice + read-back; two consecutive
   operational fires (first expands, second sees no new work).
 
-### PR #5 — Second concrete virtual dataset
+### PR #5 — Persist container config on change
+
+Sequenced after PR #4 deliberately: the first one or two `-spatial` datasets run
+in production *unpublished* (not exposed to external readers) as a thorough
+shakeout before the architecture is called settled, so the `fetch_config` reader
+path this fixes isn't yet load-bearing. The constraint is "before the first
+**externally published** virtual repo," not before the first prod write.
+`Repository.create`
+persists the virtual-chunk container config, but nothing calls
+`repo.save_config()` afterward, so a later in-code container change affects only
+the writing process — an external reader recovering containers via `fetch_config`
+(the "Reader experience" / "En-masse repoint" promises) sees the creation-time
+set forever. Fix: call `save_config()` from the writable-open path when the
+in-code config differs, or document an explicit ops-card procedure.
+
+### PR #6 — Second concrete virtual dataset
 
 Different provider (NOAA ↔ ECMWF) to prove the abstractions generalize; refine
 `VirtualRegionJob` defaults from what it needs.
 
-### PR #6 — Validation phase
+### PR #7 — Validation phase
 
 Two sub-phases, sequenced after the first datasets are operationally stable:
 
@@ -1103,16 +1137,21 @@ Decision deferred to PR #4 — pick by demand and convenience at the time.
 ### Status (PR log)
 
 The PR sequence in the [implementation plan](#implementation-plan) is tracked on
-issue **#513** (its body holds the 6-PR checklist; items are written "PR 1" not
-"PR #1" so GitHub doesn't auto-link to issues 1–6).
+issue **#513** (its body holds the PR checklist; items are written "PR 1" not
+"PR #1" so GitHub doesn't auto-link to issues 1–7).
 
 | PR | State | Notes |
 |---|---|---|
 | PR 1 — extract `MaterializedRegionJob` | **merged** (#643) | `RegionJob` base + `MaterializedRegionJob(RegionJob)`; all datasets swapped base. |
 | PR 2 — prep | **merged** (#647) | ECMWF parser → `grib_message_byte_ranges_from_index`; `Encoding.serializer`; `gribberish~=0.30` (`gribberish.zarr.GribberishCodec`, `.to_dict()` → `{"name":"gribberish","configuration":{"var":...}}`); `IcechunkVirtualConfig` (real icechunk objects via `InstanceOf`) + `manifest_append_dim_split(*, split_size, dim)`; threaded through `StoreFactory`; validator (config present ⇒ all ICECHUNK). |
 | PR 3a — worker-processing seam (materialized only) | **merged** (#649) | See [B-method](#decision-b-method). |
-| PR 3b — `VirtualRegionJob` on the seam | **open** (#650) | Supersedes #648 (closed). Review rounds 1–4 addressed. |
-| PR 4–6 | not started | First `-spatial` dataset, then second provider, then validation. |
+| PR 3b — `VirtualRegionJob` on the seam | **open** (#650) | Supersedes #648 (closed). Review rounds 1–5 addressed. |
+| PR 3c — move-only refactor | not started | Split `region_job.py` → `virtual_region_job.py` + `materialized_region_job.py`; revisit `RegionJob.process` stub. |
+| PR 3d — consolidate processing-loop docs | not started | Authoritative seam/lifecycle docs in `docs/`, linked from code. |
+| PR 4 — first concrete virtual dataset | not started | First `-spatial` dataset end to end. |
+| PR 5 — persist container config | not started | `save_config()` on container drift; before first *externally published* virtual repo (first datasets run in prod unpublished). |
+| PR 6 — second concrete virtual dataset | not started | Different provider, proves abstractions generalize. |
+| PR 7 — validation phase | not started | Spatial-chunk validators + offline tooling. |
 
 PR 3 was originally one combined PR (#648) but was resequenced into 3a + 3b after
 the [B-method](#decision-b-method) design review; #648 is closed/superseded by #650.
@@ -1238,7 +1277,7 @@ not a framework-level rule.
 chunks for partially-published inits are expected) and `compare_replica_and_primary`
 (it would S3-fetch + GRIB-decode every compared chunk — the exact decode-in-steady-
 state cost the design avoids). Both are skipped for virtual; a manifest-aware
-virtual validator is deferred to the validation PR (#513 PR 6). The replica
+virtual validator is deferred to the validation PR (#513 PR 7). The replica
 comparator skip is latent until a virtual dataset gets a replica, but is removed
 now so it can't fire decode-heavy when that day comes.
 
@@ -1304,29 +1343,13 @@ commit.
 
 ### TODO
 
-- **Before PR 4 — move-only refactor:** pull `VirtualRegionJob` into
-  `common/virtual_region_job.py` and `MaterializedRegionJob` into
-  `common/materialized_region_job.py`, out of the shared `common/region_job.py`.
-  Pure moves, no logic changes. While doing it, **revisit `RegionJob.process`**:
-  it's an abstract stub on the base that only `MaterializedRegionJob` implements
-  (virtual writes via `process_virtual`). It currently stays on the base so the
-  materialized `process_worker_jobs` loop — which receives base-typed jobs — type-
-  checks; decide whether the split lets it live on `MaterializedRegionJob` instead.
-- **Consolidate the processing-loop docs.** How materialized and virtual datasets
-  run their per-worker processing (the [seam](#the-worker-processing-seam), the two
-  lifecycles, commit cadence) is currently explained across code docstrings/comments
-  *and* this plan. Pull the authoritative version into the docs (e.g. a
-  `docs/parallel_processing.md` section) and link to it from the code, rather than
-  scattering the explanation across comments and docstrings.
-- **PR 4:** first concrete `-spatial` dataset end to end (pick from
-  [candidates](#candidate-first-datasets)).
-- **Before the first production virtual repo — persist container config on
-  change** (review round 4). `Repository.create` persists the config, but nothing
-  calls `repo.save_config()` afterward, so a later in-code container change affects
-  only the writing process — an external reader recovering containers via
-  `fetch_config` (the "Reader experience" / "En-masse repoint" promises) sees the
-  creation-time set forever. Fix: call `save_config()` from the writable-open path
-  when the in-code config differs, or document an explicit ops-card procedure.
+The remaining work is now sequenced as formal PRs in the
+[implementation plan](#implementation-plan): **PR #3c** (move-only refactor +
+`RegionJob.process` revisit), **PR #3d** (consolidate processing-loop docs),
+**PR #4** (first concrete `-spatial` dataset — pick from
+[candidates](#candidate-first-datasets)), **PR #5** (persist container config via
+`save_config()` before the first externally published virtual repo), **PR #6**
+(second dataset), **PR #7** (validation).
 
 ## Spike results
 
