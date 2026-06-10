@@ -12,6 +12,7 @@ from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob
+from reformatters.common.retry import retry
 from reformatters.common.types import AppendDim, DatetimeLike, Timedelta
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 from reformatters.noaa.gefs.gefs_config_models import (
@@ -203,6 +204,9 @@ class GefsForecast10DaySpatialRegionJob(
 
 
 def _content_length(url: str) -> int:
-    response = httpx.head(url)
-    response.raise_for_status()
-    return int(response.headers["content-length"])
+    def _head() -> int:
+        response = httpx.head(url)
+        response.raise_for_status()
+        return int(response.headers["content-length"])
+
+    return retry(_head, max_attempts=6)

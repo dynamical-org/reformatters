@@ -30,6 +30,23 @@ EXPECTED_FORECAST_LENGTH = pd.Timedelta(hours=240)
 # (0.5 degree at all leads) can't share this dataset's grid.
 _S_FILE_TYPES = ("s+a", "s+b", "s+b-b22")
 
+# Virtual chunks serve raw GRIB values, so attrs diverge from the materialized
+# datasets where their pipeline transforms values: GDAL converts temperatures
+# K -> degree_Celsius on read, and precipitation is deaccumulated to a rate.
+_RAW_VALUE_ATTRS_OVERRIDES: dict[str, dict[str, Any]] = {
+    "temperature_2m": {"units": "K"},
+    "maximum_temperature_2m": {"units": "K"},
+    "minimum_temperature_2m": {"units": "K"},
+    "precipitation_surface": {
+        "short_name": "tp",
+        "long_name": "Total precipitation",
+        "standard_name": "precipitation_amount",
+        "units": "kg m-2",
+        "step_type": "accum",
+        "comment": "Accumulation over the current window; windows reset every 6 forecast hours.",
+    },
+}
+
 
 class GefsForecast10DaySpatialTemplateConfig(TemplateConfig[GEFSDataVar]):
     """Template configuration for the GEFS 10-day spatial (virtual) forecast dataset.
@@ -261,7 +278,15 @@ class GefsForecast10DaySpatialTemplateConfig(TemplateConfig[GEFSDataVar]):
             len(dim_coords["longitude"]),
         )
         return [
-            replace(var, encoding=_virtual_encoding(var, message_chunks))
+            replace(
+                var,
+                encoding=_virtual_encoding(var, message_chunks),
+                attrs=(
+                    replace(var.attrs, **_RAW_VALUE_ATTRS_OVERRIDES[var.name])
+                    if var.name in _RAW_VALUE_ATTRS_OVERRIDES
+                    else var.attrs
+                ),
+            )
             for var in get_shared_data_var_configs(message_chunks, message_chunks)
             if var.internal_attrs.gefs_file_type in _S_FILE_TYPES
         ]

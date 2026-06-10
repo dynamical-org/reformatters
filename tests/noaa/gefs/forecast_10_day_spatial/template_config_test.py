@@ -59,6 +59,18 @@ def test_data_vars_are_s_file_vars_with_virtual_encoding() -> None:
         }
 
 
+def test_raw_grib_value_attrs() -> None:
+    # GribberishCodec serves raw GRIB values: Kelvin temperatures (no GDAL K->C
+    # conversion) and accumulated (not deaccumulated-to-rate) precipitation.
+    by_name = {v.name: v for v in TEMPLATE_CONFIG.data_vars}
+    for name in ("temperature_2m", "maximum_temperature_2m", "minimum_temperature_2m"):
+        assert by_name[name].attrs.units == "K"
+    precipitation = by_name["precipitation_surface"]
+    assert precipitation.attrs.units == "kg m-2"
+    assert precipitation.attrs.standard_name == "precipitation_amount"
+    assert precipitation.attrs.step_type == "accum"
+
+
 def test_get_template_expected_forecast_length() -> None:
     ds = TEMPLATE_CONFIG.get_template(pd.Timestamp("2020-10-02T00:00"))
     assert ds.sizes["init_time"] == 4

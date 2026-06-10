@@ -779,7 +779,7 @@
           "long_name": "Maximum temperature",
           "short_name": "tmax",
           "standard_name": "air_temperature",
-          "units": "degree_Celsius",
+          "units": "K",
           "step_type": "max",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -835,7 +835,7 @@
           "long_name": "Minimum temperature",
           "short_name": "tmin",
           "standard_name": "air_temperature",
-          "units": "degree_Celsius",
+          "units": "K",
           "step_type": "min",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1000,12 +1000,12 @@
           }
         ],
         "attributes": {
-          "long_name": "Precipitation rate",
-          "short_name": "prate",
-          "standard_name": "precipitation_flux",
-          "units": "kg m-2 s-1",
-          "comment": "Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",
-          "step_type": "avg",
+          "long_name": "Total precipitation",
+          "short_name": "tp",
+          "standard_name": "precipitation_amount",
+          "units": "kg m-2",
+          "comment": "Accumulation over the current window; windows reset every 6 forecast hours.",
+          "step_type": "accum",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -1277,7 +1277,7 @@
           "long_name": "2 metre temperature",
           "short_name": "2t",
           "standard_name": "air_temperature",
-          "units": "degree_Celsius",
+          "units": "K",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

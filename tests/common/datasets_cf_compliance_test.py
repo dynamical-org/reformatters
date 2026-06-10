@@ -683,6 +683,19 @@ def _check_consistency(
     return conflicts
 
 
+# Virtual datasets serve raw GRIB values, which diverge from the transformed
+# values materialized datasets serve under the same variable name (Kelvin vs
+# GDAL's Celsius temperatures, accumulated vs deaccumulated-to-rate
+# precipitation), so these (dataset_id, var_name) pairs are exempt from
+# cross-dataset metadata consistency.
+RAW_GRIB_VALUE_VARS = {
+    ("noaa-gefs-forecast-10-day-spatial", "temperature_2m"),
+    ("noaa-gefs-forecast-10-day-spatial", "maximum_temperature_2m"),
+    ("noaa-gefs-forecast-10-day-spatial", "minimum_temperature_2m"),
+    ("noaa-gefs-forecast-10-day-spatial", "precipitation_surface"),
+}
+
+
 def test_metadata_consistency_across_datasets() -> None:
     """
     Ensure metadata is consistent across all datasets. Checks:
@@ -700,6 +713,8 @@ def test_metadata_consistency_across_datasets() -> None:
     for dataset in DYNAMICAL_DATASETS:
         template_config = dataset.template_config
         for var_config in template_config.data_vars:
+            if (dataset.dataset_id, var_config.name) in RAW_GRIB_VALUE_VARS:
+                continue
             attrs = {
                 "short_name": var_config.attrs.short_name,
                 "units": var_config.attrs.units,
