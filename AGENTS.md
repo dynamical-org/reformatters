@@ -77,7 +77,7 @@ Use ECMWF variable name for `long_name` and ECMWF short name for `short_name`.  
 ### RegionJob
 Base class: `src/reformatters/common/region_job.py`, commented example subclass: `src/reformatters/example/region_job.py`.
 
-Defines the **process** for reformatting a region of the dataset: downloading, reading, and writing data. `RegionJob` is the shared base (partitioning via `get_jobs()`, `generate_source_file_coords()`, `operational_update_jobs()`, `update_template_with_results()`, and an abstract `process()`); `MaterializedRegionJob(RegionJob)` adds the concrete download → read → write pipeline (`download_file()`, `read_data()`, `apply_data_transformations()`, `process()` and the parallelism tunables). Materialized (rechunked) datasets subclass `MaterializedRegionJob`. Key responsibilities:
+Defines the **process** for reformatting a region of the dataset: downloading, reading, and writing data. `RegionJob` is the shared base (partitioning via `get_jobs()`, `generate_source_file_coords()`, `operational_update_jobs()`, `update_template_with_results()`); `MaterializedRegionJob(RegionJob)` adds the concrete download → read → write pipeline (`download_file()`, `read_data()`, `apply_data_transformations()`, `process()` and the parallelism tunables). Materialized (rechunked) datasets subclass `MaterializedRegionJob`. Key responsibilities:
 - Implement `generate_source_file_coords()` - list source files needed for a region
 - Implement `download_file()` - retrieve a source file to local disk
 - Implement `read_data()` - load data from a local file into a numpy array

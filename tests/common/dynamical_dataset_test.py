@@ -216,10 +216,9 @@ def test_update_template(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_backfill(monkeypatch: pytest.MonkeyPatch) -> None:
-    mock_job0 = Mock()
-    mock_job0.summary = lambda: "job0-summary"
-    mock_job1 = Mock()
-    mock_job1.summary = lambda: "job1-summary"
+    # template_ds and tmp_store are pydantic fields, which Mock(spec=...) misses
+    mock_job0 = Mock(spec=ExampleRegionJob, template_ds=Mock(), tmp_store=Mock())
+    mock_job1 = Mock(spec=ExampleRegionJob, template_ds=Mock(), tmp_store=Mock())
     monkeypatch.setattr(
         ExampleRegionJob,
         "get_jobs",
