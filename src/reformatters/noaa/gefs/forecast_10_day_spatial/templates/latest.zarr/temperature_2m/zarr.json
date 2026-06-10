@@ -1,0 +1,56 @@
+{
+  "shape": [
+    1,
+    31,
+    81,
+    721,
+    1440
+  ],
+  "data_type": "float64",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        1,
+        1,
+        721,
+        1440
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "gribberish",
+      "configuration": {
+        "var": "TMP"
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "2 metre temperature",
+    "short_name": "2t",
+    "standard_name": "air_temperature",
+    "units": "degree_Celsius",
+    "step_type": "instant",
+    "coordinates": "expected_forecast_length spatial_ref valid_time",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "init_time",
+    "ensemble_member",
+    "lead_time",
+    "latitude",
+    "longitude"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}
