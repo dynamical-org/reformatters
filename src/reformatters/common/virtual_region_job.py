@@ -37,7 +37,10 @@ class VirtualRef(NamedTuple):
 class VirtualRegionJob(
     RegionJob[DATA_VAR, SOURCE_FILE_COORD], Generic[DATA_VAR, SOURCE_FILE_COORD]
 ):
-    """Base class for processing a region of virtual Icechunk datasets that point to external files."""
+    """Base class for processing a region of virtual Icechunk datasets that point to external files.
+
+    See docs/virtual_datasets.md for the write loop, filtering, and reader-safety guarantees.
+    """
 
     # Locked to None: an integer max_vars_per_job would split one source file's
     # variables across separate jobs that commit independently, breaking the
@@ -50,13 +53,9 @@ class VirtualRegionJob(
     ) -> Iterator[Sequence[VirtualRef]]:
         """Discover available source files among `remaining` and yield their virtual references.
 
-        Each yield is one commit's worth of refs. The contract is that a yield
-        holds *whole* source files — every ref of a file is emitted in the same
-        batch, never split across yields — so a reader on `main` sees all of a
-        file's data or none of it. This is a discipline the generator must keep
-        (and tests check). The generator owns the batching policy: backfill yields
-        batches of ~N whole files to amortize commit overhead; operational yields
-        ~1 file at a time for per-file visibility.
+        Each yield is one commit's worth of *whole* source files — never split a
+        file across yields, never yield an empty batch. The generator owns the
+        batching policy. See "The write loop" in docs/virtual_datasets.md.
         """
         raise NotImplementedError(
             "Yield batches of VirtualRefs, each one commit's worth of whole source files."
@@ -134,12 +133,12 @@ class VirtualRegionJob(
     ) -> None:
         """Run the virtual write loop, committing each yielded batch atomically.
 
-        Same loop for backfill and operational; the only difference is the
-        `branch` the driver opened (a temp branch for backfill, "main" for the
-        single-writer operational update). sync_dims_to grows the store lazily (a
-        no-op on the pre-sized backfill branch). A fresh writable session is opened
-        per batch because an icechunk session becomes read-only after commit.
+        The same loop serves backfill (temp branch) and the single-writer
+        operational update ("main"); see "The write loop" in docs/virtual_datasets.md.
         """
+        # A fresh writable session is opened per batch because an icechunk
+        # session becomes read-only after commit. sync_dims_to grows the store
+        # lazily (a no-op on the pre-sized backfill branch).
         readonly_store = primary_repo.readonly_session(branch).store
         candidates = self.generate_source_file_coords(
             self._processing_region_ds(), self.data_vars

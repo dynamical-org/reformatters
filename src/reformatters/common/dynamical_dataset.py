@@ -388,7 +388,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> None:
         """Shared processing loop for both updates and backfills.
 
-        Coordinates parallel writes across multiple workers:
+        Coordinates parallel writes across multiple workers (see docs/parallel_processing.md):
         - Icechunk stores: uses a temp branch so readers on "main" never see partial data
         - Zarr v3 stores: defers metadata write until all workers finish
         """
@@ -470,7 +470,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> None:
         """Single-writer virtual dataset operational update: commit one or more
         whole source files straight to the "main" icechunk branch as they arrive
-        (no parallel_coordination), so readers see each file within seconds."""
+        (no parallel_coordination), so readers see each file within seconds.
+        See "Operational updates" in docs/virtual_datasets.md."""
         assert workers_total == 1, "Virtual operational updates run single-writer"
         assert worker_index == 0, "Virtual operational updates run single-writer"
         # A single active-window job whose generator polls the union of all

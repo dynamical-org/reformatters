@@ -424,7 +424,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         Materialized and virtual datasets each own their store/session lifecycle and
         commit cadence behind this one call (see "The worker-processing seam" in
-        docs/plans/virtual_icechunk_datasets.md). Callers must pass at least one job.
+        docs/parallel_processing.md). Callers must pass at least one job.
         """
         raise NotImplementedError(
             "Subclasses implement process_worker_jobs with variant-specific logic"
