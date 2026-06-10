@@ -12,6 +12,15 @@ Work is split along two axes:
 
 The Cartesian product of regions and variable groups produces the full job list. Each worker gets every Nth job.
 
+## The worker-processing seam
+
+`RegionJob.process_worker_jobs(worker_jobs, store_factory, branch_name, worker_index)` is the single polymorphic call the coordinator (`DynamicalDataset._process_region_jobs`) drives every dataset variant through. Each variant owns its store/session lifecycle and commit cadence behind it:
+
+- **Materialized** — opens stores once and writes all of the worker's jobs in a single commit.
+- **Virtual** — commits each batch of source-file refs as its generator yields them, because a committed icechunk session is read-only (see [virtual_datasets.md](virtual_datasets.md#the-write-loop)).
+
+The only fork outside this call is the coordination lifecycle: everything runs the parallel temp-branch flow below except virtual operational updates, which are single-writer (see below).
+
 ## Reader safety
 
 Readers must always see a consistent view — either the old data or the fully updated data, never a partial state with some variables or time steps missing.
@@ -34,7 +43,7 @@ All metadata and chunk writes happen on a temporary branch (`_job_{job_name}`). 
 
 Virtual Icechunk datasets (`VirtualRegionJob`) are the one exception to the temp-branch coordinator. Their *operational* updates run **single-writer** and commit whole source files straight to `main` as each arrives, so readers see new data within seconds rather than at finalization. There is no temp branch, no `parallel_setup`, no coordination files, and no finalization step — `update()` routes virtual operational updates to `_run_virtual_operational_update` instead of `_process_region_jobs`.
 
-This is safe because each commit contains a *whole* source file's references (all of its chunks), so a reader on `main` always sees either none or all of a file's data. Reader-visible atomicity comes from icechunk's per-commit transaction, not from a branch swap. See [docs/plans/virtual_icechunk_datasets.md](plans/virtual_icechunk_datasets.md).
+This is safe because each commit contains a *whole* source file's references (all of its chunks), so a reader on `main` always sees either none or all of a file's data. Reader-visible atomicity comes from icechunk's per-commit transaction, not from a branch swap. See [virtual_datasets.md](virtual_datasets.md).
 
 Virtual *backfills* are **not** an exception — they use the normal temp-branch coordinator above (parallel across workers, pre-sized branch, finalize resets `main`).
 

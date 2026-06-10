@@ -1153,8 +1153,8 @@ issue **#513** (its body holds the PR checklist; items are written "PR 1" not
 | PR 3a — worker-processing seam (materialized only) | **merged** (#649) | See [B-method](#decision-b-method). |
 | PR 3b — `VirtualRegionJob` on the seam | **merged** (#650) | Supersedes #648 (closed). |
 | PR 3c — move-only refactor | **merged** (#653) | Split `region_job.py` → `virtual_region_job.py` + `materialized_region_job.py`. |
-| PR 3d — move `process()` onto `MaterializedRegionJob` | **open** (#654) | Removes the base `process()` stub; materialized `process_worker_jobs` narrows its jobs. |
-| PR 3e — consolidate processing-loop docs | not started | Authoritative seam/lifecycle docs in `docs/`, linked from code. |
+| PR 3d — move `process()` onto `MaterializedRegionJob` | **merged** (#654) | Removes the base `process()` stub; materialized `process_worker_jobs` narrows its jobs. |
+| PR 3e — consolidate processing-loop docs | **open** (#655) | `docs/virtual_datasets.md` + seam section in `docs/parallel_processing.md`, linked from code. |
 | PR 4 — first concrete virtual dataset | not started | First `-spatial` dataset end to end. |
 | PR 5 — persist container config | not started | `save_config()` on container drift; before first *externally published* virtual repo (first datasets run in prod unpublished). |
 | PR 6 — second concrete virtual dataset | not started | Different provider, proves abstractions generalize. |
