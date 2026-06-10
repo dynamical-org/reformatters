@@ -7,7 +7,7 @@ from copy import deepcopy
 from http import HTTPStatus
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
-from typing import Any, ClassVar, Generic
+from typing import Any, ClassVar, Generic, cast
 
 import httpx
 import numpy as np
@@ -135,8 +135,14 @@ class MaterializedRegionJob(
         primary_store = store_factory.primary_store(writable=True, branch=branch_name)
         replica_stores = store_factory.replica_stores(writable=True, branch=branch_name)
 
+        assert all(isinstance(job, MaterializedRegionJob) for job in worker_jobs)
+        jobs = cast(
+            "Sequence[MaterializedRegionJob[DATA_VAR, SOURCE_FILE_COORD]]", worker_jobs
+        )
+        del worker_jobs
+
         worker_results: dict[str, list[SourceFileResult]] = {}
-        for job in worker_jobs:
+        for job in jobs:
             template_utils.write_metadata(job.template_ds, job.tmp_store)
             results = job.process(
                 primary_store=primary_store, replica_stores=replica_stores

@@ -411,23 +411,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         ]
         return all_jobs
 
-    def process(
-        self,
-        primary_store: Store,
-        replica_stores: list[Store],
-    ) -> Mapping[str, Sequence[SOURCE_FILE_COORD]]:
-        """
-        Process this region, writing chunk data to primary_store (and replica_stores)
-        and returning the per-variable source file coordinates with their final status.
-
-        Implemented by MaterializedRegionJob. (VirtualRegionJob writes via
-        process_virtual instead; this stub stays on the base so the materialized
-        process_worker_jobs loop, which receives base-typed jobs, type-checks.)
-        """
-        raise NotImplementedError(
-            "Subclasses implement process() with variant-specific logic"
-        )
-
     @classmethod
     def process_worker_jobs(
         cls,

@@ -149,7 +149,7 @@ DynamicalDataset                          # unchanged single base
 
 RegionJob                                 # shared base: fields, get_jobs,
 │                                         #   source_groups, generate_source_file_coords,
-│                                         #   operational_update_jobs (abstract), process (abstract)
+│                                         #   operational_update_jobs (abstract)
 ├── MaterializedRegionJob                 # existing process() pipeline + hooks + tunables
 │   ├── NoaaGfsCommonRegionJob → NoaaGfsForecastRegionJob   (base swap only)
 │   ├── NoaaHrrrRegionJob → …                                (base swap only)
@@ -196,7 +196,7 @@ ride their parent's swap. Tests pass unchanged. This is PR #1 on its own.
 - `get_jobs()` — region × variable-group fan-out (see
   [Partitioning](#partitioning)).
 - `source_groups()`, `get_processing_region()`, `generate_source_file_coords()`
-  (abstract), `operational_update_jobs()` (abstract), `process()` (abstract),
+  (abstract), `operational_update_jobs()` (abstract),
   `process_worker_jobs()` (abstract; the per-worker seam).
 
 **`MaterializedRegionJob` (subclass):** today's `process()` body, the
@@ -1039,13 +1039,19 @@ slotted onto 3a's seam.
 Pull `VirtualRegionJob` into `common/virtual_region_job.py` and
 `MaterializedRegionJob` into `common/materialized_region_job.py`, out of the
 shared `common/region_job.py` (base `RegionJob` stays). Pure moves, no logic
-changes; tests pass unchanged. While doing it, **revisit `RegionJob.process`**:
-it's an abstract stub on the base that only `MaterializedRegionJob` implements
-(virtual writes via `process_virtual`). It currently stays on the base so the
-materialized `process_worker_jobs` loop — which receives base-typed jobs — type-
-checks; decide whether the split lets it live on `MaterializedRegionJob` instead.
+changes; tests pass unchanged.
 
-### PR #3d — Consolidate processing-loop docs
+### PR #3d — Move `process()` onto `MaterializedRegionJob`
+
+`process()` was an abstract stub on the base that only `MaterializedRegionJob`
+implements (virtual writes via `process_virtual`); it stayed on the base only so
+the materialized `process_worker_jobs` loop — which receives base-typed jobs —
+type-checked. It now lives only on `MaterializedRegionJob`, whose
+`process_worker_jobs` asserts all jobs are materialized and casts the sequence,
+mirroring the virtual side's isinstance narrowing to `VirtualRegionJob` before
+`process_virtual`.
+
+### PR #3e — Consolidate processing-loop docs
 
 How materialized and virtual datasets run their per-worker processing (the
 [seam](#the-worker-processing-seam), the two coordination lifecycles, commit
@@ -1145,9 +1151,10 @@ issue **#513** (its body holds the PR checklist; items are written "PR 1" not
 | PR 1 — extract `MaterializedRegionJob` | **merged** (#643) | `RegionJob` base + `MaterializedRegionJob(RegionJob)`; all datasets swapped base. |
 | PR 2 — prep | **merged** (#647) | ECMWF parser → `grib_message_byte_ranges_from_index`; `Encoding.serializer`; `gribberish~=0.30` (`gribberish.zarr.GribberishCodec`, `.to_dict()` → `{"name":"gribberish","configuration":{"var":...}}`); `IcechunkVirtualConfig` (real icechunk objects via `InstanceOf`) + `manifest_append_dim_split(*, split_size, dim)`; threaded through `StoreFactory`; validator (config present ⇒ all ICECHUNK). |
 | PR 3a — worker-processing seam (materialized only) | **merged** (#649) | See [B-method](#decision-b-method). |
-| PR 3b — `VirtualRegionJob` on the seam | **open** (#650) | Supersedes #648 (closed). Review rounds 1–5 addressed. |
-| PR 3c — move-only refactor | not started | Split `region_job.py` → `virtual_region_job.py` + `materialized_region_job.py`; revisit `RegionJob.process` stub. |
-| PR 3d — consolidate processing-loop docs | not started | Authoritative seam/lifecycle docs in `docs/`, linked from code. |
+| PR 3b — `VirtualRegionJob` on the seam | **merged** (#650) | Supersedes #648 (closed). |
+| PR 3c — move-only refactor | **merged** (#653) | Split `region_job.py` → `virtual_region_job.py` + `materialized_region_job.py`. |
+| PR 3d — move `process()` onto `MaterializedRegionJob` | **open** | Removes the base `process()` stub; materialized `process_worker_jobs` narrows its jobs. |
+| PR 3e — consolidate processing-loop docs | not started | Authoritative seam/lifecycle docs in `docs/`, linked from code. |
 | PR 4 — first concrete virtual dataset | not started | First `-spatial` dataset end to end. |
 | PR 5 — persist container config | not started | `save_config()` on container drift; before first *externally published* virtual repo (first datasets run in prod unpublished). |
 | PR 6 — second concrete virtual dataset | not started | Different provider, proves abstractions generalize. |
@@ -1344,8 +1351,8 @@ commit.
 ### TODO
 
 The remaining work is now sequenced as formal PRs in the
-[implementation plan](#implementation-plan): **PR #3c** (move-only refactor +
-`RegionJob.process` revisit), **PR #3d** (consolidate processing-loop docs),
+[implementation plan](#implementation-plan): **PR #3d** (move `process()` onto
+`MaterializedRegionJob`), **PR #3e** (consolidate processing-loop docs),
 **PR #4** (first concrete `-spatial` dataset — pick from
 [candidates](#candidate-first-datasets)), **PR #5** (persist container config via
 `save_config()` before the first externally published virtual repo), **PR #6**
