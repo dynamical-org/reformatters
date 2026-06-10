@@ -232,10 +232,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
             log.info("Writing to existing stores, skipping metadata write.")
         elif not self.store_factory.all_stores_icechunk():
-            # Zarr v3 needs metadata in the final store before workers run. Icechunk
-            # gets it from parallel_setup (local tmp store + temp branch), and
-            # pre-writing the full template to main here would publish a NaN-padded
-            # future to readers until finalize resets main.
+            # Write metadata to final store. Required for Zarr v3 only, Icechunk metadata is written in parallel_setup.
             template_utils.write_metadata(template_ds, self.store_factory)
 
         num_jobs = len(
@@ -320,8 +317,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
 
         template_ds = self._get_template(append_dim_end)
-        # Zarr v3 needs metadata in the final store before workers run; icechunk gets
-        # it from parallel_setup (see backfill_kubernetes).
+        # Write metadata to final store. Required for Zarr v3 only, Icechunk metadata is written in parallel_setup.
         if not self.store_factory.all_stores_icechunk():
             template_utils.write_metadata(template_ds, self.store_factory)
 
@@ -490,8 +486,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """Validate the dataset, raising an exception if it is invalid."""
         # Virtual datasets get their own manifest-aware validators. The materialized
         # ones don't apply: check_for_expected_shards (no shards; missing chunks for
-        # partially-published inits are expected) and compare_replica_and_primary
-        # (would S3-fetch + GRIB-decode every compared chunk).
+        # partially-published inits are expected) and compare_replica_and_primary.
         is_virtual = issubclass(self.region_job_class, VirtualRegionJob)
         with self._monitor(ValidationCronJob, reformat_job_name):
             primary_store = self.store_factory.primary_store()

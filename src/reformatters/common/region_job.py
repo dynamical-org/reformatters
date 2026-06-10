@@ -360,10 +360,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             data_var_groups = [data_vars]
 
         # Regions along append dimension.
-        # Materialized arrays partition by shard; virtual arrays use chunks. All
-        # data vars must agree: a mix would partition by whichever var is first,
-        # and a chunk-sized region over a sharded var lets workers write into the
-        # same physical shard.
+        # Materialized arrays partition by shard; virtual arrays use chunks.
+        # All data vars must agree: a mix would partition by whichever var is first,
+        # and a chunk-sized region over a sharded var would cause multiple workers
+        # to write to the same shard.
         sharded = [
             v.encoding.get("shards") is not None for v in template_ds.data_vars.values()
         ]
@@ -460,17 +460,12 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         branch_name: str,
         worker_index: int,
     ) -> dict[str, list[SourceFileResult]]:
-        """Process one worker's (non-empty) region jobs against ``branch_name`` and
+        """Process one worker's region jobs against ``branch_name`` and
         return the per-variable source file results.
 
-        Each variant owns its own store/session lifecycle and commit cadence behind
-        this one call. The parallel temp-branch coordinator
-        (``DynamicalDataset._process_region_jobs``) drives both variants through it;
-        a virtual *operational* update is the one exception, forking in ``update()``
-        to ``_run_virtual_operational_update`` (single-writer-to-``main``). Callers
-        must pass at least one job: materialized would otherwise make an empty commit
-        (which icechunk rejects). Implemented by the MaterializedRegionJob and
-        VirtualRegionJob subclasses.
+        Materialized and virtual datasets each own their store/session lifecycle and
+        commit cadence behind this one call (see "The worker-processing seam" in
+        docs/plans/virtual_icechunk_datasets.md). Callers must pass at least one job.
         """
         raise NotImplementedError(
             "Subclasses implement process_worker_jobs with variant-specific logic"
@@ -858,8 +853,7 @@ class VirtualRegionJob(
 
     # Locked to None: an integer max_vars_per_job would split one source file's
     # variables across separate jobs that commit independently, breaking the
-    # per-file commit atomicity virtual readers rely on. Virtual jobs are tiny
-    # (byte-range refs) and parallelize along the append dim, not variables.
+    # per-file commit atomicity virtual readers rely on.
     max_vars_per_job: ClassVar[Final[int | None]] = None
 
     def process_virtual_refs(

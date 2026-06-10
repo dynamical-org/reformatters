@@ -1307,7 +1307,17 @@ commit.
 - **Before PR 4 — move-only refactor:** pull `VirtualRegionJob` into
   `common/virtual_region_job.py` and `MaterializedRegionJob` into
   `common/materialized_region_job.py`, out of the shared `common/region_job.py`.
-  Pure moves, no logic changes.
+  Pure moves, no logic changes. While doing it, **revisit `RegionJob.process`**:
+  it's an abstract stub on the base that only `MaterializedRegionJob` implements
+  (virtual writes via `process_virtual`). It currently stays on the base so the
+  materialized `process_worker_jobs` loop — which receives base-typed jobs — type-
+  checks; decide whether the split lets it live on `MaterializedRegionJob` instead.
+- **Consolidate the processing-loop docs.** How materialized and virtual datasets
+  run their per-worker processing (the [seam](#the-worker-processing-seam), the two
+  lifecycles, commit cadence) is currently explained across code docstrings/comments
+  *and* this plan. Pull the authoritative version into the docs (e.g. a
+  `docs/parallel_processing.md` section) and link to it from the code, rather than
+  scattering the explanation across comments and docstrings.
 - **PR 4:** first concrete `-spatial` dataset end to end (pick from
   [candidates](#candidate-first-datasets)).
 - **Before the first production virtual repo — persist container config on
