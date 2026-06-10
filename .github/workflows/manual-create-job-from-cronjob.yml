@@ -23,6 +23,8 @@ name: 'Manual: Create Job from CronJob'
         - nasa-smap-level3-36km-v9-validate
         - noaa-gefs-analysis-update
         - noaa-gefs-analysis-validate
+        - noaa-gefs-forecast-16-day-spatial-update
+        - noaa-gefs-forecast-16-day-spatial-validate
         - noaa-gefs-forecast-35-day-update
         - noaa-gefs-forecast-35-day-validate
         - noaa-gfs-analysis-update
