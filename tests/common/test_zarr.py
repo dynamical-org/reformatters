@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import Mock, call
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
@@ -85,9 +85,21 @@ def test_copy_zarr_metadata_calls_copy_metadata_files_for_all_stores(
     # Instead of exact call matching, check the calls contain the right elements
     assert len(calls) == 3
     for call_args in calls:
-        files, _store_path, _store = call_args[0]
+        files, _store_path, store = call_args[0]
         # Verify the files list contains the expected files (order-independent)
         assert set(files) == set(expected_metadata_files)
+        _assert_format_specific_order(files, store)
+
+
+def _assert_format_specific_order(files: list[Path], store: Store) -> None:
+    """Zarr v3 readers need coordinate chunks written before metadata; a fresh
+    icechunk store rejects a chunk whose array metadata doesn't exist yet."""
+    last_json = max(i for i, f in enumerate(files) if f.name == "zarr.json")
+    first_chunk = min(i for i, f in enumerate(files) if f.name != "zarr.json")
+    if isinstance(store, IcechunkStore):
+        assert last_json < first_chunk
+    else:
+        assert first_chunk < last_json
 
 
 def test_copy_zarr_metadata_skips_non_icechunk_stores_when_icechunk_only(
@@ -117,16 +129,14 @@ def test_copy_zarr_metadata_skips_non_icechunk_stores_when_icechunk_only(
     assert mock_copy_metadata_files.call_count == 2
     calls = mock_copy_metadata_files.call_args_list
 
-    assert calls[0] == call(
-        expected_metadata_files,
-        tmp_store,
-        mock_replica_store_icechunk,
-    )
-    assert calls[1] == call(
-        expected_metadata_files,
-        tmp_store,
-        mock_primary_icechunk,
-    )
+    for call_args, expected_store in zip(
+        calls, [mock_replica_store_icechunk, mock_primary_icechunk], strict=True
+    ):
+        files, store_path, store = call_args[0]
+        assert set(files) == set(expected_metadata_files)
+        _assert_format_specific_order(files, store)
+        assert store_path == tmp_store
+        assert store is expected_store
 
 
 def test_copy_zarr_metadata_noops_when_icechunk_only_and_no_icechunk_store(
