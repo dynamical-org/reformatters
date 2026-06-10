@@ -21,9 +21,7 @@ from reformatters.common.config_models import (
     Encoding,
 )
 from reformatters.common.iterating import get_worker_jobs
-from reformatters.common.materialized_region_job import (
-    MaterializedRegionJob,
-)
+from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     SourceFileCoord,
     SourceFileResult,

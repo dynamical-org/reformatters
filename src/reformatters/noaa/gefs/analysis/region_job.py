@@ -11,9 +11,7 @@ from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.interpolation import linear_interpolate_1d_inplace
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
-from reformatters.common.materialized_region_job import (
-    MaterializedRegionJob,
-)
+from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     CoordinateValue,
     RegionJob,

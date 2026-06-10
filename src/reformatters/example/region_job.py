@@ -5,9 +5,7 @@ import xarray as xr
 from zarr.abc.store import Store
 
 from reformatters.common.logging import get_logger
-from reformatters.common.materialized_region_job import (
-    MaterializedRegionJob,
-)
+from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     CoordinateValue,
     RegionJob,
