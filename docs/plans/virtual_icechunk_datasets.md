@@ -85,16 +85,16 @@ for source_file in source_files:                       # see "what a file covers
 
     refs = [
         VirtualRef(
-            key=chunk_key(msg.out_loc, msg.var, ds),    # msg.out_loc: the cell this message fills
+            data_var=msg.var,                           # which array this message fills
+            out_loc=msg.out_loc,                        # the cell it fills; chunk_key maps it to an index
             location=source_file.get_url(),             # s3://noaa-gefs-pds/...
             offset=msg.start,
             length=msg.end - msg.start,
         )
         for msg in messages
     ]
-    store.set_virtual_refs(refs)                        # all of this file's refs, one batch
-
-session.commit("...")                                   # readers see new data
+    yield refs                                          # all of this file's refs, one batch
+    # the driver emits via set_virtual_refs + commits — readers see new data
 ```
 
 At read time `GribberishCodec` (a zarr v3 `ArrayBytesCodec` serializer) decodes
@@ -177,11 +177,14 @@ ride their parent's swap. Tests pass unchanged. This is PR #1 on its own.
 - Fields: `template_config`, `region_job_class`, storage configs, plus the new
   `icechunk_virtual_config` (see [Storage configuration](#storage-configuration)).
 - CLI, Sentry, `validators()`, `operational_kubernetes_resources()` — unchanged.
-- `_process_region_jobs` driver — gains **one** fork: a virtual operational
-  update (region job class is a `VirtualRegionJob` subclass *and* this is an
-  operational update) takes the single-writer-to-`main` path; everything else
-  (materialized backfill/update, **and virtual backfill**) keeps the existing
-  temp-branch path.
+- The per-worker processing seam is polymorphic: `_process_region_jobs` (the
+  parallel temp-branch coordinator) calls
+  `region_job_class.process_worker_jobs(...)` and names no variant — materialized
+  backfill/update and **virtual backfill** all flow through it unchanged. The
+  **one** driver fork lives in `update()`: a virtual operational update routes to
+  `_run_virtual_operational_update` (single-writer-streaming-to-`main`, which
+  reuses the same `process_worker_jobs` on `branch="main"` with no
+  `parallel_setup`/`finalize`). See [the seam](#the-worker-processing-seam).
 - A model validator: if `region_job_class` is virtual then every storage
   config must be `ICECHUNK` and `icechunk_virtual_config` must be present with a
   non-empty container set.
@@ -193,25 +196,51 @@ ride their parent's swap. Tests pass unchanged. This is PR #1 on its own.
 - `get_jobs()` — region × variable-group fan-out (see
   [Partitioning](#partitioning)).
 - `source_groups()`, `get_processing_region()`, `generate_source_file_coords()`
-  (abstract), `operational_update_jobs()` (abstract), `process()` (abstract).
+  (abstract), `operational_update_jobs()` (abstract), `process()` (abstract),
+  `process_worker_jobs()` (abstract; the per-worker seam).
 
 **`MaterializedRegionJob` (subclass):** today's `process()` body, the
 `download_file` / `read_data` / `apply_data_transformations` hooks, the
-parallelism tunables, and the shared-memory helpers. The existing datasets'
-region jobs change base class here and nothing else.
+parallelism tunables, and the shared-memory helpers, plus a
+`process_worker_jobs()` that writes all of a worker's jobs to the branch in a
+single commit. The existing datasets' region jobs change base class here and
+nothing else.
 
 **`VirtualRegionJob` (subclass):**
 
-- `process()` — runs [the one virtual write loop](#the-virtual-write-loop).
-- `process_virtual_refs(remaining, deadline)` — abstract generator: discover
-  available source files and yield one file's refs at a time.
-- `filter_already_present(candidates, store, ds)` — default impl
+- `process_worker_jobs()` — opens the icechunk repos and drives each job's
+  `process_virtual()` (many commits per worker vs the materialized variant's one).
+- `process_virtual(primary_repo, replica_repos, branch)` — runs
+  [the one virtual write loop](#the-virtual-write-loop) for a single job.
+- `process_virtual_refs(remaining)` — abstract generator: discover available
+  source files and yield whole files' refs a batch at a time.
+- `filter_already_present(candidates, store)` — default impl
   (see [Filtering](#filtering-already-present-coordinates)); overridable.
-- `sync_dims_to(store, extent)` — idempotent dim/coord/derived-coord expansion
-  (see [The virtual write loop](#the-virtual-write-loop)).
-- `chunk_key(coord, var, ds)` — coord labels → chunk key, derived from array
+- `sync_dims_to(stores, extent)` — idempotent dim/coord/derived-coord expansion,
+  sized per-store (see [The virtual write loop](#the-virtual-write-loop)).
+- `chunk_key(out_loc, var)` — coord labels → chunk index, derived from array
   metadata so it can't drift from zarr (see [Chunk keys](#chunk-keys)). Shared
   by filter and emit.
+
+### The worker-processing seam
+
+The materialized and virtual variants differ in **commit-batch size**, not in
+mechanism: a materialized worker writes one commit's worth (all its jobs); a
+virtual worker writes many (one per yielded source-file batch, because a
+committed icechunk session is read-only). That single difference is expressed by
+one polymorphic method — `RegionJob.process_worker_jobs(worker_jobs,
+store_factory, branch_name, worker_index) -> dict[str, list[SourceFileResult]]` —
+so the coordinator drives every variant through one call and names none of them.
+Each variant owns its own store/session lifecycle and commit cadence behind it
+(materialized opens stores once and commits once; virtual opens the repos and
+runs the per-batch loop). The only genuinely irreducible fork is the
+*coordination lifecycle* — parallel-temp-branch (everything) vs
+single-writer-to-`main` (virtual operational) — which lives at the `update()`
+entry point, not inside the shared coordinator.
+
+This seam landed first as a behavior-preserving, materialized-only refactor (PR
+3a, #649) so it could be reviewed without virtual code; PR 3b adds
+`VirtualRegionJob.process_worker_jobs` and the coordinator stays variant-free.
 
 ## Storage configuration
 
@@ -377,19 +406,20 @@ Consequences by flow:
 
 ## The virtual write loop
 
-Both virtual flows — backfill and operational — run the **same** loop. The only
-differences are *where the session is opened* and *how big a batch the generator
-yields*:
+Both virtual flows — backfill and operational — run the **same** loop (in
+`process_virtual`). The only differences are the `branch` the driver opened and
+*how big a batch the generator yields*:
 
 ```python
-candidates = self.generate_source_file_coords(scope)          # shared w/ materialized
-remaining  = self.filter_already_present(candidates, store, ds)
+candidates = self.generate_source_file_coords(self._processing_region_ds(), self.data_vars)
+remaining  = self.filter_already_present(candidates, readonly_store)
 
-for batch in self.process_virtual_refs(remaining, deadline):  # batch == 1+ whole files
-    self.sync_dims_to(store, batch.extent)                    # idempotent; no-op if already covered
-    store.set_virtual_refs(path, batch.refs)                  # plural API, per array path
-    if store.session.has_uncommitted_changes:                 # guard: empty commit raises
-        commit(store)                                         # one commit per yield
+for refs in self.process_virtual_refs(remaining):             # refs == 1+ whole files' refs
+    assert refs                                               # contract: never an empty yield
+    stores = fresh writable sessions (a committed session is read-only)
+    self.sync_dims_to(stores, needed_size(refs))             # idempotent; per-store, no-op if covered
+    self._emit_refs(stores, refs)                            # set_virtual_refs per array path
+    commit(stores)                                           # one commit per yield (never empty)
 ```
 
 `sync_dims_to(store, extent)` is the single primitive that unifies pre-sizing
@@ -415,16 +445,18 @@ yield-immediately. The atomicity invariant (see
 [Reader safety](#reader-safety)) says each yield is **whole files** — never
 splitting a file across yields — but a yield can contain one file or many.
 
-> **Empty commits raise — guard them.** icechunk's `session.commit` raises
-> `IcechunkError` ("no changes made to the session") rather than no-opping, and
-> the shared `storage.commit_if_icechunk` helper commits unconditionally. A
-> well-behaved generator never yields an empty batch, but the driver still guards
-> on `session.has_uncommitted_changes` before committing (the alternative,
-> `allow_empty=True`, would litter the history with empty snapshots). This pairs
-> with the idempotency story: **setting refs always dirties the session — even
-> re-emitting byte-identical refs** — so the guard fires only on a genuinely
-> empty poll, never on idempotent replay (a filter false-negative just rewrites
-> an identical, content-addressed manifest and commits a no-content snapshot).
+> **Empty commits raise — so the contract forbids empty yields.** icechunk's
+> `session.commit` raises `IcechunkError` ("no changes made to the session")
+> rather than no-opping. Rather than guard each commit on
+> `session.has_uncommitted_changes`, the loop relies on the generator contract:
+> each yield is one commit's worth of **whole files**, so a batch always has refs,
+> and **setting refs always dirties the session — even re-emitting byte-identical
+> refs** — so the commit is never empty. The loop **asserts** `refs` (a loud,
+> early failure if a generator ever violates the contract) and leaves
+> `commit_if_icechunk` committing unconditionally. The empty-poll and
+> everything-already-present cases never reach the commit — they yield no batch,
+> so the loop body simply doesn't run (a filter false-negative still re-emits and
+> commits an idempotent, content-addressed no-content snapshot).
 
 The two flows fall out naturally:
 
@@ -493,13 +525,15 @@ in one poll iteration can ride one yield if the generator chooses.
 1. **CronJob fires** ~5 min before a publication window opens (per dataset).
    `concurrencyPolicy: Forbid` prevents overlapping fires.
 2. **A single worker runs `update()`**, which calls `operational_update_jobs()`
-   (→ one active-window job) and `_process_region_jobs()`.
-3. **The driver detects virtual + operational** and takes the
-   single-writer-to-`main` path: no temp branch, no shared setup, no
-   coordination files. It opens one writable session on `main` and runs
+   (→ one active-window job).
+3. **`update()` detects virtual + operational** and routes to
+   `_run_virtual_operational_update` — the single-writer-to-`main` path: no temp
+   branch, no shared setup, no coordination files, no `_process_region_jobs`. It
+   runs the variant's `process_worker_jobs` on `branch="main"`, which opens a
+   fresh writable session per batch and runs
    [the virtual write loop](#the-virtual-write-loop).
 4. **The loop** filters to what's still missing, drives
-   `process_virtual_refs(..., deadline)`, lazily expands via `sync_dims_to`,
+   `process_virtual_refs(remaining)`, lazily expands via `sync_dims_to`,
    batches refs, and commits on the ~1 s cadence.
 5. **The generator exits** when the window is complete or the pod deadline
    approaches.
@@ -1000,6 +1034,25 @@ slotted onto 3a's seam.
   a branch; operational single-writer expansion + idempotent second fire;
   emit → commit → reopen → **value** read-back round-trip.
 
+### PR #3c — Move-only refactor (split `region_job.py`)
+
+Pull `VirtualRegionJob` into `common/virtual_region_job.py` and
+`MaterializedRegionJob` into `common/materialized_region_job.py`, out of the
+shared `common/region_job.py` (base `RegionJob` stays). Pure moves, no logic
+changes; tests pass unchanged. While doing it, **revisit `RegionJob.process`**:
+it's an abstract stub on the base that only `MaterializedRegionJob` implements
+(virtual writes via `process_virtual`). It currently stays on the base so the
+materialized `process_worker_jobs` loop — which receives base-typed jobs — type-
+checks; decide whether the split lets it live on `MaterializedRegionJob` instead.
+
+### PR #3d — Consolidate processing-loop docs
+
+How materialized and virtual datasets run their per-worker processing (the
+[seam](#the-worker-processing-seam), the two coordination lifecycles, commit
+cadence) is currently explained across code docstrings/comments *and* this plan.
+Pull the authoritative version into the docs (e.g. a `docs/parallel_processing.md`
+section) and link to it from the code, rather than scattering the explanation.
+
 ### PR #4 — First concrete virtual dataset (end to end)
 
 - Pick from the [candidates](#candidate-first-datasets).
@@ -1014,12 +1067,27 @@ slotted onto 3a's seam.
 - Integration tests: backfill a small slice + read-back; two consecutive
   operational fires (first expands, second sees no new work).
 
-### PR #5 — Second concrete virtual dataset
+### PR #5 — Persist container config on change
+
+Sequenced after PR #4 deliberately: the first one or two `-spatial` datasets run
+in production *unpublished* (not exposed to external readers) as a thorough
+shakeout before the architecture is called settled, so the `fetch_config` reader
+path this fixes isn't yet load-bearing. The constraint is "before the first
+**externally published** virtual repo," not before the first prod write.
+`Repository.create`
+persists the virtual-chunk container config, but nothing calls
+`repo.save_config()` afterward, so a later in-code container change affects only
+the writing process — an external reader recovering containers via `fetch_config`
+(the "Reader experience" / "En-masse repoint" promises) sees the creation-time
+set forever. Fix: call `save_config()` from the writable-open path when the
+in-code config differs, or document an explicit ops-card procedure.
+
+### PR #6 — Second concrete virtual dataset
 
 Different provider (NOAA ↔ ECMWF) to prove the abstractions generalize; refine
 `VirtualRegionJob` defaults from what it needs.
 
-### PR #6 — Validation phase
+### PR #7 — Validation phase
 
 Two sub-phases, sequenced after the first datasets are operationally stable:
 
@@ -1059,6 +1127,229 @@ reflect both:
 | MRMS 2-minute analysis | 2-min cadence is the toughest test of the ≤5s budget; analysis structure is simplest (one time axis); existing `NoaaMrmsRegionJob` to subclass | High commit cadence (~720/day) stresses the active manifest split |
 
 Decision deferred to PR #4 — pick by demand and convenience at the time.
+
+## Implementation notes & decision log
+
+> Running log of implementation status, decisions, and gotchas. Kept here (in the
+> repo) rather than in machine-local notes so it survives across machines and
+> contributors. Append to it as the work proceeds.
+
+### Status (PR log)
+
+The PR sequence in the [implementation plan](#implementation-plan) is tracked on
+issue **#513** (its body holds the PR checklist; items are written "PR 1" not
+"PR #1" so GitHub doesn't auto-link to issues 1–7).
+
+| PR | State | Notes |
+|---|---|---|
+| PR 1 — extract `MaterializedRegionJob` | **merged** (#643) | `RegionJob` base + `MaterializedRegionJob(RegionJob)`; all datasets swapped base. |
+| PR 2 — prep | **merged** (#647) | ECMWF parser → `grib_message_byte_ranges_from_index`; `Encoding.serializer`; `gribberish~=0.30` (`gribberish.zarr.GribberishCodec`, `.to_dict()` → `{"name":"gribberish","configuration":{"var":...}}`); `IcechunkVirtualConfig` (real icechunk objects via `InstanceOf`) + `manifest_append_dim_split(*, split_size, dim)`; threaded through `StoreFactory`; validator (config present ⇒ all ICECHUNK). |
+| PR 3a — worker-processing seam (materialized only) | **merged** (#649) | See [B-method](#decision-b-method). |
+| PR 3b — `VirtualRegionJob` on the seam | **open** (#650) | Supersedes #648 (closed). Review rounds 1–5 addressed. |
+| PR 3c — move-only refactor | not started | Split `region_job.py` → `virtual_region_job.py` + `materialized_region_job.py`; revisit `RegionJob.process` stub. |
+| PR 3d — consolidate processing-loop docs | not started | Authoritative seam/lifecycle docs in `docs/`, linked from code. |
+| PR 4 — first concrete virtual dataset | not started | First `-spatial` dataset end to end. |
+| PR 5 — persist container config | not started | `save_config()` on container drift; before first *externally published* virtual repo (first datasets run in prod unpublished). |
+| PR 6 — second concrete virtual dataset | not started | Different provider, proves abstractions generalize. |
+| PR 7 — validation phase | not started | Spatial-chunk validators + offline tooling. |
+
+PR 3 was originally one combined PR (#648) but was resequenced into 3a + 3b after
+the [B-method](#decision-b-method) design review; #648 is closed/superseded by #650.
+
+### Decision log
+
+**<a name="decision-b-method"></a>Driver design = "B-method" (2026-06-09).** The
+materialized-vs-virtual difference is **just commit-batch size**, not a different
+mechanism: a materialized worker writes one commit's worth (all its jobs); a
+virtual worker writes many (one per yielded source-file batch, because a committed
+icechunk session is read-only). So both variants implement one polymorphic
+`RegionJob.process_worker_jobs(worker_jobs, store_factory, branch_name,
+worker_index)` and the coordinator (`_process_region_jobs`) names no variant. The
+only irreducible fork is the *coordination lifecycle* (axis a): the parallel
+temp-branch coordinator vs single-writer-straight-to-`main`, which lives at the
+`update()` entry point. Batch size (axis b) is *not* a fork — virtual backfill can
+even do one commit-batch per worker (coarser crash recovery, fewer snapshots), so
+"many small batches" is exclusively the single-writer *operational* property.
+
+We considered **"B-loop"** (driver owns a shared commit loop; each job yields
+write-closure "batches") and rejected it: it needs a batch/closure abstraction plus
+in-loop default-arg capture — *more* machinery than the two ~6-line
+`process_worker_jobs` methods — and the dataset-author surface is identical either
+way. See the [worker-processing seam](#the-worker-processing-seam).
+
+**<a name="decision-virtualref-namedtuple"></a>`VirtualRef` is a `NamedTuple`, not
+a `FrozenBaseModel`.** It is a pure ephemeral in-process carrier — never
+serialized (the reason `SourceFileResult` is pydantic) and has no methods (the
+reason `SourceFileCoord`/`DataVar` are pydantic) — so pydantic's machinery would be
+unused weight. Decisive technical blocker: under `FrozenBaseModel`'s config
+(`strict=True`, **no `arbitrary_types_allowed`**), a field typed
+`Mapping[Dim, CoordinateValue]` **fails at class definition** with
+`PydanticSchemaGenerationError`, because `CoordinateValue` includes bare
+`pd.Timestamp`/`pd.Timedelta`, which pydantic can't build a schema for. The repo's
+own pydantic carrier sidesteps this with `SourceFileResult.out_loc: dict[str, Any]`
+(losing the precise typing). Swapping the union to the `Annotated[...,
+PlainValidator]` `Timestamp`/`Timedelta` from `types.py` *defines* but **fails at
+construction**: the two `PlainValidator` pandas types cross-contaminate — a
+`pd.Timedelta` value hits the `pd.Timestamp` validator (`pd.Timestamp(<td>)` →
+`TypeError`), which pydantic's union does not catch (it only advances on
+`ValueError`/`AssertionError`). The `NamedTuple` keeps the honest
+`Mapping[Dim, CoordinateValue]` static type with none of this, and downstream
+already validates (chunk_key boundary assert, icechunk `VirtualChunkSpec` byte
+ranges, container-match assert).
+
+**`process_worker_jobs`'s `worker_jobs` param is `Sequence[RegionJob[...]]`, not
+`Sequence[Self]`.** `Self` in a *parameter* position breaks override compatibility
+(contravariance — a subclass would demand more-specific input than the base
+promises); ty flags `invalid-method-override`. Typing the param as the concrete
+generic base in both base and subclass makes the override compatible and needs no
+narrowing at the call site (it's called via `self.region_job_class`, statically
+`type[RegionJob[...]]`).
+
+**Base `RegionJob.process` stub is kept** (not removed). `MaterializedRegionJob.
+process_worker_jobs` loops `job.process(...)` over base-typed jobs, so the base
+needs `process` for that to type-check. The virtual side instead needs one
+`assert isinstance(job, VirtualRegionJob)` in its `process_worker_jobs` to call
+`process_virtual` — the asymmetry is intentional and minimal.
+
+**`sync_dims_to` sizes each store from its *own* committed size**, not the
+primary's. Replicas commit before the primary, so a partial commit can leave a
+replica a commit ahead; appending the primary's missing slice to an already-grown
+replica would duplicate append-dim positions. This is what makes the documented
+[replica replay](#replica-writes) idempotent for the *expansion* (not just the
+refs).
+
+**No commit guard.** The `process_virtual_refs` generator contract forbids empty
+yields, so the loop `assert`s `refs` and `commit_if_icechunk` stays unconditional
+(an empty icechunk commit raises). See [the write loop](#the-virtual-write-loop).
+
+**`VirtualRegionJob._processing_region_ds` asserts `get_processing_region() ==
+region`.** Buffering is meaningless for virtual refs (they point at raw bytes) and
+would make adjacent backfill workers emit into each other's regions.
+
+**`chunk_key` reads chunk geometry from the checked-in template, not the in-code
+`DataVar.encoding`** (review round 2). The repo trusts the *checked-in*
+`templates/latest.zarr` (git-reviewable) over in-code `TemplateConfig`; reading
+`template_ds[var].encoding["chunks"]` means a code/template drift can't silently
+mis-place refs (filter and emit would consistently compute the same *wrong* index
+without detection).
+
+**`max_vars_per_job` is locked to `None` on `VirtualRegionJob`** (review round 2).
+It splits one source file's variables across separate jobs that commit
+independently, breaking the one-file-per-commit atomicity virtual readers rely on
+(virtual jobs are tiny byte-range refs and parallelize along the append dim, not
+variables, so they never need it). Enforced statically via
+`max_vars_per_job: ClassVar[Final[int | None]] = None` — `ty` flags any subclass
+override (`override-of-final-variable`). `ty` is the chosen mechanism over a
+runtime `model_validator` (it lives on the class that owns the rule, costs
+nothing at runtime, and is caught pre-merge); a `Field(ge=1, le=1)` or
+`field_validator` can't apply here because `max_vars_per_job` is a `ClassVar`, not
+a model field. Bare `Final` also works but trips a pydantic "shadows an attribute"
+warning, so `ClassVar[Final[...]]` is used.
+
+**Virtual operational updates assert exactly one active-window job** (review round
+2), not just one worker. Multiple jobs run sequentially, so the first job's
+polling generator could consume the pod's k8s deadline and starve the rest. The
+single-writer requirement is enforced only at *fire time* by this runtime assert
+(`workers_total == 1` + one job); there is no guard at CronJob-definition time
+(no concrete virtual cronjob exists yet — that's PR 4). When the first virtual
+operational cronjob is written, give its `ReformatCronJob` `parallelism == 1` and
+consider a definition-time check so a misconfigured `parallelism > 1` fails before
+deploy rather than crashing N pods loudly.
+
+**Append-dim "leaps" are not a framework bug — deliberately not guarded** (review
+round 2 pushback). A batch growing the append dim to a later position while an
+earlier one is unfilled is the *intended* interleave for forecasts: the
+operational job spans the whole active window and its generator polls the union
+of still-missing files, so an earlier init's late leads and a newer init's first
+leads fill in together, and the filter skips done work. An earlier slot showing
+fill values meanwhile is the same accepted partial-init state as a materialized
+forecast mid-update, and a crash does **not** leave it indefinitely (the next
+fire re-polls the window and the filter re-discovers the gap). The reviewer's
+suggested "reject append-dim leaps" would *break* this interleave. The one place
+contiguity genuinely matters is **analysis** datasets (append dim `time`, which
+must not have interior gaps) — there the generator must maintain a contiguous
+frontier and stop at the first missing time step; that's a per-dataset generator
+responsibility to enforce when the first analysis `-spatial` dataset is built,
+not a framework-level rule.
+
+**Virtual `validate_dataset` skips the materialized validators** (review rounds
+2–3): `check_for_expected_shards` (virtual arrays have no shards, and missing
+chunks for partially-published inits are expected) and `compare_replica_and_primary`
+(it would S3-fetch + GRIB-decode every compared chunk — the exact decode-in-steady-
+state cost the design avoids). Both are skipped for virtual; a manifest-aware
+virtual validator is deferred to the validation PR (#513 PR 7). The replica
+comparator skip is latent until a virtual dataset gets a replica, but is removed
+now so it can't fire decode-heavy when that day comes.
+
+**`chunk_key` asserts that a dim absent from `out_loc` is a single chunk** (review
+round 4). The else branch maps an absent dim to chunk 0; if such a dim had
+multiple chunks (e.g. `ensemble_member` packed one-per-file), every ref would
+collapse to chunk 0 — later refs overwriting earlier, the rest permanent
+fill-value holes, and the filter (sharing `chunk_key`) would agree it's "done."
+The assert forces multi-chunk dims to appear in `out_loc`, mirroring the
+present-dim chunk-boundary assert.
+
+**`get_jobs` asserts all data vars agree on shard-ness** (review round 4). The
+shards-vs-chunks partition is read from the first var; a mix would partition by
+whichever var is first, and a chunk-sized region over a sharded var would let
+workers write into the same physical shard.
+
+**A behind replica fails loudly, so the per-store-sizing guard is safe** (review
+round 4). `process_virtual`'s `needed_size > current_size` check reads the
+primary's size once and skips `sync_dims_to` when the primary already covers a
+batch — so a replica that's *behind* (bootstrapped/recreated after the primary)
+wouldn't be grown. That's acceptable: we don't support behind replicas (they're
+copies that may run a little *ahead* after a crash), and `set_virtual_refs`
+**raises** `IcechunkError: invalid chunk index` on an out-of-bounds index (verified
+on 2.0.5, same as materialized chunk writes), so a behind replica fails loudly at
+`_emit_refs` rather than corrupting silently.
+
+**Backfill skips the final-store metadata write when every store is icechunk**
+(review round 4). `backfill_kubernetes`/`backfill_local` pre-write the full
+template to the final store — needed for Zarr v3 only; icechunk gets metadata from
+`parallel_setup` (tmp store + temp branch), and for virtual the pre-write would
+publish a NaN-padded future on `main` until finalize. (Even so, a virtual
+backfill's `append_dim_end` should be chosen as the last fully-published position,
+not "now," since finalize resets `main` to the presized branch.)
+
+**`process_worker_jobs` requires a non-empty `worker_jobs`** (review round 4,
+asserted on both impls). Materialized would otherwise make an empty icechunk
+commit (which raises); the coordinator filters empty workers via `if worker_jobs`.
+
+### Conventions & gotchas
+
+**Repo accessors** (naming settled round 4): `StoreFactory.icechunk_repos(*,
+sort)` returns the role-tagged `[(role, repo), …]` list (used by
+`parallel_setup`/`finalize`); `icechunk_primary_and_replica_repos()` returns the
+`(primary, (replicas, …))` tuple for the common virtual case and asserts exactly
+one (icechunk) primary.
+
+**PR ↔ issue linkage** (chosen 2026-06-05): link each PR in the #513 checklist item
+(`— #NNN`) and put `Part of #513` in the PR body. Do **not** use `Closes/Fixes
+#513` on PRs 1–5 — GitHub's "Development" sidebar link only exists via a closing
+reference, which would auto-close the #513 tracker on the first merge. Cross-ref +
+checklist is the accepted tradeoff (no Development-sidebar entry).
+
+**`StoreFactory.primary_store(writable=True, branch=…)` opens a fresh
+`repo.writable_session(branch)` on every call** (`storage.py`). This is why the
+driver/job can own a session-per-batch lifecycle through `store_factory` rather
+than threading a single session.
+
+**Commit signing (dev workflow).** Commits are SSH-signed via the 1Password agent
+(`commit.gpgsign=true`, `gpg.format=ssh`). If 1Password is locked, `git commit`
+fails with `1Password: failed to fill whole buffer` / `failed to write commit
+object` *after* the pre-commit hooks pass — unlock 1Password and retry the same
+commit.
+
+### TODO
+
+The remaining work is now sequenced as formal PRs in the
+[implementation plan](#implementation-plan): **PR #3c** (move-only refactor +
+`RegionJob.process` revisit), **PR #3d** (consolidate processing-loop docs),
+**PR #4** (first concrete `-spatial` dataset — pick from
+[candidates](#candidate-first-datasets)), **PR #5** (persist container config via
+`save_config()` before the first externally published virtual repo), **PR #6**
+(second dataset), **PR #7** (validation).
 
 ## Spike results
 

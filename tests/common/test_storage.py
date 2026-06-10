@@ -425,7 +425,7 @@ class TestIcechunkVirtualConfig:
         assert manifest.splitting is not None
         assert manifest.splitting.split_sizes
 
-    def test_non_s3_container_rejected(self) -> None:
+    def test_unsupported_container_rejected(self) -> None:
         gcs_container = icechunk.VirtualChunkContainer(
             "gs://bucket/", icechunk.gcs_store()
         )
@@ -440,8 +440,29 @@ class TestIcechunkVirtualConfig:
                 manifest_split=manifest_append_dim_split(split_size=1, dim="init_time"),
             ),
         )
-        with pytest.raises(AssertionError, match="non-S3 store"):
+        with pytest.raises(AssertionError, match="unsupported store"):
             factory.icechunk_repos(sort="primary-first")
+
+    def test_local_filesystem_container_accepted(self) -> None:
+        # Local-filesystem containers (dev/test sources) need no credentials.
+        local_container = icechunk.VirtualChunkContainer(
+            "file:///data/", icechunk.local_filesystem_store("/data/")
+        )
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/data", format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+            icechunk_virtual_config=IcechunkVirtualConfig(
+                containers=(local_container,),
+                manifest_split=manifest_append_dim_split(split_size=1, dim="init_time"),
+            ),
+        )
+        repo = factory.icechunk_repos(sort="primary-first")[0][1]
+        containers = repo.config.virtual_chunk_containers
+        assert containers is not None
+        assert "file:///data/" in containers
 
     def test_materialized_factory_registers_no_containers(self) -> None:
         factory = StoreFactory(
@@ -575,6 +596,29 @@ class TestIcechunkPrimaryWithZarr3Replica:
         )
         repos = factory.icechunk_repos(sort="primary-last")
         assert [role for role, _repo in repos] == ["primary"]
+
+    def test_icechunk_primary_and_replica_repos(self) -> None:
+        """icechunk_primary_and_replica_repos returns (primary_repo, (replicas, ...))."""
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/primary", format=DatasetFormat.ICECHUNK
+            ),
+            replica_storage_configs=[
+                StorageConfig(
+                    base_path="s3://bucket/replica-0", format=DatasetFormat.ICECHUNK
+                ),
+            ],
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+        )
+        primary_repo, replica_repos = factory.icechunk_primary_and_replica_repos()
+        assert isinstance(primary_repo, icechunk.Repository)
+        assert len(replica_repos) == 1
+        assert isinstance(replica_repos[0], icechunk.Repository)
+        # primary + replicas accounts for every repo the role-based accessor returns.
+        assert 1 + len(replica_repos) == len(
+            factory.icechunk_repos(sort="primary-first")
+        )
 
 
 class TestCommitIfIcechunkFailureIsolation:
