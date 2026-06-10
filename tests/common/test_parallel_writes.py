@@ -464,7 +464,7 @@ class TestIcechunkParallelWrites:
             )
 
         # Temp branch should be cleaned up
-        repos = dataset.store_factory.all_icechunk_repos(sort="primary-first")
+        repos = dataset.store_factory.icechunk_repos(sort="primary-first")
         assert len(repos) == 1
         _, repo = repos[0]
         branches = list(repo.list_branches())
@@ -529,9 +529,7 @@ class TestReplicaParallelWrites:
                 assert np.all(result[var].values == 1.0)
 
         # Temp branches cleaned up on both repos
-        for _role, repo in dataset.store_factory.all_icechunk_repos(
-            sort="primary-first"
-        ):
+        for _role, repo in dataset.store_factory.icechunk_repos(sort="primary-first"):
             assert list(repo.list_branches()) == ["main"]
 
 
@@ -774,7 +772,7 @@ class TestWorkerRestart:
             assert np.all(result[var].values == 1.0)
 
         # Temp branch cleaned up
-        _, repo = dataset.store_factory.all_icechunk_repos(sort="primary-first")[0]
+        _, repo = dataset.store_factory.icechunk_repos(sort="primary-first")[0]
         assert list(repo.list_branches()) == ["main"]
 
 
@@ -886,12 +884,8 @@ class TestLastWorkerRetryAfterPartialFinalize:
             )
 
         # Replica was reset; primary was not.
-        primary_repo = dataset.store_factory.all_icechunk_repos(sort="primary-first")[
-            0
-        ][1]
-        replica_repo = dataset.store_factory.all_icechunk_repos(sort="primary-last")[0][
-            1
-        ]
+        primary_repo = dataset.store_factory.icechunk_repos(sort="primary-first")[0][1]
+        replica_repo = dataset.store_factory.icechunk_repos(sort="primary-last")[0][1]
         primary_pre_retry = primary_repo.lookup_branch("main")
         replica_pre_retry = replica_repo.lookup_branch("main")
 
@@ -916,9 +910,7 @@ class TestLastWorkerRetryAfterPartialFinalize:
                 assert np.all(result[var].values == 1.0)
 
         # Temp branches cleaned up on both repos.
-        for _role, repo in dataset.store_factory.all_icechunk_repos(
-            sort="primary-first"
-        ):
+        for _role, repo in dataset.store_factory.icechunk_repos(sort="primary-first"):
             assert list(repo.list_branches()) == ["main"]
 
     def test_retry_before_any_reset_completes_all(
@@ -956,12 +948,8 @@ class TestLastWorkerRetryAfterPartialFinalize:
             reformat_job_name="test",
         )
 
-        primary_repo = dataset.store_factory.all_icechunk_repos(sort="primary-first")[
-            0
-        ][1]
-        replica_repo = dataset.store_factory.all_icechunk_repos(sort="primary-last")[0][
-            1
-        ]
+        primary_repo = dataset.store_factory.icechunk_repos(sort="primary-first")[0][1]
+        replica_repo = dataset.store_factory.icechunk_repos(sort="primary-last")[0][1]
         initial_primary = primary_repo.lookup_branch("main")
         initial_replica = replica_repo.lookup_branch("main")
 
@@ -1011,9 +999,7 @@ class TestLastWorkerRetryAfterPartialFinalize:
             for var in ["var0", "var1", "var2", "var3"]:
                 assert np.all(result[var].values == 1.0)
 
-        for _role, repo in dataset.store_factory.all_icechunk_repos(
-            sort="primary-first"
-        ):
+        for _role, repo in dataset.store_factory.icechunk_repos(sort="primary-first"):
             assert list(repo.list_branches()) == ["main"]
 
 
@@ -1055,13 +1041,11 @@ class TestReplicaOrdering:
         # labels here, which are unaffected.
         roles_first = [
             role
-            for role, _ in dataset.store_factory.all_icechunk_repos(
-                sort="primary-first"
-            )
+            for role, _ in dataset.store_factory.icechunk_repos(sort="primary-first")
         ]
         roles_last = [
             role
-            for role, _ in dataset.store_factory.all_icechunk_repos(sort="primary-last")
+            for role, _ in dataset.store_factory.icechunk_repos(sort="primary-last")
         ]
         assert roles_first[0] == "primary"
         assert roles_last[-1] == "primary"
@@ -1143,9 +1127,7 @@ class TestConcurrentJobs:
         template_ds = _create_template_ds()
         template_utils.write_metadata(template_ds, dataset.store_factory)
 
-        primary_repo = dataset.store_factory.all_icechunk_repos(sort="primary-first")[
-            0
-        ][1]
+        primary_repo = dataset.store_factory.icechunk_repos(sort="primary-first")[0][1]
         initial_snapshot = primary_repo.lookup_branch("main")
 
         jobs_a = ParallelRegionJob.get_jobs(

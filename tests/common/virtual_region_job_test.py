@@ -322,7 +322,7 @@ def _make_region_job(
 
 
 def _primary_repo(factory: StoreFactory) -> icechunk.Repository:
-    return factory.all_icechunk_repos(sort="primary-first")[0][1]
+    return factory.icechunk_repos(sort="primary-first")[0][1]
 
 
 def _snapshot_count(repo: icechunk.Repository, branch: str = "main") -> int:
@@ -690,6 +690,27 @@ def test_virtual_operational_single_writer_expands_main(tmp_path: Path) -> None:
     dataset._run_virtual_operational_update([job], workers_total=1)
 
     # Single writer committed straight to main (no temp branch ever created).
+    assert list(_primary_repo(dataset.store_factory).list_branches()) == ["main"]
+    _assert_all_values(dataset, n_inits=4)
+
+
+def test_update_routes_virtual_to_single_writer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Exercise the production entry point: update() must detect virtual via
+    # issubclass and route to the single-writer path (not _process_region_jobs).
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    full_template = _create_template_ds(4)
+    job = _make_region_job(full_template, region=slice(0, 4))
+
+    monkeypatch.setattr(
+        VirtualTestRegionJob,
+        "operational_update_jobs",
+        classmethod(lambda cls, **kwargs: ([job], full_template)),
+    )
+    dataset.update("test")
+
     assert list(_primary_repo(dataset.store_factory).list_branches()) == ["main"]
     _assert_all_values(dataset, n_inits=4)
 

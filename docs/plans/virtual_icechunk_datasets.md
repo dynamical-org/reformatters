@@ -1111,7 +1111,7 @@ issue **#513** (its body holds the 6-PR checklist; items are written "PR 1" not
 | PR 1 — extract `MaterializedRegionJob` | **merged** (#643) | `RegionJob` base + `MaterializedRegionJob(RegionJob)`; all datasets swapped base. |
 | PR 2 — prep | **merged** (#647) | ECMWF parser → `grib_message_byte_ranges_from_index`; `Encoding.serializer`; `gribberish~=0.30` (`gribberish.zarr.GribberishCodec`, `.to_dict()` → `{"name":"gribberish","configuration":{"var":...}}`); `IcechunkVirtualConfig` (real icechunk objects via `InstanceOf`) + `manifest_append_dim_split(*, split_size, dim)`; threaded through `StoreFactory`; validator (config present ⇒ all ICECHUNK). |
 | PR 3a — worker-processing seam (materialized only) | **merged** (#649) | See [B-method](#decision-b-method). |
-| PR 3b — `VirtualRegionJob` on the seam | **open** (#650) | Supersedes #648 (closed). Review rounds 1–2 addressed. |
+| PR 3b — `VirtualRegionJob` on the seam | **open** (#650) | Supersedes #648 (closed). Review rounds 1–4 addressed. |
 | PR 4–6 | not started | First `-spatial` dataset, then second provider, then validation. |
 
 PR 3 was originally one combined PR (#648) but was resequenced into 3a + 3b after
@@ -1242,7 +1242,48 @@ virtual validator is deferred to the validation PR (#513 PR 6). The replica
 comparator skip is latent until a virtual dataset gets a replica, but is removed
 now so it can't fire decode-heavy when that day comes.
 
+**`chunk_key` asserts that a dim absent from `out_loc` is a single chunk** (review
+round 4). The else branch maps an absent dim to chunk 0; if such a dim had
+multiple chunks (e.g. `ensemble_member` packed one-per-file), every ref would
+collapse to chunk 0 — later refs overwriting earlier, the rest permanent
+fill-value holes, and the filter (sharing `chunk_key`) would agree it's "done."
+The assert forces multi-chunk dims to appear in `out_loc`, mirroring the
+present-dim chunk-boundary assert.
+
+**`get_jobs` asserts all data vars agree on shard-ness** (review round 4). The
+shards-vs-chunks partition is read from the first var; a mix would partition by
+whichever var is first, and a chunk-sized region over a sharded var would let
+workers write into the same physical shard.
+
+**A behind replica fails loudly, so the per-store-sizing guard is safe** (review
+round 4). `process_virtual`'s `needed_size > current_size` check reads the
+primary's size once and skips `sync_dims_to` when the primary already covers a
+batch — so a replica that's *behind* (bootstrapped/recreated after the primary)
+wouldn't be grown. That's acceptable: we don't support behind replicas (they're
+copies that may run a little *ahead* after a crash), and `set_virtual_refs`
+**raises** `IcechunkError: invalid chunk index` on an out-of-bounds index (verified
+on 2.0.5, same as materialized chunk writes), so a behind replica fails loudly at
+`_emit_refs` rather than corrupting silently.
+
+**Backfill skips the final-store metadata write when every store is icechunk**
+(review round 4). `backfill_kubernetes`/`backfill_local` pre-write the full
+template to the final store — needed for Zarr v3 only; icechunk gets metadata from
+`parallel_setup` (tmp store + temp branch), and for virtual the pre-write would
+publish a NaN-padded future on `main` until finalize. (Even so, a virtual
+backfill's `append_dim_end` should be chosen as the last fully-published position,
+not "now," since finalize resets `main` to the presized branch.)
+
+**`process_worker_jobs` requires a non-empty `worker_jobs`** (review round 4,
+asserted on both impls). Materialized would otherwise make an empty icechunk
+commit (which raises); the coordinator filters empty workers via `if worker_jobs`.
+
 ### Conventions & gotchas
+
+**Repo accessors** (naming settled round 4): `StoreFactory.icechunk_repos(*,
+sort)` returns the role-tagged `[(role, repo), …]` list (used by
+`parallel_setup`/`finalize`); `icechunk_primary_and_replica_repos()` returns the
+`(primary, (replicas, …))` tuple for the common virtual case and asserts exactly
+one (icechunk) primary.
 
 **PR ↔ issue linkage** (chosen 2026-06-05): link each PR in the #513 checklist item
 (`— #NNN`) and put `Part of #513` in the PR body. Do **not** use `Closes/Fixes
@@ -1269,6 +1310,13 @@ commit.
   Pure moves, no logic changes.
 - **PR 4:** first concrete `-spatial` dataset end to end (pick from
   [candidates](#candidate-first-datasets)).
+- **Before the first production virtual repo — persist container config on
+  change** (review round 4). `Repository.create` persists the config, but nothing
+  calls `repo.save_config()` afterward, so a later in-code container change affects
+  only the writing process — an external reader recovering containers via
+  `fetch_config` (the "Reader experience" / "En-masse repoint" promises) sees the
+  creation-time set forever. Fix: call `save_config()` from the writable-open path
+  when the in-code config differs, or document an explicit ops-card procedure.
 
 ## Spike results
 

@@ -231,8 +231,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 "Not all stores exist, cannot run with overwrite_existing=True"
             )
             log.info("Writing to existing stores, skipping metadata write.")
-        else:
-            # Write metadata to final store. Required for Zarr v3 only, Icechunk metadata is written in parallel_setup.
+        elif not self._all_stores_icechunk():
+            # Zarr v3 needs metadata in the final store before workers run. Icechunk
+            # gets it from parallel_setup (local tmp store + temp branch), and
+            # pre-writing the full template to main here would publish a NaN-padded
+            # future to readers until finalize resets main.
             template_utils.write_metadata(template_ds, self.store_factory)
 
         num_jobs = len(
@@ -317,8 +320,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
 
         template_ds = self._get_template(append_dim_end)
-        # Write metadata to final store. Required for Zarr v3 only, Icechunk metadata is written in parallel_setup.
-        template_utils.write_metadata(template_ds, self.store_factory)
+        # Zarr v3 needs metadata in the final store before workers run; icechunk gets
+        # it from parallel_setup (see backfill_kubernetes).
+        if not self._all_stores_icechunk():
+            template_utils.write_metadata(template_ds, self.store_factory)
 
         self.backfill(
             append_dim_end,
@@ -399,7 +404,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             f"{len(worker_jobs)} of {len(all_jobs)} total jobs, {jobs_summary}"
         )
 
-        icechunk_repos = self.store_factory.all_icechunk_repos(sort="primary-first")
+        icechunk_repos = self.store_factory.icechunk_repos(sort="primary-first")
         has_icechunk = len(icechunk_repos) > 0
         branch_name = f"_job_{reformat_job_name}" if has_icechunk else "main"
 
@@ -575,6 +580,12 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def _get_template(self, append_dim_end: DatetimeLike) -> xr.Dataset:
         return self.template_config.get_template(pd.Timestamp(append_dim_end))
+
+    def _all_stores_icechunk(self) -> bool:
+        return all(
+            config.format == DatasetFormat.ICECHUNK
+            for config in (self.primary_storage_config, *self.replica_storage_configs)
+        )
 
     def _can_run_in_kubernetes(self) -> bool:
         # This is a method to support testing without changing the Config.env

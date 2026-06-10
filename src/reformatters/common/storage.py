@@ -138,21 +138,23 @@ class StoreFactory(FrozenBaseModel):
                 return False
         return True
 
-    def icechunk_repos(
+    def icechunk_primary_and_replica_repos(
         self,
     ) -> tuple[icechunk.Repository, tuple[icechunk.Repository, ...]]:
         """Returns (primary_repo, (replica_repos, ...)) for the common case where
-        the caller just wants the primary and its replicas. Use all_icechunk_repos
+        the caller just wants the primary and its replicas. Use icechunk_repos
         when you also need roles or a specific primary-first/last ordering."""
-        repos = self.all_icechunk_repos(sort="primary-first")
+        repos = self.icechunk_repos(sort="primary-first")
         primaries = [repo for role, repo in repos if role == "primary"]
+        # Virtual datasets require an icechunk primary (enforced by the
+        # DynamicalDataset validator), so exactly one primary repo is expected.
         assert len(primaries) == 1, (
-            f"expected exactly one primary, got {len(primaries)}"
+            f"expected exactly one icechunk primary, got {len(primaries)}"
         )
         replicas = tuple(repo for role, repo in repos if role != "primary")
         return primaries[0], replicas
 
-    def all_icechunk_repos(
+    def icechunk_repos(
         self, *, sort: Literal["primary-first", "primary-last"]
     ) -> list[tuple[str, icechunk.Repository]]:
         """Returns (role, Repository) for each icechunk store in the specified order.

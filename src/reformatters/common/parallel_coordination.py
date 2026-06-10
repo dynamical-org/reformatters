@@ -172,7 +172,7 @@ def finalize(
     # on the temp branch from parallel_setup — we only need to update the metadata files.
     # Process replicas before primary so primary (which drives future work) is last to update.
     if branch_name != "main":
-        replicas_first = store_factory.all_icechunk_repos(sort="primary-last")
+        replicas_first = store_factory.icechunk_repos(sort="primary-last")
         # First pass: commit final metadata and reset main on each repo.
         # If a previous attempt already reset main for a repo, skip it.
         for role, repo in replicas_first:

@@ -360,9 +360,17 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             data_var_groups = [data_vars]
 
         # Regions along append dimension.
-        # Materialized arrays partition by shard; virtual arrays use chunks.
-        sample_encoding = next(iter(template_ds.data_vars.values())).encoding
-        kind = "shards" if sample_encoding.get("shards") is not None else "chunks"
+        # Materialized arrays partition by shard; virtual arrays use chunks. All
+        # data vars must agree: a mix would partition by whichever var is first,
+        # and a chunk-sized region over a sharded var lets workers write into the
+        # same physical shard.
+        sharded = [
+            v.encoding.get("shards") is not None for v in template_ds.data_vars.values()
+        ]
+        assert len(set(sharded)) == 1, (
+            "all data vars must agree on whether they are sharded"
+        )
+        kind = "shards" if sharded[0] else "chunks"
         regions = dimension_slices(template_ds, append_dim, kind=kind)
 
         # Filter regions by time
@@ -436,7 +444,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         Process this region, writing chunk data to primary_store (and replica_stores)
         and returning the per-variable source file coordinates with their final status.
 
-        Implemented by the MaterializedRegionJob and VirtualRegionJob subclasses.
+        Implemented by MaterializedRegionJob. (VirtualRegionJob writes via
+        process_virtual instead; this stub stays on the base so the materialized
+        process_worker_jobs loop, which receives base-typed jobs, type-checks.)
         """
         raise NotImplementedError(
             "Subclasses implement process() with variant-specific logic"
@@ -450,12 +460,16 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         branch_name: str,
         worker_index: int,
     ) -> dict[str, list[SourceFileResult]]:
-        """Process one worker's region jobs against ``branch_name`` and return the
-        per-variable source file results.
+        """Process one worker's (non-empty) region jobs against ``branch_name`` and
+        return the per-variable source file results.
 
-        Each variant owns its own store/session lifecycle and commit cadence, so the
-        shared coordinator (``DynamicalDataset._process_region_jobs``) drives every
-        variant through this one call. Implemented by the MaterializedRegionJob and
+        Each variant owns its own store/session lifecycle and commit cadence behind
+        this one call. The parallel temp-branch coordinator
+        (``DynamicalDataset._process_region_jobs``) drives both variants through it;
+        a virtual *operational* update is the one exception, forking in ``update()``
+        to ``_run_virtual_operational_update`` (single-writer-to-``main``). Callers
+        must pass at least one job: materialized would otherwise make an empty commit
+        (which icechunk rejects). Implemented by the MaterializedRegionJob and
         VirtualRegionJob subclasses.
         """
         raise NotImplementedError(
@@ -557,6 +571,9 @@ class MaterializedRegionJob(
         worker_index: int,
     ) -> dict[str, list[SourceFileResult]]:
         """Write all of this worker's jobs to ``branch_name`` in a single commit."""
+        # One commit per worker; an empty job set would make an empty icechunk
+        # commit (which raises), so the caller must filter empty workers out.
+        assert worker_jobs, "process_worker_jobs requires at least one job"
         primary_store = store_factory.primary_store(writable=True, branch=branch_name)
         replica_stores = store_factory.replica_stores(writable=True, branch=branch_name)
 
@@ -919,7 +936,8 @@ class VirtualRegionJob(
         Always returns an empty dict of results: virtual refs live in the icechunk
         manifest, so there is nothing to thread back to finalize.
         """
-        primary_repo, replica_repos = store_factory.icechunk_repos()
+        assert worker_jobs, "process_worker_jobs requires at least one job"
+        primary_repo, replica_repos = store_factory.icechunk_primary_and_replica_repos()
         for job in worker_jobs:
             assert isinstance(job, VirtualRegionJob)
             job.process_virtual(primary_repo, replica_repos, branch_name)
@@ -1029,7 +1047,17 @@ class VirtualRegionJob(
                 if position < 0:
                     return None  # label not in coords -> not yet a position in this dataset
             else:
-                position = 0  # dims absent from out_loc (e.g. lat/lon) are one chunk
+                # A dim absent from out_loc (e.g. lat/lon) must be a single chunk;
+                # otherwise every ref would collapse to chunk 0 along it (later refs
+                # overwriting earlier, the rest left as permanent fill-value holes).
+                # A multi-chunk dim (e.g. ensemble_member packed one-per-file) must
+                # appear in out_loc so it resolves to the right chunk.
+                assert chunk_size >= template_var.sizes[dim], (
+                    f"dim {dim} is absent from out_loc but spans multiple chunks "
+                    f"(size {template_var.sizes[dim]}, chunk {chunk_size}); out_loc "
+                    "must locate every multi-chunk dim."
+                )
+                position = 0
             chunk_index, remainder = divmod(position, chunk_size)
             assert remainder == 0, (
                 f"{dim}={labels.get(dim)} maps to position {position}, which is not "
