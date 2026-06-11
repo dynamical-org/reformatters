@@ -963,63 +963,6 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "precipitation_surface": {
-        "shape": [
-          1,
-          31,
-          81,
-          721,
-          1440
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              1,
-              721,
-              1440
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "gribberish",
-            "configuration": {
-              "var": "APCP"
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Total precipitation",
-          "short_name": "tp",
-          "standard_name": "precipitation_amount",
-          "units": "kg m-2",
-          "comment": "Accumulation over the current window; windows reset every 6 forecast hours.",
-          "step_type": "accum",
-          "coordinates": "expected_forecast_length spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "ensemble_member",
-          "lead_time",
-          "latitude",
-          "longitude"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
       "pressure_reduced_to_mean_sea_level": {
         "shape": [
           1,
@@ -1336,6 +1279,63 @@
           "units": "percent",
           "comment": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
           "step_type": "avg",
+          "coordinates": "expected_forecast_length spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "ensemble_member",
+          "lead_time",
+          "latitude",
+          "longitude"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "total_precipitation_surface": {
+        "shape": [
+          1,
+          31,
+          81,
+          721,
+          1440
+        ],
+        "data_type": "float64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              1,
+              1,
+              721,
+              1440
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "gribberish",
+            "configuration": {
+              "var": "APCP"
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Total precipitation",
+          "short_name": "tp",
+          "standard_name": "precipitation_amount",
+          "units": "kg m-2",
+          "comment": "Accumulation over the current window; windows reset every 6 forecast hours.",
+          "step_type": "accum",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },

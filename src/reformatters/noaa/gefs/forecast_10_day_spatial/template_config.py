@@ -33,6 +33,11 @@ _S_FILE_TYPES = ("s+a", "s+b", "s+b-b22")
 # Virtual chunks serve raw GRIB values, so attrs diverge from the materialized
 # datasets where their pipeline transforms values: GDAL converts temperatures
 # K -> degree_Celsius on read, and precipitation is deaccumulated to a rate.
+# Raw precipitation is a different quantity (window accumulation), not just
+# different units, so it gets a distinct name: total_precipitation_surface.
+_RAW_VALUE_NAME_OVERRIDES: dict[str, str] = {
+    "precipitation_surface": "total_precipitation_surface",
+}
 _RAW_VALUE_ATTRS_OVERRIDES: dict[str, dict[str, Any]] = {
     "temperature_2m": {"units": "K"},
     "maximum_temperature_2m": {"units": "K"},
@@ -280,6 +285,7 @@ class GefsForecast10DaySpatialTemplateConfig(TemplateConfig[GEFSDataVar]):
         return [
             replace(
                 var,
+                name=_RAW_VALUE_NAME_OVERRIDES.get(var.name, var.name),
                 encoding=_virtual_encoding(var, message_chunks),
                 attrs=(
                     replace(var.attrs, **_RAW_VALUE_ATTRS_OVERRIDES[var.name])

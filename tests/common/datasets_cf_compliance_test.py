@@ -685,14 +685,14 @@ def _check_consistency(
 
 # Virtual datasets serve raw GRIB values, which diverge from the transformed
 # values materialized datasets serve under the same variable name (Kelvin vs
-# GDAL's Celsius temperatures, accumulated vs deaccumulated-to-rate
-# precipitation), so these (dataset_id, var_name) pairs are exempt from
-# cross-dataset metadata consistency.
+# GDAL's Celsius temperatures), so these (dataset_id, var_name) pairs are
+# exempt from cross-dataset metadata consistency. Raw quantities that differ in
+# kind, not just units (e.g. accumulated precipitation), instead get a distinct
+# variable name like total_precipitation_surface and need no exemption.
 RAW_GRIB_VALUE_VARS = {
     ("noaa-gefs-forecast-10-day-spatial", "temperature_2m"),
     ("noaa-gefs-forecast-10-day-spatial", "maximum_temperature_2m"),
     ("noaa-gefs-forecast-10-day-spatial", "minimum_temperature_2m"),
-    ("noaa-gefs-forecast-10-day-spatial", "precipitation_surface"),
 }
 
 

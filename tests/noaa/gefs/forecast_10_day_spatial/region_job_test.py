@@ -102,7 +102,7 @@ def test_generate_source_file_coords_one_file_per_init_member_lead(
 ) -> None:
     data_vars = [
         get_var("temperature_2m"),  # instant
-        get_var("precipitation_surface"),  # no hour-0 values
+        get_var("total_precipitation_surface"),  # no hour-0 values
         get_var("percent_frozen_precipitation_surface"),  # "s+b-b22", instant
     ]
     job = make_job(template_ds, data_vars=data_vars)
@@ -151,7 +151,7 @@ def test_representative_var_uses_coords_own_file_vars(template_ds: xr.Dataset) -
         init_time=pd.Timestamp("2024-01-01T00:00"),
         ensemble_member=1,
         lead_time=pd.Timedelta("3h"),
-        data_vars=[get_var("precipitation_surface"), get_var("temperature_2m")],
+        data_vars=[get_var("total_precipitation_surface"), get_var("temperature_2m")],
     )
     assert job.representative_var(avg_then_instant).name == "temperature_2m"
 
@@ -159,9 +159,9 @@ def test_representative_var_uses_coords_own_file_vars(template_ds: xr.Dataset) -
         init_time=pd.Timestamp("2024-01-01T00:00"),
         ensemble_member=1,
         lead_time=pd.Timedelta("3h"),
-        data_vars=[get_var("precipitation_surface")],
+        data_vars=[get_var("total_precipitation_surface")],
     )
-    assert job.representative_var(avg_only).name == "precipitation_surface"
+    assert job.representative_var(avg_only).name == "total_precipitation_surface"
 
 
 _INDEX_CONTENT = """1:0:d=2020100100:PRES:surface:3 hour fcst:ENS=+1
@@ -173,7 +173,7 @@ _INDEX_CONTENT = """1:0:d=2020100100:PRES:surface:3 hour fcst:ENS=+1
 def test_process_virtual_refs(
     template_ds: xr.Dataset, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    data_vars = [get_var("temperature_2m"), get_var("precipitation_surface")]
+    data_vars = [get_var("temperature_2m"), get_var("total_precipitation_surface")]
     job = make_job(template_ds, data_vars=data_vars)
 
     def fake_download(url: str, dataset_id: str) -> Path:
@@ -201,7 +201,7 @@ def test_process_virtual_refs(
     (refs,) = batches
     assert [r.data_var.name for r in refs] == [
         "temperature_2m",
-        "precipitation_surface",
+        "total_precipitation_surface",
     ]
     tmp_ref, apcp_ref = refs
     assert tmp_ref.offset == 1000
