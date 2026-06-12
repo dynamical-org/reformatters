@@ -179,13 +179,9 @@ def finalize(
             original_snapshot = setup_info.get("repo_snapshots", {}).get(role)
             current_main = repo.lookup_branch("main")
             if current_main != original_snapshot:
-                # Expected when a previous finalize attempt already reset main for
-                # this repo, or a concurrent duplicate job finalized first. If a
-                # writer with *different* work moved main (e.g. a virtual dataset's
-                # operational update cron committing during a backfill), this skip
-                # discards this job's branch — suspend that cron during virtual
-                # backfills (see docs/virtual_datasets.md).
-                log.warning(
+                # This shouldn't happen: it means multiple uncoordinated jobs ran
+                # at the same time (e.g. an operational update during a backfill).
+                log.error(
                     f"Skipping {role}: main already moved past original snapshot; "
                     f"branch {branch_name} will not be published by this job"
                 )
