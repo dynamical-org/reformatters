@@ -60,12 +60,16 @@ def write_metadata(
             category=UserWarning,
         )
 
+        # safe_chunks=False: with compute=False only metadata and numpy coordinates
+        # are written, no dask chunks, so dask/zarr chunk alignment is irrelevant.
         for replica_store in replica_stores:
             log.info(f"Writing metadata to replica {replica_store} with mode {mode}")
-            template_ds.to_zarr(replica_store, mode=mode, compute=False)
+            template_ds.to_zarr(
+                replica_store, mode=mode, compute=False, safe_chunks=False
+            )
 
         log.info(f"Writing metadata to store {store} with mode {mode}")
-        template_ds.to_zarr(store, mode=mode, compute=False)
+        template_ds.to_zarr(store, mode=mode, compute=False, safe_chunks=False)
 
     if isinstance(store, Path | str):
         sort_consolidated_metadata(Path(store) / "zarr.json")
