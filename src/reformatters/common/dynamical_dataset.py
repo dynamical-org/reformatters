@@ -480,6 +480,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         assert len(all_jobs) == 1, (
             f"Virtual operational updates run a single active-window job, got {len(all_jobs)}"
         )
+        for job in all_jobs:
+            assert isinstance(job, VirtualRegionJob)
+            assert job.processing_mode == "update", (
+                "operational_update_jobs must construct jobs with processing_mode='update'"
+            )
         self.region_job_class.process_worker_jobs(
             all_jobs, self.store_factory, "main", worker_index
         )
@@ -666,5 +671,17 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 raise ValueError(
                     "icechunk_virtual_config requires every storage config to use "
                     f"the ICECHUNK format, but found: {non_icechunk}"
+                )
+        # A virtual chunk is exactly one source message: no shards (get_jobs would
+        # partition by them and zarr would shard raw source bytes) and no
+        # compressors (a None would serialize away and zarr would stack its
+        # default compressor on the raw source bytes).
+        if issubclass(self.region_job_class, VirtualRegionJob):
+            for var in self.template_config.data_vars:
+                assert var.encoding.shards is None, (
+                    f"virtual data var {var.name} must not declare shards"
+                )
+                assert var.encoding.compressors == (), (
+                    f"virtual data var {var.name} must declare compressors=()"
                 )
         return self

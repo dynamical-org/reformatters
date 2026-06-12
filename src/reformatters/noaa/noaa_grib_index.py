@@ -8,6 +8,11 @@ from reformatters.common.config_models import DataVar
 from reformatters.common.time_utils import whole_hours
 from reformatters.noaa.models import NoaaInternalAttrs
 
+# Fallback "end" pad for the final message in an index file, whose true end
+# byte is unknown without the file size. Ranged downloads return bytes up to the
+# end of file; callers needing an exact length must detect ends >= this pad.
+GRIB_INDEX_UNKNOWN_END_PAD = 10 * (2**30)
+
 
 def _lead_time_str(var: DataVar[NoaaInternalAttrs], lead_hours: int) -> str:
     if (reset_freq := var.internal_attrs.window_reset_frequency) is not None:
@@ -97,7 +102,7 @@ def grib_message_byte_ranges_from_index(
         # If this is the last message in the file, end_match will be empty.
         # We fall back to adding a large value (+10 GiB) to get an end point since obstore
         # doesn't support omitting the end byte but will return bytes up to the end of the file.
-        end = int(end_match) if end_match else start + 10 * (2**30)
+        end = int(end_match) if end_match else start + GRIB_INDEX_UNKNOWN_END_PAD
         starts.append(start)
         ends.append(end)
 

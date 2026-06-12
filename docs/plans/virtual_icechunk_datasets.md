@@ -523,7 +523,9 @@ in one poll iteration can ride one yield if the generator chooses.
 ### Step-by-step
 
 1. **CronJob fires** ~5 min before a publication window opens (per dataset).
-   `concurrencyPolicy: Forbid` prevents overlapping fires.
+   Fires must never overlap by construction: the pod active deadline is well
+   under the interval between fires. If that invariant breaks, `Replace` kills
+   the stuck poller (visible via the Sentry cron monitor's missed completion).
 2. **A single worker runs `update()`**, which calls `operational_update_jobs()`
    (→ one active-window job).
 3. **`update()` detects virtual + operational** and routes to
@@ -1154,8 +1156,8 @@ issue **#513** (its body holds the PR checklist; items are written "PR 1" not
 | PR 3b — `VirtualRegionJob` on the seam | **merged** (#650) | Supersedes #648 (closed). |
 | PR 3c — move-only refactor | **merged** (#653) | Split `region_job.py` → `virtual_region_job.py` + `materialized_region_job.py`. |
 | PR 3d — move `process()` onto `MaterializedRegionJob` | **merged** (#654) | Removes the base `process()` stub; materialized `process_worker_jobs` narrows its jobs. |
-| PR 3e — consolidate processing-loop docs | **open** (#655) | `docs/virtual_datasets.md` + seam section in `docs/parallel_processing.md`, linked from code. |
-| PR 4 — first concrete virtual dataset | not started | First `-spatial` dataset end to end. |
+| PR 3e — consolidate processing-loop docs | **merged** (#655) | `docs/virtual_datasets.md` + seam section in `docs/parallel_processing.md`, linked from code. |
+| PR 4 — first concrete virtual dataset | **open** (#656) | `noaa-gefs-forecast-10-day-spatial-dev`: 4 inits/day, 0-240h, native 0.25° s-file grid, the 35-day vars available in s files (19). `-dev` suffix: a throwaway operational test; dataset structure questions are deliberately deferred. |
 | PR 5 — persist container config | not started | `save_config()` on container drift; before first *externally published* virtual repo (first datasets run in prod unpublished). |
 | PR 6 — second concrete virtual dataset | not started | Different provider, proves abstractions generalize. |
 | PR 7 — validation phase | not started | Spatial-chunk validators + offline tooling. |
@@ -1323,6 +1325,103 @@ not "now," since finalize resets `main` to the presized branch.)
 asserted on both impls). Materialized would otherwise make an empty icechunk
 commit (which raises); the coordinator filters empty workers via `if worker_jobs`.
 
+**Operational cron fires 3 minutes before the dataset's earliest known
+publication start; one fire per model run (2026-06-11).** The pod polls through
+the publication window, exits as soon as all expected refs are present, and the
+pod active deadline is a ~10–20 min buffer past the observed worst-case end.
+Idle polling before publication starts is fine (a listing request per tick). A
+mid-window pod-startup gap is what this avoids — restarting during publication
+would blow the ≤5 s budget. Within-deadline crashes recover via the k8s Job pod
+restart + `filter_already_present`; stragglers past the deadline and re-published
+files are caught by the next fire's startup sweep over the operational window.
+
+**ScaleOffset K→C filter: upstream fix is gribberish PR
+[mpiannucci/gribberish#153](https://github.com/mpiannucci/gribberish/pull/153)
+(2026-06-12).** Chaining a ScaleOffset filter (offset=-273.15, scale=1.0) after
+the gribberish serializer decodes raw GRIB Kelvin to Celsius (verified end to
+end against a real virtual ref using the numcodecs wrapper). Two prerequisites
+before adopting it:
+1. A gribberish release including PR 153 — `_decode_single` currently returns a
+   bare ndarray instead of an `NDBuffer`, which crashes any chained
+   array→array codec.
+2. **Use `ScaleOffset` from `zarr.codecs`, not the `numcodecs` wrapper** (the
+   wrapper is outside the zarr v3 spec). `zarr.codecs.ScaleOffset` exists as of
+   zarr 3.2 — **merged** (`zarr~=3.2` is on main), so only the gribberish
+   release remains.
+
+Once both land, the virtual GEFS temperature vars chain the filter and declare
+`degree_Celsius`, and the temporary `RAW_GRIB_VALUE_VARS` consistency-test
+exemptions are removed. Note this affects *readers*: arrays with a chained
+filter need the fixed gribberish to read, so don't ship the filter in a
+published dataset before the release.
+
+**Append-expansion bottleneck: fixed by the zarr 3.2 upgrade (2026-06-12).**
+An operational-cadence replay of init 2026-06-11T06 (real listings, index
+fetches, and local icechunk commits against the init's actual S3 publication
+mtimes on a simulated clock) showed the tick loop itself is healthy — listing
+p50 0.63 s/tick, index fetch p50 0.11 s/file at 64-wide, emit p50 62 ms,
+commit p50 88 ms, steady-state arrival→commit latency **p50 0.47 s** — but the
+*first* commit of the init paid **762 s in `sync_dims_to`**, delaying the
+first ~300 files by up to ~13 minutes (87.5% of files within the 5 s budget =
+exactly "everything after the expansion"). cProfile pinned it: zarr 3.1.3's
+`Array.resize` materializes the full old and new chunk-coordinate sets
+(~20.9M per data var) to compute chunks to delete — provably empty work when
+growing. zarr 3.2.0 adds an `only_growing` fast path that skips the scan;
+measured on the same store, the one-init append drops **762 s → 0.1 s**,
+putting the entire init inside the latency budget. The zarr `~=3.1` → `~=3.2`
+upgrade is **merged**, so the latency fix is live.
+
+**Tick-loop design settled (2026-06-12).** The operational generator is a tick
+loop: each tick lists the source bucket (obstore via the cached
+`common/download.py::s3_store`; listings return sizes, killing the last-message
+content-length HEAD), diffs against pending, fetches newly available `.idx`
+files on a `ThreadPoolExecutor`, and yields everything found as one commit. A
+file is "available" only when data **and** index are both listed. No
+`poll_until` (the k8s pod deadline is the only timeout — a `DeadlineExceeded`
+job failure is the correct anomaly signal for never-published files) and no
+`files_per_yield` knobs (yield everything ready; catch-up backlogs commit as one
+big batch ASAP). `processing_mode: Literal["backfill", "update"]` lives on
+`VirtualRegionJob` and selects single-sweep vs poll; the operational driver
+asserts jobs are constructed with `"update"`. `process_virtual_refs` yields
+`(coord, refs)` pairs so the loop can assert each file's refs cover the cell the
+filter probes (a violation would re-ingest the file forever). Fires never
+overlap by construction (pod deadline well under the cron interval; the default
+`Replace` policy plus Sentry cron monitoring surface a stuck poller), and a
+foreign writer committing to `main` mid-backfill makes finalize skip publishing
+the backfill's branch with a warning (suspend the update cron during virtual
+backfills). For non-listable ordered sources (none yet), a frontier-prober slots
+into the same discover step. Measured `.idx` fetch throughput vs pool width: 8
+-> ~105 files/s, 32 -> ~310, 64 -> ~380 (chosen), 128 -> ~435.
+
+### Publication timing measurements (2026-06-11)
+
+Measured from S3 object `LastModified` over 6–10 recent inits (2026-06-09..11).
+These set per-dataset cron schedules, pod deadlines, and loop tuning.
+
+| | GEFS s 0.25° | HRRR wrfsfc | GFS pgrb2 0.25° | AIFS Single | AIFS ENS |
+|---|---|---|---|---|---|
+| files/init | 2,511 | 19 (49 at 00/06/12/18z) | 209 | 61 | 122 (pf ≈ 4.5 GB) |
+| window start | init+3:46:29–3:47:57 (90 s band) | init+0:50:49–0:53:15 | init+3:32–3:35 | init+5:22–5:36 (14 min spread) | init+5:47–6:04 (17 min spread) |
+| window duration | ~1h43 | ~35 m / ~53 m | ~1h50 | **2–3 min** | ~7 min |
+| arrival shape | bursts, 20–54 files/5 s, ~95% lead-ordered | trickle, 1 file/~62 s, lead-ordered | trickle, ~15 s median gap | dump, unordered | dump, unordered |
+| index lag after data | 0–5 s, never before | 5–9 s, never before | p50 29 s, max 74 s | 0–2 s | p50 1 s, max 32 s, once *before* data |
+
+Implications:
+
+- **NOAA starts are metronomic; ECMWF's vary ~15 min** — ECMWF crons must lead
+  by more and idle-poll until the dump starts.
+- **Trickle vs dump** is the axis that matters inside the loop: GEFS/HRRR/GFS
+  trickle for 1–2 h (small steady per-tick yields); AIFS dumps everything in
+  2–7 min unordered, so its latency is set by index-fetch concurrency, not poll
+  interval.
+- **The index file gates ref creation and lags the data** (GFS by up to 74 s —
+  NOAA's own pipeline is the latency floor there). ECMWF once published the
+  `.index` before the data, so availability = data **and** index both listed.
+- **Listings are cheap and return sizes**: ≤6 LIST pages per GEFS init, 1 page
+  for the others; sizes eliminate the last-message `content-length` HEAD.
+- One HRRR file showed an mtime ~2 h after its siblings — straggler or
+  re-publication (see [Open questions](#open-questions) item 6).
+
 ### Conventions & gotchas
 
 **Repo accessors** (naming settled round 4): `StoreFactory.icechunk_repos(*,
@@ -1436,6 +1535,18 @@ and are not checked in — PR #3's integration tests are the durable versions.
 5. **Reforecast / historical archives** — some datasets (e.g. GEFS v12
    reforecast) use different URL schemes for historical data. Virtual backfills
    must handle them; operational updates don't. Scope per dataset.
+6. **Ref maintenance: re-published files & source migration.** Two problems
+   share one shape — already-committed refs that later need re-emitting. (a)
+   Sources sometimes re-publish a file (observed: an HRRR file with mtime ~2 h
+   after its siblings); a rewritten object can shift byte ranges, leaving
+   committed refs pointing at the wrong bytes. (b) For lowest latency we may
+   initially point refs at NOMADS (lowest publish latency, but low rate limits
+   and short retention), then come back and repoint each file's refs at the
+   S3/GCS archive copy once it lands there. Both need a "detect changed/moved
+   source files and re-emit their refs" pass: detection (listing mtime/size vs
+   what we ingested) plus idempotent re-emit (`set_virtual_refs` overwrites).
+   The per-file, gradual nature means the en-masse container repoint doesn't
+   apply. No design yet.
 
 ---
 

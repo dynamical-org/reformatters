@@ -16,6 +16,7 @@ from reformatters.common.download import (
     http_download_to_disk,
     http_store,
     httpx_download_to_disk,
+    s3_download_to_disk,
     s3_store,
 )
 
@@ -134,6 +135,40 @@ def test_http_download_to_disk_calls_download(tmp_path: Path) -> None:
     assert captured[0]["path"] == "/data/file.grib2"
     assert captured[0]["disk_cache"] is False
     assert result == get_local_path("my-dataset", "/data/file.grib2")
+
+
+def test_s3_download_to_disk_calls_download(tmp_path: Path) -> None:
+    captured: list[dict] = []
+
+    def fake_download_to_disk(
+        store: object,
+        path: str,
+        local_path: Path,
+        *,
+        byte_ranges: tuple[Sequence[int], Sequence[int]] | None,
+        disk_cache: bool,
+    ) -> None:
+        captured.append({"store": store, "path": path, "local_path": local_path})
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_bytes(b"data")
+
+    with patch.object(download_module, "download_to_disk", fake_download_to_disk):
+        result = s3_download_to_disk(
+            "s3://test-bucket/data/file.idx", "my-dataset", region="us-east-1"
+        )
+
+    assert len(captured) == 1
+    assert isinstance(captured[0]["store"], obstore.store.S3Store)
+    # Leading slash stripped: S3 keys are bucket-relative.
+    assert captured[0]["path"] == "data/file.idx"
+    assert result == get_local_path("my-dataset", "/data/file.idx")
+
+
+def test_s3_download_to_disk_rejects_non_s3_url() -> None:
+    with pytest.raises(AssertionError):
+        s3_download_to_disk(
+            "https://example.com/file.idx", "my-dataset", region="us-east-1"
+        )
 
 
 def test_http_download_to_disk_disk_cache_passes_through(

@@ -179,7 +179,12 @@ def finalize(
             original_snapshot = setup_info.get("repo_snapshots", {}).get(role)
             current_main = repo.lookup_branch("main")
             if current_main != original_snapshot:
-                log.info(f"Skipping {role}: main already moved past original snapshot")
+                # This shouldn't happen: it means multiple uncoordinated jobs ran
+                # at the same time (e.g. an operational update during a backfill).
+                log.error(
+                    f"Skipping {role}: main already moved past original snapshot; "
+                    f"branch {branch_name} will not be published by this job"
+                )
                 continue
             session = repo.writable_session(branch_name)
             copy_zarr_metadata(

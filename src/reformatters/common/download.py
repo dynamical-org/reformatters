@@ -147,6 +147,30 @@ def http_download_to_disk(
     return local_path
 
 
+def s3_download_to_disk(
+    url: str,
+    dataset_id: str,
+    *,
+    region: str,
+    byte_ranges: tuple[Sequence[int], Sequence[int]] | None = None,
+    local_path_suffix: str = "",
+    disk_cache: bool = False,
+) -> Path:
+    """Download s3://bucket/key to disk via the cached anonymous obstore S3 store."""
+    parsed_url = urlparse(url)
+    assert parsed_url.scheme == "s3", url
+    store = s3_store(f"s3://{parsed_url.netloc}", region=region)
+    local_path = get_local_path(dataset_id, parsed_url.path, local_path_suffix)
+    download_to_disk(
+        store,
+        parsed_url.path.removeprefix("/"),
+        local_path,
+        disk_cache=disk_cache,
+        byte_ranges=byte_ranges,
+    )
+    return local_path
+
+
 def get_local_path(dataset_id: str, path: str, local_path_suffix: str = "") -> Path:
     base_local = DOWNLOAD_DIR / dataset_id / path.removeprefix("/")
     return (

@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Any, ClassVar, Final, Generic, NamedTuple
+from typing import Any, ClassVar, Final, Generic, Literal, NamedTuple
 
 import icechunk
 import pandas as pd
@@ -47,24 +47,29 @@ class VirtualRegionJob(
     # per-file commit atomicity virtual readers rely on.
     max_vars_per_job: ClassVar[Final[int | None]] = None
 
+    # Updates wait for source files as the provider publishes them, backfills check once
+    processing_mode: Literal["backfill", "update"] = "backfill"
+
     def process_virtual_refs(
         self,
         remaining: Sequence[SOURCE_FILE_COORD],
-    ) -> Iterator[Sequence[VirtualRef]]:
+    ) -> Iterator[Sequence[tuple[SOURCE_FILE_COORD, Sequence[VirtualRef]]]]:
         """Discover available source files among `remaining` and yield their virtual references.
 
-        Each yield is one commit's worth of *whole* source files — never split a
-        file across yields, never yield an empty batch. The generator owns the
-        batching policy. See "The write loop" in docs/virtual_datasets.md.
+        Each yield is one commit's worth of *whole* source files as (coord, refs)
+        pairs — never split a file across yields, never yield an empty batch. The
+        generator owns the batching policy. See "The write loop" in
+        docs/virtual_datasets.md.
         """
         raise NotImplementedError(
-            "Yield batches of VirtualRefs, each one commit's worth of whole source files."
+            "Yield batches of (source file coord, its VirtualRefs) pairs, "
+            "each one commit's worth of whole source files."
         )
 
     def representative_var(self, coord: SOURCE_FILE_COORD) -> DATA_VAR:  # noqa: ARG002
         """The variable whose chunk presence means `coord`'s file is fully ingested.
 
-        Used by filter_already_present to probe a single representative cell per
+        Used by filter_already_present to probe a single representative chunk per
         file. Default: the first instant var (most likely to have data at every
         step), else the first data var; valid when every file contains every
         variable. Override for one-variable-per-file packings (e.g. GEFS v12
@@ -146,11 +151,14 @@ class VirtualRegionJob(
         remaining = self.filter_already_present(candidates, readonly_store)
         current_size = self._append_dim_size(readonly_store)
 
-        for refs in self.process_virtual_refs(remaining):
+        for file_refs_batch in self.process_virtual_refs(remaining):
             # The generator yields whole files, so a batch always has refs; emitting
             # them always dirties the session, so the commit below is never empty
             # (an empty icechunk commit raises rather than no-ops).
-            assert refs, "process_virtual_refs yielded an empty batch"
+            assert file_refs_batch, "process_virtual_refs yielded an empty batch"
+            for coord, file_refs in file_refs_batch:
+                self._assert_probe_chunk_covered(coord, file_refs)
+            refs = [ref for _, file_refs in file_refs_batch for ref in file_refs]
             primary_session = primary_repo.writable_session(branch)
             replica_sessions = [repo.writable_session(branch) for repo in replica_repos]
             stores = [primary_session.store, *(s.store for s in replica_sessions)]
@@ -168,6 +176,30 @@ class VirtualRegionJob(
                 primary_session.store,
                 [s.store for s in replica_sessions],
             )
+
+    def _assert_probe_chunk_covered(
+        self, coord: SOURCE_FILE_COORD, file_refs: Sequence[VirtualRef]
+    ) -> None:
+        """A file's refs must include the chunk filter_already_present probes.
+
+        The filter decides whether a whole file is already ingested by checking
+        one chunk: (representative_var, the file's out_loc). If a file's refs
+        never write that chunk, the filter never sees the file land and every
+        future fire re-ingests it; usually a representative_var override is
+        needed (see its docstring).
+        """
+        assert file_refs, f"empty refs for source file {coord}"
+        rep = self.representative_var(coord)
+        probe = self.chunk_key(coord.out_loc(), rep)
+        assert any(
+            ref.data_var.name == rep.name and self.chunk_key(ref.out_loc, rep) == probe
+            for ref in file_refs
+        ), (
+            f"refs for {coord} do not cover representative chunk "
+            f"({rep.name}, {dict(coord.out_loc())}); the filter would re-ingest "
+            "this file forever. Override representative_var to pick a variable "
+            "the file actually contains."
+        )
 
     def _emit_refs(
         self, stores: Sequence[IcechunkStore], refs: Sequence[VirtualRef]
