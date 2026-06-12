@@ -681,10 +681,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 assert var.encoding.shards is None, (
                     f"virtual data var {var.name} must not declare shards"
                 )
-                assert var.encoding.compressors is not None, (
-                    f"virtual data var {var.name} must declare compressors=(), not None"
-                )
-                assert len(var.encoding.compressors) == 0, (
-                    f"virtual data var {var.name} must not declare compressors"
+                assert var.encoding.compressors == (), (
+                    f"virtual data var {var.name} must declare compressors=()"
                 )
         return self

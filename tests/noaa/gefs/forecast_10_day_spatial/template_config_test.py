@@ -112,11 +112,10 @@ def test_data_vars_are_s_file_vars_with_virtual_encoding() -> None:
         # serializer (see docs/virtual_datasets.md "Encoding rules").
         assert encoding.chunks == (1, 1, 1, 721, 1440)
         assert encoding.shards is None
-        # Empty (not None, which serialization would drop -> zarr defaults)
-        assert encoding.compressors is not None
-        assert len(encoding.compressors) == 0
-        assert encoding.filters is not None
-        assert len(encoding.filters) == 0
+        # Empty (not None, which serialization would drop -> zarr defaults).
+        # filters' BeforeValidator normalizes the input tuple to a list.
+        assert encoding.compressors == ()
+        assert encoding.filters == []
         assert encoding.dtype == "float64"
         assert np.isnan(encoding.fill_value)
         assert encoding.serializer == {
