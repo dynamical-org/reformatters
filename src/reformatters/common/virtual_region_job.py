@@ -47,10 +47,7 @@ class VirtualRegionJob(
     # per-file commit atomicity virtual readers rely on.
     max_vars_per_job: ClassVar[Final[int | None]] = None
 
-    # Updates poll for source files as the provider publishes them, exiting when
-    # all expected files are ingested (the pod deadline bounds waiting on a file
-    # that never publishes). Backfills sweep what exists once and exit.
-    # operational_update_jobs implementations must construct jobs with "update".
+    # Updates wait for source files as the provider publishes them, backfills check once
     processing_mode: Literal["backfill", "update"] = "backfill"
 
     def process_virtual_refs(
