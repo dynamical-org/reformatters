@@ -77,7 +77,9 @@ class GefsForecast10DaySpatialTemplateConfig(TemplateConfig[GEFSDataVar]):
     @property
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
-            dataset_id="noaa-gefs-forecast-10-day-spatial",
+            # -dev suffix: this dataset is a throwaway operational test of the
+            # virtual dataset machinery; its structure is not settled.
+            dataset_id="noaa-gefs-forecast-10-day-spatial-dev",
             dataset_version="0.1.0",
             name="NOAA GEFS forecast, 10 day, spatial",
             description="Weather forecasts from the Global Ensemble Forecast System (GEFS) operated by NOAA NWS NCEP, optimized for spatial (map) access patterns.",

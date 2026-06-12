@@ -690,9 +690,9 @@ def _check_consistency(
 # kind, not just units (e.g. accumulated precipitation), instead get a distinct
 # variable name like total_precipitation_surface and need no exemption.
 RAW_GRIB_VALUE_VARS = {
-    ("noaa-gefs-forecast-10-day-spatial", "temperature_2m"),
-    ("noaa-gefs-forecast-10-day-spatial", "maximum_temperature_2m"),
-    ("noaa-gefs-forecast-10-day-spatial", "minimum_temperature_2m"),
+    ("noaa-gefs-forecast-10-day-spatial-dev", "temperature_2m"),
+    ("noaa-gefs-forecast-10-day-spatial-dev", "maximum_temperature_2m"),
+    ("noaa-gefs-forecast-10-day-spatial-dev", "minimum_temperature_2m"),
 }
 
 
