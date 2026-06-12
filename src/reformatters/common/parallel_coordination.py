@@ -160,9 +160,11 @@ def finalize(
     if update_template_with_results:
         assert len(all_jobs) > 0
         updated_template = all_jobs[0].update_template_with_results(merged_results)
-        template_utils.write_metadata(updated_template, tmp_store)
     else:
         updated_template = template_ds
+    # Ensure tmp_store has written metadata. Virtual workers (besides worker 0)
+    # do not otherwise write to tmp_store.
+    template_utils.write_metadata(updated_template, tmp_store)
 
     now = pd.Timestamp.now(tz="UTC")
     commit_message = f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}"

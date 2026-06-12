@@ -573,6 +573,10 @@ class TestFinalize:
             update_template_with_results=False,
         )
         stub_io["copy_zarr_metadata"].assert_not_called()
+        # Even without update_template_with_results, finalize writes template
+        # metadata to tmp_store so the copy below it never reads an empty dir.
+        stub_io["write_metadata"].assert_called_once()
+        stub_io["write_metadata"].reset_mock()
 
         # Update path: flips to True → zarr3 copy called once with zarr3_only=True.
         job = MagicMock()
