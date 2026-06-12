@@ -31,6 +31,7 @@ from reformatters.noaa.noaa_utils import has_hour_0_values
 log = get_logger(__name__)
 
 _S3_LOCATION_PREFIX = "s3://noaa-gefs-pds/"
+_S3_BUCKET_REGION = "us-east-1"
 
 
 def _vars_in_s_file(
@@ -177,7 +178,7 @@ class GefsForecast10DaySpatialRegionJob(
         self, coord: GefsForecast10DaySpatialSourceFileCoord, file_size: int
     ) -> list[VirtualRef]:
         index_path = s3_download_to_disk(
-            coord.get_index_url(), self.dataset_id, region="us-east-1"
+            coord.get_index_url(), self.dataset_id, region=_S3_BUCKET_REGION
         )
         location = coord.get_url()
         out_loc = coord.out_loc()
@@ -255,9 +256,17 @@ class GefsForecast10DaySpatialRegionJob(
 
 def _list_objects(prefix: str) -> dict[str, int]:
     """All object keys under `prefix` in the GEFS bucket, mapped to size in bytes."""
-    store = s3_store(_S3_LOCATION_PREFIX, region="us-east-1")
-    return {
-        meta["path"]: meta["size"]
-        for batch in obstore.list(store, prefix=prefix)
-        for meta in batch
-    }
+    store = s3_store(_S3_LOCATION_PREFIX, region=_S3_BUCKET_REGION)
+    # Arrow skips per-object python dict materialization. Time is dominated by
+    # S3's 1,000-keys-per-request paging either way; chunk_size just lets one
+    # record batch span all pages of an init's ~5k objects.
+    batch = obstore.list(
+        store, prefix=prefix, chunk_size=10_000, return_arrow=True
+    ).collect()
+    return dict(
+        zip(
+            batch.column("path").to_pylist(),
+            batch.column("size").to_pylist(),
+            strict=True,
+        )
+    )
