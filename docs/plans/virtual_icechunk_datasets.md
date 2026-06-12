@@ -523,7 +523,9 @@ in one poll iteration can ride one yield if the generator chooses.
 ### Step-by-step
 
 1. **CronJob fires** ~5 min before a publication window opens (per dataset).
-   `concurrencyPolicy: Forbid` prevents overlapping fires.
+   Fires must never overlap by construction: the pod active deadline is well
+   under the interval between fires. If that invariant breaks, `Replace` kills
+   the stuck poller (visible via the Sentry cron monitor's missed completion).
 2. **A single worker runs `update()`**, which calls `operational_update_jobs()`
    (→ one active-window job).
 3. **`update()` detects virtual + operational** and routes to
@@ -1383,10 +1385,12 @@ big batch ASAP). `processing_mode: Literal["backfill", "update"]` lives on
 `VirtualRegionJob` and selects single-sweep vs poll; the operational driver
 asserts jobs are constructed with `"update"`. `process_virtual_refs` yields
 `(coord, refs)` pairs so the loop can assert each file's refs cover the cell the
-filter probes (a violation would re-ingest the file forever). The cron uses
-`concurrencyPolicy: Forbid` and backfill finalize asserts `main` contains the
-temp branch before skipping its reset (a foreign mid-backfill writer fails
-loudly). For non-listable ordered sources (none yet), a frontier-prober slots
+filter probes (a violation would re-ingest the file forever). Fires never
+overlap by construction (pod deadline well under the cron interval; the default
+`Replace` policy plus Sentry cron monitoring surface a stuck poller), and a
+foreign writer committing to `main` mid-backfill makes finalize skip publishing
+the backfill's branch with a warning (suspend the update cron during virtual
+backfills). For non-listable ordered sources (none yet), a frontier-prober slots
 into the same discover step. Measured `.idx` fetch throughput vs pool width: 8
 -> ~105 files/s, 32 -> ~310, 64 -> ~380 (chosen), 128 -> ~435.
 
