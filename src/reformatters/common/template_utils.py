@@ -62,6 +62,9 @@ def write_metadata(
 
         # safe_chunks=False: with compute=False only metadata and numpy coordinates
         # are written, no dask chunks, so dask/zarr chunk alignment is irrelevant.
+        # The alternative, aligning dask chunks to the stored chunks (align_chunks=True
+        # or chunking templates at stored sizes), builds a task-per-chunk dask graph
+        # even under compute=False, which is slow/OOM on our largest arrays.
         for replica_store in replica_stores:
             log.info(f"Writing metadata to replica {replica_store} with mode {mode}")
             template_ds.to_zarr(
