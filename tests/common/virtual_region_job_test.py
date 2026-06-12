@@ -791,7 +791,8 @@ def test_two_worker_backfill_disjoint(tmp_path: Path) -> None:
             workers_total=2,
             reformat_job_name="test",
             template_ds=template_ds,
-            tmp_store=dataset._tmp_store(),
+            # Distinct per worker, simulating separate pods
+            tmp_store=tmp_path / f"worker-{worker_index}-tmp.zarr",
             update_template_with_results=False,
         )
 
