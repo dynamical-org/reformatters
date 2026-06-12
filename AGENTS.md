@@ -156,6 +156,8 @@ See [docs/parallel_processing.md](docs/parallel_processing.md) for details on co
 * Don't write error handing code unless I ask for it, nor smooth over exceptions/errors unless they are expected as part of control flow. In general, write code that will raise an exception early if something isn't expected. Enforce important expectations with asserts.
 * Add only extremely minimal code comments and no docstrings unless I ask for them, but don't remove existing comments.
   * Add comments only when doing things out of the ordinary, to highlight gotchas, or if less clear code is required due to an optimization.
+  * In non-test code, the vast majority of comments should be one line. State the non-obvious fact the next reader needs, not the reasoning behind the change: no failure-mode stories, no defending why the code is correct, no operational instructions. Point to docs (e.g. "..., see docs/parallel_processing.md.") to add richer context only for complex topics.
+  * In non-test code, an assert or validator with a clear message is its own documentation — don't add a comment restating what it enforces or what would break without it.
 * Use Python 3.13+ features
 * Follow ty type checking. If you need to add an ignore, ignore a specific check like `# ty: ignore[specific]`. Always annotate types on all function arguments and return types.
 * Follow ruff format
