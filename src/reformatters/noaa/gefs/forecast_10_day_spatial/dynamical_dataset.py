@@ -58,6 +58,9 @@ class GefsForecast10DaySpatialDataset(
         # See "Publication timing measurements" in the virtual datasets plan.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
+            # Suspended until the operational test launches (run the prod
+            # backfill first, then unsuspend).
+            suspend=True,
             schedule="43 3,9,15,21 * * *",
             # Must stay well under the 6h between fires so fires never overlap.
             pod_active_deadline=timedelta(hours=2, minutes=10),
@@ -71,6 +74,7 @@ class GefsForecast10DaySpatialDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
+            suspend=True,
             schedule="40 7 * * *",  # after the 00z init finishes publishing
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,

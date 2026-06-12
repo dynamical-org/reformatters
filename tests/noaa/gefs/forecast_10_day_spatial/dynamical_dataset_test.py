@@ -155,6 +155,9 @@ def test_operational_kubernetes_resources(
     # Virtual operational updates are strictly single-writer.
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
+    # Suspended until the operational test launches.
+    assert update_cron_job.suspend is True
+    assert validation_cron_job.suspend is True
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
 
 
