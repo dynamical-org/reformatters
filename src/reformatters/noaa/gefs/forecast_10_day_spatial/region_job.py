@@ -257,9 +257,6 @@ class GefsForecast10DaySpatialRegionJob(
 def _list_objects(prefix: str) -> dict[str, int]:
     """All object keys under `prefix` in the GEFS bucket, mapped to size in bytes."""
     store = s3_store(_S3_LOCATION_PREFIX, region=_S3_BUCKET_REGION)
-    # Arrow skips per-object python dict materialization. Time is dominated by
-    # S3's 1,000-keys-per-request paging either way; chunk_size just lets one
-    # record batch span all pages of an init's ~5k objects.
     batch = obstore.list(
         store, prefix=prefix, chunk_size=10_000, return_arrow=True
     ).collect()
