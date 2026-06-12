@@ -1333,6 +1333,19 @@ would blow the ≤5 s budget. Within-deadline crashes recover via the k8s Job po
 restart + `filter_already_present`; stragglers past the deadline and re-published
 files are caught by the next fire's startup sweep over the operational window.
 
+**ScaleOffset K→C filter: upstream fix is gribberish PR
+[mpiannucci/gribberish#153](https://github.com/mpiannucci/gribberish/pull/153)
+(2026-06-12).** Chaining `zarr.codecs.numcodecs.FixedScaleOffset(offset=-273.15,
+scale=1.0)` as a filter after the gribberish serializer decodes raw GRIB Kelvin
+to Celsius (verified end to end against a real virtual ref). The one blocker is
+that gribberish's `_decode_single` returns a bare ndarray instead of an
+`NDBuffer`, which crashes any chained array→array codec — PR 153 is that fix.
+Once a release ships it, the virtual GEFS temperature vars switch to the filter
+and declare `degree_Celsius`, and the temporary `RAW_GRIB_VALUE_VARS`
+consistency-test exemptions are removed. Note this affects *readers*: arrays
+with a chained filter need the fixed gribberish to read, so don't ship the
+filter in a published dataset before the release.
+
 **Tick-loop design settled (2026-06-12).** The operational generator is a tick
 loop: each tick lists the source bucket (obstore via the cached
 `common/download.py::s3_store`; listings return sizes, killing the last-message

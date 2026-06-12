@@ -37,7 +37,7 @@ Virtual backfills use the standard parallel temp-branch flow (see [parallel_proc
 
 Two operational rules when backfilling a live virtual dataset:
 
-- **Suspend the dataset's `-update` CronJob for the duration of the backfill.** Finalize resets `main` to the temp branch only if `main` hasn't moved since setup; an operational fire committing to `main` mid-backfill would make finalize fail loudly (it asserts rather than silently discarding the backfill's work).
+- **Suspend the dataset's `-update` CronJob for the duration of the backfill.** Finalize resets `main` to the temp branch only if `main` hasn't moved since setup; an operational fire committing to `main` mid-backfill would make finalize skip the reset (with a warning), discarding the backfill's work.
 - **Choose `append_dim_end` as the last *fully published* position, not "now".** Finalize resets `main` to the pre-sized branch, so positions past the published data would appear as NaN-filled slots to readers.
 
 ## Filtering: the manifest is the source of truth
