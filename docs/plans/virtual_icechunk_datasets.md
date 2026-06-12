@@ -1335,16 +1335,22 @@ files are caught by the next fire's startup sweep over the operational window.
 
 **ScaleOffset K→C filter: upstream fix is gribberish PR
 [mpiannucci/gribberish#153](https://github.com/mpiannucci/gribberish/pull/153)
-(2026-06-12).** Chaining `zarr.codecs.numcodecs.FixedScaleOffset(offset=-273.15,
-scale=1.0)` as a filter after the gribberish serializer decodes raw GRIB Kelvin
-to Celsius (verified end to end against a real virtual ref). The one blocker is
-that gribberish's `_decode_single` returns a bare ndarray instead of an
-`NDBuffer`, which crashes any chained array→array codec — PR 153 is that fix.
-Once a release ships it, the virtual GEFS temperature vars switch to the filter
-and declare `degree_Celsius`, and the temporary `RAW_GRIB_VALUE_VARS`
-consistency-test exemptions are removed. Note this affects *readers*: arrays
-with a chained filter need the fixed gribberish to read, so don't ship the
-filter in a published dataset before the release.
+(2026-06-12).** Chaining a ScaleOffset filter (offset=-273.15, scale=1.0) after
+the gribberish serializer decodes raw GRIB Kelvin to Celsius (verified end to
+end against a real virtual ref using the numcodecs wrapper). Two prerequisites
+before adopting it:
+1. A gribberish release including PR 153 — `_decode_single` currently returns a
+   bare ndarray instead of an `NDBuffer`, which crashes any chained
+   array→array codec.
+2. **Use `ScaleOffset` from `zarr.codecs`, not the `numcodecs` wrapper** (the
+   wrapper is outside the zarr v3 spec). That requires upgrading our pinned
+   zarr beyond the current 3.1.3.
+
+Once both land, the virtual GEFS temperature vars chain the filter and declare
+`degree_Celsius`, and the temporary `RAW_GRIB_VALUE_VARS` consistency-test
+exemptions are removed. Note this affects *readers*: arrays with a chained
+filter need the fixed gribberish to read, so don't ship the filter in a
+published dataset before the release.
 
 **Tick-loop design settled (2026-06-12).** The operational generator is a tick
 loop: each tick lists the source bucket (obstore via the cached

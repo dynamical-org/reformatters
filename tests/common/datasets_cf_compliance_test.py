@@ -690,9 +690,9 @@ def _check_consistency(
 # kind, not just units (e.g. accumulated precipitation), instead get a distinct
 # variable name like total_precipitation_surface and need no exemption.
 # TEMPORARY: once a gribberish release includes
-# https://github.com/mpiannucci/gribberish/pull/153, the temperature vars chain
-# a FixedScaleOffset K->C filter, declare degree_Celsius, and these exemptions
-# are removed.
+# https://github.com/mpiannucci/gribberish/pull/153 and we upgrade zarr for
+# zarr.codecs ScaleOffset, the temperature vars chain a K->C filter, declare
+# degree_Celsius, and these exemptions are removed.
 RAW_GRIB_VALUE_VARS = {
     ("noaa-gefs-forecast-10-day-spatial-dev", "temperature_2m"),
     ("noaa-gefs-forecast-10-day-spatial-dev", "maximum_temperature_2m"),
