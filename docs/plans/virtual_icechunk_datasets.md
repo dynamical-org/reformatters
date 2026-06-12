@@ -1343,14 +1343,32 @@ before adopting it:
    bare ndarray instead of an `NDBuffer`, which crashes any chained
    array→array codec.
 2. **Use `ScaleOffset` from `zarr.codecs`, not the `numcodecs` wrapper** (the
-   wrapper is outside the zarr v3 spec). That requires upgrading our pinned
-   zarr beyond the current 3.1.3.
+   wrapper is outside the zarr v3 spec). `zarr.codecs.ScaleOffset` exists as of
+   zarr 3.2; the upgrade from our pinned 3.1.3 is tracked on its own branch as
+   an isolated core change.
 
 Once both land, the virtual GEFS temperature vars chain the filter and declare
 `degree_Celsius`, and the temporary `RAW_GRIB_VALUE_VARS` consistency-test
 exemptions are removed. Note this affects *readers*: arrays with a chained
 filter need the fixed gribberish to read, so don't ship the filter in a
 published dataset before the release.
+
+**Append-expansion bottleneck: fixed by the zarr 3.2 upgrade (2026-06-12).**
+An operational-cadence replay of init 2026-06-11T06 (real listings, index
+fetches, and local icechunk commits against the init's actual S3 publication
+mtimes on a simulated clock) showed the tick loop itself is healthy — listing
+p50 0.63 s/tick, index fetch p50 0.11 s/file at 64-wide, emit p50 62 ms,
+commit p50 88 ms, steady-state arrival→commit latency **p50 0.47 s** — but the
+*first* commit of the init paid **762 s in `sync_dims_to`**, delaying the
+first ~300 files by up to ~13 minutes (87.5% of files within the 5 s budget =
+exactly "everything after the expansion"). cProfile pinned it: zarr 3.1.3's
+`Array.resize` materializes the full old and new chunk-coordinate sets
+(~20.9M per data var) to compute chunks to delete — provably empty work when
+growing. zarr 3.2.0 adds an `only_growing` fast path that skips the scan;
+measured on the same store, the one-init append drops **762 s → 0.1 s**,
+putting the entire init inside the latency budget. The zarr `~=3.1` → `>=3.2`
+upgrade is tracked on its own branch as an isolated core change; the virtual
+dataset's latency target depends on it.
 
 **Tick-loop design settled (2026-06-12).** The operational generator is a tick
 loop: each tick lists the source bucket (obstore via the cached
