@@ -1323,6 +1323,45 @@ not "now," since finalize resets `main` to the presized branch.)
 asserted on both impls). Materialized would otherwise make an empty icechunk
 commit (which raises); the coordinator filters empty workers via `if worker_jobs`.
 
+**Operational cron fires 3 minutes before the dataset's earliest known
+publication start; one fire per model run (2026-06-11).** The pod polls through
+the publication window, exits as soon as all expected refs are present, and the
+pod active deadline is a ~10–20 min buffer past the observed worst-case end.
+Idle polling before publication starts is fine (a listing request per tick). A
+mid-window pod-startup gap is what this avoids — restarting during publication
+would blow the ≤5 s budget. Within-deadline crashes recover via the k8s Job pod
+restart + `filter_already_present`; stragglers past the deadline and re-published
+files are caught by the next fire's startup sweep over the operational window.
+
+### Publication timing measurements (2026-06-11)
+
+Measured from S3 object `LastModified` over 6–10 recent inits (2026-06-09..11).
+These set per-dataset cron schedules, pod deadlines, and loop tuning.
+
+| | GEFS s 0.25° | HRRR wrfsfc | GFS pgrb2 0.25° | AIFS Single | AIFS ENS |
+|---|---|---|---|---|---|
+| files/init | 2,511 | 19 (49 at 00/06/12/18z) | 209 | 61 | 122 (pf ≈ 4.5 GB) |
+| window start | init+3:46:29–3:47:57 (90 s band) | init+0:50:49–0:53:15 | init+3:32–3:35 | init+5:22–5:36 (14 min spread) | init+5:47–6:04 (17 min spread) |
+| window duration | ~1h43 | ~35 m / ~53 m | ~1h50 | **2–3 min** | ~7 min |
+| arrival shape | bursts, 20–54 files/5 s, ~95% lead-ordered | trickle, 1 file/~62 s, lead-ordered | trickle, ~15 s median gap | dump, unordered | dump, unordered |
+| index lag after data | 0–5 s, never before | 5–9 s, never before | p50 29 s, max 74 s | 0–2 s | p50 1 s, max 32 s, once *before* data |
+
+Implications:
+
+- **NOAA starts are metronomic; ECMWF's vary ~15 min** — ECMWF crons must lead
+  by more and idle-poll until the dump starts.
+- **Trickle vs dump** is the axis that matters inside the loop: GEFS/HRRR/GFS
+  trickle for 1–2 h (small steady per-tick yields); AIFS dumps everything in
+  2–7 min unordered, so its latency is set by index-fetch concurrency, not poll
+  interval.
+- **The index file gates ref creation and lags the data** (GFS by up to 74 s —
+  NOAA's own pipeline is the latency floor there). ECMWF once published the
+  `.index` before the data, so availability = data **and** index both listed.
+- **Listings are cheap and return sizes**: ≤6 LIST pages per GEFS init, 1 page
+  for the others; sizes eliminate the last-message `content-length` HEAD.
+- One HRRR file showed an mtime ~2 h after its siblings — straggler or
+  re-publication (see [Open questions](#open-questions) item 6).
+
 ### Conventions & gotchas
 
 **Repo accessors** (naming settled round 4): `StoreFactory.icechunk_repos(*,
@@ -1436,6 +1475,18 @@ and are not checked in — PR #3's integration tests are the durable versions.
 5. **Reforecast / historical archives** — some datasets (e.g. GEFS v12
    reforecast) use different URL schemes for historical data. Virtual backfills
    must handle them; operational updates don't. Scope per dataset.
+6. **Ref maintenance: re-published files & source migration.** Two problems
+   share one shape — already-committed refs that later need re-emitting. (a)
+   Sources sometimes re-publish a file (observed: an HRRR file with mtime ~2 h
+   after its siblings); a rewritten object can shift byte ranges, leaving
+   committed refs pointing at the wrong bytes. (b) For lowest latency we may
+   initially point refs at NOMADS (lowest publish latency, but low rate limits
+   and short retention), then come back and repoint each file's refs at the
+   S3/GCS archive copy once it lands there. Both need a "detect changed/moved
+   source files and re-emit their refs" pass: detection (listing mtime/size vs
+   what we ingested) plus idempotent re-emit (`set_virtual_refs` overwrites).
+   The per-file, gradual nature means the en-masse container repoint doesn't
+   apply. No design yet.
 
 ---
 
