@@ -69,7 +69,7 @@ class VirtualRegionJob(
     def representative_var(self, coord: SOURCE_FILE_COORD) -> DATA_VAR:  # noqa: ARG002
         """The variable whose chunk presence means `coord`'s file is fully ingested.
 
-        Used by filter_already_present to probe a single representative cell per
+        Used by filter_already_present to probe a single representative chunk per
         file. Default: the first instant var (most likely to have data at every
         step), else the first data var; valid when every file contains every
         variable. Override for one-variable-per-file packings (e.g. GEFS v12
@@ -157,7 +157,7 @@ class VirtualRegionJob(
             # (an empty icechunk commit raises rather than no-ops).
             assert file_refs_batch, "process_virtual_refs yielded an empty batch"
             for coord, file_refs in file_refs_batch:
-                self._assert_probe_cell_covered(coord, file_refs)
+                self._assert_probe_chunk_covered(coord, file_refs)
             refs = [ref for _, file_refs in file_refs_batch for ref in file_refs]
             primary_session = primary_repo.writable_session(branch)
             replica_sessions = [repo.writable_session(branch) for repo in replica_repos]
@@ -177,14 +177,16 @@ class VirtualRegionJob(
                 [s.store for s in replica_sessions],
             )
 
-    def _assert_probe_cell_covered(
+    def _assert_probe_chunk_covered(
         self, coord: SOURCE_FILE_COORD, file_refs: Sequence[VirtualRef]
     ) -> None:
-        """A file's refs must include the cell filter_already_present probes.
+        """A file's refs must include the chunk filter_already_present probes.
 
-        Otherwise the probe never sees the file land and every future fire
-        re-ingests it forever; usually a representative_var override is needed
-        (see its docstring).
+        The filter decides whether a whole file is already ingested by checking
+        one chunk: (representative_var, the file's out_loc). If a file's refs
+        never write that chunk, the filter never sees the file land and every
+        future fire re-ingests it; usually a representative_var override is
+        needed (see its docstring).
         """
         assert file_refs, f"empty refs for source file {coord}"
         rep = self.representative_var(coord)
