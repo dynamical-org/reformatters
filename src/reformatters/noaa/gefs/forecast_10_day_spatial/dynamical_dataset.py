@@ -40,21 +40,24 @@ class GefsForecast10DaySpatialDataset(
                     "s3://noaa-gefs-pds/", icechunk.s3_store(region="us-east-1")
                 ),
             ),
-            # One year of inits per manifest split.
-            manifest_split=manifest_append_dim_split(
-                split_size=365 * 4, dim="init_time"
-            ),
+            # One week of inits per manifest split: every commit rewrites each
+            # touched array's active split, so the split size caps commit cost
+            # (~1.3 MB per array at week end). The -dev operational test
+            # measures this tradeoff; see "Manifest splitting" in the plan.
+            manifest_split=manifest_append_dim_split(split_size=7 * 4, dim="init_time"),
         )
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        # Single-writer operational updates; each fire ingests whatever new files
-        # are available, so an hourly cadence ingests each init incrementally as
-        # it publishes (~3-4h after init time).
+        # Single-writer; one fire per init, 3 minutes before the earliest observed
+        # publication start (init+3:46), polling through the publication window.
+        # The pod exits when the init is fully ingested (observed init+5:30-5:39);
+        # the deadline (init+5:53) bounds waiting on a file that never publishes.
+        # See "Publication timing measurements" in the virtual datasets plan.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="10 * * * *",
-            pod_active_deadline=timedelta(minutes=50),
+            schedule="43 3,9,15,21 * * *",
+            pod_active_deadline=timedelta(hours=2, minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="2",

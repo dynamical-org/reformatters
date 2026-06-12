@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Literal
 from unittest.mock import Mock
 
 import pandas as pd
@@ -35,6 +36,7 @@ def make_job(
     template_ds: xr.Dataset,
     data_vars: Sequence[GEFSDataVar] | None = None,
     region: slice = slice(0, 1),
+    processing_mode: Literal["backfill", "update"] = "backfill",
 ) -> GefsForecast10DaySpatialRegionJob:
     return GefsForecast10DaySpatialRegionJob(
         tmp_store=Path("unused-tmp.zarr"),
@@ -43,6 +45,7 @@ def make_job(
         append_dim="init_time",
         region=region,
         reformat_job_name="test",
+        processing_mode=processing_mode,
     )
 
 
@@ -169,35 +172,54 @@ _INDEX_CONTENT = """1:0:d=2020100100:PRES:surface:3 hour fcst:ENS=+1
 3:2500:d=2020100100:APCP:surface:0-3 hour acc fcst:ENS=+1
 """
 
+_PREFIX = "gefs.20201001/00/atmos/pgrb2sp25/"
 
-def test_process_virtual_refs(
-    template_ds: xr.Dataset, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    data_vars = [get_var("temperature_2m"), get_var("total_precipitation_surface")]
-    job = make_job(template_ds, data_vars=data_vars)
 
+def _coord(
+    member: int, data_vars: Sequence[GEFSDataVar]
+) -> GefsForecast10DaySpatialSourceFileCoord:
+    return GefsForecast10DaySpatialSourceFileCoord(
+        init_time=pd.Timestamp("2020-10-01T00:00"),
+        ensemble_member=member,
+        lead_time=pd.Timedelta("3h"),
+        data_vars=data_vars,
+    )
+
+
+def _fake_index_download(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     def fake_download(url: str, dataset_id: str) -> Path:
-        if "gep02" in url:  # member 2's file is not yet published
-            raise FileNotFoundError(url)
         index_path = tmp_path / "index.idx"
         index_path.write_text(_INDEX_CONTENT)
         return index_path
 
     monkeypatch.setattr(region_job_module, "http_download_to_disk", fake_download)
-    monkeypatch.setattr(region_job_module, "_content_length", lambda url: 9000)
 
-    def coord(member: int) -> GefsForecast10DaySpatialSourceFileCoord:
-        return GefsForecast10DaySpatialSourceFileCoord(
-            init_time=pd.Timestamp("2020-10-01T00:00"),
-            ensemble_member=member,
-            lead_time=pd.Timedelta("3h"),
-            data_vars=data_vars,
-        )
 
-    batches = list(job.process_virtual_refs([coord(1), coord(2)]))
+def test_process_virtual_refs_backfill_sweeps_once(
+    template_ds: xr.Dataset, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    data_vars = [get_var("temperature_2m"), get_var("total_precipitation_surface")]
+    job = make_job(template_ds, data_vars=data_vars)
+    _fake_index_download(monkeypatch, tmp_path)
 
-    # One yield containing only the published file's refs, one ref per var.
-    assert len(batches) == 1
+    member1 = f"{_PREFIX}gep01.t00z.pgrb2s.0p25.f003"
+    member2 = f"{_PREFIX}gep02.t00z.pgrb2s.0p25.f003"
+    listings: list[str] = []
+
+    def fake_list_objects(prefix: str) -> dict[str, int]:
+        listings.append(prefix)
+        # Member 1 fully published; member 2's .idx has not landed yet.
+        return {member1: 9000, f"{member1}.idx": 200, member2: 9000}
+
+    monkeypatch.setattr(region_job_module, "_list_objects", fake_list_objects)
+
+    batches = list(
+        job.process_virtual_refs([_coord(1, data_vars), _coord(2, data_vars)])
+    )
+
+    # A backfill sweeps once: one listing, one yield with only the file whose
+    # data and index are both listed, then exit without polling.
+    assert listings == [_PREFIX]
     (refs,) = batches
     assert [r.data_var.name for r in refs] == [
         "temperature_2m",
@@ -206,13 +228,11 @@ def test_process_virtual_refs(
     tmp_ref, apcp_ref = refs
     assert tmp_ref.offset == 1000
     assert tmp_ref.length == 1500
-    # APCP is the last message in the index; its end comes from the file size.
+    # APCP is the last message in the index; its end comes from the listed file size.
     assert apcp_ref.offset == 2500
     assert apcp_ref.length == 9000 - 2500
     for ref in refs:
-        assert ref.location == (
-            "s3://noaa-gefs-pds/gefs.20201001/00/atmos/pgrb2sp25/gep01.t00z.pgrb2s.0p25.f003"
-        )
+        assert ref.location == f"s3://noaa-gefs-pds/{member1}"
         assert ref.out_loc == {
             "init_time": pd.Timestamp("2020-10-01T00:00"),
             "lead_time": pd.Timedelta("3h"),
@@ -220,22 +240,70 @@ def test_process_virtual_refs(
         }
 
 
-def test_process_virtual_refs_no_available_files_yields_nothing(
-    template_ds: xr.Dataset, monkeypatch: pytest.MonkeyPatch
+def test_process_virtual_refs_update_polls_until_all_ingested(
+    template_ds: xr.Dataset, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    job = make_job(template_ds)
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars=data_vars, processing_mode="update")
+    _fake_index_download(monkeypatch, tmp_path)
+    sleeps: list[float] = []
+    monkeypatch.setattr(region_job_module.time, "sleep", sleeps.append)
 
-    def fake_download(url: str, dataset_id: str) -> Path:
-        raise FileNotFoundError(url)
-
-    monkeypatch.setattr(region_job_module, "http_download_to_disk", fake_download)
-    coord = GefsForecast10DaySpatialSourceFileCoord(
-        init_time=pd.Timestamp("2020-10-01T00:00"),
-        ensemble_member=1,
-        lead_time=pd.Timedelta("3h"),
-        data_vars=[get_var("temperature_2m")],
+    member1 = f"{_PREFIX}gep01.t00z.pgrb2s.0p25.f003"
+    member2 = f"{_PREFIX}gep02.t00z.pgrb2s.0p25.f003"
+    # Tick 1: nothing published; tick 2: member 1; tick 3: member 2 as well.
+    listings = iter(
+        [
+            {},
+            {member1: 9000, f"{member1}.idx": 200},
+            {member2: 9000, f"{member2}.idx": 200},
+        ]
     )
-    assert list(job.process_virtual_refs([coord])) == []
+    monkeypatch.setattr(
+        region_job_module, "_list_objects", lambda prefix: next(listings)
+    )
+
+    batches = list(
+        job.process_virtual_refs([_coord(1, data_vars), _coord(2, data_vars)])
+    )
+
+    # One yield per tick that found new files; exits once all are ingested
+    # without consuming a fourth listing.
+    assert [[r.data_var.name for r in refs] for refs in batches] == [
+        ["temperature_2m"],
+        ["temperature_2m"],
+    ]
+    # Slept between ticks (after ticks 1 and 2, not after the final tick).
+    assert len(sleeps) == 2
+
+
+def test_list_objects_paginates(monkeypatch: pytest.MonkeyPatch) -> None:
+    pages = {
+        None: """<?xml version="1.0"?>
+            <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+              <Contents><Key>a/file1</Key><Size>100</Size></Contents>
+              <NextContinuationToken>tok</NextContinuationToken>
+            </ListBucketResult>""",
+        "tok": """<?xml version="1.0"?>
+            <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+              <Contents><Key>a/file2</Key><Size>200</Size></Contents>
+            </ListBucketResult>""",
+    }
+
+    class FakeResponse:
+        def __init__(self, text: str) -> None:
+            self.text = text
+
+        def raise_for_status(self) -> None:
+            pass
+
+    def fake_get(url: str, params: dict[str, str], timeout: int) -> FakeResponse:
+        assert params["prefix"] == "a/"
+        return FakeResponse(pages[params.get("continuation-token")])
+
+    monkeypatch.setattr(region_job_module.httpx, "get", fake_get)
+
+    assert region_job_module._list_objects("a/") == {"a/file1": 100, "a/file2": 200}
 
 
 def test_operational_update_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -252,6 +320,8 @@ def test_operational_update_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     (job,) = jobs
+    assert isinstance(job, GefsForecast10DaySpatialRegionJob)
+    assert job.processing_mode == "update"
     init_times = template_ds.get_index("init_time")
     assert init_times[-1] == pd.Timestamp("2020-10-03T00:00")
     # One job spanning the 24h active window (4 init times at 6h frequency).
