@@ -195,7 +195,7 @@ class VirtualRegionJob(
             ref.data_var.name == rep.name and self.chunk_key(ref.out_loc, rep) == probe
             for ref in file_refs
         ), (
-            f"refs for {coord} do not cover representative cell "
+            f"refs for {coord} do not cover representative chunk "
             f"({rep.name}, {dict(coord.out_loc())}); the filter would re-ingest "
             "this file forever. Override representative_var to pick a variable "
             "the file actually contains."

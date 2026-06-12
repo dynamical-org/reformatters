@@ -492,6 +492,121 @@ def test_process_virtual_rejects_empty_batch(tmp_path: Path) -> None:
         job.process_virtual(repo, [], "main")
 
 
+def test_process_virtual_rejects_refs_missing_probe_chunk(tmp_path: Path) -> None:
+    # A file's refs must cover the chunk filter_already_present probes, or the
+    # filter never sees the file land and re-ingests it forever.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+
+    class WrongChunkJob(VirtualTestRegionJob):
+        def process_virtual_refs(
+            self,
+            remaining: Sequence[VirtualTestSourceFileCoord],
+        ) -> Iterator[
+            Sequence[tuple[VirtualTestSourceFileCoord, Sequence[VirtualRef]]]
+        ]:
+            coord = remaining[0]
+            ref = VirtualRef(
+                data_var=self.data_vars[0],
+                # A different lead than the coord's file covers.
+                out_loc={"init_time": coord.init_time, "lead_time": LEAD_TIMES[1]},
+                location=self.messages_url,
+                offset=0,
+                length=8,
+            )
+            yield [(coord, [ref])]
+
+    job = WrongChunkJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=template_ds,
+        data_vars=[VirtualTestDataVar(name="temperature_2m")],
+        append_dim="init_time",
+        region=slice(0, 4),
+        reformat_job_name="test",
+    )
+    with pytest.raises(AssertionError, match="do not cover representative chunk"):
+        job.process_virtual(repo, [], "main")
+
+
+def test_virtual_operational_rejects_backfill_mode_job(tmp_path: Path) -> None:
+    # Without "update" the job sweeps once instead of polling; the driver
+    # asserts operational jobs are constructed to poll.
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
+
+    with pytest.raises(AssertionError, match="processing_mode='update'"):
+        dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
+
+
+def _construct_dataset(
+    tmp_path: Path, dataset_cls: type[VirtualTestDataset]
+) -> VirtualTestDataset:
+    container = icechunk.VirtualChunkContainer(
+        f"file://{tmp_path}/", icechunk.local_filesystem_store(str(tmp_path))
+    )
+    return dataset_cls(
+        primary_storage_config=StorageConfig(
+            base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+        ),
+        icechunk_virtual_config=IcechunkVirtualConfig(
+            containers=(container,),
+            manifest_split=manifest_append_dim_split(split_size=2, dim="init_time"),
+        ),
+    )
+
+
+def _encoding(**overrides: Any) -> Encoding:  # noqa: ANN401 - encoding field passthrough
+    defaults: dict[str, Any] = {
+        "dtype": "float64",
+        "fill_value": np.nan,
+        "chunks": (1, 1, N_LAT, N_LON),
+        "shards": None,
+        "compressors": (),
+        "filters": None,
+    }
+    return Encoding(**{**defaults, **overrides})
+
+
+def test_virtual_dataset_rejects_sharded_or_compressed_encodings(
+    tmp_path: Path,
+) -> None:
+    class ShardedTemplateConfig(VirtualTestTemplateConfig):
+        @computed_field  # type: ignore[prop-decorator]
+        @property
+        def data_vars(self) -> Sequence[VirtualTestDataVar]:
+            return [
+                VirtualTestDataVar(
+                    name="temperature_2m",
+                    encoding=_encoding(shards=(2, 2, N_LAT, N_LON)),
+                )
+            ]
+
+    class ShardedDataset(VirtualTestDataset):
+        template_config: ShardedTemplateConfig = ShardedTemplateConfig()
+
+    with pytest.raises(ValidationError, match="must not declare shards"):
+        _construct_dataset(tmp_path, ShardedDataset)
+
+    class CompressedTemplateConfig(VirtualTestTemplateConfig):
+        @computed_field  # type: ignore[prop-decorator]
+        @property
+        def data_vars(self) -> Sequence[VirtualTestDataVar]:
+            return [
+                VirtualTestDataVar(
+                    name="temperature_2m", encoding=_encoding(compressors=None)
+                )
+            ]
+
+    class CompressedDataset(VirtualTestDataset):
+        template_config: CompressedTemplateConfig = CompressedTemplateConfig()
+
+    with pytest.raises(ValidationError, match="must declare compressors="):
+        _construct_dataset(tmp_path, CompressedDataset)
+
+
 # --- process_virtual integration (real value read-back) ---
 
 
