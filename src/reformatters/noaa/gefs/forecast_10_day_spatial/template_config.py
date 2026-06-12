@@ -81,7 +81,7 @@ class GefsForecast10DaySpatialTemplateConfig(TemplateConfig[GEFSDataVar]):
             # virtual dataset machinery; its structure is not settled.
             dataset_id="noaa-gefs-forecast-10-day-spatial-dev",
             dataset_version="0.1.0",
-            name="NOAA GEFS forecast, 10 day, spatial",
+            name="Development: NOAA GEFS forecast, 10 day, spatial",
             description="Weather forecasts from the Global Ensemble Forecast System (GEFS) operated by NOAA NWS NCEP, optimized for spatial (map) access patterns.",
             attribution="NOAA NWS NCEP GEFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
             license="CC-BY-4.0",
@@ -307,8 +307,6 @@ def _virtual_encoding(var: GEFSDataVar, message_chunks: tuple[int, ...]) -> Enco
         fill_value=np.nan,
         chunks=message_chunks,
         shards=None,
-        # Empty, not None: exclude_none serialization would drop a None and zarr
-        # would then apply its default compressor on top of the GRIB bytes.
         compressors=(),
         filters=(),
         serializer=GribberishCodec(var=var.internal_attrs.grib_element).to_dict(),

@@ -27,7 +27,6 @@ dependencies = [
     "google-crc32c>=1.8.0",
     "httpx>=0.28.1",
     "gribberish~=0.30",
-    "arro3-core>=0.8.0",
 ]
 
 [build-system]

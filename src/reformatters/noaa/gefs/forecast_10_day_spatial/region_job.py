@@ -257,13 +257,8 @@ class GefsForecast10DaySpatialRegionJob(
 def _list_objects(prefix: str) -> dict[str, int]:
     """All object keys under `prefix` in the GEFS bucket, mapped to size in bytes."""
     store = s3_store(_S3_LOCATION_PREFIX, region=_S3_BUCKET_REGION)
-    batch = obstore.list(
-        store, prefix=prefix, chunk_size=10_000, return_arrow=True
-    ).collect()
-    return dict(
-        zip(
-            batch.column("path").to_pylist(),
-            batch.column("size").to_pylist(),
-            strict=True,
-        )
-    )
+    return {
+        meta["path"]: meta["size"]
+        for batch in obstore.list(store, prefix=prefix, chunk_size=10_000)
+        for meta in batch
+    }
