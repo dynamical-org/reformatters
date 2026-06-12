@@ -1346,8 +1346,8 @@ before adopting it:
    array→array codec.
 2. **Use `ScaleOffset` from `zarr.codecs`, not the `numcodecs` wrapper** (the
    wrapper is outside the zarr v3 spec). `zarr.codecs.ScaleOffset` exists as of
-   zarr 3.2; the upgrade from our pinned 3.1.3 is tracked on its own branch as
-   an isolated core change.
+   zarr 3.2 — **merged** (`zarr~=3.2` is on main), so only the gribberish
+   release remains.
 
 Once both land, the virtual GEFS temperature vars chain the filter and declare
 `degree_Celsius`, and the temporary `RAW_GRIB_VALUE_VARS` consistency-test
@@ -1368,9 +1368,8 @@ exactly "everything after the expansion"). cProfile pinned it: zarr 3.1.3's
 (~20.9M per data var) to compute chunks to delete — provably empty work when
 growing. zarr 3.2.0 adds an `only_growing` fast path that skips the scan;
 measured on the same store, the one-init append drops **762 s → 0.1 s**,
-putting the entire init inside the latency budget. The zarr `~=3.1` → `>=3.2`
-upgrade is tracked on its own branch as an isolated core change; the virtual
-dataset's latency target depends on it.
+putting the entire init inside the latency budget. The zarr `~=3.1` → `~=3.2`
+upgrade is **merged**, so the latency fix is live.
 
 **Tick-loop design settled (2026-06-12).** The operational generator is a tick
 loop: each tick lists the source bucket (obstore via the cached
