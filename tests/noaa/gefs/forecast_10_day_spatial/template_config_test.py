@@ -8,6 +8,72 @@ from reformatters.noaa.gefs.forecast_10_day_spatial.template_config import (
 TEMPLATE_CONFIG = GefsForecast10DaySpatialTemplateConfig()
 
 
+def test_dataset_attributes() -> None:
+    attrs = TEMPLATE_CONFIG.dataset_attributes
+    assert attrs.dataset_id == "noaa-gefs-forecast-10-day-spatial-dev"
+    assert attrs.dataset_version == "0.1.0"
+    assert attrs.spatial_domain == "Global"
+    assert attrs.spatial_resolution == "0.25 degrees (~20km)"
+    assert attrs.forecast_domain == "Forecast lead time 0-240 hours (0-10 days) ahead"
+    assert (
+        attrs.time_domain == "Forecasts initialized 2020-10-01 00:00:00 UTC to Present"
+    )
+
+
+def test_dims_and_append_dim() -> None:
+    assert TEMPLATE_CONFIG.dims == (
+        "init_time",
+        "ensemble_member",
+        "lead_time",
+        "latitude",
+        "longitude",
+    )
+    assert TEMPLATE_CONFIG.append_dim == "init_time"
+    assert TEMPLATE_CONFIG.append_dim_start == pd.Timestamp("2020-10-01T00:00")
+    assert TEMPLATE_CONFIG.append_dim_frequency == pd.Timedelta("6h")
+
+
+def test_coords_names_and_encodings() -> None:
+    coords = TEMPLATE_CONFIG.coords
+    assert [c.name for c in coords] == [
+        "latitude",
+        "longitude",
+        "spatial_ref",
+        "init_time",
+        "ensemble_member",
+        "lead_time",
+        "valid_time",
+        "expected_forecast_length",
+    ]
+    by_name = {c.name: c for c in coords}
+    # The archive is continuously appended to, never pre-sized toward a fixed end.
+    assert by_name["init_time"].attrs.statistics_approximate is not None
+    assert by_name["init_time"].attrs.statistics_approximate.max == "Present"
+    assert by_name["valid_time"].attrs.statistics_approximate is not None
+    assert by_name["valid_time"].attrs.statistics_approximate.max == "Present"
+    for coord in coords:
+        assert coord.encoding.shards is None
+
+
+def test_append_dim_coordinates_range() -> None:
+    init_times = TEMPLATE_CONFIG.append_dim_coordinates(
+        pd.Timestamp("2020-10-02T00:00")
+    )
+    assert init_times[0] == pd.Timestamp("2020-10-01T00:00")
+    # End is exclusive.
+    assert init_times[-1] == pd.Timestamp("2020-10-01T18:00")
+    assert len(init_times) == 4
+
+
+def test_derive_coordinates() -> None:
+    ds = TEMPLATE_CONFIG.get_template(pd.Timestamp("2020-10-02T00:00"))
+    assert "spatial_ref" in ds.coords
+    np.testing.assert_array_equal(
+        ds["valid_time"].values,
+        ds["init_time"].values[:, None] + ds["lead_time"].values[None, :],
+    )
+
+
 def test_dimension_coordinates_native_quarter_degree_grid() -> None:
     dim_coords = TEMPLATE_CONFIG.dimension_coordinates()
 

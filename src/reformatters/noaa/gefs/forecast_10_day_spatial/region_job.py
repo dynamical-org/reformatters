@@ -1,20 +1,18 @@
 import time
-import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import ClassVar, Literal
 
-import httpx
+import obstore
 import pandas as pd
 import xarray as xr
 from zarr.abc.store import Store
 
-from reformatters.common.download import http_download_to_disk
+from reformatters.common.download import s3_download_to_disk, s3_store
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob
-from reformatters.common.retry import retry
 from reformatters.common.types import AppendDim, DatetimeLike, Timedelta
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 from reformatters.noaa.gefs.gefs_config_models import (
@@ -32,9 +30,7 @@ from reformatters.noaa.noaa_utils import has_hour_0_values
 
 log = get_logger(__name__)
 
-_S3_BUCKET_URL = "https://noaa-gefs-pds.s3.amazonaws.com/"
 _S3_LOCATION_PREFIX = "s3://noaa-gefs-pds/"
-_S3_LIST_NS = "{http://s3.amazonaws.com/doc/2006-03-01/}"
 
 
 def _vars_in_s_file(
@@ -74,15 +70,13 @@ class GefsForecast10DaySpatialSourceFileCoord(GefsEnsembleSourceFileCoord):
         ), f"coord includes vars not in the s file for {self.init_time}"
         return "s"
 
-    def get_s3_location(self) -> str:
-        """The ref location, matching the dataset's virtual chunk container prefix."""
-        url = self.get_url()
+    def get_url(self) -> str:
+        """The s3:// source location; refs point here, matching the dataset's
+        virtual chunk container prefix."""
+        url = super().get_url()
         https_prefix = f"https://{self.primary_base_url}/"
         assert url.startswith(https_prefix), url
         return _S3_LOCATION_PREFIX + url.removeprefix(https_prefix)
-
-    def s3_key(self) -> str:
-        return self.get_s3_location().removeprefix(_S3_LOCATION_PREFIX)
 
 
 class GefsForecast10DaySpatialRegionJob(
@@ -95,13 +89,10 @@ class GefsForecast10DaySpatialRegionJob(
     operational_window: ClassVar[Timedelta] = pd.Timedelta("24h")
     # When polling, pace bucket listings to at most one sweep per tick.
     tick_interval: ClassVar[Timedelta] = pd.Timedelta("1s")
-    # Concurrent index file downloads.
-    download_concurrency: ClassVar[int] = 8
-
-    # Updates poll for files as NOAA publishes them, exiting when all expected
-    # files are ingested (the pod deadline bounds waiting on a file that never
-    # publishes). Backfills sweep what exists once and exit.
-    processing_mode: Literal["backfill", "update"] = "backfill"
+    # Concurrent index file downloads. The .idx files are ~30KB latency-bound
+    # requests; measured throughput vs pool width: 8 -> ~105 files/s,
+    # 32 -> ~310, 64 -> ~380, 128 -> ~435 (diminishing).
+    download_concurrency: ClassVar[int] = 64
 
     def generate_source_file_coords(
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[GEFSDataVar]
@@ -127,13 +118,18 @@ class GefsForecast10DaySpatialRegionJob(
 
     def process_virtual_refs(
         self, remaining: Sequence[GefsForecast10DaySpatialSourceFileCoord]
-    ) -> Iterator[Sequence[VirtualRef]]:
+    ) -> Iterator[
+        Sequence[tuple[GefsForecast10DaySpatialSourceFileCoord, Sequence[VirtualRef]]]
+    ]:
         """Each tick: list the bucket, fetch newly available files' indexes, yield their refs.
 
         One yield (= one commit) per tick, containing every file that became
         available since the last tick.
         """
-        pending = {coord.s3_key(): coord for coord in remaining}
+        pending = {
+            coord.get_url().removeprefix(_S3_LOCATION_PREFIX): coord
+            for coord in remaining
+        }
         with ThreadPoolExecutor(self.download_concurrency) as pool:
             while pending:
                 tick_start = time.monotonic()
@@ -143,13 +139,13 @@ class GefsForecast10DaySpatialRegionJob(
                     refs_per_file = pool.map(
                         self._file_refs, coords, available.values()
                     )
-                    refs = [ref for file_refs in refs_per_file for ref in file_refs]
+                    batch = list(zip(coords, refs_per_file, strict=True))
                     for key in available:
                         del pending[key]
                     log.info(
                         f"Ingesting {len(coords)} files, {len(pending)} still pending"
                     )
-                    yield refs
+                    yield batch
                 if self.processing_mode == "backfill":
                     if pending:
                         log.info(
@@ -180,8 +176,10 @@ class GefsForecast10DaySpatialRegionJob(
     def _file_refs(
         self, coord: GefsForecast10DaySpatialSourceFileCoord, file_size: int
     ) -> list[VirtualRef]:
-        index_path = http_download_to_disk(coord.get_index_url(), self.dataset_id)
-        location = coord.get_s3_location()
+        index_path = s3_download_to_disk(
+            coord.get_index_url(), self.dataset_id, region="us-east-1"
+        )
+        location = coord.get_url()
         out_loc = coord.out_loc()
         refs = []
         for var in coord.data_vars:
@@ -201,6 +199,8 @@ class GefsForecast10DaySpatialRegionJob(
                     length=end - start,
                 )
             )
+        # Index files accumulate by the millions in backfills; never keep them.
+        index_path.unlink()
         return refs
 
     def representative_var(
@@ -255,27 +255,9 @@ class GefsForecast10DaySpatialRegionJob(
 
 def _list_objects(prefix: str) -> dict[str, int]:
     """All object keys under `prefix` in the GEFS bucket, mapped to size in bytes."""
-    objects: dict[str, int] = {}
-    params = {"list-type": "2", "prefix": prefix, "max-keys": "1000"}
-    while True:
-        response = _fetch_list_page(params)
-        root = ET.fromstring(response.text)  # noqa: S314 - AWS S3 API response
-        for contents in root.iter(f"{_S3_LIST_NS}Contents"):
-            key = contents.findtext(f"{_S3_LIST_NS}Key")
-            size = contents.findtext(f"{_S3_LIST_NS}Size")
-            assert key is not None
-            assert size is not None
-            objects[key] = int(size)
-        token = root.findtext(f"{_S3_LIST_NS}NextContinuationToken")
-        if token is None:
-            return objects
-        params = {**params, "continuation-token": token}
-
-
-def _fetch_list_page(params: dict[str, str]) -> httpx.Response:
-    def get() -> httpx.Response:
-        response = httpx.get(_S3_BUCKET_URL, params=params, timeout=30)
-        response.raise_for_status()
-        return response
-
-    return retry(get)
+    store = s3_store(_S3_LOCATION_PREFIX, region="us-east-1")
+    return {
+        meta["path"]: meta["size"]
+        for batch in obstore.list(store, prefix=prefix)
+        for meta in batch
+    }

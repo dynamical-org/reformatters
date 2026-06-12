@@ -3,9 +3,15 @@ from pathlib import Path
 from typing import Literal
 from unittest.mock import Mock
 
+import httpx
+import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+from gribberish import (
+    parse_grib_array,  # ty: ignore[unresolved-import] - native module member
+    parse_grib_message_metadata,  # ty: ignore[unresolved-import] - native module member
+)
 
 from reformatters.noaa.gefs.forecast_10_day_spatial import (
     region_job as region_job_module,
@@ -13,6 +19,7 @@ from reformatters.noaa.gefs.forecast_10_day_spatial import (
 from reformatters.noaa.gefs.forecast_10_day_spatial.region_job import (
     GefsForecast10DaySpatialRegionJob,
     GefsForecast10DaySpatialSourceFileCoord,
+    _vars_in_s_file,
 )
 from reformatters.noaa.gefs.forecast_10_day_spatial.template_config import (
     GefsForecast10DaySpatialTemplateConfig,
@@ -56,12 +63,13 @@ def test_source_file_coord_urls() -> None:
         lead_time=pd.Timedelta("3h"),
         data_vars=[get_var("temperature_2m")],
     )
+    # The single canonical URL is the s3:// source location refs point at,
+    # matching the dataset's virtual chunk container prefix.
     assert coord.get_url() == (
-        "https://noaa-gefs-pds.s3.amazonaws.com/"
-        "gefs.20240101/06/atmos/pgrb2sp25/gep01.t06z.pgrb2s.0p25.f003"
-    )
-    assert coord.get_s3_location() == (
         "s3://noaa-gefs-pds/gefs.20240101/06/atmos/pgrb2sp25/gep01.t06z.pgrb2s.0p25.f003"
+    )
+    assert coord.get_index_url() == (
+        "s3://noaa-gefs-pds/gefs.20240101/06/atmos/pgrb2sp25/gep01.t06z.pgrb2s.0p25.f003.idx"
     )
 
 
@@ -73,8 +81,7 @@ def test_source_file_coord_url_control_member_max_lead() -> None:
         data_vars=[get_var("temperature_2m")],
     )
     assert coord.get_url() == (
-        "https://noaa-gefs-pds.s3.amazonaws.com/"
-        "gefs.20240101/00/atmos/pgrb2sp25/gec00.t00z.pgrb2s.0p25.f240"
+        "s3://noaa-gefs-pds/gefs.20240101/00/atmos/pgrb2sp25/gec00.t00z.pgrb2s.0p25.f240"
     )
 
 
@@ -187,12 +194,12 @@ def _coord(
 
 
 def _fake_index_download(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    def fake_download(url: str, dataset_id: str) -> Path:
+    def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
         index_path = tmp_path / "index.idx"
         index_path.write_text(_INDEX_CONTENT)
         return index_path
 
-    monkeypatch.setattr(region_job_module, "http_download_to_disk", fake_download)
+    monkeypatch.setattr(region_job_module, "s3_download_to_disk", fake_download)
 
 
 def test_process_virtual_refs_backfill_sweeps_once(
@@ -220,7 +227,9 @@ def test_process_virtual_refs_backfill_sweeps_once(
     # A backfill sweeps once: one listing, one yield with only the file whose
     # data and index are both listed, then exit without polling.
     assert listings == [_PREFIX]
-    (refs,) = batches
+    (batch,) = batches
+    ((coord, refs),) = batch
+    assert coord.ensemble_member == 1
     assert [r.data_var.name for r in refs] == [
         "temperature_2m",
         "total_precipitation_surface",
@@ -269,41 +278,83 @@ def test_process_virtual_refs_update_polls_until_all_ingested(
 
     # One yield per tick that found new files; exits once all are ingested
     # without consuming a fourth listing.
-    assert [[r.data_var.name for r in refs] for refs in batches] == [
-        ["temperature_2m"],
-        ["temperature_2m"],
+    assert [
+        [
+            (coord.ensemble_member, [r.data_var.name for r in refs])
+            for coord, refs in batch
+        ]
+        for batch in batches
+    ] == [
+        [(1, ["temperature_2m"])],
+        [(2, ["temperature_2m"])],
     ]
     # Slept between ticks (after ticks 1 and 2, not after the final tick).
     assert len(sleeps) == 2
 
 
-def test_list_objects_paginates(monkeypatch: pytest.MonkeyPatch) -> None:
-    pages = {
-        None: """<?xml version="1.0"?>
-            <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
-              <Contents><Key>a/file1</Key><Size>100</Size></Contents>
-              <NextContinuationToken>tok</NextContinuationToken>
-            </ListBucketResult>""",
-        "tok": """<?xml version="1.0"?>
-            <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
-              <Contents><Key>a/file2</Key><Size>200</Size></Contents>
-            </ListBucketResult>""",
+def test_discover_available_requires_data_and_index(
+    template_ds: xr.Dataset, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars=data_vars)
+    member1 = f"{_PREFIX}gep01.t00z.pgrb2s.0p25.f003"
+    member2 = f"{_PREFIX}gep02.t00z.pgrb2s.0p25.f003"
+    monkeypatch.setattr(
+        region_job_module,
+        "_list_objects",
+        lambda prefix: {member1: 9000, f"{member1}.idx": 200, f"{member2}.idx": 150},
+    )
+
+    pending = {
+        member1: _coord(1, data_vars),
+        member2: _coord(2, data_vars),  # .idx listed but data file is not
     }
+    assert job._discover_available(pending) == {member1: 9000}
 
-    class FakeResponse:
-        def __init__(self, text: str) -> None:
-            self.text = text
 
-        def raise_for_status(self) -> None:
-            pass
+@pytest.mark.slow
+def test_real_source_all_vars_resolve_and_decode(template_ds: xr.Dataset) -> None:
+    """Guard against NOAA layout/index drift: list the real bucket, parse a real
+    index for every variable, and decode one message to check values + grid."""
+    init = pd.Timestamp("2024-01-01T00:00")
+    lead = pd.Timedelta("6h")
+    coord = GefsForecast10DaySpatialSourceFileCoord(
+        init_time=init,
+        ensemble_member=1,
+        lead_time=lead,
+        data_vars=_vars_in_s_file(list(TEMPLATE_CONFIG.data_vars), init, lead),
+    )
+    job = make_job(template_ds)
 
-    def fake_get(url: str, params: dict[str, str], timeout: int) -> FakeResponse:
-        assert params["prefix"] == "a/"
-        return FakeResponse(pages[params.get("continuation-token")])
+    key = coord.get_url().removeprefix("s3://noaa-gefs-pds/")
+    available = job._discover_available({key: coord})
+    file_size = available[key]
+    refs = job._file_refs(coord, file_size)
 
-    monkeypatch.setattr(region_job_module.httpx, "get", fake_get)
+    assert len(refs) == 19
+    for ref in refs:
+        assert 0 <= ref.offset < file_size
+        assert 0 < ref.length
+        assert ref.offset + ref.length <= file_size
+        assert ref.location == coord.get_url()
 
-    assert region_job_module._list_objects("a/") == {"a/file1": 100, "a/file2": 200}
+    t2m_ref = next(r for r in refs if r.data_var.name == "temperature_2m")
+    response = httpx.get(
+        f"https://noaa-gefs-pds.s3.amazonaws.com/{key}",
+        headers={
+            "Range": f"bytes={t2m_ref.offset}-{t2m_ref.offset + t2m_ref.length - 1}"
+        },
+    )
+    response.raise_for_status()
+    data = parse_grib_array(response.content, 0)
+    assert data.size == 721 * 1440
+    assert 180 < np.nanmin(data) < 280 < np.nanmax(data) < 340  # plausible Kelvin
+
+    # Virtual chunks serve the raw message grid; it must match the template exactly.
+    lat, lon = parse_grib_message_metadata(response.content, 0).latlng()
+    dim_coords = TEMPLATE_CONFIG.dimension_coordinates()
+    np.testing.assert_allclose(np.asarray(lat), dim_coords["latitude"])
+    np.testing.assert_allclose(np.asarray(lon), dim_coords["longitude"])
 
 
 def test_operational_update_jobs(monkeypatch: pytest.MonkeyPatch) -> None:

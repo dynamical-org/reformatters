@@ -1333,6 +1333,26 @@ would blow the ≤5 s budget. Within-deadline crashes recover via the k8s Job po
 restart + `filter_already_present`; stragglers past the deadline and re-published
 files are caught by the next fire's startup sweep over the operational window.
 
+**Tick-loop design settled (2026-06-12).** The operational generator is a tick
+loop: each tick lists the source bucket (obstore via the cached
+`common/download.py::s3_store`; listings return sizes, killing the last-message
+content-length HEAD), diffs against pending, fetches newly available `.idx`
+files on a `ThreadPoolExecutor`, and yields everything found as one commit. A
+file is "available" only when data **and** index are both listed. No
+`poll_until` (the k8s pod deadline is the only timeout — a `DeadlineExceeded`
+job failure is the correct anomaly signal for never-published files) and no
+`files_per_yield` knobs (yield everything ready; catch-up backlogs commit as one
+big batch ASAP). `processing_mode: Literal["backfill", "update"]` lives on
+`VirtualRegionJob` and selects single-sweep vs poll; the operational driver
+asserts jobs are constructed with `"update"`. `process_virtual_refs` yields
+`(coord, refs)` pairs so the loop can assert each file's refs cover the cell the
+filter probes (a violation would re-ingest the file forever). The cron uses
+`concurrencyPolicy: Forbid` and backfill finalize asserts `main` contains the
+temp branch before skipping its reset (a foreign mid-backfill writer fails
+loudly). For non-listable ordered sources (none yet), a frontier-prober slots
+into the same discover step. Measured `.idx` fetch throughput vs pool width: 8
+-> ~105 files/s, 32 -> ~310, 64 -> ~380 (chosen), 128 -> ~435.
+
 ### Publication timing measurements (2026-06-11)
 
 Measured from S3 object `LastModified` over 6–10 recent inits (2026-06-09..11).

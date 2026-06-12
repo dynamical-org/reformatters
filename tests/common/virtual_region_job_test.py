@@ -14,7 +14,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from datetime import timedelta
 from itertools import batched
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 import dask.array
 import icechunk
@@ -155,7 +155,7 @@ class VirtualTestDataVar(DataVar[BaseInternalAttrs]):
         fill_value=np.nan,
         chunks=(1, 1, N_LAT, N_LON),  # one chunk per (init, lead) message
         shards=None,
-        compressors=None,
+        compressors=(),
         filters=None,
     )
     attrs: DataVarAttrs = DataVarAttrs(
@@ -201,26 +201,25 @@ class VirtualTestRegionJob(
     def process_virtual_refs(
         self,
         remaining: Sequence[VirtualTestSourceFileCoord],
-    ) -> Iterator[Sequence[VirtualRef]]:
+    ) -> Iterator[Sequence[tuple[VirtualTestSourceFileCoord, Sequence[VirtualRef]]]]:
         data_var = self.data_vars[0]
         init_index = self.template_ds.get_index("init_time")
         lead_index = self.template_ds.get_index("lead_time")
         for group in batched(remaining, self.backfill_batch_files, strict=False):
-            refs: list[VirtualRef] = []
+            batch: list[tuple[VirtualTestSourceFileCoord, Sequence[VirtualRef]]] = []
             for coord in group:
                 init_idx = int(init_index.get_indexer(pd.Index([coord.init_time]))[0])
                 lead_idx = int(lead_index.get_indexer(pd.Index([coord.lead_time]))[0])
                 offset, length = _message_offset_length(init_idx, lead_idx)
-                refs.append(
-                    VirtualRef(
-                        data_var=data_var,
-                        out_loc=coord.out_loc(),
-                        location=self.messages_url,
-                        offset=offset,
-                        length=length,
-                    )
+                ref = VirtualRef(
+                    data_var=data_var,
+                    out_loc=coord.out_loc(),
+                    location=self.messages_url,
+                    offset=offset,
+                    length=length,
                 )
-            yield refs
+                batch.append((coord, [ref]))
+            yield batch
 
 
 class VirtualTestTemplateConfig(TemplateConfig[VirtualTestDataVar]):
@@ -312,6 +311,7 @@ def _make_region_job(
     template_ds: xr.Dataset,
     *,
     region: slice,
+    processing_mode: Literal["backfill", "update"] = "backfill",
 ) -> VirtualTestRegionJob:
     return VirtualTestRegionJob(
         tmp_store=Path("unused-tmp.zarr"),
@@ -320,6 +320,7 @@ def _make_region_job(
         append_dim="init_time",
         region=region,
         reformat_job_name="test",
+        processing_mode=processing_mode,
     )
 
 
@@ -474,7 +475,9 @@ def test_process_virtual_rejects_empty_batch(tmp_path: Path) -> None:
         def process_virtual_refs(
             self,
             remaining: Sequence[VirtualTestSourceFileCoord],  # noqa: ARG002
-        ) -> Iterator[Sequence[VirtualRef]]:
+        ) -> Iterator[
+            Sequence[tuple[VirtualTestSourceFileCoord, Sequence[VirtualRef]]]
+        ]:
             yield []
 
     job = EmptyBatchJob(
@@ -687,7 +690,7 @@ def test_virtual_operational_single_writer_expands_main(tmp_path: Path) -> None:
     # Start with an empty main (no future NaNs), then operationally expand it.
     template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
     full_template = _create_template_ds(4)
-    job = _make_region_job(full_template, region=slice(0, 4))
+    job = _make_region_job(full_template, region=slice(0, 4), processing_mode="update")
 
     dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
 
@@ -704,7 +707,7 @@ def test_update_routes_virtual_to_single_writer(
     dataset = _make_dataset(tmp_path)
     template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
     full_template = _create_template_ds(4)
-    job = _make_region_job(full_template, region=slice(0, 4))
+    job = _make_region_job(full_template, region=slice(0, 4), processing_mode="update")
 
     monkeypatch.setattr(
         VirtualTestRegionJob,
@@ -797,7 +800,9 @@ def test_virtual_operational_second_fire_sees_no_new_work(tmp_path: Path) -> Non
     full_template = _create_template_ds(4)
 
     def fire() -> None:
-        job = _make_region_job(full_template, region=slice(0, 4))
+        job = _make_region_job(
+            full_template, region=slice(0, 4), processing_mode="update"
+        )
         dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
 
     fire()

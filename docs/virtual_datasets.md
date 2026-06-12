@@ -10,10 +10,12 @@ How virtual jobs plug into worker parallelism and coordination is covered in [pa
 
 1. `generate_source_file_coords` lists candidate source files for the region.
 2. `filter_already_present` drops files whose refs are already in the manifest.
-3. `process_virtual_refs(remaining)` — the generator each dataset implements — discovers available source files and yields batches of `VirtualRef`s.
+3. `process_virtual_refs(remaining)` — the generator each dataset implements — discovers available source files and yields batches of `(source file coord, its VirtualRefs)` pairs.
 4. Each yield is committed atomically: open fresh writable sessions (a committed icechunk session is read-only), grow the append dim if needed (`sync_dims_to`), `set_virtual_refs`, commit.
 
-**The yield is the commit unit.** The generator owns the batching policy: operational updates yield ~one file at a time for per-file visibility; backfills yield ~N files per commit to amortize commit overhead. A yield must contain *whole* source files — never split a file across yields — and must never be empty (an empty icechunk commit raises).
+**The yield is the commit unit.** The generator owns the batching policy: operational updates yield everything that arrived since the last poll tick (typically ~one file) for per-file visibility; backfills yield everything available. A yield must contain *whole* source files — never split a file across yields — and must never be empty (an empty icechunk commit raises). The loop asserts each file's refs cover the representative cell `filter_already_present` probes, so a file the filter could never see as ingested fails loudly instead of being re-ingested forever.
+
+`processing_mode` on the job selects the generator's stopping rule: `"backfill"` sweeps what exists once and exits; `"update"` polls until everything expected is ingested, with the pod's active deadline bounding how long it waits on a file that never publishes. `operational_update_jobs` implementations must construct jobs with `processing_mode="update"` (asserted by the driver).
 
 ## Reader safety: one source file → one atomic commit
 
@@ -32,6 +34,11 @@ Crash recovery is automatic: committed refs are durable and the filter skips the
 ## Backfill: parallel on a pre-sized temp branch
 
 Virtual backfills use the standard parallel temp-branch flow (see [parallel_processing.md](parallel_processing.md#icechunk-stores)). Worker 0 pre-sizes the full template on the branch, so every worker's `sync_dims_to` is a no-op and parallel workers write disjoint refs with no resize conflicts. Jobs partition by chunks along the append dim (virtual arrays have no shards).
+
+Two operational rules when backfilling a live virtual dataset:
+
+- **Suspend the dataset's `-update` CronJob for the duration of the backfill.** Finalize resets `main` to the temp branch only if `main` hasn't moved since setup; an operational fire committing to `main` mid-backfill would make finalize fail loudly (it asserts rather than silently discarding the backfill's work).
+- **Choose `append_dim_end` as the last *fully published* position, not "now".** Finalize resets `main` to the pre-sized branch, so positions past the published data would appear as NaN-filled slots to readers.
 
 ## Filtering: the manifest is the source of truth
 

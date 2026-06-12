@@ -57,6 +57,8 @@ class GefsForecast10DaySpatialDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="43 3,9,15,21 * * *",
+            # Never overlap or kill a mid-window poller (single-writer invariant).
+            concurrency_policy="Forbid",
             pod_active_deadline=timedelta(hours=2, minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,

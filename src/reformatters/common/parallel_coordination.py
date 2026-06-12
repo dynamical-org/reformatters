@@ -179,7 +179,23 @@ def finalize(
             original_snapshot = setup_info.get("repo_snapshots", {}).get(role)
             current_main = repo.lookup_branch("main")
             if current_main != original_snapshot:
-                log.info(f"Skipping {role}: main already moved past original snapshot")
+                # Only safe if a previous finalize attempt already published this
+                # branch. If another writer moved main (e.g. a virtual dataset's
+                # operational update cron committing during a backfill), skipping
+                # would silently discard this whole job's work — fail loudly.
+                if branch_name in repo.list_branches():
+                    branch_tip = repo.lookup_branch(branch_name)
+                    assert any(
+                        snapshot.id == branch_tip
+                        for snapshot in repo.ancestry(branch="main")
+                    ), (
+                        f"{role}: main moved past the snapshot captured at setup "
+                        f"and does not contain branch {branch_name} - another "
+                        "writer committed to main during this job, so this job's "
+                        "work was NOT published. Suspend the operational update "
+                        "cron during virtual backfills and rerun."
+                    )
+                log.info(f"Skipping {role}: main already includes this branch")
                 continue
             session = repo.writable_session(branch_name)
             copy_zarr_metadata(

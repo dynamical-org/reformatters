@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from datetime import timedelta
 from functools import cached_property
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import pydantic
 from kubernetes import client, config
@@ -222,6 +222,10 @@ class CronJob(Job):
     schedule: Annotated[str, pydantic.Field(min_length=1)]
     ttl: timedelta = timedelta(hours=12)
     suspend: bool = False
+    # Virtual operational updates must use "Forbid": with "Replace", a poller
+    # still inside its publication window is killed by the next fire and two
+    # writers can briefly overlap on main (a concurrent-resize hazard).
+    concurrency_policy: Literal["Replace", "Forbid"] = "Replace"
 
     def as_kubernetes_object(self) -> dict[str, Any]:
         job_spec = super().as_kubernetes_object()["spec"]
@@ -238,7 +242,7 @@ class CronJob(Job):
             "spec": {
                 "schedule": self.schedule,
                 "suspend": self.suspend,
-                "concurrencyPolicy": "Replace",
+                "concurrencyPolicy": self.concurrency_policy,
                 "jobTemplate": {"spec": job_spec},
             },
         }
