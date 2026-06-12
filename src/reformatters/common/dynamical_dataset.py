@@ -482,8 +482,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
         for job in all_jobs:
             assert isinstance(job, VirtualRegionJob)
-            # Without "update" the job sweeps once instead of polling, silently
-            # ingesting nothing when the cron fires before publication starts.
             assert job.processing_mode == "update", (
                 "operational_update_jobs must construct jobs with processing_mode='update'"
             )
