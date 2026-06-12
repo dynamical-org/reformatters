@@ -188,10 +188,15 @@ class StoreFactory(FrozenBaseModel):
             repo_config, credentials = _virtual_repository_config_and_credentials(
                 self.icechunk_virtual_config
             )
-            repo = icechunk.Repository.open_or_create(
-                ic_storage,
-                config=repo_config,
-                authorize_virtual_chunk_access=credentials,
+            # Retry to resolve multiple workers racing to create a new repo
+            repo = retry(
+                functools.partial(
+                    icechunk.Repository.open_or_create,
+                    ic_storage,
+                    config=repo_config,
+                    authorize_virtual_chunk_access=credentials,
+                ),
+                max_attempts=3,
             )
             repos.append((role, repo))
 
