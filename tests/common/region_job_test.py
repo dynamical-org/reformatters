@@ -557,7 +557,8 @@ def test_get_jobs_many_shards_combined_filters() -> None:
     assert all(len(j.data_vars) == 2 for j in jobs)
     assert all(j.data_vars[0].name == "var0" for j in jobs)
     assert all(j.data_vars[1].name == "var1" for j in jobs)
-    assert [j.region for j in jobs] == [slice(i, i + 1) for i in expected_shard_indices]
+    # Sorted: get_jobs spreads regions across the append dim (see spread_evenly).
+    assert sorted(j.region.start for j in jobs) == expected_shard_indices
 
 
 # --- Edge case tests for get_jobs filtering ---
@@ -620,7 +621,9 @@ def _get_regions(
         filter_end=filter_end,
         filter_contains=filter_contains,
     )
-    return [j.region for j in jobs]
+    # Sort by start: get_jobs spreads regions across the append dim (see
+    # spread_evenly); these tests check which regions survive filtering, not order.
+    return sorted((j.region for j in jobs), key=lambda r: r.start)
 
 
 class TestFilterStartEdgeCases:

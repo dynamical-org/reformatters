@@ -27,7 +27,11 @@ from zarr.abc.store import Store
 
 from reformatters.common import storage
 from reformatters.common.config_models import DataVar
-from reformatters.common.iterating import dimension_slices, split_groups
+from reformatters.common.iterating import (
+    dimension_slices,
+    split_groups,
+    spread_evenly,
+)
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.types import (
@@ -396,6 +400,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     for i, r in enumerate(regions, start=start_shard)
                     if i in shard_indices
                 ]
+
+        # Spread regions so any contiguous worker-index window (the workers
+        # running concurrently) covers the whole append dim, not a clustered band.
+        regions = spread_evenly(regions)
 
         all_jobs = [
             cls(
