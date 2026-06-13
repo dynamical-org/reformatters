@@ -54,8 +54,8 @@ def spread_evenly[T](items: Sequence[T]) -> list[T]:
     Bit-reversal permutation. Concurrently-running workers occupy a contiguous
     worker-index window, so spreading the append-dim regions this way makes them
     process source files scattered across the range instead of a clustered band,
-    avoiding hot-spotting a few object-store prefixes. See "S3 prefix" in
-    docs/parallel_processing.md.
+    avoiding hot-spotting a few object-store prefixes. See "Append dim region
+    spreading" in docs/parallel_processing.md.
     """
     n = len(items)
     bits = max(1, (n - 1).bit_length())

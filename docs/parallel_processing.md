@@ -12,9 +12,9 @@ Work is split along two axes:
 
 The Cartesian product of regions and variable groups produces the full job list. Each worker gets every Nth job.
 
-### S3 prefix spreading
+### Append dim region spreading
 
-Regions are reordered with a bit-reversal permutation (`iterating.spread_evenly`) before the job list is built. Round-robin assignment makes worker N's first job region N, so the workers running concurrently (a contiguous index window) would otherwise all hit the same narrow band of the append dim at once — for a multi-year archive that clusters requests on a few source object-store prefixes, hot-spotting partitions that throttle (e.g. S3 503 SlowDown). Spreading the regions makes any contiguous worker window cover the whole append dim, so source-prefix load stays even across the run. The permutation is deterministic (every worker recomputes the same order) and concurrency-independent, so it needs nothing beyond the region count.
+Regions are reordered with a bit-reversal permutation (`iterating.spread_evenly`) before the job list is built. Round-robin assignment makes worker N's first job region N, so the workers running concurrently (a contiguous index window) would otherwise all hit the same narrow band of the append dim at once. For a multi-year archive that clusters source requests on a few object-store prefixes, hot-spotting partitions that throttle (e.g. S3 503 SlowDown). Spreading the regions makes any contiguous worker window cover the whole append dim, so source load stays even across the run. The permutation is deterministic (every worker recomputes the same order) and concurrency-independent, so it needs nothing beyond the region count.
 
 ## The worker-processing seam
 
