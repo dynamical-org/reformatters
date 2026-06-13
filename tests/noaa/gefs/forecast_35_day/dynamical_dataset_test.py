@@ -119,13 +119,7 @@ def test_backfill_local_and_operational_update(
         lambda self, end_time: shrink_chunks_and_shards(
             orig_get_template(end_time).sel(
                 lead_time=slice("0h", "3h"), ensemble_member=slice(0, 1)
-            ),
-            {
-                "ensemble_member": (2, 2),
-                "lead_time": (2, 2),
-                "latitude": (361, 361),
-                "longitude": (720, 1440),
-            },
+            )
         ),
     )
 

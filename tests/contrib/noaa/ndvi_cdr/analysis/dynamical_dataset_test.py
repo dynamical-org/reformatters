@@ -37,10 +37,7 @@ def test_backfill_local_and_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
     monkeypatch.setattr(
         type(dataset.template_config),
         "get_template",
-        lambda self, end_time: shrink_chunks_and_shards(
-            orig_get_template(end_time),
-            {"time": (4, 4), "latitude": (900, 1800), "longitude": (1800, 3600)},
-        ),
+        lambda self, end_time: shrink_chunks_and_shards(orig_get_template(end_time)),
     )
 
     # Dataset starts at 1981-06-24, test with a couple days after start

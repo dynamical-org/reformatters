@@ -43,10 +43,7 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(
         type(dataset.template_config),
         "get_template",
-        lambda self, end_time: shrink_chunks_and_shards(
-            orig_get_template(end_time),
-            {"time": (24, 24), "latitude": (361, 361), "longitude": (720, 1440)},
-        ),
+        lambda self, end_time: shrink_chunks_and_shards(orig_get_template(end_time)),
     )
 
     dataset.backfill_local(
