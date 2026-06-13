@@ -66,10 +66,8 @@ class GefsForecast10DaySpatialDataset(
             pod_active_deadline=timedelta(hours=2, minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
-            cpu="2",
-            memory="8G",
-            shared_memory="1G",
-            ephemeral_storage="10G",
+            cpu="1.7",
+            memory="7G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
         validation_cron_job = ValidationCronJob(
