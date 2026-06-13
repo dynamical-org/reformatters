@@ -1393,6 +1393,32 @@ backfills). For non-listable ordered sources (none yet), a frontier-prober slots
 into the same discover step. Measured `.idx` fetch throughput vs pool width: 8
 -> ~105 files/s, 32 -> ~310, 64 -> ~380 (chosen), 128 -> ~435.
 
+**Chunk-ref cache OOM (2026-06-12).** The first live operational update
+(manually fired mid-window) crash-looped through ~6 pods (8G each, lifetimes
+6–73 min, SIGKILL with no Python exception); each replacement pod resumed from
+the manifest within ~2–5 min and the init completed correctly — the
+restart-resilience design worked, but the kills needed a root cause. RSS-tracked
+replay (one init, ~300 commits): default icechunk config grows 461→1208 MB and
+*accelerating*; `CachingConfig(num_chunk_refs=0)` is flat 445→495 MB at equal
+throughput. Cause: every streaming commit rewrites the active manifest split
+(prod: week split ≈ 1.3M URL-bearing refs across vars) and the writer never
+reads old versions, so icechunk's default 5M-entry chunk-ref cache fills with
+dead manifest versions — multi-GB on virtual datasets. Fix: cap the chunk-ref
+cache in `_virtual_repository_config_and_credentials`. Sizing the cap (measured,
+not tuned to this one dataset): `num_chunk_refs=0` is flat but logs a "cache too
+small" WARN on every manifest load (Sentry spam); `1.3M` rises then *plateaus*
+~720 MB as eviction kicks in (bounded). A virtual ref ≈ 180 bytes (S3 URL +
+offset + length), so the chosen **1M-ref cap ≈ 200 MB** ceiling — a fixed,
+dataset-agnostic budget that holds a working set, stays bounded, and silences
+the warning. Existence checks (`filter_already_present`, ~2,511 candidates
+against the real prod month-store) are *cache-insensitive*: flat 2.5–2.6 s from
+0 to 5M, because the fire opens a cold cache and the cost is the async manifest
+fetches, not retention. Side finding: Sentry
+marks the monitor `timeout` once `max_runtime` passes even if a late `ok`
+arrives, and per-pod `in_progress` re-checkins share one `check_in_id`, so a
+crash-looping run looks like a single long run in Sentry crons — `pod_name` on
+log attributes is what revealed the restarts.
+
 ### Publication timing measurements (2026-06-11)
 
 Measured from S3 object `LastModified` over 6–10 recent inits (2026-06-09..11).

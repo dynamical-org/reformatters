@@ -424,6 +424,9 @@ class TestIcechunkVirtualConfig:
         assert manifest is not None
         assert manifest.splitting is not None
         assert manifest.splitting.split_sizes
+        caching = repo.config.caching
+        assert caching is not None
+        assert caching.num_chunk_refs == 1_000_000
 
     def test_unsupported_container_rejected(self) -> None:
         gcs_container = icechunk.VirtualChunkContainer(
