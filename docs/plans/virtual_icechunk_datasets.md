@@ -1160,10 +1160,48 @@ issue **#513** (its body holds the PR checklist; items are written "PR 1" not
 | PR 4 — first concrete virtual dataset | **open** (#656) | `noaa-gefs-forecast-10-day-spatial-dev`: 4 inits/day, 0-240h, native 0.25° s-file grid, the 35-day vars available in s files (19). `-dev` suffix: a throwaway operational test; dataset structure questions are deliberately deferred. |
 | PR 5 — persist container config | not started | `save_config()` on container drift; before first *externally published* virtual repo (first datasets run in prod unpublished). |
 | PR 6 — second concrete virtual dataset | not started | Different provider, proves abstractions generalize. |
-| PR 7 — validation phase | not started | Spatial-chunk validators + offline tooling. |
+| PR 7 — extract common patterns into `VirtualRegionJob` | not started | With two concrete datasets in hand, lift the shared machinery out of the subclasses (see "Extracting common patterns" below). |
+| PR 8 — validation phase | not started | Spatial-chunk validators + offline tooling. |
 
 PR 3 was originally one combined PR (#648) but was resequenced into 3a + 3b after
 the [B-method](#decision-b-method) design review; #648 is closed/superseded by #650.
+
+### Extracting common patterns (PR 7)
+
+The first virtual dataset (`noaa-gefs-forecast-10-day-spatial-dev`, PR 4) was
+built deliberately concrete: the whole discover → fetch → build-refs → batch →
+yield loop lives in the dataset's `RegionJob`, not the base, because we didn't
+yet know which parts generalize. Building the second virtual dataset (PR 6) is
+what reveals the real seam, so the extraction is sequenced **after** it — lifting
+shared machinery into `VirtualRegionJob` only once two implementations agree on
+its shape, rather than guessing from one.
+
+Candidates observed in the GEFS implementation that look common, not
+GEFS-specific (confirm against the second dataset before lifting):
+
+- **The tick loop** (`process_virtual_refs`): per-tick discover-diff-fetch-yield,
+  the backfill single-sweep vs update poll-until-empty fork, and the
+  `tick_interval` pacing. The dataset-specific part is only *how* a file's refs
+  are built; the loop shape is generic.
+- **Listing-based availability** (`_discover_available`): "a file is available
+  once its data and index objects are both listed, mapped to the data size."
+  Object-store listing is generic; the data/index key relationship is the
+  dataset's to define.
+- **Per-file ref resolution with unreadable-file skipping**: a file that can't be
+  turned into refs (corrupt/stale index — see "Skip source files…", a decode
+  surprise, a transient read error) returns no refs and is dropped from the
+  batch so its chunks stay fill and validation surfaces the gap. The broad
+  per-file `try/except` (re-raising `AssertionError`, logging, skipping) is the
+  virtual analog of `MaterializedRegionJob`'s `download_file`/`read_data` error
+  handling and belongs on the base. The stale-index *detection* (max byte offset
+  vs file size) is index-format-specific and stays with the dataset's ref
+  builder.
+- **The `_file_refs` seam itself**: today an unenforced GEFS convention. PR 7
+  should make it (or a better-named equivalent) the formal per-file method the
+  base loop calls, the way materialized has `download_file`/`read_data`.
+
+Do not over-fit to GEFS: keep anything that's genuinely one provider's quirk
+(NOAA `.idx` parsing, the s-file var subsetting) in the subclass.
 
 ### Decision log
 
@@ -1286,7 +1324,7 @@ not a framework-level rule.
 chunks for partially-published inits are expected) and `compare_replica_and_primary`
 (it would S3-fetch + GRIB-decode every compared chunk — the exact decode-in-steady-
 state cost the design avoids). Both are skipped for virtual; a manifest-aware
-virtual validator is deferred to the validation PR (#513 PR 7). The replica
+virtual validator is deferred to the validation PR (#513 PR 8). The replica
 comparator skip is latent until a virtual dataset gets a replica, but is removed
 now so it can't fire decode-heavy when that day comes.
 
@@ -1481,7 +1519,8 @@ The remaining work is now sequenced as formal PRs in the
 **PR #4** (first concrete `-spatial` dataset — pick from
 [candidates](#candidate-first-datasets)), **PR #5** (persist container config via
 `save_config()` before the first externally published virtual repo), **PR #6**
-(second dataset), **PR #7** (validation).
+(second dataset), **PR #7** (extract common patterns into `VirtualRegionJob`),
+**PR #8** (validation).
 
 ## Spike results
 
