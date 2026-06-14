@@ -137,10 +137,10 @@ class GefsForecast10DaySpatialRegionJob(
                 if available:
                     coords = [pending[key] for key in available]
                     refs_per_file = pool.map(
-                        self._file_refs, coords, available.values()
+                        self._file_refs_or_skip, coords, available.values()
                     )
-                    # Files with no refs were skipped (stale/mismatched index); drop
-                    # them so a batch never carries a file with no chunks.
+                    # Files with no refs were skipped (unreadable source); drop them
+                    # so a batch never carries a file with no chunks.
                     batch = [
                         (coord, refs)
                         for coord, refs in zip(coords, refs_per_file, strict=True)
@@ -182,6 +182,21 @@ class GefsForecast10DaySpatialRegionJob(
             for key in pending
             if key in listed and f"{key}.idx" in listed
         }
+
+    def _file_refs_or_skip(
+        self, coord: GefsForecast10DaySpatialSourceFileCoord, file_size: int
+    ) -> list[VirtualRef]:
+        # Skip a file we can't turn into refs (a decode surprise, a transient read
+        # error) rather than sink the whole job; its chunks stay fill and validation
+        # surfaces the gap. AssertionError is our own invariant, so it propagates.
+        # PR 7 lifts this onto VirtualRegionJob; see docs/plans/virtual_icechunk_datasets.md.
+        try:
+            return self._file_refs(coord, file_size)
+        except AssertionError:
+            raise
+        except Exception:
+            log.exception(f"Skipping {coord.get_url()}: could not build virtual refs")
+            return []
 
     def _file_refs(
         self, coord: GefsForecast10DaySpatialSourceFileCoord, file_size: int
