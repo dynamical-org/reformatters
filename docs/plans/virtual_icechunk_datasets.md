@@ -1200,6 +1200,38 @@ GEFS-specific (confirm against the second dataset before lifting):
   should make it (or a better-named equivalent) the formal per-file method the
   base loop calls, the way materialized has `download_file`/`read_data`.
 
+**A possible seam shape** (sketched in the "Tick-loop design settled" discussion
+below — a direction to weigh against PR 6, *not* a committed API). Lift the loop
+onto the base and have it drive two per-dataset methods:
+
+- `discover(pending) -> available` — the subset of pending source files ready to
+  fetch now. GEFS does a **listing diff** (data + index both listed). A
+  non-listable or strongly rate-limited source could instead **walk/probe
+  expected files in publication order** (a "frontier prober"); a backfill could
+  assume-all. The loop is indifferent to which.
+- `file_refs(coord) -> refs` — build one file's virtual refs, with the
+  unreadable-file skipping above.
+
+The base owns everything between them:
+
+```python
+while pending and now() < poll_until:        # backfill: single pass; update: until empty / deadline
+    tick_start = monotonic()
+    available = self.discover(pending)        # subset of pending, ready now
+    if available:
+        refs = [r for f in pool.map(self.file_refs, available) for r in f]
+        pending -= available
+        yield refs                            # never empty (gated on available)
+    sleep(max(0.0, tick_interval - (monotonic() - tick_start)))
+```
+
+The per-dataset knobs (`tick_interval`, `download_concurrency`, backfill-vs-update)
+parameterize this one skeleton rather than forking it. Where a sub-step is broadly
+useful but not universal (object-store listing diff, the data+index availability
+rule, the index-byte-range parse), prefer a **utility implementations opt into**
+over a forced base method — "if [patterns] are common, we make them into utilities
+that implementations can pick from."
+
 Do not over-fit to GEFS: keep anything that's genuinely one provider's quirk
 (NOAA `.idx` parsing, the s-file var subsetting) in the subclass.
 
