@@ -10,7 +10,6 @@ import xarray as xr
 from zarr.abc.store import Store
 
 from reformatters.common.download import s3_download_to_disk, s3_store
-from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob
 from reformatters.common.types import AppendDim, DatetimeLike, Timedelta
@@ -190,47 +189,46 @@ class GefsForecast10DaySpatialRegionJob(
         index_path = s3_download_to_disk(
             coord.get_index_url(), self.dataset_id, region=_S3_BUCKET_REGION
         )
-        location = coord.get_url()
         try:
-            # A matching index never references bytes past the data file. When it does,
-            # the source was re-published without regenerating the index (or vice versa)
-            # and every offset is suspect, so skip the whole file (its chunks stay fill).
-            # Returning no refs is the caller's signal to drop the file from the batch.
-            byte_offsets = [
-                int(line.split(":", 2)[1])
-                for line in index_path.read_text().splitlines()
-                if line.strip()
-            ]
-            if byte_offsets and max(byte_offsets) >= file_size:
-                log.warning(
-                    f"Skipping {location}: index references byte {max(byte_offsets)} "
-                    f">= data file size {file_size}; stale or mismatched index"
-                )
-                return []
-
-            out_loc = coord.out_loc()
-            refs = []
-            for var in coord.data_vars:
-                starts, ends = grib_message_byte_ranges_from_index(
-                    index_path, [var], coord.init_time, coord.lead_time
-                )
-                start, end = item(zip(starts, ends, strict=True))
-                if end - start >= GRIB_INDEX_UNKNOWN_END_PAD:
-                    # Last message in the file; the index doesn't know its end byte.
-                    end = file_size
-                refs.append(
-                    VirtualRef(
-                        data_var=var,
-                        out_loc=out_loc,
-                        location=location,
-                        offset=start,
-                        length=end - start,
-                    )
-                )
-            return refs
+            starts, ends = grib_message_byte_ranges_from_index(
+                index_path, coord.data_vars, coord.init_time, coord.lead_time
+            )
         finally:
             # Index files accumulate by the millions in backfills; never keep them.
             index_path.unlink()
+
+        # The last message in the file has no end byte in the index; the listed
+        # file size supplies it.
+        ends = [
+            file_size if end - start >= GRIB_INDEX_UNKNOWN_END_PAD else end
+            for start, end in zip(starts, ends, strict=True)
+        ]
+        # A matching index never references bytes past the data file. When it does, the
+        # source was re-published without regenerating the index and the offsets are
+        # unusable, so skip the whole file (its chunks stay fill). Returning no refs is
+        # the caller's signal to drop the file from the batch.
+        if any(
+            end > file_size or end <= start
+            for start, end in zip(starts, ends, strict=True)
+        ):
+            log.warning(
+                f"Skipping {coord.get_url()}: index byte ranges fall outside the "
+                f"{file_size}-byte data file; stale or mismatched index"
+            )
+            return []
+
+        out_loc = coord.out_loc()
+        location = coord.get_url()
+        return [
+            VirtualRef(
+                data_var=var,
+                out_loc=out_loc,
+                location=location,
+                offset=start,
+                length=end - start,
+            )
+            for var, start, end in zip(coord.data_vars, starts, ends, strict=True)
+        ]
 
     def representative_var(
         self, coord: GefsForecast10DaySpatialSourceFileCoord
