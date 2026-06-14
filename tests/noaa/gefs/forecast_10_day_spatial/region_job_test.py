@@ -195,7 +195,8 @@ def _coord(
 
 def _fake_index_download(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
-        index_path = tmp_path / "index.idx"
+        # Unique per url so concurrent _file_refs don't clobber each other's file.
+        index_path = tmp_path / (url.rsplit("/", 1)[-1] + ".idx")
         index_path.write_text(_INDEX_CONTENT)
         return index_path
 
@@ -290,6 +291,48 @@ def test_process_virtual_refs_update_polls_until_all_ingested(
     ]
     # Slept between ticks (after ticks 1 and 2, not after the final tick).
     assert len(sleeps) == 2
+
+
+def test_file_refs_skips_file_whose_index_points_past_eof(
+    template_ds: xr.Dataset, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars=data_vars)
+    _fake_index_download(monkeypatch, tmp_path)  # index's last message starts at 2500
+    coord = _coord(1, data_vars)
+    # A matching (larger) file resolves refs.
+    assert job._file_refs(coord, file_size=9000)
+    # A file smaller than the index's max offset is stale/mismatched -> no refs.
+    assert job._file_refs(coord, file_size=2000) == []
+
+
+def test_process_virtual_refs_drops_files_with_stale_index(
+    template_ds: xr.Dataset, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars=data_vars)
+    _fake_index_download(monkeypatch, tmp_path)
+    member1 = f"{_PREFIX}gep01.t00z.pgrb2s.0p25.f003"
+    member2 = f"{_PREFIX}gep02.t00z.pgrb2s.0p25.f003"
+    # member1's listed size (2000) is below the index's max offset (2500) -> skipped.
+    monkeypatch.setattr(
+        region_job_module,
+        "_list_objects",
+        lambda prefix: {
+            member1: 2000,
+            f"{member1}.idx": 200,
+            member2: 9000,
+            f"{member2}.idx": 200,
+        },
+    )
+
+    batches = list(
+        job.process_virtual_refs([_coord(1, data_vars), _coord(2, data_vars)])
+    )
+
+    (batch,) = batches
+    ((coord, _refs),) = batch
+    assert coord.ensemble_member == 2  # member1 dropped, only member2 ingested
 
 
 def test_discover_available_requires_data_and_index(
