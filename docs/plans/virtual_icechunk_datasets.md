@@ -1157,7 +1157,7 @@ issue **#513** (its body holds the PR checklist; items are written "PR 1" not
 | PR 3c — move-only refactor | **merged** (#653) | Split `region_job.py` → `virtual_region_job.py` + `materialized_region_job.py`. |
 | PR 3d — move `process()` onto `MaterializedRegionJob` | **merged** (#654) | Removes the base `process()` stub; materialized `process_worker_jobs` narrows its jobs. |
 | PR 3e — consolidate processing-loop docs | **merged** (#655) | `docs/virtual_datasets.md` + seam section in `docs/parallel_processing.md`, linked from code. |
-| PR 4 — first concrete virtual dataset | **open** (#656) | `noaa-gefs-forecast-10-day-spatial-dev`: 4 inits/day, 0-240h, native 0.25° s-file grid, the 35-day vars available in s files (19). `-dev` suffix: a throwaway operational test; dataset structure questions are deliberately deferred. |
+| PR 4 — first concrete virtual dataset | **merged** (#656; fixes #658 #659) | `noaa-gefs-forecast-10-day-spatial-dev`: 4 inits/day, 0-240h, native 0.25° s-file grid, the 35-day vars available in s files (19). `-dev` suffix: a throwaway operational test; dataset structure questions are deliberately deferred. Month-long prod backfill (2026-05-12 06z – 2026-06-12 06z, 32 k8s workers) published 2026-06-12; spot checks (independent GRIB decodes vs store, null patterns, coverage) all passed. Crons unsuspended to start the operational test. |
 | PR 5 — persist container config | not started | `save_config()` on container drift; before first *externally published* virtual repo (first datasets run in prod unpublished). |
 | PR 6 — second concrete virtual dataset | not started | Different provider, proves abstractions generalize. |
 | PR 7 — validation phase | not started | Spatial-chunk validators + offline tooling. |
