@@ -140,13 +140,23 @@ class GefsForecast10DaySpatialRegionJob(
                     refs_per_file = pool.map(
                         self._file_refs, coords, available.values()
                     )
-                    batch = list(zip(coords, refs_per_file, strict=True))
+                    # Files with no refs were skipped (stale/mismatched index); drop
+                    # them so a batch never carries a file with no chunks.
+                    batch = [
+                        (coord, refs)
+                        for coord, refs in zip(coords, refs_per_file, strict=True)
+                        if refs
+                    ]
                     for key in available:
                         del pending[key]
+                    skipped = len(coords) - len(batch)
                     log.info(
-                        f"Ingesting {len(coords)} files, {len(pending)} still pending"
+                        f"Ingesting {len(batch)} files"
+                        f"{f' ({skipped} skipped)' if skipped else ''}, "
+                        f"{len(pending)} still pending"
                     )
-                    yield batch
+                    if batch:
+                        yield batch
                 if self.processing_mode == "backfill":
                     if pending:
                         log.info(
@@ -181,28 +191,46 @@ class GefsForecast10DaySpatialRegionJob(
             coord.get_index_url(), self.dataset_id, region=_S3_BUCKET_REGION
         )
         location = coord.get_url()
-        out_loc = coord.out_loc()
-        refs = []
-        for var in coord.data_vars:
-            starts, ends = grib_message_byte_ranges_from_index(
-                index_path, [var], coord.init_time, coord.lead_time
-            )
-            start, end = item(zip(starts, ends, strict=True))
-            if end - start >= GRIB_INDEX_UNKNOWN_END_PAD:
-                # Last message in the file; the index doesn't know its end byte.
-                end = file_size
-            refs.append(
-                VirtualRef(
-                    data_var=var,
-                    out_loc=out_loc,
-                    location=location,
-                    offset=start,
-                    length=end - start,
+        try:
+            # A matching index never references bytes past the data file. When it does,
+            # the source was re-published without regenerating the index (or vice versa)
+            # and every offset is suspect, so skip the whole file (its chunks stay fill).
+            # Returning no refs is the caller's signal to drop the file from the batch.
+            byte_offsets = [
+                int(line.split(":", 2)[1])
+                for line in index_path.read_text().splitlines()
+                if line.strip()
+            ]
+            if byte_offsets and max(byte_offsets) >= file_size:
+                log.warning(
+                    f"Skipping {location}: index references byte {max(byte_offsets)} "
+                    f">= data file size {file_size}; stale or mismatched index"
                 )
-            )
-        # Index files accumulate by the millions in backfills; never keep them.
-        index_path.unlink()
-        return refs
+                return []
+
+            out_loc = coord.out_loc()
+            refs = []
+            for var in coord.data_vars:
+                starts, ends = grib_message_byte_ranges_from_index(
+                    index_path, [var], coord.init_time, coord.lead_time
+                )
+                start, end = item(zip(starts, ends, strict=True))
+                if end - start >= GRIB_INDEX_UNKNOWN_END_PAD:
+                    # Last message in the file; the index doesn't know its end byte.
+                    end = file_size
+                refs.append(
+                    VirtualRef(
+                        data_var=var,
+                        out_loc=out_loc,
+                        location=location,
+                        offset=start,
+                        length=end - start,
+                    )
+                )
+            return refs
+        finally:
+            # Index files accumulate by the millions in backfills; never keep them.
+            index_path.unlink()
 
     def representative_var(
         self, coord: GefsForecast10DaySpatialSourceFileCoord
