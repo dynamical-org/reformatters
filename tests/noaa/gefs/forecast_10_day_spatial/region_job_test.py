@@ -13,6 +13,7 @@ from gribberish import (
     parse_grib_message_metadata,  # ty: ignore[unresolved-import] - native module member
 )
 
+from reformatters.common.virtual_region_job import VirtualRef
 from reformatters.noaa.gefs.forecast_10_day_spatial import (
     region_job as region_job_module,
 )
@@ -333,6 +334,35 @@ def test_process_virtual_refs_drops_files_with_stale_index(
     (batch,) = batches
     ((coord, _refs),) = batch
     assert coord.ensemble_member == 2  # member1 dropped, only member2 ingested
+
+
+def test_file_refs_or_skip_swallows_unexpected_errors(
+    template_ds: xr.Dataset, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = make_job(template_ds, data_vars=[get_var("temperature_2m")])
+    coord = _coord(1, [get_var("temperature_2m")])
+
+    def boom(*args: object, **kwargs: object) -> list[VirtualRef]:
+        raise RuntimeError("network blip")
+
+    monkeypatch.setattr(job, "_file_refs", boom)
+    # An unexpected per-file error skips the file (no refs) rather than raising.
+    assert job._file_refs_or_skip(coord, 9000) == []
+
+
+def test_file_refs_or_skip_propagates_assertion_errors(
+    template_ds: xr.Dataset, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = make_job(template_ds, data_vars=[get_var("temperature_2m")])
+    coord = _coord(1, [get_var("temperature_2m")])
+
+    def bad_invariant(*args: object, **kwargs: object) -> list[VirtualRef]:
+        raise AssertionError("our own invariant")
+
+    monkeypatch.setattr(job, "_file_refs", bad_invariant)
+    # Assertion failures are our own bugs and must surface, not be swallowed.
+    with pytest.raises(AssertionError, match="our own invariant"):
+        job._file_refs_or_skip(coord, 9000)
 
 
 def test_discover_available_requires_data_and_index(
