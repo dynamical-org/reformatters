@@ -218,11 +218,7 @@ class StoreFactory(FrozenBaseModel):
 
     def persist_virtual_config(self) -> None:
         """Persist the in-code virtual chunk container set into each icechunk repo so
-        external readers recover it via Repository.fetch_config and need only supply the
-        anonymous authorize map at open (credentials are never persisted). No-op for
-        materialized datasets. Single-writer: call once from parallel_setup. Repointing a
-        container (same url_prefix, new backend) is a deliberate admin re-save; see "PR 5"
-        in docs/plans/virtual_icechunk_datasets.md.
+        external readers don't need to provide it manually. No-op for materialized datasets.
         """
         if self.icechunk_virtual_config is None:
             return
