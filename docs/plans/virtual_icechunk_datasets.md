@@ -1082,20 +1082,48 @@ in production *unpublished* (not exposed to external readers) as a thorough
 shakeout before the architecture is called settled, so the `fetch_config` reader
 path this fixes isn't yet load-bearing. The constraint is "before the first
 **externally published** virtual repo," not before the first prod write.
-`Repository.create`
-persists the virtual-chunk container config, but nothing calls
-`repo.save_config()` afterward, so a later in-code container change affects only
-the writing process — an external reader recovering containers via `fetch_config`
-(the "Reader experience" / "En-masse repoint" promises) sees the creation-time
-set forever. Fix: call `save_config()` from the writable-open path when the
-in-code config differs, or document an explicit ops-card procedure.
+
+The problem: nothing was persisted *into* the repo. Every open — writer and
+reader — passed an in-memory `config=` override
+(`_virtual_repository_config_and_credentials`), which works only because *we*
+always supply it. An external reader opening with no override got
+`RepositoryConfig.default()` (zero containers) → every virtual read raised "you
+need to authorize the virtual chunk container."
+
+Implemented: `StoreFactory.persist_virtual_config()`, called once from
+`parallel_setup`'s worker-0 (`is_first`) branch — the single-writer chokepoint,
+which avoids the `RepositoryConfig.previous_file` optimistic-concurrency race a
+per-worker save would hit. It is **drift-gated**: `Repository.fetch_config` (a
+storage read, guarded by `Repository.exists` because `fetch_config` raises on a
+not-yet-created repo) compares the persisted container `url_prefix` set to the
+in-code set and only re-saves on a difference. No-op for materialized datasets.
+
+Decisions (icechunk 2.0.5, spiked):
+- **`save_config(self)` takes no args** — it persists *the repo's open-time
+  config*. The worker-0 repo is opened with the full override, so the persisted
+  config is containers + manifest_split + caching.
+- **`Repository.open(config=override)` merges field-by-field onto the persisted
+  config** (verified: a no-container override still recovered the persisted
+  containers). So (a) our writers' override keeps working unchanged once we
+  persist, and (b) persisting the full config including
+  `caching(num_chunk_refs=1M)` is benign — a reader who cares overrides it, and
+  1M is a *safer* default than icechunk's 5M (the value behind the original OOM).
+  We persist the whole config rather than a lean subset.
+- **Drift is keyed on `url_prefix` only.** Repointing a container (same prefix,
+  new backend) is a deliberate admin action paired with an explicit re-save, not
+  something the runtime diff detects.
 
 ### PR #6 — Second concrete virtual dataset
 
 Different provider (NOAA ↔ ECMWF) to prove the abstractions generalize; refine
 `VirtualRegionJob` defaults from what it needs.
 
-### PR #7 — Validation phase
+### PR #7 — Extract common patterns into `VirtualRegionJob`
+
+Sequenced after PR #6 so the seam is drawn from two implementations, not guessed
+from one. See [Extracting common patterns (PR 7)](#extracting-common-patterns-pr-7).
+
+### PR #8 — Validation phase
 
 Two sub-phases, sequenced after the first datasets are operationally stable:
 
@@ -1158,7 +1186,7 @@ issue **#513** (its body holds the PR checklist; items are written "PR 1" not
 | PR 3d — move `process()` onto `MaterializedRegionJob` | **merged** (#654) | Removes the base `process()` stub; materialized `process_worker_jobs` narrows its jobs. |
 | PR 3e — consolidate processing-loop docs | **merged** (#655) | `docs/virtual_datasets.md` + seam section in `docs/parallel_processing.md`, linked from code. |
 | PR 4 — first concrete virtual dataset | **merged** (#656; fixes #658 #659) | `noaa-gefs-forecast-10-day-spatial-dev`: 4 inits/day, 0-240h, native 0.25° s-file grid, the 35-day vars available in s files (19). `-dev` suffix: a throwaway operational test; dataset structure questions are deliberately deferred. Month-long prod backfill (2026-05-12 06z – 2026-06-12 06z, 32 k8s workers) published 2026-06-12; spot checks (independent GRIB decodes vs store, null patterns, coverage) all passed. Crons unsuspended to start the operational test. |
-| PR 5 — persist container config | not started | `save_config()` on container drift; before first *externally published* virtual repo (first datasets run in prod unpublished). |
+| PR 5 — persist container config | in progress | `save_config()` on container drift in `parallel_setup`; before first *externally published* virtual repo (first datasets run in prod unpublished). |
 | PR 6 — second concrete virtual dataset | not started | Different provider, proves abstractions generalize. |
 | PR 7 — extract common patterns into `VirtualRegionJob` | not started | With two concrete datasets in hand, lift the shared machinery out of the subclasses (see "Extracting common patterns" below). |
 | PR 8 — validation phase | not started | Spatial-chunk validators + offline tooling. |
