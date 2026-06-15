@@ -1083,12 +1083,27 @@ shakeout before the architecture is called settled, so the `fetch_config` reader
 path this fixes isn't yet load-bearing. The constraint is "before the first
 **externally published** virtual repo," not before the first prod write.
 
-The problem: nothing was persisted *into* the repo. Every open — writer and
-reader — passed an in-memory `config=` override
-(`_virtual_repository_config_and_credentials`), which works only because *we*
-always supply it. An external reader opening with no override got
-`RepositoryConfig.default()` (zero containers) → every virtual read raised "you
-need to authorize the virtual chunk container."
+The problem: the container *registrations* weren't persisted *into* the repo.
+Reading a virtual chunk needs two **separate** things, and only the first is
+persistable:
+
+1. The container **registered** — `set_virtual_chunk_container(VCC)`, the
+   `url_prefix` → backend-store mapping. Refs are stored relative to it, so it
+   must be present for the repo to resolve them. Part of `RepositoryConfig`;
+   persistable via `save_config`.
+2. The container **authorized** at open — `authorize_virtual_chunk_access={prefix:
+   creds}`, the credentials + explicit read-time grant. This is icechunk's
+   security boundary: it is **never** persisted and the reader must pass it on
+   every open, no matter what the repo creator wrote.
+
+We only ever supplied the registrations in-memory through the `config=` override,
+so an external reader opening with just an authorize map and no override has no
+registered containers and can't resolve the refs — and would have to reconstruct
+and `set_virtual_chunk_container` our exact config themselves, defeating the
+minimal-published-surface goal. Persisting does **not** remove the authorize
+requirement (nothing can); it removes the need for the reader to *register*. They
+recover the registrations from the repo via `fetch_config` on a plain
+`Repository.open(storage)` and supply only the anonymous authorize map.
 
 Implemented: `StoreFactory.persist_virtual_config()`, called once from
 `parallel_setup`'s worker-0 (`is_first`) branch — the single-writer chokepoint,
