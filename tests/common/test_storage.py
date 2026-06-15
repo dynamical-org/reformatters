@@ -479,6 +479,83 @@ class TestIcechunkVirtualConfig:
         assert not repo.config.virtual_chunk_containers
 
 
+def _spy_save_config(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Record each Repository.save_config call while still performing it."""
+    calls: list[int] = []
+    real = icechunk.Repository.save_config
+
+    def spy(self: icechunk.Repository) -> None:
+        calls.append(1)
+        real(self)
+
+    monkeypatch.setattr(icechunk.Repository, "save_config", spy)
+    return calls
+
+
+class TestPersistVirtualConfig:
+    def _virtual_factory(
+        self, tmp_path: str, *, prefix: str = "file:///data/"
+    ) -> StoreFactory:
+        container = icechunk.VirtualChunkContainer(
+            prefix, icechunk.local_filesystem_store("/data/")
+        )
+        return StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+            icechunk_virtual_config=IcechunkVirtualConfig(
+                containers=(container,),
+                manifest_split=manifest_append_dim_split(split_size=1, dim="init_time"),
+            ),
+        )
+
+    def test_persists_container_set_for_reader_recovery(self, tmp_path: str) -> None:
+        factory = self._virtual_factory(tmp_path)
+        factory.persist_virtual_config()
+        # A reader opens with no config override and still recovers the containers.
+        _role, _path, storage = factory._icechunk_storages()[0]
+        fetched = icechunk.Repository.fetch_config(storage)
+        assert fetched is not None
+        assert fetched.virtual_chunk_containers is not None
+        assert "file:///data/" in fetched.virtual_chunk_containers
+
+    def test_is_drift_gated_idempotent(
+        self, tmp_path: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        factory = self._virtual_factory(tmp_path)
+        calls = _spy_save_config(monkeypatch)
+        factory.persist_virtual_config()
+        factory.persist_virtual_config()  # containers unchanged -> no second save
+        assert calls == [1]
+
+    def test_resaves_on_container_change(
+        self, tmp_path: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._virtual_factory(tmp_path).persist_virtual_config()
+        calls = _spy_save_config(monkeypatch)
+        # Same store, different container set -> drift -> save again.
+        self._virtual_factory(
+            tmp_path, prefix="file:///other/"
+        ).persist_virtual_config()
+        assert calls == [1]
+
+    def test_noop_for_materialized(
+        self, tmp_path: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+        )
+        calls = _spy_save_config(monkeypatch)
+        factory.persist_virtual_config()
+        assert calls == []
+
+
 class TestBranchSupport:
     def test_icechunk_store_opens_on_specified_branch(self) -> None:
         factory = StoreFactory(

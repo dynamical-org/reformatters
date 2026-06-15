@@ -87,6 +87,8 @@ def parallel_setup(
                 ic_stores[0],
                 ic_stores[1:],
             )
+            # Persist virtual chunk containers so repo stays in sync with in-code config
+            store_factory.persist_virtual_config()
         # Zarr v3: do NOT expand (readers would see empty holes)
 
         if workers_total > 1:

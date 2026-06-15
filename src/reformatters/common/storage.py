@@ -160,6 +160,29 @@ class StoreFactory(FrozenBaseModel):
         replicas = tuple(repo for role, repo in repos if role != "primary")
         return primaries[0], replicas
 
+    def _icechunk_storages(self) -> list[tuple[str, str, icechunk.Storage]]:
+        """(role, store_path, storage) for each icechunk store, primary first then
+        replicas (replicas skipped in dev, matching replica_stores)."""
+        all_configs = [
+            ("primary", self.primary_storage_config),
+            *[
+                (f"replica-{i}", config)
+                for i, config in enumerate(self.replica_storage_configs)
+            ],
+        ]
+        if Config.is_dev:
+            all_configs = [all_configs[0]]
+
+        storages: list[tuple[str, str, icechunk.Storage]] = []
+        for role, config in all_configs:
+            if config.format != DatasetFormat.ICECHUNK:
+                continue
+            store_path = _get_store_path(self.dataset_id, self.version, config)
+            storages.append(
+                (role, store_path, _get_icechunk_storage(store_path, config))
+            )
+        return storages
+
     def icechunk_repos(
         self, *, sort: Literal["primary-first", "primary-last"]
     ) -> list[tuple[str, icechunk.Repository]]:
@@ -168,26 +191,11 @@ class StoreFactory(FrozenBaseModel):
         `role` uniquely identifies the repo within this StoreFactory:
         "primary" for the primary store, "replica-0", "replica-1", ... for replicas.
         """
+        repo_config, credentials = _virtual_repository_config_and_credentials(
+            self.icechunk_virtual_config
+        )
         repos: list[tuple[str, icechunk.Repository]] = []
-        all_configs = [
-            ("primary", self.primary_storage_config),
-            *[
-                (f"replica-{i}", config)
-                for i, config in enumerate(self.replica_storage_configs)
-            ],
-        ]
-        # In dev, skip replicas (same as replica_stores behavior)
-        if Config.is_dev:
-            all_configs = [all_configs[0]]
-
-        for role, config in all_configs:
-            if config.format != DatasetFormat.ICECHUNK:
-                continue
-            store_path = _get_store_path(self.dataset_id, self.version, config)
-            ic_storage = _get_icechunk_storage(store_path, config)
-            repo_config, credentials = _virtual_repository_config_and_credentials(
-                self.icechunk_virtual_config
-            )
+        for role, _store_path, ic_storage in self._icechunk_storages():
             # Retry to resolve multiple workers racing to create a new repo
             repo = retry(
                 functools.partial(
@@ -207,6 +215,36 @@ class StoreFactory(FrozenBaseModel):
                 return sorted(repos, key=lambda r: r[0] == "primary")
             case _ as unreachable:
                 assert_never(unreachable)
+
+    def persist_virtual_config(self) -> None:
+        """Persist the in-code virtual chunk container set into each icechunk repo so
+        external readers don't need to provide it manually. No-op for materialized datasets.
+        """
+        if self.icechunk_virtual_config is None:
+            return
+        in_code_prefixes = {
+            container.url_prefix
+            for container in self.icechunk_virtual_config.containers
+        }
+        repo_config, credentials = _virtual_repository_config_and_credentials(
+            self.icechunk_virtual_config
+        )
+        for role, store_path, ic_storage in self._icechunk_storages():
+            if icechunk.Repository.exists(ic_storage):
+                persisted = icechunk.Repository.fetch_config(ic_storage)
+                if (
+                    persisted is not None
+                    and set(persisted.virtual_chunk_containers or ())
+                    == in_code_prefixes
+                ):
+                    continue
+            repo = icechunk.Repository.open_or_create(
+                ic_storage,
+                config=repo_config,
+                authorize_virtual_chunk_access=credentials,
+            )
+            repo.save_config()
+            log.info(f"Persisted virtual chunk container config to {role} {store_path}")
 
     def _coordination_base_path(self) -> str:
         if Config.is_prod:

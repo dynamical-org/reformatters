@@ -29,6 +29,10 @@ class FakeStoreFactory:
         }
         self._primary_store: object = MagicMock(name="primary_zarr3_store")
         self._replica_stores: list[object] = []
+        self.persist_virtual_config_calls = 0
+
+    def persist_virtual_config(self) -> None:
+        self.persist_virtual_config_calls += 1
 
     def set_icechunk_repos(self, ordered: list[tuple[str, FakeRepo]]) -> None:
         self._icechunk_repos_by_sort["primary-first"] = list(ordered)
@@ -224,6 +228,9 @@ class TestParallelSetupFirstWorker:
             primary_session.store,
             [replica_session.store],
         )
+
+        # Worker 0 persists the virtual container config once after expanding.
+        assert factory.persist_virtual_config_calls == 1
 
         # ready.json records the snapshot per role.
         ready = json.loads(factory.files["job"]["setup/ready.json"])
