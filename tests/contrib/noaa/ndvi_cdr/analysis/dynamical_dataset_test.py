@@ -13,6 +13,7 @@ from reformatters.contrib.noaa.ndvi_cdr.analysis.dynamical_dataset import (
 from reformatters.contrib.noaa.ndvi_cdr.analysis.region_job import (
     NoaaNdviCdrAnalysisRegionJob,
 )
+from tests.chunk_utils import shrink_chunks_and_shards
 
 pytestmark = pytest.mark.slow
 
@@ -31,6 +32,14 @@ def test_backfill_local_and_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
     )
 
     dataset = NoaaNdviCdrAnalysisDataset(primary_storage_config=noop_storage_config)
+
+    orig_get_template = dataset.template_config.get_template
+    monkeypatch.setattr(
+        type(dataset.template_config),
+        "get_template",
+        lambda self, end_time: shrink_chunks_and_shards(orig_get_template(end_time)),
+    )
+
     # Dataset starts at 1981-06-24, test with a couple days after start
     dataset.backfill_local(append_dim_end=pd.Timestamp("1981-06-25"))
     ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
