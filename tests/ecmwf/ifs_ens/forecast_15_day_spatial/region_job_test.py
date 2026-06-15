@@ -13,6 +13,7 @@ from gribberish import (
     parse_grib_message_metadata,  # ty: ignore[unresolved-import] - native module member
 )
 
+from reformatters.common import virtual_region_job
 from reformatters.common.virtual_region_job import VirtualRef
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 from reformatters.ecmwf.ifs_ens.forecast_15_day_spatial import (
@@ -159,7 +160,7 @@ def test_file_refs_resolves_all_members(
     _fake_index_download(monkeypatch, tmp_path)
     coord = _coord((1, 2), data_vars)
 
-    refs = job._file_refs(coord, file_size=9000)
+    refs = job.file_refs(coord, file_size=9000)
 
     # Two members x two vars, each pointing at the one shared enfo-ef file.
     assert len(refs) == 4
@@ -192,38 +193,29 @@ def test_file_refs_skips_file_whose_index_points_past_eof(
     _fake_index_download(monkeypatch, tmp_path)
     coord = _coord((1, 2), data_vars)
     # A matching (larger) file resolves refs.
-    assert job._file_refs(coord, file_size=9000)
+    assert job.file_refs(coord, file_size=9000)
     # A file smaller than the index's max offset is stale/mismatched -> no refs.
-    assert job._file_refs(coord, file_size=400) == []
+    assert job.file_refs(coord, file_size=400) == []
 
 
-def _fake_list(monkeypatch: pytest.MonkeyPatch, listing: dict[str, int]) -> list[str]:
-    listings: list[str] = []
+def _fake_discover(
+    monkeypatch: pytest.MonkeyPatch,
+    ticks: list[list[tuple[IfsEnsForecast15DaySpatialSourceFileCoord, int]]],
+) -> list[int]:
+    """Drive the loop: return one canned (coord, size) list per discovery sweep."""
+    sweeps: list[int] = []
+    it = iter(ticks)
 
-    def fake_list_objects(prefix: str) -> dict[str, int]:
-        listings.append(prefix)
-        return listing
+    def fake(
+        pending: list[IfsEnsForecast15DaySpatialSourceFileCoord], **kwargs: object
+    ) -> list[tuple[IfsEnsForecast15DaySpatialSourceFileCoord, int]]:
+        sweeps.append(len(pending))
+        return next(it)
 
-    monkeypatch.setattr(region_job_module, "_list_objects", fake_list_objects)
-    return listings
-
-
-def test_discover_available_requires_data_and_index(
-    template_ds: xr.Dataset, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    data_vars = [get_var("temperature_2m")]
-    job = make_job(template_ds, data_vars=data_vars)
-    index_key = _ENFO_FILE.removesuffix(".grib2") + ".index"
-    enfo2 = f"{_ENFO_PREFIX}20260513000000-6h-enfo-ef.grib2"
-    _fake_list(
-        monkeypatch,
-        {_ENFO_FILE: 9000, index_key: 200, enfo2: 9000},  # enfo2 has no .index yet
+    monkeypatch.setattr(
+        region_job_module, "discover_available_by_obstore_listing", fake
     )
-    pending = {
-        _ENFO_FILE: _coord(_PERTURBED, data_vars),
-        enfo2: _coord(_PERTURBED, data_vars, lead_time=pd.Timedelta("6h")),
-    }
-    assert job._discover_available(pending) == {_ENFO_FILE: 9000}
+    return sweeps
 
 
 def test_process_virtual_refs_backfill_sweeps_once(
@@ -232,17 +224,15 @@ def test_process_virtual_refs_backfill_sweeps_once(
     data_vars = [get_var("temperature_2m"), get_var("pressure_surface")]
     job = make_job(template_ds, data_vars=data_vars)
     _fake_index_download(monkeypatch, tmp_path)
-    index_key = _ENFO_FILE.removesuffix(".grib2") + ".index"
-    enfo2 = f"{_ENFO_PREFIX}20260513000000-6h-enfo-ef.grib2"
-    # File 1 fully published; file 2's .index has not landed yet.
-    listings = _fake_list(monkeypatch, {_ENFO_FILE: 9000, index_key: 200, enfo2: 9000})
-
     coord1 = _coord((1, 2), data_vars)
     coord2 = _coord((1, 2), data_vars, lead_time=pd.Timedelta("6h"))
+    # File 1 ready; file 2 not yet.
+    sweeps = _fake_discover(monkeypatch, [[(coord1, 9000)]])
+
     batches = list(job.process_virtual_refs([coord1, coord2]))
 
-    # A backfill sweeps once: one listing, one yield with only the ready file, exit.
-    assert listings == [_ENFO_PREFIX]
+    # A backfill sweeps once, yields the ready file, then exits.
+    assert len(sweeps) == 1
     (batch,) = batches
     ((coord, refs),) = batch
     assert coord.lead_time == pd.Timedelta("3h")
@@ -256,25 +246,13 @@ def test_process_virtual_refs_update_polls_until_all_ingested(
     job = make_job(template_ds, data_vars=data_vars, processing_mode="update")
     _fake_index_download(monkeypatch, tmp_path)
     sleeps: list[float] = []
-    monkeypatch.setattr(region_job_module.time, "sleep", sleeps.append)
-
-    index_key = _ENFO_FILE.removesuffix(".grib2") + ".index"
-    enfo2 = f"{_ENFO_PREFIX}20260513000000-6h-enfo-ef.grib2"
-    enfo2_index = enfo2.removesuffix(".grib2") + ".index"
-    # Tick 1: nothing; tick 2: file 1; tick 3: file 2 as well.
-    listings = iter(
-        [
-            {},
-            {_ENFO_FILE: 9000, index_key: 200},
-            {enfo2: 9000, enfo2_index: 200},
-        ]
-    )
-    monkeypatch.setattr(
-        region_job_module, "_list_objects", lambda prefix: next(listings)
-    )
+    monkeypatch.setattr(virtual_region_job.time, "sleep", sleeps.append)
 
     coord1 = _coord((1, 2), data_vars)
     coord2 = _coord((1, 2), data_vars, lead_time=pd.Timedelta("6h"))
+    # Tick 1: nothing; tick 2: file 1; tick 3: file 2.
+    _fake_discover(monkeypatch, [[], [(coord1, 9000)], [(coord2, 9000)]])
+
     batches = list(job.process_virtual_refs([coord1, coord2]))
 
     assert [[coord.lead_time for coord, _refs in batch] for batch in batches] == [
@@ -330,11 +308,11 @@ def test_real_source_all_vars_resolve_and_decode(template_ds: xr.Dataset) -> Non
     job = make_job(template_ds)
 
     key = coord.get_url().removeprefix(_S3_LOCATION_PREFIX)
-    available = job._discover_available({key: coord})
-    if key not in available:
+    available = job.discover_available([coord])
+    if not available:
         pytest.skip(f"ECMWF open data for {init} not currently in the bucket")
-    file_size = available[key]
-    refs = job._file_refs(coord, file_size)
+    [(_, file_size)] = available
+    refs = job.file_refs(coord, file_size)
 
     # 17 vars x 50 perturbed members.
     assert len(refs) == 17 * 50

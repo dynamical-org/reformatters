@@ -1,5 +1,7 @@
 import asyncio
+import time
 from collections.abc import Iterator, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, ClassVar, Final, Generic, Literal, NamedTuple
 
 import icechunk
@@ -12,6 +14,7 @@ from zarr.core.metadata import ArrayV3Metadata
 
 from reformatters.common import storage
 from reformatters.common.config_models import DataVar
+from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     DATA_VAR,
     SOURCE_FILE_COORD,
@@ -19,7 +22,9 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileResult,
 )
-from reformatters.common.types import Dim
+from reformatters.common.types import Dim, Timedelta
+
+log = get_logger(__name__)
 
 
 class VirtualRef(NamedTuple):
@@ -42,42 +47,69 @@ class VirtualRegionJob(
     See docs/virtual_datasets.md for the write loop, filtering, and reader-safety guarantees.
     """
 
-    # Locked to None: an integer max_vars_per_job would split one source file's
-    # variables across separate jobs that commit independently, breaking the
-    # per-file commit atomicity virtual readers rely on.
+    # ----- Class attributes -----
+
+    # Locked to None: an int would split one file's vars across independently
+    # committing jobs, breaking the per-file commit atomicity readers rely on.
     max_vars_per_job: ClassVar[Final[int | None]] = None
 
     # Updates wait for source files as the provider publishes them, backfills check once
     processing_mode: Literal["backfill", "update"] = "backfill"
 
-    def process_virtual_refs(
-        self,
-        remaining: Sequence[SOURCE_FILE_COORD],
-    ) -> Iterator[Sequence[tuple[SOURCE_FILE_COORD, Sequence[VirtualRef]]]]:
-        """Discover available source files among `remaining` and yield their virtual references.
+    # When polling, pace each discovery sweep to at most one per tick.
+    tick_interval: ClassVar[Timedelta] = pd.Timedelta("1s")
+    # Concurrent file downloads while building refs (file_refs runs in a thread pool).
+    download_concurrency: ClassVar[int] = 32
 
-        Each yield is one commit's worth of *whole* source files as (coord, refs)
-        pairs — never split a file across yields, never yield an empty batch. The
-        generator owns the batching policy. See "The write loop" in
-        docs/virtual_datasets.md.
+    # ----- Overridable methods -----
+    # A dataset implements file_refs and generate_source_file_coords (from
+    # RegionJob); the rest have working defaults.
+
+    def file_refs(self, coord: SOURCE_FILE_COORD, file_size: int) -> list[VirtualRef]:
+        """Build every virtual ref a single source file contributes (or [] to skip it).
+
+        Resolve each message's byte range however the source allows — parse a sidecar
+        index (`coord.get_index_url()`), scan the data file, or (one message per file)
+        point at the whole file — and return a VirtualRef per (out cell, variable) in
+        coordinate-label space; the chunk index is resolved centrally later (see
+        _emit_refs). Return [] to drop an unreadable or stale file. `file_size` is
+        whatever discover_available reported (a listed size, a Content-Length), e.g.
+        to supply the missing final end byte of an index that omits it.
         """
         raise NotImplementedError(
-            "Yield batches of (source file coord, its VirtualRefs) pairs, "
-            "each one commit's worth of whole source files."
+            "Return the VirtualRefs for one source file, or [] to skip it."
         )
 
-    def representative_var(self, coord: SOURCE_FILE_COORD) -> DATA_VAR:  # noqa: ARG002
+    def discover_available(
+        self, pending: list[SOURCE_FILE_COORD]
+    ) -> list[tuple[SOURCE_FILE_COORD, int]]:
+        """Of the not-yet-present files, the subset fetchable now, each with its data-file size.
+
+        Return the same coord objects from `pending` (the loop drops them by
+        identity). For an obstore-listable backend, delegate to
+        `virtual_source_listing.discover_available_by_obstore_listing`; for a source
+        obstore can't list (an HTML directory index, a frontier to probe,
+        assume-all) implement it directly.
+        """
+        raise NotImplementedError(
+            "Return the (coord, file_size) pairs ready to fetch now."
+        )
+
+    def representative_var(self, coord: SOURCE_FILE_COORD) -> DATA_VAR:
         """The variable whose chunk presence means `coord`'s file is fully ingested.
 
-        Used by filter_already_present to probe a single representative chunk per
-        file. Default: the first instant var (most likely to have data at every
-        step), else the first data var; valid when every file contains every
-        variable. Override for one-variable-per-file packings (e.g. GEFS v12
-        reforecast) to return the candidate's own variable.
+        Probed by filter_already_present and asserted by the write loop, so it must
+        be a variable the file's refs actually cover. Default: the first instant var
+        (most likely to have data at every step) among the vars the file carries —
+        `coord.data_vars` if it declares which subset it packs, else all of
+        self.data_vars — falling back to the first such var. Override only for a
+        packing neither rule captures (e.g. one variable per file keyed off the
+        coord rather than its data_vars).
         """
+        file_vars = getattr(coord, "data_vars", None) or self.data_vars
         return next(
-            (var for var in self.data_vars if var.attrs.step_type == "instant"),
-            self.data_vars[0],
+            (var for var in file_vars if var.attrs.step_type == "instant"),
+            file_vars[0],
         )
 
     def filter_already_present(
@@ -108,7 +140,68 @@ class VirtualRegionJob(
         present = _exists_many(store, [key for _, key in keyed if key is not None])
         return [coord for coord, key in keyed if key is None or not present[key]]
 
-    # ----- Most subclasses will not need to override the attributes and methods below -----
+    # ----- Common write-loop machinery: subclasses do not implement these -----
+
+    def process_virtual_refs(
+        self,
+        remaining: Sequence[SOURCE_FILE_COORD],
+    ) -> Iterator[Sequence[tuple[SOURCE_FILE_COORD, Sequence[VirtualRef]]]]:
+        """Drive discover_available + file_refs, yielding one commit's worth per tick.
+
+        One yield per tick contains every file that became available since the last:
+        a backfill sweeps once and exits, an update polls until everything is
+        ingested. Each yield is whole source files as (coord, refs) pairs — never
+        split a file, never yield empty. Source-agnostic: it only asks
+        discover_available which coords are ready. Override only for a different
+        batching policy. See "The write loop" in docs/virtual_datasets.md.
+        """
+        pending = list(remaining)
+        with ThreadPoolExecutor(self.download_concurrency) as pool:
+            while pending:
+                tick_start = time.monotonic()
+                available = self.discover_available(pending)
+                if available:
+                    coords, sizes = zip(*available, strict=True)
+                    refs_per_file = pool.map(self._file_refs_or_skip, coords, sizes)
+                    # Drop files that yielded no refs (skipped as unreadable).
+                    batch = [
+                        (coord, refs)
+                        for coord, refs in zip(coords, refs_per_file, strict=True)
+                        if refs
+                    ]
+                    ready = {id(coord) for coord in coords}
+                    pending = [coord for coord in pending if id(coord) not in ready]
+                    skipped = len(coords) - len(batch)
+                    log.info(
+                        f"Ingesting {len(batch)} files"
+                        f"{f' ({skipped} skipped)' if skipped else ''}, "
+                        f"{len(pending)} still pending"
+                    )
+                    if batch:
+                        yield batch
+                if self.processing_mode == "backfill":
+                    if pending:
+                        log.info(
+                            f"{len(pending)} source files not present, skipping "
+                            f"(first: {pending[0].get_url()})"
+                        )
+                    return
+                if pending:
+                    elapsed = time.monotonic() - tick_start
+                    time.sleep(max(0.0, self.tick_interval.total_seconds() - elapsed))
+
+    def _file_refs_or_skip(
+        self, coord: SOURCE_FILE_COORD, file_size: int
+    ) -> list[VirtualRef]:
+        # Skip a file we can't build refs for rather than sink the job; AssertionError
+        # is our own invariant, so let it propagate.
+        try:
+            return self.file_refs(coord, file_size)
+        except AssertionError:
+            raise
+        except Exception:
+            log.exception(f"Skipping {coord.get_url()}: could not build virtual refs")
+            return []
 
     @classmethod
     def process_worker_jobs(
@@ -152,9 +245,6 @@ class VirtualRegionJob(
         current_size = self._append_dim_size(readonly_store)
 
         for file_refs_batch in self.process_virtual_refs(remaining):
-            # The generator yields whole files, so a batch always has refs; emitting
-            # them always dirties the session, so the commit below is never empty
-            # (an empty icechunk commit raises rather than no-ops).
             assert file_refs_batch, "process_virtual_refs yielded an empty batch"
             for coord, file_refs in file_refs_batch:
                 self._assert_probe_chunk_covered(coord, file_refs)
@@ -180,14 +270,8 @@ class VirtualRegionJob(
     def _assert_probe_chunk_covered(
         self, coord: SOURCE_FILE_COORD, file_refs: Sequence[VirtualRef]
     ) -> None:
-        """A file's refs must include the chunk filter_already_present probes.
-
-        The filter decides whether a whole file is already ingested by checking
-        one chunk: (representative_var, the file's out_loc). If a file's refs
-        never write that chunk, the filter never sees the file land and every
-        future fire re-ingests it; usually a representative_var override is
-        needed (see its docstring).
-        """
+        """A file's refs must cover the chunk filter_already_present probes
+        (representative_var at the file's out_loc)."""
         assert file_refs, f"empty refs for source file {coord}"
         rep = self.representative_var(coord)
         probe = self.chunk_key(coord.out_loc(), rep)
@@ -234,16 +318,11 @@ class VirtualRegionJob(
     ) -> tuple[int, ...] | None:
         """Map a source message's coordinate labels to its zarr chunk index.
 
-        Returns None if a label is not in the template's coords, which the filter
-        treats as "remaining". Asserts each label lands on an exact chunk boundary -
-        a virtual chunk is exactly one GRIB message, so any non-aligned position is
-        a bug.
+        Returns None if a label is not in the template's coords (the filter treats
+        that as "remaining").
         """
-        # Geometry (dim order, chunk sizes, coord positions) is read from the
-        # checked-in template (the authoritative metadata, git-reviewable), not the
-        # in-code DataVar.encoding which could drift from it. So the index matches
-        # what readers resolve and does not depend on how far the store has been
-        # expanded. Shared by the filter and the emitter so they cannot disagree.
+        # Geometry comes from the checked-in template, not the in-code
+        # DataVar.encoding which could drift; shared by the filter and emitter.
         template_var = self.template_ds[var.name]
         dims = tuple(str(d) for d in template_var.dims)
         chunks = template_var.encoding["chunks"]
@@ -261,11 +340,8 @@ class VirtualRegionJob(
                 if position < 0:
                     return None  # label not in coords -> not yet a position in this dataset
             else:
-                # A dim absent from out_loc (e.g. lat/lon) must be a single chunk;
-                # otherwise every ref would collapse to chunk 0 along it (later refs
-                # overwriting earlier, the rest left as permanent fill-value holes).
-                # A multi-chunk dim (e.g. ensemble_member packed one-per-file) must
-                # appear in out_loc so it resolves to the right chunk.
+                # A dim absent from out_loc must be single-chunk, else all refs
+                # collapse to chunk 0 along it.
                 assert chunk_size >= template_var.sizes[dim], (
                     f"dim {dim} is absent from out_loc but spans multiple chunks "
                     f"(size {template_var.sizes[dim]}, chunk {chunk_size}); out_loc "
@@ -285,14 +361,9 @@ class VirtualRegionJob(
         self, stores: Sequence[IcechunkStore], needed_append_dim_size: int
     ) -> None:
         """Grow the append dim (and its dependent coords) to `needed_append_dim_size`."""
-        # Writes only the new positions by appending the corresponding slice of the
-        # already-derived template; existing positions are untouched. Data vars stay
-        # dask-lazy under compute=False, so the decode-only serializer is never
-        # invoked. A no-op for any store already covering the size (so backfill's
-        # pre-sized branch never resizes, and parallel workers never conflict). Each
-        # store's missing slice is computed from its own committed size: replicas
-        # commit before the primary, so a partial commit can leave a replica ahead,
-        # and appending the primary's slice to it would duplicate positions.
+        # compute=False keeps data vars dask-lazy so the decode-only serializer is
+        # never invoked. Each store's missing slice is from its own committed size:
+        # replicas can be a commit ahead, so the primary's slice would duplicate.
         for store in stores:
             current_size = self._append_dim_size(store)
             if needed_append_dim_size <= current_size:
@@ -320,9 +391,7 @@ class VirtualRegionJob(
 
     def _processing_region_ds(self) -> xr.Dataset:
         processing_region = self.get_processing_region()
-        # Virtual refs point at raw source bytes, so no surrounding buffer is ever
-        # needed; a buffered region would make adjacent backfill workers generate
-        # overlapping candidates and emit refs into each other's regions.
+        # Virtual refs point at raw source bytes, so no surrounding buffer is needed.
         assert processing_region == self.region, (
             "VirtualRegionJob.get_processing_region must equal self.region"
         )
