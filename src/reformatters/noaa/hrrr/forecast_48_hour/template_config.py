@@ -90,7 +90,7 @@ class NoaaHrrrForecast48HourTemplateConfig(NoaaHrrrCommonTemplateConfig):
             ),
             "ingested_forecast_length": (
                 ("init_time",),
-                np.full(ds[self.append_dim].size, np.timedelta64("NaT", "ns")),
+                np.full(ds[self.append_dim].size, np.timedelta64("NaT", "us")),
             ),
             "latitude": (("y", "x"), latitudes),
             "longitude": (("y", "x"), longitudes),
