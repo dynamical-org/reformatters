@@ -168,7 +168,7 @@ def test_derive_coordinates_and_spatial_ref() -> None:
 
     dims, arr = derived["ingested_forecast_length"]
     assert dims == (cfg.append_dim,)
-    assert arr.dtype == "timedelta64[ns]"
+    assert arr.dtype == "timedelta64[us]"
     assert np.all(pd.isna(arr))
 
     dims2, arr2 = derived["expected_forecast_length"]

@@ -98,7 +98,7 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #     "valid_time": ds["init_time"] + ds["lead_time"],
         #     "ingested_forecast_length": (
         #         (self.append_dim,),
-        #         np.full(ds[self.append_dim].size, np.timedelta64("NaT", "ns")),
+        #         np.full(ds[self.append_dim].size, np.timedelta64("NaT", "us")),
         #     ),
         #     "spatial_ref": SPATIAL_REF_COORDS,
         # }

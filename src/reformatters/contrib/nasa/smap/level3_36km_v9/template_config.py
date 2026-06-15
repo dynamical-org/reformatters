@@ -40,7 +40,7 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
     dims: tuple[Dim, ...] = ("time", "y", "x")
     append_dim: AppendDim = "time"
     append_dim_start: Timestamp = pd.Timestamp("2015-04-01T00:00")
-    append_dim_frequency: Timedelta = pd.Timedelta("1d")
+    append_dim_frequency: Timedelta = pd.Timedelta("1D")
 
     # EASE-Grid 2.0 36km global grid crs and grid parameters
     epsg: str = "EPSG:6933"

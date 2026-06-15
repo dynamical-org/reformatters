@@ -107,7 +107,7 @@ class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
                 ("init_time", "ensemble_member"),
                 np.full(
                     (ds["init_time"].size, ds["ensemble_member"].size),
-                    np.timedelta64("NaT", "ns"),
+                    np.timedelta64("NaT", "us"),
                 ),
             ),
             "expected_forecast_length": (
