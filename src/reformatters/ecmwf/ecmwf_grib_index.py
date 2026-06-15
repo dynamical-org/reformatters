@@ -25,11 +25,39 @@ def grib_message_byte_ranges_from_index(
     tuple[list[int], list[int]]
         list of byte range starts & a list of byte range ends. Elements of each list in order of data vars.
     """
-    byte_range_starts: list[int] = []
-    byte_range_ends: list[int] = []
     index_file_df = _parse_index_file(
         index_local_path, ensemble=ensemble_member is not None, step=step
     )
+    return _byte_ranges_for_member(index_file_df, data_vars, ensemble_member)
+
+
+def grib_message_byte_ranges_from_index_by_member(
+    index_local_path: PathLike[str],
+    data_vars: Sequence[DataVar[EcmwfInternalAttrs]],
+    ensemble_members: Sequence[int],
+    *,
+    step: int | None = None,
+) -> dict[int, tuple[list[int], list[int]]]:
+    """Byte ranges for multiple ensemble members packed in one index file.
+
+    Parses the index once (ECMWF open data packs every member of a lead into a
+    single file), returning each member's (starts, ends) in data var order. Used
+    by the virtual region job; see docs/virtual_datasets.md.
+    """
+    index_file_df = _parse_index_file(index_local_path, ensemble=True, step=step)
+    return {
+        member: _byte_ranges_for_member(index_file_df, data_vars, member)
+        for member in ensemble_members
+    }
+
+
+def _byte_ranges_for_member(
+    index_file_df: pd.DataFrame,
+    data_vars: Sequence[DataVar[EcmwfInternalAttrs]],
+    ensemble_member: int | None,
+) -> tuple[list[int], list[int]]:
+    byte_range_starts: list[int] = []
+    byte_range_ends: list[int] = []
     for data_var in data_vars:
         level_selector = (
             slice(None)

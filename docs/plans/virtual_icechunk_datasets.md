@@ -1130,8 +1130,46 @@ Decisions (icechunk 2.0.5, spiked):
 
 ### PR #6 — Second concrete virtual dataset
 
-Different provider (NOAA ↔ ECMWF) to prove the abstractions generalize; refine
-`VirtualRegionJob` defaults from what it needs.
+`ecmwf-ifs-ens-forecast-15-day-spatial-dev`: ECMWF IFS ENS, full 51-member
+ensemble, 0-360h, native 0.25° grid. A different provider that proves the
+abstractions generalize, and stresses three things GEFS did not:
+
+- **Different index format.** ECMWF `.index` is JSON-lines with explicit
+  `_offset`/`_length` per message (no implied ends), so the virtual `_file_refs`
+  needs none of GEFS's "last message → file size" PAD fallback. Reuses
+  `ecmwf_grib_index.grib_message_byte_ranges_from_index`, plus a new
+  `..._by_member` that parses one index once and returns every member's ranges
+  (one open-data file packs all members of a lead).
+- **Multi-member-per-file packing.** One source file → many member chunks in one
+  atomic commit, exercising the base `chunk_key`'s "a multi-chunk dim must appear
+  in `out_loc`" path. Post IFS-50r1 (2026-05-12 06z) the control member lives in
+  `oper-fc` and perturbed members in `enfo-ef`, so one `(init, lead)` maps to two
+  files; each is its own coord. `append_dim_start` is set to the first 00z fully
+  in that regime so there are no historical special cases.
+- **Raw-value attrs.** Like GEFS, virtual chunks serve raw GRIB values:
+  temperatures stay Kelvin, total cloud cover stays a 0-1 fraction, and total
+  precipitation is the raw whole-forecast accumulation in metres
+  (`total_precipitation_surface`). The two accumulated-radiation vars are dropped
+  (their raw un-deaccumulated form needs a bespoke time-integrated name/units;
+  no value for a throwaway). Var/CRS definitions are reused from the materialized
+  `forecast_15_day_0_25_degree` config so metadata stays in sync.
+
+Validation findings (spiked against live data before building):
+
+- **gribberish decodes ECMWF IFS GRIB2** (both `oper-fc` and `enfo-ef`). The
+  `GribberishCodec(var=…)` label is ignored on decode — `_decode_single` just
+  calls `parse_grib_array(bytes, 0)` on the one-message chunk — so gribberish's
+  occasional ECMWF param misnaming (e.g. `tp` → `categoricalfreezingrainncep`)
+  is cosmetic; `var` is set to `grib_element` for consistency with GEFS.
+- **Native grid is wrapped.** Longitude runs `180…359.75` then `0…179.75`
+  (latitude 90→-90); the template longitude must match this order exactly since
+  virtual chunks serve the raw message. Verified end to end: a real local
+  backfill decodes ~298K at the equator through the icechunk virtual container.
+- **Open-data retention is ~4 days.** There is no permanent open-data archive, so
+  inits before the retention window can never be backfilled; the store carries an
+  empty init prefix from `append_dim_start` up to wherever operational ingest
+  begins, then grows forward. Acceptable for a throwaway; a real dataset would
+  pair open data with a permanent archive (MARS/source.coop) for history.
 
 ### PR #7 — Extract common patterns into `VirtualRegionJob`
 
@@ -1201,8 +1239,8 @@ issue **#513** (its body holds the PR checklist; items are written "PR 1" not
 | PR 3d — move `process()` onto `MaterializedRegionJob` | **merged** (#654) | Removes the base `process()` stub; materialized `process_worker_jobs` narrows its jobs. |
 | PR 3e — consolidate processing-loop docs | **merged** (#655) | `docs/virtual_datasets.md` + seam section in `docs/parallel_processing.md`, linked from code. |
 | PR 4 — first concrete virtual dataset | **merged** (#656; fixes #658 #659) | `noaa-gefs-forecast-10-day-spatial-dev`: 4 inits/day, 0-240h, native 0.25° s-file grid, the 35-day vars available in s files (19). `-dev` suffix: a throwaway operational test; dataset structure questions are deliberately deferred. Month-long prod backfill (2026-05-12 06z – 2026-06-12 06z, 32 k8s workers) published 2026-06-12; spot checks (independent GRIB decodes vs store, null patterns, coverage) all passed. Crons unsuspended to start the operational test. |
-| PR 5 — persist container config | in progress (#667) | `save_config()` on container drift in `parallel_setup`; before first *externally published* virtual repo (first datasets run in prod unpublished). |
-| PR 6 — second concrete virtual dataset | not started | Different provider, proves abstractions generalize. |
+| PR 5 — persist container config | **merged** (#667) | `save_config()` on container drift in `parallel_setup`; before first *externally published* virtual repo (first datasets run in prod unpublished). |
+| PR 6 — second concrete virtual dataset | in progress | `ecmwf-ifs-ens-forecast-15-day-spatial-dev`: ECMWF IFS ENS, 51 members, 0-360h, native wrapped 0.25° grid. Different index format (JSON-lines, explicit lengths), multi-member-per-file packing (control `oper-fc` + perturbed `enfo-ef`), raw-value attrs. Validated end to end against live data; open-data ~4-day retention noted. |
 | PR 7 — extract common patterns into `VirtualRegionJob` | not started | With two concrete datasets in hand, lift the shared machinery out of the subclasses (see "Extracting common patterns" below). |
 | PR 8 — validation phase | not started | Spatial-chunk validators + offline tooling. |
 

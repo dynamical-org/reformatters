@@ -15,6 +15,7 @@ from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, EcmwfInternalAt
 from reformatters.ecmwf.ecmwf_grib_index import (
     _parse_index_file,
     grib_message_byte_ranges_from_index,
+    grib_message_byte_ranges_from_index_by_member,
 )
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -291,6 +292,42 @@ def test_get_byte_ranges_oper_fc_pressure_level_var(oper_fc_index_file: Path) ->
     )
     assert starts == [1000000]
     assert ends == [1500000]
+
+
+# ---------------------------------------------------------------------------
+# Multi-member extraction (one open-data file packs every member)
+# ---------------------------------------------------------------------------
+
+_BY_MEMBER_INDEX_JSONL = """\
+{"type": "pf", "stream": "enfo", "step": "3", "levtype": "sfc", "number": "1", "param": "2t", "_offset": 0, "_length": 100}
+{"type": "pf", "stream": "enfo", "step": "3", "levtype": "sfc", "number": "1", "param": "sp", "_offset": 100, "_length": 200}
+{"type": "pf", "stream": "enfo", "step": "3", "levtype": "sfc", "number": "2", "param": "2t", "_offset": 300, "_length": 100}
+{"type": "pf", "stream": "enfo", "step": "3", "levtype": "sfc", "number": "2", "param": "sp", "_offset": 400, "_length": 150}
+"""
+
+
+def test_byte_ranges_by_member_packs_every_member(tmp_path: Path) -> None:
+    path = tmp_path / "by-member.index"
+    path.write_text(_BY_MEMBER_INDEX_JSONL)
+    var_2t = _make_ecmwf_var("temperature_2m", "2t", "sfc")
+    var_sp = _make_ecmwf_var("pressure_surface", "sp", "sfc")
+
+    result = grib_message_byte_ranges_from_index_by_member(
+        path, [var_2t, var_sp], [1, 2]
+    )
+
+    assert set(result) == {1, 2}
+    # (starts, ends) in data var order for each member.
+    assert result[1] == ([0, 100], [100, 300])
+    assert result[2] == ([300, 400], [400, 550])
+
+
+def test_byte_ranges_by_member_control(oper_fc_index_file: Path) -> None:
+    var = _make_ecmwf_var("temperature_2m", "2t", "sfc")
+    result = grib_message_byte_ranges_from_index_by_member(
+        oper_fc_index_file, [var], [0]
+    )
+    assert result == {0: ([0], [1000000])}
 
 
 def test_get_byte_ranges_mars_multiple_vars_single_step() -> None:

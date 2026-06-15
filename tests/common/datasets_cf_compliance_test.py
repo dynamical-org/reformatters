@@ -685,10 +685,11 @@ def _check_consistency(
 
 # Virtual datasets serve raw GRIB values, which diverge from the transformed
 # values materialized datasets serve under the same variable name (Kelvin vs
-# GDAL's Celsius temperatures), so these (dataset_id, var_name) pairs are
-# exempt from cross-dataset metadata consistency. Raw quantities that differ in
-# kind, not just units (e.g. accumulated precipitation), instead get a distinct
-# variable name like total_precipitation_surface and need no exemption.
+# GDAL's Celsius temperatures, a 0-1 fraction vs a scaled percent), so these
+# (dataset_id, var_name) pairs are exempt from cross-dataset metadata consistency.
+# Raw quantities that differ in kind, not just units, get a distinct variable name
+# like total_precipitation_surface; that name is still exempt where two providers'
+# raw forms differ (NOAA's mm-per-window vs ECMWF's metres-of-whole-forecast).
 # TEMPORARY: once a gribberish release includes
 # https://github.com/mpiannucci/gribberish/pull/153 and we upgrade zarr for
 # zarr.codecs ScaleOffset, the temperature vars chain a K->C filter, declare
@@ -697,6 +698,12 @@ RAW_GRIB_VALUE_VARS = {
     ("noaa-gefs-forecast-10-day-spatial-dev", "temperature_2m"),
     ("noaa-gefs-forecast-10-day-spatial-dev", "maximum_temperature_2m"),
     ("noaa-gefs-forecast-10-day-spatial-dev", "minimum_temperature_2m"),
+    ("ecmwf-ifs-ens-forecast-15-day-spatial-dev", "temperature_2m"),
+    ("ecmwf-ifs-ens-forecast-15-day-spatial-dev", "dew_point_temperature_2m"),
+    ("ecmwf-ifs-ens-forecast-15-day-spatial-dev", "temperature_850hpa"),
+    ("ecmwf-ifs-ens-forecast-15-day-spatial-dev", "temperature_925hpa"),
+    ("ecmwf-ifs-ens-forecast-15-day-spatial-dev", "total_cloud_cover_atmosphere"),
+    ("ecmwf-ifs-ens-forecast-15-day-spatial-dev", "total_precipitation_surface"),
 }
 
 
