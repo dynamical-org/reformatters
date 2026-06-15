@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from functools import partial
 
 import icechunk
 from pydantic import Field
@@ -85,4 +86,10 @@ class GefsForecast10DaySpatialDataset(
         # Minimal for now: the NaN validators decode one full GRIB message per
         # (lead, member) chunk touched, which is unbounded on a virtual store.
         # Manifest-aware validators are planned (virtual datasets plan, PR 7).
-        return (validation.check_forecast_current_data,)
+        # 6h cycle + ~3h48m = 9h48m plus a little buffer = 10h
+        return (
+            partial(
+                validation.check_forecast_current_data,
+                max_latest_init_time_age=timedelta(hours=10),
+            ),
+        )

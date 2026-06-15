@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from functools import partial
 from typing import Any
 
 import numpy as np
@@ -161,5 +162,7 @@ def test_operational_kubernetes_resources(
 
 
 def test_validators(dataset: GefsForecast10DaySpatialDataset) -> None:
-    validators = tuple(dataset.validators())
-    assert validators == (validation.check_forecast_current_data,)
+    [validator] = dataset.validators()
+    assert isinstance(validator, partial)
+    assert validator.func is validation.check_forecast_current_data
+    assert validator.keywords == {"max_latest_init_time_age": timedelta(hours=10)}
