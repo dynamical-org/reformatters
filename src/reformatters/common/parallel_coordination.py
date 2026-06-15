@@ -87,8 +87,7 @@ def parallel_setup(
                 ic_stores[0],
                 ic_stores[1:],
             )
-            # Persist the virtual chunk container set so external readers recover it
-            # from the repo; no-op for materialized datasets. See PR 5 in docs/plans/virtual_icechunk_datasets.md.
+            # Persist virtual chunk containers so repo stays in sync with in-code config
             store_factory.persist_virtual_config()
         # Zarr v3: do NOT expand (readers would see empty holes)
 
