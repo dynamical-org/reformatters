@@ -69,7 +69,8 @@ class GefsForecast10DaySpatialDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="40 7 * * *",  # after the 00z init finishes publishing
+            # Validate after each update: update fire (43 3,9,15,21) + its 2h10m deadline.
+            schedule="53 5,11,17,23 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
