@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from functools import partial
 
 import icechunk
 from pydantic import Field
@@ -69,7 +70,8 @@ class GefsForecast10DaySpatialDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="40 7 * * *",  # after the 00z init finishes publishing
+            # Validate after each update: update fire (43 3,9,15,21) + its 2h10m deadline.
+            schedule="53 5,11,17,23 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -84,4 +86,10 @@ class GefsForecast10DaySpatialDataset(
         # Minimal for now: the NaN validators decode one full GRIB message per
         # (lead, member) chunk touched, which is unbounded on a virtual store.
         # Manifest-aware validators are planned (virtual datasets plan, PR 7).
-        return (validation.check_forecast_current_data,)
+        # 6h cycle + ~3h48m = 9h48m plus a little buffer = 10h
+        return (
+            partial(
+                validation.check_forecast_current_data,
+                max_latest_init_time_age=timedelta(hours=10),
+            ),
+        )
