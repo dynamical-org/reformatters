@@ -208,6 +208,35 @@ not duplicated. For a back-compat root surface over a few dozen single-level var
 this is cheap; aliasing whole pressure-level stacks would meaningfully grow the
 manifest and is probably not worth it.
 
+### Spike 4 — mixed-dim variables in one flat group (feasibility for Decision A)
+
+`spike4_mixed_dims_flat.py` writes a single-level and a pressure-level variable
+into one **root** group (no zarr group), commits, reads back.
+
+```
+vars + dims in ONE flat group:
+  temperature_2m   ('time', 'lat', 'lon')
+  temperature      ('time', 'level', 'lat', 'lon')
+single open_zarr, no group= needed.  temperature.sel(level=500) shape: (3, 4, 5)
+```
+
+**Finding:** real vertical dimensions don't need zarr groups. A flat dataset holds
+heterogeneous-dimension variables fine, so the grouping decision (Q2) is decoupled
+from the dimension decision (Q1). Drives Decision A.
+
+### Spike 5 — model-level availability in NODD GFS (feasibility for Decision C)
+
+`spike5_model_level_availability.py` classifies both GFS products' indexes:
+
+```
+GFS pgrb2  0p25:  pressure 16 vars x 33 levels ; hybrid/model 6 vars x [1,2]
+GFS pgrb2b 0p25:  pressure 15 vars x 22 levels ; hybrid/model 0 vars
+```
+
+**Finding:** neither standard NODD GFS product carries usable model levels. A
+`model_level` group/dimension is not feasible for GFS from these sources. Drives
+Decision C.
+
 ---
 
 ## Synthesis & recommendation
@@ -220,10 +249,14 @@ The measurements turn most of the either/or framing into a "both, by regime":
    coordinate; single/surface variables stay suffix-named. Spike 3 shows this is
    the structure the data actually has — ~88% dense vs ~7% dense.
 
-2. **Group by level-type** (Q2). It's the only layout that gives each regime its
-   natural dimensionality, and spike 1 shows the storage stack fully supports it
-   (write per group, read per group or as a DataTree, coords inherited from root).
-   The real cost is the base-class work in Q's precondition, not storage.
+2. **Real vertical dimensions do NOT require zarr groups** (Q2). Spike 4 shows a
+   single flat root group holds `temperature_2m(time, y, x)` and
+   `temperature(time, pressure_level, y, x)` side by side, read back with one
+   `open_zarr` (no `group=`). Spike 1 shows groups *also* work if we want them.
+   So the dimension decision (Q1) and the grouping decision (Q2) are independent:
+   we can get the dense `pressure_level` win in the existing single-group layout
+   and treat groups as a later, optional organizational choice. See expanded
+   decision A below.
 
 3. **For back-compat, prefer a root-level "single_level"-style surface that
    reuses today's exact names** so a new virtual dataset can swap in for a
@@ -246,28 +279,141 @@ The measurements turn most of the either/or framing into a "both, by regime":
    feasible; recommend doing that for the existing products rather than a hard
    cutover, and making the new virtual versions swap-compatible at the root.
 
-### Open decisions to settle before designing the base-class changes
+## Expanded open decisions
 
-- **Group naming & rule (Q7):** lock the exact group names and a written rule for
-  which variables go where, so it's uniform across providers.
-- **Root = single_level, or aliases (Q4 vs Q8):** do single-level vars simply live
-  at root, or does the root hold aliases into a `single_level/` group?
-- **Per-group `dims`/`coords`/`data_vars` in `TemplateConfig`:** how to express a
-  multi-group template (e.g. `data_vars` keyed by group, or a small per-group
-  sub-config) and how `chunk_key`/`filter_already_present` address
-  `group/var`-pathed arrays.
-- **`model_level` scope:** GFS pgrb2 exposes only a handful of hybrid messages;
-  decide whether model levels come from a different product (e.g. `pgrb2b`/native)
-  before committing to the group.
-- **Ensemble sizing (Q9):** confirm manifest/chunk sizing with `ensemble_member ×
-  pressure_level` for the GEFS-style case.
+These are the choices that are genuinely ours to make. Each is laid out as the
+real question, the options, and a recommendation.
+
+### Decision A — The machinery change: per-variable dims, not groups
+
+The framing "should we use groups?" buries the actual base-class gap. Look at what
+the code keys on:
+
+- `chunk_key()` already reads geometry **per variable** from the template:
+  `template_var.dims` and `template_var.encoding["chunks"]`
+  (`virtual_region_job.py`). It handles a dim being present or absent in `out_loc`
+  generically. **It already supports heterogeneous-dimension variables** — pass it
+  a `temperature` whose template var has a `pressure_level` dim and it just works,
+  as long as the source ref's `out_loc` carries the level label.
+- `filter_already_present()` / `_emit_refs()` address arrays by flat `var.name` at
+  the root — fine as long as variables stay in one group.
+- The one real blocker is `TemplateConfig`: `update_template()` builds **every**
+  variable with the same `self.dims` via
+  `make_empty_variable(self.dims, coords, dtype)`, and `self.dims` is a single
+  tuple. There is no way today to give `temperature` a `pressure_level` dim while
+  `temperature_2m` has none.
+
+So the decision is **per-variable dims (A1)** vs. **zarr groups + DataTree (A2)**,
+and spike 4 proves A1 is sufficient for real vertical dimensions.
+
+**A1 — per-variable dims in one flat group (recommended first step).**
+Add an optional `dims` to `DataVar` (default = template `dims`), add the
+`pressure_level` coordinate to `coords`, and teach `update_template` /
+`empty_copy_with_reindex` to honor per-var dims. `chunk_key` needs no change.
+`SourceFileCoord.out_loc()` for a pressure message must include its
+`pressure_level` label; `representative_var` must pick a (var, level) the file
+actually contains.
+- Pros: smallest change; one `open_zarr` for readers; single-level vars are byte-
+  for-byte unchanged at the root, so swap-compat with the materialized catalog is
+  free; `.sel(pressure_level=500)` works; **NaN holes on sparse upper levels cost
+  nothing** — a missing (var, level) chunk is simply an absent ref in a virtual
+  store, never stored bytes.
+- Cons: one flat namespace, so naming discipline matters (decision B); a single
+  array set and manifest for the whole dataset.
+
+**A2 — zarr groups + DataTree (defer).**
+`TemplateConfig` grows per-group `dims`/`coords`/`data_vars` (e.g. `data_vars`
+keyed by group, or a small per-group sub-config); `template_ds` becomes a
+DataTree or a dict of datasets; `chunk_key`/filter/emit address `group/var` paths;
+`get_template`, `write_metadata`, `empty_copy_with_reindex`, and `sync_dims_to`
+all loop over groups; coordination/finalize runs per group.
+- Pros: clean separation, per-group chunk policy, readers open only what they want,
+  no name collisions.
+- Cons: substantial churn across `TemplateConfig`, `RegionJob`,
+  `VirtualRegionJob`, `template_utils`, `storage`; readers must know the group; the
+  back-compat root either duplicates or uses aliases (decision below).
+
+**Recommendation:** ship A1 now. It delivers the dense-pressure win with minimal
+churn and preserves swap-compat. Groups can be layered on later (A2) without
+invalidating A1's variable names, and only when a dataset actually needs per-group
+chunking or the flat namespace becomes unwieldy (e.g. ensemble × model_level ×
+pressure_level). Under A1 the "alias" idea (Q4) and "empty root" idea (Q8) mostly
+dissolve: single-level vars simply *are* the root, and pressure vars *are* the
+level-dim arrays in the same root — nothing to alias.
+
+### Decision B — Naming convention + the written rule
+
+With A1 everything shares one namespace, so the convention has to be unambiguous
+and uniform across providers. Proposed rules:
+
+- **Level-dim variables use the plain ECMWF name, no suffix:** `temperature`,
+  `geopotential_height`, `relative_humidity`, `specific_humidity`, `wind_u`,
+  `wind_v`, `vertical_velocity`. A plain name *always means* "indexed by a
+  `*_level` dimension."
+- **Single/surface variables keep today's suffix convention exactly:**
+  `temperature_2m`, `wind_u_10m`, `pressure_surface`,
+  `pressure_reduced_to_mean_sea_level`. A suffixed name *always means* "one fixed
+  level." This is what makes `temperature` (pressure stack) and `temperature_2m`
+  (2 m) coexist without ambiguity.
+- **Dimension/coordinate:** `pressure_level`, values in **hPa** (matches the
+  legacy `_500hpa` suffix and the idx `mb` units), CF `standard_name`
+  `air_pressure`, `axis="Z"`, `positive="down"`. Pick and document an ordering
+  (recommend descending, surface→top: 1000 → 1).
+- **The placement rule (write it down):** a variable goes on the real
+  `pressure_level` dimension iff the source publishes it across a dense set of
+  pressure levels (e.g. ≥ ~80% of the union other core vars use); otherwise it
+  stays suffix-named. A variable may appear **both** ways (e.g. `temperature` on
+  the pressure stack *and* `temperature_2m`).
+- **Sparse-upper-level handling:** use one `pressure_level` dimension spanning the
+  full 33-level union; variables present only on a subset (spike 3: the 6
+  mixing-ratio vars at 22 levels) simply have no ref above their top level. In a
+  virtual store that is zero cost (absent chunk → fill value), so there is no
+  reason to split the dimension by which vars reach which level.
+
+### Decision C — `model_level` scope (defer; provider-specific)
+
+Spike 5 settles this for NOAA GFS: neither `pgrb2.0p25` nor `pgrb2b.0p25` on NODD
+carries usable model/hybrid levels (1–2 hybrid messages total; pgrb2b has none).
+GFS does not publish a full native-level 0.25° grid on NODD. So:
+
+- **Do not design a universal `model_level` structure now.** Pressure levels are
+  universally available and dense; ship `single_level (suffix) + pressure_level
+  (real dim)` first.
+- Treat `model_level` as **provider-specific and deferred** — HRRR native files,
+  IFS model-level products, ICON native levels each differ. Evaluate per provider
+  when a concrete dense-native-level source is identified. If/when one is, it is
+  the strongest case for A2 groups (a second `model_level` dimension alongside
+  `pressure_level` in one flat dataset is also possible but starts to strain the
+  flat namespace).
+
+### Decision D — Ensemble & manifest/chunk sizing (Q9)
+
+This is a sizing validation, not a structural choice, but it must be checked before
+committing. In a virtual store one ref = one GRIB message = one chunk, and lat/lon
+are a single chunk per message, so manifest entries ≈
+`#append_dim × #ensemble × #lead × #pressure_level × #vars`.
+
+- Pressure levels multiply the ref count of core vars by ~33. For a GEFS-style
+  ensemble (31 members) the pressure block alone is on the order of
+  `16 vars × 33 levels × 31 members × ~81 leads ≈ 1.3M refs per init_time` — large,
+  but exactly what icechunk manifest splitting is built for.
+- The existing `IcechunkVirtualConfig` already splits manifests along the append
+  dim (`manifest_append_dim_split`) and caps the chunk-ref cache
+  (`num_chunk_refs=1_000_000`, see `storage.py`). **Action:** validate the split
+  size and cache budget against the ensemble × pressure projection, and split more
+  aggressively if a single append-dim manifest shard exceeds comfortable size.
+- **Chunking note:** because a virtual chunk is one whole horizontal field,
+  `pressure_level` is chunked **1 per level** (each level is its own message) and
+  lat/lon are single-chunk. Encode `pressure_level` chunk size = 1.
 
 ### Reproducing the spikes
 
 Scripts are committed under `docs/plans/vertical_structure_spikes/`:
 
 ```
-uv run python docs/plans/vertical_structure_spikes/spike3_sparsity.py  # grid density (network: NODD idx)
-uv run python docs/plans/vertical_structure_spikes/spike1_groups.py    # multi-group round-trip
-uv run python docs/plans/vertical_structure_spikes/spike2_alias.py     # virtual alias one ref -> two paths
+uv run python docs/plans/vertical_structure_spikes/spike3_sparsity.py              # grid density (network: NODD idx)
+uv run python docs/plans/vertical_structure_spikes/spike1_groups.py                # multi-group round-trip
+uv run python docs/plans/vertical_structure_spikes/spike2_alias.py                 # virtual alias one ref -> two paths
+uv run python docs/plans/vertical_structure_spikes/spike4_mixed_dims_flat.py       # mixed-dim vars in ONE flat group
+uv run python docs/plans/vertical_structure_spikes/spike5_model_level_availability.py  # pgrb2 vs pgrb2b level content
 ```
