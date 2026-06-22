@@ -123,7 +123,7 @@ ignore = [
     "ARG005",  # unused lambda arg
 ]
 # Throwaway exploration scripts, see docs/plans/vertical_structure_exploration.md
-"docs/plans/vertical_structure_spikes/*.py" = ["T20", "S", "INP", "PERF", "PLW", "ANN", "E401", "E741", "I001"]
+"docs/plans/vertical_structure_spikes/*.py" = ["T20", "S", "INP", "PERF", "PLW", "ANN", "E401", "E741", "I001", "BLE001", "F841", "RUF103"]
 
 [tool.ty.terminal]
 error-on-warning = true

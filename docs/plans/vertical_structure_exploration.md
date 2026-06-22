@@ -468,6 +468,79 @@ uv run python docs/plans/vertical_structure_spikes/spike4_mixed_dims_flat.py    
 uv run python docs/plans/vertical_structure_spikes/spike5_model_level_availability.py  # pgrb2 vs pgrb2b level content
 ```
 
+## Source-data vertical-level review (all 8 catalog models)
+
+Reviewed which of our catalogued models publish **more than one dense vertical
+coordinate type** in the *files we'd virtualize* (the public GRIB archives), which
+is what would force a vertical-dimension/grouping decision. Empirical for the NOAA
+products (NODD `.idx` files, spikes 3/5 + `spike_hrrr_gefs.py`); ECMWF/DWD/MRMS from
+provider docs + live listings.
+
+| Model | Single/surface | Pressure levels (dense) | Model/native levels (dense) | Other dense vertical | Multiple Z-types? |
+|---|---|---|---|---|---|
+| NOAA GFS | yes | **33** levels, 16 vars | no (1–2 hybrid msgs on NODD) | — | **No** — pressure only |
+| NOAA GEFS | yes | modest (0.5° a-file ~12; s-file 0.25° none) | no | — | **No** (but see resolution heterogeneity below) |
+| NOAA HRRR | yes | **39** levels, 14 vars (`wrfprs`) | **50** native levels, 20 vars (`wrfnat`) | — | **YES** — pressure + native |
+| NOAA MRMS | yes (mostly 2D) | no | no | 33 CAPPI height levels (~0.5–19 km), shared by all 3D mosaics | No — one height type |
+| ECMWF IFS ENS | yes | **14** levels (1000→10 hPa), full var set | no (MARS/paid only) | — | **No** — pressure only |
+| ECMWF AIFS Single | yes | **13** levels, narrower var set | no | — | **No** — pressure only |
+| ECMWF AIFS ENS | yes | **14** levels | no (only an *experimental* product) | — | **No** — pressure only |
+| DWD ICON-EU | yes (~100+ vars) | **~20** levels (T, FI, RELHUM, U, V) | **~74** model levels (T, U, V, W, P, QV, …) | — | **YES** — pressure + model |
+
+**Headline: only HRRR and ICON-EU (2 of 8) genuinely need multiple vertical-level
+groups.** Five products are pressure-only (or less); MRMS has a single dense
+vertical type (height), so it gets at most one vertical dimension and no
+pressure-vs-model decision. Crucially, we *know each model's answer up front* from
+this review — there is no "we'll be surprised later" risk that would argue for
+pre-emptively grouping everything.
+
+## When are zarr groups actually required?
+
+Groups solve more than the vertical-coordinate problem. There are (at least) two
+*independent* triggers, and a dataset needs groups if **either** holds:
+
+1. **Multiple dense vertical coordinate types for the same variable** (Decision A's
+   multi-Z case). `temperature` on both pressure and model levels can't share one
+   flat array. → HRRR, ICON-EU.
+
+2. **A dimension whose extent varies across another dimension** (the heterogeneity
+   case). A virtual chunk is a raw GRIB message at its native grid — we can't
+   resample — so if the horizontal grid size changes along the append/lead axis, the
+   data is not rectangular and can't live in one array. **GEFS is the concrete
+   example:** its `s` files are 0.25° only through lead 240 h, after which only
+   `a`/`b` at 0.5° exist (`gefs_config_models.py:15-19`). Tellingly, our one existing
+   virtual GEFS dataset is `forecast_10_day_spatial` = exactly 240 h — capped at the
+   resolution boundary to sidestep this. Spanning the full 35 days virtually would
+   need two resolution groups (e.g. `/lead_0_240` at 0.25°, `/lead_243_840` at
+   0.5°), or two separate datasets.
+
+(A third, softer trigger: wanting genuinely different chunk/manifest policies per
+block of variables.)
+
+### Recommendation: per-dataset, not always-group
+
+**Do not make `pressure_level` a group by default.** Decide layout per dataset at
+creation, from its known source structure:
+
+- **Single vertical coordinate type → flat (root) layout.** Pressure (or height for
+  MRMS) is a real dimension *at the root*; single/surface vars sit alongside it
+  suffix-named (spike 4). This is 6 of 8 models (GFS, GEFS, IFS ENS, AIFS×2, MRMS)
+  and preserves swap-compat with the materialized catalog.
+- **Multiple vertical coordinate types → groups** named by coordinate type
+  (`pressure_level/`, `model_level/`), single/surface at root. This is HRRR and
+  ICON-EU.
+- **Shape heterogeneity → groups** named by the homogeneous block (e.g. resolution
+  window), independent of vertical levels. GEFS full-range is the case.
+
+Rationale: always-grouping would nest 6 of 8 datasets for zero functional benefit
+and break the simple-root / swap-compatible story from Decisions A/B. The forward-
+compat worry ("what if a dataset gains model levels later?") is weak here because we
+already *know* each model's vertical structure, and because the uniform data model
+— **every variable declares its vertical coordinate** (`None` / `pressure_level` /
+`model_level` / `height`) — makes the flat-vs-grouped choice a *rendering* of that
+model, so a later escalation is mechanical, not a redesign. A1 is the single-
+coordinate rendering; groups are the multi-coordinate rendering.
+
 ## Parked / next steps
 
 Decision status and follow-ups (so they aren't lost):
@@ -482,9 +555,16 @@ Decision status and follow-ups (so they aren't lost):
   `*_level` dim; suffix ⇒ one fixed level; `pressure_level` in hPa, CF
   `air_pressure`, axis Z, positive down, descending; place on the real dim iff
   densely published; single levels stay suffix-flat (MultiIndex rejected).
-- **C — `model_level` scope:** deferred, provider-specific. Not available for GFS on
-  NODD; revisit per provider when a dense native-level source exists. First
-  iteration is single-level (suffix) + `pressure_level` (real dim) only.
+- **C — `model_level` scope:** deferred, provider-specific. The source review
+  (above) shows **only HRRR (`wrfnat`, 50 levels) and DWD ICON-EU (~74 levels)**
+  publish dense model levels for the same vars as pressure — they are the concrete
+  multi-Z cases. GFS/GEFS/ECMWF have none in their public files. First iteration is
+  single-level (suffix) + `pressure_level` (real dim) only; bring in `model_level`
+  when building HRRR/ICON-EU.
 - **D — ensemble & manifest sizing:** validation task. Check
   `manifest_append_dim_split` size and `num_chunk_refs` cache against the
   ensemble × pressure projection before committing; `pressure_level` chunk size = 1.
+- **E — group policy:** **DECIDED** (see "When are zarr groups actually required?").
+  Per-dataset, not always-group: flat root for single-vertical-coordinate datasets
+  (6 of 8); groups only for multiple vertical coordinate types (HRRR, ICON-EU) or
+  shape heterogeneity (GEFS full-range resolution split).
