@@ -371,10 +371,13 @@ A2.** Model the data uniformly as "each variable declares its vertical coordinat
 (`None` for single/surface, `pressure_level`, `model_level`, …); then *render*
 flat-at-root when a dataset has ≤1 vertical coordinate type (for swap-compat) and
 render as groups when it has more. Designing the var→vertical-coordinate
-association into the config now means flat-vs-grouped is a later rendering choice,
-not a rewrite. Note this collision does **not** arise for the immediate GFS/GEFS
-pressure-level work (GFS has no usable model levels — decision C), so A1 ships
-unblocked; the association just keeps the door open.
+association into the config now means flat-vs-grouped is a later rendering choice in
+*our code*, not a rewrite. (To be clear: re-rendering an *already-published* dataset
+is still a breaking change for consumers — a new dataset version, not done lightly.
+The cheap-to-change part is our implementation, so we should set the layout policy
+deliberately up front.) Note this collision does **not** arise for the immediate
+GFS/GEFS pressure-level work (GFS has no usable model levels — decision C), so A1
+ships unblocked; the association just keeps the door open.
 
 ### Decision B — Naming convention + the written rule — **DECIDED**
 
@@ -567,9 +570,13 @@ HRRR:  /  temperature_2m, …   /pressure_level  temperature   /model_level  tem
 Either way, single/surface vars stay at root, so materialized→virtual swap-compat is
 the same for both (the suffix→dimension change for pressure breaks those few names
 regardless of grouping). Shared data model: every variable declares its vertical
-coordinate, so flat-vs-grouped is a rendering choice and the policy can be applied
-uniformly. (Same call also covers GEFS's shape-heterogeneity split — resolution
-windows as groups `/lead_0_240`, `/lead_243_840`, vs. separate datasets.)
+coordinate, so flat-vs-grouped is a rendering choice in our code and the policy can
+be applied uniformly. **This is why the policy is worth deciding deliberately now:
+changing the layout of an already-published dataset is a breaking change for
+consumer code (a new dataset version), not something we would do lightly — even
+though our implementation could re-render either way.** (Same call also covers
+GEFS's shape-heterogeneity split — resolution windows as groups `/lead_0_240`,
+`/lead_243_840`, vs. separate datasets.)
 
 **Author's lean: Option A** — optimize the common, most-used single-type datasets
 for one-shot discovery; introduce groups only where a real name conflict requires
@@ -583,8 +590,10 @@ Decision status and follow-ups (so they aren't lost):
   concrete `DataVar.dims` (optional, default = template `dims`) + `update_template`
   / `empty_copy_with_reindex` change as a small proposal / proof-of-concept diff.
   Model each variable's vertical coordinate (`None` / `pressure_level` /
-  `model_level`) so flat-at-root vs. grouped is a later rendering choice — A1 is the
-  single-vertical-coordinate special case of A2.
+  `model_level`) so flat-at-root vs. grouped is a rendering choice in our code — A1
+  is the single-vertical-coordinate special case of A2. (Cheap to re-render in code;
+  *not* cheap to change once published — that's a breaking version bump, so set the
+  layout policy (E) deliberately up front.)
 - **B — naming convention:** **DECIDED** (see Decision B). Plain ECMWF name ⇒ on a
   `*_level` dim; suffix ⇒ one fixed level; `pressure_level` in hPa, CF
   `air_pressure`, axis Z, positive down, descending; place on the real dim iff
