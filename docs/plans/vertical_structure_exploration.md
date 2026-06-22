@@ -585,7 +585,31 @@ MRMS:  /single_level …                    /height reflectivity
 - ✗ Least discoverable: a bare `open_zarr(url)` yields nothing useful; you must know
   to open `single_level`. (`open_datatree` still shows all groups at once.)
 
-Notes for all three: the suffix→dimension change for the few pressure names breaks
+A/B/C are all *one store, zarr groups*. Two alternatives sit outside that family:
+
+**Option D — separate datasets per level type (no groups; more stores).** Publish a
+store per level type instead of groups: e.g. `hrrr-forecast` (single + pressure) plus
+a separate `hrrr-forecast-model-level`; mirrors how we already split forecast vs.
+analysis into separate datasets.
+- ✓ No group machinery at all — each store is a simple flat dataset; lowest code
+  change. Independent versioning/lifecycle; consumer picks a URL.
+- ✗ Cross-level work spans stores (open + merge); coordinates (init_time, lat/lon,
+  ensemble) duplicated per store; more STAC collections; loses single-open /
+  `open_datatree` cohesion and cross-group atomic commits.
+
+**Option E — one flat store, type-suffixed names (no groups; two vertical dims
+coexist).** Resolve the collision by name, not path: a single root group holding
+`temperature(pressure_level)` and, say, `temperature_native(model_level)` — both
+vertical dims live in the same flat dataset (mixed dims are fine — spike 4).
+- ✓ One `open_zarr()` returns everything, even for HRRR/ICON-EU — most discoverable.
+- ✗ Asymmetric naming (which type gets the bare name?); two `*_level` dims in one
+  dataset; leaned against in Decision A.
+
+(Also considered and rejected — Decision A: a single generalized `level` dim
+concatenating pressure + model under one axis with a `level_type` aux coord;
+incomparable axis, poor `.sel`, awkward CF round-trip.)
+
+Notes for all options: the suffix→dimension change for the few pressure names breaks
 those regardless of layout; the shared data model (every variable declares its
 vertical coordinate) means the layout is a rendering choice *in our code*. **But
 changing the layout of an already-published dataset is a breaking change for
@@ -594,10 +618,14 @@ policy is worth deciding deliberately now.** The same call covers GEFS's
 shape-heterogeneity split (resolution windows as groups `/lead_0_240`,
 `/lead_243_840`, vs. separate datasets).
 
+**Taxonomy:** one store + groups (A/B/C, differing by how much goes in groups),
+multiple stores (D), or one flat store disambiguated by name (E).
+
 **Author's lean: Option A** — optimize the common, most-used single-type datasets
 for one-shot discovery; introduce groups only where a real name conflict requires
-them. Option C is the most consistent but least discoverable; Option B is the middle
-ground. Pending TSC input.
+them. C is the most consistent but least discoverable; B is the middle ground; D
+trades cohesion for the least machinery; E keeps one-open discoverability at the cost
+of asymmetric names. Pending TSC input.
 
 ## Parked / next steps
 
@@ -627,5 +655,7 @@ Decision status and follow-ups (so they aren't lost):
   TSC): where do vertical stacks (and single levels) live?"). HRRR/ICON-EU must group
   regardless; the call is the catalog-wide layout: **A** group only on conflict
   (single-type stays flat at root, author's lean), **B** always group vertical stacks
-  but keep single-level at root, or **C** group everything including a `single_level`
-  group (empty root, most consistent / least discoverable). Awaiting TSC input.
+  but keep single-level at root, **C** group everything including a `single_level`
+  group (empty root, most consistent / least discoverable), **D** separate datasets
+  per level type (no groups, more stores), or **E** one flat store, type-suffixed
+  names (no groups). Awaiting TSC input.
