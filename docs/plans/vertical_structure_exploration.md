@@ -465,39 +465,54 @@ uv run python docs/plans/vertical_structure_spikes/spike3_sparsity.py           
 uv run python docs/plans/vertical_structure_spikes/spike1_groups.py                # multi-group round-trip
 uv run python docs/plans/vertical_structure_spikes/spike2_alias.py                 # virtual alias one ref -> two paths
 uv run python docs/plans/vertical_structure_spikes/spike4_mixed_dims_flat.py       # mixed-dim vars in ONE flat group
-uv run python docs/plans/vertical_structure_spikes/spike5_model_level_availability.py  # pgrb2 vs pgrb2b level content
+uv run python docs/plans/vertical_structure_spikes/spike5_model_level_availability.py  # GFS pgrb2 vs pgrb2b level content
+uv run python docs/plans/vertical_structure_spikes/spike6_hrrr_gefs_levels.py      # HRRR wrfprs/wrfnat + GEFS (real .idx)
+uv run python docs/plans/vertical_structure_spikes/spike7_ecmwf_levels.py          # ECMWF IFS ENS / AIFS open-data .index
+uv run python docs/plans/vertical_structure_spikes/spike8_icon_eu_levels.py        # DWD ICON-EU pressure vs model levels
+uv run python docs/plans/vertical_structure_spikes/spike8b_icon_read_one_grib.py   # download+decode one ICON model-level GRIB
+uv run python docs/plans/vertical_structure_spikes/spike9_mrms_levels.py           # MRMS 3D products from real bucket
 ```
+
+(ECMWF/ICON spikes hit live, short-retention open-data servers — update the
+hard-coded date if it has aged out.)
 
 ## Source-data vertical-level review (all 8 catalog models)
 
 Reviewed which of our catalogued models publish **more than one dense vertical
 coordinate type** in the *files we'd virtualize* (the public GRIB archives), which
-is what would force a vertical-dimension/grouping decision. Empirical for the NOAA
-products (NODD `.idx` files, spikes 3/5 + `spike_hrrr_gefs.py`); ECMWF/DWD/MRMS from
-provider docs + live listings.
+is what would force a vertical-dimension/grouping decision. **All figures verified
+against real source files**, not docs (docs are often stale — see
+`source_data_exploration_guide.md` §5): NOAA from NODD `.idx` (spikes 3/5/6), ECMWF
+from the live open-data JSON `.index` files (spike 7), DWD ICON-EU from live
+directory listings plus one model-level GRIB downloaded and decoded with rasterio
+(spikes 8 / 8b), MRMS from the live `noaa-mrms-pds` bucket listing (spike 9). The
+real-file pass corrected one doc-sourced figure (AIFS Single is 14 pressure levels,
+not 13) and otherwise confirmed the structure.
 
 | Model | Single/surface | Pressure levels (dense) | Model/native levels (dense) | Other dense vertical | Multiple Z-types? |
 |---|---|---|---|---|---|
 | NOAA GFS | yes | **33** levels, 16 vars | no (1–2 hybrid msgs on NODD) | — | **No** — pressure only |
 | NOAA GEFS | yes | modest (0.5° a-file ~12; s-file 0.25° none) | no | — | **No** (but see resolution heterogeneity below) |
 | NOAA HRRR | yes | **39** levels, 14 vars (`wrfprs`) | **50** native levels, 20 vars (`wrfnat`) | — | **YES** — pressure + native |
-| NOAA MRMS | yes (mostly 2D) | no | no | 33 CAPPI height levels (~0.5–19 km), shared by all 3D mosaics | No — one height type |
-| ECMWF IFS ENS | yes | **14** levels (1000→10 hPa), full var set | no (MARS/paid only) | — | **No** — pressure only |
-| ECMWF AIFS Single | yes | **13** levels, narrower var set | no | — | **No** — pressure only |
-| ECMWF AIFS ENS | yes | **14** levels | no (only an *experimental* product) | — | **No** — pressure only |
-| DWD ICON-EU | yes (~100+ vars) | **~20** levels (T, FI, RELHUM, U, V) | **~74** model levels (T, U, V, W, P, QV, …) | — | **YES** — pressure + model |
+| NOAA MRMS | yes (mostly 2D) | no | no | **33** height levels (0.5–19 km) on 3 vars (`MergedReflectivityQC`, `MergedRhoHV`, `MergedZdr`) | No — one height type |
+| ECMWF IFS ENS | yes | **14** levels (1000→10 hPa), 9 params (d, gh, q, r, t, u, v, vo, w) | no (MARS/paid only) | 4 `sol` soil levels | **No** — pressure only |
+| ECMWF AIFS Single | yes | **14** levels, 7 params (gh, q, t, u, v, w, z) | no | 2 `sol` soil levels | **No** — pressure only |
+| ECMWF AIFS ENS | yes | **14** levels, 6 params (q, t, u, v, w, z) | no (only an *experimental* product) | 2 `sol` soil levels | **No** — pressure only |
+| DWD ICON-EU | yes (67 vars) | **20** levels, 7 vars (clc, fi, omega, relhum, t, u, v) | **74** model levels, 10 vars (clc, p, qc, qi, qv, t, tke, u, v, w) | — | **YES** — pressure + model (both: t, u, v, clc) |
 
 **Headline: only HRRR and ICON-EU (2 of 8) genuinely need multiple vertical-level
 groups.** Five products are pressure-only (or less); MRMS has a single dense
 vertical type (height), so it gets at most one vertical dimension and no
-pressure-vs-model decision. Crucially, we *know each model's answer up front* from
-this review — there is no "we'll be surprised later" risk that would argue for
-pre-emptively grouping everything.
+pressure-vs-model decision. (ECMWF's `sol` soil layers are a second vertical type
+in principle, but only 2–4 layers on soil vars — not the same atmospheric variable
+on two systems, so no group decision.) Crucially, we *know each model's answer up
+front* from this review — there is no "we'll be surprised later" risk that would
+argue for pre-emptively grouping everything.
 
 ## When are zarr groups actually required?
 
-Groups solve more than the vertical-coordinate problem. There are (at least) two
-*independent* triggers, and a dataset needs groups if **either** holds:
+Groups solve more than the vertical-coordinate problem. There are two *independent*
+triggers, and a dataset needs groups if **either** holds:
 
 1. **Multiple dense vertical coordinate types for the same variable** (Decision A's
    multi-Z case). `temperature` on both pressure and model levels can't share one
@@ -514,8 +529,9 @@ Groups solve more than the vertical-coordinate problem. There are (at least) two
    need two resolution groups (e.g. `/lead_0_240` at 0.25°, `/lead_243_840` at
    0.5°), or two separate datasets.
 
-(A third, softer trigger: wanting genuinely different chunk/manifest policies per
-block of variables.)
+Manifest/chunk-policy differences are **not** a grouping trigger: we will not
+impose the reader complexity of multiple groups just to vary manifest chunking
+within a dataset.
 
 ### Recommendation: per-dataset, not always-group
 
