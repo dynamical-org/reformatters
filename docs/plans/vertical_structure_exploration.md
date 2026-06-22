@@ -341,10 +341,45 @@ pressure_level). Under A1 the "alias" idea (Q4) and "empty root" idea (Q8) mostl
 dissolve: single-level vars simply *are* the root, and pressure vars *are* the
 level-dim arrays in the same root — nothing to alias.
 
-### Decision B — Naming convention + the written rule
+**The one case A1 can't express: a variable on two vertical-coordinate types.**
+If a dataset publishes `temperature` on *both* pressure levels and model levels,
+a flat group can't hold two arrays named `temperature` that differ only in their Z
+dim. An array has exactly one Z axis, and a 5-D `temperature(time, pressure_level,
+model_level, y, x)` is nonsense (a cell is on one or the other, never both). Three
+ways out:
 
-With A1 everything shares one namespace, so the convention has to be unambiguous
-and uniform across providers. Proposed rules:
+1. **Groups (the clean answer): the group name *is* the vertical-coordinate type.**
+   `pressure_level/temperature`, `model_level/temperature`; single/surface vars stay
+   at root (suffix-named). This is exactly the case A2 exists for, and it gives a
+   crisp escalation rule: **use groups iff a dataset has more than one vertical
+   coordinate type for the same variable; otherwise stay flat.** Spike 1 confirms
+   root arrays and subgroups coexist in one store, so single-levels-at-root +
+   `pressure_level/` + `model_level/` is a valid layout.
+2. **Type-suffix the name** (`temperature` + `temperature_model_level`). Keeps the
+   flat namespace but is asymmetric (which Z-type wins the bare name?) and reads as
+   a special case — rejected.
+3. **One generalized `level` dim with auxiliary `level_type`/`level_value`
+   coords**, concatenating the two stacks (33 + 127 entries, *not* a cross product,
+   so no NaN blow-up). Technically CF-valid, but it reintroduces the
+   incomparable-axis ergonomics of the single-level MultiIndex idea below (you
+   can't `.sel(pressure_level=500)` cleanly, and slicing across the pressure↔model
+   boundary is meaningless) plus awkward CF round-trip — rejected for the same
+   reasons.
+
+The useful reframing: **A1 is just the single-vertical-coordinate special case of
+A2.** Model the data uniformly as "each variable declares its vertical coordinate"
+(`None` for single/surface, `pressure_level`, `model_level`, …); then *render*
+flat-at-root when a dataset has ≤1 vertical coordinate type (for swap-compat) and
+render as groups when it has more. Designing the var→vertical-coordinate
+association into the config now means flat-vs-grouped is a later rendering choice,
+not a rewrite. Note this collision does **not** arise for the immediate GFS/GEFS
+pressure-level work (GFS has no usable model levels — decision C), so A1 ships
+unblocked; the association just keeps the door open.
+
+### Decision B — Naming convention + the written rule — **DECIDED**
+
+Agreed. This is the naming convention of record. With A1 everything shares one
+namespace, so the convention is unambiguous and uniform across providers:
 
 - **Level-dim variables use the plain ECMWF name, no suffix:** `temperature`,
   `geopotential_height`, `relative_humidity`, `specific_humidity`, `wind_u`,
@@ -369,6 +404,21 @@ and uniform across providers. Proposed rules:
   mixing-ratio vars at 22 levels) simply have no ref above their top level. In a
   virtual store that is zero cost (absent chunk → fill value), so there is no
   reason to split the dimension by which vars reach which level.
+
+**Rejected: a MultiIndex `level` dim for single levels** (e.g.
+`.sel(level=("height_above_surface", "2m"))`). It doesn't help — the single-level
+grid stays ~7% sparse, and in a virtual store sparsity isn't even the cost
+(absent refs are free). The real objections are semantic and ergonomic: the
+single-level "levels" are *incomparable* (`2 m above ground` vs `mean sea level`
+vs `entire atmosphere` vs `boundary layer`), so the one thing a dimension buys —
+operating *across* it (slice/interpolate/integrate) — is meaningless for them; you
+always pick one named thing. `("height_above_surface","2m")` is more verbose and
+less discoverable than `temperature_2m`, and a pandas MultiIndex doesn't round-trip
+cleanly to Zarr/CF. The deciding factor stays **density × comparability**: pressure
+is the only single regime that is both, which is why it (and only it) gets a real
+dimension. Even a numeric `height_above_ground` sub-dim (2/10/80/100 m) is rejected:
+the heights are comparable but the cross product is still sparse (temperature only
+at 2 m, wind at 10/80/100 m), so single levels stay suffix-flat.
 
 ### Decision C — `model_level` scope (defer; provider-specific)
 
@@ -417,3 +467,24 @@ uv run python docs/plans/vertical_structure_spikes/spike2_alias.py              
 uv run python docs/plans/vertical_structure_spikes/spike4_mixed_dims_flat.py       # mixed-dim vars in ONE flat group
 uv run python docs/plans/vertical_structure_spikes/spike5_model_level_availability.py  # pgrb2 vs pgrb2b level content
 ```
+
+## Parked / next steps
+
+Decision status and follow-ups (so they aren't lost):
+
+- **A — machinery (per-variable dims):** *parked, to design next.* Draft the
+  concrete `DataVar.dims` (optional, default = template `dims`) + `update_template`
+  / `empty_copy_with_reindex` change as a small proposal / proof-of-concept diff.
+  Model each variable's vertical coordinate (`None` / `pressure_level` /
+  `model_level`) so flat-at-root vs. grouped is a later rendering choice — A1 is the
+  single-vertical-coordinate special case of A2.
+- **B — naming convention:** **DECIDED** (see Decision B). Plain ECMWF name ⇒ on a
+  `*_level` dim; suffix ⇒ one fixed level; `pressure_level` in hPa, CF
+  `air_pressure`, axis Z, positive down, descending; place on the real dim iff
+  densely published; single levels stay suffix-flat (MultiIndex rejected).
+- **C — `model_level` scope:** deferred, provider-specific. Not available for GFS on
+  NODD; revisit per provider when a dense native-level source exists. First
+  iteration is single-level (suffix) + `pressure_level` (real dim) only.
+- **D — ensemble & manifest sizing:** validation task. Check
+  `manifest_append_dim_split` size and `num_chunk_refs` cache against the
+  ensemble × pressure projection before committing; `pressure_level` chunk size = 1.
