@@ -529,30 +529,51 @@ triggers, and a dataset needs groups if **either** holds:
    need two resolution groups (e.g. `/lead_0_240` at 0.25°, `/lead_243_840` at
    0.5°), or two separate datasets.
 
-### Open question: always group `pressure_level`, or only when it conflicts?
+### Open question (for TSC): always group vertical stacks, or only on conflict?
 
-**Undecided.** Should `pressure_level` *always* be its own group for consistency,
-or only when a dataset has another vertical-coordinate type to conflict with —
-storing it as a plain dimension on the root when there's no conflict?
+**Decision needed.** Single/surface variables always live at the root, suffix-named.
+The question is where a *vertical stack* (pressure, model, height) lives.
 
-- **Conditional (lean):** if a dataset has a single vertical coordinate type, store
-  it as a dimension *on the root* (pressure for GFS/GEFS/IFS ENS/AIFS×2, height for
-  MRMS); only escalate to groups (`pressure_level/`, `model_level/`) when a second
-  type is present (HRRR, ICON-EU) — i.e. group only to resolve a name conflict.
-  This nests just 2 of 8 datasets and preserves the simple-root / swap-compatible
-  story from Decisions A/B; the uniform "every variable declares its vertical
-  coordinate" data model makes flat-vs-grouped a rendering choice, so escalating
-  later is mechanical. Since we already know each model's structure, the
-  "surprised later" risk is low.
-- **Always-group:** put pressure (and any vertical stack) in a named group in every
-  dataset, so layout is identical catalog-wide and a dataset gaining a second
-  vertical type never changes the location of existing variables. Costs needless
-  nesting for 6 of 8 datasets and breaks drop-in swap-compat with the materialized
-  catalog (readers would need `group=`).
+Fixed regardless of the choice: HRRR and ICON-EU publish `temperature` on **both**
+pressure and model levels, so the bare name collides and at least one stack **must**
+go in a group. This decision is really about the other six (single-vertical-type)
+datasets — and thus whether "pressure-level temperature" has a *uniform* location
+across the catalog.
 
-Resolving this also fixes the shape-heterogeneity layout (trigger 2): if we group
-by vertical type we likely also group the GEFS resolution windows
-(`/lead_0_240`, `/lead_243_840`) rather than splitting into separate datasets.
+**Option A — group only on conflict.** Single-type datasets keep the stack as a
+dimension on the root; group only where two types collide.
+
+```
+GFS:   /  temperature_2m, temperature(pressure_level), …
+HRRR:  /  temperature_2m, …   /pressure_level  temperature   /model_level  temperature
+```
+- One `open_zarr()` on GFS/IFS yields surface + pressure together; no group knowledge.
+- Groups appear only where semantically needed; their presence signals "multiple
+  vertical systems."
+- Pressure access differs GFS (root) vs HRRR (group) — not uniform.
+
+**Option B — always group stacks.** Root holds only single/surface vars everywhere;
+every stack lives in a group named for its coordinate.
+
+```
+GFS:   /  temperature_2m, …   /pressure_level  temperature
+HRRR:  /  temperature_2m, …   /pressure_level  temperature   /model_level  temperature
+```
+- Uniform: `pressure_level/temperature` everywhere; a dataset gaining a vertical
+  type never relocates existing vars.
+- GFS/IFS readers must open the `pressure_level` group (one-shot `open_zarr` gives
+  only surface vars); nests 6 of 8 datasets.
+
+Either way, single/surface vars stay at root, so materialized→virtual swap-compat is
+the same for both (the suffix→dimension change for pressure breaks those few names
+regardless of grouping). Shared data model: every variable declares its vertical
+coordinate, so flat-vs-grouped is a rendering choice and the policy can be applied
+uniformly. (Same call also covers GEFS's shape-heterogeneity split — resolution
+windows as groups `/lead_0_240`, `/lead_243_840`, vs. separate datasets.)
+
+**Author's lean: Option A** — optimize the common, most-used single-type datasets
+for one-shot discovery; introduce groups only where a real name conflict requires
+them. Pending TSC input.
 
 ## Parked / next steps
 
@@ -568,16 +589,16 @@ Decision status and follow-ups (so they aren't lost):
   `*_level` dim; suffix ⇒ one fixed level; `pressure_level` in hPa, CF
   `air_pressure`, axis Z, positive down, descending; place on the real dim iff
   densely published; single levels stay suffix-flat (MultiIndex rejected).
-- **C — `model_level` scope:** deferred, provider-specific. The source review
-  (above) shows **only HRRR (`wrfnat`, 50 levels) and DWD ICON-EU (~74 levels)**
-  publish dense model levels for the same vars as pressure — they are the concrete
-  multi-Z cases. GFS/GEFS/ECMWF have none in their public files. First iteration is
-  single-level (suffix) + `pressure_level` (real dim) only; bring in `model_level`
-  when building HRRR/ICON-EU.
-- **D — ensemble & manifest sizing:** validation task. Check
-  `manifest_append_dim_split` size and `num_chunk_refs` cache against the
-  ensemble × pressure projection before committing; `pressure_level` chunk size = 1.
-- **E — group policy:** **OPEN** (see "Open question: always group `pressure_level`,
-  or only when it conflicts?"). Should `pressure_level` always be its own group, or
-  only when a second vertical-coordinate type forces it — storing it as a root
-  dimension when there's no conflict? Leaning conditional; not decided.
+- **C — `model_level` inclusion:** **RESOLVED — include all available vertical
+  levels.** The source review shows only **HRRR (`wrfnat`, 50 levels)** and **DWD
+  ICON-EU (74 levels)** publish dense model levels for the same vars as pressure;
+  GFS/GEFS/ECMWF have none in their public files. Virtual HRRR and ICON-EU
+  (imminent) ship single + `pressure_level` + `model_level`. C is a *data-inclusion*
+  question (which vertical types are in the dataset); the *layout* it forces is
+  Decision E — for HRRR/ICON-EU the bare name `temperature` collides across pressure
+  and model levels, so a group is required.
+- **E — group policy (layout):** **OPEN — pending TSC** (see "Open question (for
+  TSC): always group vertical stacks, or only on conflict?"). HRRR/ICON-EU must
+  group regardless; the call is whether single-vertical-type datasets keep the stack
+  as a root dimension (Option A, author's lean) or always nest it in a group (Option
+  B). Awaiting technical steering committee input.
