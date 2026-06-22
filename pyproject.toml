@@ -128,6 +128,10 @@ ignore = [
 [tool.ty.terminal]
 error-on-warning = true
 
+[tool.ty.src]
+# Throwaway exploration scripts, see docs/plans/vertical_structure_exploration.md
+exclude = ["docs/plans/vertical_structure_spikes/"]
+
 [tool.ty.rules]
 possibly-unresolved-reference = "error"
 possibly-missing-attribute = "error"
