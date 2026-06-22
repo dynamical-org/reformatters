@@ -529,33 +529,30 @@ triggers, and a dataset needs groups if **either** holds:
    need two resolution groups (e.g. `/lead_0_240` at 0.25°, `/lead_243_840` at
    0.5°), or two separate datasets.
 
-Manifest/chunk-policy differences are **not** a grouping trigger: we will not
-impose the reader complexity of multiple groups just to vary manifest chunking
-within a dataset.
+### Open question: always group `pressure_level`, or only when it conflicts?
 
-### Recommendation: per-dataset, not always-group
+**Undecided.** Should `pressure_level` *always* be its own group for consistency,
+or only when a dataset has another vertical-coordinate type to conflict with —
+storing it as a plain dimension on the root when there's no conflict?
 
-**Do not make `pressure_level` a group by default.** Decide layout per dataset at
-creation, from its known source structure:
+- **Conditional (lean):** if a dataset has a single vertical coordinate type, store
+  it as a dimension *on the root* (pressure for GFS/GEFS/IFS ENS/AIFS×2, height for
+  MRMS); only escalate to groups (`pressure_level/`, `model_level/`) when a second
+  type is present (HRRR, ICON-EU) — i.e. group only to resolve a name conflict.
+  This nests just 2 of 8 datasets and preserves the simple-root / swap-compatible
+  story from Decisions A/B; the uniform "every variable declares its vertical
+  coordinate" data model makes flat-vs-grouped a rendering choice, so escalating
+  later is mechanical. Since we already know each model's structure, the
+  "surprised later" risk is low.
+- **Always-group:** put pressure (and any vertical stack) in a named group in every
+  dataset, so layout is identical catalog-wide and a dataset gaining a second
+  vertical type never changes the location of existing variables. Costs needless
+  nesting for 6 of 8 datasets and breaks drop-in swap-compat with the materialized
+  catalog (readers would need `group=`).
 
-- **Single vertical coordinate type → flat (root) layout.** Pressure (or height for
-  MRMS) is a real dimension *at the root*; single/surface vars sit alongside it
-  suffix-named (spike 4). This is 6 of 8 models (GFS, GEFS, IFS ENS, AIFS×2, MRMS)
-  and preserves swap-compat with the materialized catalog.
-- **Multiple vertical coordinate types → groups** named by coordinate type
-  (`pressure_level/`, `model_level/`), single/surface at root. This is HRRR and
-  ICON-EU.
-- **Shape heterogeneity → groups** named by the homogeneous block (e.g. resolution
-  window), independent of vertical levels. GEFS full-range is the case.
-
-Rationale: always-grouping would nest 6 of 8 datasets for zero functional benefit
-and break the simple-root / swap-compatible story from Decisions A/B. The forward-
-compat worry ("what if a dataset gains model levels later?") is weak here because we
-already *know* each model's vertical structure, and because the uniform data model
-— **every variable declares its vertical coordinate** (`None` / `pressure_level` /
-`model_level` / `height`) — makes the flat-vs-grouped choice a *rendering* of that
-model, so a later escalation is mechanical, not a redesign. A1 is the single-
-coordinate rendering; groups are the multi-coordinate rendering.
+Resolving this also fixes the shape-heterogeneity layout (trigger 2): if we group
+by vertical type we likely also group the GEFS resolution windows
+(`/lead_0_240`, `/lead_243_840`) rather than splitting into separate datasets.
 
 ## Parked / next steps
 
@@ -580,7 +577,7 @@ Decision status and follow-ups (so they aren't lost):
 - **D — ensemble & manifest sizing:** validation task. Check
   `manifest_append_dim_split` size and `num_chunk_refs` cache against the
   ensemble × pressure projection before committing; `pressure_level` chunk size = 1.
-- **E — group policy:** **DECIDED** (see "When are zarr groups actually required?").
-  Per-dataset, not always-group: flat root for single-vertical-coordinate datasets
-  (6 of 8); groups only for multiple vertical coordinate types (HRRR, ICON-EU) or
-  shape heterogeneity (GEFS full-range resolution split).
+- **E — group policy:** **OPEN** (see "Open question: always group `pressure_level`,
+  or only when it conflicts?"). Should `pressure_level` always be its own group, or
+  only when a second vertical-coordinate type forces it — storing it as a root
+  dimension when there's no conflict? Leaning conditional; not decided.
