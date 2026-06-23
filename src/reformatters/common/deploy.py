@@ -70,9 +70,9 @@ def deploy_operational_resources(
 
 
 def _provision_heartbeats(cron_jobs: Iterable[kubernetes.CronJob]) -> None:
-    if os.getenv("BETTERSTACK_API_TOKEN_RW") is None:
+    if os.getenv("BETTERSTACK_API_KEY_RW") is None:
         log.warning(
-            "BETTERSTACK_API_TOKEN_RW unset; skipping Better Stack "
+            "BETTERSTACK_API_KEY_RW unset; skipping Better Stack "
             "heartbeat provisioning. Cron monitoring will not be updated."
         )
         return

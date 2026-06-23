@@ -117,7 +117,7 @@ def test_upsert_heartbeat_noop_when_unchanged() -> None:
 
 
 def test_reconcile_heartbeats_builds_url_map(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("BETTERSTACK_API_TOKEN_RW", "token")
+    monkeypatch.setenv("BETTERSTACK_API_KEY_RW", "token")
     monkeypatch.delenv("DYNAMICAL_BETTERSTACK_STATUS_PAGE_ID", raising=False)
     monkeypatch.setattr(betterstack, "_api_client", lambda token: _NullClient())
     monkeypatch.setattr(betterstack, "_list_heartbeats", lambda client: {})
