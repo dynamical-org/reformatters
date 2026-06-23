@@ -552,37 +552,35 @@ same shape:
 This is Option B below (single-level at root, every stack grouped), with two
 refinements: group name = dimension name, and empty groups are omitted.
 
-### Open sub-questions this leaves
+### Sub-questions
 
-1. **Shared-coordinate placement (the big one).** Where do the dimension
-   coordinates shared by root and groups live — `time`/`init_time`/`lead_time`,
-   `latitude`/`longitude` (or `y`/`x`), `ensemble_member`, and `spatial_ref`/CRS?
-   Spike (`spike_coords`) shows that if they live **only at the root**, opening a
-   child group on its own (`xr.open_zarr(url, group="pressure_level")`) returns the
-   variable with correct dim *sizes* but **no coordinate values** for time/lat/lon —
-   only the in-group `pressure_level` coord; just `open_datatree`/`open_groups`
-   (the DataTree model) inherits the root coords. So either (a) **duplicate** the
-   shared coords into every group so each group is independently openable (cheap —
-   coords are small real arrays, not virtual refs; costs a little metadata and write
-   coordination), or (b) **root-only + require DataTree reads** (no duplication, but
-   a plain per-group open is coordinate-less and surprising). Needs a call.
-2. **Other vertical coordinate types + the single-vs-Z boundary.** The decision
-   names only `pressure_level` and `model_level`. Still open: (a) the group/dim name
-   for **height-based** stacks (MRMS 3D reflectivity, 33 CAPPI levels — `height`?
-   `altitude`?) and **soil/depth** stacks (ECMWF `sol`, ICON `t_so`/`w_so` —
+1. **Shared-coordinate placement — DECIDED: duplicate into every group.** The
+   dimension coordinates shared by root and groups (`time`/`init_time`/`lead_time`,
+   `latitude`/`longitude` or `y`/`x`, `ensemble_member`, `spatial_ref`/CRS) are
+   **written into each group**, so every group is independently openable —
+   `xr.open_zarr(url, group="pressure_level")` returns fully-coordinated data without
+   needing the DataTree model. Rationale: spike `spike10` shows root-only coords leave
+   a child group coordinate-less on a plain per-group open; duplication is cheap
+   (coords are small real arrays, not virtual refs) and worth it for standalone
+   usability.
+2. **Other vertical coordinate types + the single-vs-Z boundary — OPEN (deferred).**
+   The decision names only `pressure_level` and `model_level`. Still open: (a) the
+   group/dim name for **height-based** stacks (MRMS 3D reflectivity, 33 CAPPI levels —
+   `height`? `altitude`?) and **soil/depth** stacks (ECMWF `sol`, ICON `t_so`/`w_so` —
    `depth_below_land_surface`?), and whether those are in scope now; (b) the rule for
    *what counts as a Z dimension* (dense + comparable → its own group/dim) **vs. a
    single-level var at root** (sparse/selected → suffix-named). E.g. a single
    selected pressure level — is `geopotential_height_500hpa` a root single-level var,
    or a `pressure_level` group of size 1? (Per Decision B's density × comparability,
    a single selected level stays suffix-named at root — worth restating explicitly.)
-3. **Scope of this decision.** It resolves *vertical* structure only. Still open:
-   the non-vertical heterogeneity case (GEFS 0.25°/0.5° across lead time — resolution
-   groups vs. separate datasets), and whether this structure also reshapes existing
-   *materialized* datasets or applies only to new virtual all-level datasets.
-4. **Empty root is allowed** (minor): a purely upper-air dataset would have a root
-   with shared coords but zero data variables. Structurally fine; just confirm it's
-   intended.
+3. **Scope of this decision — OPEN (deferred).** It resolves *vertical* structure
+   only. Still open: the non-vertical heterogeneity case (GEFS 0.25°/0.5° across lead
+   time — resolution groups vs. separate datasets), and whether this structure also
+   reshapes existing *materialized* datasets or applies only to new virtual all-level
+   datasets.
+4. **Empty root — CONFIRMED acceptable (and unlikely).** A purely upper-air dataset
+   would have a root with shared coords but zero data variables; structurally fine,
+   and not expected to come up in practice.
 
 ### Options considered (decided: Option B)
 
@@ -708,9 +706,9 @@ Decision status and follow-ups (so they aren't lost):
 - **E — group policy (layout):** **DECIDED — Option B, refined** (see "Decided
   layout"). Single-level at root; each vertical (Z) dimension in a group named after
   the dimension (`pressure_level`, `model_level` — group name = dim name); structure
-  uniform across all datasets; empty groups omitted. Open sub-questions remain:
-  **(1)** shared-coordinate placement (duplicate into each group vs. root-only +
-  DataTree reads — see spike `spike_coords`); **(2)** naming/scope for other Z types
+  uniform across all datasets; empty groups omitted. Shared coords are **duplicated
+  into each group** so groups are independently openable (sub-q 1 decided; empty root
+  confirmed fine, sub-q 4). Still open: **sub-q 2** naming/scope for other Z types
   (height for MRMS, soil/depth) and the dense-Z-dim vs. single-level-at-root boundary;
-  **(3)** the non-vertical resolution-heterogeneity case (GEFS) and whether this
+  **sub-q 3** the non-vertical resolution-heterogeneity case (GEFS) and whether this
   reshapes materialized datasets or only new virtual ones.
