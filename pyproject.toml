@@ -27,6 +27,8 @@ dependencies = [
     "google-crc32c>=1.8.0",
     "httpx>=0.28.1",
     "gribberish~=0.30",
+    "logtail-python>=0.3.4",
+    "croniter>=6.2.2",
 ]
 
 [build-system]
@@ -54,6 +56,7 @@ dev = [
     "pytest-xdist~=3.8",
     # NOTE: keep this in sync with .pre-commit-config.yaml
     "ruff==0.15.14",
+    "types-croniter>=6.2.2.20260518",
     "ty~=0.0.39",
     "types-boto3>=1.43.5",
     "types-requests~=2.32",

@@ -4,11 +4,12 @@ _Report issues to feedback@dynamical.org._
 
 For each dataset there are two workflows: `{dataset-id}-update` runs first, followed by `{dataset-id}-validate`.
 
-## Sentry monitoring
-_Requires sentry organization invitation._
-- [Crons overview](https://dynamical.sentry.io/insights/crons/) - Start here. If all green, we're good. If red, click in to see the issue and logs.
-- [Issues](https://dynamical.sentry.io/issues/?statsPeriod=12h)
-- [Logs](https://dynamical.sentry.io/explore/logs/) - You can filter these by job name
+## Better Stack monitoring
+_Requires Better Stack team invitation._
+- [Heartbeats](https://uptime.betterstack.com/) - Start here. Each cron has a `{cronjob-name}.start` (fires within ~10m of the scheduled time) and a `{cronjob-name}.complete` (fires after a successful run) heartbeat. If all green, we're good.
+- [status.dynamical.org](https://status.dynamical.org) - Public status page; driven by each dataset's `{dataset-id}-validate.complete` heartbeat.
+- [Errors](https://dynamical.sentry.io/issues/?statsPeriod=12h) - Captured via the Sentry SDK pointed at Better Stack's errors application.
+- [Logs](https://telemetry.betterstack.com/) - You can filter these by `job_name`.
 
 ## Kubernetes cluster operations
 Accessible via manually triggered github actions. Follow link and click "run workflow". _Requires repo write permisisons._

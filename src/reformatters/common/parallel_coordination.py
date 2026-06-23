@@ -105,7 +105,7 @@ def parallel_setup(
             reformat_job_name, "setup"
         )
         while not setup_files:
-            log.info("Waiting for worker 0 to complete setup...")
+            log.debug("Waiting for worker 0 to complete setup...")
             time.sleep(5)
             setup_files = store_factory.read_all_coordination_files(
                 reformat_job_name, "setup"
@@ -127,7 +127,7 @@ def wait_for_workers(
         store_factory.count_coordination_files(reformat_job_name, "results")
         < workers_total
     ):
-        log.info("Waiting for all workers to complete...")
+        log.debug("Waiting for all workers to complete...")
         time.sleep(10)
 
 

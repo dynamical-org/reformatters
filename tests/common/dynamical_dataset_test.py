@@ -3,21 +3,25 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta
 from functools import partial
 from pathlib import Path
-from typing import ClassVar
-from unittest.mock import Mock
+from typing import Any, ClassVar
+from unittest.mock import Mock, call
 
 import icechunk
 import numpy as np
 import pandas as pd
 import pytest
-import sentry_sdk
-import sentry_sdk.crons
 import xarray as xr
 import zarr
 import zarr.errors
 from pydantic import ValidationError, computed_field
 
-from reformatters.common import dynamical_dataset, storage, template_utils, validation
+from reformatters.common import (
+    betterstack,
+    dynamical_dataset,
+    storage,
+    template_utils,
+    validation,
+)
 from reformatters.common.config import Config, Env
 from reformatters.common.config_models import (
     BaseInternalAttrs,
@@ -408,7 +412,7 @@ def test_validate_dataset_calls_validators(
         lambda store, chunks=None, consolidated=None: mock_replica_store_ds,
     )
 
-    dataset.validate_dataset("example-job-name")
+    dataset.validate_dataset()
 
     # Check that we have exactly 2 calls
     assert mock_validate.call_count == 2
@@ -494,90 +498,122 @@ class ExampleDatasetWithThreeCronJobs(
         ]
 
 
+def _heartbeat_url_map(
+    dataset: DynamicalDataset[Any, Any],
+) -> dict[str, dict[str, str]]:
+    return {
+        cron_job.name: {
+            "start": f"https://hb.example/{cron_job.name}/start",
+            "complete": f"https://hb.example/{cron_job.name}/complete",
+        }
+        for cron_job in dataset.operational_kubernetes_resources("image-tag")
+    }
+
+
 def test_monitor_with_cron_job_name_filters_by_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """When multiple cron jobs match a type (e.g. all are CronJob subclasses),
     cron_job_name disambiguates."""
-    monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
-    mock_capture = Mock()
-    monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", mock_capture)
-
     dataset = ExampleDatasetWithThreeCronJobs()
+    heartbeat_urls = _heartbeat_url_map(dataset)
+    monkeypatch.setattr(betterstack, "load_heartbeat_urls", lambda: heartbeat_urls)
+    mock_ping = Mock()
+    monkeypatch.setattr(betterstack, "ping", mock_ping)
 
     # Without cron_job_name, filtering by base CronJob matches all 3 → should fail
     with (
         pytest.raises(ValueError, match="Expected exactly one item, got multiple"),
-        dataset._monitor(CronJob, "job-name"),
+        dataset._monitor(CronJob),
     ):
         pass
+    assert mock_ping.call_count == 0
 
     # With cron_job_name, it narrows to exactly one
-    with dataset._monitor(
-        CronJob, "job-name", cron_job_name=f"{dataset.dataset_id}-archive"
-    ):
+    with dataset._monitor(CronJob, cron_job_name=f"{dataset.dataset_id}-archive"):
         pass
 
-    statuses = [c.kwargs["status"] for c in mock_capture.call_args_list]
-    assert statuses == ["in_progress", "ok"]
-
-    # Verify the monitor used the archive job's schedule
-    call_kwargs = mock_capture.call_args_list[0].kwargs
-    assert call_kwargs["monitor_config"]["schedule"]["value"] == "0 4 * * *"
+    archive = heartbeat_urls[f"{dataset.dataset_id}-archive"]
+    assert mock_ping.call_args_list == [
+        call(archive["start"]),
+        call(archive["complete"]),
+    ]
 
 
 def test_monitor_with_cron_job_name_still_filters_by_type(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """cron_job_name and cron_type are both applied."""
-    monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
-    mock_capture = Mock()
-    monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", mock_capture)
-
     dataset = ExampleDatasetWithThreeCronJobs()
+    heartbeat_urls = _heartbeat_url_map(dataset)
+    monkeypatch.setattr(betterstack, "load_heartbeat_urls", lambda: heartbeat_urls)
+    mock_ping = Mock()
+    monkeypatch.setattr(betterstack, "ping", mock_ping)
 
     # ReformatCronJob filter with the update name should work
     with dataset._monitor(
-        ReformatCronJob, "job-name", cron_job_name=f"{dataset.dataset_id}-update"
+        ReformatCronJob, cron_job_name=f"{dataset.dataset_id}-update"
     ):
         pass
 
-    statuses = [c.kwargs["status"] for c in mock_capture.call_args_list]
-    assert statuses == ["in_progress", "ok"]
+    update = heartbeat_urls[f"{dataset.dataset_id}-update"]
+    assert mock_ping.call_args_list == [
+        call(update["start"]),
+        call(update["complete"]),
+    ]
+
+
+def test_monitor_missing_heartbeat_slug_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dataset = ExampleDatasetWithThreeCronJobs()
+    monkeypatch.setattr(
+        betterstack, "load_heartbeat_urls", lambda: {"some-other-cron": {}}
+    )
+    monkeypatch.setattr(betterstack, "ping", Mock())
+
+    with (
+        pytest.raises(AssertionError, match="No Better Stack heartbeats"),
+        dataset._monitor(ReformatCronJob, cron_job_name=f"{dataset.dataset_id}-update"),
+    ):
+        pass
 
 
 def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
-
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
     )
+    heartbeat_urls = _heartbeat_url_map(dataset)
+    monkeypatch.setattr(betterstack, "load_heartbeat_urls", lambda: heartbeat_urls)
+    mock_ping = Mock()
+    monkeypatch.setattr(betterstack, "ping", mock_ping)
 
-    # Mock capture_checkin to record statuses
-    mock_capture = Mock()
-    monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", mock_capture)
+    update = heartbeat_urls[f"{dataset.dataset_id}-update"]
 
-    # Success case: should record "in_progress" then "ok"
-    with dataset._monitor(ReformatCronJob, "job-name"):
+    # Success case: ping start then complete
+    with dataset._monitor(ReformatCronJob):
         pass
-    statuses = [c.kwargs["status"] for c in mock_capture.call_args_list]
-    assert statuses == ["in_progress", "ok"]
+    assert mock_ping.call_args_list == [
+        call(update["start"]),
+        call(update["complete"]),
+    ]
 
-    # Error case: should record "in_progress" then "error"
-    mock_capture.reset_mock()
+    # Error case: ping start then complete with failed=True
+    mock_ping.reset_mock()
     with pytest.raises(ValueError, match="failure"):  # noqa: SIM117
-        with dataset._monitor(ReformatCronJob, "job-name"):
+        with dataset._monitor(ReformatCronJob):
             raise ValueError("failure")
-    statuses = [c.kwargs["status"] for c in mock_capture.call_args_list]
-    assert statuses == ["in_progress", "error"]
+    assert mock_ping.call_args_list == [
+        call(update["start"]),
+        call(update["complete"], failed=True),
+    ]
 
 
-def test_monitor_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Test that it's ok to not define operational_kubernetes_resources if sentry reporting is disabled
-
-    # disable sentry reporting
-    monkeypatch.setattr(type(Config), "is_sentry_enabled", False)
+def test_monitor_without_heartbeats(monkeypatch: pytest.MonkeyPatch) -> None:
+    # It's ok to not define operational_kubernetes_resources when heartbeats are disabled
+    # (empty map, e.g. outside prod).
+    monkeypatch.setattr(betterstack, "load_heartbeat_urls", dict)
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
@@ -592,7 +628,7 @@ def test_monitor_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     # this should not raise
-    with dataset._monitor(ReformatCronJob, "job"):
+    with dataset._monitor(ReformatCronJob):
         pass
 
 

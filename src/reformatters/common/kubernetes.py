@@ -17,6 +17,11 @@ from reformatters.common.config import Config
 _SECRET_MOUNT_PATH = "/secrets"  # noqa: S105
 _SECRET_CONTENTS_KEY = "contents"  # noqa: S105
 
+# Static operator-created secret holding the Better Stack log source token + ingesting host.
+BETTERSTACK_SECRET_NAME = "betterstack"  # noqa: S105
+# Heartbeat URL map, (re)written by `deploy` via betterstack.reconcile_heartbeats.
+BETTERSTACK_HEARTBEATS_SECRET_NAME = "betterstack-heartbeats"  # noqa: S105
+
 
 class Job(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
@@ -98,6 +103,24 @@ class Job(pydantic.BaseModel):
                                             "secretKeyRef": {
                                                 "key": "DYNAMICAL_SENTRY_DSN",
                                                 "name": "sentry",
+                                            }
+                                        },
+                                    },
+                                    {
+                                        "name": "DYNAMICAL_BETTERSTACK_SOURCE_TOKEN",
+                                        "valueFrom": {
+                                            "secretKeyRef": {
+                                                "key": "DYNAMICAL_BETTERSTACK_SOURCE_TOKEN",
+                                                "name": BETTERSTACK_SECRET_NAME,
+                                            }
+                                        },
+                                    },
+                                    {
+                                        "name": "DYNAMICAL_BETTERSTACK_INGESTING_HOST",
+                                        "valueFrom": {
+                                            "secretKeyRef": {
+                                                "key": "DYNAMICAL_BETTERSTACK_INGESTING_HOST",
+                                                "name": BETTERSTACK_SECRET_NAME,
                                             }
                                         },
                                     },
@@ -222,6 +245,13 @@ class CronJob(Job):
     schedule: Annotated[str, pydantic.Field(min_length=1)]
     ttl: timedelta = timedelta(hours=12)
     suspend: bool = False
+
+    @pydantic.model_validator(mode="after")
+    def _mount_heartbeats_secret(self) -> CronJob:
+        # _monitor pings the heartbeat URLs loaded from this secret.
+        if BETTERSTACK_HEARTBEATS_SECRET_NAME not in self.secret_names:
+            self.secret_names = [*self.secret_names, BETTERSTACK_HEARTBEATS_SECRET_NAME]
+        return self
 
     def as_kubernetes_object(self) -> dict[str, Any]:
         job_spec = super().as_kubernetes_object()["spec"]

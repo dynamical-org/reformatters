@@ -860,7 +860,7 @@ def test_validate_dataset_on_virtual_skips_shard_check(tmp_path: Path) -> None:
     _make_region_job(_create_template_ds(4), region=slice(0, 2)).process_virtual(
         repo, [], "main"
     )
-    dataset.validate_dataset("test")  # must not raise
+    dataset.validate_dataset()  # must not raise
 
 
 def test_process_virtual_writes_refs_to_replica(tmp_path: Path) -> None:

@@ -10,21 +10,20 @@ from typing import Annotated, Any, Generic, Literal, Self, TypeVar
 
 import numpy as np
 import pandas as pd
-import sentry_sdk
-import sentry_sdk.crons
 import typer
 import xarray as xr
 from icechunk.store import IcechunkStore
 from pydantic import Field, computed_field, model_validator
 
 from reformatters.common import (
+    betterstack,
     parallel_coordination,
     template_utils,
     validation,
 )
 from reformatters.common.config import Config
 from reformatters.common.config_models import DataVar
-from reformatters.common.iterating import digest, get_worker_jobs, item
+from reformatters.common.iterating import get_worker_jobs, item
 from reformatters.common.kubernetes import (
     CronJob,
     Job,
@@ -157,7 +156,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         is_last = worker_index == workers_total - 1
         with self._monitor(
             ReformatCronJob,
-            reformat_job_name,
             send_in_progress=is_first,
             send_result=is_last,
         ):
@@ -489,16 +487,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             all_jobs, self.store_factory, "main", worker_index
         )
 
-    def validate_dataset(
-        self,
-        reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
-    ) -> None:
+    def validate_dataset(self) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
         # Virtual datasets get their own manifest-aware validators. The materialized
         # ones don't apply: check_for_expected_shards (no shards; missing chunks for
         # partially-published inits are expected) and compare_replica_and_primary.
         is_virtual = issubclass(self.region_job_class, VirtualRegionJob)
-        with self._monitor(ValidationCronJob, reformat_job_name):
+        with self._monitor(ValidationCronJob):
             primary_store = self.store_factory.primary_store()
             primary_store_validators = list(self.validators())
             if not is_virtual:
@@ -594,14 +589,14 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def _monitor(
         self,
         cron_type: type[CronJob],
-        reformat_job_name: str,
         cron_job_name: str | None = None,
         *,
         send_in_progress: bool = True,
         send_result: bool = True,
     ) -> Iterator[None]:
-        # Don't require operational_kubernetes_resources to be defined unless sentry reporting is enabled
-        if not Config.is_sentry_enabled:
+        # No-op outside prod (empty map), so operational_kubernetes_resources isn't required locally.
+        heartbeat_urls = betterstack.load_heartbeat_urls()
+        if not heartbeat_urls:
             yield
             return
 
@@ -613,37 +608,26 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         cron_job = item(cron_jobs)
 
         # Use the actual cronjob name from k8s env when available. This ensures
-        # staging cronjobs report to their own Sentry monitor, not production's.
+        # staging cronjobs ping their own heartbeats, not production's.
         monitor_slug = os.getenv("CRON_JOB_NAME") or cron_job.name
+        assert monitor_slug in heartbeat_urls, (
+            f"No Better Stack heartbeats for {monitor_slug}; deploy to provision them."
+        )
+        urls = heartbeat_urls[monitor_slug]
 
-        def capture_checkin(status: Literal["ok", "in_progress", "error"]) -> None:
-            sentry_sdk.crons.capture_checkin(
-                monitor_slug=monitor_slug,
-                check_in_id=digest([reformat_job_name], length=32),
-                status=status,
-                monitor_config={
-                    "schedule": {"type": "crontab", "value": cron_job.schedule},
-                    "timezone": "UTC",
-                    "checkin_margin": 10,
-                    "max_runtime": int(
-                        cron_job.pod_active_deadline.total_seconds() / 60
-                    ),
-                    "failure_issue_threshold": 1,
-                    "recovery_threshold": 1,
-                },
-            )
-
+        # Start and complete are separate heartbeats with tuned grace periods so a no-start
+        # is caught quickly regardless of run length; see plans/673_betterstack.md.
         if send_in_progress:
-            capture_checkin("in_progress")
+            betterstack.ping(urls["start"])
         try:
             yield
         except Exception:
             if send_result:
-                capture_checkin("error")
+                betterstack.ping(urls["complete"], failed=True)
             raise
         else:
             if send_result:
-                capture_checkin("ok")
+                betterstack.ping(urls["complete"])
 
     @model_validator(mode="after")
     def _validate_virtual_storage(self) -> Self:

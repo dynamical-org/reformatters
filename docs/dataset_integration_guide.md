@@ -139,7 +139,10 @@ The details here depend on the computing resources and the Zarr storage location
    - Complete the steps in README.md > Deploying to the cloud > Setup.
    - `DYNAMICAL_ENV=prod uv run main $DATASET_ID backfill-kubernetes <append-dim-end> <jobs-per-pod> <max-parallelism>`, then track the job with `kubectl get jobs`.
 1. See operational cronjobs in your kubernetes cluster and check their schedule: `kubectl get cronjobs`.
-1. To enable issue reporting and cron monitoring with the error reporting service Sentry, create a secret in your kubernetes cluster with your Sentry account's DSN: `kubectl create secret generic sentry --from-literal='DYNAMICAL_SENTRY_DSN=xxx'`.
+1. Monitoring runs through Better Stack, set up via two static secrets (one-time, cluster-wide):
+   - Errors (Sentry SDK pointed at Better Stack's errors application): `kubectl create secret generic sentry --from-literal='DYNAMICAL_SENTRY_DSN=xxx'`.
+   - Logs (logtail source): `kubectl create secret generic betterstack --from-literal='DYNAMICAL_BETTERSTACK_SOURCE_TOKEN=xxx' --from-literal='DYNAMICAL_BETTERSTACK_INGESTING_HOST=xxx'`.
+   - Cron heartbeats are provisioned automatically: every `deploy` reconciles a `{cronjob}.start` + `{cronjob}.complete` heartbeat per cron job and writes their URLs into the `betterstack-heartbeats` secret. Set `DYNAMICAL_BETTERSTACK_UPTIME_API_TOKEN` (and optionally `DYNAMICAL_BETTERSTACK_STATUS_PAGE_ID` to publish `*-validate.complete` to the status page) in your local env when deploying. No per-dataset heartbeat setup is needed.
 
 ## 7. Validate
 

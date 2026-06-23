@@ -90,7 +90,7 @@ This deletes:
 - Kubernetes cronjobs (`stage-noaa-gfs-forecast-v0-3-0-update`, `stage-noaa-gfs-forecast-v0-3-0-validate`)
 - The remote git branch (`stage/noaa-gfs-forecast/v0.3.0`)
 
-The dataset store and Sentry cron monitors are **not** deleted. Clean them up manually when ready.
+The dataset store and Better Stack heartbeats are **not** deleted. Clean them up manually when ready.
 
 ## Constraints
 

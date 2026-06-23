@@ -82,6 +82,24 @@ def test_as_kubernetes_object_comprehensive() -> None:
                                 },
                             },
                             {
+                                "name": "DYNAMICAL_BETTERSTACK_SOURCE_TOKEN",
+                                "valueFrom": {
+                                    "secretKeyRef": {
+                                        "key": "DYNAMICAL_BETTERSTACK_SOURCE_TOKEN",
+                                        "name": "betterstack",
+                                    }
+                                },
+                            },
+                            {
+                                "name": "DYNAMICAL_BETTERSTACK_INGESTING_HOST",
+                                "valueFrom": {
+                                    "secretKeyRef": {
+                                        "key": "DYNAMICAL_BETTERSTACK_INGESTING_HOST",
+                                        "name": "betterstack",
+                                    }
+                                },
+                            },
+                            {
                                 "name": "JOB_NAME",
                                 "valueFrom": {
                                     "fieldRef": {

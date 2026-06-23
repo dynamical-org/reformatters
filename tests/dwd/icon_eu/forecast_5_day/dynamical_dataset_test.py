@@ -225,7 +225,7 @@ def test_archive_grib_files_calls_copy_for_each_init_hour(
             return_value={},
         ),
     ):
-        dataset.archive_grib_files(reformat_job_name="test")
+        dataset.archive_grib_files()
 
     assert mock_copy.call_count == 4
     for i, init_hour in enumerate([0, 6, 12, 18]):
@@ -256,7 +256,7 @@ def test_archive_grib_files_passes_s3_credentials(
             return_value=secret,
         ),
     ):
-        dataset.archive_grib_files(reformat_job_name="test")
+        dataset.archive_grib_files()
 
     # All calls should include S3 credentials
     for c in mock_copy.call_args_list:

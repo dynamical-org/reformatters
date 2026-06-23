@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import PurePosixPath
-from typing import Annotated, ClassVar
+from typing import ClassVar
 
 import typer
 
@@ -104,7 +104,6 @@ class DwdIconEuForecast5DayDataset(
 
     def archive_grib_files(
         self,
-        reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
         # It would've made more sense for `dst_root_path` to be a `PurePosixPath` but Typer doesn't
         # handle `PurePosixPath`, so we use a `str` to keep Typer happy.
         dst_root_path: str = dynamical_grib_archive_rclone_root,
@@ -136,7 +135,6 @@ class DwdIconEuForecast5DayDataset(
         """
         with self._monitor(
             CronJob,
-            reformat_job_name,
             cron_job_name=f"{self.dataset_id}-archive-grib-files",
         ):
             # When running in prod, `secret` will be {'key': 'xxx', 'secret': 'xxxx'}.
