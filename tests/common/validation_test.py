@@ -1,3 +1,4 @@
+import warnings
 from datetime import timedelta
 
 import icechunk
@@ -476,7 +477,7 @@ def test_check_analysis_recent_nans_invalid_sampling_strategy(
     with pytest.raises(AssertionError, match="Expected code to be unreachable"):
         validation.check_analysis_recent_nans(
             analysis_dataset,
-            spatial_sampling="invalid",  # type: ignore[arg-type]
+            spatial_sampling="invalid",  # ty: ignore[invalid-argument-type]
         )
 
 
@@ -522,6 +523,31 @@ def test_truncate_shards_truncation() -> None:
     shards = [str(i) for i in range(10)]
     out = validation._truncate_shards(shards, keep=3)
     assert out == "[0, 1, 2, ..., 7, 8, 9]"
+
+
+def test_summarize_coords_multidimensional() -> None:
+    """Multi-dimensional coords (e.g. valid_time) collapse to a first..last range."""
+    init_times = pd.date_range("2026-06-05T12:00", periods=1, freq="6h")
+    lead_times = pd.timedelta_range(start="0h", periods=209, freq="1h")
+    valid_time = xr.DataArray(
+        init_times.values[:, None] + lead_times.values[None, :],
+        dims=("init_time", "lead_time"),
+    )
+    ds = xr.Dataset(
+        coords={
+            "init_time": ("init_time", init_times),
+            "lead_time": ("lead_time", lead_times),
+            "valid_time": valid_time,
+        }
+    )
+
+    summary = validation._summarize_coords(ds)
+
+    assert "valid_time=[2026-06-05T12:00:00..2026-06-14T04:00:00] (n=209)" in summary
+    # The full nested array must not be dumped.
+    assert "\n" not in summary
+    assert "init_time=2026-06-05T12:00:00" in summary
+    assert "lead_time=[0 days 00:00:00..8 days 16:00:00] (n=209)" in summary
 
 
 def test_check_for_expected_shards_skips_hrrr_categorical(
@@ -577,7 +603,16 @@ def test_validate_dataset_raises_on_failed_validator(
         coords={"time": times, "y": np.arange(4), "x": np.arange(4)},
     )
     store = zarr.storage.MemoryStore()
-    ds.to_zarr(store, mode="w", consolidated=False)
+    # Match production stores, which carry consolidated metadata (see template_utils.write_metadata),
+    # so validate_dataset opens them without the consolidated-fallback warning. Writing it emits a
+    # spec-compatibility UserWarning that production suppresses too.
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Consolidated metadata is currently not part in the Zarr format 3 specification",
+            category=UserWarning,
+        )
+        ds.to_zarr(store, mode="w")
 
     def passing(ds: xr.Dataset) -> validation.ValidationResult:
         return validation.ValidationResult(passed=True, message="ok")

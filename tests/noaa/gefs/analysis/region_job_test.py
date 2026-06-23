@@ -810,6 +810,9 @@ _PRE_V12_MISSING_VARS = frozenset(
 )
 
 
+# read_rasterio's per-call NotGeoreferencedWarning suppression leaks under the ThreadPoolExecutor
+# below because warnings.catch_warnings is not thread-safe; the warning is expected for GEFS GRIB.
+@pytest.mark.filterwarnings("ignore::rasterio.errors.NotGeoreferencedWarning")
 @pytest.mark.slow
 def test_download_and_read_all_vars_reforecast() -> None:
     """Download and read all vars from GEFS v12 reforecast (2000-2019), one var per file.
@@ -841,6 +844,7 @@ def test_download_and_read_all_vars_reforecast() -> None:
         list(pool.map(_download_and_check, data_vars))
 
 
+@pytest.mark.filterwarnings("ignore::rasterio.errors.NotGeoreferencedWarning")
 @pytest.mark.slow
 def test_download_and_read_all_vars_pre_v12() -> None:
     """Download and read all vars from pre-GEFS v12 period (2020-01-01 to 2020-09-23).
@@ -870,6 +874,7 @@ def test_download_and_read_all_vars_pre_v12() -> None:
         list(pool.map(_download_and_check, data_vars))
 
 
+@pytest.mark.filterwarnings("ignore::rasterio.errors.NotGeoreferencedWarning")
 @pytest.mark.slow
 def test_download_and_read_all_vars_current_early_lead() -> None:
     """Download and read all vars from current GEFS analysis archive (s-files, lead = 6h).

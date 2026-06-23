@@ -14,6 +14,7 @@ from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
+from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     CoordinateValue,
     RegionJob,
@@ -87,7 +88,7 @@ class DwdIconEuForecast5DaySourceFileCoord(SourceFileCoord):
 
 
 class DwdIconEuForecast5DayRegionJob(
-    RegionJob[DwdIconEuDataVar, DwdIconEuForecast5DaySourceFileCoord]
+    MaterializedRegionJob[DwdIconEuDataVar, DwdIconEuForecast5DaySourceFileCoord]
 ):
     @classmethod
     def source_groups(

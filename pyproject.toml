@@ -12,25 +12,29 @@ dependencies = [
     "numcodecs~=0.16",
     "numpy~=2.3",
     "obstore~=0.8",
-    "pandas~=2.3",
+    "pandas~=3.0",
     "pydantic~=2.10",
     "rasterio~=1.5",
     "requests~=2.32",
-    "rioxarray~=0.19",
+    "rioxarray~=0.22",
     "s3fs~=2026.0",
     "sentry-sdk~=2.20",
     "typer~=0.12",
-    "xarray~=2026.0",
-    "zarr~=3.1",
-    "kubernetes~=33.1",
+    "xarray~=2026.4",
+    "zarr~=3.2",
+    "kubernetes>=36.0.1,<37",
     "icechunk~=2.0",
     "google-crc32c>=1.8.0",
     "httpx>=0.28.1",
+    "gribberish~=0.30",
 ]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv]
+exclude-newer = "5 days"
 
 
 [project.scripts]
@@ -42,15 +46,15 @@ dev = [
     "cf-xarray>=0.10.10",
     "markdown-it-py>=4.0.0",
     "matplotlib~=3.9",
-    "pandas-stubs~=2.2",
-    "prek==0.3.0",
+    "pandas-stubs~=3.0",
+    "prek==0.4.1",
     "pyqt6>=6.7.1",
     "pytest~=9.0",
     "pytest-sugar~=1.0",
     "pytest-xdist~=3.8",
     # NOTE: keep this in sync with .pre-commit-config.yaml
-    "ruff==0.14.14",
-    "ty~=0.0.14",
+    "ruff==0.15.14",
+    "ty~=0.0.39",
     "types-boto3>=1.43.5",
     "types-requests~=2.32",
 ]

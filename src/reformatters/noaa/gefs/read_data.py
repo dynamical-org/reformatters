@@ -114,14 +114,13 @@ def read_rasterio(
                         assert reader.transform == out_transform
                         assert reader.crs.to_dict() == out_crs
                         return raw
-                    result, _ = rasterio.warp.reproject(
+                    result = _reproject_bilinear_longitude_wrap(
                         raw,
-                        np.full(out_spatial_shape, np.nan, dtype=np.float32),
-                        src_transform=reader.transform,
-                        src_crs=reader.crs,
-                        dst_transform=out_transform,
-                        dst_crs=out_crs,
-                        resampling=rasterio.warp.Resampling.bilinear,
+                        reader.transform,
+                        reader.crs,
+                        out_spatial_shape,
+                        out_transform,
+                        out_crs,
                     )
                     if not Config.is_prod:
                         # Because the pixel centers are aligned we exactly retain the source data
@@ -130,3 +129,33 @@ def read_rasterio(
                     return result
                 case _ as unreachable:
                     assert_never(unreachable)
+
+
+def _reproject_bilinear_longitude_wrap(
+    raw: Array2D[np.float32],
+    src_transform: rasterio.transform.Affine,
+    src_crs: rasterio.crs.CRS,
+    out_spatial_shape: tuple[int, int],
+    out_transform: rasterio.transform.Affine,
+    out_crs: rasterio.crs.CRS,
+) -> Array2D[np.float32]:
+    # The global source grid does not include a column for longitude 180°, so the
+    # easternmost 0.25° destination pixels sit just outside the source's eastern edge
+    # and bilinear resampling would leave them unset (NaN, later stored as the 0 fill
+    # value). Pad the source with a wrap-around column on each side (longitude 180° ==
+    # -180°) and shift the transform west by one source pixel so every destination pixel
+    # falls strictly inside the source extent and interpolates across the antimeridian.
+    assert abs(raw.shape[1] * src_transform.a - 360) < 1e-6, "Source must span the full globe"  # fmt: skip
+    wrapped = np.concatenate([raw[:, -1:], raw, raw[:, :1]], axis=1)
+    wrapped_transform = src_transform * rasterio.transform.Affine.translation(-1, 0)
+    result: Array2D[np.float32]
+    result, _ = rasterio.warp.reproject(
+        wrapped,
+        np.full(out_spatial_shape, np.nan, dtype=np.float32),
+        src_transform=wrapped_transform,
+        src_crs=src_crs,
+        dst_transform=out_transform,
+        dst_crs=out_crs,
+        resampling=rasterio.warp.Resampling.bilinear,
+    )
+    return result

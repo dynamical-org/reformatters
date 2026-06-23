@@ -156,8 +156,8 @@ def test_derive_coordinates_and_spatial_ref() -> None:
     # ingested_forecast_length: all NaT (timedeltas)
     dims, arr = derived["ingested_forecast_length"]
     assert dims == (cfg.append_dim,)
-    # dtype is timedelta64[ns], not datetime64
-    assert arr.dtype == "timedelta64[ns]"
+    # dtype is timedelta64[us], not datetime64
+    assert arr.dtype == "timedelta64[us]"
     assert np.all(pd.isna(arr))
     # expected_forecast_length: filled with max lead_time
     dims2, arr2 = derived["expected_forecast_length"]

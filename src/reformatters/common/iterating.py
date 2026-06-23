@@ -26,7 +26,7 @@ def shard_slice_indexers(da: xr.DataArray) -> Sequence[tuple[slice, ...]]:
     Returns tuples of integer offset slices which correspond to each shard of `da` across all dimensions.
     Each tuple can be used to index into `da` to extract a shard, e.g. `da[shard_indexer]`.
     """
-    dim_slices = map(chunk_slices, da.shape, da.encoding["shards"])
+    dim_slices = map(chunk_slices, da.shape, da.encoding["shards"], strict=True)
     return tuple(product(*dim_slices))
 
 
@@ -46,6 +46,21 @@ def get_worker_jobs[T](
     assert workers_total >= 1
     assert worker_index < workers_total
     return tuple(islice(jobs, worker_index, None, workers_total))
+
+
+def spread_evenly[T](items: Sequence[T]) -> list[T]:
+    """Reorder so any prefix samples the whole input roughly uniformly.
+
+    Bit-reversal permutation. Concurrently-running workers occupy a contiguous
+    worker-index window, so spreading the append-dim regions this way makes them
+    process source files scattered across the range instead of a clustered band,
+    avoiding hot-spotting a few object-store prefixes. See "Append dim region
+    spreading" in docs/parallel_processing.md.
+    """
+    n = len(items)
+    bits = max(1, (n - 1).bit_length())
+    order = sorted(range(n), key=lambda i: int(format(i, f"0{bits}b")[::-1], 2))
+    return [items[i] for i in order]
 
 
 def consume[T](iterator: Iterable[T], n: int | None = None) -> None:

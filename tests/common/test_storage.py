@@ -7,17 +7,30 @@ import pytest
 import zarr
 import zarr.storage
 from icechunk.store import IcechunkStore
+from pydantic import ValidationError
 
 from reformatters.common import retry as retry_module
 from reformatters.common.config import Config, Env
 from reformatters.common.storage import (
     DatasetFormat,
+    IcechunkVirtualConfig,
     StorageConfig,
     StoreFactory,
     _get_store_path,
     _icechunk_to_s3fs_storage_options,
     commit_if_icechunk,
+    manifest_append_dim_split,
 )
+
+
+def _example_virtual_config() -> IcechunkVirtualConfig:
+    container = icechunk.VirtualChunkContainer(
+        "s3://noaa-gfs-bdp-pds/", icechunk.s3_store(region="us-east-1", anonymous=True)
+    )
+    return IcechunkVirtualConfig(
+        containers=(container,),
+        manifest_split=manifest_append_dim_split(split_size=1000, dim="init_time"),
+    )
 
 
 @pytest.mark.parametrize(
@@ -375,6 +388,174 @@ class TestIcechunkRepos:
         assert repos[1][0] == "replica-0"
 
 
+class TestIcechunkVirtualConfig:
+    def test_manifest_append_dim_split_structure(self) -> None:
+        split = manifest_append_dim_split(split_size=500, dim="init_time")
+        assert isinstance(split, icechunk.ManifestSplittingConfig)
+        # One AnyArray rule splitting the named dim every `split_size` indices.
+        [(condition, dim_splits)] = split.split_sizes
+        assert condition == icechunk.ManifestSplitCondition.AnyArray()
+        [(dim_condition, size)] = dim_splits
+        assert "init_time" in repr(dim_condition)
+        assert size == 500
+
+    def test_requires_at_least_one_container(self) -> None:
+        with pytest.raises(ValidationError):
+            IcechunkVirtualConfig(
+                containers=(),
+                manifest_split=manifest_append_dim_split(split_size=1, dim="init_time"),
+            )
+
+    def test_store_factory_registers_containers_and_split(self) -> None:
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/data", format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+            icechunk_virtual_config=_example_virtual_config(),
+        )
+        # icechunk_repos opens (and so creates) the repo with our override config.
+        repo = factory.icechunk_repos(sort="primary-first")[0][1]
+        containers = repo.config.virtual_chunk_containers
+        assert containers is not None
+        assert "s3://noaa-gfs-bdp-pds/" in containers
+        manifest = repo.config.manifest
+        assert manifest is not None
+        assert manifest.splitting is not None
+        assert manifest.splitting.split_sizes
+        caching = repo.config.caching
+        assert caching is not None
+        assert caching.num_chunk_refs == 1_000_000
+
+    def test_unsupported_container_rejected(self) -> None:
+        gcs_container = icechunk.VirtualChunkContainer(
+            "gs://bucket/", icechunk.gcs_store()
+        )
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/data", format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+            icechunk_virtual_config=IcechunkVirtualConfig(
+                containers=(gcs_container,),
+                manifest_split=manifest_append_dim_split(split_size=1, dim="init_time"),
+            ),
+        )
+        with pytest.raises(AssertionError, match="unsupported store"):
+            factory.icechunk_repos(sort="primary-first")
+
+    def test_local_filesystem_container_accepted(self) -> None:
+        # Local-filesystem containers (dev/test sources) need no credentials.
+        local_container = icechunk.VirtualChunkContainer(
+            "file:///data/", icechunk.local_filesystem_store("/data/")
+        )
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/data", format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+            icechunk_virtual_config=IcechunkVirtualConfig(
+                containers=(local_container,),
+                manifest_split=manifest_append_dim_split(split_size=1, dim="init_time"),
+            ),
+        )
+        repo = factory.icechunk_repos(sort="primary-first")[0][1]
+        containers = repo.config.virtual_chunk_containers
+        assert containers is not None
+        assert "file:///data/" in containers
+
+    def test_materialized_factory_registers_no_containers(self) -> None:
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/data", format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+        )
+        repo = factory.icechunk_repos(sort="primary-first")[0][1]
+        assert not repo.config.virtual_chunk_containers
+
+
+def _spy_save_config(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Record each Repository.save_config call while still performing it."""
+    calls: list[int] = []
+    real = icechunk.Repository.save_config
+
+    def spy(self: icechunk.Repository) -> None:
+        calls.append(1)
+        real(self)
+
+    monkeypatch.setattr(icechunk.Repository, "save_config", spy)
+    return calls
+
+
+class TestPersistVirtualConfig:
+    def _virtual_factory(
+        self, tmp_path: str, *, prefix: str = "file:///data/"
+    ) -> StoreFactory:
+        container = icechunk.VirtualChunkContainer(
+            prefix, icechunk.local_filesystem_store("/data/")
+        )
+        return StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+            icechunk_virtual_config=IcechunkVirtualConfig(
+                containers=(container,),
+                manifest_split=manifest_append_dim_split(split_size=1, dim="init_time"),
+            ),
+        )
+
+    def test_persists_container_set_for_reader_recovery(self, tmp_path: str) -> None:
+        factory = self._virtual_factory(tmp_path)
+        factory.persist_virtual_config()
+        # A reader opens with no config override and still recovers the containers.
+        _role, _path, storage = factory._icechunk_storages()[0]
+        fetched = icechunk.Repository.fetch_config(storage)
+        assert fetched is not None
+        assert fetched.virtual_chunk_containers is not None
+        assert "file:///data/" in fetched.virtual_chunk_containers
+
+    def test_is_drift_gated_idempotent(
+        self, tmp_path: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        factory = self._virtual_factory(tmp_path)
+        calls = _spy_save_config(monkeypatch)
+        factory.persist_virtual_config()
+        factory.persist_virtual_config()  # containers unchanged -> no second save
+        assert calls == [1]
+
+    def test_resaves_on_container_change(
+        self, tmp_path: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._virtual_factory(tmp_path).persist_virtual_config()
+        calls = _spy_save_config(monkeypatch)
+        # Same store, different container set -> drift -> save again.
+        self._virtual_factory(
+            tmp_path, prefix="file:///other/"
+        ).persist_virtual_config()
+        assert calls == [1]
+
+    def test_noop_for_materialized(
+        self, tmp_path: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+        )
+        calls = _spy_save_config(monkeypatch)
+        factory.persist_virtual_config()
+        assert calls == []
+
+
 class TestBranchSupport:
     def test_icechunk_store_opens_on_specified_branch(self) -> None:
         factory = StoreFactory(
@@ -495,6 +676,29 @@ class TestIcechunkPrimaryWithZarr3Replica:
         )
         repos = factory.icechunk_repos(sort="primary-last")
         assert [role for role, _repo in repos] == ["primary"]
+
+    def test_icechunk_primary_and_replica_repos(self) -> None:
+        """icechunk_primary_and_replica_repos returns (primary_repo, (replicas, ...))."""
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/primary", format=DatasetFormat.ICECHUNK
+            ),
+            replica_storage_configs=[
+                StorageConfig(
+                    base_path="s3://bucket/replica-0", format=DatasetFormat.ICECHUNK
+                ),
+            ],
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+        )
+        primary_repo, replica_repos = factory.icechunk_primary_and_replica_repos()
+        assert isinstance(primary_repo, icechunk.Repository)
+        assert len(replica_repos) == 1
+        assert isinstance(replica_repos[0], icechunk.Repository)
+        # primary + replicas accounts for every repo the role-based accessor returns.
+        assert 1 + len(replica_repos) == len(
+            factory.icechunk_repos(sort="primary-first")
+        )
 
 
 class TestCommitIfIcechunkFailureIsolation:

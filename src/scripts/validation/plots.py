@@ -5,7 +5,6 @@ import typer
 
 from reformatters.common.logging import get_logger
 from scripts.validation.compare_spatial import (
-    GEFS_ANALYSIS_URL,
     compare_spatial,
     run_compare_spatial,
 )
@@ -25,10 +24,16 @@ from scripts.validation.utils import (
     is_forecast_dataset,
     load_zarr_dataset,
     output_dir_option,
+    reference_url_option,
+    resolve_reference_url,
     scope_time_period,
     select_variables_for_plotting,
     start_date_option,
     variables_option,
+)
+from scripts.validation.value_timeseries import (
+    run_value_timeseries,
+    value_timeseries,
 )
 
 log = get_logger(__name__)
@@ -45,6 +50,10 @@ app.command("compare-timeseries", help="Timeseries comparison, one PNG per varia
 )
 app.command("report-nulls", help="Null analysis, one PNG per variable")(report_nulls)
 app.command(
+    "value-timeseries",
+    help="Full-period value time series (mean ± std), one PNG per variable",
+)(value_timeseries)
+app.command(
     "render-report",
     help="Render validation_summary.md to a static HTML report in the run directory.",
 )(render_report_command)
@@ -60,9 +69,7 @@ app.command(
 )
 def run_all(
     dataset_url: str,
-    reference_url: str = typer.Option(
-        GEFS_ANALYSIS_URL, "--reference-url", help="Reference dataset URL"
-    ),
+    reference_url: str | None = reference_url_option,
     variables: list[str] | None = variables_option,
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
@@ -89,6 +96,7 @@ def run_all(
     if start_date or end_date:
         validation_ds = scope_time_period(validation_ds, start_date, end_date)
 
+    reference_url = resolve_reference_url(reference_url)
     log.info(f"Loading reference dataset:  {reference_url}")
     reference_ds = load_zarr_dataset(reference_url)
 
@@ -133,6 +141,7 @@ def run_all(
     )
 
     run_report_nulls(ctx)
+    run_value_timeseries(ctx)
     run_compare_timeseries(ctx)
     run_compare_spatial(ctx, init_time=init_time, lead_time=lead_time, time=time)
 

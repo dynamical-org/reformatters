@@ -18,6 +18,7 @@ from reformatters.common.download import (
 )
 from reformatters.common.iterating import digest, group_by
 from reformatters.common.logging import get_logger
+from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     CoordinateValue,
     RegionJob,
@@ -74,7 +75,9 @@ class NoaaGfsSourceFileCoord(SourceFileCoord):
         raise NotImplementedError("Subclasses must implement out_loc()")
 
 
-class NoaaGfsCommonRegionJob(RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]):
+class NoaaGfsCommonRegionJob(
+    MaterializedRegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]
+):
     """Common RegionJob for GFS datasets."""
 
     @classmethod

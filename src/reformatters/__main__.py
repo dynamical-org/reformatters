@@ -35,6 +35,9 @@ from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset im
 )
 from reformatters.example.new_dataset import initialize_new_integration
 from reformatters.noaa.gefs.analysis.dynamical_dataset import GefsAnalysisDataset
+from reformatters.noaa.gefs.forecast_10_day_spatial.dynamical_dataset import (
+    GefsForecast10DaySpatialDataset,
+)
 from reformatters.noaa.gefs.forecast_35_day.dynamical_dataset import (
     GefsForecast35DayDataset,
 )
@@ -154,6 +157,9 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     GefsForecast35DayDataset(
         primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
         replica_storage_configs=[NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig()],
+    ),
+    GefsForecast10DaySpatialDataset(
+        primary_storage_config=NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaHrrrForecast48HourDataset(
         primary_storage_config=SourceCoopZarrDatasetStorageConfig(),

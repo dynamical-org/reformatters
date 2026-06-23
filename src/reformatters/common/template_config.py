@@ -183,7 +183,7 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         # 10 as a minimum to ensure we have some buffer.
         num_years = max(2025 - self.append_dim_start.year + 15, 10)
         total_timedelta = pd.Timedelta(days=365 * num_years)
-        result: float = total_timedelta / self.append_dim_frequency  # type: ignore[assignment]
+        result: float = total_timedelta / self.append_dim_frequency  # ty: ignore[invalid-assignment]
         return int(result)
 
     def template_path(self) -> Path:

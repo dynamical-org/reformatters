@@ -14,6 +14,7 @@ from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import digest, item
 from reformatters.common.logging import get_logger
+from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import RegionJob
 from reformatters.common.types import (
     AppendDim,
@@ -25,7 +26,7 @@ from reformatters.ecmwf.ecmwf_config_models import (
     has_hour_0_values,
     vars_available,
 )
-from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
+from reformatters.ecmwf.ecmwf_grib_index import grib_message_byte_ranges_from_index
 from reformatters.ecmwf.ecmwf_utils import (
     EcmwfOpenDataSource,
     ecmwf_download_with_fallback,
@@ -43,7 +44,7 @@ log = get_logger(__name__)
 
 
 class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
-    RegionJob[EcmwfDataVar, IfsEnsSourceFileCoord]
+    MaterializedRegionJob[EcmwfDataVar, IfsEnsSourceFileCoord]
 ):
     # Limits the number of variables downloaded together.
     # All variables are scattered throughout the grib file without any organization,
@@ -144,7 +145,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             idx_url, self.dataset_id, disk_cache=True
         )
 
-        byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(
+        byte_range_starts, byte_range_ends = grib_message_byte_ranges_from_index(
             idx_local_path,
             coord.data_var_group,
             coord.ensemble_member,

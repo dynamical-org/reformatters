@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from itertools import pairwise
 
 import numpy as np
 import pytest
@@ -13,6 +14,7 @@ from reformatters.common.iterating import (
     group_by,
     item,
     shard_slice_indexers,
+    spread_evenly,
 )
 
 
@@ -116,6 +118,31 @@ def test_get_worker_jobs_zero_workers_total() -> None:
 def test_get_worker_jobs_worker_index_greater_than_workers_total() -> None:
     with pytest.raises(AssertionError):
         get_worker_jobs(range(6), 2, 2)
+
+
+def test_spread_evenly_is_a_permutation() -> None:
+    for n in (0, 1, 2, 7, 8, 100, 8326):
+        result = spread_evenly(list(range(n)))
+        assert sorted(result) == list(range(n))
+        assert result == spread_evenly(list(range(n)))  # deterministic
+
+
+def test_spread_evenly_preserves_elements_not_just_indices() -> None:
+    items = ["a", "b", "c", "d"]
+    assert sorted(spread_evenly(items)) == sorted(items)
+
+
+def test_spread_evenly_any_prefix_covers_the_full_range() -> None:
+    # Any contiguous worker-index window must span the input, not cluster in a
+    # band. Check the first `window` entries are spread within ~3x of uniform.
+    n = 8326
+    result = spread_evenly(list(range(n)))
+    for window in (64, 128, 256):
+        head = sorted(result[:window])
+        max_gap = max(b - a for a, b in pairwise(head))
+        assert max_gap < 3 * (n // window)
+        assert head[0] < n // window
+        assert head[-1] > n - n // window
 
 
 def test_get_worker_jobs_worker_index_equal_to_workers_total() -> None:

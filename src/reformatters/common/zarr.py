@@ -117,16 +117,21 @@ def copy_zarr_metadata(
     """
     assert not (icechunk_only and zarr3_only)
 
-    metadata_files: list[Path] = []
-
-    # The coordinate label arrays must be copied before the metadata.
+    coord_chunk_files: list[Path] = []
     for coord in template_ds.coords:
-        metadata_files.extend(
+        coord_chunk_files.extend(
             f for f in tmp_store.glob(f"{coord}/c/**/*") if f.is_file()
         )
+    zarr_json_files = [tmp_store / "zarr.json", *tmp_store.glob("*/zarr.json")]
 
-    metadata_files.append(tmp_store / "zarr.json")
-    metadata_files.extend(tmp_store.glob("*/zarr.json"))
+    def _ordered_files(store: Store) -> list[Path]:
+        # Zarr v3: coordinate label chunks before metadata, so readers never see
+        # metadata referencing coordinate values that aren't written yet.
+        # Icechunk: metadata first — a fresh store rejects a chunk whose array
+        # doesn't exist yet — and the session commit is atomic for readers.
+        if isinstance(store, IcechunkStore):
+            return [*zarr_json_files, *coord_chunk_files]
+        return [*coord_chunk_files, *zarr_json_files]
 
     def _should_skip(store: Store) -> bool:
         is_icechunk = isinstance(store, IcechunkStore)
@@ -142,7 +147,7 @@ def copy_zarr_metadata(
         log.info(
             f"Copying metadata to replica store ({_store_repr(replica_store)}) from {tmp_store}"
         )
-        _copy_metadata_files(metadata_files, tmp_store, replica_store)
+        _copy_metadata_files(_ordered_files(replica_store), tmp_store, replica_store)
 
     if _should_skip(primary_store):
         return
@@ -150,7 +155,7 @@ def copy_zarr_metadata(
     log.info(
         f"Copying metadata to primary store ({_store_repr(primary_store)}) from {tmp_store}"
     )
-    _copy_metadata_files(metadata_files, tmp_store, primary_store)
+    _copy_metadata_files(_ordered_files(primary_store), tmp_store, primary_store)
 
 
 def _copy_metadata_files(

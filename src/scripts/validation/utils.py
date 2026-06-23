@@ -1,8 +1,10 @@
+import functools
 from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+import httpx
 import icechunk
 import numpy as np
 import obstore
@@ -12,6 +14,40 @@ import xarray as xr
 from zarr.storage import ObjectStore, StoreLike
 
 OUTPUT_DIR = "data/output"
+
+STAC_CATALOG_URL = "https://stac.dynamical.org/catalog.json"
+GEFS_ANALYSIS_COLLECTION_ID = "noaa-gefs-analysis"
+
+
+@functools.cache
+def get_gefs_analysis_reference_url() -> str:
+    """Look up the GEFS analysis icechunk asset URL from the STAC catalog."""
+    with httpx.Client(follow_redirects=True, timeout=30.0) as client:
+        catalog = client.get(STAC_CATALOG_URL).raise_for_status().json()
+        for link in catalog["links"]:
+            if link["rel"] != "child":
+                continue
+            collection = client.get(link["href"]).raise_for_status().json()
+            if collection["id"] == GEFS_ANALYSIS_COLLECTION_ID:
+                return collection["assets"]["icechunk"]["href"]
+    raise ValueError(
+        f"Collection {GEFS_ANALYSIS_COLLECTION_ID!r} not found in STAC catalog at {STAC_CATALOG_URL}"
+    )
+
+
+def resolve_reference_url(reference_url: str | None) -> str:
+    if reference_url is not None:
+        return reference_url
+    return get_gefs_analysis_reference_url()
+
+
+reference_url_option = typer.Option(
+    None,
+    "--reference-url",
+    help="Reference dataset URL "
+    "(default: GEFS analysis icechunk asset looked up from the STAC catalog)",
+)
+
 
 variables_option = typer.Option(
     None,
@@ -71,6 +107,17 @@ class VariableStats:
     ref_spatial_mean: float | None = None
     ref_available_spatial: bool = False
 
+    # Value time series over the full period (per-timestep mean ± std at each point)
+    value_ts_plot: str | None = None
+    value_mean_p1: float | None = None
+    value_std_p1: float | None = None
+    value_min_p1: float | None = None
+    value_max_p1: float | None = None
+    value_mean_p2: float | None = None
+    value_std_p2: float | None = None
+    value_min_p2: float | None = None
+    value_max_p2: float | None = None
+
     # Timeseries comparison
     temporal_plot: str | None = None
     val_temporal_min_p1: float | None = None
@@ -114,8 +161,14 @@ class RunContext:
     temporal_period_label: str | None = None
     unavailable_timestamps_file: str | None = None
     combined_nulls_plot: str | None = None
+    combined_value_timeseries_plot: str | None = None
     combined_spatial_plot: str | None = None
     combined_temporal_plot: str | None = None
+    # Point arrays loaded once by run_report_nulls (var -> (point1, point2)) and reused
+    # by run_value_timeseries to avoid reading the point data a second time.
+    loaded_point_data: dict[str, tuple[xr.DataArray, xr.DataArray]] = field(
+        default_factory=dict
+    )
     stats: dict[str, VariableStats] = field(default_factory=dict)
 
     def stats_for(self, var: str) -> VariableStats:
@@ -196,9 +249,20 @@ def get_random_spatial_indices(
     rng = np.random.default_rng()
     lat_size = ds.sizes[lat_dim]
     lon_size = ds.sizes[lon_dim]
-    lat1_idx = int(rng.integers(0, lat_size // 4))
+
+    lat_lo, lat_hi = 0, lat_size
+    if lat_dim == "latitude":
+        lats = ds.latitude.values
+        # Avoid polar grid points where many variables have edge-case behavior
+        # (e.g. wind components degenerate, projections distort).
+        if lats.min() < -80 and lats.max() > 80:
+            valid = np.where((lats >= -70) & (lats <= 70))[0]
+            lat_lo, lat_hi = int(valid.min()), int(valid.max()) + 1
+
+    lat_range = lat_hi - lat_lo
+    lat1_idx = int(rng.integers(lat_lo, lat_lo + lat_range // 4))
+    lat2_idx = int(rng.integers(lat_lo + 3 * lat_range // 4, lat_hi))
     lon1_idx = int(rng.integers(0, lon_size // 4))
-    lat2_idx = int(rng.integers(3 * lat_size // 4, lat_size))
     lon2_idx = int(rng.integers(3 * lon_size // 4, lon_size))
     point1_sel = {lat_dim: lat1_idx, lon_dim: lon1_idx}
     point2_sel = {lat_dim: lat2_idx, lon_dim: lon2_idx}

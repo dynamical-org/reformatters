@@ -12,6 +12,7 @@ import xarray as xr
 import zarr
 import zarr.core.sync
 import zarr.storage
+from icechunk.store import IcechunkStore
 from zarr.abc.store import Store
 
 from reformatters.common import iterating
@@ -63,10 +64,12 @@ def validate_dataset(
     """
     log.info(f"Validating zarr {store}")
 
+    consolidated = not isinstance(store, IcechunkStore)
+
     # Run all validators
     failed_validations = []
     for validator in validators:
-        ds = xr.open_zarr(store, chunks=None)
+        ds = xr.open_zarr(store, chunks=None, consolidated=consolidated)
 
         result = validator(ds)
         if not result.passed:
@@ -257,7 +260,7 @@ def _format_coord_value(value: object) -> str:
 def _summarize_coords(ds: xr.Dataset) -> str:
     parts = []
     for name in ds.coords:
-        values = np.atleast_1d(ds.coords[name].values)
+        values = ds.coords[name].values.ravel()
         if values.size == 0:
             parts.append(f"{name}=<empty>")
         elif values.size == 1:
@@ -320,7 +323,7 @@ def _check_nan_fractions(
     if problem_vars:
         message = f"Excessive NaN fraction (> {max_nan_fraction}):\n" + "\n".join(
             f"- {var}: {fraction:.6f} NaN fraction"
-            for var, fraction in problem_vars.items()
+            for var, fraction in sorted(problem_vars.items())
         )
         return ValidationResult(passed=False, message=message)
 

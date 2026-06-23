@@ -20,4 +20,4 @@ def retry[T](
                 rng = np.random.default_rng()
                 time.sleep(attempt * rng.uniform(0.8, 1.2) + 0.1)
 
-    raise last_exception if last_exception else AssertionError("unreachable")
+    raise last_exception or AssertionError("unreachable")

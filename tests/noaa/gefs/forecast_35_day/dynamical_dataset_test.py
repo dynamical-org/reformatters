@@ -9,6 +9,7 @@ from reformatters.common import validation
 from reformatters.noaa.gefs.forecast_35_day.dynamical_dataset import (
     GefsForecast35DayDataset,
 )
+from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 
 
@@ -115,8 +116,10 @@ def test_backfill_local_and_operational_update(
     monkeypatch.setattr(
         type(dataset.template_config),
         "get_template",
-        lambda self, end_time: orig_get_template(end_time).sel(
-            lead_time=slice("0h", "3h"), ensemble_member=slice(0, 1)
+        lambda self, end_time: shrink_chunks_and_shards(
+            orig_get_template(end_time).sel(
+                lead_time=slice("0h", "3h"), ensemble_member=slice(0, 1)
+            )
         ),
     )
 

@@ -10,6 +10,7 @@ from pydantic import Field
 from zarr.abc.store import Store
 
 from reformatters.common.download import http_download_to_disk
+from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     CoordinateValue,
     RegionJob,
@@ -79,7 +80,7 @@ class UarizonaSwannAnalysisSourceFileCoord(SourceFileCoord):
 
 
 class UarizonaSwannAnalysisRegionJob(
-    RegionJob[UarizonaSwannDataVar, UarizonaSwannAnalysisSourceFileCoord]
+    MaterializedRegionJob[UarizonaSwannDataVar, UarizonaSwannAnalysisSourceFileCoord]
 ):
     # Be gentle to UA HTTP servers
     download_parallelism: int = 2

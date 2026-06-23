@@ -135,7 +135,7 @@ class GefsSourceFileCoord(SourceFileCoord):
             elif gefs_file_type == "b":
                 return "b"
             else:
-                assert_never(gefs_file_type)  # ty: ignore[type-assertion-failure]
+                assert_never(gefs_file_type)
 
         elif self.init_time >= GEFS_REFORECAST_END:
             match gefs_file_type:
@@ -144,7 +144,7 @@ class GefsSourceFileCoord(SourceFileCoord):
                 case "s+b" | "s+b-b22" | "b":
                     return "b"
                 case _:
-                    assert_never(gefs_file_type)  # ty: ignore[type-assertion-failure]
+                    assert_never(gefs_file_type)
         elif self.init_time >= GEFS_REFORECAST_START:
             return "reforecast"
         else:

@@ -21,8 +21,8 @@ from reformatters.common.config_models import (
     Encoding,
 )
 from reformatters.common.iterating import get_worker_jobs
+from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
-    RegionJob,
     SourceFileCoord,
     SourceFileResult,
     SourceFileStatus,
@@ -62,7 +62,7 @@ class ExampleSourceFileCoords(SourceFileCoord):
         return f"https://test.org/testfile{self.time.strftime('%Y%m%d%H%M')}"
 
 
-class ExampleRegionJob(RegionJob[ExampleDataVar, ExampleSourceFileCoords]):
+class ExampleRegionJob(MaterializedRegionJob[ExampleDataVar, ExampleSourceFileCoords]):
     max_vars_per_job: ClassVar[int] = 2
 
     @classmethod
@@ -557,7 +557,8 @@ def test_get_jobs_many_shards_combined_filters() -> None:
     assert all(len(j.data_vars) == 2 for j in jobs)
     assert all(j.data_vars[0].name == "var0" for j in jobs)
     assert all(j.data_vars[1].name == "var1" for j in jobs)
-    assert [j.region for j in jobs] == [slice(i, i + 1) for i in expected_shard_indices]
+    # Sorted: get_jobs spreads regions across the append dim (see spread_evenly).
+    assert sorted(j.region.start for j in jobs) == expected_shard_indices
 
 
 # --- Edge case tests for get_jobs filtering ---
@@ -620,7 +621,9 @@ def _get_regions(
         filter_end=filter_end,
         filter_contains=filter_contains,
     )
-    return [j.region for j in jobs]
+    # Sort by start: get_jobs spreads regions across the append dim (see
+    # spread_evenly); these tests check which regions survive filtering, not order.
+    return sorted((j.region for j in jobs), key=lambda r: r.start)
 
 
 class TestFilterStartEdgeCases:
@@ -1032,12 +1035,14 @@ class TestDownloadErrorLogging:
         coord = ExampleSourceFileCoords(
             time=pd.Timestamp(job.template_ds.time.values[0])
         )
-        with caplog.at_level(logging.DEBUG, logger="reformatters.common.region_job"):
+        with caplog.at_level(
+            logging.DEBUG, logger="reformatters.common.materialized_region_job"
+        ):
             job._download_processing_group([coord], ["var0"])
         return [
             r.levelno
             for r in caplog.records
-            if r.name == "reformatters.common.region_job"
+            if r.name == "reformatters.common.materialized_region_job"
             and r.message != "Downloading ['var0'] in 1 files..."
         ]
 

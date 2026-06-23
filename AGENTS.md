@@ -38,6 +38,7 @@ tests/                       # Mirrors src/ structure
 docs/
 ├── dataset_integration_guide.md      # Step-by-step new dataset integration walkthrough
 ├── parallel_processing.md            # How parallel writes coordinate across workers
+├── virtual_datasets.md               # Writing + reading virtual (chunk reference) Icechunk datasets
 ├── add_new_variable.md               # Add new variable to an existing dataset
 ├── validation.md                     # Run + read validation plots; data quality checklist
 ├── chunk_shard_layout_tool.md        # Zarr V3 chunk/shard layout optimizer
@@ -77,7 +78,7 @@ Use ECMWF variable name for `long_name` and ECMWF short name for `short_name`.  
 ### RegionJob
 Base class: `src/reformatters/common/region_job.py`, commented example subclass: `src/reformatters/example/region_job.py`.
 
-Defines the **process** for reformatting a region of the dataset: downloading, reading, and writing data. Key responsibilities:
+Defines the **process** for reformatting a region of the dataset: downloading, reading, and writing data. `RegionJob` is the shared base (partitioning via `get_jobs()`, `generate_source_file_coords()`, `operational_update_jobs()`, `update_template_with_results()`); `MaterializedRegionJob(RegionJob)` adds the concrete download → read → write pipeline (`download_file()`, `read_data()`, `apply_data_transformations()`, `process()` and the parallelism tunables). Materialized (rechunked) datasets subclass `MaterializedRegionJob`. Key responsibilities:
 - Implement `generate_source_file_coords()` - list source files needed for a region
 - Implement `download_file()` - retrieve a source file to local disk
 - Implement `read_data()` - load data from a local file into a numpy array
@@ -155,6 +156,8 @@ See [docs/parallel_processing.md](docs/parallel_processing.md) for details on co
 * Don't write error handing code unless I ask for it, nor smooth over exceptions/errors unless they are expected as part of control flow. In general, write code that will raise an exception early if something isn't expected. Enforce important expectations with asserts.
 * Add only extremely minimal code comments and no docstrings unless I ask for them, but don't remove existing comments.
   * Add comments only when doing things out of the ordinary, to highlight gotchas, or if less clear code is required due to an optimization.
+  * In non-test code, the vast majority of comments should be one line. State the non-obvious fact the next reader needs, not the reasoning behind the change: no failure-mode stories, no defending why the code is correct, no operational instructions. Point to docs (e.g. "..., see docs/parallel_processing.md.") to add richer context only for complex topics.
+  * In non-test code, an assert or validator with a clear message is its own documentation — don't add a comment restating what it enforces or what would break without it.
 * Use Python 3.13+ features
 * Follow ty type checking. If you need to add an ignore, ignore a specific check like `# ty: ignore[specific]`. Always annotate types on all function arguments and return types.
 * Follow ruff format

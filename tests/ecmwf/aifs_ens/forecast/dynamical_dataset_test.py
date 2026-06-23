@@ -9,6 +9,7 @@ from reformatters.common import validation
 from reformatters.ecmwf.aifs_ens.forecast.dynamical_dataset import (
     EcmwfAifsEnsForecastDataset,
 )
+from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 
 
@@ -37,9 +38,11 @@ def test_backfill_local_and_operational_update(
     monkeypatch.setattr(
         type(dataset.template_config),
         "get_template",
-        lambda self, end_time: orig_get_template(end_time).sel(
-            lead_time=slice("0h", "6h"),
-            ensemble_member=slice(0, 1),  # control (0) + first perturbed (1)
+        lambda self, end_time: shrink_chunks_and_shards(
+            orig_get_template(end_time).sel(
+                lead_time=slice("0h", "6h"),
+                ensemble_member=slice(0, 1),  # control (0) + first perturbed (1)
+            )
         )[variables_to_check],
     )
     dataset.backfill_local(append_dim_end=pd.Timestamp("2025-07-02T06:00:00"))

@@ -18,7 +18,9 @@ from scripts.validation.utils import (
     is_forecast_dataset,
     load_zarr_dataset,
     output_dir_option,
+    reference_url_option,
     resolve_output_dir,
+    resolve_reference_url,
     scope_time_period,
     select_random_ensemble_member,
     select_variables_for_plotting,
@@ -29,8 +31,6 @@ from scripts.validation.utils import (
 log = get_logger(__name__)
 
 zarr.config.set({"async.concurrency": 32})
-
-GEFS_ANALYSIS_URL = "https://data.dynamical.org/noaa/gefs/analysis/latest.zarr"
 
 
 def align_reference_spatially(ds: xr.Dataset, reference_ds: xr.Dataset) -> xr.Dataset:
@@ -363,7 +363,7 @@ def run_compare_spatial(
 
 def compare_spatial(
     validation_url: str,
-    reference_url: str = GEFS_ANALYSIS_URL,
+    reference_url: str | None = reference_url_option,
     variables: list[str] | None = variables_option,
     show_plot: bool = False,
     init_time: str | None = None,
@@ -382,6 +382,7 @@ def compare_spatial(
     is_forecast = is_forecast_dataset(validation_ds)
     log.info(f"Detected {'forecast' if is_forecast else 'analysis'} dataset")
 
+    reference_url = resolve_reference_url(reference_url)
     log.info(f"Loading reference dataset: {reference_url}")
     reference_ds = load_zarr_dataset(reference_url)
 

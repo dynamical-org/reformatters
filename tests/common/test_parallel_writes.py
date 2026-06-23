@@ -21,8 +21,10 @@ import pytest
 import xarray as xr
 from pydantic import computed_field
 
+from reformatters.common import (
+    materialized_region_job as materialized_region_job_module,
+)
 from reformatters.common import parallel_coordination as pc_module
-from reformatters.common import region_job as region_job_module
 from reformatters.common import storage as storage_module
 from reformatters.common import template_utils
 from reformatters.common.config_models import (
@@ -33,10 +35,8 @@ from reformatters.common.config_models import (
 )
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
-from reformatters.common.region_job import (
-    RegionJob,
-    SourceFileCoord,
-)
+from reformatters.common.materialized_region_job import MaterializedRegionJob
+from reformatters.common.region_job import SourceFileCoord
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, ArrayFloat32, Dim, Timedelta, Timestamp
@@ -46,10 +46,12 @@ pytestmark = pytest.mark.slow
 
 @pytest.fixture(autouse=True)
 def _use_thread_pool_for_shard_writes(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Substitute ThreadPoolExecutor for ProcessPoolExecutor in region_job so
-    shard writes skip spawn overhead. SharedMemory works in-process, and the
+    """Substitute ThreadPoolExecutor for ProcessPoolExecutor in materialized_region_job
+    so shard writes skip spawn overhead. SharedMemory works in-process, and the
     zarr writes are I/O-bound — threads are fine for these tests."""
-    monkeypatch.setattr(region_job_module, "ProcessPoolExecutor", ThreadPoolExecutor)
+    monkeypatch.setattr(
+        materialized_region_job_module, "ProcessPoolExecutor", ThreadPoolExecutor
+    )
 
 
 _LAT_SIZE = 3
@@ -80,7 +82,9 @@ class ParallelSourceFileCoord(SourceFileCoord):
         return f"https://test.org/{self.time.isoformat()}"
 
 
-class ParallelRegionJob(RegionJob[ParallelDataVar, ParallelSourceFileCoord]):
+class ParallelRegionJob(
+    MaterializedRegionJob[ParallelDataVar, ParallelSourceFileCoord]
+):
     max_vars_per_job: ClassVar[int] = 2
 
     def generate_source_file_coords(
@@ -869,7 +873,7 @@ class TestLastWorkerRetryAfterPartialFinalize:
                 finalize_count[0] += 1
                 if finalize_count[0] == 2:
                     raise RuntimeError("simulated pod death between resets")
-            return original_copy(*args, **kwargs)  # type: ignore[arg-type]
+            return original_copy(*args, **kwargs)  # ty: ignore[invalid-argument-type]
 
         monkeypatch.setattr(pc_module, "copy_zarr_metadata", wrapped_copy)
 
@@ -963,7 +967,7 @@ class TestLastWorkerRetryAfterPartialFinalize:
                 finalize_count[0] += 1
                 if finalize_count[0] == 1:
                     raise RuntimeError("simulated pod death before first reset")
-            return original_copy(*args, **kwargs)  # type: ignore[arg-type]
+            return original_copy(*args, **kwargs)  # ty: ignore[invalid-argument-type]
 
         monkeypatch.setattr(pc_module, "copy_zarr_metadata", wrapped_copy)
 
@@ -1091,7 +1095,7 @@ class TestReplicaOrdering:
             self: icechunk.Repository, *args: object, **kwargs: object
         ) -> object:
             reset_order.append(_role_from_storage(str(self.storage)))
-            return original_reset(self, *args, **kwargs)  # type: ignore[arg-type]
+            return original_reset(self, *args, **kwargs)  # ty: ignore[invalid-argument-type]
 
         monkeypatch.setattr(icechunk.Repository, "reset_branch", recording_reset)
 

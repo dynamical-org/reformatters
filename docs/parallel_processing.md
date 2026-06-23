@@ -12,6 +12,19 @@ Work is split along two axes:
 
 The Cartesian product of regions and variable groups produces the full job list. Each worker gets every Nth job.
 
+### Append dim region spreading
+
+Regions are reordered with a bit-reversal permutation (`iterating.spread_evenly`) before the job list is built. Round-robin assignment makes worker N's first job region N, so the workers running concurrently (a contiguous index window) would otherwise all hit the same narrow band of the append dim at once. For a multi-year archive that clusters source requests on a few object-store prefixes, hot-spotting partitions that throttle (e.g. S3 503 SlowDown). Spreading the regions makes any contiguous worker window cover the whole append dim, so source load stays even across the run. The permutation is deterministic (every worker recomputes the same order) and concurrency-independent, so it needs nothing beyond the region count.
+
+## The worker-processing seam
+
+`RegionJob.process_worker_jobs(worker_jobs, store_factory, branch_name, worker_index)` is the single polymorphic call the coordinator (`DynamicalDataset._process_region_jobs`) drives every dataset variant through. Each variant owns its store/session lifecycle and commit cadence behind it:
+
+- **Materialized** — opens stores once and writes all of the worker's jobs in a single commit.
+- **Virtual** — commits each batch of source-file refs as its generator yields them, because a committed icechunk session is read-only (see [virtual_datasets.md](virtual_datasets.md#the-write-loop)).
+
+The only fork outside this call is the coordination lifecycle: everything runs the parallel temp-branch flow below except virtual operational updates, which are single-writer (see below).
+
 ## Reader safety
 
 Readers must always see a consistent view — either the old data or the fully updated data, never a partial state with some variables or time steps missing.
@@ -29,6 +42,14 @@ All metadata and chunk writes happen on a temporary branch (`_job_{job_name}`). 
 1. **Worker 0 setup** — creates a temp branch from main's current snapshot, copies expanded metadata from the local tmp store, commits on the branch
 2. **All workers** — open sessions on the temp branch, write chunk data, commit with `ConflictDetector` rebase (uncooperative distributed writes)
 3. **Last worker finalization** — writes final metadata on the branch, then atomically resets `main` to the branch tip using `reset_branch("main", snapshot, from_snapshot_id=original)`. This branch reset is what makes all writes visible to readers. The `from_snapshot_id` check ensures no concurrent process moved main.
+
+### Virtual Icechunk operational updates (single-writer exception)
+
+Virtual Icechunk datasets (`VirtualRegionJob`) are the one exception to the temp-branch coordinator. Their *operational* updates run **single-writer** and commit whole source files straight to `main` as each arrives, so readers see new data within seconds rather than at finalization. There is no temp branch, no `parallel_setup`, no coordination files, and no finalization step — `update()` routes virtual operational updates to `_run_virtual_operational_update` instead of `_process_region_jobs`.
+
+This is safe because each commit contains a *whole* source file's references (all of its chunks), so a reader on `main` always sees either none or all of a file's data. Reader-visible atomicity comes from icechunk's per-commit transaction, not from a branch swap. See [virtual_datasets.md](virtual_datasets.md).
+
+Virtual *backfills* are **not** an exception — they use the normal temp-branch coordinator above (parallel across workers, pre-sized branch, finalize resets `main`).
 
 ## Worker coordination
 

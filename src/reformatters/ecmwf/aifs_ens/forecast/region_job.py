@@ -13,6 +13,7 @@ from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import digest, group_by
 from reformatters.common.logging import get_logger
+from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     CoordinateValue,
     RegionJob,
@@ -28,7 +29,7 @@ from reformatters.common.types import (
     Timestamp,
 )
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, vars_available
-from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
+from reformatters.ecmwf.ecmwf_grib_index import grib_message_byte_ranges_from_index
 from reformatters.ecmwf.ecmwf_utils import (
     EcmwfOpenDataSource,
     ecmwf_download_with_fallback,
@@ -96,7 +97,7 @@ class EcmwfAifsEnsForecastSourceFileCoord(SourceFileCoord):
 
 
 class EcmwfAifsEnsForecastRegionJob(
-    RegionJob[EcmwfDataVar, EcmwfAifsEnsForecastSourceFileCoord]
+    MaterializedRegionJob[EcmwfDataVar, EcmwfAifsEnsForecastSourceFileCoord]
 ):
     max_vars_per_download_group: ClassVar[int] = 2
     max_vars_per_job: ClassVar[int] = 4
@@ -154,7 +155,7 @@ class EcmwfAifsEnsForecastRegionJob(
         index_ensemble_member = (
             None if coord.file_type == "cf" else coord.ensemble_member
         )
-        byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(
+        byte_range_starts, byte_range_ends = grib_message_byte_ranges_from_index(
             idx_local_path,
             coord.data_var_group,
             ensemble_member=index_ensemble_member,

@@ -10,7 +10,7 @@ from reformatters.ecmwf.ecmwf_config_models import (
 )
 
 
-def get_message_byte_ranges_from_index(
+def grib_message_byte_ranges_from_index(
     index_local_path: PathLike[str],
     data_vars: Sequence[DataVar[EcmwfInternalAttrs]],
     ensemble_member: int | None = None,

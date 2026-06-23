@@ -363,7 +363,7 @@ def search_chunk_shapes(
                 if not filtered:
                     filtered = [d for d in divisors if d <= 128]
 
-        constrained_divisors.append(filtered if filtered else divisors[:10])
+        constrained_divisors.append(filtered or divisors[:10])
 
     # Search for valid combinations
     valid_shapes: list[tuple[int, ...]] = []

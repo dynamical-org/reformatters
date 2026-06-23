@@ -1144,7 +1144,7 @@ def test_deaccumulate_unknown_accumulation_type_raises() -> None:
             data_array,
             dim="lead_time",
             reset_frequency=pd.Timedelta.max,
-            accumulation_type="not-a-real-type",  # type: ignore[arg-type]
+            accumulation_type="not-a-real-type",  # ty: ignore[invalid-argument-type]
         )
 
 

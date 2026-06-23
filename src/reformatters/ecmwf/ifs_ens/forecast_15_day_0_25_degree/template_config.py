@@ -96,14 +96,14 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
             "valid_time": ds["init_time"] + ds["lead_time"],
             "ingested_forecast_length": (
                 (self.append_dim,),
-                np.full(ds[self.append_dim].size, np.timedelta64("NaT", "ns")),
+                np.full(ds[self.append_dim].size, np.timedelta64("NaT", "us")),
             ),
             "expected_forecast_length": (
                 (self.append_dim,),
                 np.full(
                     ds[self.append_dim].size,
                     self.dimension_coordinates()["lead_time"].max(),
-                    dtype="timedelta64[ns]",
+                    dtype="timedelta64[us]",
                 ),
             ),
             "spatial_ref": SPATIAL_REF_COORDS,

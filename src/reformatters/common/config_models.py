@@ -106,7 +106,7 @@ def codecs_to_dicts(
     result: list[dict[str, Any]] = []
     for codec in codecs:
         if hasattr(codec, "to_dict"):
-            result.append(codec.to_dict())  # type: ignore[union-attr]
+            result.append(codec.to_dict())  # ty: ignore[call-non-callable]
         else:
             result.append(dict(codec.__dict__))
     return result
@@ -156,6 +156,10 @@ class Encoding(pydantic.BaseModel):
         pydantic.BeforeValidator(codecs_to_dicts),
     ] = None
     compressors: Sequence[dict[str, Any]] | None = None
+    # zarr v3 ArrayBytesCodec serializer (the single slot between filters and
+    # compressors). None means zarr's default BytesCodec. Virtual datasets set
+    # this to a per-variable GribberishCodec dict.
+    serializer: dict[str, Any] | None = None
 
     calendar: Literal["proleptic_gregorian"] | None = None  # For timestamps only
     # The _encoded_ units, for timestamps and timedeltas only

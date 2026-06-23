@@ -87,6 +87,8 @@ def parallel_setup(
                 ic_stores[0],
                 ic_stores[1:],
             )
+            # Persist virtual chunk containers so repo stays in sync with in-code config
+            store_factory.persist_virtual_config()
         # Zarr v3: do NOT expand (readers would see empty holes)
 
         if workers_total > 1:
@@ -160,9 +162,11 @@ def finalize(
     if update_template_with_results:
         assert len(all_jobs) > 0
         updated_template = all_jobs[0].update_template_with_results(merged_results)
-        template_utils.write_metadata(updated_template, tmp_store)
     else:
         updated_template = template_ds
+    # Ensure tmp_store has written metadata. Virtual workers (besides worker 0)
+    # do not otherwise write to tmp_store.
+    template_utils.write_metadata(updated_template, tmp_store)
 
     now = pd.Timestamp.now(tz="UTC")
     commit_message = f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}"
@@ -179,7 +183,12 @@ def finalize(
             original_snapshot = setup_info.get("repo_snapshots", {}).get(role)
             current_main = repo.lookup_branch("main")
             if current_main != original_snapshot:
-                log.info(f"Skipping {role}: main already moved past original snapshot")
+                # This shouldn't happen: it means multiple uncoordinated jobs ran
+                # at the same time (e.g. an operational update during a backfill).
+                log.error(
+                    f"Skipping {role}: main already moved past original snapshot; "
+                    f"branch {branch_name} will not be published by this job"
+                )
                 continue
             session = repo.writable_session(branch_name)
             copy_zarr_metadata(

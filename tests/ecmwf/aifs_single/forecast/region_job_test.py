@@ -12,6 +12,7 @@ from reformatters.common import template_utils
 from reformatters.common.iterating import item
 from reformatters.common.pydantic import replace
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
+from reformatters.common.types import ArrayFloat32
 from reformatters.ecmwf.aifs_single.forecast.region_job import (
     AIFS_SINGLE_PATH_CHANGE_DATE,
     EcmwfAifsSingleForecastRegionJob,
@@ -411,7 +412,8 @@ def test_read_data_alt_precip_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
 
     precip_var = item(v for v in config.data_vars if v.name == "precipitation_surface")
     coord = EcmwfAifsSingleForecastSourceFileCoord(
-        init_time=pd.Timestamp("2024-04-01"),
+        # v34+ alt metadata is the current "aifs-single" format, so use a current-era init.
+        init_time=AIFS_SINGLE_PATH_CHANGE_DATE,
         lead_time=pd.Timedelta("6h"),
         data_var_group=[precip_var],
         downloaded_path=Path("fake/path.grib2"),
@@ -436,6 +438,59 @@ def test_read_data_alt_precip_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
     result = region_job.read_data(coord, precip_var)
     assert np.array_equal(result, test_data)
     rasterio_reader.read.assert_called_once_with(1, out_dtype=np.float32)
+
+
+def _precip_read_data_mock(
+    monkeypatch: pytest.MonkeyPatch, init_time: pd.Timestamp
+) -> ArrayFloat32:
+    """Read precipitation_surface for the given init_time, returning the raw-scaled array."""
+    config = EcmwfAifsSingleForecastTemplateConfig()
+    region_job = EcmwfAifsSingleForecastRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=Mock(),
+        data_vars=config.data_vars,
+        append_dim=config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+    precip_var = item(v for v in config.data_vars if v.name == "precipitation_surface")
+    coord = EcmwfAifsSingleForecastSourceFileCoord(
+        init_time=init_time,
+        lead_time=pd.Timedelta("6h"),
+        data_var_group=[precip_var],
+        downloaded_path=Path("fake/path.grib2"),
+    )
+
+    rasterio_reader = Mock()
+    rasterio_reader.__enter__ = Mock(return_value=rasterio_reader)
+    rasterio_reader.__exit__ = Mock(return_value=False)
+    rasterio_reader.count = 1
+    rasterio_reader.descriptions = ['2[-] SFC="Ground or water surface"']
+    rasterio_reader.tags = Mock(
+        return_value={"GRIB_COMMENT": "(prodType 0, cat 1, subcat 193) [-]"}
+    )
+    rasterio_reader.read = Mock(
+        return_value=np.full((721, 1440), 0.001, dtype=np.float32)
+    )
+    monkeypatch.setattr(
+        "reformatters.ecmwf.aifs_single.forecast.region_job.rasterio.open",
+        Mock(return_value=rasterio_reader),
+    )
+    return region_job.read_data(coord, precip_var)
+
+
+def test_read_data_legacy_precip_scaled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Legacy 'aifs' precip is stored in metres and scaled x1000 to mm (kg m-2)."""
+    result = _precip_read_data_mock(
+        monkeypatch, AIFS_SINGLE_PATH_CHANGE_DATE - pd.Timedelta("6h")
+    )
+    np.testing.assert_array_equal(result, 1.0)  # 0.001 m * 1000
+
+
+def test_read_data_current_precip_not_scaled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Current 'aifs-single' precip is already in mm (kg m-2) and is not rescaled."""
+    result = _precip_read_data_mock(monkeypatch, AIFS_SINGLE_PATH_CHANGE_DATE)
+    np.testing.assert_allclose(result, 0.001, rtol=1e-6)
 
 
 def test_operational_update_jobs(

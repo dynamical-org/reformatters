@@ -13,6 +13,7 @@ from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import digest, group_by
 from reformatters.common.logging import get_logger
+from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     CoordinateValue,
     RegionJob,
@@ -28,7 +29,7 @@ from reformatters.common.types import (
     Timestamp,
 )
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, vars_available
-from reformatters.ecmwf.ecmwf_grib_index import get_message_byte_ranges_from_index
+from reformatters.ecmwf.ecmwf_grib_index import grib_message_byte_ranges_from_index
 from reformatters.ecmwf.ecmwf_utils import (
     EcmwfOpenDataSource,
     ecmwf_download_with_fallback,
@@ -92,7 +93,7 @@ class EcmwfAifsSingleForecastSourceFileCoord(SourceFileCoord):
 
 
 class EcmwfAifsSingleForecastRegionJob(
-    RegionJob[EcmwfDataVar, EcmwfAifsSingleForecastSourceFileCoord]
+    MaterializedRegionJob[EcmwfDataVar, EcmwfAifsSingleForecastSourceFileCoord]
 ):
     max_vars_per_download_group: ClassVar[int] = 10
 
@@ -140,7 +141,7 @@ class EcmwfAifsSingleForecastRegionJob(
             coord.get_index_url(source), self.dataset_id, disk_cache=True
         )
 
-        byte_range_starts, byte_range_ends = get_message_byte_ranges_from_index(
+        byte_range_starts, byte_range_ends = grib_message_byte_ranges_from_index(
             idx_local_path,
             coord.data_var_group,
         )
@@ -186,6 +187,15 @@ class EcmwfAifsSingleForecastRegionJob(
                 f"{expected_comment=}, {expected_description=}, {coord.downloaded_path=}"
             )
             result: ArrayFloat32 = reader.read(matching_bands[0], out_dtype=np.float32)
+
+            # Apply any init_time-ranged scale factors here, per message, rather than in
+            # apply_data_transformations: a region can straddle a format change, and the
+            # scale must be applied before deaccumulation (deaccumulation is linear, so
+            # scaling the accumulation is equivalent to scaling the resulting rate).
+            for factor in data_var.internal_attrs.init_time_scale_factors:
+                if factor.applies_to(coord.init_time):
+                    result *= factor.scale_factor
+
             return result
 
     def apply_data_transformations(

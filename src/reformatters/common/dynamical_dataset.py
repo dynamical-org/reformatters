@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Annotated, Any, Generic, Literal, TypeVar
+from typing import Annotated, Any, Generic, Literal, Self, TypeVar
 
 import numpy as np
 import pandas as pd
@@ -14,11 +14,11 @@ import sentry_sdk
 import sentry_sdk.crons
 import typer
 import xarray as xr
-from pydantic import Field, computed_field
+from icechunk.store import IcechunkStore
+from pydantic import Field, computed_field, model_validator
 
 from reformatters.common import (
     parallel_coordination,
-    storage,
     template_utils,
     validation,
 )
@@ -39,9 +39,16 @@ from reformatters.common.region_job import (
     SourceFileCoord,
     SourceFileResult,
 )
-from reformatters.common.storage import StorageConfig, StoreFactory, get_local_tmp_store
+from reformatters.common.storage import (
+    DatasetFormat,
+    IcechunkVirtualConfig,
+    StorageConfig,
+    StoreFactory,
+    get_local_tmp_store,
+)
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike
+from reformatters.common.virtual_region_job import VirtualRegionJob
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
@@ -57,16 +64,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     primary_storage_config: StorageConfig
     replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
-
-    @computed_field
-    @property
-    def store_factory(self) -> StoreFactory:
-        return StoreFactory(
-            primary_storage_config=self.primary_storage_config,
-            replica_storage_configs=self.replica_storage_configs,
-            dataset_id=self.dataset_id,
-            template_config_version=self.template_config.version,
-        )
+    icechunk_virtual_config: IcechunkVirtualConfig | None = None
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """
@@ -132,6 +130,17 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """Generate and persist the dataset template using the template_config."""
         self.template_config.update_template()
 
+    @computed_field
+    @property
+    def store_factory(self) -> StoreFactory:
+        return StoreFactory(
+            primary_storage_config=self.primary_storage_config,
+            replica_storage_configs=self.replica_storage_configs,
+            dataset_id=self.dataset_id,
+            template_config_version=self.template_config.version,
+            icechunk_virtual_config=self.icechunk_virtual_config,
+        )
+
     def num_variable_groups(self) -> int:
         """Number of variable groups for parallel updates."""
         return self.region_job_class.num_variable_groups(self.template_config.data_vars)
@@ -163,15 +172,21 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 reformat_job_name=reformat_job_name,
             )
 
-            self._process_region_jobs(
-                all_jobs=all_jobs,
-                worker_index=worker_index,
-                workers_total=workers_total,
-                reformat_job_name=reformat_job_name,
-                template_ds=template_ds,
-                tmp_store=tmp_store,
-                update_template_with_results=True,
-            )
+            if issubclass(self.region_job_class, VirtualRegionJob):
+                # Virtual operational updates are single-writer streaming (see docs/parallel_processing.md)
+                self._run_virtual_operational_update(
+                    all_jobs, worker_index, workers_total
+                )
+            else:
+                self._process_region_jobs(
+                    all_jobs=all_jobs,
+                    worker_index=worker_index,
+                    workers_total=workers_total,
+                    reformat_job_name=reformat_job_name,
+                    template_ds=template_ds,
+                    tmp_store=tmp_store,
+                    update_template_with_results=True,
+                )
 
         log.info(
             f"Operational update complete. Wrote to primary store: {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()} replicas"
@@ -218,7 +233,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 "Not all stores exist, cannot run with overwrite_existing=True"
             )
             log.info("Writing to existing stores, skipping metadata write.")
-        else:
+        elif not self.store_factory.all_stores_icechunk():
             # Write metadata to final store. Required for Zarr v3 only, Icechunk metadata is written in parallel_setup.
             template_utils.write_metadata(template_ds, self.store_factory)
 
@@ -305,7 +320,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         template_ds = self._get_template(append_dim_end)
         # Write metadata to final store. Required for Zarr v3 only, Icechunk metadata is written in parallel_setup.
-        template_utils.write_metadata(template_ds, self.store_factory)
+        if not self.store_factory.all_stores_icechunk():
+            template_utils.write_metadata(template_ds, self.store_factory)
 
         self.backfill(
             append_dim_end,
@@ -372,7 +388,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> None:
         """Shared processing loop for both updates and backfills.
 
-        Coordinates parallel writes across multiple workers:
+        Coordinates parallel writes across multiple workers (see docs/parallel_processing.md):
         - Icechunk stores: uses a temp branch so readers on "main" never see partial data
         - Zarr v3 stores: defers metadata write until all workers finish
         """
@@ -402,37 +418,15 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             icechunk_repos=icechunk_repos,
         )
 
-        # 2. Get stores and process jobs
-        worker_results: dict[str, list[SourceFileResult]] = {}
-        if worker_jobs:
-            primary_store = self.store_factory.primary_store(
-                writable=True, branch=branch_name
+        # 2. Process jobs. Each region job variant owns its own store/session
+        # lifecycle and commit cadence behind this one call.
+        worker_results: dict[str, list[SourceFileResult]] = (
+            self.region_job_class.process_worker_jobs(
+                worker_jobs, self.store_factory, branch_name, worker_index
             )
-            replica_stores = self.store_factory.replica_stores(
-                writable=True, branch=branch_name
-            )
-
-            for job in worker_jobs:
-                template_utils.write_metadata(job.template_ds, job.tmp_store)
-                results = job.process(
-                    primary_store=primary_store, replica_stores=replica_stores
-                )
-                for var_name, coords in results.items():
-                    worker_results.setdefault(var_name, []).extend(
-                        SourceFileResult(
-                            status=c.status,
-                            out_loc={**c.out_loc()},
-                            url=c.get_url(),
-                        )
-                        for c in coords
-                    )
-
-            now = pd.Timestamp.now(tz="UTC")
-            storage.commit_if_icechunk(
-                f"Update worker {worker_index} at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
-                primary_store,
-                replica_stores,
-            )
+            if worker_jobs
+            else {}
+        )
 
         # 3. Write results and finalize
         if workers_total > 1:
@@ -468,17 +462,49 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 update_template_with_results=update_template_with_results,
             )
 
+    def _run_virtual_operational_update(
+        self,
+        all_jobs: Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]],
+        worker_index: int,
+        workers_total: int,
+    ) -> None:
+        """Single-writer virtual dataset operational update: commit one or more
+        whole source files straight to the "main" icechunk branch as they arrive
+        (no parallel_coordination), so readers see each file within seconds.
+        See "Operational updates" in docs/virtual_datasets.md."""
+        assert workers_total == 1, "Virtual operational updates run single-writer"
+        assert worker_index == 0, "Virtual operational updates run single-writer"
+        # A single active-window job whose generator polls the union of all
+        # still-missing files; multiple jobs would run sequentially and the first
+        # one's polling could consume the pod's deadline and starve the rest.
+        assert len(all_jobs) == 1, (
+            f"Virtual operational updates run a single active-window job, got {len(all_jobs)}"
+        )
+        for job in all_jobs:
+            assert isinstance(job, VirtualRegionJob)
+            assert job.processing_mode == "update", (
+                "operational_update_jobs must construct jobs with processing_mode='update'"
+            )
+        self.region_job_class.process_worker_jobs(
+            all_jobs, self.store_factory, "main", worker_index
+        )
+
     def validate_dataset(
         self,
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
+        # Virtual datasets get their own manifest-aware validators. The materialized
+        # ones don't apply: check_for_expected_shards (no shards; missing chunks for
+        # partially-published inits are expected) and compare_replica_and_primary.
+        is_virtual = issubclass(self.region_job_class, VirtualRegionJob)
         with self._monitor(ValidationCronJob, reformat_job_name):
             primary_store = self.store_factory.primary_store()
             primary_store_validators = list(self.validators())
-            primary_store_validators.append(
-                partial(validation.check_for_expected_shards, primary_store)
-            )
+            if not is_virtual:
+                primary_store_validators.append(
+                    partial(validation.check_for_expected_shards, primary_store)
+                )
 
             validation.validate_dataset(
                 primary_store,
@@ -488,16 +514,23 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
             for replica_store in self.store_factory.replica_stores():
                 replica_store_validators = list(self.validators())
-                replica_store_validators.append(
-                    partial(validation.check_for_expected_shards, replica_store)
-                )
-                replica_store_validators.append(
-                    partial(
-                        validation.compare_replica_and_primary,
-                        self.template_config.append_dim,
-                        xr.open_zarr(replica_store, chunks=None),
+                if not is_virtual:
+                    replica_store_validators.append(
+                        partial(validation.check_for_expected_shards, replica_store)
                     )
-                )
+                    replica_store_validators.append(
+                        partial(  # ty: ignore[invalid-argument-type]
+                            validation.compare_replica_and_primary,
+                            self.template_config.append_dim,
+                            xr.open_zarr(
+                                replica_store,
+                                chunks=None,
+                                consolidated=not isinstance(
+                                    replica_store, IcechunkStore
+                                ),
+                            ),
+                        )
+                    )
 
                 validation.validate_dataset(
                     replica_store,
@@ -611,3 +644,44 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         else:
             if send_result:
                 capture_checkin("ok")
+
+    @model_validator(mode="after")
+    def _validate_virtual_storage(self) -> Self:
+        # A virtual region job emits chunk refs into icechunk and needs the source
+        # containers registered, so the virtual config is mandatory for it.
+        if (
+            issubclass(self.region_job_class, VirtualRegionJob)
+            and self.icechunk_virtual_config is None
+        ):
+            raise ValueError(
+                f"{self.region_job_class.__name__} is a VirtualRegionJob but no "
+                "icechunk_virtual_config was provided; virtual datasets require it."
+            )
+        # Virtual datasets store icechunk metadata + virtual chunk refs, so every store must be icechunk.
+        if self.icechunk_virtual_config is not None:
+            non_icechunk = [
+                config
+                for config in (
+                    self.primary_storage_config,
+                    *self.replica_storage_configs,
+                )
+                if config.format != DatasetFormat.ICECHUNK
+            ]
+            if non_icechunk:
+                raise ValueError(
+                    "icechunk_virtual_config requires every storage config to use "
+                    f"the ICECHUNK format, but found: {non_icechunk}"
+                )
+        # A virtual chunk is exactly one source message: no shards (get_jobs would
+        # partition by them and zarr would shard raw source bytes) and no
+        # compressors (a None would serialize away and zarr would stack its
+        # default compressor on the raw source bytes).
+        if issubclass(self.region_job_class, VirtualRegionJob):
+            for var in self.template_config.data_vars:
+                assert var.encoding.shards is None, (
+                    f"virtual data var {var.name} must not declare shards"
+                )
+                assert var.encoding.compressors == (), (
+                    f"virtual data var {var.name} must declare compressors=()"
+                )
+        return self

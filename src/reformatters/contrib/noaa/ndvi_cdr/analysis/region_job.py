@@ -20,6 +20,7 @@ from reformatters.common.download import (
 )
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
+from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     CoordinateValue,
     RegionJob,
@@ -67,7 +68,7 @@ class NoaaNdviCdrAnalysisSourceFileCoord(SourceFileCoord):
 
 
 class NoaaNdviCdrAnalysisRegionJob(
-    RegionJob[NoaaNdviCdrDataVar, NoaaNdviCdrAnalysisSourceFileCoord]
+    MaterializedRegionJob[NoaaNdviCdrDataVar, NoaaNdviCdrAnalysisSourceFileCoord]
 ):
     # Set lower than would be needed for fetching exclusively from S3
     # to accomodate the cases where we are downloading from NCEI.

@@ -27,7 +27,11 @@ from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
-from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, EcmwfInternalAttrs
+from reformatters.ecmwf.ecmwf_config_models import (
+    EcmwfDataVar,
+    EcmwfInternalAttrs,
+    InitTimeScaleFactor,
+)
 
 
 class EcmwfAifsSingleForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
@@ -73,14 +77,14 @@ class EcmwfAifsSingleForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
             "valid_time": ds["init_time"] + ds["lead_time"],
             "ingested_forecast_length": (
                 (self.append_dim,),
-                np.full(ds[self.append_dim].size, np.timedelta64("NaT", "ns")),
+                np.full(ds[self.append_dim].size, np.timedelta64("NaT", "us")),
             ),
             "expected_forecast_length": (
                 (self.append_dim,),
                 np.full(
                     ds[self.append_dim].size,
                     self.dimension_coordinates()["lead_time"].max(),
-                    dtype="timedelta64[ns]",
+                    dtype="timedelta64[us]",
                 ),
             ),
             "spatial_ref": SPATIAL_REF_COORDS,
@@ -423,6 +427,9 @@ class EcmwfAifsSingleForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
                 # Early GRIB master tables (v27) encode tp with generic product template codes.
                 # Later versions (v34+) use "Total precipitation rate [kg/(m^2*s)]".
                 # We use the early form here; read_data handles both.
+                # The legacy "aifs" format (init_time before expanded_vars_date) also stored
+                # the accumulation in metres, whereas the current "aifs-single" format uses
+                # mm (kg m-2), so that range is scaled x1000.
                 internal_attrs=EcmwfInternalAttrs(
                     grib_comment="(prodType 0, cat 1, subcat 193) [-]",
                     grib_description='2[-] SFC="Ground or water surface"',
@@ -430,6 +437,9 @@ class EcmwfAifsSingleForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
                     grib_index_param="tp",
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     deaccumulate_to_rate=True,
+                    init_time_scale_factors=(
+                        InitTimeScaleFactor(scale_factor=1000, end=expanded_vars_date),
+                    ),
                     window_reset_frequency=pd.Timedelta.max,
                     deaccumulation_invalid_below_threshold_rate=PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
                 ),

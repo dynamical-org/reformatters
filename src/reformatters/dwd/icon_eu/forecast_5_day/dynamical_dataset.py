@@ -108,9 +108,9 @@ class DwdIconEuForecast5DayDataset(
         # It would've made more sense for `dst_root_path` to be a `PurePosixPath` but Typer doesn't
         # handle `PurePosixPath`, so we use a `str` to keep Typer happy.
         dst_root_path: str = dynamical_grib_archive_rclone_root,
-        # The `type: ignore` on the line below is because Typer doesn't understand the type hints
+        # The `ty: ignore` on the line below is because Typer doesn't understand the type hints
         # `tuple[int, ...]` or `Sequence[int]`, so we have to use `list[int]`.
-        nwp_init_hours: list[int] = (0, 6, 12, 18),  # type: ignore[assignment]
+        nwp_init_hours: list[int] = (0, 6, 12, 18),  # ty: ignore[invalid-parameter-default]
         transfer_parallelism: int = 64,
         checkers: int = 32,
         stats_logging_freq: str = "1m",
