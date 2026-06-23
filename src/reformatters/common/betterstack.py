@@ -124,9 +124,9 @@ def reconcile_heartbeats(cron_jobs: Iterable[CronJob]) -> dict[str, dict[str, st
     """Idempotently create/update one start + one complete heartbeat per cron job.
 
     Returns the cron_name -> {"start": url, "complete": url} map. Requires the
-    DYNAMICAL_BETTERSTACK_UPTIME_API_TOKEN env var (operator-supplied at deploy).
+    BETTERSTACK_API_TOKEN_RW env var (operator-supplied at deploy).
     """
-    token = os.environ["DYNAMICAL_BETTERSTACK_UPTIME_API_TOKEN"]
+    token = os.environ["BETTERSTACK_API_TOKEN_RW"]
     status_page_id = os.getenv("DYNAMICAL_BETTERSTACK_STATUS_PAGE_ID")
 
     url_map: dict[str, dict[str, str]] = {}
