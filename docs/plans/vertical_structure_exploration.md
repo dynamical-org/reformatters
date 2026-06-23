@@ -474,6 +474,7 @@ uv run python docs/plans/vertical_structure_spikes/spike7_ecmwf_levels.py       
 uv run python docs/plans/vertical_structure_spikes/spike8_icon_eu_levels.py        # DWD ICON-EU pressure vs model levels
 uv run python docs/plans/vertical_structure_spikes/spike8b_icon_read_one_grib.py   # download+decode one ICON model-level GRIB
 uv run python docs/plans/vertical_structure_spikes/spike9_mrms_levels.py           # MRMS 3D products from real bucket
+uv run python docs/plans/vertical_structure_spikes/spike10_group_coord_inheritance.py  # do child groups carry root coords?
 ```
 
 (ECMWF/ICON spikes hit live, short-retention open-data servers — update the
@@ -532,11 +533,63 @@ triggers, and a dataset needs groups if **either** holds:
    need two resolution groups (e.g. `/lead_0_240` at 0.25°, `/lead_243_840` at
    0.5°), or two separate datasets.
 
-### Open question (for TSC): where do vertical stacks (and single levels) live?
+## Decided layout (Decision E) — Option B, refined
 
-**Decision needed.** Dense pressure/model/height levels become a real vertical
-*dimension*. The question is the on-disk layout — what sits at the root vs. in named
-groups. Three options, in order of increasing uniformity (and decreasing root use).
+**DECIDED.** Catalog-wide structure, applied uniformly so every dataset has the
+same shape:
+
+- **Single-level / surface variables always live at the root** (suffix-named, e.g.
+  `temperature_2m`).
+- **Variables with a vertical (Z) dimension live in a group named after that
+  dimension.** Supported: `model_level` and `pressure_level` — each string is *both*
+  the group name and the name of the vertical dimension of the variables inside it
+  (e.g. `pressure_level/temperature` indexed by `pressure_level`).
+- **This structure is used regardless of whether a dataset has zero, one, or
+  multiple vertical dimensions** — datasets are cross-consistent.
+- **A group with no variables does not exist** (e.g. a pressure-only dataset has a
+  `pressure_level` group but no `model_level` group).
+
+This is Option B below (single-level at root, every stack grouped), with two
+refinements: group name = dimension name, and empty groups are omitted.
+
+### Open sub-questions this leaves
+
+1. **Shared-coordinate placement (the big one).** Where do the dimension
+   coordinates shared by root and groups live — `time`/`init_time`/`lead_time`,
+   `latitude`/`longitude` (or `y`/`x`), `ensemble_member`, and `spatial_ref`/CRS?
+   Spike (`spike_coords`) shows that if they live **only at the root**, opening a
+   child group on its own (`xr.open_zarr(url, group="pressure_level")`) returns the
+   variable with correct dim *sizes* but **no coordinate values** for time/lat/lon —
+   only the in-group `pressure_level` coord; just `open_datatree`/`open_groups`
+   (the DataTree model) inherits the root coords. So either (a) **duplicate** the
+   shared coords into every group so each group is independently openable (cheap —
+   coords are small real arrays, not virtual refs; costs a little metadata and write
+   coordination), or (b) **root-only + require DataTree reads** (no duplication, but
+   a plain per-group open is coordinate-less and surprising). Needs a call.
+2. **Other vertical coordinate types + the single-vs-Z boundary.** The decision
+   names only `pressure_level` and `model_level`. Still open: (a) the group/dim name
+   for **height-based** stacks (MRMS 3D reflectivity, 33 CAPPI levels — `height`?
+   `altitude`?) and **soil/depth** stacks (ECMWF `sol`, ICON `t_so`/`w_so` —
+   `depth_below_land_surface`?), and whether those are in scope now; (b) the rule for
+   *what counts as a Z dimension* (dense + comparable → its own group/dim) **vs. a
+   single-level var at root** (sparse/selected → suffix-named). E.g. a single
+   selected pressure level — is `geopotential_height_500hpa` a root single-level var,
+   or a `pressure_level` group of size 1? (Per Decision B's density × comparability,
+   a single selected level stays suffix-named at root — worth restating explicitly.)
+3. **Scope of this decision.** It resolves *vertical* structure only. Still open:
+   the non-vertical heterogeneity case (GEFS 0.25°/0.5° across lead time — resolution
+   groups vs. separate datasets), and whether this structure also reshapes existing
+   *materialized* datasets or applies only to new virtual all-level datasets.
+4. **Empty root is allowed** (minor): a purely upper-air dataset would have a root
+   with shared coords but zero data variables. Structurally fine; just confirm it's
+   intended.
+
+### Options considered (decided: Option B)
+
+*Record of the options weighed before Decision E above chose Option B.* Dense
+pressure/model/height levels become a real vertical *dimension*; the question was
+the on-disk layout — what sits at the root vs. in named groups. Five options below,
+in order of increasing uniformity (and decreasing root use).
 
 Fixed regardless of the choice: HRRR and ICON-EU publish `temperature` on **both**
 pressure and model levels, so the bare name collides and at least one stack **must**
@@ -621,11 +674,12 @@ shape-heterogeneity split (resolution windows as groups `/lead_0_240`,
 **Taxonomy:** one store + groups (A/B/C, differing by how much goes in groups),
 multiple stores (D), or one flat store disambiguated by name (E).
 
-**Author's lean: Option A** — optimize the common, most-used single-type datasets
-for one-shot discovery; introduce groups only where a real name conflict requires
-them. C is the most consistent but least discoverable; B is the middle ground; D
-trades cohesion for the least machinery; E keeps one-open discoverability at the cost
-of asymmetric names. Pending TSC input.
+**Outcome: Option B chosen** (see Decision E above) — the author had leaned A, but
+cross-dataset structural consistency won out: every dataset has the same shape
+(single-level at root, each vertical stack in a like-named group), and a dataset
+gaining a vertical type never relocates existing variables. The trade accepted is
+that pressure access requires opening the `pressure_level` group even for
+single-vertical-type datasets like GFS/IFS.
 
 ## Parked / next steps
 
@@ -651,11 +705,12 @@ Decision status and follow-ups (so they aren't lost):
   question (which vertical types are in the dataset); the *layout* it forces is
   Decision E — for HRRR/ICON-EU the bare name `temperature` collides across pressure
   and model levels, so a group is required.
-- **E — group policy (layout):** **OPEN — pending TSC** (see "Open question (for
-  TSC): where do vertical stacks (and single levels) live?"). HRRR/ICON-EU must group
-  regardless; the call is the catalog-wide layout: **A** group only on conflict
-  (single-type stays flat at root, author's lean), **B** always group vertical stacks
-  but keep single-level at root, **C** group everything including a `single_level`
-  group (empty root, most consistent / least discoverable), **D** separate datasets
-  per level type (no groups, more stores), or **E** one flat store, type-suffixed
-  names (no groups). Awaiting TSC input.
+- **E — group policy (layout):** **DECIDED — Option B, refined** (see "Decided
+  layout"). Single-level at root; each vertical (Z) dimension in a group named after
+  the dimension (`pressure_level`, `model_level` — group name = dim name); structure
+  uniform across all datasets; empty groups omitted. Open sub-questions remain:
+  **(1)** shared-coordinate placement (duplicate into each group vs. root-only +
+  DataTree reads — see spike `spike_coords`); **(2)** naming/scope for other Z types
+  (height for MRMS, soil/depth) and the dense-Z-dim vs. single-level-at-root boundary;
+  **(3)** the non-vertical resolution-heterogeneity case (GEFS) and whether this
+  reshapes materialized datasets or only new virtual ones.
