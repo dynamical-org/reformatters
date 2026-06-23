@@ -522,16 +522,18 @@ triggers, and a dataset needs groups if **either** holds:
    multi-Z case). `temperature` on both pressure and model levels can't share one
    flat array. → HRRR, ICON-EU.
 
-2. **A dimension whose extent varies across another dimension** (the heterogeneity
-   case). A virtual chunk is a raw GRIB message at its native grid — we can't
-   resample — so if the horizontal grid size changes along the append/lead axis, the
-   data is not rectangular and can't live in one array. **GEFS is the concrete
-   example:** its `s` files are 0.25° only through lead 240 h, after which only
-   `a`/`b` at 0.5° exist (`gefs_config_models.py:15-19`). Tellingly, our one existing
-   virtual GEFS dataset is `forecast_10_day_spatial` = exactly 240 h — capped at the
-   resolution boundary to sidestep this. Spanning the full 35 days virtually would
-   need two resolution groups (e.g. `/lead_0_240` at 0.25°, `/lead_243_840` at
-   0.5°), or two separate datasets.
+2. **A dimension whose extent varies across another dimension *and we can't make it
+   uniform*** (the heterogeneity case). If the horizontal grid size changes along the
+   append/lead axis, the data isn't rectangular and can't live in one array — *unless*
+   we resample it onto a common grid. A **materialized** dataset can resample, so it
+   stays group-free; a **virtual** dataset can't (a chunk is a raw GRIB message at its
+   native grid), so it needs groups. **GEFS is the concrete example:** its `s` files
+   are 0.25° only through lead 240 h, after which only `a`/`b` at 0.5° exist
+   (`gefs_config_models.py:15-19`). Tellingly, our one existing virtual GEFS dataset
+   is `forecast_10_day_spatial` = exactly 240 h — capped at the resolution boundary to
+   sidestep this. Spanning the full 35 days *virtually* would need two resolution
+   groups (e.g. `/lead_0_240` at 0.25°, `/lead_243_840` at 0.5°), or two separate
+   datasets; the materialized 35-day GEFS resamples to one grid and needs neither.
 
 ## Decided layout (Decision E) — Option B, refined
 
@@ -548,6 +550,13 @@ same shape:
   multiple vertical dimensions** — datasets are cross-consistent.
 - **A group with no variables does not exist** (e.g. a pressure-only dataset has a
   `pressure_level` group but no `model_level` group).
+- **Applies to all datasets — materialized and virtual.** Today every materialized
+  dataset is single-level selections only, so they're all entirely at the root and
+  already conform. Note a selected single level such as `temperature_500hpa` is a
+  *single-level slice* and stays a root single-level var (it isn't dense, per the
+  sub-q 2 boundary rule) — even though the same physical variable may appear as a
+  dense `pressure_level/temperature` in a (e.g. virtual) dataset that includes the
+  full stack.
 
 This is Option B below (single-level at root, every stack grouped), with two
 refinements: group name = dimension name, and empty groups are omitted.
@@ -575,11 +584,14 @@ refinements: group name = dimension name, and empty groups are omitted.
    - **Names — DEFERRED:** the group/dim names for other dense+comparable Z types
      (height for MRMS 3D reflectivity; soil/depth for ECMWF `sol`, ICON
      `t_so`/`w_so`) are not yet chosen. `pressure_level` and `model_level` stand.
-3. **Scope of this decision — OPEN (deferred).** It resolves *vertical* structure
-   only. Still open: the non-vertical heterogeneity case (GEFS 0.25°/0.5° across lead
-   time — resolution groups vs. separate datasets), and whether this structure also
-   reshapes existing *materialized* datasets or applies only to new virtual all-level
-   datasets.
+3. **Scope of this decision — DECIDED.** The structure applies to **all** datasets,
+   materialized and virtual. (Today's materialized datasets are single-level
+   selections only, so they already conform — everything at the root.) Non-vertical
+   heterogeneity also gets groups, but **only when we can't make it uniform**: a
+   materialized dataset resamples a varying grid onto a common one (no groups); a
+   virtual dataset can't resample, so a dimension whose extent varies (e.g. GEFS
+   0.25°/0.5° across lead time) needs resolution groups (or separate datasets). See
+   trigger 2 in "When are zarr groups actually required?".
 4. **Empty root — CONFIRMED acceptable (and unlikely).** A purely upper-air dataset
    would have a root with shared coords but zero data variables; structurally fine,
    and not expected to come up in practice.
@@ -712,7 +724,8 @@ Decision status and follow-ups (so they aren't lost):
   into each group** so groups are independently openable (sub-q 1 decided; empty root
   confirmed fine, sub-q 4). Boundary rule decided (sub-q 2): a level set becomes its
   own Z dimension/group **iff dense + comparable**, else the var stays a root
-  single-level (suffix-named). Still open: **sub-q 2 names** for other Z types (height
-  for MRMS, soil/depth) — deferred; **sub-q 3** the non-vertical resolution-
-  heterogeneity case (GEFS) and whether this reshapes materialized datasets or only
-  new virtual ones.
+  single-level (suffix-named). Scope decided (sub-q 3): applies to **all** datasets
+  (materialized + virtual; today's materialized are single-level-only so already
+  conform); non-vertical heterogeneity gets groups only when it can't be made uniform
+  (virtual can't resample, materialized can). Still open: **sub-q 2 names** for other
+  Z types (height for MRMS, soil/depth) — deferred.
