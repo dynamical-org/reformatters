@@ -563,16 +563,18 @@ refinements: group name = dimension name, and empty groups are omitted.
    a child group coordinate-less on a plain per-group open; duplication is cheap
    (coords are small real arrays, not virtual refs) and worth it for standalone
    usability.
-2. **Other vertical coordinate types + the single-vs-Z boundary — OPEN (deferred).**
-   The decision names only `pressure_level` and `model_level`. Still open: (a) the
-   group/dim name for **height-based** stacks (MRMS 3D reflectivity, 33 CAPPI levels —
-   `height`? `altitude`?) and **soil/depth** stacks (ECMWF `sol`, ICON `t_so`/`w_so` —
-   `depth_below_land_surface`?), and whether those are in scope now; (b) the rule for
-   *what counts as a Z dimension* (dense + comparable → its own group/dim) **vs. a
-   single-level var at root** (sparse/selected → suffix-named). E.g. a single
-   selected pressure level — is `geopotential_height_500hpa` a root single-level var,
-   or a `pressure_level` group of size 1? (Per Decision B's density × comparability,
-   a single selected level stays suffix-named at root — worth restating explicitly.)
+2. **Other vertical coordinate types + the single-vs-Z boundary — boundary DECIDED,
+   names deferred.**
+   - **Boundary rule — DECIDED:** a variable's levels become a real Z dimension (its
+     own group) **iff they form a dense + comparable set**; otherwise the variable
+     stays a single-level var at the root (suffix-named). This is Decision B's
+     density × comparability as the governing test. Consequences: a single selected
+     pressure level (`geopotential_height_500hpa`) is *not* dense → stays a root
+     single-level var, not a size-1 `pressure_level` group; a sparse handful of soil
+     layers likewise stays suffix-named at root unless dense + comparable.
+   - **Names — DEFERRED:** the group/dim names for other dense+comparable Z types
+     (height for MRMS 3D reflectivity; soil/depth for ECMWF `sol`, ICON
+     `t_so`/`w_so`) are not yet chosen. `pressure_level` and `model_level` stand.
 3. **Scope of this decision — OPEN (deferred).** It resolves *vertical* structure
    only. Still open: the non-vertical heterogeneity case (GEFS 0.25°/0.5° across lead
    time — resolution groups vs. separate datasets), and whether this structure also
@@ -708,7 +710,9 @@ Decision status and follow-ups (so they aren't lost):
   the dimension (`pressure_level`, `model_level` — group name = dim name); structure
   uniform across all datasets; empty groups omitted. Shared coords are **duplicated
   into each group** so groups are independently openable (sub-q 1 decided; empty root
-  confirmed fine, sub-q 4). Still open: **sub-q 2** naming/scope for other Z types
-  (height for MRMS, soil/depth) and the dense-Z-dim vs. single-level-at-root boundary;
-  **sub-q 3** the non-vertical resolution-heterogeneity case (GEFS) and whether this
-  reshapes materialized datasets or only new virtual ones.
+  confirmed fine, sub-q 4). Boundary rule decided (sub-q 2): a level set becomes its
+  own Z dimension/group **iff dense + comparable**, else the var stays a root
+  single-level (suffix-named). Still open: **sub-q 2 names** for other Z types (height
+  for MRMS, soil/depth) — deferred; **sub-q 3** the non-vertical resolution-
+  heterogeneity case (GEFS) and whether this reshapes materialized datasets or only
+  new virtual ones.
