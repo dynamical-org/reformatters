@@ -246,19 +246,29 @@ class CronJob(Job):
     ttl: timedelta = timedelta(hours=12)
     suspend: bool = False
 
-    @pydantic.model_validator(mode="after")
-    def _mount_heartbeats_secret(self) -> CronJob:
-        # _monitor pings the heartbeat URLs loaded from this secret.
-        if BETTERSTACK_HEARTBEATS_SECRET_NAME not in self.secret_names:
-            self.secret_names = [*self.secret_names, BETTERSTACK_HEARTBEATS_SECRET_NAME]
-        return self
-
     def as_kubernetes_object(self) -> dict[str, Any]:
         job_spec = super().as_kubernetes_object()["spec"]
-        job_spec["template"]["spec"]["containers"][0]["env"].append(
+        pod_spec = job_spec["template"]["spec"]
+        pod_spec["containers"][0]["env"].append(
             {
                 "name": "CRON_JOB_NAME",
                 "value": self.name,
+            }
+        )
+        # _monitor pings the heartbeat URLs loaded from this secret; mounted here rather
+        # than via secret_names so it doesn't pollute the dataset's declared secrets.
+        pod_spec["containers"][0]["volumeMounts"].append(
+            {
+                "name": BETTERSTACK_HEARTBEATS_SECRET_NAME,
+                "mountPath": f"/secrets/{BETTERSTACK_HEARTBEATS_SECRET_NAME}.json",
+                "subPath": _SECRET_CONTENTS_KEY,
+                "readOnly": True,
+            }
+        )
+        pod_spec["volumes"].append(
+            {
+                "name": BETTERSTACK_HEARTBEATS_SECRET_NAME,
+                "secret": {"secretName": BETTERSTACK_HEARTBEATS_SECRET_NAME},
             }
         )
         return {
