@@ -352,7 +352,7 @@
         "shape": [
           1
         ],
-        "data_type": "int64",
+        "data_type": "float64",
         "chunk_grid": {
           "name": "regular",
           "configuration": {
@@ -367,7 +367,7 @@
             "separator": "/"
           }
         },
-        "fill_value": -1,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "bytes",
@@ -393,7 +393,8 @@
             "max": "15 days 00:00:00"
           },
           "dtype": "timedelta64[us]",
-          "units": "seconds"
+          "units": "seconds",
+          "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
           "init_time"
@@ -682,7 +683,7 @@
         "shape": [
           1
         ],
-        "data_type": "int64",
+        "data_type": "float64",
         "chunk_grid": {
           "name": "regular",
           "configuration": {
@@ -697,7 +698,7 @@
             "separator": "/"
           }
         },
-        "fill_value": -1,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "bytes",
@@ -723,7 +724,8 @@
             "max": "15 days 00:00:00"
           },
           "dtype": "timedelta64[us]",
-          "units": "seconds"
+          "units": "seconds",
+          "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
           "init_time"
@@ -847,7 +849,7 @@
         "shape": [
           61
         ],
-        "data_type": "int64",
+        "data_type": "float64",
         "chunk_grid": {
           "name": "regular",
           "configuration": {
@@ -862,7 +864,7 @@
             "separator": "/"
           }
         },
-        "fill_value": -1,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "bytes",
@@ -889,7 +891,8 @@
             "max": "15 days 00:00:00"
           },
           "dtype": "timedelta64[us]",
-          "units": "seconds"
+          "units": "seconds",
+          "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
           "lead_time"

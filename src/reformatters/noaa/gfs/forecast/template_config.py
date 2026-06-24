@@ -114,8 +114,8 @@ class NoaaGfsForecastTemplateConfig(NoaaGfsCommonTemplateConfig):
             Coordinate(
                 name="lead_time",
                 encoding=Encoding(
-                    dtype="int64",
-                    fill_value=-1,
+                    dtype="float64",
+                    fill_value=float("nan"),
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
                     units="seconds",
                     chunks=len(dim_coords["lead_time"]),
@@ -158,8 +158,8 @@ class NoaaGfsForecastTemplateConfig(NoaaGfsCommonTemplateConfig):
             Coordinate(
                 name="ingested_forecast_length",
                 encoding=Encoding(
-                    dtype="int64",
-                    fill_value=-1,
+                    dtype="float64",
+                    fill_value=float("nan"),
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
                     units="seconds",
                     chunks=append_dim_coordinate_chunk_size,
@@ -177,8 +177,8 @@ class NoaaGfsForecastTemplateConfig(NoaaGfsCommonTemplateConfig):
             Coordinate(
                 name="expected_forecast_length",
                 encoding=Encoding(
-                    dtype="int64",
-                    fill_value=-1,
+                    dtype="float64",
+                    fill_value=float("nan"),
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
                     units="seconds",
                     chunks=append_dim_coordinate_chunk_size,

@@ -245,7 +245,7 @@ def test_coordinates_configuration(
 
     # Test lead_time coordinate
     lead_time_coord = next(coord for coord in coords if coord.name == "lead_time")
-    assert lead_time_coord.encoding.dtype == "int64"
+    assert lead_time_coord.encoding.dtype == "float64"
     assert lead_time_coord.encoding.units == "seconds"
     # Should chunk all lead times together
     assert lead_time_coord.encoding.chunks == 181

@@ -134,6 +134,61 @@ def test_update_template_fill_values_are_correct(
 @pytest.mark.parametrize(
     "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
 )
+def test_coordinates_load_without_error(
+    dataset: DynamicalDataset[Any, Any],
+) -> None:
+    """
+    Regression test: loading every coordinate of the checked-in template must
+    not raise.
+
+    A timedelta coordinate stored as int64 encodes NaT as the int64 sentinel
+    (np.iinfo(int64).min); decoding it to a finer resolution (seconds -> us/ns)
+    multiplies the sentinel and overflows on some xarray versions
+    (OutOfBoundsTimedelta / "Overflow in int64 * timedelta64 multiplication").
+
+    Opening the stored zarr exercises stored NaT sentinels (e.g.
+    ingested_forecast_length), which get_template would otherwise re-derive from
+    numpy and never decode. get_template loads all coords too, so we cover both.
+    """
+    template_config = dataset.template_config
+
+    stored_ds = xr.open_zarr(template_config.template_path(), decode_timedelta=True)
+    for coord_name in stored_ds.coords:
+        stored_ds[coord_name].load()
+
+    end_time = template_config.append_dim_start + template_config.append_dim_frequency
+    template_config.get_template(end_time)
+
+
+@pytest.mark.parametrize(
+    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+)
+def test_timedelta_coordinates_stored_as_float(
+    dataset: DynamicalDataset[Any, Any],
+) -> None:
+    """
+    Cross-template consistency: every timedelta coordinate must be stored as a
+    float dtype so NaT serializes to NaN rather than the int64 sentinel that
+    overflows on decode. See test_coordinates_load_without_error.
+    """
+    template_config = dataset.template_config
+    template_path = template_config.template_path()
+
+    stored_ds = xr.open_zarr(template_path, decode_timedelta=True)
+    for coord_name in stored_ds.coords:
+        if stored_ds[coord_name].dtype.kind != "m":  # timedelta64
+            continue
+        with open(template_path / coord_name / "zarr.json") as f:
+            data_type = json.load(f)["data_type"]
+        assert data_type == "float64", (
+            f"Timedelta coordinate '{coord_name}' is stored as '{data_type}'. "
+            "Store it as float64 so NaT round-trips without int64 overflow."
+        )
+
+
+@pytest.mark.parametrize(
+    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+)
 def test_coordinates_have_single_chunk(
     dataset: DynamicalDataset[Any, Any],
 ) -> None:
@@ -145,22 +200,24 @@ def test_coordinates_have_single_chunk(
     template_path = template_config.template_path()
 
     # Open the template to get the coordinates
-    template_ds = xr.open_zarr(template_path)
+    template_ds = xr.open_zarr(template_path, decode_timedelta=True)
 
     for coord_name in template_ds.coords:
+        # A coordinate written entirely as its fill value (e.g. the scalar
+        # spatial_ref, or all-NaT ingested_forecast_length) writes no chunk.
+        all_fill = coord_name == "spatial_ref" or bool(
+            template_ds[coord_name].isnull().all()
+        )
+
         coord_path = template_path / coord_name
-        # Skip scalar coordinates (like spatial_ref) which have no chunks
         if not coord_path.is_dir():
-            assert (
-                coord_name == "spatial_ref"
-            )  # spatial_ref doesn't write a chunk for older datasets where fill value = 0 and write empty chunks = false
+            assert all_fill
             continue
 
         c_dir = coord_path / "c"
 
         if not c_dir.exists():
-            # spatial_ref doesn't write a chunk for older datasets where fill value = 0 and write empty chunks = false
-            assert coord_name == "spatial_ref"
+            assert all_fill
             continue
 
         # Check that only chunk file '0' exists
