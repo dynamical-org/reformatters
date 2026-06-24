@@ -223,7 +223,7 @@ class MaterializedRegionJob(
             for download_future in concurrent.futures.as_completed(download_futures):
                 data_var_group = download_futures[download_future]
                 source_file_coords = download_future.result()
-                log.debug(f"Downloaded: {[v.name for v in data_var_group]}")
+                log.info(f"Downloaded: {[v.name for v in data_var_group]}")
 
                 # Process one data variable at a time to ensure a single user of
                 # the shared buffer at a time and to reduce peak memory usage
@@ -324,7 +324,7 @@ class MaterializedRegionJob(
 
                 return updated_coord
 
-        log.debug(f"Downloading {data_var_names} in {len(source_file_coords)} files...")
+        log.info(f"Downloading {data_var_names} in {len(source_file_coords)} files...")
         with ThreadPoolExecutor(
             max_workers=self.download_parallelism
         ) as download_executor:
@@ -351,7 +351,7 @@ class MaterializedRegionJob(
         # Index is used to maintain order of coords
         updated_coords: dict[int, SOURCE_FILE_COORD] = {}
 
-        log.debug(f"Reading {data_var.name}...")
+        log.info(f"Reading {data_var.name}...")
         with ThreadPoolExecutor(max_workers=self.read_parallelism) as executor:
             futures = {}
             for i, coord in enumerate(read_coords):
