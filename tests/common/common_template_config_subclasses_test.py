@@ -203,28 +203,15 @@ def test_coordinates_have_single_chunk(
     template_ds = xr.open_zarr(template_path, decode_timedelta=True)
 
     for coord_name in template_ds.coords:
-        # A coordinate written entirely as its fill value (e.g. the scalar
-        # spatial_ref, or all-NaT ingested_forecast_length) writes no chunk.
-        all_fill = coord_name == "spatial_ref" or bool(
-            template_ds[coord_name].isnull().all()
-        )
+        c_path = template_path / coord_name / "c"
 
-        coord_path = template_path / coord_name
-        if not coord_path.is_dir():
-            assert all_fill
+        # We write empty chunks, so every coordinate has a chunk on disk. A
+        # scalar coordinate (e.g. spatial_ref) stores its single chunk as the
+        # file `c`; an N-d coordinate stores chunks under the directory `c/`.
+        if c_path.is_file():
             continue
 
-        c_dir = coord_path / "c"
-
-        if not c_dir.exists():
-            assert all_fill
-            continue
-
-        # Check that only chunk file '0' exists
-        chunk_files = list(c_dir.iterdir())
-        chunk_file_names = [f.name for f in chunk_files]
-
-        # Ensure exactly one chunk file exists and it's named '0'
+        chunk_file_names = [f.name for f in c_path.iterdir()]
         assert chunk_file_names == ["0"], (
             f"Coordinate '{coord_name}' should have only one chunk file '0', but found: {chunk_file_names}"
         )

@@ -135,8 +135,6 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #     Coordinate(
         #         name="lead_time",
         #         encoding=Encoding(
-        #             # Timedelta coords use float so NaT serializes to NaN; int64
-        #             # stores NaT as a sentinel that overflows decode on some xarray versions.
         #             dtype="float64",
         #             fill_value=float("nan"),
         #             compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
