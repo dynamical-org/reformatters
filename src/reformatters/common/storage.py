@@ -304,6 +304,12 @@ class StoreFactory(FrozenBaseModel):
         with contextlib.suppress(FileNotFoundError):
             fs.rm(path, recursive=True)
 
+    def delete_coordination_file(self, job_name: str, key: str) -> None:
+        path = f"{self._coordination_base_path()}/{job_name}/{key}"
+        fs = self._coordination_fs()
+        with contextlib.suppress(FileNotFoundError):
+            fs.rm_file(path)
+
 
 _ICECHUNK_TO_S3FS_CREDENTIAL_KEYS = {
     "access_key_id": "key",

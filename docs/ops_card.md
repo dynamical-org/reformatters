@@ -4,6 +4,8 @@ _Report issues to feedback@dynamical.org._
 
 For each dataset there are two workflows: `{dataset-id}-update` runs first, followed by `{dataset-id}-validate`.
 
+Some datasets also have their `{dataset-id}-update` triggered early by wxopticon source-arrival webhooks (via the in-cluster webhook receiver); the cron schedule remains the backup, and skips when a webhook already completed or is processing the run. See [webhooks.md](webhooks.md).
+
 ## Sentry monitoring
 _Requires sentry organization invitation._
 - [Crons overview](https://dynamical.sentry.io/insights/crons/) - Start here. If all green, we're good. If red, click in to see the issue and logs.

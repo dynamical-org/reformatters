@@ -4,10 +4,14 @@ from collections.abc import Callable, Iterable, Sequence
 from typing import Any
 
 import typer
+import uvicorn
 
 from reformatters.common import docker, kubernetes, staging
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.logging import get_logger
+from reformatters.common.webhook import deploy as webhook_deploy
+from reformatters.common.webhook.receiver import create_app
+from reformatters.common.webhook.subscription import register_subscription
 
 log = get_logger(__name__)
 
@@ -17,6 +21,7 @@ def deploy_operational_resources(
     docker_image: str | None = None,
     dataset_id_filter: str | None = None,
     cronjob_transform: Callable[[kubernetes.CronJob], kubernetes.CronJob] | None = None,
+    include_webhook_receiver: bool = False,
 ) -> None:
     image_tag = docker_image or docker.build_and_push_image()
 
@@ -44,12 +49,16 @@ def deploy_operational_resources(
         f" for dataset_id_filter={dataset_id_filter!r}" if dataset_id_filter else ""
     )
 
+    items: list[dict[str, Any]] = [
+        reformat_job.as_kubernetes_object() for reformat_job in reformat_jobs
+    ]
+    if include_webhook_receiver:
+        items.extend(webhook_deploy.webhook_receiver_resources(image_tag))
+
     k8s_resource_list = {
         "apiVersion": "v1",
         "kind": "List",
-        "items": [
-            reformat_job.as_kubernetes_object() for reformat_job in reformat_jobs
-        ],
+        "items": items,
     }
 
     subprocess.run(
@@ -71,7 +80,36 @@ def register_commands(
     def deploy(
         docker_image: str | None = None,
     ) -> None:
-        deploy_operational_resources(datasets, docker_image)
+        deploy_operational_resources(
+            datasets, docker_image, include_webhook_receiver=True
+        )
+
+    @app.command()
+    def serve_webhooks(
+        host: str = "0.0.0.0",  # noqa: S104  in-cluster service behind an Ingress
+        port: int = 8080,
+    ) -> None:
+        """Run the wxopticon webhook receiver (see docs/webhooks.md)."""
+        uvicorn.run(create_app(list(datasets)), host=host, port=port)
+
+    @app.command()
+    def register_webhook_subscription(
+        webhook_url: str,
+        subscription_id: str | None = None,
+    ) -> None:
+        """Register (or --subscription-id to update) the wxopticon subscription that
+        delivers source-arrival webhooks to the receiver. Needs WXOPTICON_ADMIN_TOKEN."""
+        result = register_subscription(
+            list(datasets), webhook_url, subscription_id=subscription_id
+        )
+        log.info(f"Subscription id: {result.get('id')}")
+        secret = result.get("secret")
+        if secret:
+            log.info(
+                "Store this secret (shown once) in the 'wxopticon-webhook' k8s secret "
+                "under key WXOPTICON_WEBHOOK_SECRET:"
+            )
+            typer.echo(secret)
 
     @app.command()
     def deploy_staging(
