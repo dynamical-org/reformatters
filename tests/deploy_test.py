@@ -56,6 +56,8 @@ class ExampleDataset2(ExampleDataset1):
 def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_run = Mock()
     monkeypatch.setattr(subprocess, "run", mock_run)
+    mock_provision_heartbeats = Mock()
+    monkeypatch.setattr(deploy, "_provision_heartbeats", mock_provision_heartbeats)
 
     example_datasets = [
         ExampleDatasetInDevelopment(),
@@ -71,6 +73,7 @@ def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
 
     deploy.deploy_operational_resources(test_datasets, docker_image="test-image-tag")
 
+    mock_provision_heartbeats.assert_called_once()
     assert mock_run.call_count == 1
     args, kwargs = mock_run.call_args
     assert args[0] == ["/usr/bin/kubectl", "apply", "-f", "-"]
@@ -91,3 +94,12 @@ def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
     # Dataset 2
     assert resources["items"][2]["kind"] == "CronJob"
     assert resources["items"][2]["metadata"]["name"] == "example-dataset-2-update"
+
+
+def test_provision_heartbeats_requires_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("BETTERSTACK_API_KEY_RW", raising=False)
+
+    with pytest.raises(RuntimeError, match="BETTERSTACK_API_KEY_RW is required"):
+        deploy._provision_heartbeats([])

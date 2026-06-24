@@ -134,7 +134,6 @@ jobs:
       - name: Deploy staging
         env:
           BETTERSTACK_API_KEY_RW: ${{ secrets.BETTERSTACK_API_KEY_RW }}
-          DYNAMICAL_BETTERSTACK_STATUS_PAGE_ID: ${{ secrets.DYNAMICAL_BETTERSTACK_STATUS_PAGE_ID }}
         run: >
           uv run main deploy-staging
           ${{ steps.parse.outputs.dataset_id }}

@@ -615,8 +615,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
         urls = heartbeat_urls[monitor_slug]
 
-        # Start and complete are separate heartbeats with tuned grace periods so a no-start
-        # is caught quickly regardless of run length; see plans/673_betterstack.md.
+        # Separate heartbeats catch no-start quickly without shortening run completion grace.
         if send_in_progress:
             betterstack.ping(urls["start"])
         try:

@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 from typing import Self
 from unittest.mock import Mock
@@ -61,13 +62,23 @@ def test_ping_ok_and_failed(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_upsert_heartbeat_creates_when_missing() -> None:
     client = Mock()
     client.post.return_value.json.return_value = {
-        "data": {"attributes": {"url": "https://hb/new"}}
+        "data": {
+            "id": "8",
+            "attributes": {
+                "url": "https://hb/new",
+                "name": "a.start",
+                "period": 86400,
+                "grace": 600,
+            },
+        }
     }
     spec = HeartbeatSpec("start", "a.start", timedelta(days=1), timedelta(minutes=10))
+    existing: dict[str, dict[str, object]] = {}
 
-    url = betterstack._upsert_heartbeat(client, {}, spec)
+    url = betterstack._upsert_heartbeat(client, existing, spec)
 
     assert url == "https://hb/new"
+    assert existing["a.start"]["id"] == "8"
     client.post.assert_called_once()
     assert client.post.call_args.kwargs["json"] == {
         "name": "a.start",
@@ -91,6 +102,7 @@ def test_upsert_heartbeat_patches_when_grace_changed() -> None:
     url = betterstack._upsert_heartbeat(client, existing, spec)
 
     assert url == "https://hb/existing"
+    assert existing["a.start"]["grace"] == 600
     client.post.assert_not_called()
     client.patch.assert_called_once_with(
         "/heartbeats/7", json={"name": "a.start", "period": 86400, "grace": 600}
@@ -152,6 +164,96 @@ def test_reconcile_heartbeats_builds_url_map(monkeypatch: pytest.MonkeyPatch) ->
             "complete": "https://hb/example-validate.complete",
         },
     }
+
+
+def test_reconcile_heartbeats_attaches_new_validation_to_status_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("BETTERSTACK_API_KEY_RW", "token")
+    monkeypatch.setenv("DYNAMICAL_BETTERSTACK_STATUS_PAGE_ID", "status-page-id")
+    monkeypatch.setattr(betterstack, "_api_client", lambda token: _NullClient())
+    monkeypatch.setattr(betterstack, "_list_heartbeats", lambda client: {})
+    mock_attach = Mock()
+    monkeypatch.setattr(betterstack, "_attach_to_status_page", mock_attach)
+
+    def upsert(
+        client: object,
+        existing: dict[str, dict[str, object]],
+        spec: HeartbeatSpec,
+    ) -> str:
+        existing[spec.name] = {
+            "id": "7",
+            "url": f"https://hb/{spec.name}",
+            "period": int(spec.period.total_seconds()),
+            "grace": int(spec.grace.total_seconds()),
+        }
+        return f"https://hb/{spec.name}"
+
+    monkeypatch.setattr(betterstack, "_upsert_heartbeat", upsert)
+
+    cron = ValidationCronJob(
+        name="example-validate",
+        schedule="0 1 * * *",
+        pod_active_deadline=timedelta(minutes=10),
+        image="image-tag",
+        dataset_id="example",
+        cpu="1",
+        memory="1G",
+    )
+
+    betterstack.reconcile_heartbeats([cron])
+
+    mock_attach.assert_called_once()
+    assert mock_attach.call_args.args[3] == "example-validate.complete"
+
+
+def test_reconcile_heartbeats_does_not_attach_staging_to_status_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("BETTERSTACK_API_KEY_RW", "token")
+    monkeypatch.setenv("DYNAMICAL_BETTERSTACK_STATUS_PAGE_ID", "status-page-id")
+    monkeypatch.setattr(betterstack, "_api_client", lambda token: _NullClient())
+    monkeypatch.setattr(betterstack, "_list_heartbeats", lambda client: {})
+    monkeypatch.setattr(
+        betterstack,
+        "_upsert_heartbeat",
+        lambda client, existing, spec: f"https://hb/{spec.name}",
+    )
+    mock_attach = Mock()
+    monkeypatch.setattr(betterstack, "_attach_to_status_page", mock_attach)
+
+    cron = ValidationCronJob(
+        name="stage-example-v1-validate",
+        schedule="0 1 * * *",
+        pod_active_deadline=timedelta(minutes=10),
+        image="image-tag",
+        dataset_id="example",
+        cpu="1",
+        memory="1G",
+    )
+
+    betterstack.reconcile_heartbeats([cron])
+
+    mock_attach.assert_not_called()
+
+
+def test_write_heartbeat_secret_merges_existing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    existing = {"prod-update": {"start": "https://hb/prod/start"}}
+    update = {"stage-update": {"start": "https://hb/stage/start"}}
+    monkeypatch.setattr(
+        betterstack, "_load_existing_heartbeat_secret", lambda: existing
+    )
+    mock_run = Mock(side_effect=[Mock(stdout="manifest"), Mock()])
+    monkeypatch.setattr(betterstack.subprocess, "run", mock_run)
+
+    betterstack.write_heartbeat_secret(update)
+
+    create_args = mock_run.call_args_list[0].args[0]
+    literal = next(arg for arg in create_args if arg.startswith("--from-literal="))
+    contents = json.loads(literal.removeprefix("--from-literal=contents="))
+    assert contents == existing | update
 
 
 class _NullClient:

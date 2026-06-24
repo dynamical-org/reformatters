@@ -216,8 +216,8 @@ echo "$OUTPUT"
 echo ""
 echo "### Monitoring"
 echo ""
-echo "- Sentry crons overview: https://dynamical.sentry.io/insights/crons/"
-echo "- Sentry logs: https://dynamical.sentry.io/explore/logs/"
+echo "- Better Stack heartbeats: https://uptime.betterstack.com/"
+echo "- Better Stack logs: https://telemetry.betterstack.com/"
 
 # Write to job summary
 echo "## Kubernetes Jobs" >> $GITHUB_STEP_SUMMARY
@@ -228,8 +228,8 @@ echo '```' >> $GITHUB_STEP_SUMMARY
 echo "" >> $GITHUB_STEP_SUMMARY
 echo "### Monitoring" >> $GITHUB_STEP_SUMMARY
 echo "" >> $GITHUB_STEP_SUMMARY
-echo "- [Sentry crons overview](https://dynamical.sentry.io/insights/crons/)" >> $GITHUB_STEP_SUMMARY
-echo "- [Sentry logs](https://dynamical.sentry.io/explore/logs/)" >> $GITHUB_STEP_SUMMARY
+echo "- [Better Stack heartbeats](https://uptime.betterstack.com/)" >> $GITHUB_STEP_SUMMARY
+echo "- [Better Stack logs](https://telemetry.betterstack.com/)" >> $GITHUB_STEP_SUMMARY
 """
                         ),
                     },
@@ -288,8 +288,8 @@ echo "$OUTPUT"
 echo ""
 echo "### Monitoring"
 echo ""
-echo "- Sentry crons overview: https://dynamical.sentry.io/insights/crons/"
-echo "- Sentry logs: https://dynamical.sentry.io/explore/logs/"
+echo "- Better Stack heartbeats: https://uptime.betterstack.com/"
+echo "- Better Stack logs: https://telemetry.betterstack.com/"
 
 # Write to job summary
 echo "## Kubernetes Pods" >> $GITHUB_STEP_SUMMARY
@@ -300,8 +300,8 @@ echo '```' >> $GITHUB_STEP_SUMMARY
 echo "" >> $GITHUB_STEP_SUMMARY
 echo "### Monitoring" >> $GITHUB_STEP_SUMMARY
 echo "" >> $GITHUB_STEP_SUMMARY
-echo "- [Sentry crons overview](https://dynamical.sentry.io/insights/crons/)" >> $GITHUB_STEP_SUMMARY
-echo "- [Sentry logs](https://dynamical.sentry.io/explore/logs/)" >> $GITHUB_STEP_SUMMARY
+echo "- [Better Stack heartbeats](https://uptime.betterstack.com/)" >> $GITHUB_STEP_SUMMARY
+echo "- [Better Stack logs](https://telemetry.betterstack.com/)" >> $GITHUB_STEP_SUMMARY
 """
                         ),
                     },

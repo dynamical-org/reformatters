@@ -103,8 +103,8 @@ jobs:
         echo ""
         echo "### Monitoring"
         echo ""
-        echo "- Sentry cron status: https://dynamical.sentry.io/issues/alerts/rules/crons/reformatters/${CRONJOB_NAME}/details/"
-        echo "- Sentry job logs: https://dynamical.sentry.io/explore/logs/?logsQuery=job_name%3A${JOB_NAME}"
+        echo "- Better Stack heartbeats (filter for ${CRONJOB_NAME}.start / .complete): https://uptime.betterstack.com/"
+        echo "- Better Stack logs (filter job_name=${JOB_NAME}): https://telemetry.betterstack.com/"
         echo "- Manual Get Jobs: https://github.com/${{ github.repository }}/actions/workflows/manual-get-jobs.yml"
         echo "- Manual Get Pods: https://github.com/${{ github.repository }}/actions/workflows/manual-get-pods.yml"
 
@@ -118,8 +118,8 @@ jobs:
           echo ""
           echo "### Monitoring"
           echo ""
-          echo "- [Sentry cron status](https://dynamical.sentry.io/issues/alerts/rules/crons/reformatters/${CRONJOB_NAME}/details/)"
-          echo "- [Sentry job logs](https://dynamical.sentry.io/explore/logs/?logsQuery=job_name%3A${JOB_NAME})"
+          echo "- [Better Stack heartbeats](https://uptime.betterstack.com/) (filter for \`${CRONJOB_NAME}.start\` / \`.complete\`)"
+          echo "- [Better Stack logs](https://telemetry.betterstack.com/) (filter \`job_name=${JOB_NAME}\`)"
           echo "- [Manual Get Jobs](https://github.com/${{ github.repository }}/actions/workflows/manual-get-jobs.yml)"
           echo "- [Manual Get Pods](https://github.com/${{ github.repository }}/actions/workflows/manual-get-pods.yml)"
         } >> $GITHUB_STEP_SUMMARY

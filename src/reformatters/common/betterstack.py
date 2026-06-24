@@ -1,3 +1,4 @@
+import base64
 import itertools
 import json
 import os
@@ -50,7 +51,7 @@ def heartbeat_specs(cron_job: CronJob) -> list[HeartbeatSpec]:
     """Two heartbeats per cron: a tight-grace start and a run-length-grace complete.
 
     The start heartbeat detects a no-start within _START_GRACE regardless of run length;
-    the complete heartbeat's grace must cover the full run (see plans/673_betterstack.md).
+    the complete heartbeat's grace must cover the full run.
     """
     period = schedule_period(cron_job.schedule)
     names = heartbeat_names(cron_job.name)
@@ -111,11 +112,15 @@ def _upsert_heartbeat(
         response = client.post("/heartbeats", json=payload)
         response.raise_for_status()
         log.info(f"Created heartbeat {spec.name}")
-        return response.json()["data"]["attributes"]["url"]
+        body = response.json()["data"]
+        attributes = body["attributes"]
+        existing[spec.name] = {"id": body["id"], **attributes}
+        return attributes["url"]
 
     if current["period"] != payload["period"] or current["grace"] != payload["grace"]:
         response = client.patch(f"/heartbeats/{current['id']}", json=payload)
         response.raise_for_status()
+        current.update(payload)
         log.info(f"Updated heartbeat {spec.name}")
     return current["url"]
 
@@ -139,7 +144,11 @@ def reconcile_heartbeats(cron_jobs: Iterable[CronJob]) -> dict[str, dict[str, st
             url_map[cron_job.name] = urls
 
             # The validation completing is the public freshness signal for status.dynamical.org.
-            if status_page_id and isinstance(cron_job, ValidationCronJob):
+            if (
+                status_page_id
+                and isinstance(cron_job, ValidationCronJob)
+                and not cron_job.name.startswith("stage-")
+            ):
                 _attach_to_status_page(
                     client,
                     status_page_id,
@@ -170,8 +179,38 @@ def _attach_to_status_page(
         response.raise_for_status()
 
 
+def _load_existing_heartbeat_secret() -> dict[str, dict[str, str]]:
+    result = subprocess.run(  # noqa: S603
+        [
+            "/usr/bin/kubectl",
+            "get",
+            "secret",
+            BETTERSTACK_HEARTBEATS_SECRET_NAME,
+            "-o",
+            "json",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        if "not found" in result.stderr.lower():
+            return {}
+        result.check_returncode()
+
+    body = json.loads(result.stdout)
+    data = body.get("data", {})
+    encoded_contents = data.get("contents")
+    if encoded_contents is None:
+        return {}
+    contents = json.loads(base64.b64decode(encoded_contents).decode())
+    assert isinstance(contents, dict)
+    return contents
+
+
 def write_heartbeat_secret(url_map: dict[str, dict[str, str]]) -> None:
     """Persist the heartbeat URL map into the k8s secret the cron pods load at runtime."""
+    merged_url_map = _load_existing_heartbeat_secret() | url_map
     manifest = subprocess.run(  # noqa: S603
         [
             "/usr/bin/kubectl",
@@ -179,7 +218,7 @@ def write_heartbeat_secret(url_map: dict[str, dict[str, str]]) -> None:
             "secret",
             "generic",
             BETTERSTACK_HEARTBEATS_SECRET_NAME,
-            f"--from-literal=contents={json.dumps(url_map)}",
+            f"--from-literal=contents={json.dumps(merged_url_map)}",
             "--dry-run=client",
             "-o",
             "json",
@@ -195,5 +234,5 @@ def write_heartbeat_secret(url_map: dict[str, dict[str, str]]) -> None:
         check=True,
     )
     log.info(
-        f"Wrote {BETTERSTACK_HEARTBEATS_SECRET_NAME} secret with {len(url_map)} cron jobs"
+        f"Wrote {BETTERSTACK_HEARTBEATS_SECRET_NAME} secret with {len(merged_url_map)} cron jobs"
     )
