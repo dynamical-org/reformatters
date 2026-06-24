@@ -2,6 +2,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+import pandas as pd
 import xarray as xr
 
 from reformatters.common import operational_run_guard as guard
@@ -36,7 +37,9 @@ RUN = "2026-06-10T06:00:00+00:00"
 def test_run_key_uses_newest_written_append_dim_value() -> None:
     template_ds = xr.Dataset(
         coords={
-            "init_time": ["2026-06-10T00:00", "2026-06-10T06:00", "2026-06-10T12:00"]
+            "init_time": pd.to_datetime(
+                ["2026-06-10T00:00", "2026-06-10T06:00", "2026-06-10T12:00"]
+            )
         }
     )
     jobs = [SimpleNamespace(region=slice(0, 2)), SimpleNamespace(region=slice(1, 3))]

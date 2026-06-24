@@ -34,7 +34,10 @@ def run_key(
     Webhook (~init+5h) and cron (~init+5h22m) read the same store and template, so
     they derive the same key for a given run.
     """
-    last_index = max(job.region.stop for job in all_jobs) - 1
+    # Region stops are shard-aligned and can extend past the data; clamp to the template.
+    last_index = (
+        min(max(job.region.stop for job in all_jobs), template_ds.sizes[append_dim]) - 1
+    )
     value = template_ds[append_dim].values[last_index]
     return pd.Timestamp(value).isoformat()
 
