@@ -1,0 +1,66 @@
+import threading
+
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+from reformatters.common.kubernetes import load_secret
+from reformatters.common.logging import get_logger
+from reformatters.common.retry import retry
+
+log = get_logger(__name__)
+
+
+class _ThreadLocalStorage(threading.local):
+    session: requests.Session
+
+
+_thread_local = _ThreadLocalStorage()
+
+_TOKEN_URL = "https://urs.earthdata.nasa.gov/api/users/find_or_create_token"  # noqa: S105
+
+
+def get_authenticated_session() -> requests.Session:
+    """
+    Get an authenticated requests.Session for NASA Earthdata.
+
+    Cached per thread. Credentials are loaded from the nasa-earthdata secret.
+    """
+    if not hasattr(_thread_local, "session"):
+        _thread_local.session = retry(_create_authenticated_session)
+    return _thread_local.session
+
+
+def _create_authenticated_session() -> requests.Session:
+    """Create and authenticate a requests session with NASA Earthdata."""
+    credentials = load_secret("nasa-earthdata")
+    username = credentials["username"]
+    password = credentials["password"]
+
+    session = requests.Session()
+
+    # Configure retries for the session
+    retry_strategy = Retry(
+        total=5,
+        backoff_factor=1.0,
+        backoff_jitter=0.5,
+        status_forcelist=[429, 500, 502, 503, 504],
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+
+    token_response = session.post(_TOKEN_URL, auth=(username, password), timeout=10)
+    try:
+        token_response.raise_for_status()
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to get token from NASA Earthdata: {token_response.status_code}: {token_response.text}"
+        ) from e
+
+    token_data = token_response.json()
+    token = token_data["access_token"]
+
+    session.headers["Authorization"] = f"Bearer {token}"
+
+    return session
