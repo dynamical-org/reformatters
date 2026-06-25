@@ -68,11 +68,21 @@ def write_metadata(
         for replica_store in replica_stores:
             log.info(f"Writing metadata to replica {replica_store} with mode {mode}")
             template_ds.to_zarr(
-                replica_store, mode=mode, compute=False, safe_chunks=False
+                replica_store,
+                mode=mode,
+                compute=False,
+                safe_chunks=False,
+                write_empty_chunks=True,
             )
 
         log.info(f"Writing metadata to store {store} with mode {mode}")
-        template_ds.to_zarr(store, mode=mode, compute=False, safe_chunks=False)
+        template_ds.to_zarr(
+            store,
+            mode=mode,
+            compute=False,
+            safe_chunks=False,
+            write_empty_chunks=True,
+        )
 
     if isinstance(store, Path | str):
         sort_consolidated_metadata(Path(store) / "zarr.json")
