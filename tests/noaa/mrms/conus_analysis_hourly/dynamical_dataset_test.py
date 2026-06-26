@@ -17,7 +17,10 @@ from reformatters.common.types import AppendDim
 from reformatters.noaa.mrms.conus_analysis_hourly.dynamical_dataset import (
     NoaaMrmsConusAnalysisHourlyDataset,
 )
-from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+from tests.common.dynamical_dataset_test import (
+    NOOP_STORAGE_CONFIG,
+    assert_configured_validators,
+)
 from tests.xarray_testing import assert_no_nulls
 
 
@@ -199,6 +202,8 @@ def test_backfill_local_and_operational_update(
         updated_point["categorical_precipitation_type_surface"].values,
         np.array([3.0, 3.0, 3.0], dtype=np.float32),
     )
+
+    assert_configured_validators(dataset)
 
 
 def test_operational_kubernetes_resources(

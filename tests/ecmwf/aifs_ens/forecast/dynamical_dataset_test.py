@@ -10,7 +10,10 @@ from reformatters.ecmwf.aifs_ens.forecast.dynamical_dataset import (
     EcmwfAifsEnsForecastDataset,
 )
 from tests.chunk_utils import shrink_chunks_and_shards
-from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+from tests.common.dynamical_dataset_test import (
+    NOOP_STORAGE_CONFIG,
+    assert_configured_validators,
+)
 
 
 @pytest.fixture
@@ -135,6 +138,8 @@ def test_backfill_local_and_operational_update(
         precip_expected,
         rtol=1e-6,
     )
+
+    assert_configured_validators(dataset)
 
 
 def test_operational_kubernetes_resources(

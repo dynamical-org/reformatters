@@ -14,6 +14,7 @@ from reformatters.contrib.noaa.ndvi_cdr.analysis.region_job import (
     NoaaNdviCdrAnalysisRegionJob,
 )
 from tests.chunk_utils import shrink_chunks_and_shards
+from tests.common.dynamical_dataset_test import assert_configured_validators
 
 pytestmark = pytest.mark.slow
 
@@ -106,3 +107,5 @@ def test_backfill_local_and_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
         .ndvi_usable.item(),
         0.623046875,
     )
+
+    assert_configured_validators(dataset)

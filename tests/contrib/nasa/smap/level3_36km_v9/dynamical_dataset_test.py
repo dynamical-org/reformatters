@@ -9,7 +9,10 @@ from reformatters.common import validation
 from reformatters.contrib.nasa.smap.level3_36km_v9.dynamical_dataset import (
     NasaSmapLevel336KmV9Dataset,
 )
-from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+from tests.common.dynamical_dataset_test import (
+    NOOP_STORAGE_CONFIG,
+    assert_configured_validators,
+)
 
 
 @pytest.fixture
@@ -88,6 +91,8 @@ def test_backfill_local_and_operational_update(
     np.testing.assert_array_almost_equal(
         subset_ds["soil_moisture_pm"].values, [0.25, 0.30, 0.35], decimal=3
     )
+
+    assert_configured_validators(dataset)
 
 
 def test_operational_kubernetes_resources(

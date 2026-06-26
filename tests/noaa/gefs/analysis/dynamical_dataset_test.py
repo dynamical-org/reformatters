@@ -8,7 +8,10 @@ import xarray as xr
 from reformatters.common import validation
 from reformatters.noaa.gefs.analysis.dynamical_dataset import GefsAnalysisDataset
 from tests.chunk_utils import shrink_chunks_and_shards
-from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+from tests.common.dynamical_dataset_test import (
+    NOOP_STORAGE_CONFIG,
+    assert_configured_validators,
+)
 
 
 @pytest.fixture
@@ -247,3 +250,5 @@ def test_backfill_local_and_operational_update(
     assert point_ds["temperature_2m"] == 26.125
     assert point_ds["precipitation_surface"] == 0.00032806396
     assert point_ds["maximum_temperature_2m"] == 26.0
+
+    assert_configured_validators(dataset)

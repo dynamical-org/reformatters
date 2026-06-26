@@ -5,7 +5,10 @@
 
 # from reformatters.common import validation
 # from reformatters.example.dynamical_dataset import ExampleDataset
-# from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+# from tests.common.dynamical_dataset_test import (
+#     NOOP_STORAGE_CONFIG,
+#     assert_configured_validators,
+# )
 
 
 # @pytest.fixture
@@ -51,6 +54,8 @@
 #     np.testing.assert_array_equal(
 #         subset_ds["your_variable"].values, [190.0, 163.0, 135.0]
 #     )
+
+#     assert_configured_validators(dataset)
 
 
 # def test_operational_kubernetes_resources(

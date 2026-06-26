@@ -10,7 +10,10 @@ from reformatters.noaa.gefs.forecast_35_day.dynamical_dataset import (
     GefsForecast35DayDataset,
 )
 from tests.chunk_utils import shrink_chunks_and_shards
-from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+from tests.common.dynamical_dataset_test import (
+    NOOP_STORAGE_CONFIG,
+    assert_configured_validators,
+)
 
 
 @pytest.fixture
@@ -291,3 +294,5 @@ def test_backfill_local_and_operational_update(
     assert point_ds["temperature_2m"] == 23.25
     assert point_ds["precipitation_surface"] == 1.2040138e-05
     assert point_ds["maximum_temperature_2m"] == 23.875
+
+    assert_configured_validators(dataset)

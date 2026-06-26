@@ -12,7 +12,10 @@ from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.dwd.icon_eu.forecast_5_day.dynamical_dataset import (
     DwdIconEuForecast5DayDataset,
 )
-from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+from tests.common.dynamical_dataset_test import (
+    NOOP_STORAGE_CONFIG,
+    assert_configured_validators,
+)
 from tests.xarray_testing import assert_no_nulls
 
 
@@ -170,6 +173,8 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     )
 
     _assert_temperature_decreases_with_latitude(updated_ds)
+
+    assert_configured_validators(dataset)
 
 
 def _assert_temperature_decreases_with_latitude(ds: xr.Dataset) -> None:

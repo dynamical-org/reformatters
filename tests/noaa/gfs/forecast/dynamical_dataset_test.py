@@ -10,7 +10,10 @@ from zarr.abc.store import Store
 from reformatters.common import validation
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.noaa.gfs.forecast import NoaaGfsForecastDataset
-from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+from tests.common.dynamical_dataset_test import (
+    NOOP_STORAGE_CONFIG,
+    assert_configured_validators,
+)
 
 
 @pytest.mark.slow
@@ -204,6 +207,8 @@ def test_backfill_local_and_operational_update(
     _check_updated_store(dataset.store_factory.primary_store())
     for replica_store in dataset.store_factory.replica_stores():
         _check_updated_store(replica_store)
+
+    assert_configured_validators(dataset)
 
 
 def test_operational_kubernetes_resources() -> None:

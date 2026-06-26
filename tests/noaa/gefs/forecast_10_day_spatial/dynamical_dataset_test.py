@@ -18,6 +18,7 @@ from reformatters.noaa.gefs.forecast_10_day_spatial.region_job import (
     GefsForecast10DaySpatialRegionJob,
 )
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
+from tests.common.dynamical_dataset_test import assert_configured_validators
 
 
 @pytest.fixture
@@ -131,6 +132,8 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     )
     np.testing.assert_allclose(updated_point["temperature_2m"].values, 300.7870703125)
     np.testing.assert_allclose(updated_point["total_precipitation_surface"].values, 0.2)
+
+    assert_configured_validators(dataset)
 
 
 def test_virtual_container_matches_ref_locations(
