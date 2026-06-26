@@ -13,7 +13,7 @@ from reformatters.contrib.uarizona.swann.analysis.region_job import (
     UarizonaSwannAnalysisSourceFileCoord,
 )
 from tests.common.dynamical_dataset_test import (
-    assert_configured_validators_do_not_crash,
+    assert_configured_validators,
 )
 
 pytestmark = [
@@ -73,7 +73,7 @@ def test_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
 
     # Smoke-run the configured validators against the built store ("now" is mocked to
     # the test-data era above) to catch validator config bugs that would crash the cron.
-    assert_configured_validators_do_not_crash(dataset)
+    assert_configured_validators(dataset)
 
 
 def test_update_template_trimming(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:

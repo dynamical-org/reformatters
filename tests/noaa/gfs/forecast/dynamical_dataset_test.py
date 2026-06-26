@@ -12,7 +12,7 @@ from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.noaa.gfs.forecast import NoaaGfsForecastDataset
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
-    assert_configured_validators_do_not_crash,
+    assert_configured_validators,
 )
 
 
@@ -210,7 +210,7 @@ def test_backfill_local_and_operational_update(
 
     # Smoke-run the configured validators against the built store ("now" is mocked to
     # the test-data era above) to catch validator config bugs that would crash the cron.
-    assert_configured_validators_do_not_crash(dataset)
+    assert_configured_validators(dataset)
 
 
 def test_operational_kubernetes_resources() -> None:

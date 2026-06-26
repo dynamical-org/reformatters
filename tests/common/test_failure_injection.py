@@ -7,6 +7,18 @@ failure or a lagging variable can leave a permanent NaN hole that survives the
 normal resume-from-latest update, and shard-presence validation does not notice
 because the (NaN-filled) shard is still written.
 
+This behavior is by design, not a bug: we deliberately do NOT fail the whole job
+when individual source files are inaccessible or unreadable, so that one corrupt
+file or a transient network error cannot hold back the data we *can* publish from
+every other file. The trade-off is that a failed file leaves a gap rather than
+aborting the run.
+
+That gap is not always permanent: most `operational_update_jobs` reprocess the
+most recent existing chunk along with any new ones, so a transient failure in the
+latest chunk usually gets one automatic follow-up attempt on the next update. A
+gap in an older chunk (as pinned by these tests, where newer data has already
+advanced past it) is not retried automatically and needs a targeted backfill.
+
 Marked `slow` because each test runs `_process_region_jobs` end-to-end.
 """
 

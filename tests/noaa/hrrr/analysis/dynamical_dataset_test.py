@@ -12,7 +12,7 @@ from reformatters.noaa.hrrr.analysis.dynamical_dataset import (
 from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
-    assert_configured_validators_do_not_crash,
+    assert_configured_validators,
 )
 from tests.xarray_testing import assert_no_nulls
 
@@ -116,7 +116,7 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
 
     # Smoke-run the configured validators against the built store ("now" is mocked to
     # the test-data era above) to catch validator config bugs that would crash the cron.
-    assert_configured_validators_do_not_crash(dataset)
+    assert_configured_validators(dataset)
 
 
 def test_operational_kubernetes_resources(

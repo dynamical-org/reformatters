@@ -13,6 +13,7 @@ import zarr.abc.store
 import zarr.storage
 from zarr.abc.store import Store
 
+from reformatters.common.config import Config
 from reformatters.common.config_models import Coordinate, DataVar
 from reformatters.common.logging import get_logger
 from reformatters.common.storage import StoreFactory, commit_if_icechunk
@@ -123,36 +124,37 @@ def sort_consolidated_metadata(zarr_json_path: Path) -> None:
         json.dump(zarr_json, f, indent=2)
 
 
-def _structural_signature(var: xr.DataArray, append_dim: str) -> dict[str, Any]:
+def _structural_signature(
+    var: xr.DataArray, append_dim: str, *, compare_append_axis: bool
+) -> dict[str, Any]:
     """Structural fields of a variable that must stay stable for an existing store.
 
     Compares the on-disk format (encoding dtype/chunks/shards) plus dims. dtype is
     normalized through np.dtype because an in-code template stores it as a string
     ("float32") while a reopened store reports a numpy dtype.
 
-    Chunk and shard sizes are compared on the non-append axes only. The append
-    dimension is the one that grows on every update, so its chunk/shard size is the
-    expansion axis (governed by fixed append-dim config and protected at PR time by the
-    template-drift test). Comparing it across a growing dimension would be fragile, and
-    test helpers that auto-shrink chunk geometry to the current size legitimately vary
-    it between a short backfill and a longer update.
+    When ``compare_append_axis`` is False the append dimension's chunk/shard size is
+    dropped from the comparison (see assert_no_structural_drift_from_existing_store).
     """
 
-    def non_append_sizes(
+    def chunk_sizes(
         value: tuple[int, ...] | list[int] | int | None,
     ) -> tuple[int, ...] | None:
         if value is None:
             return None
         sizes = (value,) if isinstance(value, int) else tuple(value)
+        if compare_append_axis:
+            return sizes
         return tuple(
             size for axis, size in enumerate(sizes) if var.dims[axis] != append_dim
         )
 
+    suffix = "" if compare_append_axis else " (non-append)"
     return {
         "dims": tuple(var.dims),
         "dtype": np.dtype(var.encoding["dtype"]),
-        "chunks (non-append)": non_append_sizes(var.encoding.get("chunks")),
-        "shards (non-append)": non_append_sizes(var.encoding.get("shards")),
+        f"chunks{suffix}": chunk_sizes(var.encoding.get("chunks")),
+        f"shards{suffix}": chunk_sizes(var.encoding.get("shards")),
     }
 
 
@@ -164,14 +166,20 @@ def assert_no_structural_drift_from_existing_store(
 
     Operational updates write new chunks into an existing archive and then swap in the
     template's metadata. If the template's structure has drifted from what readers
-    currently see — a removed/renamed variable, or a changed dtype, dims, or non-append
-    chunks/shards — the update would corrupt the archive or break readers. This guard
-    runs on worker 0 before any data is written and raises before damage is done.
+    currently see — a removed/renamed variable, or a changed dtype, dims, chunks, or
+    shards — the update would corrupt the archive or break readers. This guard runs on
+    worker 0 before any data is written and raises before damage is done.
 
-    Only variables present in `existing_ds` are checked; the template may add new
-    variables. Backfills are exempt (they rewrite the whole store and may legitimately
-    change structure), so callers only run this for operational updates.
+    Only variables present in `existing_ds` are checked, so the template may freely add
+    new variables. Backfills are exempt (they rewrite the whole store and may
+    legitimately change structure), so callers only run this for operational updates.
+
+    The append dimension's chunk/shard size is compared in dev/prod but skipped under
+    Config.env == test, where the integration auto-shrink helper sizes append-dim chunks
+    to the (varying) template length. In production these sizes are fixed config, so any
+    change is caught here as well as at PR time by the template-drift test.
     """
+    compare_append_axis = not Config.is_test
     mismatches: list[str] = []
     for var_name in map(str, existing_ds.data_vars):
         if var_name not in template_ds.data_vars:
@@ -180,8 +188,12 @@ def assert_no_structural_drift_from_existing_store(
             )
             continue
 
-        existing_sig = _structural_signature(existing_ds[var_name], append_dim)
-        template_sig = _structural_signature(template_ds[var_name], append_dim)
+        existing_sig = _structural_signature(
+            existing_ds[var_name], append_dim, compare_append_axis=compare_append_axis
+        )
+        template_sig = _structural_signature(
+            template_ds[var_name], append_dim, compare_append_axis=compare_append_axis
+        )
         for field, existing_value in existing_sig.items():
             template_value = template_sig[field]
             if existing_value != template_value:

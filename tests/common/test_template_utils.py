@@ -7,6 +7,7 @@ import pytest
 import xarray as xr
 from gribberish.zarr import GribberishCodec
 
+from reformatters.common.config import Config, Env
 from reformatters.common.config_models import (
     BaseInternalAttrs,
     DataVar,
@@ -312,11 +313,32 @@ def test_structural_drift_allows_new_variables_in_template() -> None:
 
 
 def test_structural_drift_allows_append_dim_chunk_and_shard_change() -> None:
-    # The append dim grows each update and test helpers auto-shrink its chunk geometry
-    # to the current length, so a differing append-axis chunk/shard must NOT trip the
-    # guard. Non-append axes (here latitude/longitude) are unchanged.
+    # Under the test env the append dim's chunk geometry is auto-shrunk to the (varying)
+    # template length, so a differing append-axis chunk/shard must NOT trip the guard.
+    # Non-append axes (here latitude/longitude) are unchanged.
     existing = _structured_ds(var0=_structured_var(chunks=(1, 3, 4), shards=(2, 3, 4)))
     template = _structured_ds(var0=_structured_var(chunks=(2, 3, 4), shards=(4, 3, 4)))
+    assert_no_structural_drift_from_existing_store(template, existing, "time")
+
+
+def test_structural_drift_checks_append_axis_outside_test_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # In dev/prod the append-dim chunk/shard IS part of the structural contract.
+    monkeypatch.setattr(Config, "env", Env.prod)
+    existing = _structured_ds(var0=_structured_var(chunks=(1, 3, 4)))
+    template = _structured_ds(var0=_structured_var(chunks=(2, 3, 4)))  # append axis
+    with pytest.raises(ValueError, match=r"var0\.chunks"):
+        assert_no_structural_drift_from_existing_store(template, existing, "time")
+
+
+def test_structural_drift_allows_new_variables_outside_test_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Adding a new variable must not trip the guard even when every axis is compared.
+    monkeypatch.setattr(Config, "env", Env.prod)
+    existing = _structured_ds(var0=_structured_var())
+    template = _structured_ds(var0=_structured_var(), var_new=_structured_var())
     assert_no_structural_drift_from_existing_store(template, existing, "time")
 
 

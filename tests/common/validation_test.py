@@ -766,6 +766,37 @@ def test_check_for_expected_shards_passes(rng: np.random.Generator) -> None:
     assert "All variables have expected shards" in result.message
 
 
+def test_check_for_expected_shards_passes_unsharded(rng: np.random.Generator) -> None:
+    """Unsharded datasets (shards=None) store one chunk per object key; the check must
+    partition by chunks instead of crashing on the missing shard grid."""
+    times = pd.date_range("2024-01-01", periods=16, freq="1h")
+    x = np.arange(10)
+    y = np.arange(8)
+
+    ds = xr.Dataset(
+        {
+            "temperature": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+        },
+        coords={"time": times, "y": y, "x": x},
+        attrs={"dataset_id": "test-dataset"},
+    )
+
+    for var in ds.data_vars.values():
+        var.encoding["chunks"] = (4, 4, 5)
+        var.encoding["shards"] = None
+
+    store = zarr.storage.MemoryStore()
+    ds.to_zarr(store, mode="w", consolidated=False)
+
+    result = validation.check_for_expected_shards(store, ds)
+
+    assert result.passed
+    assert "All variables have expected shards" in result.message
+
+
 def test_check_for_expected_shards_fails_missing_shards(
     rng: np.random.Generator,
 ) -> None:

@@ -5,7 +5,10 @@
 
 # from reformatters.common import validation
 # from reformatters.example.dynamical_dataset import ExampleDataset
-# from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+# from tests.common.dynamical_dataset_test import (
+#     NOOP_STORAGE_CONFIG,
+#     assert_configured_validators,
+# )
 
 
 # @pytest.fixture
@@ -51,6 +54,11 @@
 #     np.testing.assert_array_equal(
 #         subset_ds["your_variable"].values, [190.0, 163.0, 135.0]
 #     )
+
+#     # Run this dataset's configured validators against the built store: every
+#     # validator must not raise, and the recency (check_*_current_data) validators
+#     # must pass. Catches validator config bugs that would crash the validation cron.
+#     assert_configured_validators(dataset)
 
 
 # def test_operational_kubernetes_resources(
