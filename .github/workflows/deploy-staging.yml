@@ -137,3 +137,5 @@ jobs:
           ${{ steps.parse.outputs.dataset_id }}
           ${{ steps.parse.outputs.version }}
           ${{ env.IMAGE_TAG }}
+        env:
+          BETTERSTACK_API_KEY_RW: ${{ secrets.BETTERSTACK_API_KEY_RW }}

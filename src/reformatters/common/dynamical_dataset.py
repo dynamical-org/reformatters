@@ -27,7 +27,6 @@ from reformatters.common.config import Config
 from reformatters.common.config_models import DataVar
 from reformatters.common.iterating import digest, get_worker_jobs, item
 from reformatters.common.kubernetes import (
-    STAGING_CRON_NAME_PREFIX,
     CronJob,
     Job,
     ReformatCronJob,
@@ -650,14 +649,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         step: betterstack.Step = cron_job.command[0]  # ty: ignore[invalid-assignment]
 
         def ping_heartbeat(role: betterstack.Role, *, failed: bool = False) -> None:
-            # Staging crons and non-update/validate crons (e.g. archive) get no heartbeats.
-            if (
-                not heartbeat_urls
-                or step not in betterstack.HEARTBEAT_STEPS
-                or monitor_slug.startswith(STAGING_CRON_NAME_PREFIX)
-            ):
+            # Non-update/validate crons (e.g. archive) get no heartbeats.
+            if not heartbeat_urls or step not in betterstack.HEARTBEAT_STEPS:
                 return
-            key = betterstack.heartbeat_key(self.dataset_id, step, role)
+            # monitor_slug is the actual (staging-aware) cron name, so staging crons
+            # ping their own heartbeats rather than production's.
+            prefix = betterstack.cron_name_prefix(monitor_slug, step)
+            key = betterstack.heartbeat_key(prefix, step, role)
             assert key in heartbeat_urls, (
                 f"No Better Stack heartbeat for {key}; deploy to provision it."
             )

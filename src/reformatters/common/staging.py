@@ -6,7 +6,7 @@ from typing import Any
 
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.iterating import item
-from reformatters.common.kubernetes import STAGING_CRON_NAME_PREFIX, CronJob
+from reformatters.common.kubernetes import CronJob
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import replace
 
@@ -16,6 +16,8 @@ log = get_logger(__name__)
 # {cronjob_name}-{timestamp}-{index}-{random5}, so we reserve 20 chars
 # for the suffix (1 + 10 timestamp + 1 + 3 index + 1 + 5 random = 21, round to 20+1).
 _MAX_KUBERNETES_NAME_LENGTH = 42
+
+STAGING_CRON_NAME_PREFIX = "stage-"
 
 
 def staging_cronjob_name(dataset_id: str, version: str, suffix: str) -> str:

@@ -20,9 +20,6 @@ _SECRET_CONTENTS_KEY = "contents"  # noqa: S105
 # Heartbeat URL map, (re)written by `deploy` via reconcile_heartbeats.
 BETTERSTACK_HEARTBEATS_SECRET_NAME = "betterstack-heartbeats"  # noqa: S105
 
-# Staging cron jobs are renamed with this prefix; they are excluded from heartbeat monitoring.
-STAGING_CRON_NAME_PREFIX = "stage-"
-
 
 class Job(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)

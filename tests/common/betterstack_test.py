@@ -4,6 +4,17 @@ import pytest
 from reformatters.common import betterstack
 
 
+def test_cron_name_prefix() -> None:
+    assert (
+        betterstack.cron_name_prefix("noaa-gfs-forecast-update", "update")
+        == "noaa-gfs-forecast"
+    )
+    assert (
+        betterstack.cron_name_prefix("stage-noaa-gfs-forecast-v2-validate", "validate")
+        == "stage-noaa-gfs-forecast-v2"
+    )
+
+
 def test_heartbeat_key_and_name() -> None:
     assert (
         betterstack.heartbeat_key("noaa-gfs-forecast", "update", "start")

@@ -118,12 +118,15 @@ def test_deploy_requires_betterstack_api_key(monkeypatch: pytest.MonkeyPatch) ->
         )
 
 
-def test_deploy_staging_skips_heartbeats(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Staging crons are renamed; no heartbeats are provisioned and no API key is needed.
+def test_deploy_staging_provisions_isolated_heartbeats(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Staging crons get their own heartbeats, keyed by the staging-prefixed name.
     monkeypatch.setattr(subprocess, "run", Mock())
-    monkeypatch.delenv("BETTERSTACK_API_KEY_RW", raising=False)
-    mock_reconcile = Mock()
+    monkeypatch.setenv("BETTERSTACK_API_KEY_RW", "test-token")
+    mock_reconcile = Mock(return_value={})
     monkeypatch.setattr(deploy, "reconcile_heartbeats", mock_reconcile)
+    monkeypatch.setattr(deploy, "write_heartbeat_secret", Mock())
 
     def transform(cronjob: CronJob) -> CronJob:
         return staging.rename_cronjob_for_staging(cronjob, "example-dataset-1", "0.0.1")
@@ -134,7 +137,11 @@ def test_deploy_staging_skips_heartbeats(monkeypatch: pytest.MonkeyPatch) -> Non
         dataset_id_filter="example-dataset-1",
         cronjob_transform=transform,
     )
-    mock_reconcile.assert_not_called()
+    provisioned_names = {cj.name for cj in mock_reconcile.call_args.args[0]}
+    assert provisioned_names == {
+        "stage-example-dataset-1-v0-0-1-update",
+        "stage-example-dataset-1-v0-0-1-validate",
+    }
 
 
 def _cron(cls: type, name: str, schedule: str, deadline: timedelta) -> ReformatCronJob:
@@ -167,6 +174,19 @@ def test_heartbeat_specs() -> None:
 
     assert complete.key == "example-dataset_update_complete"
     assert complete.grace == timedelta(minutes=10) + timedelta(hours=2)
+
+
+def test_heartbeat_specs_staging_prefix() -> None:
+    # Staging crons are renamed; their heartbeats stay isolated from production's.
+    cron = _cron(
+        ReformatCronJob,
+        "stage-example-dataset-v2-update",
+        "0 */6 * * *",
+        timedelta(hours=1),
+    )
+    start, _complete = deploy.heartbeat_specs(cron)
+    assert start.key == "stage-example-dataset-v2_update_start"
+    assert start.name == "reformatters stage-example-dataset-v2 update start"
 
 
 def test_reconcile_heartbeats_create_and_update(
@@ -242,13 +262,14 @@ def test_reconcile_heartbeats_create_and_update(
     assert sum(1 for method, _ in requests if method == "POST") == 3
 
 
-def test_provision_heartbeats_skips_non_eligible_crons(
+def test_provision_heartbeats_skips_archive_cron(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Archive and staging crons are filtered out, so no key is required and nothing is provisioned.
-    monkeypatch.delenv("BETTERSTACK_API_KEY_RW", raising=False)
-    mock_reconcile = Mock()
+    # Archive crons are filtered out; update/validate crons are kept.
+    monkeypatch.setenv("BETTERSTACK_API_KEY_RW", "test-token")
+    mock_reconcile = Mock(return_value={})
     monkeypatch.setattr(deploy, "reconcile_heartbeats", mock_reconcile)
+    monkeypatch.setattr(deploy, "write_heartbeat_secret", Mock())
 
     archive = CronJob(
         command=["archive-grib-files"],
@@ -261,12 +282,65 @@ def test_provision_heartbeats_skips_non_eligible_crons(
         cpu="1",
         memory="1G",
     )
-    staging_update = _cron(
-        ReformatCronJob,
-        "stage-example-dataset-v2-update",
-        "0 0 * * *",
-        timedelta(hours=1),
+    update = _cron(
+        ReformatCronJob, "example-dataset-update", "0 0 * * *", timedelta(hours=1)
     )
 
-    deploy._provision_heartbeats([archive, staging_update])
-    mock_reconcile.assert_not_called()
+    deploy._provision_heartbeats([archive, update])
+    provisioned_names = {cj.name for cj in mock_reconcile.call_args.args[0]}
+    assert provisioned_names == {"example-dataset-update"}
+
+
+def test_delete_staging_heartbeats(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BETTERSTACK_API_KEY_RW", "test-token")
+
+    prefix = "stage-example-dataset-v0-0-1"
+    staging_names = [
+        f"reformatters {prefix} {step} {role}"
+        for step in ("update", "validate")
+        for role in ("start", "complete")
+    ]
+    deleted_ids: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {"id": str(i), "attributes": {"name": name}}
+                        for i, name in enumerate(staging_names)
+                    ],
+                    "pagination": {"next": None},
+                },
+            )
+        deleted_ids.append(request.url.path.removeprefix("/api/v2/heartbeats/"))
+        return httpx.Response(204, request=request)
+
+    transport = httpx.MockTransport(handler)
+    monkeypatch.setattr(
+        deploy,
+        "_api_client",
+        lambda token: httpx.Client(
+            transport=transport, base_url="https://uptime.betterstack.com/api/v2"
+        ),
+    )
+    monkeypatch.setattr(
+        deploy,
+        "_load_existing_heartbeat_secret",
+        lambda: {
+            f"{prefix}_update_start": "https://hb/s1",
+            f"{prefix}_update_complete": "https://hb/s2",
+            f"{prefix}_validate_start": "https://hb/s3",
+            f"{prefix}_validate_complete": "https://hb/s4",
+            "example-dataset_update_start": "https://hb/prod",
+        },
+    )
+    written: list[dict[str, str]] = []
+    monkeypatch.setattr(deploy, "_apply_heartbeat_secret", written.append)
+
+    deploy.delete_staging_heartbeats("example-dataset", "0.0.1")
+
+    # All four staging heartbeats deleted; the production key is left in the secret.
+    assert sorted(deleted_ids) == ["0", "1", "2", "3"]
+    assert written == [{"example-dataset_update_start": "https://hb/prod"}]

@@ -80,13 +80,8 @@ def deploy_operational_resources(
 
 
 def _provision_heartbeats(cron_jobs: Iterable[kubernetes.CronJob]) -> None:
-    # Staging crons and non-update/validate crons (e.g. archive) get no heartbeats.
-    eligible = [
-        cj
-        for cj in cron_jobs
-        if cj.command[0] in betterstack.HEARTBEAT_STEPS
-        and not cj.name.startswith(kubernetes.STAGING_CRON_NAME_PREFIX)
-    ]
+    # Only update/validate crons get heartbeats; other crons (e.g. archive) are skipped.
+    eligible = [cj for cj in cron_jobs if cj.command[0] in betterstack.HEARTBEAT_STEPS]
     if not eligible:
         log.info(
             "No update/validate cron jobs to provision Better Stack heartbeats for."
@@ -126,17 +121,18 @@ def heartbeat_specs(cron_job: kubernetes.CronJob) -> list[HeartbeatSpec]:
     assert step in betterstack.HEARTBEAT_STEPS, (
         f"Unexpected cron command: {cron_job.command}"
     )
+    prefix = betterstack.cron_name_prefix(cron_job.name, step)
     period = schedule_period(cron_job.schedule)
     return [
         HeartbeatSpec(
-            betterstack.heartbeat_key(cron_job.dataset_id, step, "start"),
-            betterstack.heartbeat_name(cron_job.dataset_id, step, "start"),
+            betterstack.heartbeat_key(prefix, step, "start"),
+            betterstack.heartbeat_name(prefix, step, "start"),
             period,
             _START_GRACE,
         ),
         HeartbeatSpec(
-            betterstack.heartbeat_key(cron_job.dataset_id, step, "complete"),
-            betterstack.heartbeat_name(cron_job.dataset_id, step, "complete"),
+            betterstack.heartbeat_key(prefix, step, "complete"),
+            betterstack.heartbeat_name(prefix, step, "complete"),
             period,
             _START_GRACE + cron_job.pod_active_deadline,
         ),
@@ -237,9 +233,7 @@ def _load_existing_heartbeat_secret() -> dict[str, str]:
     return contents
 
 
-def write_heartbeat_secret(url_map: dict[str, str]) -> None:
-    """Persist the heartbeat URL map into the k8s secret the cron pods load at runtime."""
-    merged_url_map = _load_existing_heartbeat_secret() | url_map
+def _apply_heartbeat_secret(url_map: dict[str, str]) -> None:
     manifest = subprocess.run(  # noqa: S603
         [
             "/usr/bin/kubectl",
@@ -247,7 +241,7 @@ def write_heartbeat_secret(url_map: dict[str, str]) -> None:
             "secret",
             "generic",
             kubernetes.BETTERSTACK_HEARTBEATS_SECRET_NAME,
-            f"--from-literal=contents={json.dumps(merged_url_map)}",
+            f"--from-literal=contents={json.dumps(url_map)}",
             "--dry-run=client",
             "-o",
             "json",
@@ -263,8 +257,45 @@ def write_heartbeat_secret(url_map: dict[str, str]) -> None:
         check=True,
     )
     log.info(
-        f"Wrote {kubernetes.BETTERSTACK_HEARTBEATS_SECRET_NAME} secret with {len(merged_url_map)} heartbeat urls"
+        f"Wrote {kubernetes.BETTERSTACK_HEARTBEATS_SECRET_NAME} secret with {len(url_map)} heartbeat urls"
     )
+
+
+def write_heartbeat_secret(url_map: dict[str, str]) -> None:
+    """Persist the heartbeat URL map into the k8s secret the cron pods load at runtime."""
+    _apply_heartbeat_secret(_load_existing_heartbeat_secret() | url_map)
+
+
+def delete_staging_heartbeats(dataset_id: str, version: str) -> None:
+    """Delete a staging version's heartbeats from Better Stack and the k8s secret."""
+    token = os.environ["BETTERSTACK_API_KEY_RW"]
+
+    remove_keys: list[str] = []
+    remove_names: list[str] = []
+    for step in betterstack.HEARTBEAT_STEPS:
+        cron_name = staging.staging_cronjob_name(dataset_id, version, step)
+        prefix = betterstack.cron_name_prefix(cron_name, step)
+        for role in betterstack.HEARTBEAT_ROLES:
+            remove_keys.append(betterstack.heartbeat_key(prefix, step, role))
+            remove_names.append(betterstack.heartbeat_name(prefix, step, role))
+
+    with _api_client(token) as client:
+        existing = _list_heartbeats(client)
+        for name in remove_names:
+            heartbeat = existing.get(name)
+            if heartbeat is None:
+                continue
+            response = client.delete(f"/heartbeats/{heartbeat['id']}")
+            response.raise_for_status()
+            log.info(f"Deleted heartbeat {name}")
+
+    remove_key_set = set(remove_keys)
+    remaining = {
+        key: url
+        for key, url in _load_existing_heartbeat_secret().items()
+        if key not in remove_key_set
+    }
+    _apply_heartbeat_secret(remaining)
 
 
 def register_commands(
@@ -303,14 +334,15 @@ def register_commands(
         version: str,
         force: bool = False,
     ) -> None:
-        """Clean up staging resources: kubernetes cronjobs and git branch."""
+        """Clean up staging resources: Better Stack heartbeats, kubernetes cronjobs and git branch."""
         staging.find_dataset(datasets, dataset_id)  # validate dataset_id
         if not force:
             cronjob_names = staging.staging_cronjob_names(dataset_id, version)
             branch = staging.staging_branch_name(dataset_id, version)
             log.info(
-                f"Will delete cronjobs {cronjob_names} and branch {branch}. "
+                f"Will delete heartbeats, cronjobs {cronjob_names} and branch {branch}. "
                 "Run with --force to execute."
             )
             return
+        delete_staging_heartbeats(dataset_id, version)
         staging.cleanup_staging_resources(dataset_id, version)

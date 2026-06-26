@@ -706,18 +706,22 @@ def test_monitor_heartbeat_missing_key_raises(
             pass
 
 
-def test_monitor_skips_staging_heartbeats(monkeypatch: pytest.MonkeyPatch) -> None:
-    # A staging cron (CRON_JOB_NAME prefixed "stage-") gets no heartbeats at all.
+def test_monitor_pings_staging_heartbeats(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A staging cron (CRON_JOB_NAME prefixed "stage-") pings its own heartbeats,
+    # not production's.
     monkeypatch.setattr(type(Config), "is_sentry_enabled", False)
     monkeypatch.setenv("CRON_JOB_NAME", "stage-example-dataset-v2-update")
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
     )
-    # The prod key is present, but a staging cron must not ping it.
+    urls = {
+        "stage-example-dataset-v2_update_start": "https://hb.example/staging-start",
+        "stage-example-dataset-v2_update_complete": "https://hb.example/staging-complete",
+        "example-dataset_update_start": "https://hb.example/prod-start",
+    }
     monkeypatch.setattr(
-        "reformatters.common.betterstack.load_heartbeat_urls",
-        lambda: {"example-dataset_update_start": "https://hb.example/prod-start"},
+        "reformatters.common.betterstack.load_heartbeat_urls", lambda: urls
     )
     pings: list[tuple[str, bool]] = []
     monkeypatch.setattr(
@@ -727,7 +731,10 @@ def test_monitor_skips_staging_heartbeats(monkeypatch: pytest.MonkeyPatch) -> No
 
     with dataset._monitor(ReformatCronJob, "job-name"):
         pass
-    assert pings == []
+    assert pings == [
+        ("https://hb.example/staging-start", False),
+        ("https://hb.example/staging-complete", False),
+    ]
 
 
 def test_monitor_skips_heartbeats_for_non_update_validate_cron(
