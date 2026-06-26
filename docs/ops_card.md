@@ -10,6 +10,9 @@ _Requires sentry organization invitation._
 - [Issues](https://dynamical.sentry.io/issues/?statsPeriod=12h)
 - [Logs](https://dynamical.sentry.io/explore/logs/) - You can filter these by job name
 
+## Better Stack heartbeats
+Each dataset has four heartbeats — `reformatters {dataset-id} {update|validate} {start|complete}` — pinged at the start and on completion of its update and validate cron jobs (a failed job pings the complete heartbeat's `/fail` URL). They are provisioned automatically by `uv run main deploy` (requires the `BETTERSTACK_API_KEY_RW` env var / GitHub Actions secret), and their URLs are stored in the `betterstack-heartbeats` kubernetes secret that every cron pod mounts.
+
 ## Kubernetes cluster operations
 Accessible via manually triggered github actions. Follow link and click "run workflow". _Requires repo write permisisons._
 - [Get jobs](https://github.com/dynamical-org/reformatters/actions/workflows/manual-get-jobs.yml) - What's running now/recently and its status

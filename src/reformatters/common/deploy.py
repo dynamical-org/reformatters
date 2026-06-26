@@ -1,11 +1,12 @@
 import json
+import os
 import subprocess
 from collections.abc import Callable, Iterable, Sequence
 from typing import Any
 
 import typer
 
-from reformatters.common import docker, kubernetes, staging
+from reformatters.common import betterstack, docker, kubernetes, staging
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.logging import get_logger
 
@@ -44,6 +45,10 @@ def deploy_operational_resources(
         f" for dataset_id_filter={dataset_id_filter!r}" if dataset_id_filter else ""
     )
 
+    _provision_heartbeats(
+        cj for cj in reformat_jobs if isinstance(cj, kubernetes.CronJob)
+    )
+
     k8s_resource_list = {
         "apiVersion": "v1",
         "kind": "List",
@@ -62,6 +67,16 @@ def deploy_operational_resources(
     log.info(
         f"Deployed {[item['metadata']['name'] for item in k8s_resource_list['items']]}"  # type: ignore[index]
     )
+
+
+def _provision_heartbeats(cron_jobs: Iterable[kubernetes.CronJob]) -> None:
+    if not os.getenv("BETTERSTACK_API_KEY_RW"):
+        raise RuntimeError(
+            "BETTERSTACK_API_KEY_RW is required to provision Better Stack "
+            "heartbeats before deploying CronJobs."
+        )
+    url_map = betterstack.reconcile_heartbeats(cron_jobs)
+    betterstack.write_heartbeat_secret(url_map)
 
 
 def register_commands(
