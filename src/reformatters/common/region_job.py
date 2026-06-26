@@ -75,6 +75,10 @@ class SourceFileCoord(FrozenBaseModel):
         """Return the URL for this source file."""
         raise NotImplementedError("Return the URL of the source file.")
 
+    def get_index_url(self) -> str:
+        """Return the URL of this source file's byte-range index, if it has one."""
+        raise NotImplementedError("Return the URL of the source file's index.")
+
     def out_loc(
         self,
     ) -> Mapping[Dim, CoordinateValue]:

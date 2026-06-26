@@ -1130,8 +1130,46 @@ Decisions (icechunk 2.0.5, spiked):
 
 ### PR #6 — Second concrete virtual dataset
 
-Different provider (NOAA ↔ ECMWF) to prove the abstractions generalize; refine
-`VirtualRegionJob` defaults from what it needs.
+`ecmwf-ifs-ens-forecast-15-day-spatial-dev`: ECMWF IFS ENS, full 51-member
+ensemble, 0-360h, native 0.25° grid. A different provider that proves the
+abstractions generalize, and stresses three things GEFS did not:
+
+- **Different index format.** ECMWF `.index` is JSON-lines with explicit
+  `_offset`/`_length` per message (no implied ends), so the virtual `_file_refs`
+  needs none of GEFS's "last message → file size" PAD fallback. Reuses
+  `ecmwf_grib_index.grib_message_byte_ranges_from_index`, plus a new
+  `..._by_member` that parses one index once and returns every member's ranges
+  (one open-data file packs all members of a lead).
+- **Multi-member-per-file packing.** One source file → many member chunks in one
+  atomic commit, exercising the base `chunk_key`'s "a multi-chunk dim must appear
+  in `out_loc`" path. Post IFS-50r1 (2026-05-12 06z) the control member lives in
+  `oper-fc` and perturbed members in `enfo-ef`, so one `(init, lead)` maps to two
+  files; each is its own coord. `append_dim_start` is set to the first 00z fully
+  in that regime so there are no historical special cases.
+- **Raw-value attrs.** Like GEFS, virtual chunks serve raw GRIB values:
+  temperatures stay Kelvin, total cloud cover stays a 0-1 fraction, and total
+  precipitation is the raw whole-forecast accumulation in metres
+  (`total_precipitation_surface`). The two accumulated-radiation vars are dropped
+  (their raw un-deaccumulated form needs a bespoke time-integrated name/units;
+  no value for a throwaway). Var/CRS definitions are reused from the materialized
+  `forecast_15_day_0_25_degree` config so metadata stays in sync.
+
+Validation findings (spiked against live data before building):
+
+- **gribberish decodes ECMWF IFS GRIB2** (both `oper-fc` and `enfo-ef`). The
+  `GribberishCodec(var=…)` label is ignored on decode — `_decode_single` just
+  calls `parse_grib_array(bytes, 0)` on the one-message chunk — so gribberish's
+  occasional ECMWF param misnaming (e.g. `tp` → `categoricalfreezingrainncep`)
+  is cosmetic; `var` is set to `grib_element` for consistency with GEFS.
+- **Native grid is wrapped.** Longitude runs `180…359.75` then `0…179.75`
+  (latitude 90→-90); the template longitude must match this order exactly since
+  virtual chunks serve the raw message. Verified end to end: a real local
+  backfill decodes ~298K at the equator through the icechunk virtual container.
+- **Open-data retention is ~4 days.** There is no permanent open-data archive, so
+  inits before the retention window can never be backfilled; the store carries an
+  empty init prefix from `append_dim_start` up to wherever operational ingest
+  begins, then grows forward. Acceptable for a throwaway; a real dataset would
+  pair open data with a permanent archive (MARS/source.coop) for history.
 
 ### PR #7 — Extract common patterns into `VirtualRegionJob`
 
@@ -1201,9 +1239,9 @@ issue **#513** (its body holds the PR checklist; items are written "PR 1" not
 | PR 3d — move `process()` onto `MaterializedRegionJob` | **merged** (#654) | Removes the base `process()` stub; materialized `process_worker_jobs` narrows its jobs. |
 | PR 3e — consolidate processing-loop docs | **merged** (#655) | `docs/virtual_datasets.md` + seam section in `docs/parallel_processing.md`, linked from code. |
 | PR 4 — first concrete virtual dataset | **merged** (#656; fixes #658 #659) | `noaa-gefs-forecast-10-day-spatial-dev`: 4 inits/day, 0-240h, native 0.25° s-file grid, the 35-day vars available in s files (19). `-dev` suffix: a throwaway operational test; dataset structure questions are deliberately deferred. Month-long prod backfill (2026-05-12 06z – 2026-06-12 06z, 32 k8s workers) published 2026-06-12; spot checks (independent GRIB decodes vs store, null patterns, coverage) all passed. Crons unsuspended to start the operational test. |
-| PR 5 — persist container config | in progress (#667) | `save_config()` on container drift in `parallel_setup`; before first *externally published* virtual repo (first datasets run in prod unpublished). |
-| PR 6 — second concrete virtual dataset | not started | Different provider, proves abstractions generalize. |
-| PR 7 — extract common patterns into `VirtualRegionJob` | not started | With two concrete datasets in hand, lift the shared machinery out of the subclasses (see "Extracting common patterns" below). |
+| PR 5 — persist container config | **merged** (#667) | `save_config()` on container drift in `parallel_setup`; before first *externally published* virtual repo (first datasets run in prod unpublished). |
+| PR 6 — second concrete virtual dataset | in progress | `ecmwf-ifs-ens-forecast-15-day-spatial-dev`: ECMWF IFS ENS, 51 members, 0-360h, native wrapped 0.25° grid. Different index format (JSON-lines, explicit lengths), multi-member-per-file packing (control `oper-fc` + perturbed `enfo-ef`), raw-value attrs. Validated end to end against live data; open-data ~4-day retention noted. |
+| PR 7 — extract common patterns into `VirtualRegionJob` | in progress | Lifted the source-agnostic tick loop + unreadable-file skipping to the base (attrs → overridable seam → common machinery); the object-store-listing discovery is a separate opt-in util generic over obstore backends (`virtual_source_listing.discover_available_by_obstore_listing`), not base baggage. Subclasses supply `generate_source_file_coords`, `file_refs`, a one-line `discover_available`, `operational_update_jobs` (per-subclass, like materialized), optional `representative_var`/`filter_already_present`; the data→index relationship is `SourceFileCoord.get_index_url()`. Drew the seam from GEFS + ECMWF; each subclass `region_job.py` dropped ~100 lines. See "Extracting common patterns (PR 7) — as built" below. |
 | PR 8 — validation phase | not started | Spatial-chunk validators + offline tooling. |
 
 PR 3 was originally one combined PR (#648) but was resequenced into 3a + 3b after
@@ -1275,6 +1313,66 @@ rule, the index-byte-range parse), prefer a **utility implementations opt into**
 over a forced base method — "if [patterns] are common, we make them into utilities
 that implementations can pick from."
 
+#### Extracting common patterns (PR 7) — as built
+
+`VirtualRegionJob` is **source-agnostic** and organized in three tiers: **class
+attrs**, then the **overridable per-dataset seam**, then **common write-loop
+machinery** subclasses don't touch. The base assumes nothing about S3 or object
+listing — the loop works in coord space (it only asks `discover_available` which
+coords are ready) and drops ingested coords by identity. The seam:
+
+The core three, run in this order to drive an update:
+
+- `generate_source_file_coords` *(abstract, inherited from `RegionJob`)* — list every
+  source file this job covers.
+- `discover_available(pending) -> [(coord, size)]` *(abstract)* — given the files not
+  yet ingested, which are available to fetch now, each with its data-file size
+  (returns the same coord objects so the loop can drop them by identity).
+  Obstore-listable datasets delegate to the `discover_available_by_obstore_listing`
+  util (below) in a one-liner; a source obstore can't list (an HTML directory index,
+  a frontier to probe, assume-all) implements it directly. **Not** a base default —
+  the base carries no listing/S3 baggage.
+- `file_refs(coord, file_size) -> list[VirtualRef]` *(abstract)* — given one available
+  file, build every ref it contributes (or `[]` to skip). The index-format-specific
+  parse and the stale-index detection (byte ranges vs file size) live here, where GEFS
+  (colon-text, implied ends + size fallback) and ECMWF (JSON-lines, explicit lengths)
+  genuinely diverge.
+
+Plus the update factory and two presence-probe knobs:
+
+- `operational_update_jobs(...)` *(abstract, inherited)* — **kept per-subclass**,
+  like materialized: each encodes its own re-sweep window inline (GEFS 24h, ECMWF
+  48h) rather than reading a base `operational_window` knob.
+- `filter_already_present(candidates, store)` *(default: manifest probe)* — drop
+  candidates whose representative chunk is already a ref. Override for custom
+  presence logic.
+- `representative_var(coord)` *(default: first instant var among the coord's own
+  `data_vars`)* — which variable's chunk presence means the whole file is ingested.
+  The default reads the subset the file packs from `coord.data_vars`, so subset-packing
+  datasets (GEFS lead-0/pre-b22, ECMWF lead-0 max/min drop) need no override.
+
+Common machinery (subclasses don't implement): `process_virtual_refs` (the
+source-agnostic tick loop driving `discover_available` + `file_refs`) and
+`_file_refs_or_skip` (the broad per-file `try/except` — re-raise `AssertionError`,
+log, skip → `[]`; source-agnostic, the virtual analog of materialized's
+download/read error handling).
+
+The object-store-listing discovery is a **separate opt-in util**, not a base method:
+`virtual_source_listing.discover_available_by_obstore_listing(pending, *, store,
+location_prefix)` — generic over any obstore backend (S3, GCS, Azure, local; the
+caller passes the built store), a file is ready once both its data object and its
+index are listed. GEFS/ECMWF call it from their `discover_available`; a source
+obstore can't list (an HTTP file server with an HTML directory index) gets its own
+discovery util in the same module, and a non-listing dataset never imports any of
+it. The data→index relationship lives on the coord as `get_index_url()` (added to the base
+`SourceFileCoord`) — the coord owns its URLs.
+
+Class attrs the base offers: `tick_interval` (default 1s) and `download_concurrency`
+(default 32), overridden only when they differ — no S3 prefix/region attrs on the
+base. Net: each subclass `region_job.py` is its coord + `generate_source_file_coords`
++ `file_refs` + a one-line `discover_available` + `operational_update_jobs` +
+`representative_var`, ~100 lines lighter.
+
 Do not over-fit to GEFS: keep anything that's genuinely one provider's quirk
 (NOAA `.idx` parsing, the s-file var subsetting) in the subclass.
 
@@ -1298,6 +1396,20 @@ write-closure "batches") and rejected it: it needs a batch/closure abstraction p
 in-loop default-arg capture — *more* machinery than the two ~6-line
 `process_worker_jobs` methods — and the dataset-author surface is identical either
 way. See the [worker-processing seam](#the-worker-processing-seam).
+
+**<a name="decision-virtualref-vs-spec"></a>`VirtualRef` (our type), not icechunk's
+`VirtualChunkSpec`, as `file_refs`' return.** `VirtualChunkSpec` needs the resolved
+integer chunk **index** (`index=[i, j, k, l]`) up front; `VirtualRef` carries the
+ref in **coordinate-label space** (`data_var` + `out_loc`, e.g. `{init_time,
+lead_time, ensemble_member}`) and is resolved to an index centrally in `_emit_refs`
+via `chunk_key`. That decoupling is load-bearing: (1) the index isn't knowable when
+`file_refs` runs — the store is lazily expanded (`sync_dims_to`) only just before
+emit, so the ref's append-dim position may not exist yet; (2) the **same**
+`chunk_key` computes the filter's probe key and the emitted index, so the filter and
+emitter can't drift; (3) the chunk-boundary asserts run in one place. So each
+dataset's `file_refs` stays ignorant of store-expansion state and array geometry,
+and `VirtualRef → VirtualChunkSpec` happens once, in the base. (On the `VirtualRef`
+type itself:)
 
 **<a name="decision-virtualref-namedtuple"></a>`VirtualRef` is a `NamedTuple`, not
 a `FrozenBaseModel`.** It is a pure ephemeral in-process carrier — never
