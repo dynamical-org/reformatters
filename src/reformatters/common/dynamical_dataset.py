@@ -18,6 +18,7 @@ from icechunk.store import IcechunkStore
 from pydantic import Field, computed_field, model_validator
 
 from reformatters.common import (
+    operational_run_guard,
     parallel_coordination,
     template_utils,
     validation,
@@ -49,6 +50,7 @@ from reformatters.common.storage import (
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike
 from reformatters.common.virtual_region_job import VirtualRegionJob
+from reformatters.common.webhook.triggers import WxOpticonTrigger
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
@@ -102,6 +104,15 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         raise NotImplementedError(
             f"Implement `operational_kubernetes_resources` on {self.__class__.__name__}"
         )
+
+    def source_arrival_triggers(self) -> Sequence[WxOpticonTrigger]:
+        """wxopticon source-arrival events that should trigger this dataset's update.
+
+        Default is none: the dataset updates on its cron schedule only. Override to
+        opt a dataset into webhook-triggered updates; the existing update cron then
+        acts as a backup. See docs/webhooks.md.
+        """
+        return ()
 
     def validators(self) -> Sequence[validation.DataValidator]:
         """
@@ -172,21 +183,49 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 reformat_job_name=reformat_job_name,
             )
 
-            if issubclass(self.region_job_class, VirtualRegionJob):
-                # Virtual operational updates are single-writer streaming (see docs/parallel_processing.md)
-                self._run_virtual_operational_update(
-                    all_jobs, worker_index, workers_total
+            if not all_jobs:
+                log.info("No new data to process; skipping update.")
+                return
+
+            # Skip if a webhook-triggered update already completed or is processing this
+            # source run; the cron is a backup. See docs/webhooks.md.
+            run_key = operational_run_guard.run_key(
+                all_jobs, template_ds, self.template_config.append_dim
+            )
+            if operational_run_guard.should_skip(
+                self.store_factory, run_key, reformat_job_name
+            ):
+                return
+            if is_first:
+                operational_run_guard.claim(
+                    self.store_factory, run_key, reformat_job_name
                 )
-            else:
-                self._process_region_jobs(
-                    all_jobs=all_jobs,
-                    worker_index=worker_index,
-                    workers_total=workers_total,
-                    reformat_job_name=reformat_job_name,
-                    template_ds=template_ds,
-                    tmp_store=tmp_store,
-                    update_template_with_results=True,
-                )
+
+            # Only updates triggered by a wxopticon "complete" event know the source
+            # run is fully available; cron/progress runs leave the run re-runnable.
+            source_run_complete = os.environ.get("SOURCE_RUN_COMPLETE") == "true"
+
+            try:
+                if issubclass(self.region_job_class, VirtualRegionJob):
+                    # Virtual operational updates are single-writer streaming (see docs/parallel_processing.md)
+                    self._run_virtual_operational_update(
+                        all_jobs, worker_index, workers_total
+                    )
+                else:
+                    self._process_region_jobs(
+                        all_jobs=all_jobs,
+                        worker_index=worker_index,
+                        workers_total=workers_total,
+                        reformat_job_name=reformat_job_name,
+                        template_ds=template_ds,
+                        tmp_store=tmp_store,
+                        update_template_with_results=True,
+                    )
+                if is_last and source_run_complete:
+                    operational_run_guard.mark_complete(self.store_factory, run_key)
+            finally:
+                if is_last:
+                    operational_run_guard.release(self.store_factory, run_key)
 
         log.info(
             f"Operational update complete. Wrote to primary store: {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()} replicas"

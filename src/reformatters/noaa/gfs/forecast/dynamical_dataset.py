@@ -4,6 +4,7 @@ from datetime import timedelta
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.webhook.triggers import WxOpticonTrigger
 from reformatters.noaa.gfs.region_job import NoaaGfsSourceFileCoord
 from reformatters.noaa.models import NoaaDataVar
 
@@ -46,6 +47,12 @@ class NoaaGfsForecastDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
         )
 
         return [operational_update_cron_job, validation_cron_job]
+
+    def source_arrival_triggers(self) -> Sequence[WxOpticonTrigger]:
+        """Trigger the update when the full GFS run lands on AWS; cron is the backup."""
+        return (
+            WxOpticonTrigger(product_id="external-noaa-gfs-aws", trigger="complete"),
+        )
 
     def validators(self) -> Sequence[validation.DataValidator]:
         """The sequence of DataValidators to run on this dataset."""
