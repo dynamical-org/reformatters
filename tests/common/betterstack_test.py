@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from reformatters.common import betterstack
-from reformatters.common.kubernetes import ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 
 
 def _cron(cls: type, name: str, schedule: str, deadline: timedelta) -> ReformatCronJob:
@@ -55,6 +55,19 @@ def test_heartbeat_specs() -> None:
 
     assert complete.key == "example-dataset_update_complete"
     assert complete.grace == timedelta(minutes=10) + timedelta(hours=2)
+
+
+def test_heartbeat_specs_staging_prefix() -> None:
+    # Staging crons are renamed; their heartbeats stay isolated from production's.
+    cron = _cron(
+        ReformatCronJob,
+        "stage-example-dataset-v2-update",
+        "0 */6 * * *",
+        timedelta(hours=1),
+    )
+    start, _complete = betterstack.heartbeat_specs(cron)
+    assert start.key == "stage-example-dataset-v2_update_start"
+    assert start.name == "reformatters stage-example-dataset-v2 update start"
 
 
 def test_ping_fail_suffix(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -144,3 +157,47 @@ def test_reconcile_heartbeats_create_and_update(
     # The pre-existing start heartbeat was patched (stale grace), the rest created.
     assert ("PATCH", "/api/v2/heartbeats/1") in requests
     assert sum(1 for method, _ in requests if method == "POST") == 3
+
+
+def test_reconcile_skips_non_update_validate_crons(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("BETTERSTACK_API_KEY_RW", "test-token")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json={"data": [], "pagination": {"next": None}})
+        return httpx.Response(
+            200,
+            json={"data": {"id": "new", "attributes": {"url": "https://hb.example/x"}}},
+        )
+
+    transport = httpx.MockTransport(handler)
+    monkeypatch.setattr(
+        betterstack,
+        "_api_client",
+        lambda token: httpx.Client(
+            transport=transport, base_url="https://uptime.betterstack.com/api/v2"
+        ),
+    )
+
+    archive = CronJob(
+        command=["archive-grib-files"],
+        workers_total=1,
+        parallelism=1,
+        name="example-dataset-archive-grib-files",
+        schedule="0 0 * * *",
+        image="image:tag",
+        dataset_id="example-dataset",
+        cpu="1",
+        memory="1G",
+    )
+    update = _cron(
+        ReformatCronJob, "example-dataset-update", "0 0 * * *", timedelta(hours=1)
+    )
+    url_map = betterstack.reconcile_heartbeats([archive, update])
+
+    assert set(url_map) == {
+        "example-dataset_update_start",
+        "example-dataset_update_complete",
+    }

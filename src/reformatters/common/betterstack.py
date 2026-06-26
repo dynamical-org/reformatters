@@ -27,6 +27,9 @@ _START_GRACE = timedelta(minutes=10)
 Step = Literal["update", "validate"]
 Role = Literal["start", "complete"]
 
+# Only update and validate crons get heartbeats; other crons (e.g. archive) are skipped.
+HEARTBEAT_STEPS: tuple[Step, ...] = ("update", "validate")
+
 
 class HeartbeatSpec(NamedTuple):
     key: str
@@ -35,12 +38,18 @@ class HeartbeatSpec(NamedTuple):
     grace: timedelta
 
 
-def heartbeat_key(dataset_id: str, step: Step, role: Role) -> str:
-    return f"{dataset_id}_{step}_{role}"
+def cron_name_prefix(cron_name: str, step: Step) -> str:
+    """The cron name without its `-{step}` suffix; equals dataset_id for prod crons
+    and the staging-prefixed name for staging crons, so each gets its own heartbeats."""
+    return cron_name.removesuffix(f"-{step}")
 
 
-def heartbeat_name(dataset_id: str, step: Step, role: Role) -> str:
-    return f"reformatters {dataset_id} {step} {role}"
+def heartbeat_key(name_prefix: str, step: Step, role: Role) -> str:
+    return f"{name_prefix}_{step}_{role}"
+
+
+def heartbeat_name(name_prefix: str, step: Step, role: Role) -> str:
+    return f"reformatters {name_prefix} {step} {role}"
 
 
 def schedule_period(schedule: str) -> timedelta:
@@ -58,20 +67,19 @@ def heartbeat_specs(cron_job: CronJob) -> list[HeartbeatSpec]:
     the complete heartbeat's grace must cover the full run.
     """
     step: Step = cron_job.command[0]  # ty: ignore[invalid-assignment]
-    assert step in ("update", "validate"), (
-        f"Unexpected cron command: {cron_job.command}"
-    )
+    assert step in HEARTBEAT_STEPS, f"Unexpected cron command: {cron_job.command}"
+    prefix = cron_name_prefix(cron_job.name, step)
     period = schedule_period(cron_job.schedule)
     return [
         HeartbeatSpec(
-            heartbeat_key(cron_job.dataset_id, step, "start"),
-            heartbeat_name(cron_job.dataset_id, step, "start"),
+            heartbeat_key(prefix, step, "start"),
+            heartbeat_name(prefix, step, "start"),
             period,
             _START_GRACE,
         ),
         HeartbeatSpec(
-            heartbeat_key(cron_job.dataset_id, step, "complete"),
-            heartbeat_name(cron_job.dataset_id, step, "complete"),
+            heartbeat_key(prefix, step, "complete"),
+            heartbeat_name(prefix, step, "complete"),
             period,
             _START_GRACE + cron_job.pod_active_deadline,
         ),
@@ -149,6 +157,8 @@ def reconcile_heartbeats(cron_jobs: Iterable[CronJob]) -> dict[str, str]:
     with _api_client(token) as client:
         existing = _list_heartbeats(client)
         for cron_job in cron_jobs:
+            if cron_job.command[0] not in HEARTBEAT_STEPS:
+                continue
             for spec in heartbeat_specs(cron_job):
                 url_map[spec.key] = _upsert_heartbeat(client, existing, spec)
     return url_map
