@@ -24,12 +24,12 @@ class NoaaGfsAnalysisDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Define Kubernetes cron jobs for operational updates and validation."""
-        # GFS f006 (last lead time used) available ~3h34m after init on NOMADS. +3 min buffer.
+        # GFS f006 (last lead time used) NOMADS last-modified ~init+3h36m. +3 min buffer.
         workers = self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="37 3,9,15,21 * * *",
-            pod_active_deadline=timedelta(minutes=30),
+            schedule="40 3,9,15,21 * * *",
+            pod_active_deadline=timedelta(minutes=10),  # runs take <3 min
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="7",
@@ -43,7 +43,7 @@ class NoaaGfsAnalysisDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
 
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="7 4,10,16,22 * * *",  # 30m (pod_active_deadline) after reformat at :37
+            schedule="50 3,9,15,21 * * *",  # 10m (pod_active_deadline) after reformat at :40
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,

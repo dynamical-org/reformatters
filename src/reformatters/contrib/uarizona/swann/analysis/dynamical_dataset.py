@@ -47,7 +47,7 @@ class UarizonaSwannAnalysisDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="0 20 * * *",
-            pod_active_deadline=timedelta(minutes=30),
+            pod_active_deadline=timedelta(minutes=10),  # runs take <4 min
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="4",
@@ -58,7 +58,7 @@ class UarizonaSwannAnalysisDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="30 20 * * *",
+            schedule="10 20 * * *",  # 10m (pod_active_deadline) after reformat at :00
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,

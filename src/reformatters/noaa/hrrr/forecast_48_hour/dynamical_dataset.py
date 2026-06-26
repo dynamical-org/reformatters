@@ -32,12 +32,13 @@ class NoaaHrrrForecast48HourDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Define Kubernetes cron jobs for operational updates and validation."""
         # We pull the 0, 6, 12, and 18 init times in this dataset.
-        # HRRR f048 (last lead time) available ~1h48m after init on NOMADS. +3 min buffer.
+        # HRRR f048 (last lead time) NOMADS last-modified ~init+1h50m (we try S3
+        # first to spare NOMADS, but NOMADS publishes first). +3 min buffer.
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="51 1,7,13,19 * * *",
-            pod_active_deadline=timedelta(minutes=15),  # usually takes 3 mins
+            schedule="53 1,7,13,19 * * *",
+            pod_active_deadline=timedelta(minutes=10),  # usually takes <2 min
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3",
@@ -51,7 +52,7 @@ class NoaaHrrrForecast48HourDataset(
 
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="2 2,8,14,20 * * *",  # 15m (pod_active_deadline) after reformat at :47
+            schedule="3 2,8,14,20 * * *",  # 10m (pod_active_deadline) after reformat at :53
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,

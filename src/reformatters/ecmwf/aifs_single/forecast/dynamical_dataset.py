@@ -27,8 +27,10 @@ class EcmwfAifsSingleForecastDataset(
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="21 */6 * * *",
-            pod_active_deadline=timedelta(minutes=30),
+            # AIFS-single f360 (last lead) ecmwf-forecasts S3 p99 ~init+6h10m (recent
+            # files land 5h25m-6h03m), so fetch at init+6h13m.
+            schedule="13 */6 * * *",
+            pod_active_deadline=timedelta(minutes=10),  # runs take ~1 min
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3.5",
@@ -41,7 +43,7 @@ class EcmwfAifsSingleForecastDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="51 */6 * * *",
+            schedule="23 */6 * * *",  # 10m (pod_active_deadline) after reformat at :13
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,

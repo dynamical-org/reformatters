@@ -24,9 +24,11 @@ class GefsForecast35DayDataset(
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            # GEFS f384 last perturbed member available ~6h30m after 00z init on NOMADS. +3 min buffer.
+            # New 00z init's f384 last perturbed member NOMADS last-modified ~init+6h28m;
+            # +5 min buffer. The prior init (reprocessed each run, see operational_update_jobs)
+            # is by now complete out to f840 (lands ~init+27h).
             schedule="33 6 * * *",
-            pod_active_deadline=timedelta(hours=3.5),
+            pod_active_deadline=timedelta(minutes=30),  # runs take <23 min
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="6",  # fit on 8 vCPU node
@@ -39,8 +41,8 @@ class GefsForecast35DayDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="3 10 * * *",  # 3h30m (pod_active_deadline) after reformat at 06:33
-            pod_active_deadline=timedelta(minutes=30),
+            schedule="3 7 * * *",  # 30m (pod_active_deadline) after reformat at 06:33
+            pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3",  # fit on 4 vCPU node

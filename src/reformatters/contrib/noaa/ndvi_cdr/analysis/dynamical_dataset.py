@@ -23,7 +23,7 @@ class NoaaNdviCdrAnalysisDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="0 20 * * *",
-            pod_active_deadline=timedelta(minutes=60),
+            pod_active_deadline=timedelta(minutes=30),  # runs take <24 min
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="2",
@@ -34,7 +34,7 @@ class NoaaNdviCdrAnalysisDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="30 21 * * *",
+            schedule="30 20 * * *",  # 30m (pod_active_deadline) after reformat at :00
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
