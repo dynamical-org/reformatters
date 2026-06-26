@@ -98,21 +98,17 @@ def _copy_data_var_chunks(
         sync_to_store(store, key, file.read_bytes())
 
 
-def _coord_chunk_globs(template_ds: xr.Dataset | xr.DataTree) -> list[str]:
-    """Glob patterns for every coordinate's chunk files, group-prefixed for a tree."""
-    if isinstance(template_ds, xr.DataTree):
-        globs = []
-        for node in template_ds.subtree:
-            prefix = f"{group}/" if (group := node_group_name(node)) else ""
-            globs.extend(
-                f"{prefix}{coord}/c/**/*" for coord in node.to_dataset().coords
-            )
-        return globs
-    return [f"{coord}/c/**/*" for coord in template_ds.coords]
+def _coord_chunk_globs(template_ds: xr.DataTree) -> list[str]:
+    """Glob patterns for every coordinate's chunk files, group-prefixed."""
+    globs = []
+    for node in template_ds.subtree:
+        prefix = f"{group}/" if (group := node_group_name(node)) else ""
+        globs.extend(f"{prefix}{coord}/c/**/*" for coord in node.to_dataset().coords)
+    return globs
 
 
 def copy_zarr_metadata(
-    template_ds: xr.Dataset | xr.DataTree,
+    template_ds: xr.DataTree,
     tmp_store: Path,
     primary_store: Store,
     replica_stores: Iterable[Store] = (),

@@ -15,6 +15,7 @@ from zarr.abc.store import Store
 
 from reformatters.common.config import Config
 from reformatters.common.config_models import Coordinate, DataVar
+from reformatters.common.iterating import walk_data_arrays
 from reformatters.common.logging import get_logger
 from reformatters.common.storage import StoreFactory, commit_if_icechunk
 from reformatters.common.zarr import assert_fill_values_set
@@ -159,7 +160,7 @@ def _structural_signature(
 
 
 def assert_no_structural_drift_from_existing_store(
-    template_ds: xr.Dataset, existing_ds: xr.Dataset, append_dim: str
+    template_ds: xr.DataTree, existing_ds: xr.DataTree, append_dim: str
 ) -> None:
     """Fail an operational update whose template would change the structure of the
     already-published store.
@@ -170,9 +171,10 @@ def assert_no_structural_drift_from_existing_store(
     shards — the update would corrupt the archive or break readers. This guard runs on
     worker 0 before any data is written and raises before damage is done.
 
-    Only variables present in `existing_ds` are checked, so the template may freely add
-    new variables. Backfills are exempt (they rewrite the whole store and may
-    legitimately change structure), so callers only run this for operational updates.
+    Compares every variable across all groups (by var.path). Only variables present in
+    `existing_ds` are checked, so the template may freely add new variables. Backfills
+    are exempt (they rewrite the whole store and may legitimately change structure), so
+    callers only run this for operational updates.
 
     The append dimension's chunk/shard size is compared in dev/prod but skipped under
     Config.env == test, where the integration auto-shrink helper sizes append-dim chunks
@@ -180,25 +182,26 @@ def assert_no_structural_drift_from_existing_store(
     change is caught here as well as at PR time by the template-drift test.
     """
     compare_append_axis = not Config.is_test
+    template_by_path = dict(walk_data_arrays(template_ds))
     mismatches: list[str] = []
-    for var_name in map(str, existing_ds.data_vars):
-        if var_name not in template_ds.data_vars:
+    for path, existing_var in walk_data_arrays(existing_ds):
+        if path not in template_by_path:
             mismatches.append(
-                f"{var_name}: in existing store but missing from update template"
+                f"{path}: in existing store but missing from update template"
             )
             continue
 
         existing_sig = _structural_signature(
-            existing_ds[var_name], append_dim, compare_append_axis=compare_append_axis
+            existing_var, append_dim, compare_append_axis=compare_append_axis
         )
         template_sig = _structural_signature(
-            template_ds[var_name], append_dim, compare_append_axis=compare_append_axis
+            template_by_path[path], append_dim, compare_append_axis=compare_append_axis
         )
         for field, existing_value in existing_sig.items():
             template_value = template_sig[field]
             if existing_value != template_value:
                 mismatches.append(
-                    f"{var_name}.{field}: existing store has {existing_value!r}, "
+                    f"{path}.{field}: existing store has {existing_value!r}, "
                     f"update template has {template_value!r}"
                 )
 

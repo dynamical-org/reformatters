@@ -121,12 +121,9 @@ ignore = [
     "SLF",     # private member access
     "ARG001",  # unused function arg
     "ARG005",  # unused lambda arg
-    "RUF012",  # mutable default — moot for the pydantic test configs (see below)
+    "RUF012",  # mutable default
 ]
-# Template configs declare `dims: dict[Group, tuple] = {ROOT: (...)}`. These are
-# pydantic fields (copied per instance), so the mutable-default concern is moot,
-# and the literal reads better than a `default_factory` lambda.
-"**/template_config.py" = ["RUF012"]
+"**/template_config.py" = ["RUF012"]  # allow mutable dict for `dims: dict[Group, tuple]`
 
 [tool.ty.terminal]
 error-on-warning = true

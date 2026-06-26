@@ -277,7 +277,9 @@ class MaterializedRegionJob(
         return results
 
     def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
-        ds = self._flat_job_dataset()
+        # Materialized datasets are single-level (DynamicalDataset enforces it), so the
+        # root node holds every var; subset it to this job's vars by name.
+        ds: xr.Dataset = self.template_ds.to_dataset()[[v.name for v in self.data_vars]]  # ty: ignore[invalid-assignment]
         processing_region = self.get_processing_region()
         processing_region_ds = ds.isel({self.append_dim: processing_region})
         output_region_ds = ds.isel({self.append_dim: self.region})

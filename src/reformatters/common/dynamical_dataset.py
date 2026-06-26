@@ -410,13 +410,14 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         # already-published store. Worker 0 checks before any writes; failing here
         # leaves the live archive untouched.
         if is_first and update_template_with_results:
-            existing_ds = xr.open_zarr(
-                self.store_factory.primary_store(), decode_timedelta=True, chunks=None
+            existing_ds = xr.open_datatree(
+                self.store_factory.primary_store(),  # ty: ignore[invalid-argument-type]
+                engine="zarr",
+                decode_timedelta=True,
+                chunks=None,
             )
-            # Structural drift is checked on the root group; this path is materialized
-            # (single-level) operational updates, whose vars all live at the root.
             template_utils.assert_no_structural_drift_from_existing_store(
-                template_ds.to_dataset(), existing_ds, self.template_config.append_dim
+                template_ds, existing_ds, self.template_config.append_dim
             )
 
         # 1. Set up / wait for setup

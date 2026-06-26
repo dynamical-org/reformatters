@@ -410,7 +410,15 @@ class VirtualRegionJob(
         assert processing_region == self.region, (
             "VirtualRegionJob.get_processing_region must equal self.region"
         )
-        return self._flat_job_dataset().isel({self.append_dim: processing_region})
+        # generate_source_file_coords reads only coordinate values, so pass the region's
+        # coords from every group — never the data vars, whose names can collide across
+        # vertical groups.
+        coords = {
+            name: coord
+            for node in self.template_ds.subtree
+            for name, coord in node.to_dataset().coords.items()
+        }
+        return xr.Dataset(coords=coords).isel({self.append_dim: processing_region})
 
 
 def _exists_many(store: IcechunkStore, keys: Sequence[str]) -> dict[str, bool]:

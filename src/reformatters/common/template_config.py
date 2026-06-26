@@ -16,7 +16,6 @@ from reformatters.common.config_models import (
     DataVar,
     Group,
 )
-from reformatters.common.iterating import node_group_name
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, Timestamp
 
@@ -134,11 +133,9 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         on_disk = xr.open_datatree(self.template_path(), decode_timedelta=True)
         new_append_coords = self.append_dim_coordinates(end_time)
         coord_fill_values = {c.name: c.encoding.fill_value for c in self.coords}
-        var_by_path = {var.path: var for var in self.data_vars}
 
         nodes: dict[str, xr.Dataset] = {}
         for node in on_disk.subtree:
-            group_prefix = f"{group}/" if (group := node_group_name(node)) else ""
             ds = template_utils.empty_copy_with_reindex(
                 node.to_dataset(),
                 self.append_dim,
@@ -158,13 +155,16 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
                 ds[coord_name].encoding["fill_value"] = coord_fill_values[
                     str(coord_name)
                 ]
-            for var_name in ds.data_vars:
-                var = var_by_path[f"{group_prefix}{var_name}"]
-                assert "fill_value" not in ds[var_name].encoding, (
-                    "Fill value round tripped. That's good but not the previous behavior and if you see this AND the fill_value is correct, you can remove the workaround."
-                )
-                ds[var_name].encoding["fill_value"] = var.encoding.fill_value
             nodes[node.path] = ds
+
+        # Same fill_value workaround for data vars, keyed off the config (which may be a
+        # subset of the on-disk template) so each var is restored at its group node.
+        for var in self.data_vars:
+            var_array = nodes[self._group_node_path(var.group)][var.name]
+            assert "fill_value" not in var_array.encoding, (
+                "Fill value round tripped. That's good but not the previous behavior and if you see this AND the fill_value is correct, you can remove the workaround."
+            )
+            var_array.encoding["fill_value"] = var.encoding.fill_value
 
         template = xr.DataTree.from_dict(nodes)
 

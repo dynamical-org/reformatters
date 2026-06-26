@@ -61,7 +61,7 @@ Integrating a dataset requires subclassing three base classes. For a step by ste
 Base class: `src/reformatters/common/template_config.py`, commented example subclass: `src/reformatters/example/template_config.py`.
 
 Defines the **structure** of a dataset: dimensions, coordinates, data variables, and their attributes/encodings. Key responsibilities:
-- Declare `dims`, `append_dim`, `append_dim_start`, `append_dim_frequency`. `dims` is keyed by group: `dims = {ROOT: (...)}` for a single-level dataset, plus one entry per vertical group (e.g. `"pressure_level": (..., "pressure_level")`). Each `DataVar` sets `group` (default `ROOT`); its zarr path is `var.path`. See "Vertical levels" below and `docs/plans/vertical_dimension_structure.md`.
+- Declare `dims`, `append_dim`, `append_dim_start`, `append_dim_frequency`. `dims` is keyed by group: `dims = {ROOT: (...)}` for a single-level dataset, plus one entry per vertical group (e.g. `"pressure_level": (..., "pressure_level")`).
 - Implement `dataset_attributes`, `coords`, `data_vars`, `dimension_coordinates()`, and optionally `derive_coordinates()`
 - Generates and persists zarr metadata to `templates/latest.zarr` via `update_template()`. The template is an `xarray.DataTree` (one node per group; a single-level dataset is a one-node tree); `get_template()` returns that DataTree.
 

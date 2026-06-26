@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from enum import Enum, auto
 from itertools import chain, pairwise
 from pathlib import Path
@@ -29,9 +29,9 @@ from reformatters.common import storage
 from reformatters.common.config_models import DataVar
 from reformatters.common.iterating import (
     chunk_slices,
-    node_group_name,
     split_groups,
     spread_evenly,
+    walk_data_arrays,
 )
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
@@ -45,14 +45,6 @@ from reformatters.common.types import (
 log = get_logger(__name__)
 
 type CoordinateValue = int | float | pd.Timestamp | pd.Timedelta | str
-
-
-def walk_data_arrays(tree: xr.DataTree) -> Iterator[tuple[str, xr.DataArray]]:
-    """Yield (var_path, DataArray) for every data var across all of a template's groups."""
-    for node in tree.subtree:
-        prefix = f"{group}/" if (group := node_group_name(node)) else ""
-        for name, data_array in node.to_dataset().data_vars.items():
-            yield f"{prefix}{name}", data_array
 
 
 class SourceFileStatus(Enum):
@@ -171,20 +163,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         return a modified slice (e.g. `slice(self.region.start - 1, self.region.stop + 1)`).
         """
         return self.region
-
-    def _flat_job_dataset(self) -> xr.Dataset:
-        """This job's data vars gathered from the template tree into one flat Dataset,
-        keyed by bare variable name (unique within a job's source-file var group)."""
-        paths = {var.path for var in self.data_vars}
-        arrays = {
-            data_array.name: data_array
-            for path, data_array in walk_data_arrays(self.template_ds)
-            if path in paths
-        }
-        assert len(arrays) == len(paths), (
-            f"data var names collide across groups within one job: {sorted(paths)}"
-        )
-        return xr.Dataset(arrays)
 
     def generate_source_file_coords(
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[DATA_VAR]

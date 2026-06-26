@@ -18,12 +18,16 @@ from reformatters.common.zarr import (
 
 
 @pytest.fixture
-def template_ds() -> xr.Dataset:
-    return xr.Dataset(
-        coords={
-            "time": ["2000-01-01", "2000-01-02"],
-            "lat": [10, 20, 30],
-            "lon": [100, 110, 120],
+def template_ds() -> xr.DataTree:
+    return xr.DataTree.from_dict(
+        {
+            "/": xr.Dataset(
+                coords={
+                    "time": ["2000-01-01", "2000-01-02"],
+                    "lat": [10, 20, 30],
+                    "lon": [100, 110, 120],
+                }
+            )
         }
     )
 
@@ -63,7 +67,7 @@ def tmp_store_and_metadata_files(tmp_path: Path) -> tuple[Path, list[Path]]:
 
 def test_copy_zarr_metadata_calls_copy_metadata_files_for_all_stores(
     monkeypatch: pytest.MonkeyPatch,
-    template_ds: xr.Dataset,
+    template_ds: xr.DataTree,
     tmp_store_and_metadata_files: tuple[Path, list[Path]],
 ) -> None:
     tmp_store, expected_metadata_files = tmp_store_and_metadata_files
@@ -104,7 +108,7 @@ def _assert_format_specific_order(files: list[Path], store: Store) -> None:
 
 def test_copy_zarr_metadata_skips_non_icechunk_stores_when_icechunk_only(
     monkeypatch: pytest.MonkeyPatch,
-    template_ds: xr.Dataset,
+    template_ds: xr.DataTree,
     tmp_store_and_metadata_files: tuple[Path, list[Path]],
 ) -> None:
     tmp_store, expected_metadata_files = tmp_store_and_metadata_files
@@ -141,7 +145,7 @@ def test_copy_zarr_metadata_skips_non_icechunk_stores_when_icechunk_only(
 
 def test_copy_zarr_metadata_noops_when_icechunk_only_and_no_icechunk_store(
     monkeypatch: pytest.MonkeyPatch,
-    template_ds: xr.Dataset,
+    template_ds: xr.DataTree,
     tmp_store_and_metadata_files: tuple[Path, list[Path]],
 ) -> None:
     tmp_store, _expected_metadata_files = tmp_store_and_metadata_files

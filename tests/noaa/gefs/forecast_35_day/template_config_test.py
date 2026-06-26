@@ -68,7 +68,7 @@ def test_spatial_ref_matches_grib(
     template_config: GefsForecast35DayTemplateConfig,
     gefs_first_message_path: Path,
 ) -> None:
-    ds = template_config.get_template(pd.Timestamp("2024-11-01T00:00"))
+    ds = template_config.get_template(pd.Timestamp("2024-11-01T00:00")).to_dataset()
 
     ds_raster = xr.open_dataset(gefs_first_message_path, engine="rasterio")
 

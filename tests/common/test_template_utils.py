@@ -295,8 +295,9 @@ def _structured_var(
     return da
 
 
-def _structured_ds(**vars_: xr.DataArray) -> xr.Dataset:
-    return xr.Dataset(dict(vars_) or {"var0": _structured_var()})
+def _structured_ds(**vars_: xr.DataArray) -> xr.DataTree:
+    ds = xr.Dataset(dict(vars_) or {"var0": _structured_var()})
+    return xr.DataTree.from_dict({"/": ds})
 
 
 def test_structural_drift_passes_for_identical_structure() -> None:
