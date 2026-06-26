@@ -158,8 +158,6 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
         [[1.296875, 36.75], [912.0, 868.0]],
     )
 
-    # Smoke-run the configured validators against the built store ("now" is mocked to
-    # the test-data era above) to catch validator config bugs that would crash the cron.
     assert_configured_validators(dataset)
 
 

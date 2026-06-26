@@ -39,6 +39,7 @@ from reformatters.common.storage import (
 )
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.virtual_region_job import VirtualRegionJob
 
 NOOP_STORAGE_CONFIG = StorageConfig(
     base_path="noop",
@@ -67,6 +68,9 @@ def assert_configured_validators(dataset: DynamicalDataset) -> None:
     Content validators (NaN fraction, shard presence) are only checked for not raising,
     not for passing: e2e stores are partial (a subset of variables), so they legitimately
     report failure.
+
+    Mirrors validate_dataset: virtual datasets are opted out of check_for_expected_shards
+    (manifest-aware validators for them are a separate planned phase).
     """
     store = dataset.store_factory.primary_store()
     ds = xr.open_zarr(
@@ -77,7 +81,8 @@ def assert_configured_validators(dataset: DynamicalDataset) -> None:
     latest = pd.Timestamp(ds[dataset.template_config.append_dim].max().values)
 
     validators = list(dataset.validators())
-    validators.append(partial(validation.check_for_expected_shards, store))
+    if not issubclass(dataset.region_job_class, VirtualRegionJob):
+        validators.append(partial(validation.check_for_expected_shards, store))
 
     with patch.object(pd.Timestamp, "now", classmethod(lambda cls, *a, **k: latest)):
         for validator in validators:

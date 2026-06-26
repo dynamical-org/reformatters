@@ -92,8 +92,6 @@ def test_backfill_local_and_operational_update(
         subset_ds["soil_moisture_pm"].values, [0.25, 0.30, 0.35], decimal=3
     )
 
-    # Smoke-run the configured validators against the built store ("now" is mocked to
-    # the test-data era above) to catch validator config bugs that would crash the cron.
     assert_configured_validators(dataset)
 
 

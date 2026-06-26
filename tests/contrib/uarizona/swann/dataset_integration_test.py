@@ -71,8 +71,6 @@ def test_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
         subset_ds.snow_water_equivalent.values, [35.0, 33.0, 29.0]
     )
 
-    # Smoke-run the configured validators against the built store ("now" is mocked to
-    # the test-data era above) to catch validator config bugs that would crash the cron.
     assert_configured_validators(dataset)
 
 

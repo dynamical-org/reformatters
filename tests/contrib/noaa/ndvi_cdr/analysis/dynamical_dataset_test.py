@@ -110,6 +110,4 @@ def test_backfill_local_and_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
         0.623046875,
     )
 
-    # Smoke-run the configured validators against the built store ("now" is mocked to
-    # the test-data era above) to catch validator config bugs that would crash the cron.
     assert_configured_validators(dataset)

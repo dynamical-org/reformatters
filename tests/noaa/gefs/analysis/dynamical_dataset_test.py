@@ -251,6 +251,4 @@ def test_backfill_local_and_operational_update(
     assert point_ds["precipitation_surface"] == 0.00032806396
     assert point_ds["maximum_temperature_2m"] == 26.0
 
-    # Smoke-run the configured validators against the built store ("now" is mocked to
-    # the test-data era above) to catch validator config bugs that would crash the cron.
     assert_configured_validators(dataset)

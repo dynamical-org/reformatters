@@ -114,8 +114,6 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     assert np.isnan(point_ds["precipitation_surface"].values[0])
     assert np.all(np.isfinite(point_ds["precipitation_surface"].values[1:]))
 
-    # Smoke-run the configured validators against the built store ("now" is mocked to
-    # the test-data era above) to catch validator config bugs that would crash the cron.
     assert_configured_validators(dataset)
 
 
