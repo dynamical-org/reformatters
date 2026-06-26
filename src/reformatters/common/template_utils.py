@@ -40,7 +40,7 @@ def _to_zarr_metadata(
 
 
 def write_metadata(
-    template_ds: xr.Dataset | xr.DataTree,
+    template_ds: xr.DataTree,
     storage: zarr.storage.StoreLike | StoreFactory,
     mode: Literal["w", "w-"] | None = None,
     skip_icechunk_commit: bool = False,
@@ -49,12 +49,6 @@ def write_metadata(
     replica_stores: list[Store]
 
     assert_fill_values_set(template_ds)
-    # A plain Dataset (single-level) wraps as a one-node tree so there's one write path.
-    template = (
-        template_ds
-        if isinstance(template_ds, xr.DataTree)
-        else xr.DataTree.from_dict({"/": template_ds})
-    )
 
     if isinstance(storage, StoreFactory):
         store = storage.primary_store(writable=True)
@@ -86,10 +80,10 @@ def write_metadata(
 
         for replica_store in replica_stores:
             log.info(f"Writing metadata to replica {replica_store} with mode {mode}")
-            _to_zarr_metadata(template, replica_store, mode)
+            _to_zarr_metadata(template_ds, replica_store, mode)
 
         log.info(f"Writing metadata to store {store} with mode {mode}")
-        _to_zarr_metadata(template, store, mode)
+        _to_zarr_metadata(template_ds, store, mode)
 
     if isinstance(store, Path | str):
         sort_consolidated_metadata(Path(store) / "zarr.json")

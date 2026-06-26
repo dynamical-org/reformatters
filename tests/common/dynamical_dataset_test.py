@@ -280,7 +280,11 @@ def test_backfill(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(template_utils, "write_metadata", Mock())
 
-    monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
+    monkeypatch.setattr(
+        ExampleConfig,
+        "get_template",
+        lambda self, end: xr.DataTree.from_dict({"/": xr.Dataset()}),
+    )
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
@@ -310,7 +314,9 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
     monkeypatch.setattr(
         ExampleConfig,
         "get_template",
-        lambda self, end: xr.Dataset(attrs={"cool": "weather"}),
+        lambda self, end: xr.DataTree.from_dict(
+            {"/": xr.Dataset(attrs={"cool": "weather"})}
+        ),
     )
     backfill_mock = Mock()
     monkeypatch.setattr(
@@ -386,7 +392,11 @@ def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     )
 
     # Mock template retrieval and metadata writing
-    monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
+    monkeypatch.setattr(
+        ExampleConfig,
+        "get_template",
+        lambda self, end: xr.DataTree.from_dict({"/": xr.Dataset()}),
+    )
     monkeypatch.setattr(template_utils, "write_metadata", lambda *args, **kwargs: None)
 
     dataset = ExampleDataset(
@@ -686,7 +696,11 @@ def test_backfill_kubernetes_overwrite_existing_flag(
         Mock(return_value="test-image-tag"),
     )
     monkeypatch.setattr(subprocess, "run", Mock())
-    monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
+    monkeypatch.setattr(
+        ExampleConfig,
+        "get_template",
+        lambda self, end: xr.DataTree.from_dict({"/": xr.Dataset()}),
+    )
     monkeypatch.setattr(
         ExampleRegionJob, "get_jobs", Mock(return_value=[Mock(spec=ExampleRegionJob)])
     )
@@ -727,7 +741,11 @@ def test_backfill_kubernetes_overwrite_existing_flag_fails_if_not_all_stores_exi
         "open_zarr",
         Mock(side_effect=zarr.errors.GroupNotFoundError("Group not found")),
     )
-    monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
+    monkeypatch.setattr(
+        ExampleConfig,
+        "get_template",
+        lambda self, end: xr.DataTree.from_dict({"/": xr.Dataset()}),
+    )
 
     monkeypatch.setattr(
         dynamical_dataset,
@@ -787,7 +805,9 @@ def test_backfill_local_fails_in_wrong_environment(
     monkeypatch.setattr(template_utils, "write_metadata", Mock())
     monkeypatch.setattr(DynamicalDataset, "backfill", Mock())
     monkeypatch.setattr(
-        DynamicalDataset, "_get_template", Mock(return_value=xr.Dataset())
+        DynamicalDataset,
+        "_get_template",
+        Mock(return_value=xr.DataTree.from_dict({"/": xr.Dataset()})),
     )
 
     dataset = ExampleDataset(
