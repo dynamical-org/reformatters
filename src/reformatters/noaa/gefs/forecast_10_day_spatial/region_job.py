@@ -151,13 +151,13 @@ class GefsForecast10DaySpatialRegionJob(
         cls,
         primary_store: Store,  # noqa: ARG003 - the icechunk manifest, not a coordinate, tracks ingested data
         tmp_store: Path,
-        get_template_fn: Callable[[DatetimeLike], xr.Dataset],
+        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
         append_dim: AppendDim,
         all_data_vars: Sequence[GEFSDataVar],
         reformat_job_name: str,
     ) -> tuple[
         Sequence[RegionJob[GEFSDataVar, GefsForecast10DaySpatialSourceFileCoord]],
-        xr.Dataset,
+        xr.DataTree,
     ]:
         """A single polling job over the recent init times (24h window, the last 4 inits).
 
@@ -167,7 +167,7 @@ class GefsForecast10DaySpatialRegionJob(
         """
         append_dim_end = pd.Timestamp.now()
         template_ds = get_template_fn(append_dim_end)
-        init_times = template_ds.get_index(append_dim)
+        init_times = template_ds.to_dataset().get_index(append_dim)
         window_start = int(
             init_times.searchsorted(append_dim_end - pd.Timedelta("24h"))
         )

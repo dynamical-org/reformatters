@@ -168,7 +168,7 @@ class ParallelDataset(DynamicalDataset[ParallelDataVar, ParallelSourceFileCoord]
         ]
 
 
-def _create_template_ds(num_time: int = 4) -> xr.Dataset:
+def _create_template_ds(num_time: int = 4) -> xr.DataTree:
     ds = xr.Dataset(
         {
             f"var{i}": xr.Variable(
@@ -198,7 +198,7 @@ def _create_template_ds(num_time: int = 4) -> xr.Dataset:
     ds["time"].encoding["fill_value"] = -1
     ds["latitude"].encoding["fill_value"] = np.nan
     ds["longitude"].encoding["fill_value"] = np.nan
-    return ds
+    return xr.DataTree.from_dict({"/": ds})
 
 
 class TestZarr3ParallelWrites:
@@ -327,8 +327,9 @@ class TestZarr3ParallelWrites:
         # Drift the longitude (non-append) chunk on every data var (kept uniform so
         # get_jobs works). An append-axis change alone would be allowed by the guard.
         drifted_ds = _create_template_ds(num_time=4)
-        for var in drifted_ds.data_vars:
-            drifted_ds[var].encoding["chunks"] = (1, _LAT_SIZE, _LON_SIZE // 2)
+        drifted_root = drifted_ds.to_dataset()
+        for var in drifted_root.data_vars:
+            drifted_root[var].encoding["chunks"] = (1, _LAT_SIZE, _LON_SIZE // 2)
 
         all_jobs = ParallelRegionJob.get_jobs(
             tmp_store=dataset._tmp_store(),
@@ -395,7 +396,7 @@ class TestIcechunkParallelWrites:
         )
 
     def _init_store(
-        self, dataset: ParallelDataset, template_ds: xr.Dataset | None = None
+        self, dataset: ParallelDataset, template_ds: xr.DataTree | None = None
     ) -> None:
         """Write metadata to the icechunk store, matching production backfill flow."""
         if template_ds is None:
@@ -603,7 +604,7 @@ class TestResultsAggregation:
         def capturing_update(
             self: ParallelRegionJob,
             process_results: Mapping[str, Sequence[Any]],
-        ) -> xr.Dataset:
+        ) -> xr.DataTree:
             captured.append(dict(process_results))
             return original_update(self, process_results)
 
@@ -627,7 +628,7 @@ class TestResultsAggregation:
         # Each var spans every time step in the template (2 shards, 2 times each).
         for var_name in ("var0", "var1", "var2", "var3"):
             times = sorted(c.out_loc["time"] for c in merged[var_name])
-            assert times == list(template_ds["time"].values)
+            assert times == list(template_ds.to_dataset()["time"].values)
 
     def test_partial_read_failure_trims_template_to_last_successful_time(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -721,7 +722,7 @@ class TestWorkerEdgeCases:
 def _run_workers(
     dataset: ParallelDataset,
     all_jobs: Sequence,
-    template_ds: xr.Dataset,
+    template_ds: xr.DataTree,
     *,
     workers_total: int,
     reformat_job_name: str = "test",

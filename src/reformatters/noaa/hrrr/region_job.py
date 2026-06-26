@@ -87,7 +87,7 @@ class NoaaHrrrRegionJob(
     max_vars_per_download_group = 5
 
     @classmethod
-    def source_groups(
+    def source_file_var_groups(
         cls,
         data_vars: Sequence[NoaaHrrrDataVar],
     ) -> Sequence[Sequence[NoaaHrrrDataVar]]:
@@ -100,13 +100,13 @@ class NoaaHrrrRegionJob(
         cls,
         primary_store: Store,
         tmp_store: Path,
-        get_template_fn: Callable[[DatetimeLike], xr.Dataset],
+        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
         append_dim: AppendDim,
         all_data_vars: Sequence[NoaaHrrrDataVar],
         reformat_job_name: str,
     ) -> tuple[
         Sequence[RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]],
-        xr.Dataset,
+        xr.DataTree,
     ]:
         """Generate operational update jobs for HRRR forecast data."""
         # For operational updates, we want to process recent forecast data

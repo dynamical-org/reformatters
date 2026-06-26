@@ -86,7 +86,7 @@ def test_source_file_coord_get_url_ncep() -> None:
 def test_source_groups(
     template_config: NoaaMrmsConusAnalysisHourlyTemplateConfig,
 ) -> None:
-    groups = NoaaMrmsRegionJob.source_groups(template_config.data_vars)
+    groups = NoaaMrmsRegionJob.source_file_var_groups(template_config.data_vars)
     # Each MRMS variable is its own group (one file per variable)
     assert len(groups) == len(template_config.data_vars)
     for group in groups:

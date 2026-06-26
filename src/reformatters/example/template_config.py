@@ -7,6 +7,7 @@ import xarray as xr
 from pydantic import computed_field
 
 from reformatters.common.config_models import (
+    ROOT,
     BaseInternalAttrs,
     Coordinate,
     CoordinateAttrs,  # noqa: F401
@@ -14,6 +15,7 @@ from reformatters.common.config_models import (
     DataVar,
     DataVarAttrs,  # noqa: F401
     Encoding,  # noqa: F401
+    Group,
     StatisticsApproximate,  # noqa: F401
 )
 from reformatters.common.template_config import (
@@ -42,7 +44,9 @@ class ExampleDataVar(DataVar[ExampleInternalAttrs]):
 
 
 class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
-    dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
+    dims: dict[Group, tuple[Dim, ...]] = {
+        ROOT: ("init_time", "lead_time", "latitude", "longitude")
+    }
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = pd.Timestamp("2020-01-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
@@ -290,8 +294,8 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         # encoding_float32_default = Encoding(
         #     dtype="float32",
         #     fill_value=np.nan,
-        #     chunks=tuple(var_chunks[d] for d in self.dims),
-        #     shards=tuple(var_shards[d] for d in self.dims),
+        #     chunks=tuple(var_chunks[d] for d in self.dims[ROOT]),
+        #     shards=tuple(var_shards[d] for d in self.dims[ROOT]),
         #     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
         # )
 

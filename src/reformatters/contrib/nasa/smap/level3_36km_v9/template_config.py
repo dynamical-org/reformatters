@@ -8,6 +8,7 @@ from pydantic import computed_field
 from pyproj import Transformer
 
 from reformatters.common.config_models import (
+    ROOT,
     BaseInternalAttrs,
     Coordinate,
     CoordinateAttrs,
@@ -15,6 +16,7 @@ from reformatters.common.config_models import (
     DataVar,
     DataVarAttrs,
     Encoding,
+    Group,
     StatisticsApproximate,
 )
 from reformatters.common.template_config import (
@@ -37,7 +39,7 @@ class NasaSmapDataVar(DataVar[NasaSmapInternalAttrs]):
 
 
 class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
-    dims: tuple[Dim, ...] = ("time", "y", "x")
+    dims: dict[Group, tuple[Dim, ...]] = {ROOT: ("time", "y", "x")}
     append_dim: AppendDim = "time"
     append_dim_start: Timestamp = pd.Timestamp("2015-04-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("1D")
@@ -264,8 +266,8 @@ class NasaSmapLevel336KmV9TemplateConfig(TemplateConfig[NasaSmapDataVar]):
         encoding_float32_default = Encoding(
             dtype="float32",
             fill_value=np.nan,
-            chunks=tuple(var_chunks[d] for d in self.dims),
-            shards=tuple(var_shards[d] for d in self.dims),
+            chunks=tuple(var_chunks[d] for d in self.dims[ROOT]),
+            shards=tuple(var_shards[d] for d in self.dims[ROOT]),
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
 

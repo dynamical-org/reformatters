@@ -46,7 +46,7 @@ def parallel_setup(
     workers_total: int,
     reformat_job_name: str,
     branch_name: str,
-    template_ds: xr.Dataset,
+    template_ds: xr.DataTree,
     tmp_store: Path,
     icechunk_repos: list[tuple[str, icechunk.Repository]],
 ) -> SetupInfo:
@@ -153,7 +153,7 @@ def finalize(
     merged_results: Mapping[str, Sequence[SourceFileResult]],
     reformat_job_name: str,
     branch_name: str,
-    template_ds: xr.Dataset,
+    template_ds: xr.DataTree,
     tmp_store: Path,
     setup_info: SetupInfo,
     workers_total: int,

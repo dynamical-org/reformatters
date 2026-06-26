@@ -8,10 +8,12 @@ from gribberish.zarr import GribberishCodec
 from pydantic import computed_field
 
 from reformatters.common.config_models import (
+    ROOT,
     Coordinate,
     CoordinateAttrs,
     DatasetAttributes,
     Encoding,
+    Group,
     StatisticsApproximate,
 )
 from reformatters.common.pydantic import replace
@@ -62,13 +64,15 @@ class GefsForecast10DaySpatialTemplateConfig(TemplateConfig[GEFSDataVar]):
     and lead times stop at 240h where the s files end. See docs/virtual_datasets.md.
     """
 
-    dims: tuple[Dim, ...] = (
-        "init_time",
-        "ensemble_member",
-        "lead_time",
-        "latitude",
-        "longitude",
-    )
+    dims: dict[Group, tuple[Dim, ...]] = {
+        ROOT: (
+            "init_time",
+            "ensemble_member",
+            "lead_time",
+            "latitude",
+            "longitude",
+        )
+    }
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = pd.Timestamp("2020-10-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("6h")

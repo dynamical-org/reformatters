@@ -95,7 +95,7 @@ def test_region_job_source_groups(
 ) -> None:
     """Test that data variables are grouped by file type."""
     # Test source grouping with available sfc variables
-    groups = NoaaHrrrRegionJob.source_groups(template_config.data_vars)
+    groups = NoaaHrrrRegionJob.source_file_var_groups(template_config.data_vars)
 
     # Two groups expected: those with hour 0 values and those without
     assert len(groups) == 2
@@ -121,7 +121,7 @@ def test_region_job_source_groups_multiple_file_types(
             break
 
     if len(mixed_vars) > 1:
-        groups = NoaaHrrrRegionJob.source_groups(mixed_vars)
+        groups = NoaaHrrrRegionJob.source_file_var_groups(mixed_vars)
         # Should have separate groups for different file types
         assert len(groups) >= 1
 
@@ -630,7 +630,7 @@ def test_download_file_from_nomads_hrrr() -> None:
 
     # lead_time=2h: all vars (instant and accumulated) are present in the f02 GRIB file
     lead_time = pd.Timedelta(hours=2)
-    for group in NoaaHrrrForecast48HourRegionJob.source_groups(
+    for group in NoaaHrrrForecast48HourRegionJob.source_file_var_groups(
         template_config.data_vars
     ):
         file_type = group[0].internal_attrs.hrrr_file_type

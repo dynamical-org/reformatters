@@ -122,6 +122,10 @@ ignore = [
     "ARG001",  # unused function arg
     "ARG005",  # unused lambda arg
 ]
+# Template configs declare `dims: dict[Group, tuple] = {ROOT: (...)}`. These are
+# pydantic fields (copied per instance), so the mutable-default concern is moot,
+# and the literal reads better than a `default_factory` lambda.
+"**/template_config.py" = ["RUF012"]
 
 [tool.ty.terminal]
 error-on-warning = true

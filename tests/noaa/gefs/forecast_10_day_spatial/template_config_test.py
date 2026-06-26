@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 
+from reformatters.common.config_models import ROOT
 from reformatters.noaa.gefs.forecast_10_day_spatial.template_config import (
     GefsForecast10DaySpatialTemplateConfig,
 )
@@ -21,7 +22,7 @@ def test_dataset_attributes() -> None:
 
 
 def test_dims_and_append_dim() -> None:
-    assert TEMPLATE_CONFIG.dims == (
+    assert TEMPLATE_CONFIG.dims[ROOT] == (
         "init_time",
         "ensemble_member",
         "lead_time",
@@ -66,7 +67,7 @@ def test_append_dim_coordinates_range() -> None:
 
 
 def test_derive_coordinates() -> None:
-    ds = TEMPLATE_CONFIG.get_template(pd.Timestamp("2020-10-02T00:00"))
+    ds = TEMPLATE_CONFIG.get_template(pd.Timestamp("2020-10-02T00:00")).to_dataset()
     assert "spatial_ref" in ds.coords
     np.testing.assert_array_equal(
         ds["valid_time"].values,

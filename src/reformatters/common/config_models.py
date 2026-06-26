@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from enum import Enum, auto
 from typing import Annotated, Any, Generic, Literal, TypeVar
 
 import numcodecs
@@ -7,6 +8,27 @@ import pydantic
 
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.types import TimedeltaUnits, TimestampUnits
+
+
+class RootGroup(Enum):
+    ROOT = auto()  # pure sentinel; the root zarr group has no name
+
+
+ROOT = RootGroup.ROOT
+
+# A variable on a dense, comparable vertical dimension lives in a zarr group named
+# after that dimension (group name == dimension name). Expand as new types are added.
+type VerticalGroup = Literal["pressure_level", "model_level"]
+# A variable's group: ROOT (single-level, lives at the dataset root) or a vertical group.
+type Group = VerticalGroup | RootGroup
+
+
+def var_path(group: Group, name: str) -> str:
+    """The zarr path / identity key of a variable: `name` at root, else `group/name`."""
+    if group is ROOT:
+        return name
+    return f"{group}/{name}"
+
 
 type AttributeStr = Annotated[str, pydantic.Field(pattern=r"^[A-Z0-9].*[^.]$")]
 type Sentence = Annotated[str, pydantic.Field(pattern=r"^[A-Z].*\.$")]
@@ -188,6 +210,12 @@ INTERNAL_ATTRS_co = TypeVar(
 
 class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS_co]):
     name: str
+    group: Group = ROOT
     encoding: Encoding
     attrs: DataVarAttrs
     internal_attrs: INTERNAL_ATTRS_co
+
+    @property
+    def path(self) -> str:
+        """The variable's zarr path / identity key (`name` at root, else `group/name`)."""
+        return var_path(self.group, self.name)

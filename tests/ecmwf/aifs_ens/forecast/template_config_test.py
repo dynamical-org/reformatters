@@ -6,6 +6,7 @@ import pytest
 import rioxarray  # noqa: F401  # Registers .rio accessor on xarray objects
 import xarray as xr
 
+from reformatters.common.config_models import ROOT
 from reformatters.common.iterating import item
 from reformatters.common.template_config import SPATIAL_REF_COORDS
 from reformatters.ecmwf.aifs_ens.forecast.template_config import (
@@ -16,7 +17,7 @@ from reformatters.ecmwf.aifs_ens.forecast.template_config import (
 def test_template_config_attrs() -> None:
     config = EcmwfAifsEnsForecastTemplateConfig()
 
-    assert config.dims == (
+    assert config.dims[ROOT] == (
         "init_time",
         "lead_time",
         "ensemble_member",
@@ -200,7 +201,7 @@ def test_get_template_spatial_ref() -> None:
     template_config = EcmwfAifsEnsForecastTemplateConfig()
     ds = template_config.get_template(
         template_config.append_dim_start + pd.Timedelta(days=10)
-    )
+    ).to_dataset()
 
     expected_crs = "+proj=longlat +a=6371229 +b=6371229 +no_defs +type=crs"
     calculated_spatial_ref_attrs = ds.rio.write_crs(expected_crs).spatial_ref.attrs

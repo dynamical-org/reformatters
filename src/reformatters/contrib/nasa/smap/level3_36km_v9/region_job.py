@@ -115,13 +115,13 @@ class NasaSmapLevel336KmV9RegionJob(
         cls,
         primary_store: Store,
         tmp_store: Path,
-        get_template_fn: Callable[[DatetimeLike], xr.Dataset],
+        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
         append_dim: AppendDim,
         all_data_vars: Sequence[NasaSmapDataVar],
         reformat_job_name: str,
     ) -> tuple[
         Sequence[RegionJob[NasaSmapDataVar, NasaSmapLevel336KmV9SourceFileCoord]],
-        xr.Dataset,
+        xr.DataTree,
     ]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset

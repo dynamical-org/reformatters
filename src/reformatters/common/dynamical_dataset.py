@@ -381,7 +381,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         worker_index: int,
         workers_total: int,
         reformat_job_name: str,
-        template_ds: xr.Dataset,
+        template_ds: xr.DataTree,
         tmp_store: Path,
         *,
         update_template_with_results: bool,
@@ -413,8 +413,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             existing_ds = xr.open_zarr(
                 self.store_factory.primary_store(), decode_timedelta=True, chunks=None
             )
+            # Structural drift is checked on the root group; this path is materialized
+            # (single-level) operational updates, whose vars all live at the root.
             template_utils.assert_no_structural_drift_from_existing_store(
-                template_ds, existing_ds, self.template_config.append_dim
+                template_ds.to_dataset(), existing_ds, self.template_config.append_dim
             )
 
         # 1. Set up / wait for setup
@@ -594,7 +596,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def _tmp_store(self) -> Path:
         return get_local_tmp_store()
 
-    def _get_template(self, append_dim_end: DatetimeLike) -> xr.Dataset:
+    def _get_template(self, append_dim_end: DatetimeLike) -> xr.DataTree:
         return self.template_config.get_template(pd.Timestamp(append_dim_end))
 
     def _can_run_in_kubernetes(self) -> bool:

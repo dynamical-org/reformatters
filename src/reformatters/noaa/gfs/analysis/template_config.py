@@ -7,10 +7,12 @@ import xarray as xr
 from pydantic import computed_field
 
 from reformatters.common.config_models import (
+    ROOT,
     Coordinate,
     CoordinateAttrs,
     DatasetAttributes,
     Encoding,
+    Group,
     StatisticsApproximate,
 )
 from reformatters.common.template_config import SPATIAL_REF_COORDS
@@ -25,7 +27,7 @@ from reformatters.noaa.models import NoaaDataVar
 
 
 class NoaaGfsAnalysisTemplateConfig(NoaaGfsCommonTemplateConfig):
-    dims: tuple[Dim, ...] = ("time", "latitude", "longitude")
+    dims: dict[Group, tuple[Dim, ...]] = {ROOT: ("time", "latitude", "longitude")}
     append_dim: AppendDim = "time"
     append_dim_start: Timestamp = pd.Timestamp("2021-05-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("1h")
@@ -113,8 +115,8 @@ class NoaaGfsAnalysisTemplateConfig(NoaaGfsCommonTemplateConfig):
         encoding_float32_default = Encoding(
             dtype="float32",
             fill_value=np.nan,
-            chunks=tuple(var_chunks[d] for d in self.dims),
-            shards=tuple(var_shards[d] for d in self.dims),
+            chunks=tuple(var_chunks[d] for d in self.dims[ROOT]),
+            shards=tuple(var_shards[d] for d in self.dims[ROOT]),
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
 

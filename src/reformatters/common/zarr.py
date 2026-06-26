@@ -97,8 +97,21 @@ def _copy_data_var_chunks(
         sync_to_store(store, key, file.read_bytes())
 
 
+def _coord_chunk_globs(template_ds: xr.Dataset | xr.DataTree) -> list[str]:
+    """Glob patterns for every coordinate's chunk files, group-prefixed for a tree."""
+    if isinstance(template_ds, xr.DataTree):
+        globs = []
+        for node in template_ds.subtree:
+            prefix = "" if node.path == "/" else node.path.removeprefix("/") + "/"
+            globs.extend(
+                f"{prefix}{coord}/c/**/*" for coord in node.to_dataset().coords
+            )
+        return globs
+    return [f"{coord}/c/**/*" for coord in template_ds.coords]
+
+
 def copy_zarr_metadata(
-    template_ds: xr.Dataset,
+    template_ds: xr.Dataset | xr.DataTree,
     tmp_store: Path,
     primary_store: Store,
     replica_stores: Iterable[Store] = (),
@@ -118,11 +131,14 @@ def copy_zarr_metadata(
     assert not (icechunk_only and zarr3_only)
 
     coord_chunk_files: list[Path] = []
-    for coord in template_ds.coords:
-        coord_chunk_files.extend(
-            f for f in tmp_store.glob(f"{coord}/c/**/*") if f.is_file()
-        )
-    zarr_json_files = [tmp_store / "zarr.json", *tmp_store.glob("*/zarr.json")]
+    for coord_glob in _coord_chunk_globs(template_ds):
+        coord_chunk_files.extend(f for f in tmp_store.glob(coord_glob) if f.is_file())
+    # Shallowest first so a parent group's metadata is written before its children's
+    # (icechunk rejects a child array whose parent group does not yet exist).
+    zarr_json_files = sorted(
+        tmp_store.rglob("zarr.json"),
+        key=lambda p: len(p.relative_to(tmp_store).parts),
+    )
 
     def _ordered_files(store: Store) -> list[Path]:
         # Zarr v3: coordinate label chunks before metadata, so readers never see
@@ -181,7 +197,14 @@ def sync_to_store(store: Store, key: str, data: bytes) -> None:
     )
 
 
-def assert_fill_values_set(xr_obj: xr.Dataset | xr.DataArray) -> None:
+def assert_fill_values_set(
+    xr_obj: xr.Dataset | xr.DataArray | xr.DataTree,
+) -> None:
+    if isinstance(xr_obj, xr.DataTree):
+        for node in xr_obj.subtree:
+            assert_fill_values_set(node.to_dataset())
+        return
+
     if isinstance(xr_obj, xr.DataArray):
         assert "fill_value" in xr_obj.encoding, (
             f"Fill value not set for DataArray {xr_obj.name}"

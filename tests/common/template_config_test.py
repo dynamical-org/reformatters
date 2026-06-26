@@ -8,10 +8,12 @@ import xarray as xr
 
 # Use a dummy DataVar that is a subtype of BaseInternalAttrs, as required by the type var
 from reformatters.common.config_models import (
+    ROOT,
     BaseInternalAttrs,
     Coordinate,
     DatasetAttributes,
     DataVar,
+    Group,
 )
 from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
@@ -35,7 +37,7 @@ class ExampleDatasetAttributes(DatasetAttributes):
 class ExampleConfig(TemplateConfig[ExampleDataVar]):
     """A minimal concrete implementation to test the happy-path logic."""
 
-    dims: tuple[Dim, ...] = ("time",)
+    dims: dict[Group, tuple[Dim, ...]] = {ROOT: ("time",)}  # noqa: RUF012
     append_dim: AppendDim = "time"
     append_dim_start: Timestamp = pd.Timestamp("2000-01-01")
     append_dim_frequency: Timedelta = pd.Timedelta(days=1)
@@ -76,7 +78,7 @@ class BadCoordsConfig(ExampleConfig):
 @pytest.fixture
 def example_config() -> ExampleConfig:
     return ExampleConfig(
-        dims=("time",),
+        dims={ROOT: ("time",)},
         append_dim="time",
         append_dim_start=pd.Timestamp("2000-01-01"),
         append_dim_frequency=pd.Timedelta(days=1),
@@ -112,7 +114,7 @@ def test_append_dim_coordinate_chunk_size_varies_with_start(
         append_dim_start: Timestamp = pd.Timestamp(f"{start_year}-01-01")
 
     inst = C(
-        dims=("time",),
+        dims={ROOT: ("time",)},
         append_dim="time",
         append_dim_start=pd.Timestamp(f"{start_year}-01-01"),
         append_dim_frequency=pd.Timedelta(days=1),
@@ -135,7 +137,7 @@ def test_default_derive_coordinates_returns_spatial_ref(
 
 def test_derive_coordinates_raises_if_coords_not_returned() -> None:
     bad = BadCoordsConfig(
-        dims=("time",),
+        dims={ROOT: ("time",)},
         append_dim="time",
         append_dim_start=pd.Timestamp("2000-01-01"),
         append_dim_frequency=pd.Timedelta(days=1),

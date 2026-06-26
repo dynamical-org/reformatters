@@ -7,10 +7,12 @@ import xarray as xr
 from pydantic import computed_field
 
 from reformatters.common.config_models import (
+    ROOT,
     Coordinate,
     CoordinateAttrs,
     DatasetAttributes,
     Encoding,
+    Group,
     StatisticsApproximate,
 )
 from reformatters.common.template_config import SPATIAL_REF_COORDS
@@ -24,7 +26,9 @@ from reformatters.noaa.models import NoaaDataVar
 
 
 class NoaaGfsForecastTemplateConfig(NoaaGfsCommonTemplateConfig):
-    dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
+    dims: dict[Group, tuple[Dim, ...]] = {
+        ROOT: ("init_time", "lead_time", "latitude", "longitude")
+    }
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = pd.Timestamp("2021-05-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
@@ -216,8 +220,8 @@ class NoaaGfsForecastTemplateConfig(NoaaGfsCommonTemplateConfig):
             # While in general we use nan as a fill_value, these datasets were backfilled
             # with fill_value = 0 and write_missing_chunks defaulting to false so we retain the 0 fill value
             fill_value=0,
-            chunks=tuple(var_chunks[d] for d in self.dims),
-            shards=tuple(var_shards[d] for d in self.dims),
+            chunks=tuple(var_chunks[d] for d in self.dims[ROOT]),
+            shards=tuple(var_shards[d] for d in self.dims[ROOT]),
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
 

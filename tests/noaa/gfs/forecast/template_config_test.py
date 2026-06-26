@@ -47,7 +47,7 @@ def test_get_template_spatial_ref() -> None:
     template_config = NoaaGfsForecastTemplateConfig()
     ds = template_config.get_template(
         template_config.append_dim_start + pd.Timedelta(days=10)
-    )
+    ).to_dataset()
     original_attrs = deepcopy(ds.spatial_ref.attrs)
 
     expected_crs = "+proj=longlat +a=6371229 +b=6371229 +no_defs +type=crs"
@@ -59,7 +59,7 @@ def test_get_template_spatial_ref() -> None:
 @pytest.mark.slow
 def test_spatial_ref_matches_grib(gfs_first_message_path: Path) -> None:
     cfg = NoaaGfsForecastTemplateConfig()
-    ds = cfg.get_template(pd.Timestamp("2024-11-01T00:00"))
+    ds = cfg.get_template(pd.Timestamp("2024-11-01T00:00")).to_dataset()
 
     ds_raster = xr.open_dataset(gfs_first_message_path, engine="rasterio")
 

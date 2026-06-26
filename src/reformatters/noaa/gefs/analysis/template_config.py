@@ -5,10 +5,12 @@ import pandas as pd
 from pydantic import computed_field
 
 from reformatters.common.config_models import (
+    ROOT,
     Coordinate,
     CoordinateAttrs,
     DatasetAttributes,
     Encoding,
+    Group,
     StatisticsApproximate,
 )
 from reformatters.common.template_config import TemplateConfig
@@ -25,7 +27,7 @@ from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
 class GefsAnalysisTemplateConfig(TemplateConfig[GEFSDataVar]):
     """Template configuration for GEFS analysis dataset."""
 
-    dims: tuple[Dim, ...] = ("time", "latitude", "longitude")
+    dims: dict[Group, tuple[Dim, ...]] = {ROOT: ("time", "latitude", "longitude")}
     append_dim: AppendDim = "time"
     append_dim_start: Timestamp = pd.Timestamp("2000-01-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("3h")
@@ -115,9 +117,9 @@ class GefsAnalysisTemplateConfig(TemplateConfig[GEFSDataVar]):
             "longitude": var_chunks["longitude"] * 12,  # 4 shards over 1440 pixels
         }
 
-        assert self.dims == tuple(var_chunks.keys())
+        assert self.dims[ROOT] == tuple(var_chunks.keys())
 
-        var_chunks_ordered = tuple(var_chunks[dim] for dim in self.dims)
-        var_shards_ordered = tuple(var_shards[dim] for dim in self.dims)
+        var_chunks_ordered = tuple(var_chunks[dim] for dim in self.dims[ROOT])
+        var_shards_ordered = tuple(var_shards[dim] for dim in self.dims[ROOT])
 
         return get_shared_data_var_configs(var_chunks_ordered, var_shards_ordered)

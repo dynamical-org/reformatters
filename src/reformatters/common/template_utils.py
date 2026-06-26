@@ -22,8 +22,29 @@ from reformatters.common.zarr import assert_fill_values_set
 log = get_logger(__name__)
 
 
+def _to_zarr_metadata(
+    template: xr.DataTree, store: Store | Path, mode: Literal["w", "w-"]
+) -> None:
+    # safe_chunks=False: with compute=False only metadata and numpy coordinates
+    # are written, no dask chunks, so dask/zarr chunk alignment is irrelevant.
+    # The alternative, aligning dask chunks to the stored chunks (align_chunks=True
+    # or chunking templates at stored sizes), builds a task-per-chunk dask graph
+    # even under compute=False, which is slow/OOM on our largest arrays.
+    # write_inherited_coords=True writes each group's own copy of the shared coords
+    # so groups open standalone; see docs/plans/vertical_dimension_structure.md. It
+    # is a no-op for a single-level dataset (a one-node tree, no child groups).
+    template.to_zarr(
+        store,
+        mode=mode,
+        compute=False,
+        write_inherited_coords=True,
+        safe_chunks=False,
+        write_empty_chunks=True,
+    )
+
+
 def write_metadata(
-    template_ds: xr.Dataset,
+    template_ds: xr.Dataset | xr.DataTree,
     storage: zarr.storage.StoreLike | StoreFactory,
     mode: Literal["w", "w-"] | None = None,
     skip_icechunk_commit: bool = False,
@@ -32,6 +53,13 @@ def write_metadata(
     replica_stores: list[Store]
 
     assert_fill_values_set(template_ds)
+    # A single-level dataset's template is a plain Dataset; wrap it as a one-node tree
+    # so there is one write path. A one-node tree writes byte-identically to the Dataset.
+    template = (
+        template_ds
+        if isinstance(template_ds, xr.DataTree)
+        else xr.DataTree.from_dict({"/": template_ds})
+    )
 
     if isinstance(storage, StoreFactory):
         store = storage.primary_store(writable=True)
@@ -61,29 +89,12 @@ def write_metadata(
             category=UserWarning,
         )
 
-        # safe_chunks=False: with compute=False only metadata and numpy coordinates
-        # are written, no dask chunks, so dask/zarr chunk alignment is irrelevant.
-        # The alternative, aligning dask chunks to the stored chunks (align_chunks=True
-        # or chunking templates at stored sizes), builds a task-per-chunk dask graph
-        # even under compute=False, which is slow/OOM on our largest arrays.
         for replica_store in replica_stores:
             log.info(f"Writing metadata to replica {replica_store} with mode {mode}")
-            template_ds.to_zarr(
-                replica_store,
-                mode=mode,
-                compute=False,
-                safe_chunks=False,
-                write_empty_chunks=True,
-            )
+            _to_zarr_metadata(template, replica_store, mode)
 
         log.info(f"Writing metadata to store {store} with mode {mode}")
-        template_ds.to_zarr(
-            store,
-            mode=mode,
-            compute=False,
-            safe_chunks=False,
-            write_empty_chunks=True,
-        )
+        _to_zarr_metadata(template, store, mode)
 
     if isinstance(store, Path | str):
         sort_consolidated_metadata(Path(store) / "zarr.json")

@@ -62,7 +62,7 @@ class ExampleRegionJob(MaterializedRegionJob[ExampleDataVar, ExampleSourceFileCo
     # Implement this method only if different variables must be retrieved from different urls
     #
     # # @classmethod
-    # def source_groups(
+    # def source_file_var_groups(
     #     cls,
     #     data_vars: Sequence[ExampleDataVar],
     # ) -> Sequence[Sequence[ExampleDataVar]]:
@@ -160,7 +160,7 @@ class ExampleRegionJob(MaterializedRegionJob[ExampleDataVar, ExampleSourceFileCo
 
     def update_template_with_results(
         self, process_results: Mapping[str, Sequence[SourceFileResult]]
-    ) -> xr.Dataset:
+    ) -> xr.DataTree:
         """
         Update template dataset based on processing results. This method is called
         during operational updates.
@@ -217,11 +217,13 @@ class ExampleRegionJob(MaterializedRegionJob[ExampleDataVar, ExampleSourceFileCo
         cls,
         primary_store: Store,
         tmp_store: Path,
-        get_template_fn: Callable[[DatetimeLike], xr.Dataset],
+        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
         append_dim: AppendDim,
         all_data_vars: Sequence[ExampleDataVar],
         reformat_job_name: str,
-    ) -> tuple[Sequence[RegionJob[ExampleDataVar, ExampleSourceFileCoord]], xr.Dataset]:
+    ) -> tuple[
+        Sequence[RegionJob[ExampleDataVar, ExampleSourceFileCoord]], xr.DataTree
+    ]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset
         from its current state to include the latest available data.
@@ -244,7 +246,7 @@ class ExampleRegionJob(MaterializedRegionJob[ExampleDataVar, ExampleSourceFileCo
             The primary store to read existing data from and write updates to.
         tmp_store : Path
             The temporary Zarr store to write into while processing.
-        get_template_fn : Callable[[DatetimeLike], xr.Dataset]
+        get_template_fn : Callable[[DatetimeLike], xr.DataTree]
             Function to get the template_ds for the operational update.
         append_dim : AppendDim
             The dimension along which data is appended (e.g., "time").

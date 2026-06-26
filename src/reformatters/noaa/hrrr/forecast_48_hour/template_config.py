@@ -7,10 +7,12 @@ import xarray as xr
 from pydantic import computed_field
 
 from reformatters.common.config_models import (
+    ROOT,
     Coordinate,
     CoordinateAttrs,
     DatasetAttributes,
     Encoding,
+    Group,
     StatisticsApproximate,
 )
 from reformatters.common.template_config import SPATIAL_REF_COORDS
@@ -35,7 +37,7 @@ EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR = pd.Series(
 
 class NoaaHrrrForecast48HourTemplateConfig(NoaaHrrrCommonTemplateConfig):
     # HRRR uses a projected coordinate system with x/y dimensions
-    dims: tuple[Dim, ...] = ("init_time", "lead_time", "y", "x")
+    dims: dict[Group, tuple[Dim, ...]] = {ROOT: ("init_time", "lead_time", "y", "x")}
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = pd.Timestamp("2018-07-13T12:00")  # start of HRRR v3
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
@@ -233,8 +235,8 @@ class NoaaHrrrForecast48HourTemplateConfig(NoaaHrrrCommonTemplateConfig):
         encoding_float32_default = Encoding(
             dtype="float32",
             fill_value=0.0,
-            chunks=tuple(var_chunks[d] for d in self.dims),
-            shards=tuple(var_shards[d] for d in self.dims),
+            chunks=tuple(var_chunks[d] for d in self.dims[ROOT]),
+            shards=tuple(var_shards[d] for d in self.dims[ROOT]),
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
 
