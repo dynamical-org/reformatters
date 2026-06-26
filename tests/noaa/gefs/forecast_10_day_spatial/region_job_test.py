@@ -13,6 +13,7 @@ from gribberish import (
     parse_grib_message_metadata,  # ty: ignore[unresolved-import] - native module member
 )
 
+from reformatters.common import virtual_region_job
 from reformatters.common.virtual_region_job import VirtualRef
 from reformatters.noaa.gefs.forecast_10_day_spatial import (
     region_job as region_job_module,
@@ -196,12 +197,32 @@ def _coord(
 
 def _fake_index_download(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
-        # Unique per url so concurrent _file_refs don't clobber each other's file.
+        # Unique per url so concurrent file_refs don't clobber each other's file.
         index_path = tmp_path / (url.rsplit("/", 1)[-1] + ".idx")
         index_path.write_text(_INDEX_CONTENT)
         return index_path
 
     monkeypatch.setattr(region_job_module, "s3_download_to_disk", fake_download)
+
+
+def _fake_discover(
+    monkeypatch: pytest.MonkeyPatch,
+    ticks: list[list[tuple[GefsForecast10DaySpatialSourceFileCoord, int]]],
+) -> list[int]:
+    """Drive the loop: return one canned (coord, size) list per discovery sweep."""
+    sweeps: list[int] = []
+    it = iter(ticks)
+
+    def fake(
+        pending: list[GefsForecast10DaySpatialSourceFileCoord], **kwargs: object
+    ) -> list[tuple[GefsForecast10DaySpatialSourceFileCoord, int]]:
+        sweeps.append(len(pending))
+        return next(it)
+
+    monkeypatch.setattr(
+        region_job_module, "discover_available_by_obstore_listing", fake
+    )
+    return sweeps
 
 
 def test_process_virtual_refs_backfill_sweeps_once(
@@ -210,25 +231,14 @@ def test_process_virtual_refs_backfill_sweeps_once(
     data_vars = [get_var("temperature_2m"), get_var("total_precipitation_surface")]
     job = make_job(template_ds, data_vars=data_vars)
     _fake_index_download(monkeypatch, tmp_path)
+    coord1, coord2 = _coord(1, data_vars), _coord(2, data_vars)
+    # Member 1 ready; member 2 not yet.
+    sweeps = _fake_discover(monkeypatch, [[(coord1, 9000)]])
 
-    member1 = f"{_PREFIX}gep01.t00z.pgrb2s.0p25.f003"
-    member2 = f"{_PREFIX}gep02.t00z.pgrb2s.0p25.f003"
-    listings: list[str] = []
+    batches = list(job.process_virtual_refs([coord1, coord2]))
 
-    def fake_list_objects(prefix: str) -> dict[str, int]:
-        listings.append(prefix)
-        # Member 1 fully published; member 2's .idx has not landed yet.
-        return {member1: 9000, f"{member1}.idx": 200, member2: 9000}
-
-    monkeypatch.setattr(region_job_module, "_list_objects", fake_list_objects)
-
-    batches = list(
-        job.process_virtual_refs([_coord(1, data_vars), _coord(2, data_vars)])
-    )
-
-    # A backfill sweeps once: one listing, one yield with only the file whose
-    # data and index are both listed, then exit without polling.
-    assert listings == [_PREFIX]
+    # A backfill sweeps once, yields the ready file, then exits without polling.
+    assert len(sweeps) == 1
     (batch,) = batches
     ((coord, refs),) = batch
     assert coord.ensemble_member == 1
@@ -242,6 +252,7 @@ def test_process_virtual_refs_backfill_sweeps_once(
     # APCP is the last message in the index; its end comes from the listed file size.
     assert apcp_ref.offset == 2500
     assert apcp_ref.length == 9000 - 2500
+    member1 = f"{_PREFIX}gep01.t00z.pgrb2s.0p25.f003"
     for ref in refs:
         assert ref.location == f"s3://noaa-gefs-pds/{member1}"
         assert ref.out_loc == {
@@ -258,28 +269,15 @@ def test_process_virtual_refs_update_polls_until_all_ingested(
     job = make_job(template_ds, data_vars=data_vars, processing_mode="update")
     _fake_index_download(monkeypatch, tmp_path)
     sleeps: list[float] = []
-    monkeypatch.setattr(region_job_module.time, "sleep", sleeps.append)
+    monkeypatch.setattr(virtual_region_job.time, "sleep", sleeps.append)
 
-    member1 = f"{_PREFIX}gep01.t00z.pgrb2s.0p25.f003"
-    member2 = f"{_PREFIX}gep02.t00z.pgrb2s.0p25.f003"
-    # Tick 1: nothing published; tick 2: member 1; tick 3: member 2 as well.
-    listings = iter(
-        [
-            {},
-            {member1: 9000, f"{member1}.idx": 200},
-            {member2: 9000, f"{member2}.idx": 200},
-        ]
-    )
-    monkeypatch.setattr(
-        region_job_module, "_list_objects", lambda prefix: next(listings)
-    )
+    coord1, coord2 = _coord(1, data_vars), _coord(2, data_vars)
+    # Tick 1: nothing; tick 2: member 1; tick 3: member 2.
+    _fake_discover(monkeypatch, [[], [(coord1, 9000)], [(coord2, 9000)]])
 
-    batches = list(
-        job.process_virtual_refs([_coord(1, data_vars), _coord(2, data_vars)])
-    )
+    batches = list(job.process_virtual_refs([coord1, coord2]))
 
-    # One yield per tick that found new files; exits once all are ingested
-    # without consuming a fourth listing.
+    # One yield per tick that found new files; exits once all are ingested.
     assert [
         [
             (coord.ensemble_member, [r.data_var.name for r in refs])
@@ -302,9 +300,9 @@ def test_file_refs_skips_file_whose_index_points_past_eof(
     _fake_index_download(monkeypatch, tmp_path)  # index's last message starts at 2500
     coord = _coord(1, data_vars)
     # A matching (larger) file resolves refs.
-    assert job._file_refs(coord, file_size=9000)
+    assert job.file_refs(coord, file_size=9000)
     # A file smaller than the index's max offset is stale/mismatched -> no refs.
-    assert job._file_refs(coord, file_size=2000) == []
+    assert job.file_refs(coord, file_size=2000) == []
 
 
 def test_process_virtual_refs_drops_files_with_stale_index(
@@ -313,23 +311,11 @@ def test_process_virtual_refs_drops_files_with_stale_index(
     data_vars = [get_var("temperature_2m")]
     job = make_job(template_ds, data_vars=data_vars)
     _fake_index_download(monkeypatch, tmp_path)
-    member1 = f"{_PREFIX}gep01.t00z.pgrb2s.0p25.f003"
-    member2 = f"{_PREFIX}gep02.t00z.pgrb2s.0p25.f003"
-    # member1's listed size (2000) is below the index's max offset (2500) -> skipped.
-    monkeypatch.setattr(
-        region_job_module,
-        "_list_objects",
-        lambda prefix: {
-            member1: 2000,
-            f"{member1}.idx": 200,
-            member2: 9000,
-            f"{member2}.idx": 200,
-        },
-    )
+    coord1, coord2 = _coord(1, data_vars), _coord(2, data_vars)
+    # member1's size (2000) is below the index's max offset (2500) -> file_refs skips it.
+    _fake_discover(monkeypatch, [[(coord1, 2000), (coord2, 9000)]])
 
-    batches = list(
-        job.process_virtual_refs([_coord(1, data_vars), _coord(2, data_vars)])
-    )
+    batches = list(job.process_virtual_refs([coord1, coord2]))
 
     (batch,) = batches
     ((coord, _refs),) = batch
@@ -342,10 +328,12 @@ def test_file_refs_or_skip_swallows_unexpected_errors(
     job = make_job(template_ds, data_vars=[get_var("temperature_2m")])
     coord = _coord(1, [get_var("temperature_2m")])
 
-    def boom(*args: object, **kwargs: object) -> list[VirtualRef]:
+    def boom(self: object, *args: object, **kwargs: object) -> list[VirtualRef]:
         raise RuntimeError("network blip")
 
-    monkeypatch.setattr(job, "_file_refs", boom)
+    # Patch on the class: file_refs is a public name, which pydantic's __setattr__
+    # rejects as a non-field on the model instance.
+    monkeypatch.setattr(type(job), "file_refs", boom)
     # An unexpected per-file error skips the file (no refs) rather than raising.
     assert job._file_refs_or_skip(coord, 9000) == []
 
@@ -356,33 +344,15 @@ def test_file_refs_or_skip_propagates_assertion_errors(
     job = make_job(template_ds, data_vars=[get_var("temperature_2m")])
     coord = _coord(1, [get_var("temperature_2m")])
 
-    def bad_invariant(*args: object, **kwargs: object) -> list[VirtualRef]:
+    def bad_invariant(
+        self: object, *args: object, **kwargs: object
+    ) -> list[VirtualRef]:
         raise AssertionError("our own invariant")
 
-    monkeypatch.setattr(job, "_file_refs", bad_invariant)
+    monkeypatch.setattr(type(job), "file_refs", bad_invariant)
     # Assertion failures are our own bugs and must surface, not be swallowed.
     with pytest.raises(AssertionError, match="our own invariant"):
         job._file_refs_or_skip(coord, 9000)
-
-
-def test_discover_available_requires_data_and_index(
-    template_ds: xr.Dataset, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    data_vars = [get_var("temperature_2m")]
-    job = make_job(template_ds, data_vars=data_vars)
-    member1 = f"{_PREFIX}gep01.t00z.pgrb2s.0p25.f003"
-    member2 = f"{_PREFIX}gep02.t00z.pgrb2s.0p25.f003"
-    monkeypatch.setattr(
-        region_job_module,
-        "_list_objects",
-        lambda prefix: {member1: 9000, f"{member1}.idx": 200, f"{member2}.idx": 150},
-    )
-
-    pending = {
-        member1: _coord(1, data_vars),
-        member2: _coord(2, data_vars),  # .idx listed but data file is not
-    }
-    assert job._discover_available(pending) == {member1: 9000}
 
 
 @pytest.mark.slow
@@ -399,10 +369,9 @@ def test_real_source_all_vars_resolve_and_decode(template_ds: xr.Dataset) -> Non
     )
     job = make_job(template_ds)
 
+    [(_, file_size)] = job.discover_available([coord])
     key = coord.get_url().removeprefix("s3://noaa-gefs-pds/")
-    available = job._discover_available({key: coord})
-    file_size = available[key]
-    refs = job._file_refs(coord, file_size)
+    refs = job.file_refs(coord, file_size)
 
     assert len(refs) == 19
     for ref in refs:
