@@ -1,8 +1,13 @@
 name: Deploy Operational Updates
 
+# Gate the production deploy on Code Quality passing on main: this fires only after
+# the "Code Quality" workflow completes for a push to main, so the full test suite
+# runs once (no duplicated steps here) and the deploy depends on its result.
 on:
-  push:
-    branches: [ main ]
+  workflow_run:
+    workflows: ["Code Quality"]
+    types: [completed]
+    branches: [main]
 
 # Prevent concurrent runs since this is deploying to the K8S cluster
 concurrency:
@@ -14,56 +19,24 @@ permissions:
   contents: read
 
 env:
-  IMAGE_TAG: "${{ secrets.DOCKER_REPOSITORY }}:${{ github.sha }}"
+  # workflow_run's github.sha is the default-branch tip, so pin to the exact commit
+  # that passed Code Quality.
+  IMAGE_TAG: "${{ secrets.DOCKER_REPOSITORY }}:${{ github.event.workflow_run.head_sha }}"
 
 jobs:
-  quality:
-    name: Code Quality
-    runs-on: ubuntu-24.04
-
-    # Keep code-quality.yaml and these steps in sync
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
-        with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
-
-      - name: "Set up Python"
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
-        with:
-          python-version-file: ".python-version"
-
-      - name: Install the project
-        run: uv sync --all-extras --dev --locked
-
-      - name: Install this project
-        run: "uv pip install -e ."
-
-      - name: Run Ruff
-        run: uv run ruff check --output-format=github
-
-      - name: Check code format
-        run: uv run ruff format --check
-
-      - name: Run ty
-        run: uv run ty check
-
-      - name: Run Pytest
-        run: uv run pytest -p no:sugar --verbose
-
   deploy:
     name: Deploy
-    # Gate the production deploy on the full test suite passing on the merge commit.
-    needs: quality
+    # Only deploy if the Code Quality run succeeded.
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04
     environment: prod
 
     # Keep deploy-staging.yaml and these steps in sync
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          # Build/deploy the exact commit that passed Code Quality, not the branch tip.
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7

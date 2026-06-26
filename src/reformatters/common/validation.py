@@ -439,10 +439,9 @@ def check_for_expected_shards(store: Store, ds: xr.Dataset) -> ValidationResult:
     for var in map(str, ds.data_vars):  # our keys are strs, xr types as Hashable
         ordered_dims = ds[var].dims
 
-        # Unsharded vars store one chunk per object key, so partition by chunks then.
-        kind = "shards" if ds[var].encoding.get("shards") is not None else "chunks"
         shard_counts_per_dim = [
-            len(iterating.dimension_slices(ds, str(dim), kind)) for dim in ordered_dims
+            len(iterating.dimension_slices(ds, str(dim), "shards"))
+            for dim in ordered_dims
         ]
         ranges = [range(shard_count) for shard_count in shard_counts_per_dim]
         expected_shard_indexes = {
