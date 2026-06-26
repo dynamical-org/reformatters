@@ -226,7 +226,7 @@ class VirtualTestRegionJob(
 
 
 class VirtualTestTemplateConfig(TemplateConfig[VirtualTestDataVar]):
-    dims: dict[Group, tuple[Dim, ...]] = {  # noqa: RUF012
+    dims: dict[Group, tuple[Dim, ...]] = {
         ROOT: ("init_time", "lead_time", "latitude", "longitude")
     }
     append_dim: AppendDim = "init_time"

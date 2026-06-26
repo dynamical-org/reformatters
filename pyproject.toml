@@ -121,6 +121,7 @@ ignore = [
     "SLF",     # private member access
     "ARG001",  # unused function arg
     "ARG005",  # unused lambda arg
+    "RUF012",  # mutable default — moot for the pydantic test configs (see below)
 ]
 # Template configs declare `dims: dict[Group, tuple] = {ROOT: (...)}`. These are
 # pydantic fields (copied per instance), so the mutable-default concern is moot,

@@ -71,7 +71,7 @@ def _data_var(name: str, group: Group, n_dims: int) -> _DV:
 
 
 class MultiGroupConfig(TemplateConfig[_DV]):
-    dims: dict[Group, tuple[Dim, ...]] = {  # noqa: RUF012
+    dims: dict[Group, tuple[Dim, ...]] = {
         ROOT: ("init_time", "latitude", "longitude"),
         "pressure_level": ("init_time", "latitude", "longitude", "pressure_level"),
         "model_level": ("init_time", "latitude", "longitude", "model_level"),
@@ -203,7 +203,7 @@ def test_validator_rejects_orphan_vertical_group() -> None:
 
 def test_validator_group_must_add_its_own_dim() -> None:
     class BadAddedDim(MultiGroupConfig):
-        dims: dict[Group, tuple[Dim, ...]] = {  # noqa: RUF012
+        dims: dict[Group, tuple[Dim, ...]] = {
             ROOT: ("init_time", "latitude", "longitude"),
             # pressure_level group adds "model_level" instead of "pressure_level"
             "pressure_level": ("init_time", "latitude", "longitude", "model_level"),
@@ -216,7 +216,7 @@ def test_validator_group_must_add_its_own_dim() -> None:
 
 def test_validator_root_var_name_cannot_equal_group_name() -> None:
     class RootNameCollision(MultiGroupConfig):
-        dims: dict[Group, tuple[Dim, ...]] = {  # noqa: RUF012
+        dims: dict[Group, tuple[Dim, ...]] = {
             ROOT: ("init_time", "latitude", "longitude"),
             "pressure_level": ("init_time", "latitude", "longitude", "pressure_level"),
         }
@@ -236,7 +236,7 @@ def test_validator_root_var_name_cannot_equal_group_name() -> None:
 
 def test_validator_uniform_append_dim_chunk_size() -> None:
     class NonUniformAppendChunk(MultiGroupConfig):
-        dims: dict[Group, tuple[Dim, ...]] = {  # noqa: RUF012
+        dims: dict[Group, tuple[Dim, ...]] = {
             ROOT: ("init_time", "latitude", "longitude"),
             "pressure_level": ("init_time", "latitude", "longitude", "pressure_level"),
         }

@@ -37,7 +37,7 @@ class ExampleDatasetAttributes(DatasetAttributes):
 class ExampleConfig(TemplateConfig[ExampleDataVar]):
     """A minimal concrete implementation to test the happy-path logic."""
 
-    dims: dict[Group, tuple[Dim, ...]] = {ROOT: ("time",)}  # noqa: RUF012
+    dims: dict[Group, tuple[Dim, ...]] = {ROOT: ("time",)}
     append_dim: AppendDim = "time"
     append_dim_start: Timestamp = pd.Timestamp("2000-01-01")
     append_dim_frequency: Timedelta = pd.Timedelta(days=1)

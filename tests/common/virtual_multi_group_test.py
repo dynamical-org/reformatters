@@ -313,7 +313,7 @@ class MultiGroupRegionJob(
 
 
 class MultiGroupTemplateConfig(TemplateConfig[DataVar[BaseInternalAttrs]]):
-    dims: dict[Group, tuple[Dim, ...]] = {  # noqa: RUF012
+    dims: dict[Group, tuple[Dim, ...]] = {
         ROOT: ("init_time", "lead_time", "latitude", "longitude"),
         "pressure_level": (
             "init_time",
