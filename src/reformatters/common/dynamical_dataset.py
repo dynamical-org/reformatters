@@ -406,6 +406,17 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         has_icechunk = len(icechunk_repos) > 0
         branch_name = f"_job_{reformat_job_name}" if has_icechunk else "main"
 
+        # 0. Guard: an operational update must not change the structure of the
+        # already-published store. Worker 0 checks before any writes; failing here
+        # leaves the live archive untouched.
+        if is_first and update_template_with_results:
+            existing_ds = xr.open_zarr(
+                self.store_factory.primary_store(), decode_timedelta=True, chunks=None
+            )
+            template_utils.assert_no_structural_drift_from_existing_store(
+                template_ds, existing_ds, self.template_config.append_dim
+            )
+
         # 1. Set up / wait for setup
         setup_info = parallel_coordination.parallel_setup(
             self.store_factory,

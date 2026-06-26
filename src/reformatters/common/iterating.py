@@ -34,7 +34,7 @@ def chunk_slices(size: int, chunk_size: int) -> Sequence[slice]:
     """chunk_slices(5, 2) => slice(0, 2), slice(2, 4), slice(4, 6)"""
     indexes = range(0, size + chunk_size, chunk_size)
     slices = tuple(starmap(slice, pairwise(indexes)))
-    assert (s0.stop == s1.start for s0, s1 in pairwise(slices))
+    assert all(s0.stop == s1.start for s0, s1 in pairwise(slices))
     return slices
 
 

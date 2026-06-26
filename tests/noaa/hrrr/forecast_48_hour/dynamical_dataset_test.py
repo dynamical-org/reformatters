@@ -9,7 +9,10 @@ from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
     NoaaHrrrForecast48HourDataset,
 )
-from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+from tests.common.dynamical_dataset_test import (
+    NOOP_STORAGE_CONFIG,
+    assert_configured_validators,
+)
 from tests.xarray_testing import assert_no_nulls
 
 
@@ -154,6 +157,8 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
         point_ds["downward_short_wave_radiation_flux_surface"].values,
         [[1.296875, 36.75], [912.0, 868.0]],
     )
+
+    assert_configured_validators(dataset)
 
 
 def test_operational_kubernetes_resources(

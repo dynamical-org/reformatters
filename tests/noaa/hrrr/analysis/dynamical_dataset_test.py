@@ -10,7 +10,10 @@ from reformatters.noaa.hrrr.analysis.dynamical_dataset import (
     NoaaHrrrAnalysisDataset,
 )
 from tests.chunk_utils import shrink_chunks_and_shards
-from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+from tests.common.dynamical_dataset_test import (
+    NOOP_STORAGE_CONFIG,
+    assert_configured_validators,
+)
 from tests.xarray_testing import assert_no_nulls
 
 
@@ -110,6 +113,8 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     assert np.all(np.isfinite(point_ds["temperature_2m"].values))
     assert np.isnan(point_ds["precipitation_surface"].values[0])
     assert np.all(np.isfinite(point_ds["precipitation_surface"].values[1:]))
+
+    assert_configured_validators(dataset)
 
 
 def test_operational_kubernetes_resources(

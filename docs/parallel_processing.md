@@ -29,6 +29,10 @@ The only fork outside this call is the coordination lifecycle: everything runs t
 
 Readers must always see a consistent view — either the old data or the fully updated data, never a partial state with some variables or time steps missing.
 
+### Structure guard (operational updates)
+
+Before any writes, worker 0 of an operational update asserts that the update template's structure still matches the already-published store — for every variable present in the store, the variable must still exist and its dims, on-disk dtype, chunks, and shards must be unchanged (`template_utils.assert_no_structural_drift_from_existing_store`, called from `DynamicalDataset._process_region_jobs`). A drifted template (a removed/renamed variable or a changed dtype/dims/chunks/shards) would corrupt the existing archive or break readers, so the update fails fast and leaves the live store untouched. Changing structure requires a backfill, which is exempt from this guard.
+
 ### Zarr v3 stores
 
 Data chunks can be written directly because they occupy new shard regions that readers won't access until the metadata (which defines the dataset's dimensions) is updated. The metadata write is deferred until the last worker completes, making all new data visible atomically.

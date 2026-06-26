@@ -7,6 +7,7 @@ import pytest
 import xarray as xr
 from gribberish.zarr import GribberishCodec
 
+from reformatters.common.config import Config, Env
 from reformatters.common.config_models import (
     BaseInternalAttrs,
     DataVar,
@@ -15,6 +16,7 @@ from reformatters.common.config_models import (
 )
 from reformatters.common.template_utils import (
     _get_mode_from_path_store,
+    assert_no_structural_drift_from_existing_store,
     assign_var_metadata,
     empty_copy_with_reindex,
     make_empty_variable,
@@ -273,3 +275,109 @@ def test_empty_copy_with_reindex_with_derive_fn() -> None:
     )
     assert "derived" in result.coords
     assert len(result.coords["derived"]) == 2
+
+
+# --- assert_no_structural_drift_from_existing_store tests ---
+
+
+def _structured_var(
+    *,
+    dtype: object = "float32",
+    chunks: tuple[int, ...] = (1, 3, 4),
+    shards: tuple[int, ...] | None = (2, 3, 4),
+    dims: tuple[str, ...] = ("time", "latitude", "longitude"),
+) -> xr.DataArray:
+    sizes = {"time": 4, "latitude": 3, "longitude": 4}
+    da = xr.DataArray(
+        np.zeros(tuple(sizes[d] for d in dims), dtype=np.float32), dims=dims
+    )
+    da.encoding = {"dtype": dtype, "chunks": chunks, "shards": shards}
+    return da
+
+
+def _structured_ds(**vars_: xr.DataArray) -> xr.Dataset:
+    return xr.Dataset(dict(vars_) or {"var0": _structured_var()})
+
+
+def test_structural_drift_passes_for_identical_structure() -> None:
+    # Existing store reports a numpy dtype object; template reports a string.
+    existing = _structured_ds(var0=_structured_var(dtype=np.dtype("float32")))
+    template = _structured_ds(var0=_structured_var(dtype="float32"))
+    assert_no_structural_drift_from_existing_store(template, existing, "time")
+
+
+def test_structural_drift_allows_new_variables_in_template() -> None:
+    existing = _structured_ds(var0=_structured_var())
+    template = _structured_ds(var0=_structured_var(), var_new=_structured_var())
+    assert_no_structural_drift_from_existing_store(template, existing, "time")
+
+
+def test_structural_drift_allows_append_dim_chunk_and_shard_change() -> None:
+    # Under the test env the append dim's chunk geometry is auto-shrunk to the (varying)
+    # template length, so a differing append-axis chunk/shard must NOT trip the guard.
+    # Non-append axes (here latitude/longitude) are unchanged.
+    existing = _structured_ds(var0=_structured_var(chunks=(1, 3, 4), shards=(2, 3, 4)))
+    template = _structured_ds(var0=_structured_var(chunks=(2, 3, 4), shards=(4, 3, 4)))
+    assert_no_structural_drift_from_existing_store(template, existing, "time")
+
+
+def test_structural_drift_checks_append_axis_outside_test_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # In dev/prod the append-dim chunk/shard IS part of the structural contract.
+    monkeypatch.setattr(Config, "env", Env.prod)
+    existing = _structured_ds(var0=_structured_var(chunks=(1, 3, 4)))
+    template = _structured_ds(var0=_structured_var(chunks=(2, 3, 4)))  # append axis
+    with pytest.raises(ValueError, match=r"var0\.chunks"):
+        assert_no_structural_drift_from_existing_store(template, existing, "time")
+
+
+def test_structural_drift_allows_new_variables_outside_test_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Adding a new variable must not trip the guard even when every axis is compared.
+    monkeypatch.setattr(Config, "env", Env.prod)
+    existing = _structured_ds(var0=_structured_var())
+    template = _structured_ds(var0=_structured_var(), var_new=_structured_var())
+    assert_no_structural_drift_from_existing_store(template, existing, "time")
+
+
+def test_structural_drift_detects_removed_variable() -> None:
+    existing = _structured_ds(var0=_structured_var(), var1=_structured_var())
+    template = _structured_ds(var0=_structured_var())
+    with pytest.raises(ValueError, match="var1: in existing store but missing"):
+        assert_no_structural_drift_from_existing_store(template, existing, "time")
+
+
+def test_structural_drift_detects_dtype_change() -> None:
+    existing = _structured_ds(var0=_structured_var(dtype="float32"))
+    template = _structured_ds(var0=_structured_var(dtype="float64"))
+    with pytest.raises(ValueError, match=r"var0\.dtype"):
+        assert_no_structural_drift_from_existing_store(template, existing, "time")
+
+
+def test_structural_drift_detects_non_append_chunks_change() -> None:
+    # Drift a spatial (non-append) axis: longitude chunk 4 -> 2.
+    existing = _structured_ds(var0=_structured_var(chunks=(1, 3, 4)))
+    template = _structured_ds(var0=_structured_var(chunks=(1, 3, 2)))
+    with pytest.raises(ValueError, match=r"var0\.chunks"):
+        assert_no_structural_drift_from_existing_store(template, existing, "time")
+
+
+def test_structural_drift_detects_non_append_shards_change() -> None:
+    # Drift a spatial (non-append) axis: longitude shard 4 -> 2.
+    existing = _structured_ds(var0=_structured_var(shards=(2, 3, 4)))
+    template = _structured_ds(var0=_structured_var(shards=(2, 3, 2)))
+    with pytest.raises(ValueError, match=r"var0\.shards"):
+        assert_no_structural_drift_from_existing_store(template, existing, "time")
+
+
+def test_structural_drift_detects_dims_change() -> None:
+    existing = _structured_ds(
+        var0=_structured_var(dims=("time", "latitude", "longitude"))
+    )
+    template = _structured_ds(
+        var0=_structured_var(dims=("time", "longitude", "latitude"))
+    )
+    with pytest.raises(ValueError, match=r"var0\.dims"):
+        assert_no_structural_drift_from_existing_store(template, existing, "time")

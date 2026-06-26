@@ -23,9 +23,9 @@ class GefsAnalysisDataset(DynamicalDataset[GEFSDataVar, GefsAnalysisSourceFileCo
         workers = 2
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            # GEFS f006 (last lead time used) available ~3h48m after init on NOMADS. +3 min buffer.
+            # GEFS f006 (last lead time used) NOMADS last-modified ~init+3h48m. +3 min buffer.
             schedule="51 3,9,15,21 * * *",
-            pod_active_deadline=timedelta(hours=1),
+            pod_active_deadline=timedelta(minutes=30),  # runs take <22 min
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="14",  # fit on 16 vCPU node
@@ -38,7 +38,7 @@ class GefsAnalysisDataset(DynamicalDataset[GEFSDataVar, GefsAnalysisSourceFileCo
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="51 4,10,16,22 * * *",  # 1h (pod_active_deadline) after reformat
+            schedule="21 4,10,16,22 * * *",  # 30m (pod_active_deadline) after reformat at :51
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,

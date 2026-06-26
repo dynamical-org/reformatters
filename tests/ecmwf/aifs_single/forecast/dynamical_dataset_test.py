@@ -9,7 +9,10 @@ from reformatters.common import validation
 from reformatters.ecmwf.aifs_single.forecast.dynamical_dataset import (
     EcmwfAifsSingleForecastDataset,
 )
-from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+from tests.common.dynamical_dataset_test import (
+    NOOP_STORAGE_CONFIG,
+    assert_configured_validators,
+)
 
 
 @pytest.fixture
@@ -111,6 +114,8 @@ def test_backfill_local_and_operational_update(
     np.testing.assert_allclose(
         updated_point.precipitation_surface.values, precip_expected, rtol=1e-4
     )
+
+    assert_configured_validators(dataset)
 
 
 def test_operational_kubernetes_resources(

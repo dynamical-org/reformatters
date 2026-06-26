@@ -33,7 +33,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
             # (Ensemble stats get uploaded 15-20 mins later, but we don't process those.)
             schedule="50 7 * * *",
             suspend=False,
-            pod_active_deadline=timedelta(hours=4.5),
+            pod_active_deadline=timedelta(minutes=35),  # runs take <26 min
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3",
@@ -46,7 +46,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="5 12 * * *",
+            schedule="25 8 * * *",  # 35m (pod_active_deadline) after reformat at 07:50
             suspend=False,
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,

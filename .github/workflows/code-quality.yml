@@ -5,6 +5,9 @@ permissions:
 
 on:
   pull_request:
+  # Also run on main so the operational deploy can depend on this via workflow_run.
+  push:
+    branches: [main]
 
 jobs:
   quality:

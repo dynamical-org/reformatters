@@ -10,7 +10,10 @@ from reformatters.noaa.gefs.forecast_35_day.dynamical_dataset import (
     GefsForecast35DayDataset,
 )
 from tests.chunk_utils import shrink_chunks_and_shards
-from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+from tests.common.dynamical_dataset_test import (
+    NOOP_STORAGE_CONFIG,
+    assert_configured_validators,
+)
 
 
 @pytest.fixture
@@ -36,7 +39,7 @@ def test_operational_kubernetes_resources(dataset: GefsForecast35DayDataset) -> 
 
     # Check validation job
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    assert validation_cron_job.schedule == "3 10 * * *"
+    assert validation_cron_job.schedule == "3 7 * * *"
     assert validation_cron_job.secret_names == dataset.store_factory.k8s_secret_names()
     assert validation_cron_job.cpu == "3"
     assert validation_cron_job.memory == "30G"
@@ -291,3 +294,5 @@ def test_backfill_local_and_operational_update(
     assert point_ds["temperature_2m"] == 23.25
     assert point_ds["precipitation_surface"] == 1.2040138e-05
     assert point_ds["maximum_temperature_2m"] == 23.875
+
+    assert_configured_validators(dataset)

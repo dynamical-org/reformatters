@@ -4,9 +4,10 @@ from datetime import datetime, timedelta
 from functools import partial
 from pathlib import Path
 from typing import ClassVar
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import icechunk
+import icechunk.store
 import numpy as np
 import pandas as pd
 import pytest
@@ -38,12 +39,65 @@ from reformatters.common.storage import (
 )
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.virtual_region_job import VirtualRegionJob
 
 NOOP_STORAGE_CONFIG = StorageConfig(
     base_path="noop",
     k8s_secret_name="noop-secret",  # noqa: S106
     format=DatasetFormat.ZARR3,
 )
+
+
+_RECENCY_VALIDATORS = (
+    validation.check_forecast_current_data,
+    validation.check_analysis_current_data,
+)
+
+
+def assert_configured_validators(dataset: DynamicalDataset) -> None:
+    """Run a dataset's configured validators (plus the shard-presence check that
+    validate_dataset adds) against the store its e2e test built.
+
+    Every validator must return a ValidationResult rather than raising — this catches
+    validator config bugs that would silently crash the validation cronjob (a partial()
+    with a wrong signature, or a validator that errors on the dataset's real dimension
+    structure). The recency validators (check_*_current_data) must additionally pass:
+    we patch pd.Timestamp.now() to the store's latest append-dim coordinate so "now"
+    lines up with the freshest data the e2e test wrote.
+
+    Content validators (NaN fraction, shard presence) are only checked for not raising,
+    not for passing: e2e stores are partial (a subset of variables), so they legitimately
+    report failure.
+
+    Mirrors validate_dataset: virtual datasets are opted out of check_for_expected_shards
+    (manifest-aware validators for them are a separate planned phase).
+    """
+    store = dataset.store_factory.primary_store()
+    ds = xr.open_zarr(
+        store,
+        chunks=None,
+        consolidated=not isinstance(store, icechunk.store.IcechunkStore),
+    )
+    latest = pd.Timestamp(ds[dataset.template_config.append_dim].max().values)
+
+    validators = list(dataset.validators())
+    if not issubclass(dataset.region_job_class, VirtualRegionJob):
+        validators.append(partial(validation.check_for_expected_shards, store))
+
+    with patch.object(pd.Timestamp, "now", classmethod(lambda cls, *a, **k: latest)):
+        for validator in validators:
+            result = validator(ds)
+            assert isinstance(result, validation.ValidationResult), (
+                f"Validator {getattr(validator, 'func', validator)!r} returned "
+                f"{type(result)!r}, expected ValidationResult"
+            )
+            underlying = getattr(validator, "func", validator)
+            if underlying in _RECENCY_VALIDATORS:
+                name = getattr(underlying, "__name__", underlying)
+                assert result.passed, (
+                    f"Recency validator {name} should pass with now={latest}: "
+                    f"{result.message}"
+                )
 
 
 class ExampleDatasetStorageConfig(StorageConfig):

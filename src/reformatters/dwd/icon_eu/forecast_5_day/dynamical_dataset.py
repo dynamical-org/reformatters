@@ -59,15 +59,15 @@ class DwdIconEuForecast5DayDataset(
             secret_names=["source-coop-storage-options-key"],
         )
 
-        # ICON-EU runs at 00, 06, 12, 18 UTC. DWD's complete forecast is available ~3h45m after
-        # init. We schedule the reformat 3 minutes after that (3h48m after init). The archive job
-        # may not have finished copying to Source Coop yet, in which case download_file falls back
-        # to reading directly from DWD.
+        # ICON-EU runs at 00, 06, 12, 18 UTC. DWD's complete forecast (f120) is available by
+        # ~init+3h49m (p99). We schedule the reformat 3 minutes after that (3h52m after init).
+        # The archive job may not have finished copying to Source Coop yet, in which case
+        # download_file falls back to reading directly from DWD.
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="48 3,9,15,21 * * *",
-            pod_active_deadline=timedelta(minutes=5),
+            schedule="52 3,9,15,21 * * *",
+            pod_active_deadline=timedelta(minutes=10),  # runs take <5 min
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3",
@@ -81,7 +81,7 @@ class DwdIconEuForecast5DayDataset(
 
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="53 3,9,15,21 * * *",
+            schedule="2 4,10,16,22 * * *",  # 10m (pod_active_deadline) after reformat at :52
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
