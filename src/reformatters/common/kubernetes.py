@@ -17,8 +17,11 @@ from reformatters.common.config import Config
 _SECRET_MOUNT_PATH = "/secrets"  # noqa: S105
 _SECRET_CONTENTS_KEY = "contents"  # noqa: S105
 
-# Heartbeat URL map, (re)written by `deploy` via betterstack.reconcile_heartbeats.
+# Heartbeat URL map, (re)written by `deploy` via reconcile_heartbeats.
 BETTERSTACK_HEARTBEATS_SECRET_NAME = "betterstack-heartbeats"  # noqa: S105
+
+# Staging cron jobs are renamed with this prefix; they are excluded from heartbeat monitoring.
+STAGING_CRON_NAME_PREFIX = "stage-"
 
 
 class Job(pydantic.BaseModel):

@@ -5,10 +5,11 @@ from datetime import timedelta
 from typing import Any
 from unittest.mock import Mock
 
+import httpx
 import pytest
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
-from reformatters.common import betterstack, deploy
+from reformatters.common import deploy, staging
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 
@@ -59,8 +60,8 @@ def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setenv("BETTERSTACK_API_KEY_RW", "test-token")
     mock_reconcile = Mock(return_value={})
-    monkeypatch.setattr(betterstack, "reconcile_heartbeats", mock_reconcile)
-    monkeypatch.setattr(betterstack, "write_heartbeat_secret", Mock())
+    monkeypatch.setattr(deploy, "reconcile_heartbeats", mock_reconcile)
+    monkeypatch.setattr(deploy, "write_heartbeat_secret", Mock())
 
     example_datasets = [
         ExampleDatasetInDevelopment(),
@@ -115,3 +116,157 @@ def test_deploy_requires_betterstack_api_key(monkeypatch: pytest.MonkeyPatch) ->
             [ExampleDataset1()],  # ty: ignore[invalid-argument-type]
             docker_image="test-image-tag",
         )
+
+
+def test_deploy_staging_skips_heartbeats(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Staging crons are renamed; no heartbeats are provisioned and no API key is needed.
+    monkeypatch.setattr(subprocess, "run", Mock())
+    monkeypatch.delenv("BETTERSTACK_API_KEY_RW", raising=False)
+    mock_reconcile = Mock()
+    monkeypatch.setattr(deploy, "reconcile_heartbeats", mock_reconcile)
+
+    def transform(cronjob: CronJob) -> CronJob:
+        return staging.rename_cronjob_for_staging(cronjob, "example-dataset-1", "0.0.1")
+
+    deploy.deploy_operational_resources(
+        [ExampleDataset1()],  # ty: ignore[invalid-argument-type]
+        docker_image="test-image-tag",
+        dataset_id_filter="example-dataset-1",
+        cronjob_transform=transform,
+    )
+    mock_reconcile.assert_not_called()
+
+
+def _cron(cls: type, name: str, schedule: str, deadline: timedelta) -> ReformatCronJob:
+    return cls(
+        name=name,
+        schedule=schedule,
+        pod_active_deadline=deadline,
+        image="image:tag",
+        dataset_id="example-dataset",
+        cpu="1",
+        memory="1G",
+    )
+
+
+def test_schedule_period() -> None:
+    assert deploy.schedule_period("0 0 * * *") == timedelta(days=1)
+    assert deploy.schedule_period("38 5,11,17,23 * * *") == timedelta(hours=6)
+
+
+def test_heartbeat_specs() -> None:
+    cron = _cron(
+        ReformatCronJob, "example-dataset-update", "0 */6 * * *", timedelta(hours=2)
+    )
+    start, complete = deploy.heartbeat_specs(cron)
+
+    assert start.key == "example-dataset_update_start"
+    assert start.name == "reformatters example-dataset update start"
+    assert start.period == timedelta(hours=6)
+    assert start.grace == timedelta(minutes=10)
+
+    assert complete.key == "example-dataset_update_complete"
+    assert complete.grace == timedelta(minutes=10) + timedelta(hours=2)
+
+
+def test_reconcile_heartbeats_create_and_update(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("BETTERSTACK_API_KEY_RW", "test-token")
+
+    # One heartbeat already exists with stale grace (forces a PATCH); others are created.
+    existing_name = "reformatters example-dataset update start"
+    requests: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append((request.method, request.url.path))
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "id": "1",
+                            "attributes": {
+                                "name": existing_name,
+                                "url": "https://hb.example/existing",
+                                "period": 21600,
+                                "grace": 1,
+                            },
+                        }
+                    ],
+                    "pagination": {"next": None},
+                },
+            )
+        if request.method == "PATCH":
+            return httpx.Response(200, json={"data": {"id": "1", "attributes": {}}})
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "id": "new",
+                    "attributes": {"url": f"https://hb.example/{len(requests)}"},
+                }
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    monkeypatch.setattr(
+        deploy,
+        "_api_client",
+        lambda token: httpx.Client(
+            transport=transport, base_url="https://uptime.betterstack.com/api/v2"
+        ),
+    )
+
+    cron_jobs = [
+        _cron(
+            ReformatCronJob, "example-dataset-update", "0 */6 * * *", timedelta(hours=1)
+        ),
+        _cron(
+            ValidationCronJob,
+            "example-dataset-validate",
+            "0 */6 * * *",
+            timedelta(hours=1),
+        ),
+    ]
+    url_map = deploy.reconcile_heartbeats(cron_jobs)
+
+    assert set(url_map) == {
+        "example-dataset_update_start",
+        "example-dataset_update_complete",
+        "example-dataset_validate_start",
+        "example-dataset_validate_complete",
+    }
+    assert ("PATCH", "/api/v2/heartbeats/1") in requests
+    assert sum(1 for method, _ in requests if method == "POST") == 3
+
+
+def test_provision_heartbeats_skips_non_eligible_crons(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Archive and staging crons are filtered out, so no key is required and nothing is provisioned.
+    monkeypatch.delenv("BETTERSTACK_API_KEY_RW", raising=False)
+    mock_reconcile = Mock()
+    monkeypatch.setattr(deploy, "reconcile_heartbeats", mock_reconcile)
+
+    archive = CronJob(
+        command=["archive-grib-files"],
+        workers_total=1,
+        parallelism=1,
+        name="example-dataset-archive-grib-files",
+        schedule="0 0 * * *",
+        image="image:tag",
+        dataset_id="example-dataset",
+        cpu="1",
+        memory="1G",
+    )
+    staging_update = _cron(
+        ReformatCronJob,
+        "stage-example-dataset-v2-update",
+        "0 0 * * *",
+        timedelta(hours=1),
+    )
+
+    deploy._provision_heartbeats([archive, staging_update])
+    mock_reconcile.assert_not_called()
