@@ -44,6 +44,12 @@ class ExampleDataVar(DataVar[ExampleInternalAttrs]):
 
 
 class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
+    # Single-level dataset: all vars live at the root. To add a vertical group, add an
+    # entry whose key is the group/dimension name and whose dims are the root dims plus
+    # that dimension, then set group=... on the group's DataVars (their zarr path becomes
+    # "<group>/<name>"). E.g.:
+    #   "pressure_level": ("init_time", "lead_time", "latitude", "longitude", "pressure_level"),
+    # See docs/plans/vertical_dimension_structure.md.
     dims: dict[Group, tuple[Dim, ...]] = {
         ROOT: ("init_time", "lead_time", "latitude", "longitude")
     }

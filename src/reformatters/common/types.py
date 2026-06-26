@@ -34,6 +34,10 @@ type Dim = Literal[
     "x",
     "y",
     "statistic",
+    # Vertical group dimensions (a group's name equals its dimension name); keep in
+    # sync with VerticalGroup in config_models.py.
+    "pressure_level",
+    "model_level",
 ]
 type AppendDim = Literal["init_time", "time"]
 assert set(get_args(AppendDim)) <= set(get_args(Dim))

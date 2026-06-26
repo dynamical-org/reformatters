@@ -29,6 +29,7 @@ from reformatters.common import storage
 from reformatters.common.config_models import DataVar
 from reformatters.common.iterating import (
     chunk_slices,
+    node_group_name,
     split_groups,
     spread_evenly,
 )
@@ -49,9 +50,9 @@ type CoordinateValue = int | float | pd.Timestamp | pd.Timedelta | str
 def walk_data_arrays(tree: xr.DataTree) -> Iterator[tuple[str, xr.DataArray]]:
     """Yield (var_path, DataArray) for every data var across all of a template's groups."""
     for node in tree.subtree:
-        group_prefix = "" if node.path == "/" else node.path.removeprefix("/") + "/"
+        prefix = f"{group}/" if (group := node_group_name(node)) else ""
         for name, data_array in node.to_dataset().data_vars.items():
-            yield f"{group_prefix}{name}", data_array
+            yield f"{prefix}{name}", data_array
 
 
 class SourceFileStatus(Enum):
@@ -126,8 +127,7 @@ def region_slice(s: slice) -> slice:
 
 class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     tmp_store: Path
-    # The whole-dataset template as a DataTree (root + one node per vertical group;
-    # a single-level dataset is a one-node tree). Each data var lives at its var.path.
+    # Whole-dataset template tree: root + one node per vertical group (single-level = one node).
     template_ds: xr.DataTree
     data_vars: Sequence[DATA_VAR]
     append_dim: AppendDim
@@ -173,19 +173,17 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         return self.region
 
     def _flat_job_dataset(self) -> xr.Dataset:
-        """This job's data vars gathered from the template tree into one flat Dataset.
-
-        Keyed by bare variable name (unique within a job's source-file var group). Used
-        to read coordinate values over the processing region and, for materialized jobs,
-        as per-variable write geometry. Vars from different vertical groups bring their
-        own dims, so the result may mix dimensionalities.
-        """
+        """This job's data vars gathered from the template tree into one flat Dataset,
+        keyed by bare variable name (unique within a job's source-file var group)."""
         paths = {var.path for var in self.data_vars}
         arrays = {
             data_array.name: data_array
             for path, data_array in walk_data_arrays(self.template_ds)
             if path in paths
         }
+        assert len(arrays) == len(paths), (
+            f"data var names collide across groups within one job: {sorted(paths)}"
+        )
         return xr.Dataset(arrays)
 
     def generate_source_file_coords(
@@ -348,7 +346,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             Keep only shards containing at least one of the specified timestamps.
             Timestamps must exactly match coordinate values. Empty list returns no jobs.
         filter_variable_names : list[str] | None, default None
-            Keep only the specified variables. If None, all variables are included.
+            Keep only the specified variables, matched by bare name or by var.path
+            (a bare name selects that var in every group). If None, all are included.
 
         Returns
         -------
@@ -380,11 +379,11 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             data_var_groups = [data_vars]
 
         # Regions along append dimension.
-        # Materialized arrays partition by shard; virtual arrays use chunks.
-        # All data vars must agree: a mix would partition by whichever var is first,
-        # and a chunk-sized region over a sharded var would cause multiple workers
-        # to write to the same shard. The append-dim chunk/shard size is uniform
-        # across vertical groups (enforced in TemplateConfig), so partitioning is shared.
+        # Materialized arrays partition by shard; virtual arrays use chunks. All data
+        # vars must agree: a mix would partition by whichever var is first, and a
+        # chunk-sized region over a sharded var would let multiple workers write the
+        # same shard. The tree-walking twin of iterating.dimension_slices (whose flat
+        # Dataset can't hold same-named vars from different groups).
         sharded = {da.encoding.get("shards") is not None for _, da in template_arrays}
         assert len(sharded) == 1, "all data vars must agree on whether they are sharded"
         kind = "shards" if sharded.pop() else "chunks"

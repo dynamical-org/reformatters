@@ -25,14 +25,10 @@ log = get_logger(__name__)
 def _to_zarr_metadata(
     template: xr.DataTree, store: Store | Path, mode: Literal["w", "w-"]
 ) -> None:
-    # safe_chunks=False: with compute=False only metadata and numpy coordinates
-    # are written, no dask chunks, so dask/zarr chunk alignment is irrelevant.
-    # The alternative, aligning dask chunks to the stored chunks (align_chunks=True
-    # or chunking templates at stored sizes), builds a task-per-chunk dask graph
-    # even under compute=False, which is slow/OOM on our largest arrays.
-    # write_inherited_coords=True writes each group's own copy of the shared coords
-    # so groups open standalone; see docs/plans/vertical_dimension_structure.md. It
-    # is a no-op for a single-level dataset (a one-node tree, no child groups).
+    # safe_chunks=False: with compute=False no dask chunks are written, so alignment
+    # is irrelevant; aligning instead builds a per-chunk dask graph that OOMs large arrays.
+    # write_inherited_coords=True writes each group's own copy of the shared coords so
+    # groups open standalone; see docs/plans/vertical_dimension_structure.md.
     template.to_zarr(
         store,
         mode=mode,
@@ -53,8 +49,7 @@ def write_metadata(
     replica_stores: list[Store]
 
     assert_fill_values_set(template_ds)
-    # A single-level dataset's template is a plain Dataset; wrap it as a one-node tree
-    # so there is one write path. A one-node tree writes byte-identically to the Dataset.
+    # A plain Dataset (single-level) wraps as a one-node tree so there's one write path.
     template = (
         template_ds
         if isinstance(template_ds, xr.DataTree)

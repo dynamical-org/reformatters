@@ -29,10 +29,12 @@ from zarr.core.metadata import ArrayV3Metadata
 
 from reformatters.common import template_utils, validation
 from reformatters.common.config_models import (
+    ROOT,
     BaseInternalAttrs,
     DataVar,
     DataVarAttrs,
     Encoding,
+    Group,
 )
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
@@ -224,7 +226,9 @@ class VirtualTestRegionJob(
 
 
 class VirtualTestTemplateConfig(TemplateConfig[VirtualTestDataVar]):
-    dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
+    dims: dict[Group, tuple[Dim, ...]] = {  # noqa: RUF012
+        ROOT: ("init_time", "lead_time", "latitude", "longitude")
+    }
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = APPEND_DIM_START
     append_dim_frequency: Timedelta = APPEND_DIM_FREQ

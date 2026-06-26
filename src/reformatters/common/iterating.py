@@ -7,6 +7,11 @@ from typing import Any, Literal
 import xarray as xr
 
 
+def node_group_name(node: xr.DataTree) -> str | None:
+    """The group name of a DataTree node, or None for the root."""
+    return None if node.path == "/" else node.path.removeprefix("/")
+
+
 def dimension_slices(
     ds: xr.Dataset, dim: str, kind: Literal["shards", "chunks"] = "shards"
 ) -> Sequence[slice]:

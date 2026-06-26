@@ -14,6 +14,7 @@ from zarr.core.metadata import ArrayV3Metadata
 
 from reformatters.common import storage
 from reformatters.common.config_models import DataVar
+from reformatters.common.iterating import node_group_name
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     DATA_VAR,
@@ -322,11 +323,9 @@ class VirtualRegionJob(
         Returns None if a label is not in the template's coords (the filter treats
         that as "remaining").
         """
-        # Geometry comes from the checked-in template, not the in-code
-        # DataVar.encoding which could drift; shared by the filter and emitter.
-        # Index by var.path so a vertical-group var resolves to its group node, and
-        # read coordinate positions from the var's own DataArray (which carries its
-        # vertical coord, absent from the root).
+        # Geometry comes from the checked-in template, not in-code DataVar.encoding
+        # which could drift. Index by var.path so a vertical-group var resolves to its
+        # group node (its DataArray carries the vertical coord, absent from the root).
         template_var = self.template_ds[var.path]
         dims = tuple(str(d) for d in template_var.dims)
         chunks = template_var.encoding["chunks"]
@@ -364,13 +363,13 @@ class VirtualRegionJob(
     ) -> None:
         """Grow the append dim (and its dependent coords) to `needed_append_dim_size`
         in every group (DataTree.to_zarr has no append_dim, so each node is appended
-        on its own; groups may sit at different lengths transiently)."""
+        on its own)."""
         # compute=False keeps data vars dask-lazy so the decode-only serializer is
-        # never invoked. Each (store, group)'s missing slice is from its own committed
-        # size: replicas can be a commit ahead, so the primary's slice would duplicate.
+        # never invoked. Each (store, group)'s missing slice is read from its own
+        # committed size.
         for store in stores:
             for node in self.template_ds.subtree:
-                group = None if node.path == "/" else node.path.removeprefix("/")
+                group = node_group_name(node)
                 current_size = self._append_dim_size(store, group)
                 if needed_append_dim_size <= current_size:
                     continue

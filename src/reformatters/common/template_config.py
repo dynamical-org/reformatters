@@ -16,6 +16,7 @@ from reformatters.common.config_models import (
     DataVar,
     Group,
 )
+from reformatters.common.iterating import node_group_name
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, Timestamp
 
@@ -137,7 +138,7 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
 
         nodes: dict[str, xr.Dataset] = {}
         for node in on_disk.subtree:
-            group_prefix = "" if node.path == "/" else node.path.removeprefix("/") + "/"
+            group_prefix = f"{group}/" if (group := node_group_name(node)) else ""
             ds = template_utils.empty_copy_with_reindex(
                 node.to_dataset(),
                 self.append_dim,
@@ -249,6 +250,8 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         assert used <= declared, (
             f"data var group(s) {used - declared} are not declared in dims"
         )
+        orphans = {g for g in self.dims if g is not ROOT} - used
+        assert not orphans, f"vertical group(s) {orphans} declared in dims but unused"
 
         paths = [var.path for var in self.data_vars]
         assert len(paths) == len(set(paths)), (

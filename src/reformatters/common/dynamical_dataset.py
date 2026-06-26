@@ -23,7 +23,7 @@ from reformatters.common import (
     validation,
 )
 from reformatters.common.config import Config
-from reformatters.common.config_models import DataVar
+from reformatters.common.config_models import ROOT, DataVar
 from reformatters.common.iterating import digest, get_worker_jobs, item
 from reformatters.common.kubernetes import (
     CronJob,
@@ -697,4 +697,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 assert var.encoding.compressors == (), (
                     f"virtual data var {var.name} must declare compressors=()"
                 )
+        else:
+            # The materialized chunk-write path (zarr.copy_data_var, write_shards) is
+            # not yet group-aware; only virtual datasets support vertical groups today.
+            grouped = [
+                v.path for v in self.template_config.data_vars if v.group is not ROOT
+            ]
+            assert not grouped, (
+                f"materialized datasets do not yet support vertical groups: {grouped}"
+            )
         return self

@@ -217,5 +217,4 @@ class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS_co]):
 
     @property
     def path(self) -> str:
-        """The variable's zarr path / identity key (`name` at root, else `group/name`)."""
         return var_path(self.group, self.name)
