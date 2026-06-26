@@ -55,9 +55,6 @@
 #         subset_ds["your_variable"].values, [190.0, 163.0, 135.0]
 #     )
 
-#     # Run this dataset's configured validators against the built store: every
-#     # validator must not raise, and the recency (check_*_current_data) validators
-#     # must pass. Catches validator config bugs that would crash the validation cron.
 #     assert_configured_validators(dataset)
 
 

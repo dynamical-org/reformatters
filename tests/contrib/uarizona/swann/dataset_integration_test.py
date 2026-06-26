@@ -12,9 +12,7 @@ from reformatters.contrib.uarizona.swann.analysis.region_job import (
     UarizonaSwannAnalysisRegionJob,
     UarizonaSwannAnalysisSourceFileCoord,
 )
-from tests.common.dynamical_dataset_test import (
-    assert_configured_validators,
-)
+from tests.common.dynamical_dataset_test import assert_configured_validators
 
 pytestmark = [
     pytest.mark.slow,

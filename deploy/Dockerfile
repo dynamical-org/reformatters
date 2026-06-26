@@ -132,9 +132,7 @@ COPY . /app/
 USER app
 WORKDIR /app
 
-# Build-time smoke test: fail the build if the app can't start, so a broken image never
-# ships. Mirrors the prod ENTRYPOINT (python src/reformatters/__main__.py) — the exact
-# invocation k8s jobs use, just with --help.
+# Light test that the app can be run
 RUN <<EOT
 python -V
 python src/reformatters/__main__.py --help

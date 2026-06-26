@@ -14,9 +14,7 @@ from reformatters.contrib.noaa.ndvi_cdr.analysis.region_job import (
     NoaaNdviCdrAnalysisRegionJob,
 )
 from tests.chunk_utils import shrink_chunks_and_shards
-from tests.common.dynamical_dataset_test import (
-    assert_configured_validators,
-)
+from tests.common.dynamical_dataset_test import assert_configured_validators
 
 pytestmark = pytest.mark.slow
 

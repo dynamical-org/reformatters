@@ -1,8 +1,6 @@
 name: Deploy Operational Updates
 
-# Gate the production deploy on Code Quality passing on main: this fires only after
-# the "Code Quality" workflow completes for a push to main, so the full test suite
-# runs once (no duplicated steps here) and the deploy depends on its result.
+# Gate the production deploy on Code Quality passing on main.
 on:
   workflow_run:
     workflows: ["Code Quality"]
@@ -26,7 +24,6 @@ env:
 jobs:
   deploy:
     name: Deploy
-    # Only deploy if the Code Quality run succeeded.
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04
     environment: prod
@@ -35,7 +32,6 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          # Build/deploy the exact commit that passed Code Quality, not the branch tip.
           ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Install uv

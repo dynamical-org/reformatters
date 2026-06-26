@@ -18,9 +18,7 @@ from reformatters.noaa.gefs.forecast_10_day_spatial.region_job import (
     GefsForecast10DaySpatialRegionJob,
 )
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
-from tests.common.dynamical_dataset_test import (
-    assert_configured_validators,
-)
+from tests.common.dynamical_dataset_test import assert_configured_validators
 
 
 @pytest.fixture
