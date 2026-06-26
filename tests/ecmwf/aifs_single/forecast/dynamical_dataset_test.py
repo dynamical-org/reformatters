@@ -9,7 +9,10 @@ from reformatters.common import validation
 from reformatters.ecmwf.aifs_single.forecast.dynamical_dataset import (
     EcmwfAifsSingleForecastDataset,
 )
-from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+from tests.common.dynamical_dataset_test import (
+    NOOP_STORAGE_CONFIG,
+    assert_configured_validators_do_not_crash,
+)
 
 
 @pytest.fixture
@@ -111,6 +114,10 @@ def test_backfill_local_and_operational_update(
     np.testing.assert_allclose(
         updated_point.precipitation_surface.values, precip_expected, rtol=1e-4
     )
+
+    # Smoke-run the configured validators against the built store ("now" is mocked to
+    # the test-data era above) to catch validator config bugs that would crash the cron.
+    assert_configured_validators_do_not_crash(dataset)
 
 
 def test_operational_kubernetes_resources(

@@ -132,8 +132,9 @@ COPY . /app/
 USER app
 WORKDIR /app
 
-# Light test that the app can be run
+# Build-time smoke test: fail the build if the packaged CLI can't start, so a broken
+# image never ships. Runs the installed `main` console script (uv is absent at runtime).
 RUN <<EOT
 python -V
-python src/reformatters/__main__.py --help
+main --help
 EOT

@@ -7,6 +7,7 @@ from typing import ClassVar
 from unittest.mock import Mock
 
 import icechunk
+import icechunk.store
 import numpy as np
 import pandas as pd
 import pytest
@@ -44,6 +45,33 @@ NOOP_STORAGE_CONFIG = StorageConfig(
     k8s_secret_name="noop-secret",  # noqa: S106
     format=DatasetFormat.ZARR3,
 )
+
+
+def assert_configured_validators_do_not_crash(dataset: DynamicalDataset) -> None:
+    """Smoke-run a dataset's configured validators (plus the shard-presence check that
+    validate_dataset adds) against the store built by an e2e test, asserting each
+    returns a ValidationResult rather than raising.
+
+    This catches the validator config bugs that silently take down the validation
+    cronjob — a validator that crashes on the dataset's real dimension structure, or a
+    partial() with a wrong signature. It deliberately does NOT require passed=True: e2e
+    stores are partial (a subset of variables, historical dates), so content checks may
+    legitimately report failure.
+    """
+    store = dataset.store_factory.primary_store()
+    ds = xr.open_zarr(
+        store,
+        chunks=None,
+        consolidated=not isinstance(store, icechunk.store.IcechunkStore),
+    )
+    validators = list(dataset.validators())
+    validators.append(partial(validation.check_for_expected_shards, store))
+    for validator in validators:
+        result = validator(ds)
+        assert isinstance(result, validation.ValidationResult), (
+            f"Validator {getattr(validator, 'func', validator)!r} returned "
+            f"{type(result)!r}, expected ValidationResult"
+        )
 
 
 class ExampleDatasetStorageConfig(StorageConfig):

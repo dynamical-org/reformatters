@@ -123,6 +123,82 @@ def sort_consolidated_metadata(zarr_json_path: Path) -> None:
         json.dump(zarr_json, f, indent=2)
 
 
+def _structural_signature(var: xr.DataArray, append_dim: str) -> dict[str, Any]:
+    """Structural fields of a variable that must stay stable for an existing store.
+
+    Compares the on-disk format (encoding dtype/chunks/shards) plus dims. dtype is
+    normalized through np.dtype because an in-code template stores it as a string
+    ("float32") while a reopened store reports a numpy dtype.
+
+    Chunk and shard sizes are compared on the non-append axes only. The append
+    dimension is the one that grows on every update, so its chunk/shard size is the
+    expansion axis (governed by fixed append-dim config and protected at PR time by the
+    template-drift test). Comparing it across a growing dimension would be fragile, and
+    test helpers that auto-shrink chunk geometry to the current size legitimately vary
+    it between a short backfill and a longer update.
+    """
+
+    def non_append_sizes(
+        value: tuple[int, ...] | list[int] | int | None,
+    ) -> tuple[int, ...] | None:
+        if value is None:
+            return None
+        sizes = (value,) if isinstance(value, int) else tuple(value)
+        return tuple(
+            size for axis, size in enumerate(sizes) if var.dims[axis] != append_dim
+        )
+
+    return {
+        "dims": tuple(var.dims),
+        "dtype": np.dtype(var.encoding["dtype"]),
+        "chunks (non-append)": non_append_sizes(var.encoding.get("chunks")),
+        "shards (non-append)": non_append_sizes(var.encoding.get("shards")),
+    }
+
+
+def assert_no_structural_drift_from_existing_store(
+    template_ds: xr.Dataset, existing_ds: xr.Dataset, append_dim: str
+) -> None:
+    """Fail an operational update whose template would change the structure of the
+    already-published store.
+
+    Operational updates write new chunks into an existing archive and then swap in the
+    template's metadata. If the template's structure has drifted from what readers
+    currently see — a removed/renamed variable, or a changed dtype, dims, or non-append
+    chunks/shards — the update would corrupt the archive or break readers. This guard
+    runs on worker 0 before any data is written and raises before damage is done.
+
+    Only variables present in `existing_ds` are checked; the template may add new
+    variables. Backfills are exempt (they rewrite the whole store and may legitimately
+    change structure), so callers only run this for operational updates.
+    """
+    mismatches: list[str] = []
+    for var_name in map(str, existing_ds.data_vars):
+        if var_name not in template_ds.data_vars:
+            mismatches.append(
+                f"{var_name}: in existing store but missing from update template"
+            )
+            continue
+
+        existing_sig = _structural_signature(existing_ds[var_name], append_dim)
+        template_sig = _structural_signature(template_ds[var_name], append_dim)
+        for field, existing_value in existing_sig.items():
+            template_value = template_sig[field]
+            if existing_value != template_value:
+                mismatches.append(
+                    f"{var_name}.{field}: existing store has {existing_value!r}, "
+                    f"update template has {template_value!r}"
+                )
+
+    if mismatches:
+        raise ValueError(
+            "Update template structure does not match the existing store. "
+            "Operational updates cannot change the structure of a published dataset; "
+            "run a backfill to change structure. Mismatches:\n"
+            + "\n".join(f"- {m}" for m in mismatches)
+        )
+
+
 def make_empty_variable(
     dims: tuple[str, ...],
     coords: dict[str, Any],

@@ -14,6 +14,9 @@ from reformatters.contrib.noaa.ndvi_cdr.analysis.region_job import (
     NoaaNdviCdrAnalysisRegionJob,
 )
 from tests.chunk_utils import shrink_chunks_and_shards
+from tests.common.dynamical_dataset_test import (
+    assert_configured_validators_do_not_crash,
+)
 
 pytestmark = pytest.mark.slow
 
@@ -106,3 +109,7 @@ def test_backfill_local_and_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
         .ndvi_usable.item(),
         0.623046875,
     )
+
+    # Smoke-run the configured validators against the built store ("now" is mocked to
+    # the test-data era above) to catch validator config bugs that would crash the cron.
+    assert_configured_validators_do_not_crash(dataset)

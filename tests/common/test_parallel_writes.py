@@ -317,6 +317,42 @@ class TestZarr3ParallelWrites:
         for var in ["var0", "var1", "var2", "var3"]:
             assert np.all(result[var].values == 1.0)
 
+    def test_update_rejects_structural_drift(self, tmp_path: Path) -> None:
+        """An operational update whose template changed a non-append structural field
+        (here, the longitude chunk size) is rejected by worker 0 before any writes."""
+        dataset = self._make_dataset(tmp_path)
+        initial_ds = _create_template_ds(num_time=2)
+        template_utils.write_metadata(initial_ds, dataset.store_factory)
+
+        # Drift the longitude (non-append) chunk on every data var (kept uniform so
+        # get_jobs works). An append-axis change alone would be allowed by the guard.
+        drifted_ds = _create_template_ds(num_time=4)
+        for var in drifted_ds.data_vars:
+            drifted_ds[var].encoding["chunks"] = (1, _LAT_SIZE, _LON_SIZE // 2)
+
+        all_jobs = ParallelRegionJob.get_jobs(
+            tmp_store=dataset._tmp_store(),
+            template_ds=drifted_ds,
+            append_dim="time",
+            all_data_vars=ParallelTemplateConfig().data_vars,
+            reformat_job_name="test",
+        )
+
+        with pytest.raises(ValueError, match="does not match the existing store"):
+            dataset._process_region_jobs(
+                all_jobs=all_jobs,
+                worker_index=0,
+                workers_total=1,
+                reformat_job_name="test",
+                template_ds=drifted_ds,
+                tmp_store=dataset._tmp_store(),
+                update_template_with_results=True,
+            )
+
+        # Guard ran before any writes: the store is untouched (still 2 time steps).
+        reader_ds = xr.open_zarr(dataset.store_factory.primary_store())
+        assert reader_ds.sizes["time"] == 2
+
     def test_coordination_files_cleaned_up(self, tmp_path: Path) -> None:
         dataset = self._make_dataset(tmp_path)
         template_ds = _create_template_ds()

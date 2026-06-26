@@ -12,7 +12,10 @@ from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.dwd.icon_eu.forecast_5_day.dynamical_dataset import (
     DwdIconEuForecast5DayDataset,
 )
-from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+from tests.common.dynamical_dataset_test import (
+    NOOP_STORAGE_CONFIG,
+    assert_configured_validators_do_not_crash,
+)
 from tests.xarray_testing import assert_no_nulls
 
 
@@ -170,6 +173,10 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     )
 
     _assert_temperature_decreases_with_latitude(updated_ds)
+
+    # Smoke-run the configured validators against the built store ("now" is mocked to
+    # the test-data era above) to catch validator config bugs that would crash the cron.
+    assert_configured_validators_do_not_crash(dataset)
 
 
 def _assert_temperature_decreases_with_latitude(ds: xr.Dataset) -> None:

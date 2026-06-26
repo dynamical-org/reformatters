@@ -12,6 +12,9 @@ from reformatters.contrib.uarizona.swann.analysis.region_job import (
     UarizonaSwannAnalysisRegionJob,
     UarizonaSwannAnalysisSourceFileCoord,
 )
+from tests.common.dynamical_dataset_test import (
+    assert_configured_validators_do_not_crash,
+)
 
 pytestmark = [
     pytest.mark.slow,
@@ -67,6 +70,10 @@ def test_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     np.testing.assert_array_equal(
         subset_ds.snow_water_equivalent.values, [35.0, 33.0, 29.0]
     )
+
+    # Smoke-run the configured validators against the built store ("now" is mocked to
+    # the test-data era above) to catch validator config bugs that would crash the cron.
+    assert_configured_validators_do_not_crash(dataset)
 
 
 def test_update_template_trimming(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
