@@ -18,6 +18,7 @@ from icechunk.store import IcechunkStore
 from pydantic import Field, computed_field, model_validator
 
 from reformatters.common import (
+    betterstack,
     parallel_coordination,
     template_utils,
     validation,
@@ -611,8 +612,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         send_in_progress: bool = True,
         send_result: bool = True,
     ) -> Iterator[None]:
-        # Don't require operational_kubernetes_resources to be defined unless sentry reporting is enabled
-        if not Config.is_sentry_enabled:
+        # Don't require operational_kubernetes_resources to be defined unless we're reporting.
+        heartbeat_urls = betterstack.load_heartbeat_urls()
+        if not Config.is_sentry_enabled and not heartbeat_urls:
             yield
             return
 
@@ -644,17 +646,35 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 },
             )
 
+        step: betterstack.Step = cron_job.command[0]  # ty: ignore[invalid-assignment]
+
+        def ping_heartbeat(role: betterstack.Role, *, failed: bool = False) -> None:
+            # Non-update/validate crons (e.g. archive) get no heartbeats.
+            if not heartbeat_urls or step not in betterstack.HEARTBEAT_STEPS:
+                return
+            # monitor_slug is the actual (staging-aware) cron name, so staging crons
+            # ping their own heartbeats rather than production's.
+            prefix = betterstack.cron_name_prefix(monitor_slug, step)
+            key = betterstack.heartbeat_key(prefix, step, role)
+            assert key in heartbeat_urls, (
+                f"No Better Stack heartbeat for {key}; deploy to provision it."
+            )
+            betterstack.ping(heartbeat_urls[key], failed=failed)
+
         if send_in_progress:
             capture_checkin("in_progress")
+            ping_heartbeat("start")
         try:
             yield
         except Exception:
             if send_result:
                 capture_checkin("error")
+                ping_heartbeat("complete", failed=True)
             raise
         else:
             if send_result:
                 capture_checkin("ok")
+                ping_heartbeat("complete")
 
     @model_validator(mode="after")
     def _validate_virtual_storage(self) -> Self:

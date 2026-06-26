@@ -17,16 +17,20 @@ log = get_logger(__name__)
 # for the suffix (1 + 10 timestamp + 1 + 3 index + 1 + 5 random = 21, round to 20+1).
 _MAX_KUBERNETES_NAME_LENGTH = 42
 
+STAGING_CRON_NAME_PREFIX = "stage-"
+
 
 def staging_cronjob_name(dataset_id: str, version: str, suffix: str) -> str:
     """Build a staging cronjob name, trimming dataset_id if needed to fit the kubernetes limit."""
     version_dashes = version.replace(".", "-")
-    max_id_len = _MAX_KUBERNETES_NAME_LENGTH - len(f"stage--v{version_dashes}-{suffix}")
+    max_id_len = _MAX_KUBERNETES_NAME_LENGTH - len(
+        f"{STAGING_CRON_NAME_PREFIX}-v{version_dashes}-{suffix}"
+    )
     assert max_id_len > 0, (
         "Version and suffix are too long to fit in kubernetes name limit"
     )
     trimmed_id = dataset_id[:max_id_len].rstrip("-")
-    return f"stage-{trimmed_id}-v{version_dashes}-{suffix}"
+    return f"{STAGING_CRON_NAME_PREFIX}{trimmed_id}-v{version_dashes}-{suffix}"
 
 
 def rename_cronjob_for_staging(

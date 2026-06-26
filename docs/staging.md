@@ -87,6 +87,7 @@ uv run main cleanup-staging noaa-gfs-forecast 0.3.0 --force
 ```
 
 This deletes:
+- The staging Better Stack heartbeats (requires `BETTERSTACK_API_KEY_RW`)
 - Kubernetes cronjobs (`stage-noaa-gfs-forecast-v0-3-0-update`, `stage-noaa-gfs-forecast-v0-3-0-validate`)
 - The remote git branch (`stage/noaa-gfs-forecast/v0.3.0`)
 

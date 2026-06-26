@@ -650,6 +650,116 @@ def test_monitor_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
         pass
 
 
+def test_monitor_pings_heartbeats_success_and_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(type(Config), "is_sentry_enabled", False)
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(),
+        region_job_class=ExampleRegionJob,
+    )
+    urls = {
+        "example-dataset_update_start": "https://uptime.betterstack.com/start",
+        "example-dataset_update_complete": "https://uptime.betterstack.com/complete",
+    }
+    monkeypatch.setattr(
+        "reformatters.common.betterstack.load_heartbeat_urls", lambda: urls
+    )
+    pings: list[tuple[str, bool]] = []
+    monkeypatch.setattr(
+        "reformatters.common.betterstack.ping",
+        lambda url, *, failed=False: pings.append((url, failed)),
+    )
+
+    with dataset._monitor(ReformatCronJob, "job-name"):
+        pass
+    assert pings == [
+        ("https://uptime.betterstack.com/start", False),
+        ("https://uptime.betterstack.com/complete", False),
+    ]
+
+    pings.clear()
+    with pytest.raises(ValueError, match="failure"):  # noqa: SIM117
+        with dataset._monitor(ReformatCronJob, "job-name"):
+            raise ValueError("failure")
+    assert pings == [
+        ("https://uptime.betterstack.com/start", False),
+        ("https://uptime.betterstack.com/complete", True),
+    ]
+
+
+def test_monitor_heartbeat_missing_key_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(type(Config), "is_sentry_enabled", False)
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(),
+        region_job_class=ExampleRegionJob,
+    )
+    monkeypatch.setattr(
+        "reformatters.common.betterstack.load_heartbeat_urls",
+        lambda: {"some-other-dataset_update_start": "https://x"},
+    )
+
+    with pytest.raises(AssertionError, match="No Better Stack heartbeat"):  # noqa: SIM117
+        with dataset._monitor(ReformatCronJob, "job-name"):
+            pass
+
+
+def test_monitor_pings_staging_heartbeats(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A staging cron (CRON_JOB_NAME prefixed "stage-") pings its own heartbeats,
+    # not production's.
+    monkeypatch.setattr(type(Config), "is_sentry_enabled", False)
+    monkeypatch.setenv("CRON_JOB_NAME", "stage-example-dataset-v2-update")
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(),
+        region_job_class=ExampleRegionJob,
+    )
+    urls = {
+        "stage-example-dataset-v2_update_start": "https://hb.example/staging-start",
+        "stage-example-dataset-v2_update_complete": "https://hb.example/staging-complete",
+        "example-dataset_update_start": "https://hb.example/prod-start",
+    }
+    monkeypatch.setattr(
+        "reformatters.common.betterstack.load_heartbeat_urls", lambda: urls
+    )
+    pings: list[tuple[str, bool]] = []
+    monkeypatch.setattr(
+        "reformatters.common.betterstack.ping",
+        lambda url, *, failed=False: pings.append((url, failed)),
+    )
+
+    with dataset._monitor(ReformatCronJob, "job-name"):
+        pass
+    assert pings == [
+        ("https://hb.example/staging-start", False),
+        ("https://hb.example/staging-complete", False),
+    ]
+
+
+def test_monitor_skips_heartbeats_for_non_update_validate_cron(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(type(Config), "is_sentry_enabled", False)
+    dataset = ExampleDatasetWithThreeCronJobs()
+    monkeypatch.setattr(
+        "reformatters.common.betterstack.load_heartbeat_urls",
+        lambda: {"unused_update_start": "https://x"},
+    )
+    pings: list[tuple[str, bool]] = []
+    monkeypatch.setattr(
+        "reformatters.common.betterstack.ping",
+        lambda url, *, failed=False: pings.append((url, failed)),
+    )
+
+    # The archive cron's step isn't update/validate, so no heartbeat is pinged.
+    with dataset._monitor(
+        CronJob, "job-name", cron_job_name=f"{dataset.dataset_id}-archive"
+    ):
+        pass
+    assert pings == []
+
+
 def test_backfill_kubernetes_overwrite_existing_flag(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

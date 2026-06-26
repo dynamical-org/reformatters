@@ -140,6 +140,7 @@ The details here depend on the computing resources and the Zarr storage location
    - `DYNAMICAL_ENV=prod uv run main $DATASET_ID backfill-kubernetes <append-dim-end> <jobs-per-pod> <max-parallelism>`, then track the job with `kubectl get jobs`.
 1. See operational cronjobs in your kubernetes cluster and check their schedule: `kubectl get cronjobs`.
 1. To enable issue reporting and cron monitoring with the error reporting service Sentry, create a secret in your kubernetes cluster with your Sentry account's DSN: `kubectl create secret generic sentry --from-literal='DYNAMICAL_SENTRY_DSN=xxx'`.
+1. Deploying (`uv run main deploy`, with `BETTERSTACK_API_KEY_RW` set) automatically provisions four Better Stack heartbeats per dataset (`{update,validate}` × `{start,complete}`) for the new cron jobs and writes their URLs to the `betterstack-heartbeats` secret — no manual setup per dataset.
 
 ## 7. Validate
 

@@ -9,7 +9,9 @@ import pytest
 
 from reformatters.common.config import Config, Env
 from reformatters.common.kubernetes import (
+    BETTERSTACK_HEARTBEATS_SECRET_NAME,
     Job,
+    ReformatCronJob,
     _load_secret_from_kubernetes_api,
     load_secret,
 )
@@ -233,6 +235,30 @@ def test_as_kubernetes_object_with_custom_values() -> None:
         "resources"
     ]["requests"]["storage"]
     assert storage_request == "50G"
+
+
+def test_cronjob_mounts_betterstack_heartbeats_secret() -> None:
+    cron_job = ReformatCronJob(
+        name="example-dataset-update",
+        schedule="0 0 * * *",
+        image="image:tag",
+        dataset_id="example-dataset",
+        cpu="1",
+        memory="1G",
+    )
+    pod_spec: dict[str, Any] = cron_job.as_kubernetes_object()["spec"]["jobTemplate"][
+        "spec"
+    ]["template"]["spec"]
+
+    volume_names = {vol["name"] for vol in pod_spec["volumes"]}
+    mount = next(
+        m
+        for m in pod_spec["containers"][0]["volumeMounts"]
+        if m["name"] == BETTERSTACK_HEARTBEATS_SECRET_NAME
+    )
+    assert BETTERSTACK_HEARTBEATS_SECRET_NAME in volume_names
+    assert mount["mountPath"] == f"/secrets/{BETTERSTACK_HEARTBEATS_SECRET_NAME}.json"
+    assert mount["readOnly"] is True
 
 
 @pytest.mark.parametrize(
