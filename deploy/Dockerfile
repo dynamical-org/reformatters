@@ -132,9 +132,10 @@ COPY . /app/
 USER app
 WORKDIR /app
 
-# Build-time smoke test: fail the build if the packaged CLI can't start, so a broken
-# image never ships. Runs the installed `main` console script (uv is absent at runtime).
+# Build-time smoke test: fail the build if the app can't start, so a broken image never
+# ships. Mirrors the prod ENTRYPOINT (python src/reformatters/__main__.py) — the exact
+# invocation k8s jobs use, just with --help.
 RUN <<EOT
 python -V
-main --help
+python src/reformatters/__main__.py --help
 EOT
