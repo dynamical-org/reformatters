@@ -119,7 +119,6 @@ def region_slice(s: slice) -> slice:
 
 class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     tmp_store: Path
-    # Whole-dataset template tree: root + one node per vertical group (single-level = one node).
     template_ds: xr.DataTree
     data_vars: Sequence[DATA_VAR]
     append_dim: AppendDim
@@ -360,8 +359,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         # Materialized arrays partition by shard; virtual arrays use chunks. All data
         # vars must agree: a mix would partition by whichever var is first, and a
         # chunk-sized region over a sharded var would let multiple workers write the
-        # same shard. The tree-walking twin of iterating.dimension_slices (whose flat
-        # Dataset can't hold same-named vars from different groups).
+        # same shard.
         sharded = {da.encoding.get("shards") is not None for _, da in template_arrays}
         assert len(sharded) == 1, "all data vars must agree on whether they are sharded"
         kind = "shards" if sharded.pop() else "chunks"

@@ -195,10 +195,8 @@ def test_validator_rejects_orphan_vertical_group() -> None:
                 _data_var("temperature", "pressure_level", 4),
             ]
 
-    config = OrphanGroup()
-    assert config.groups == (ROOT, "pressure_level")  # the node is omitted...
     with pytest.raises(AssertionError, match="declared in dims but unused"):
-        config._assert_valid_structure()  # ...and the config is rejected
+        OrphanGroup()._assert_valid_structure()
 
 
 def test_validator_group_must_add_its_own_dim() -> None:

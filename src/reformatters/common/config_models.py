@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from enum import Enum, auto
 from typing import Annotated, Any, Generic, Literal, TypeVar
 
 import numcodecs
@@ -7,20 +6,7 @@ import numcodecs.abc
 import pydantic
 
 from reformatters.common.pydantic import FrozenBaseModel
-from reformatters.common.types import TimedeltaUnits, TimestampUnits
-
-
-class RootGroup(Enum):
-    ROOT = auto()  # pure sentinel; the root zarr group has no name
-
-
-ROOT = RootGroup.ROOT
-
-# A variable on a dense, comparable vertical dimension lives in a zarr group named
-# after that dimension (group name == dimension name). Expand as new types are added.
-type VerticalGroup = Literal["pressure_level", "model_level"]
-# A variable's group: ROOT (single-level, lives at the dataset root) or a vertical group.
-type Group = VerticalGroup | RootGroup
+from reformatters.common.types import ROOT, Group, TimedeltaUnits, TimestampUnits
 
 
 def var_path(group: Group, name: str) -> str:

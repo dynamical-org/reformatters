@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum, auto
 from typing import Annotated, Literal, get_args
 
 import numpy as np
@@ -34,10 +35,23 @@ type Dim = Literal[
     "x",
     "y",
     "statistic",
-    # Vertical group dimensions (a group's name equals its dimension name); keep in
-    # sync with VerticalGroup in config_models.py.
+    # Vertical group dimensions (a group's name equals its dimension name, see VerticalGroup).
     "pressure_level",
     "model_level",
 ]
 type AppendDim = Literal["init_time", "time"]
-assert set(get_args(AppendDim)) <= set(get_args(Dim))
+assert set(get_args(AppendDim.__value__)) <= set(get_args(Dim.__value__))
+
+
+class RootGroup(Enum):
+    ROOT = auto()  # pure sentinel; the root zarr group has no name
+
+
+ROOT = RootGroup.ROOT
+
+# A variable on a dense, comparable vertical dimension lives in a zarr group named
+# after that dimension (group name == dimension name). Expand as new types are added.
+type VerticalGroup = Literal["pressure_level", "model_level"]
+# A variable's group: ROOT (single-level, lives at the dataset root) or a vertical group.
+type Group = VerticalGroup | RootGroup
+assert set(get_args(VerticalGroup.__value__)) <= set(get_args(Dim.__value__))

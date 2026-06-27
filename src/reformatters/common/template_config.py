@@ -28,10 +28,6 @@ SPATIAL_REF_COORDS = ((), np.array(0))
 class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
     """Define a subclass of this class to configure the structure of a dataset."""
 
-    # Dimensions per zarr group, keyed by group. dims[ROOT] is the root/single-level
-    # dims; dims["pressure_level"] etc. are a vertical group's full dims (the shared
-    # dims plus the vertical dim, whose name equals the group name). A single-level
-    # dataset declares only {ROOT: (...)}. See docs/plans/vertical_dimension_structure.md.
     dims: dict[Group, tuple[Dim, ...]]
     append_dim: AppendDim
     append_dim_start: Timestamp
@@ -40,19 +36,18 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
     @property
     def all_dims(self) -> tuple[Dim, ...]:
         """De-duplicated union of every group's dims, root dims first."""
-        ordered: dict[Dim, None] = {}
+        result: list[Dim] = []
         for group_dims in self.dims.values():
             for dim in group_dims:
-                ordered[dim] = None
-        return tuple(ordered)
+                if dim not in result:
+                    result.append(dim)
+        return tuple(result)
 
     @property
     def groups(self) -> tuple[Group, ...]:
-        """Groups to write: ROOT (always, holds shared coords) then each vertical group
-        that has at least one data var (empty vertical groups are omitted)."""
-        used = {var.group for var in self.data_vars}
-        vertical = tuple(g for g in self.dims if g is not ROOT and g in used)
-        return (ROOT, *vertical)
+        """ROOT (holds shared coords) then each declared vertical group. Every declared
+        vertical group must be used by a var (enforced by `_assert_valid_structure`)."""
+        return (ROOT, *(g for g in self.dims if g is not ROOT))
 
     @computed_field
     @property
@@ -118,11 +113,7 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
 
     def get_template(self, end_time: DatetimeLike) -> xr.DataTree:
         """
-        Returns the template, as a DataTree, expanded to the given end time.
-
-        A single-level dataset is a one-node tree (just the root); a dataset with
-        vertical groups has one child node per group. Each node's append dimension
-        is reindexed and its coordinates re-derived.
+        Returns the template as a DataTree, with append dim in all Zarr groups expanded to the given end time.
 
         Args:
             end_time (pd.Timestamp): End time (exclusive) for the append dimension

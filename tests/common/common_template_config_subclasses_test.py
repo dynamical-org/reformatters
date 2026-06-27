@@ -83,6 +83,17 @@ def dataset(request: pytest.FixtureRequest) -> DynamicalDataset[Any, Any]:
 @pytest.mark.parametrize(
     "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
 )
+def test_template_config_structure_is_valid(
+    dataset: DynamicalDataset[Any, Any],
+) -> None:
+    """Every config passes the structure validators: group dims, (group, name)
+    uniqueness, no vertical dim unused by any var, uniform append-dim chunking, etc."""
+    dataset.template_config._assert_valid_structure()
+
+
+@pytest.mark.parametrize(
+    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+)
 def test_update_template_matches_existing_template(
     template_setup: TemplateSetup,
 ) -> None:
