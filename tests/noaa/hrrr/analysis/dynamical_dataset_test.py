@@ -5,6 +5,7 @@ import xarray as xr
 from numpy.testing import assert_array_equal
 
 from reformatters.common import validation
+from reformatters.common.config_models import ROOT
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.noaa.hrrr.analysis.dynamical_dataset import (
     NoaaHrrrAnalysisDataset,
@@ -152,7 +153,7 @@ def test_precipitation_not_null_at_shard_boundary() -> None:
 
     # Compute shard_2_start from dataset metadata
     precip_var = next(v for v in config.data_vars if v.name == "precipitation_surface")
-    time_dim_index = config.dims.index("time")
+    time_dim_index = config.dims[ROOT].index("time")
     assert isinstance(precip_var.encoding.shards, tuple)
     time_shard_size = precip_var.encoding.shards[time_dim_index]
 

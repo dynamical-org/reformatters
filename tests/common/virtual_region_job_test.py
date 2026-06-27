@@ -29,10 +29,12 @@ from zarr.core.metadata import ArrayV3Metadata
 
 from reformatters.common import template_utils, validation
 from reformatters.common.config_models import (
+    ROOT,
     BaseInternalAttrs,
     DataVar,
     DataVarAttrs,
     Encoding,
+    Group,
 )
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
@@ -92,7 +94,7 @@ def _create_template_ds(
     *,
     serializer: dict[str, Any] | None = None,
     chunks: tuple[int, ...] = (1, 1, N_LAT, N_LON),
-) -> xr.Dataset:
+) -> xr.DataTree:
     """Forecast-shaped virtual template (no shards; one chunk per message)."""
     init_times = pd.date_range(APPEND_DIM_START, periods=n_inits, freq=APPEND_DIM_FREQ)
     encoding: dict[str, Any] = {
@@ -143,7 +145,7 @@ def _create_template_ds(
     )
     ds["latitude"].encoding["fill_value"] = np.nan
     ds["longitude"].encoding["fill_value"] = np.nan
-    return ds
+    return xr.DataTree.from_dict({"/": ds})
 
 
 # --- synthetic virtual forecast dataset ---
@@ -203,8 +205,9 @@ class VirtualTestRegionJob(
         remaining: Sequence[VirtualTestSourceFileCoord],
     ) -> Iterator[Sequence[tuple[VirtualTestSourceFileCoord, Sequence[VirtualRef]]]]:
         data_var = self.data_vars[0]
-        init_index = self.template_ds.get_index("init_time")
-        lead_index = self.template_ds.get_index("lead_time")
+        template_root = self.template_ds.to_dataset()
+        init_index = template_root.get_index("init_time")
+        lead_index = template_root.get_index("lead_time")
         for group in batched(remaining, self.backfill_batch_files, strict=False):
             batch: list[tuple[VirtualTestSourceFileCoord, Sequence[VirtualRef]]] = []
             for coord in group:
@@ -223,7 +226,9 @@ class VirtualTestRegionJob(
 
 
 class VirtualTestTemplateConfig(TemplateConfig[VirtualTestDataVar]):
-    dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
+    dims: dict[Group, tuple[Dim, ...]] = {
+        ROOT: ("init_time", "lead_time", "latitude", "longitude")
+    }
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = APPEND_DIM_START
     append_dim_frequency: Timedelta = APPEND_DIM_FREQ
@@ -308,7 +313,7 @@ def _make_dataset(tmp_path: Path, *, n_inits: int = 4) -> VirtualTestDataset:
 
 
 def _make_region_job(
-    template_ds: xr.Dataset,
+    template_ds: xr.DataTree,
     *,
     region: slice,
     processing_mode: Literal["backfill", "update"] = "backfill",
@@ -689,10 +694,10 @@ def test_sync_dims_to_grows_then_is_noop(tmp_path: Path) -> None:
     # Derived coord (dims init_time x lead_time) expanded alongside the append dim.
     assert grown["valid_time"].sizes["init_time"] == 3
     np.testing.assert_array_equal(
-        grown["valid_time"].values, full_template["valid_time"].values[:3]
+        grown["valid_time"].values, full_template.to_dataset()["valid_time"].values[:3]
     )
     np.testing.assert_array_equal(
-        grown["init_time"].values, full_template["init_time"].values[:3]
+        grown["init_time"].values, full_template.to_dataset()["init_time"].values[:3]
     )
 
     # Already covered -> no-op (no write, session stays clean).
@@ -739,7 +744,7 @@ def test_sync_dims_to_resizes_each_store_from_its_own_size(tmp_path: Path) -> No
         ds = xr.open_zarr(repo.readonly_session("main").store, decode_timedelta=True)
         assert ds.sizes["init_time"] == 3
         np.testing.assert_array_equal(
-            ds["init_time"].values, full_template["init_time"].values[:3]
+            ds["init_time"].values, full_template.to_dataset()["init_time"].values[:3]
         )
 
 

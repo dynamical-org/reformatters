@@ -7,11 +7,13 @@ import xarray as xr
 from pydantic import computed_field
 
 from reformatters.common.config_models import (
+    ROOT,
     Coordinate,
     CoordinateAttrs,
     DatasetAttributes,
     DataVarAttrs,
     Encoding,
+    Group,
     StatisticsApproximate,
 )
 from reformatters.common.deaccumulation import (
@@ -35,13 +37,15 @@ from reformatters.ecmwf.ecmwf_config_models import (
 
 
 class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVar]):
-    dims: tuple[Dim, ...] = (
-        "init_time",
-        "lead_time",
-        "ensemble_member",
-        "latitude",
-        "longitude",
-    )
+    dims: dict[Group, tuple[Dim, ...]] = {
+        ROOT: (
+            "init_time",
+            "lead_time",
+            "ensemble_member",
+            "latitude",
+            "longitude",
+        )
+    }
     append_dim: AppendDim = "init_time"
     # While this dataset has a longer history, April 2024 is when we have enough 0.25 degree resolution data to start processing, with
     # the correct number of longitude values (1440), and the majority of the variables we are interested in are available.
@@ -331,8 +335,8 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
         encoding_float32_default = Encoding(
             dtype="float32",
             fill_value=np.nan,
-            chunks=tuple(var_chunks[d] for d in self.dims),
-            shards=tuple(var_shards[d] for d in self.dims),
+            chunks=tuple(var_chunks[d] for d in self.dims[ROOT]),
+            shards=tuple(var_shards[d] for d in self.dims[ROOT]),
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
 

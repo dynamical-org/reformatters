@@ -151,11 +151,11 @@ class FailRegionJob(MaterializedRegionJob[FailDataVar, FailSourceFileCoord]):
         cls,
         primary_store: Store,
         tmp_store: Path,
-        get_template_fn: Callable[[DatetimeLike], xr.Dataset],
+        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
         append_dim: AppendDim,
         all_data_vars: Sequence[FailDataVar],
         reformat_job_name: str,
-    ) -> tuple[Sequence[RegionJob[FailDataVar, FailSourceFileCoord]], xr.Dataset]:
+    ) -> tuple[Sequence[RegionJob[FailDataVar, FailSourceFileCoord]], xr.DataTree]:
         # Mirror the standard resume pattern: reprocess from the latest time already
         # in the store through the (injected) end time.
         existing_ds = xr.open_zarr(primary_store, decode_timedelta=True, chunks=None)
@@ -230,7 +230,7 @@ class FailDataset(DynamicalDataset[FailDataVar, FailSourceFileCoord]):
         return ()
 
 
-def _make_template_ds(end_time: DatetimeLike) -> xr.Dataset:
+def _make_template_ds(end_time: DatetimeLike) -> xr.DataTree:
     times = pd.date_range(_START, end_time, freq=_FREQ, inclusive="left")
     ds = xr.Dataset(
         {
@@ -261,7 +261,7 @@ def _make_template_ds(end_time: DatetimeLike) -> xr.Dataset:
     ds["time"].encoding["fill_value"] = -1
     ds["latitude"].encoding["fill_value"] = np.nan
     ds["longitude"].encoding["fill_value"] = np.nan
-    return ds
+    return xr.DataTree.from_dict({"/": ds})
 
 
 def _make_dataset(tmp_path: Path) -> FailDataset:
@@ -275,7 +275,7 @@ def _make_dataset(tmp_path: Path) -> FailDataset:
 def _run_jobs(
     dataset: FailDataset,
     all_jobs: Sequence[RegionJob[FailDataVar, FailSourceFileCoord]],
-    template_ds: xr.Dataset,
+    template_ds: xr.DataTree,
     reformat_job_name: str,
     *,
     update_template_with_results: bool,

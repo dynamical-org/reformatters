@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from reformatters.common.config_models import ROOT
 from reformatters.common.download import http_download_to_disk
 from reformatters.noaa.hrrr.analysis.template_config import (
     NoaaHrrrAnalysisTemplateConfig,
@@ -53,7 +54,7 @@ def test_template_config_attrs() -> None:
     """Test basic template configuration attributes."""
     config = NoaaHrrrAnalysisTemplateConfig()
 
-    assert config.dims == ("time", "y", "x")
+    assert config.dims[ROOT] == ("time", "y", "x")
     assert config.append_dim == "time"
 
     assert config.append_dim_start == pd.Timestamp("2014-10-01T00:00")

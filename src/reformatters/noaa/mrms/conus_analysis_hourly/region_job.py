@@ -87,7 +87,7 @@ class NoaaMrmsRegionJob(
         return slice(max(0, self.region.start - 1), self.region.stop)
 
     @classmethod
-    def source_groups(
+    def source_file_var_groups(
         cls,
         data_vars: Sequence[NoaaMrmsDataVar],
     ) -> Sequence[Sequence[NoaaMrmsDataVar]]:
@@ -239,13 +239,13 @@ class NoaaMrmsRegionJob(
         cls,
         primary_store: Store,
         tmp_store: Path,
-        get_template_fn: Callable[[DatetimeLike], xr.Dataset],
+        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
         append_dim: AppendDim,
         all_data_vars: Sequence[NoaaMrmsDataVar],
         reformat_job_name: str,
     ) -> tuple[
         Sequence[RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]],
-        xr.Dataset,
+        xr.DataTree,
     ]:
         existing_ds = xr.open_zarr(primary_store, chunks=None, decode_timedelta=True)
         ds_max_time = existing_ds[append_dim].max().item()

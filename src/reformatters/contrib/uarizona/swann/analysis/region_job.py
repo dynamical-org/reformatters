@@ -90,13 +90,13 @@ class UarizonaSwannAnalysisRegionJob(
         cls,
         primary_store: Store,
         tmp_store: Path,
-        get_template_fn: Callable[[DatetimeLike], xr.Dataset],
+        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
         append_dim: AppendDim,
         all_data_vars: Sequence[UarizonaSwannDataVar],
         reformat_job_name: str,
     ) -> tuple[
         Sequence[RegionJob[UarizonaSwannDataVar, UarizonaSwannAnalysisSourceFileCoord]],
-        xr.Dataset,
+        xr.DataTree,
     ]:
         existing_ds = xr.open_zarr(primary_store)
         append_dim_start = cls._update_append_dim_start(existing_ds)

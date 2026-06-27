@@ -7,10 +7,12 @@ import xarray as xr
 from pydantic import computed_field
 
 from reformatters.common.config_models import (
+    ROOT,
     Coordinate,
     CoordinateAttrs,
     DatasetAttributes,
     Encoding,
+    Group,
     StatisticsApproximate,
 )
 from reformatters.common.template_config import SPATIAL_REF_COORDS
@@ -27,7 +29,7 @@ from reformatters.noaa.hrrr.template_config import NoaaHrrrCommonTemplateConfig
 
 
 class NoaaHrrrAnalysisTemplateConfig(NoaaHrrrCommonTemplateConfig):
-    dims: tuple[Dim, ...] = ("time", "y", "x")
+    dims: dict[Group, tuple[Dim, ...]] = {ROOT: ("time", "y", "x")}
     append_dim: AppendDim = "time"
     # HRRR operational start is 2014-09-30. We start at 2014-10-01 to skip the incomplete first day.
     append_dim_start: Timestamp = pd.Timestamp("2014-10-01T00:00")
@@ -126,8 +128,8 @@ class NoaaHrrrAnalysisTemplateConfig(NoaaHrrrCommonTemplateConfig):
         encoding_float32_default = Encoding(
             dtype="float32",
             fill_value=np.nan,
-            chunks=tuple(var_chunks[d] for d in self.dims),
-            shards=tuple(var_shards[d] for d in self.dims),
+            chunks=tuple(var_chunks[d] for d in self.dims[ROOT]),
+            shards=tuple(var_shards[d] for d in self.dims[ROOT]),
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
 

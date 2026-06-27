@@ -105,9 +105,13 @@ def test_backfill_local_and_operational_update(
         monkeypatch.setattr(
             dataset,
             "_get_template",
-            lambda end: _set_time_shard_size(
-                orig(end).sel(time=slice(test_start, None)),
-                time_shard_size=2,
+            lambda end: xr.DataTree.from_dict(
+                {
+                    "/": _set_time_shard_size(
+                        orig(end).sel(time=slice(test_start, None)).to_dataset(),
+                        time_shard_size=2,
+                    )
+                }
             ),
         )
 

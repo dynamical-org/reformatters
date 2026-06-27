@@ -11,7 +11,7 @@ def test_get_template_spatial_ref() -> None:
     template_config = UarizonaSwannAnalysisTemplateConfig()
     ds = template_config.get_template(
         template_config.append_dim_start + pd.Timedelta(days=5)
-    )
+    ).to_dataset()
     original_attrs = deepcopy(ds.spatial_ref.attrs)
 
     # See https://nsidc.org/sites/default/files/documents/user-guide/nsidc-0719-v001-userguide.pdf

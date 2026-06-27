@@ -6,6 +6,7 @@ import pytest
 import xarray as xr
 
 from reformatters.common import validation
+from reformatters.common.config_models import ROOT
 from reformatters.noaa.gefs.analysis.dynamical_dataset import GefsAnalysisDataset
 from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
@@ -56,7 +57,7 @@ def test_template_config(dataset: GefsAnalysisDataset) -> None:
     """Test basic template configuration."""
     template_config = dataset.template_config
     assert template_config.dataset_id == "noaa-gefs-analysis"
-    assert template_config.dims == ("time", "latitude", "longitude")
+    assert template_config.dims[ROOT] == ("time", "latitude", "longitude")
     assert template_config.append_dim == "time"
 
 
@@ -81,7 +82,7 @@ def test_region_job_integration(dataset: GefsAnalysisDataset) -> None:
     assert len(data_vars) > 0
 
     # Test source grouping with template config variables
-    groups = region_job_class.source_groups(data_vars)
+    groups = region_job_class.source_file_var_groups(data_vars)
     assert len(groups) > 0
 
 

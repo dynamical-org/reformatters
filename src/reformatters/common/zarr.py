@@ -9,6 +9,7 @@ from icechunk.store import IcechunkStore
 from zarr.abc.store import Store
 from zarr.codecs import BloscCodec
 
+from reformatters.common.iterating import node_path_prefix
 from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
 
@@ -97,8 +98,22 @@ def _copy_data_var_chunks(
         sync_to_store(store, key, file.read_bytes())
 
 
+def _coord_chunk_globs(template_ds: xr.DataTree) -> list[str]:
+    """Glob patterns for every coordinate's chunk files, group-prefixed. The `c/**/*`
+    pattern catches chunked coords (`<coord>/c/0`, `<coord>/c/0/0`); the bare `c` catches
+    a scalar coord whose single chunk is the file `<coord>/c` (the caller's is_file filter
+    drops the `c/` directory matched by the bare pattern for non-scalar coords)."""
+    globs = []
+    for node in template_ds.subtree:
+        prefix = node_path_prefix(node)
+        for coord in node.to_dataset().coords:
+            globs.append(f"{prefix}{coord}/c/**/*")
+            globs.append(f"{prefix}{coord}/c")
+    return globs
+
+
 def copy_zarr_metadata(
-    template_ds: xr.Dataset,
+    template_ds: xr.DataTree,
     tmp_store: Path,
     primary_store: Store,
     replica_stores: Iterable[Store] = (),
@@ -118,11 +133,14 @@ def copy_zarr_metadata(
     assert not (icechunk_only and zarr3_only)
 
     coord_chunk_files: list[Path] = []
-    for coord in template_ds.coords:
-        coord_chunk_files.extend(
-            f for f in tmp_store.glob(f"{coord}/c/**/*") if f.is_file()
-        )
-    zarr_json_files = [tmp_store / "zarr.json", *tmp_store.glob("*/zarr.json")]
+    for coord_glob in _coord_chunk_globs(template_ds):
+        coord_chunk_files.extend(f for f in tmp_store.glob(coord_glob) if f.is_file())
+    # Shallowest first so a parent group's metadata is written before its children's
+    # (icechunk rejects a child array whose parent group does not yet exist).
+    zarr_json_files = sorted(
+        tmp_store.rglob("zarr.json"),
+        key=lambda p: len(p.relative_to(tmp_store).parts),
+    )
 
     def _ordered_files(store: Store) -> list[Path]:
         # Zarr v3: coordinate label chunks before metadata, so readers never see
@@ -181,7 +199,14 @@ def sync_to_store(store: Store, key: str, data: bytes) -> None:
     )
 
 
-def assert_fill_values_set(xr_obj: xr.Dataset | xr.DataArray) -> None:
+def assert_fill_values_set(
+    xr_obj: xr.Dataset | xr.DataArray | xr.DataTree,
+) -> None:
+    if isinstance(xr_obj, xr.DataTree):
+        for node in xr_obj.subtree:
+            assert_fill_values_set(node.to_dataset())
+        return
+
     if isinstance(xr_obj, xr.DataArray):
         assert "fill_value" in xr_obj.encoding, (
             f"Fill value not set for DataArray {xr_obj.name}"

@@ -6,6 +6,7 @@ import pytest
 import xarray as xr
 
 from reformatters.common import validation
+from reformatters.common.config_models import ROOT
 from reformatters.noaa.gefs.forecast_35_day.dynamical_dataset import (
     GefsForecast35DayDataset,
 )
@@ -57,7 +58,7 @@ def test_template_config(dataset: GefsForecast35DayDataset) -> None:
     """Test basic template configuration."""
     template_config = dataset.template_config
     assert template_config.dataset_id == "noaa-gefs-forecast-35-day"
-    assert template_config.dims == (
+    assert template_config.dims[ROOT] == (
         "init_time",
         "ensemble_member",
         "lead_time",
@@ -88,7 +89,7 @@ def test_region_job_integration(dataset: GefsForecast35DayDataset) -> None:
     assert len(data_vars) > 0
 
     # Test source grouping with template config variables
-    groups = region_job_class.source_groups(data_vars)
+    groups = region_job_class.source_file_var_groups(data_vars)
     assert len(groups) > 0
 
 

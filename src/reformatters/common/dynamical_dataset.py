@@ -23,7 +23,7 @@ from reformatters.common import (
     validation,
 )
 from reformatters.common.config import Config
-from reformatters.common.config_models import DataVar
+from reformatters.common.config_models import ROOT, DataVar
 from reformatters.common.iterating import digest, get_worker_jobs, item
 from reformatters.common.kubernetes import (
     CronJob,
@@ -174,6 +174,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
             if issubclass(self.region_job_class, VirtualRegionJob):
                 # Virtual operational updates are single-writer streaming (see docs/parallel_processing.md)
+                if is_first:
+                    self._assert_no_structural_drift(template_ds)
                 self._run_virtual_operational_update(
                     all_jobs, worker_index, workers_total
                 )
@@ -381,7 +383,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         worker_index: int,
         workers_total: int,
         reformat_job_name: str,
-        template_ds: xr.Dataset,
+        template_ds: xr.DataTree,
         tmp_store: Path,
         *,
         update_template_with_results: bool,
@@ -410,12 +412,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         # already-published store. Worker 0 checks before any writes; failing here
         # leaves the live archive untouched.
         if is_first and update_template_with_results:
-            existing_ds = xr.open_zarr(
-                self.store_factory.primary_store(), decode_timedelta=True, chunks=None
-            )
-            template_utils.assert_no_structural_drift_from_existing_store(
-                template_ds, existing_ds, self.template_config.append_dim
-            )
+            self._assert_no_structural_drift(template_ds)
 
         # 1. Set up / wait for setup
         setup_info = parallel_coordination.parallel_setup(
@@ -594,8 +591,19 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def _tmp_store(self) -> Path:
         return get_local_tmp_store()
 
-    def _get_template(self, append_dim_end: DatetimeLike) -> xr.Dataset:
+    def _get_template(self, append_dim_end: DatetimeLike) -> xr.DataTree:
         return self.template_config.get_template(pd.Timestamp(append_dim_end))
+
+    def _assert_no_structural_drift(self, template_ds: xr.DataTree) -> None:
+        existing_ds = xr.open_datatree(
+            self.store_factory.primary_store(),  # ty: ignore[invalid-argument-type]
+            engine="zarr",
+            decode_timedelta=True,
+            chunks=None,
+        )
+        template_utils.assert_no_structural_drift_from_existing_store(
+            template_ds, existing_ds, self.template_config.append_dim
+        )
 
     def _can_run_in_kubernetes(self) -> bool:
         # This is a method to support testing without changing the Config.env
@@ -695,4 +703,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 assert var.encoding.compressors == (), (
                     f"virtual data var {var.name} must declare compressors=()"
                 )
+        else:
+            # The materialized chunk-write path (zarr.copy_data_var, write_shards) is
+            # not yet group-aware; only virtual datasets support vertical groups today.
+            grouped = [
+                v.path for v in self.template_config.data_vars if v.group is not ROOT
+            ]
+            assert not grouped, (
+                f"materialized datasets do not yet support vertical groups: {grouped}"
+            )
         return self

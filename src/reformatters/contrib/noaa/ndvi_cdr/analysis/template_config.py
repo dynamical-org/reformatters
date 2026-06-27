@@ -7,6 +7,7 @@ import pandas as pd
 from pydantic import computed_field
 
 from reformatters.common.config_models import (
+    ROOT,
     BaseInternalAttrs,
     Coordinate,
     CoordinateAttrs,
@@ -14,6 +15,7 @@ from reformatters.common.config_models import (
     DataVar,
     DataVarAttrs,
     Encoding,
+    Group,
     StatisticsApproximate,
 )
 from reformatters.common.template_config import (
@@ -52,7 +54,7 @@ class NoaaNdviCdrDataVar(DataVar[NoaaNdviCdrInternalAttrs]):
 
 
 class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
-    dims: tuple[Dim, ...] = ("time", "latitude", "longitude")
+    dims: dict[Group, tuple[Dim, ...]] = {ROOT: ("time", "latitude", "longitude")}
     append_dim: AppendDim = "time"
     append_dim_start: Timestamp = pd.Timestamp("1981-06-24")
     append_dim_frequency: Timedelta = pd.Timedelta("1D")
@@ -221,16 +223,16 @@ class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
         encoding_float32_default = Encoding(
             dtype="float32",
             fill_value=0,
-            chunks=tuple(var_chunks[d] for d in self.dims),
-            shards=tuple(var_shards[d] for d in self.dims),
+            chunks=tuple(var_chunks[d] for d in self.dims[ROOT]),
+            shards=tuple(var_shards[d] for d in self.dims[ROOT]),
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
 
         encoding_int16_default = Encoding(
             dtype="int16",
             fill_value=QA_ENCODING_FILL_VALUE,
-            chunks=tuple(var_chunks[d] for d in self.dims),
-            shards=tuple(var_shards[d] for d in self.dims),
+            chunks=tuple(var_chunks[d] for d in self.dims[ROOT]),
+            shards=tuple(var_shards[d] for d in self.dims[ROOT]),
             compressors=[BLOSC_2BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
 

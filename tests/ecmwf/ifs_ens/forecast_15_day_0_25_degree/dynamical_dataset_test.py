@@ -44,11 +44,15 @@ def test_backfill_local_and_operational_update(
     monkeypatch.setattr(
         type(dataset.template_config),
         "get_template",
-        lambda self, end_time: shrink_chunks_and_shards(
-            orig_get_template(end_time).sel(
-                lead_time=slice("0h", "6h"), ensemble_member=slice(0, 1)
-            )
-        )[variables_to_check],
+        lambda self, end_time: xr.DataTree.from_dict(
+            {
+                "/": shrink_chunks_and_shards(
+                    orig_get_template(end_time).sel(
+                        lead_time=slice("0h", "6h"), ensemble_member=slice(0, 1)
+                    )
+                ).to_dataset()[variables_to_check]
+            }
+        ),
     )
     dataset.backfill_local(append_dim_end=pd.Timestamp("2024-04-02T00:00:00"))
 

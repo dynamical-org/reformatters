@@ -315,7 +315,9 @@ def test_operational_update_jobs(
 
     # Create a mock existing dataset with data up to 2025-09-28
     existing_end = pd.Timestamp("2025-09-28")
-    existing_ds = template_config.get_template(existing_end + pd.Timedelta("1s"))
+    existing_ds = template_config.get_template(
+        existing_end + pd.Timedelta("1s")
+    ).to_dataset()
 
     # Mock the primary store to return our existing dataset
     mock_store = Mock()

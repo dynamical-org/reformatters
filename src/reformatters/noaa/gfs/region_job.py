@@ -81,7 +81,7 @@ class NoaaGfsCommonRegionJob(
     """Common RegionJob for GFS datasets."""
 
     @classmethod
-    def source_groups(
+    def source_file_var_groups(
         cls,
         data_vars: Sequence[NoaaDataVar],
     ) -> Sequence[Sequence[NoaaDataVar]]:
@@ -194,11 +194,11 @@ class NoaaGfsCommonRegionJob(
         cls,
         primary_store: Store,
         tmp_store: Path,
-        get_template_fn: Callable[[DatetimeLike], xr.Dataset],
+        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
         append_dim: AppendDim,
         all_data_vars: Sequence[NoaaDataVar],
         reformat_job_name: str,
-    ) -> tuple[Sequence[RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]], xr.Dataset]:
+    ) -> tuple[Sequence[RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]], xr.DataTree]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset
         from its current state to include the latest available data.

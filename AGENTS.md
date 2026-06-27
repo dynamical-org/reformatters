@@ -61,9 +61,9 @@ Integrating a dataset requires subclassing three base classes. For a step by ste
 Base class: `src/reformatters/common/template_config.py`, commented example subclass: `src/reformatters/example/template_config.py`.
 
 Defines the **structure** of a dataset: dimensions, coordinates, data variables, and their attributes/encodings. Key responsibilities:
-- Declare `dims`, `append_dim`, `append_dim_start`, `append_dim_frequency`
+- Declare `dims`, `append_dim`, `append_dim_start`, `append_dim_frequency`. `dims` is keyed by group: `dims = {ROOT: (...)}` for a single-level dataset, plus one entry per vertical group (e.g. `"pressure_level": (..., "pressure_level")`).
 - Implement `dataset_attributes`, `coords`, `data_vars`, `dimension_coordinates()`, and optionally `derive_coordinates()`
-- Generates and persists zarr metadata to `templates/latest.zarr` via `update_template()`
+- Generates and persists zarr metadata to `templates/latest.zarr` via `update_template()`. The template is an `xarray.DataTree` (one node per group; a single-level dataset is a one-node tree); `get_template()` returns that DataTree.
 
 Always regenerate the template after any metadata changes with `uv run main <dataset-id> update-template`.
 
@@ -83,7 +83,7 @@ Defines the **process** for reformatting a region of the dataset: downloading, r
 - Implement `download_file()` - retrieve a source file to local disk
 - Implement `read_data()` - load data from a local file into a numpy array
 - Implement `operational_update_jobs()` (class method) - factory for operational update jobs
-- Optionally override `source_groups()` (vars that can be accessed together), `get_processing_region()` (buffer processed region to support deaccumulation & interpolation), `apply_data_transformations()` (deaccumulation, etc.), `update_template_with_results()` (trim based on actual data processed).
+- Optionally override `source_file_var_groups()` (vars that share a source file; a single source file may span vertical groups), `get_processing_region()` (buffer processed region to support deaccumulation & interpolation), `apply_data_transformations()` (deaccumulation, etc.), `update_template_with_results()` (trim based on actual data processed).
 
 A `RegionJob` processes a slice of the append dimension (e.g., one shard along `init_time` or `time`) for a group of data variables.
 

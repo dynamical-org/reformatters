@@ -14,6 +14,7 @@ from zarr.core.metadata import ArrayV3Metadata
 
 from reformatters.common import storage
 from reformatters.common.config_models import DataVar
+from reformatters.common.iterating import node_group_name
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     DATA_VAR,
@@ -130,7 +131,7 @@ class VirtualRegionJob(
             if index is None:
                 keyed.append((coord, None))
                 continue
-            array = group[var.name]
+            array = group[var.path]
             assert isinstance(array, zarr.Array)
             metadata = array.metadata
             assert isinstance(metadata, ArrayV3Metadata)
@@ -242,7 +243,12 @@ class VirtualRegionJob(
             self._processing_region_ds(), self.data_vars
         )
         remaining = self.filter_already_present(candidates, readonly_store)
-        current_size = self._append_dim_size(readonly_store)
+        # The smallest group, so the sync_dims_to shortcut below can never skip a group
+        # that lags root (e.g. after a partially-applied prior grow).
+        current_size = min(
+            self._append_dim_size(readonly_store, node_group_name(node))
+            for node in self.template_ds.subtree
+        )
 
         for file_refs_batch in self.process_virtual_refs(remaining):
             assert file_refs_batch, "process_virtual_refs yielded an empty batch"
@@ -276,7 +282,7 @@ class VirtualRegionJob(
         rep = self.representative_var(coord)
         probe = self.chunk_key(coord.out_loc(), rep)
         assert any(
-            ref.data_var.name == rep.name and self.chunk_key(ref.out_loc, rep) == probe
+            ref.data_var.path == rep.path and self.chunk_key(ref.out_loc, rep) == probe
             for ref in file_refs
         ), (
             f"refs for {coord} do not cover representative chunk "
@@ -295,7 +301,7 @@ class VirtualRegionJob(
                 f"ref {ref.data_var.name} {dict(ref.out_loc)} did not resolve to a "
                 "chunk index after expansion"
             )
-            specs_by_var.setdefault(ref.data_var.name, []).append(
+            specs_by_var.setdefault(ref.data_var.path, []).append(
                 VirtualChunkSpec(
                     index=list(index),
                     location=ref.location,
@@ -304,12 +310,13 @@ class VirtualRegionJob(
                 )
             )
         for store in stores:
-            for var_name, specs in specs_by_var.items():
+            for array_path, specs in specs_by_var.items():
+                # array_path is group-qualified (e.g. "pressure_level/temperature").
                 failed = store.set_virtual_refs(
-                    var_name, specs, validate_containers=True
+                    array_path, specs, validate_containers=True
                 )
                 assert failed is None, (
-                    f"{len(failed)} virtual ref(s) for {var_name} did not match a "
+                    f"{len(failed)} virtual ref(s) for {array_path} did not match a "
                     f"registered container, e.g. {failed[:3]}"
                 )
 
@@ -321,9 +328,10 @@ class VirtualRegionJob(
         Returns None if a label is not in the template's coords (the filter treats
         that as "remaining").
         """
-        # Geometry comes from the checked-in template, not the in-code
-        # DataVar.encoding which could drift; shared by the filter and emitter.
-        template_var = self.template_ds[var.name]
+        # Geometry comes from the checked-in template, not in-code DataVar.encoding
+        # which could drift. Index by var.path so a vertical-group var resolves to its
+        # group node (its DataArray carries the vertical coord, absent from the root).
+        template_var = self.template_ds[var.path]
         dims = tuple(str(d) for d in template_var.dims)
         chunks = template_var.encoding["chunks"]
         assert len(chunks) == len(dims)
@@ -333,9 +341,7 @@ class VirtualRegionJob(
         for dim, chunk_size in zip(dims, chunks, strict=True):
             if dim in labels:
                 position = int(
-                    self.template_ds.get_index(dim).get_indexer(
-                        pd.Index([labels[dim]])
-                    )[0]
+                    template_var.get_index(dim).get_indexer(pd.Index([labels[dim]]))[0]
                 )
                 if position < 0:
                     return None  # label not in coords -> not yet a position in this dataset
@@ -360,32 +366,46 @@ class VirtualRegionJob(
     def sync_dims_to(
         self, stores: Sequence[IcechunkStore], needed_append_dim_size: int
     ) -> None:
-        """Grow the append dim (and its dependent coords) to `needed_append_dim_size`."""
+        """Grow the append dim (and its dependent coords) to `needed_append_dim_size`
+        in every group (DataTree.to_zarr has no append_dim, so each node is appended
+        on its own)."""
         # compute=False keeps data vars dask-lazy so the decode-only serializer is
-        # never invoked. Each store's missing slice is from its own committed size:
-        # replicas can be a commit ahead, so the primary's slice would duplicate.
+        # never invoked. Each (store, group)'s missing slice is read from its own
+        # committed size.
         for store in stores:
-            current_size = self._append_dim_size(store)
-            if needed_append_dim_size <= current_size:
-                continue
-            slice_ds = self.template_ds.isel(
-                {self.append_dim: slice(current_size, needed_append_dim_size)}
-            )
-            slice_ds.to_zarr(
-                store, append_dim=self.append_dim, compute=False, consolidated=False
-            )
+            for node in self.template_ds.subtree:
+                group = node_group_name(node)
+                current_size = self._append_dim_size(store, group)
+                if needed_append_dim_size <= current_size:
+                    continue
+                slice_ds = node.to_dataset().isel(
+                    {self.append_dim: slice(current_size, needed_append_dim_size)}
+                )
+                slice_ds.to_zarr(
+                    store,
+                    group=group,
+                    append_dim=self.append_dim,
+                    compute=False,
+                    consolidated=False,
+                )
 
     def _needed_append_dim_size(self, refs: Sequence[VirtualRef]) -> int:
-        positions = self.template_ds.get_index(self.append_dim).get_indexer(
-            pd.Index([ref.out_loc[self.append_dim] for ref in refs])
+        positions = (
+            self.template_ds.coords[self.append_dim]
+            .to_index()
+            .get_indexer(pd.Index([ref.out_loc[self.append_dim] for ref in refs]))
         )
         assert (positions >= 0).all(), (
             "a ref's append-dim label is not present in the template"
         )
         return int(positions.max()) + 1
 
-    def _append_dim_size(self, store: IcechunkStore) -> int:
-        array = zarr.open_group(store, mode="r")[self.append_dim]
+    def _append_dim_size(self, store: IcechunkStore, group: str | None = None) -> int:
+        node = zarr.open_group(store, mode="r")
+        if group is not None:
+            node = node[group]
+            assert isinstance(node, zarr.Group)
+        array = node[self.append_dim]
         assert isinstance(array, zarr.Array)
         return int(array.shape[0])
 
@@ -395,8 +415,15 @@ class VirtualRegionJob(
         assert processing_region == self.region, (
             "VirtualRegionJob.get_processing_region must equal self.region"
         )
-        ds: xr.Dataset = self.template_ds[[v.name for v in self.data_vars]]  # ty: ignore[invalid-assignment]
-        return ds.isel({self.append_dim: processing_region})
+        # generate_source_file_coords reads only coordinate values, so pass the region's
+        # coords from every group — never the data vars, whose names can collide across
+        # vertical groups.
+        coords = {
+            name: coord
+            for node in self.template_ds.subtree
+            for name, coord in node.to_dataset().coords.items()
+        }
+        return xr.Dataset(coords=coords).isel({self.append_dim: processing_region})
 
 
 def _exists_many(store: IcechunkStore, keys: Sequence[str]) -> dict[str, bool]:

@@ -7,10 +7,12 @@ import xarray as xr
 from pydantic import computed_field
 
 from reformatters.common.config_models import (
+    ROOT,
     Coordinate,
     CoordinateAttrs,
     DatasetAttributes,
     Encoding,
+    Group,
     StatisticsApproximate,
 )
 from reformatters.common.template_config import SPATIAL_REF_COORDS, TemplateConfig
@@ -27,13 +29,15 @@ from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
 class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
     """Template configuration for GEFS 35-day forecast dataset."""
 
-    dims: tuple[Dim, ...] = (
-        "init_time",
-        "ensemble_member",
-        "lead_time",
-        "latitude",
-        "longitude",
-    )
+    dims: dict[Group, tuple[Dim, ...]] = {
+        ROOT: (
+            "init_time",
+            "ensemble_member",
+            "lead_time",
+            "latitude",
+            "longitude",
+        )
+    }
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = pd.Timestamp("2020-10-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("24h")
@@ -279,8 +283,8 @@ class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
             "longitude": var_chunks["longitude"] * 23,  # 4 shards over 1440 pixels
         }
 
-        assert self.dims == tuple(var_chunks.keys())
-        var_chunks_ordered = tuple(var_chunks[dim] for dim in self.dims)
-        var_shards_ordered = tuple(var_shards[dim] for dim in self.dims)
+        assert self.dims[ROOT] == tuple(var_chunks.keys())
+        var_chunks_ordered = tuple(var_chunks[dim] for dim in self.dims[ROOT])
+        var_shards_ordered = tuple(var_shards[dim] for dim in self.dims[ROOT])
 
         return get_shared_data_var_configs(var_chunks_ordered, var_shards_ordered)

@@ -13,9 +13,48 @@ from reformatters.common.iterating import (
     get_worker_jobs,
     group_by,
     item,
+    node_group_name,
+    node_path_prefix,
     shard_slice_indexers,
     spread_evenly,
+    walk_data_arrays,
 )
+
+
+def _two_node_tree() -> xr.DataTree:
+    root = xr.Dataset(
+        {"temperature_2m": xr.Variable(("time",), np.zeros(2, dtype=np.float32))},
+        coords={"time": [0, 1]},
+    )
+    pressure = xr.Dataset(
+        {
+            "temperature": xr.Variable(
+                ("time", "pressure_level"), np.zeros((2, 3), dtype=np.float32)
+            )
+        },
+        coords={"time": [0, 1], "pressure_level": [1000.0, 850.0, 500.0]},
+    )
+    return xr.DataTree.from_dict({"/": root, "/pressure_level": pressure})
+
+
+def test_node_group_name_root_and_child() -> None:
+    root, pressure = _two_node_tree().subtree
+    assert node_group_name(root) is None
+    assert node_group_name(pressure) == "pressure_level"
+
+
+def test_node_path_prefix_root_and_child() -> None:
+    root, pressure = _two_node_tree().subtree
+    assert node_path_prefix(root) == ""
+    assert node_path_prefix(pressure) == "pressure_level/"
+
+
+def test_walk_data_arrays_yields_group_qualified_paths() -> None:
+    tree = _two_node_tree()
+    paths = [path for path, _ in walk_data_arrays(tree)]
+    assert paths == ["temperature_2m", "pressure_level/temperature"]
+    by_path = dict(walk_data_arrays(tree))
+    assert by_path["pressure_level/temperature"].dims == ("time", "pressure_level")
 
 
 def test_group_by_parity_preserves_order() -> None:

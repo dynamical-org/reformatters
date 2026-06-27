@@ -356,3 +356,53 @@ xarray 2026.4) during design:
   openable (default omits child coords).
 - The `Group` type scheme: pydantic accepts `dict[Group, tuple]`, rejects typo'd
   keys; `ty` narrows `is ROOT` so `ROOT` cannot be used as a path string.
+
+---
+
+## 9. As built
+
+Implemented in PR "Vertical dimension support: group-keyed dims + DataTree templates".
+
+Decisions made during implementation (the plan above left some open):
+
+- **Representation — Decision A (DataTree is the canonical template).** `get_template()`
+  returns an `xr.DataTree` and `RegionJob.template_ds` is an `xr.DataTree`. This was
+  chosen over a flat path-keyed Dataset (a one-node tree per single-level dataset) so the
+  in-memory object matches the on-disk group hierarchy, coordinate scoping is structural
+  via inheritance, and there is no unenforceable "don't `to_zarr` me raw" invariant. A
+  single-level dataset is a one-node tree and writes **byte-identically** to the previous
+  Dataset path (verified: all 15 existing templates regenerate with zero diff).
+- **One write path.** `write_metadata` wraps a bare Dataset as `DataTree.from_dict({"/": ds})`
+  so there is a single `to_zarr(write_inherited_coords=True, write_empty_chunks=True)` call.
+- **`sync_dims_to` grows per group node.** `DataTree.to_zarr` does **not** support
+  `append_dim` (it raises `NotImplementedError`), so the append dim is grown by writing
+  each node's slice with `to_zarr(group=…, append_dim=…)`. Groups may sit at different
+  lengths transiently; each (store, group) resizes from its own committed size.
+- **`Dim` gained `pressure_level` and `model_level`** (`common/types.py`) — a vertical
+  group's dim name must be a valid `Dim` (group name == dim name). Keep in sync with
+  `VerticalGroup`.
+- **`source_groups` → `source_file_var_groups`** to disambiguate "vars sharing a source
+  file" from a dataset's vertical groups.
+- **Per-job geometry**: `generate_source_file_coords` gets a coords-only Dataset (the
+  region's coords merged across all groups — collision-free, since data var names can
+  repeat across vertical groups). Virtual ref/chunk geometry comes from `template_ds[var.path]`
+  directly; materialized jobs (single-level) subset the root Dataset by name.
+- DataTree API gaps to know: it supports `isel`/`sel`/`data_vars`/`coords`/`sizes`/`[name]`
+  but NOT `assign_coords`/`get_index` and not attribute-style coord access — go through
+  `tree.to_dataset()` for those (matters mostly in tests).
+
+Scope delivered: the full template + virtual infrastructure, group-aware, plus a
+synthetic multi-group template + virtual fixture under `tests/common/`. The whole
+materialized stack carries the DataTree `template_ds` (one field; its type can't split
+between virtual and materialized), but the materialized **chunk-write** path
+(`zarr.copy_data_var`, `shared_memory_utils.write_shards`) still writes at the root under
+the bare variable name — it is **not** yet group-aware. A guard in `DynamicalDataset`
+(`_validate_virtual_storage`) rejects a materialized dataset that declares any non-root
+var, so this fails loudly rather than silently miswriting. Likewise
+`update_template_with_results` trims every group to one global append-dim max (correct
+for single-group; a per-group trim is unneeded until materialized multi-group exists).
+
+Out of scope / follow-up: group-aware materialized writes, and the real multi-group
+datasets **NOAA HRRR** (`wrfprs` pressure + `wrfnat` model levels, virtual) and
+**DWD ICON-EU** — the next PR ("first shippable virtual dataset"), the first datasets to
+declare vertical groups in production.

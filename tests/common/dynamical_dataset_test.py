@@ -255,6 +255,32 @@ class TestIcechunkVirtualConfigValidation:
         assert dataset.store_factory.icechunk_virtual_config is None
 
 
+class GroupedVarConfig(ExampleConfig):
+    @computed_field
+    @property
+    def data_vars(self) -> list[ExampleDataVar]:
+        return [ExampleDataVar(name="temperature", group="pressure_level")]
+
+
+class GroupedVarDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
+    template_config: GroupedVarConfig = GroupedVarConfig()
+    region_job_class: type[ExampleRegionJob] = ExampleRegionJob
+    primary_storage_config: ExampleDatasetStorageConfig = ExampleDatasetStorageConfig()
+
+    def operational_kubernetes_resources(
+        self,
+        image_tag: str,  # noqa: ARG002
+    ) -> Sequence[CronJob]:
+        return ()
+
+
+def test_materialized_dataset_rejects_vertical_group_var() -> None:
+    # The materialized chunk-write path is not group-aware, so DynamicalDataset's
+    # _validate_virtual_storage rejects a materialized dataset with any non-root var.
+    with pytest.raises(ValidationError, match="do not yet support vertical groups"):
+        GroupedVarDataset()
+
+
 def test_update_template(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_update_template = Mock()
     monkeypatch.setattr(ExampleConfig, "update_template", mock_update_template)
@@ -280,7 +306,11 @@ def test_backfill(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(template_utils, "write_metadata", Mock())
 
-    monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
+    monkeypatch.setattr(
+        ExampleConfig,
+        "get_template",
+        lambda self, end: xr.DataTree.from_dict({"/": xr.Dataset()}),
+    )
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
@@ -310,7 +340,9 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
     monkeypatch.setattr(
         ExampleConfig,
         "get_template",
-        lambda self, end: xr.Dataset(attrs={"cool": "weather"}),
+        lambda self, end: xr.DataTree.from_dict(
+            {"/": xr.Dataset(attrs={"cool": "weather"})}
+        ),
     )
     backfill_mock = Mock()
     monkeypatch.setattr(
@@ -386,7 +418,11 @@ def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     )
 
     # Mock template retrieval and metadata writing
-    monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
+    monkeypatch.setattr(
+        ExampleConfig,
+        "get_template",
+        lambda self, end: xr.DataTree.from_dict({"/": xr.Dataset()}),
+    )
     monkeypatch.setattr(template_utils, "write_metadata", lambda *args, **kwargs: None)
 
     dataset = ExampleDataset(
@@ -686,7 +722,11 @@ def test_backfill_kubernetes_overwrite_existing_flag(
         Mock(return_value="test-image-tag"),
     )
     monkeypatch.setattr(subprocess, "run", Mock())
-    monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
+    monkeypatch.setattr(
+        ExampleConfig,
+        "get_template",
+        lambda self, end: xr.DataTree.from_dict({"/": xr.Dataset()}),
+    )
     monkeypatch.setattr(
         ExampleRegionJob, "get_jobs", Mock(return_value=[Mock(spec=ExampleRegionJob)])
     )
@@ -727,7 +767,11 @@ def test_backfill_kubernetes_overwrite_existing_flag_fails_if_not_all_stores_exi
         "open_zarr",
         Mock(side_effect=zarr.errors.GroupNotFoundError("Group not found")),
     )
-    monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
+    monkeypatch.setattr(
+        ExampleConfig,
+        "get_template",
+        lambda self, end: xr.DataTree.from_dict({"/": xr.Dataset()}),
+    )
 
     monkeypatch.setattr(
         dynamical_dataset,
@@ -787,7 +831,9 @@ def test_backfill_local_fails_in_wrong_environment(
     monkeypatch.setattr(template_utils, "write_metadata", Mock())
     monkeypatch.setattr(DynamicalDataset, "backfill", Mock())
     monkeypatch.setattr(
-        DynamicalDataset, "_get_template", Mock(return_value=xr.Dataset())
+        DynamicalDataset,
+        "_get_template",
+        Mock(return_value=xr.DataTree.from_dict({"/": xr.Dataset()})),
     )
 
     dataset = ExampleDataset(

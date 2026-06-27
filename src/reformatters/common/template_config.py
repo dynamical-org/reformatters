@@ -10,9 +10,11 @@ from pydantic import computed_field
 
 from reformatters.common import template_utils
 from reformatters.common.config_models import (
+    ROOT,
     Coordinate,
     DatasetAttributes,
     DataVar,
+    Group,
 )
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, Timestamp
@@ -26,10 +28,26 @@ SPATIAL_REF_COORDS = ((), np.array(0))
 class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
     """Define a subclass of this class to configure the structure of a dataset."""
 
-    dims: tuple[Dim, ...]
+    dims: dict[Group, tuple[Dim, ...]]
     append_dim: AppendDim
     append_dim_start: Timestamp
     append_dim_frequency: Timedelta
+
+    @property
+    def all_dims(self) -> tuple[Dim, ...]:
+        """De-duplicated union of every group's dims, root dims first."""
+        result: list[Dim] = []
+        for group_dims in self.dims.values():
+            for dim in group_dims:
+                if dim not in result:
+                    result.append(dim)
+        return tuple(result)
+
+    @property
+    def groups(self) -> tuple[Group, ...]:
+        """ROOT (holds shared coords) then each declared vertical group. Every declared
+        vertical group must be used by a var (enforced by `_assert_valid_structure`)."""
+        return (ROOT, *(g for g in self.dims if g is not ROOT))
 
     @computed_field
     @property
@@ -58,7 +76,9 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         Compute non-dimension coordinates.
         For example, if init_time is the append dimension, `{"valid_time": ds["init_time"] + ds["lead_time"]}`
         """
-        non_dimension_coords = {c.name for c in self.coords if c.name not in self.dims}
+        non_dimension_coords = {
+            c.name for c in self.coords if c.name not in self.all_dims
+        }
         missing = non_dimension_coords - {"spatial_ref"}
         if len(missing):
             raise NotImplementedError(
@@ -91,88 +111,171 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
             self.append_dim_start, end, freq=self.append_dim_frequency, inclusive="left"
         )
 
-    def get_template(self, end_time: DatetimeLike) -> xr.Dataset:
+    def get_template(self, end_time: DatetimeLike) -> xr.DataTree:
         """
-        Returns a template dataset expanded to the given end time.
+        Returns the template as a DataTree, with append dim in all Zarr groups expanded to the given end time.
 
         Args:
             end_time (pd.Timestamp): End time (exclusive) for the append dimension
 
         Returns:
-            xr.Dataset: Template dataset with dimension coordinates
+            xr.DataTree: Template tree with dimension coordinates
         """
-        ds: xr.Dataset = xr.open_zarr(self.template_path(), decode_timedelta=True)
+        on_disk = xr.open_datatree(self.template_path(), decode_timedelta=True)
+        new_append_coords = self.append_dim_coordinates(end_time)
+        coord_fill_values = {c.name: c.encoding.fill_value for c in self.coords}
 
-        # Expand init_time dimension with complete coordinates
-        ds = template_utils.empty_copy_with_reindex(
-            ds,
-            self.append_dim,
-            self.append_dim_coordinates(end_time),
-            derive_coordinates_fn=self.derive_coordinates,
-        )
+        nodes: dict[str, xr.Dataset] = {}
+        for node in on_disk.subtree:
+            ds = template_utils.empty_copy_with_reindex(
+                node.to_dataset(),
+                self.append_dim,
+                new_append_coords,
+                derive_coordinates_fn=self.derive_coordinates,
+            )
+            # Coordinates which are dask arrays are not written with .to_zarr(store, compute=False)
+            # We want to write all coords when writing metadata, so ensure they are loaded as numpy arrays.
+            for coordinate in ds.coords.values():
+                coordinate.load()
+
+            # Work around what appears to be a bug where fill_value is not set in encodings read from existing zarr template
+            for coord_name in ds.coords:
+                assert "fill_value" not in ds[coord_name].encoding, (
+                    "Fill value round tripped. That's good but not the previous behavior and if you see this AND the fill_value is correct, you can remove the workaround."
+                )
+                ds[coord_name].encoding["fill_value"] = coord_fill_values[
+                    str(coord_name)
+                ]
+            nodes[node.path] = ds
+
+        # Same fill_value workaround for data vars, keyed off the config (which may be a
+        # subset of the on-disk template) so each var is restored at its group node.
+        for var in self.data_vars:
+            var_array = nodes[self._group_node_path(var.group)][var.name]
+            assert "fill_value" not in var_array.encoding, (
+                "Fill value round tripped. That's good but not the previous behavior and if you see this AND the fill_value is correct, you can remove the workaround."
+            )
+            var_array.encoding["fill_value"] = var.encoding.fill_value
+
+        template = xr.DataTree.from_dict(nodes)
 
         # Ensure attributes have not been changed without calling update_template()
-        assert ds.attrs["dataset_id"] == self.dataset_id
-        assert ds.attrs["dataset_version"] == self.version
+        assert template.attrs["dataset_id"] == self.dataset_id
+        assert template.attrs["dataset_version"] == self.version
 
-        # Coordinates which are dask arrays are not written with .to_zarr(store, compute=False)
-        # We want to write all coords when writing metadata, so ensure they are loaded as numpy arrays.
-        for coordinate in ds.coords.values():
-            coordinate.load()
-
-        # Work around what appears to be a bug where fill_value is not set in encodings read from existing zarr template
-        for coord in self.coords:
-            assert "fill_value" not in ds[coord.name].encoding, (
-                "Fill value round tripped. That's good but not the previous behavior and if you see this AND the fill_value is correct, you can remove the workaround."
-            )
-            ds[coord.name].encoding["fill_value"] = coord.encoding.fill_value
-        for var in self.data_vars:
-            assert "fill_value" not in ds[var.name].encoding, (
-                "Fill value round tripped. That's good but not the previous behavior and if you see this AND the fill_value is correct, you can remove the workaround."
-            )
-            ds[var.name].encoding["fill_value"] = var.encoding.fill_value
-
-        return ds
+        return template
 
     def update_template(self) -> None:
         """
         Updates the template file on disk with the latest configuration.
         """
         coords = self.dimension_coordinates()
-        assert set(coords) == set(self.dims), (
-            f"`dimension_coordinates` must return coordinates for all dimensions {self.dims}"
+        assert set(coords) == set(self.all_dims), (
+            f"`dimension_coordinates` must return coordinates for all dims {self.all_dims}"
         )
+        self._assert_valid_structure()
 
-        data_vars = {
-            var_config.name: template_utils.make_empty_variable(
-                self.dims, coords, var_config.encoding.dtype
-            )
-            for var_config in self.data_vars
+        nodes = {
+            self._group_node_path(group): self._build_node_dataset(group, coords)
+            for group in self.groups
         }
+        written_coords = {name for ds in nodes.values() for name in ds.coords}
+        assert written_coords == {c.name for c in self.coords}, (
+            f"coords {written_coords} written across groups must match self.coords "
+            f"{ {c.name for c in self.coords} }"
+        )
+        template = xr.DataTree.from_dict(nodes)
+        template_utils.write_metadata(template, self.template_path())
 
+    @staticmethod
+    def _group_node_path(group: Group) -> str:
+        return "/" if group is ROOT else f"/{group}"
+
+    def _build_node_dataset(self, group: Group, coords: dict[str, Any]) -> xr.Dataset:
+        """Build one zarr group's empty dataset: its data vars plus its dims' coords
+        (shared coords + any vertical coord) and the derived coords."""
+        group_dims = self.dims[group]
+        data_vars = {
+            var.name: template_utils.make_empty_variable(
+                group_dims, coords, var.encoding.dtype
+            )
+            for var in self.data_vars
+            if var.group == group
+        }
         ds = xr.Dataset(
             data_vars,
-            coords,
+            {dim: coords[dim] for dim in group_dims},
             self.dataset_attributes.model_dump(exclude_none=True),
         )
-
         derived_coords = self.derive_coordinates(ds)
         assert set(derived_coords).isdisjoint(ds.dims), (
-            f"Return coordinates for dataset dimensions {self.dims} from `dimension_coordinates` rather than `derive_coordinates`."
+            "Return coordinates for dataset dimensions from `dimension_coordinates` "
+            "rather than `derive_coordinates`."
         )
         ds = ds.assign_coords(derived_coords)
 
-        assert {d.name for d in self.data_vars} == set(ds.data_vars)
-        for var_config in self.data_vars:
-            template_utils.assign_var_metadata(ds[var_config.name], var_config)
-
-        assert {c.name for c in self.coords} == set(ds.coords)
-        for coord_config in self.coords:
+        for var in self.data_vars:
+            if var.group == group:
+                template_utils.assign_var_metadata(ds[var.name], var)
+        coord_config = {c.name: c for c in self.coords}
+        for coord_name in ds.coords:
             template_utils.assign_var_metadata(
-                ds.coords[coord_config.name], coord_config
+                ds.coords[coord_name], coord_config[str(coord_name)]
+            )
+        return ds
+
+    def _assert_valid_structure(self) -> None:
+        """Enforce the group invariants (see docs/plans/vertical_dimension_structure.md)."""
+        root_dims = self.dims[ROOT]
+        for group, group_dims in self.dims.items():
+            if group is ROOT:
+                continue
+            added = tuple(d for d in group_dims if d not in root_dims)
+            assert added == (group,), (
+                f"vertical group {group!r} must add exactly its own dim to the root "
+                f"dims; dims[{group!r}] adds {added}, expected ({group!r},)"
             )
 
-        template_utils.write_metadata(ds, self.template_path())
+        declared = set(self.dims)
+        used = {var.group for var in self.data_vars}
+        assert used <= declared, (
+            f"data var group(s) {used - declared} are not declared in dims"
+        )
+        orphans = {g for g in self.dims if g is not ROOT} - used
+        assert not orphans, f"vertical group(s) {orphans} declared in dims but unused"
+
+        paths = [var.path for var in self.data_vars]
+        assert len(paths) == len(set(paths)), (
+            f"duplicate (group, name) across data_vars: {paths}"
+        )
+
+        group_names = {g for g in self.dims if g is not ROOT}
+        root_var_names = {var.name for var in self.data_vars if var.group is ROOT}
+        assert root_var_names.isdisjoint(group_names), (
+            f"root data var name(s) {root_var_names & group_names} collide with a group name"
+        )
+
+        append_dim_chunks = {self._append_dim_chunk_size(var) for var in self.data_vars}
+        assert len(append_dim_chunks) <= 1, (
+            f"all data vars must share one append-dim chunk size, got {append_dim_chunks}"
+        )
+
+        for var in self.data_vars:
+            n_dims = len(self.dims[var.group])
+            for kind in ("chunks", "shards"):
+                value = getattr(var.encoding, kind)
+                if isinstance(value, tuple):
+                    assert len(value) == n_dims, (
+                        f"{var.path} encoding {kind} has {len(value)} entries, "
+                        f"expected {n_dims} (the dims of group {var.group!r})"
+                    )
+
+    def _append_dim_chunk_size(self, var: DataVar[Any]) -> int:
+        dims = self.dims[var.group]
+        chunks = var.encoding.chunks
+        if isinstance(chunks, int):
+            return chunks
+        return chunks[dims.index(self.append_dim)]
 
     def append_dim_coordinate_chunk_size(self) -> int:
         """

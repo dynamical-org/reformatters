@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from reformatters.common.config_models import ROOT
 from reformatters.common.template_config import SPATIAL_REF_COORDS
 from reformatters.noaa.gfs.analysis.template_config import NoaaGfsAnalysisTemplateConfig
 
@@ -14,7 +15,7 @@ def test_get_template_spatial_ref() -> None:
     template_config = NoaaGfsAnalysisTemplateConfig()
     ds = template_config.get_template(
         template_config.append_dim_start + pd.Timedelta(days=10)
-    )
+    ).to_dataset()
     original_attrs = deepcopy(ds.spatial_ref.attrs)
 
     expected_crs = "+proj=longlat +a=6371229 +b=6371229 +no_defs +type=crs"
@@ -83,7 +84,7 @@ def test_coords_property_order_and_names() -> None:
 
 def test_dims() -> None:
     cfg = NoaaGfsAnalysisTemplateConfig()
-    assert cfg.dims == ("time", "latitude", "longitude")
+    assert cfg.dims[ROOT] == ("time", "latitude", "longitude")
 
 
 def test_append_dim_configuration() -> None:

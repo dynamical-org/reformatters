@@ -54,7 +54,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     max_vars_per_job: ClassVar[int] = 1
 
     @classmethod
-    def source_groups(
+    def source_file_var_groups(
         cls,
         data_vars: Sequence[EcmwfDataVar],
     ) -> Sequence[Sequence[EcmwfDataVar]]:
@@ -246,13 +246,13 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         cls,
         primary_store: Store,
         tmp_store: Path,
-        get_template_fn: Callable[[DatetimeLike], xr.Dataset],
+        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
         append_dim: AppendDim,
         all_data_vars: Sequence[EcmwfDataVar],
         reformat_job_name: str,
     ) -> tuple[
         Sequence[RegionJob[EcmwfDataVar, IfsEnsSourceFileCoord]],
-        xr.Dataset,
+        xr.DataTree,
     ]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset
@@ -267,7 +267,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             The primary store to read existing data from and write updates to.
         tmp_store : Path
             The temporary Zarr store to write into while processing.
-        get_template_fn : Callable[[DatetimeLike], xr.Dataset]
+        get_template_fn : Callable[[DatetimeLike], xr.DataTree]
             Function to get the template_ds for the operational update.
         append_dim : AppendDim
             The dimension along which data is appended (e.g., "time").

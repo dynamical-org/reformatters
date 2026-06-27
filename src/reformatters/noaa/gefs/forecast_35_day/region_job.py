@@ -42,7 +42,7 @@ class GefsForecast35DayRegionJob(
     max_vars_per_job = 3
 
     @classmethod
-    def source_groups(
+    def source_file_var_groups(
         cls, data_vars: Sequence[GEFSDataVar]
     ) -> Sequence[Sequence[GEFSDataVar]]:
         """
@@ -94,7 +94,7 @@ class GefsForecast35DayRegionJob(
         self, coord: GefsForecast35DaySourceFileCoord, data_var: GEFSDataVar
     ) -> ArrayND[np.generic]:
         """Read data from the source file for the given coordinate and variable."""
-        return read_data(self.template_ds, coord, data_var)
+        return read_data(self.template_ds.to_dataset(), coord, data_var)
 
     def apply_data_transformations(
         self, data_array: xr.DataArray, data_var: GEFSDataVar
@@ -129,12 +129,12 @@ class GefsForecast35DayRegionJob(
         cls,
         primary_store: Store,
         tmp_store: Path,
-        get_template_fn: Callable[[DatetimeLike], xr.Dataset],
+        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
         append_dim: AppendDim,
         all_data_vars: Sequence[GEFSDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence[RegionJob[GEFSDataVar, GefsForecast35DaySourceFileCoord]], xr.Dataset
+        Sequence[RegionJob[GEFSDataVar, GefsForecast35DaySourceFileCoord]], xr.DataTree
     ]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset

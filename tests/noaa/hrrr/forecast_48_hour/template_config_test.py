@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from reformatters.common.config_models import ROOT
 from reformatters.common.download import http_download_to_disk
 from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
     NoaaHrrrForecast48HourTemplateConfig,
@@ -64,7 +65,7 @@ def test_template_config_attrs() -> None:
     config = NoaaHrrrForecast48HourTemplateConfig()
 
     # Check dimensions
-    assert config.dims == ("init_time", "lead_time", "y", "x")
+    assert config.dims[ROOT] == ("init_time", "lead_time", "y", "x")
     assert config.append_dim == "init_time"
 
     # Check date range

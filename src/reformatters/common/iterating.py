@@ -1,10 +1,29 @@
 import hashlib
 from collections import deque
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from itertools import batched, islice, pairwise, product, starmap
 from typing import Any, Literal
 
 import xarray as xr
+
+
+def node_group_name(node: xr.DataTree) -> str | None:
+    """The group name of a DataTree node, or None for the root."""
+    return None if node.path == "/" else node.path.removeprefix("/")
+
+
+def node_path_prefix(node: xr.DataTree) -> str:
+    """A node's prefix for building var/coord paths: "" for root, else "group/"."""
+    group = node_group_name(node)
+    return "" if group is None else f"{group}/"
+
+
+def walk_data_arrays(tree: xr.DataTree) -> Iterator[tuple[str, xr.DataArray]]:
+    """Yield (var_path, DataArray) for every data var across all of a template's groups."""
+    for node in tree.subtree:
+        prefix = node_path_prefix(node)
+        for name, data_array in node.to_dataset().data_vars.items():
+            yield f"{prefix}{name}", data_array
 
 
 def dimension_slices(

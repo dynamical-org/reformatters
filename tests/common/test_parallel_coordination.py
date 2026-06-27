@@ -133,9 +133,9 @@ def stub_io(monkeypatch: pytest.MonkeyPatch) -> dict[str, MagicMock]:
     }
 
 
-def _template() -> xr.Dataset:
+def _template() -> xr.DataTree:
     # An empty dataset is enough — every real use of template_ds is stubbed.
-    return xr.Dataset()
+    return xr.DataTree.from_dict({"/": xr.Dataset()})
 
 
 class TestParallelSetupFirstWorker:

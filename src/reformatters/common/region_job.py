@@ -28,9 +28,10 @@ from zarr.abc.store import Store
 from reformatters.common import storage
 from reformatters.common.config_models import DataVar
 from reformatters.common.iterating import (
-    dimension_slices,
+    chunk_slices,
     split_groups,
     spread_evenly,
+    walk_data_arrays,
 )
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
@@ -118,7 +119,7 @@ def region_slice(s: slice) -> slice:
 
 class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     tmp_store: Path
-    template_ds: xr.Dataset
+    template_ds: xr.DataTree
     data_vars: Sequence[DATA_VAR]
     append_dim: AppendDim
     # integer slice along append_dim
@@ -130,12 +131,15 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     max_vars_per_job: ClassVar[int | None] = None
 
     @classmethod
-    def source_groups(
+    def source_file_var_groups(
         cls,
         data_vars: Sequence[DATA_VAR],
     ) -> Sequence[Sequence[DATA_VAR]]:
         """
         Return groups of variables, where all variables in a group can be retrieved from the same source file.
+
+        Distinct from a dataset's vertical groups (DataVar.group): this groups vars by
+        which source file they share, and a single source file may span vertical groups.
 
         This is a class method so it can be called by RegionJob factory methods.
         """
@@ -146,7 +150,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """Number of variable groups produced by get_jobs for a given set of data_vars."""
         if cls.max_vars_per_job is None:
             return 1
-        return len(split_groups(cls.source_groups(data_vars), cls.max_vars_per_job))
+        return len(
+            split_groups(cls.source_file_var_groups(data_vars), cls.max_vars_per_job)
+        )
 
     def get_processing_region(self) -> slice:
         """
@@ -167,7 +173,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def update_template_with_results(
         self, process_results: Mapping[str, Sequence[SourceFileResult]]
-    ) -> xr.Dataset:
+    ) -> xr.DataTree:
         """
         Update template dataset based on processing results. This method is called
         during operational updates.
@@ -188,8 +194,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         Returns
         -------
-        xr.Dataset
-            Updated template dataset reflecting the actual processing results.
+        xr.DataTree
+            Updated template tree reflecting the actual processing results.
         """
         max_append_dim_processed = max(
             (
@@ -215,11 +221,11 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         cls,
         primary_store: Store,
         tmp_store: Path,
-        get_template_fn: Callable[[DatetimeLike], xr.Dataset],
+        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
         append_dim: AppendDim,
         all_data_vars: Sequence[DATA_VAR],
         reformat_job_name: str,
-    ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.Dataset]:
+    ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.DataTree]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset
         from its current state to include the latest available data.
@@ -242,7 +248,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             The primary store to read existing data from and write updates to.
         tmp_store : Path
             The temporary Zarr store to write into while processing.
-        get_template_fn : Callable[[DatetimeLike], xr.Dataset]
+        get_template_fn : Callable[[DatetimeLike], xr.DataTree]
             Function to get the template_ds for the operational update.
         append_dim : AppendDim
             The dimension along which data is appended (e.g., "time").
@@ -256,7 +262,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         -------
         Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
             RegionJob instances that need processing for operational updates.
-        xr.Dataset
+        xr.DataTree
             The template_ds for the operational update.
         """
         raise NotImplementedError(
@@ -278,7 +284,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def get_jobs(
         cls,
         tmp_store: Path,
-        template_ds: xr.Dataset,
+        template_ds: xr.DataTree,
         append_dim: AppendDim,
         all_data_vars: Sequence[DATA_VAR],
         reformat_job_name: str,
@@ -299,8 +305,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         ----------
         tmp_store : Path
             The temporary Zarr store to write into while processing.
-        template_ds : xr.Dataset
-            Dataset template defining structure and metadata.
+        template_ds : xr.DataTree
+            Template tree defining structure and metadata (one node per group).
         append_dim : AppendDim
             The dimension along which data is appended (e.g., "time").
         all_data_vars : Sequence[DATA_VAR]
@@ -317,7 +323,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             Keep only shards containing at least one of the specified timestamps.
             Timestamps must exactly match coordinate values. Empty list returns no jobs.
         filter_variable_names : list[str] | None, default None
-            Keep only the specified variables. If None, all variables are included.
+            Keep only the specified variables, matched by bare name or by var.path
+            (a bare name selects that var in every group). If None, all are included.
 
         Returns
         -------
@@ -327,35 +334,44 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
 
         # Data variables -- filter and group
-        assert {v.name for v in all_data_vars} == set(template_ds.data_vars)
+        template_arrays = list(walk_data_arrays(template_ds))
+        assert {v.path for v in all_data_vars} == {path for path, _ in template_arrays}
 
         data_vars: Sequence[DATA_VAR]
         if filter_variable_names:
-            data_vars = [v for v in all_data_vars if v.name in filter_variable_names]
+            data_vars = [
+                v
+                for v in all_data_vars
+                if v.name in filter_variable_names or v.path in filter_variable_names
+            ]
         else:
             data_vars = all_data_vars
 
         if cls.max_vars_per_job is not None:
-            # Split by source groups first as those are efficient groupings,
+            # Split by source file var groups first as those are efficient groupings,
             # then split further to create smaller jobs for parallelism.
-            data_var_groups = cls.source_groups(data_vars)
+            data_var_groups = cls.source_file_var_groups(data_vars)
             data_var_groups = split_groups(data_var_groups, cls.max_vars_per_job)
         else:
             data_var_groups = [data_vars]
 
         # Regions along append dimension.
-        # Materialized arrays partition by shard; virtual arrays use chunks.
-        # All data vars must agree: a mix would partition by whichever var is first,
-        # and a chunk-sized region over a sharded var would cause multiple workers
-        # to write to the same shard.
-        sharded = [
-            v.encoding.get("shards") is not None for v in template_ds.data_vars.values()
-        ]
-        assert len(set(sharded)) == 1, (
-            "all data vars must agree on whether they are sharded"
+        # Materialized arrays partition by shard; virtual arrays use chunks. All data
+        # vars must agree: a mix would partition by whichever var is first, and a
+        # chunk-sized region over a sharded var would let multiple workers write the
+        # same shard.
+        sharded = {da.encoding.get("shards") is not None for _, da in template_arrays}
+        assert len(sharded) == 1, "all data vars must agree on whether they are sharded"
+        kind = "shards" if sharded.pop() else "chunks"
+        append_chunk_sizes = {
+            da.encoding[kind][da.dims.index(append_dim)] for _, da in template_arrays
+        }
+        assert len(append_chunk_sizes) == 1, (
+            f"Inconsistent {kind} sizes along {append_dim}: {append_chunk_sizes}"
         )
-        kind = "shards" if sharded[0] else "chunks"
-        regions = dimension_slices(template_ds, append_dim, kind=kind)
+        regions = chunk_slices(
+            len(template_ds.coords[append_dim]), append_chunk_sizes.pop()
+        )
 
         # Filter regions by time
         if (

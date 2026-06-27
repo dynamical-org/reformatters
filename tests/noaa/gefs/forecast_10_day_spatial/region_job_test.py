@@ -36,13 +36,13 @@ def get_var(name: str) -> GEFSDataVar:
 
 
 @pytest.fixture(scope="module")
-def template_ds() -> xr.Dataset:
+def template_ds() -> xr.DataTree:
     # Spans the 2022-10-18T12 transition when "s+b-b22" vars entered the s files.
     return TEMPLATE_CONFIG.get_template(pd.Timestamp("2022-10-19T00:00"))
 
 
 def make_job(
-    template_ds: xr.Dataset,
+    template_ds: xr.DataTree,
     data_vars: Sequence[GEFSDataVar] | None = None,
     region: slice = slice(0, 1),
     processing_mode: Literal["backfill", "update"] = "backfill",
@@ -110,7 +110,7 @@ def test_source_file_coord_rejects_pre_b22_var() -> None:
 
 
 def test_generate_source_file_coords_one_file_per_init_member_lead(
-    template_ds: xr.Dataset,
+    template_ds: xr.DataTree,
 ) -> None:
     data_vars = [
         get_var("temperature_2m"),  # instant
@@ -119,9 +119,11 @@ def test_generate_source_file_coords_one_file_per_init_member_lead(
     ]
     job = make_job(template_ds, data_vars=data_vars)
     # The final init (2022-10-18T18) is after the b22 transition.
-    processing_region_ds = template_ds.isel(
-        init_time=slice(-1, None), ensemble_member=slice(0, 2)
-    ).sel(lead_time=[pd.Timedelta("0h"), pd.Timedelta("3h")])
+    processing_region_ds = (
+        template_ds.isel(init_time=slice(-1, None), ensemble_member=slice(0, 2))
+        .sel(lead_time=[pd.Timedelta("0h"), pd.Timedelta("3h")])
+        .to_dataset()
+    )
 
     coords = job.generate_source_file_coords(processing_region_ds, data_vars)
 
@@ -140,7 +142,7 @@ def test_generate_source_file_coords_one_file_per_init_member_lead(
 
 
 def test_generate_source_file_coords_excludes_b22_vars_before_transition(
-    template_ds: xr.Dataset,
+    template_ds: xr.DataTree,
 ) -> None:
     data_vars = [
         get_var("temperature_2m"),
@@ -148,16 +150,18 @@ def test_generate_source_file_coords_excludes_b22_vars_before_transition(
     ]
     job = make_job(template_ds, data_vars=data_vars)
     # The first init (2020-10-01T00) is before the b22 transition.
-    processing_region_ds = template_ds.isel(
-        init_time=slice(0, 1), ensemble_member=slice(0, 1)
-    ).sel(lead_time=[pd.Timedelta("3h")])
+    processing_region_ds = (
+        template_ds.isel(init_time=slice(0, 1), ensemble_member=slice(0, 1))
+        .sel(lead_time=[pd.Timedelta("3h")])
+        .to_dataset()
+    )
 
     (coord,) = job.generate_source_file_coords(processing_region_ds, data_vars)
     assert [v.name for v in coord.data_vars] == ["temperature_2m"]
     assert coord.gefs_file_type == "s"
 
 
-def test_representative_var_uses_coords_own_file_vars(template_ds: xr.Dataset) -> None:
+def test_representative_var_uses_coords_own_file_vars(template_ds: xr.DataTree) -> None:
     job = make_job(template_ds)
     avg_then_instant = GefsForecast10DaySpatialSourceFileCoord(
         init_time=pd.Timestamp("2024-01-01T00:00"),
@@ -226,7 +230,7 @@ def _fake_discover(
 
 
 def test_process_virtual_refs_backfill_sweeps_once(
-    template_ds: xr.Dataset, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     data_vars = [get_var("temperature_2m"), get_var("total_precipitation_surface")]
     job = make_job(template_ds, data_vars=data_vars)
@@ -263,7 +267,7 @@ def test_process_virtual_refs_backfill_sweeps_once(
 
 
 def test_process_virtual_refs_update_polls_until_all_ingested(
-    template_ds: xr.Dataset, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     data_vars = [get_var("temperature_2m")]
     job = make_job(template_ds, data_vars=data_vars, processing_mode="update")
@@ -293,7 +297,7 @@ def test_process_virtual_refs_update_polls_until_all_ingested(
 
 
 def test_file_refs_skips_file_whose_index_points_past_eof(
-    template_ds: xr.Dataset, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     data_vars = [get_var("temperature_2m")]
     job = make_job(template_ds, data_vars=data_vars)
@@ -306,7 +310,7 @@ def test_file_refs_skips_file_whose_index_points_past_eof(
 
 
 def test_process_virtual_refs_drops_files_with_stale_index(
-    template_ds: xr.Dataset, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     data_vars = [get_var("temperature_2m")]
     job = make_job(template_ds, data_vars=data_vars)
@@ -323,7 +327,7 @@ def test_process_virtual_refs_drops_files_with_stale_index(
 
 
 def test_file_refs_or_skip_swallows_unexpected_errors(
-    template_ds: xr.Dataset, monkeypatch: pytest.MonkeyPatch
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     job = make_job(template_ds, data_vars=[get_var("temperature_2m")])
     coord = _coord(1, [get_var("temperature_2m")])
@@ -339,7 +343,7 @@ def test_file_refs_or_skip_swallows_unexpected_errors(
 
 
 def test_file_refs_or_skip_propagates_assertion_errors(
-    template_ds: xr.Dataset, monkeypatch: pytest.MonkeyPatch
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     job = make_job(template_ds, data_vars=[get_var("temperature_2m")])
     coord = _coord(1, [get_var("temperature_2m")])
@@ -356,7 +360,7 @@ def test_file_refs_or_skip_propagates_assertion_errors(
 
 
 @pytest.mark.slow
-def test_real_source_all_vars_resolve_and_decode(template_ds: xr.Dataset) -> None:
+def test_real_source_all_vars_resolve_and_decode(template_ds: xr.DataTree) -> None:
     """Guard against NOAA layout/index drift: list the real bucket, parse a real
     index for every variable, and decode one message to check values + grid."""
     init = pd.Timestamp("2024-01-01T00:00")
@@ -415,7 +419,7 @@ def test_operational_update_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
     (job,) = jobs
     assert isinstance(job, GefsForecast10DaySpatialRegionJob)
     assert job.processing_mode == "update"
-    init_times = template_ds.get_index("init_time")
+    init_times = template_ds.to_dataset().get_index("init_time")
     assert init_times[-1] == pd.Timestamp("2020-10-03T00:00")
     # One job spanning the 24h active window (4 init times at 6h frequency).
     assert job.region == slice(len(init_times) - 4, len(init_times))

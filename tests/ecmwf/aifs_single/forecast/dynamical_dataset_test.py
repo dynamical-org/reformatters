@@ -40,9 +40,13 @@ def test_backfill_local_and_operational_update(
     monkeypatch.setattr(
         type(dataset.template_config),
         "get_template",
-        lambda self, end_time: orig_get_template(end_time).sel(
-            lead_time=slice("0h", "6h"),
-        )[variables_to_check],
+        lambda self, end_time: xr.DataTree.from_dict(
+            {
+                "/": orig_get_template(end_time)
+                .sel(lead_time=slice("0h", "6h"))
+                .to_dataset()[variables_to_check]
+            }
+        ),
     )
     # Backfill one 6-hour init
     dataset.backfill_local(append_dim_end=pd.Timestamp("2024-04-01T06:00:00"))

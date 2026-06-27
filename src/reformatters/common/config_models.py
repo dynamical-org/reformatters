@@ -6,7 +6,15 @@ import numcodecs.abc
 import pydantic
 
 from reformatters.common.pydantic import FrozenBaseModel
-from reformatters.common.types import TimedeltaUnits, TimestampUnits
+from reformatters.common.types import ROOT, Group, TimedeltaUnits, TimestampUnits
+
+
+def var_path(group: Group, name: str) -> str:
+    """The zarr path / identity key of a variable: `name` at root, else `group/name`."""
+    if group is ROOT:
+        return name
+    return f"{group}/{name}"
+
 
 type AttributeStr = Annotated[str, pydantic.Field(pattern=r"^[A-Z0-9].*[^.]$")]
 type Sentence = Annotated[str, pydantic.Field(pattern=r"^[A-Z].*\.$")]
@@ -188,6 +196,11 @@ INTERNAL_ATTRS_co = TypeVar(
 
 class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS_co]):
     name: str
+    group: Group = ROOT
     encoding: Encoding
     attrs: DataVarAttrs
     internal_attrs: INTERNAL_ATTRS_co
+
+    @property
+    def path(self) -> str:
+        return var_path(self.group, self.name)

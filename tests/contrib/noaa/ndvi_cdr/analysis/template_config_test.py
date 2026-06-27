@@ -12,7 +12,7 @@ def test_get_template_spatial_ref() -> None:
     template_config = NoaaNdviCdrAnalysisTemplateConfig()
     ds = template_config.get_template(
         template_config.append_dim_start + pd.Timedelta(days=10)
-    )
+    ).to_dataset()
     original_attrs = deepcopy(ds.spatial_ref.attrs)
 
     expected_crs = "EPSG:4326"

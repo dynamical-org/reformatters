@@ -5,6 +5,7 @@ import pandas as pd
 import rioxarray  # noqa: F401
 from pyproj import CRS
 
+from reformatters.common.config_models import ROOT
 from reformatters.dwd.icon_eu.forecast_5_day.template_config import (
     DwdIconEuForecast5DayTemplateConfig,
 )
@@ -39,7 +40,7 @@ def test_spatial_coordinates() -> None:
 def test_template_config_attrs() -> None:
     config = DwdIconEuForecast5DayTemplateConfig()
 
-    assert config.dims == ("init_time", "lead_time", "latitude", "longitude")
+    assert config.dims[ROOT] == ("init_time", "lead_time", "latitude", "longitude")
     assert config.append_dim == "init_time"
     assert config.append_dim_start == pd.Timestamp("2026-02-10T00:00")
     assert config.append_dim_frequency == pd.Timedelta("6h")
@@ -133,7 +134,7 @@ def test_get_template_spatial_ref() -> None:
     template_config = DwdIconEuForecast5DayTemplateConfig()
     ds = template_config.get_template(
         template_config.append_dim_start + pd.Timedelta(days=10)
-    )
+    ).to_dataset()
     original_attrs = deepcopy(ds.spatial_ref.attrs)
 
     # This WKT string is extracted from the ICON-EU GRIB by gdalinfo:

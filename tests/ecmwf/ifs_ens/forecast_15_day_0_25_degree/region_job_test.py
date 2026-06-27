@@ -26,7 +26,7 @@ from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.template_config impo
 
 def test_region_job_source_groups() -> None:
     template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
-    groups = EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_groups(
+    groups = EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_file_var_groups(
         template_config.data_vars
     )
     assert len(groups) == 4
@@ -59,7 +59,7 @@ def test_region_job_generate_source_file_coords_open_data() -> None:
         reformat_job_name="test",
     )
     processing_region_ds, _ = region_job._get_region_datasets()
-    groups = EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_groups(
+    groups = EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_file_var_groups(
         template_config.data_vars
     )
     # We are grouping by date_available and has_hour_0_values, so we should get 4 groups
@@ -147,7 +147,7 @@ def test_region_job_generate_source_file_coords_mars_date_available_vars() -> No
         reformat_job_name="test",
     )
     processing_region_ds, _ = region_job._get_region_datasets()
-    groups = EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_groups(
+    groups = EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_file_var_groups(
         template_config.data_vars
     )
 
@@ -577,7 +577,7 @@ def test_download_file_from_ecmwf_open_data() -> None:
         init_time=slice(init_time, None),
         lead_time=[pd.Timedelta("0h"), pd.Timedelta("3h"), pd.Timedelta("96h")],
         ensemble_member=[0],
-    )
+    ).to_dataset()
 
     def check_data_var(data_var: EcmwfDataVar) -> None:
         for source_coord in region_job.generate_source_file_coords(test_ds, [data_var]):
@@ -591,7 +591,7 @@ def test_download_file_from_ecmwf_open_data() -> None:
 
     all_data_vars = [
         data_var
-        for group in EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_groups(
+        for group in EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_file_var_groups(
             template_config.data_vars
         )
         for data_var in group
