@@ -83,13 +83,15 @@ class GefsForecast10DaySpatialDataset(
         return [operational_update_cron_job, validation_cron_job]
 
     def validators(self) -> Sequence[validation.DataValidator]:
-        # Minimal for now: the NaN validators decode one full GRIB message per
-        # (lead, member) chunk touched, which is unbounded on a virtual store.
-        # Manifest-aware validators are planned (virtual datasets plan, PR 7).
         # 6h cycle + ~3h48m = 9h48m plus a little buffer = 10h
         return (
             partial(
                 validation.check_forecast_current_data,
                 max_latest_init_time_age=timedelta(hours=10),
             ),
+            # Manifest completeness (missing steps) + a bounded sample-decode of the
+            # latest complete init. Both probe the recent window via the operational
+            # region job; see docs/virtual_datasets.md. The full NaN scan stays offline.
+            validation.CheckVirtualManifestCompleteness(),
+            validation.CheckVirtualDecodeHealth(),
         )

@@ -10,6 +10,7 @@ from reformatters.common.iterating import (
     consume,
     digest,
     dimension_slices,
+    flatten_groups,
     get_worker_jobs,
     group_by,
     item,
@@ -55,6 +56,38 @@ def test_walk_data_arrays_yields_group_qualified_paths() -> None:
     assert paths == ["temperature_2m", "pressure_level/temperature"]
     by_path = dict(walk_data_arrays(tree))
     assert by_path["pressure_level/temperature"].dims == ("time", "pressure_level")
+
+
+def test_flatten_groups_single_node_returns_root() -> None:
+    root = xr.Dataset(
+        {"temperature_2m": xr.Variable(("time",), np.zeros(2, dtype=np.float32))},
+        coords={"time": [0, 1]},
+    )
+    flat = flatten_groups(xr.DataTree.from_dict({"/": root}))
+    assert list(flat.data_vars) == ["temperature_2m"]
+    assert flat.equals(root)
+
+
+def test_flatten_groups_keys_group_vars_by_path() -> None:
+    flat = flatten_groups(_two_node_tree())
+    assert set(flat.data_vars) == {"temperature_2m", "pressure_level/temperature"}
+    # The group var keeps its vertical dim and that group's own coord is merged in.
+    assert flat["pressure_level/temperature"].dims == ("time", "pressure_level")
+    assert "pressure_level" in flat.coords
+
+
+def test_flatten_groups_handles_arbitrary_nesting() -> None:
+    # Nested groups flatten by node path with no special-casing.
+    coords = {"x": [0, 1]}
+    tree = xr.DataTree.from_dict(
+        {
+            "/": xr.Dataset({"a": ("x", [1.0, 2.0])}, coords=coords),
+            "/g": xr.Dataset({"b": ("x", [3.0, 4.0])}, coords=coords),
+            "/g/h": xr.Dataset({"c": ("x", [5.0, 6.0])}, coords=coords),
+        }
+    )
+    flat = flatten_groups(tree)
+    assert set(flat.data_vars) == {"a", "g/b", "g/h/c"}
 
 
 def test_group_by_parity_preserves_order() -> None:

@@ -239,9 +239,7 @@ class VirtualRegionJob(
         # session becomes read-only after commit. sync_dims_to grows the store
         # lazily (a no-op on the pre-sized backfill branch).
         readonly_store = primary_repo.readonly_session(branch).store
-        candidates = self.generate_source_file_coords(
-            self._processing_region_ds(), self.data_vars
-        )
+        candidates = self.source_file_coords()
         remaining = self.filter_already_present(candidates, readonly_store)
         # The smallest group, so the sync_dims_to shortcut below can never skip a group
         # that lags root (e.g. after a partially-applied prior grow).
@@ -408,6 +406,13 @@ class VirtualRegionJob(
         array = node[self.append_dim]
         assert isinstance(array, zarr.Array)
         return int(array.shape[0])
+
+    def source_file_coords(self) -> Sequence[SOURCE_FILE_COORD]:
+        """Every source file coord this job's region covers — the write loop's inputs,
+        before filtering. Reused by operational validation to probe manifest completeness."""
+        return self.generate_source_file_coords(
+            self._processing_region_ds(), self.data_vars
+        )
 
     def _processing_region_ds(self) -> xr.Dataset:
         processing_region = self.get_processing_region()

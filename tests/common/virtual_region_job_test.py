@@ -868,6 +868,127 @@ def test_validate_dataset_on_virtual_skips_shard_check(tmp_path: Path) -> None:
     dataset.validate_dataset("test")  # must not raise
 
 
+# --- virtual operational validators (completeness + decode health) ---
+
+
+def _backfilled_store(
+    dataset: VirtualTestDataset, template_ds: xr.DataTree, *, emit: slice
+) -> icechunk.IcechunkStore:
+    """Pre-size main to the template, emit refs for `emit`, return the readonly store."""
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    _make_region_job(template_ds, region=emit).process_virtual(repo, [], "main")
+    return repo.readonly_session("main").store
+
+
+def test_check_virtual_manifest_completeness_passes(tmp_path: Path) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 4))
+    job = _make_region_job(template_ds, region=slice(0, 4))
+
+    result = validation.CheckVirtualManifestCompleteness()(
+        job, store, xr.open_zarr(store, decode_timedelta=True)
+    )
+    assert result.passed, result.message
+
+
+def test_check_virtual_manifest_completeness_detects_hole(tmp_path: Path) -> None:
+    # Emit inits 0-1 of a 4-init window. With skip_newest_positions=1 the newest
+    # (init 3) is excluded, but init 2 is expected and missing -> a real hole.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 2))
+    job = _make_region_job(template_ds, region=slice(0, 4))
+
+    result = validation.CheckVirtualManifestCompleteness()(
+        job, store, xr.open_zarr(store, decode_timedelta=True)
+    )
+    assert not result.passed
+    assert "missing" in result.message
+
+
+def test_check_virtual_manifest_completeness_excludes_newest_positions(
+    tmp_path: Path,
+) -> None:
+    # Emit inits 0-2 but not the newest (init 3). skip_newest_positions=1 excludes
+    # init 3 from the check, so completeness passes despite its absence.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 3))
+    job = _make_region_job(template_ds, region=slice(0, 4))
+
+    result = validation.CheckVirtualManifestCompleteness()(
+        job, store, xr.open_zarr(store, decode_timedelta=True)
+    )
+    assert result.passed, result.message
+
+
+def test_check_virtual_decode_health_passes(tmp_path: Path) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 4))
+    job = _make_region_job(template_ds, region=slice(0, 4))
+
+    result = validation.CheckVirtualDecodeHealth()(
+        job, store, xr.open_zarr(store, decode_timedelta=True)
+    )
+    assert result.passed, result.message
+    assert "decoded with data" in result.message
+
+
+def test_check_virtual_decode_health_detects_all_nan(tmp_path: Path) -> None:
+    # The target position (init 2, the newest after skip_newest_positions=1) has no
+    # emitted refs, so every sampled chunk reads back fill-value NaN.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 2))
+    job = _make_region_job(template_ds, region=slice(0, 4))
+
+    result = validation.CheckVirtualDecodeHealth()(
+        job, store, xr.open_zarr(store, decode_timedelta=True)
+    )
+    assert not result.passed
+    assert "entirely NaN" in result.message
+
+
+def test_validate_dataset_requires_region_job_for_virtual_validator(
+    tmp_path: Path,
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    store = _backfilled_store(dataset, _create_template_ds(4), emit=slice(0, 4))
+    with pytest.raises(AssertionError, match="needs a region_job"):
+        validation.validate_dataset(
+            store, [validation.CheckVirtualManifestCompleteness()]
+        )
+
+
+def test_validate_dataset_wires_virtual_validators(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The dataset lists the virtual validators in validators(); validate_dataset must
+    # build the operational-window region job and dispatch the context to them.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    _backfilled_store(dataset, template_ds, emit=slice(0, 4))
+    job = _make_region_job(template_ds, region=slice(0, 4), processing_mode="update")
+
+    monkeypatch.setattr(
+        VirtualTestRegionJob,
+        "operational_update_jobs",
+        classmethod(lambda cls, **kwargs: ([job], template_ds)),
+    )
+    monkeypatch.setattr(
+        VirtualTestDataset,
+        "validators",
+        lambda self: (
+            validation.CheckVirtualManifestCompleteness(),
+            validation.CheckVirtualDecodeHealth(),
+        ),
+    )
+    dataset.validate_dataset("test")  # must not raise
+
+
 def test_process_virtual_writes_refs_to_replica(tmp_path: Path) -> None:
     # Replica emit path + replicas-then-primary commit: both stores get every ref.
     dataset = _make_dataset(tmp_path)

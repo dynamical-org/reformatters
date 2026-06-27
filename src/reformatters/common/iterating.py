@@ -26,6 +26,26 @@ def walk_data_arrays(tree: xr.DataTree) -> Iterator[tuple[str, xr.DataArray]]:
             yield f"{prefix}{name}", data_array
 
 
+def flatten_groups(tree: xr.DataTree) -> xr.Dataset:
+    """Flatten a (possibly multi-group, possibly nested) DataTree into one Dataset whose
+    data vars are keyed by group path — root vars keep their bare name, a group var
+    becomes ``group/name`` (nested: ``a/b/name``), the same path `walk_data_arrays` and
+    the zarr store use. Shared coords (duplicated identically into every group) merge;
+    each group's own dim coords come along. A single-node tree returns its root dataset.
+
+    Recursing over ``tree.subtree`` means arbitrarily nested groups flatten with no
+    special-casing — the node path is the var-name prefix."""
+    flat = xr.Dataset()
+    for node in tree.subtree:
+        prefix = node_path_prefix(node)
+        node_ds = node.to_dataset()
+        flat = flat.merge(
+            node_ds.rename({name: f"{prefix}{name}" for name in node_ds.data_vars}),
+            compat="no_conflicts",
+        )
+    return flat
+
+
 def dimension_slices(
     ds: xr.Dataset, dim: str, kind: Literal["shards", "chunks"] = "shards"
 ) -> Sequence[slice]:

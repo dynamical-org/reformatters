@@ -502,13 +502,19 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
-        # Virtual datasets get their own manifest-aware validators. The materialized
-        # ones don't apply: check_for_expected_shards (no shards; missing chunks for
-        # partially-published inits are expected) and compare_replica_and_primary.
+        # A dataset's validators() lists every check, mixing plain XarrayDataValidators
+        # with VirtualDataValidators (which need the region job + manifest). The
+        # materialized-only check_for_expected_shards / compare_replica_and_primary are
+        # appended below since every materialized dataset wants them.
         is_virtual = issubclass(self.region_job_class, VirtualRegionJob)
+        base_validators = list(self.validators())
         with self._monitor(ValidationCronJob, reformat_job_name):
+            region_job = self._virtual_validation_region_job(
+                base_validators, reformat_job_name
+            )
+
             primary_store = self.store_factory.primary_store()
-            primary_store_validators = list(self.validators())
+            primary_store_validators = list(base_validators)
             if not is_virtual:
                 primary_store_validators.append(
                     partial(validation.check_for_expected_shards, primary_store)
@@ -517,11 +523,12 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             validation.validate_dataset(
                 primary_store,
                 validators=primary_store_validators,
+                region_job=region_job,
             )
             log.info(f"Done validating {primary_store}")
 
             for replica_store in self.store_factory.replica_stores():
-                replica_store_validators = list(self.validators())
+                replica_store_validators = list(base_validators)
                 if not is_virtual:
                     replica_store_validators.append(
                         partial(validation.check_for_expected_shards, replica_store)
@@ -530,9 +537,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         partial(  # ty: ignore[invalid-argument-type]
                             validation.compare_replica_and_primary,
                             self.template_config.append_dim,
-                            xr.open_zarr(
+                            validation.open_validation_dataset(
                                 replica_store,
-                                chunks=None,
                                 consolidated=not isinstance(
                                     replica_store, IcechunkStore
                                 ),
@@ -543,8 +549,34 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 validation.validate_dataset(
                     replica_store,
                     validators=replica_store_validators,
+                    region_job=region_job,
                 )
                 log.info(f"Done validating {replica_store}")
+
+    def _virtual_validation_region_job(
+        self,
+        validators: Sequence[validation.DataValidator],
+        reformat_job_name: str,
+    ) -> VirtualRegionJob[DATA_VAR, SOURCE_FILE_COORD] | None:
+        """The operational-window job a VirtualDataValidator probes against, or None if
+        none of the validators need it. Built once and shared across primary + replica
+        (the job is store-independent; each validator's context binds the store)."""
+        if not any(isinstance(v, validation.VirtualDataValidator) for v in validators):
+            return None
+        jobs, _template_ds = self.region_job_class.operational_update_jobs(
+            primary_store=self.store_factory.primary_store(),
+            tmp_store=self._tmp_store(),
+            get_template_fn=self._get_template,
+            append_dim=self.template_config.append_dim,
+            all_data_vars=self.template_config.data_vars,
+            reformat_job_name=reformat_job_name,
+        )
+        job = item(jobs)
+        assert isinstance(job, VirtualRegionJob), (
+            f"validators() returned a VirtualDataValidator but {self.region_job_class.__name__} "
+            "is not a VirtualRegionJob"
+        )
+        return job
 
     def dataset_urls(
         self,

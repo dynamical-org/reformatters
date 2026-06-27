@@ -1176,18 +1176,45 @@ Validation findings (spiked against live data before building):
 Sequenced after PR #6 so the seam is drawn from two implementations, not guessed
 from one. See [Extracting common patterns (PR 7)](#extracting-common-patterns-pr-7).
 
-### PR #8 — Validation phase
+### PR #8 — Operational validation
 
-Two sub-phases, sequenced after the first datasets are operationally stable:
+The validators the `-validate` CronJob runs after each operational update —
+cheap, bounded, spatial-chunk-optimized, sequenced after the first datasets are
+operationally stable. Three checks over a recent window:
 
-1. **Operational, spatial-chunk-optimized validators** — a manifest-presence
-   check (shares [filtering](#filtering-already-present-coordinates)'s
-   `chunk_key` + ref-existence primitive) plus a bounded sample-decode, designed
-   for the one-message-per-chunk access pattern rather than the materialized
-   shard layout.
-2. **Offline tooling** — update `docs/validation.md` and its plotting/scan
-   tooling to be feasible on a virtual store (millions of refs, decode-on-read),
-   rather than assuming materialized read economics.
+1. **Lag** — the latest append-dim position is recent enough. The existing
+   `check_forecast_current_data` / `check_analysis_current_data` already apply
+   unchanged (a pure coordinate read).
+2. **Manifest completeness (missing steps)** — re-run the operational filter
+   (`generate_source_file_coords` + `filter_already_present`, the
+   [filtering](#filtering-already-present-coordinates) `chunk_key` + ref-existence
+   primitive) over the window's *already-complete* inits and assert nothing
+   remains. Reusing the dataset's own coord generation makes the expected set
+   exact (structural absences like hour-0 accumulated vars are already excluded),
+   so there are no false positives. Measured ~2 s to probe a full init (47 k
+   chunk keys) on the live GEFS store.
+3. **Decode health (bounded sample-decode)** — decode a small fixed sample
+   (e.g. first + last + a random lead, one member, the vars) of the latest
+   complete init and assert each decodes without error and isn't entirely NaN.
+   ~0.22 s per full-message decode measured, so a few dozen is seconds. This is
+   the operational read path (gribberish + container authorization) end to end;
+   the full-archive NaN/coverage scan stays offline (PR #11) because one decode
+   per chunk across all leads × members is hours.
+
+`check_for_expected_shards` and `compare_replica_and_primary` do **not** carry
+over: virtual stores have no shards (→ the completeness check above), and virtual
+replicas point at the *same* source bytes so decoded values are identical by
+construction (a value compare adds nothing; refs are committed
+replica-then-primary idempotently).
+
+### PR #11 — Offline / backfill validation
+
+Update `docs/validation.md` and its plotting/scan tooling (`src/scripts/validation/`)
+to be feasible on a virtual store (millions of refs, decode-on-read) rather than
+assuming materialized read economics. This is the thorough, whole-archive
+correctness pass run after a backfill — distinct from the cheap operational
+checks in PR #8 — so it can afford broad decode-on-read sampling, plots, and
+spatial/timeseries comparison.
 
 ### Later (separate PR per dataset)
 
@@ -1242,7 +1269,8 @@ issue **#513** (its body holds the PR checklist; items are written "PR 1" not
 | PR 5 — persist container config | **merged** (#667) | `save_config()` on container drift in `parallel_setup`; before first *externally published* virtual repo (first datasets run in prod unpublished). |
 | PR 6 — second concrete virtual dataset | in progress | `ecmwf-ifs-ens-forecast-15-day-spatial-dev`: ECMWF IFS ENS, 51 members, 0-360h, native wrapped 0.25° grid. Different index format (JSON-lines, explicit lengths), multi-member-per-file packing (control `oper-fc` + perturbed `enfo-ef`), raw-value attrs. Validated end to end against live data; open-data ~4-day retention noted. |
 | PR 7 — extract common patterns into `VirtualRegionJob` | in progress | Lifted the source-agnostic tick loop + unreadable-file skipping to the base (attrs → overridable seam → common machinery); the object-store-listing discovery is a separate opt-in util generic over obstore backends (`virtual_source_listing.discover_available_by_obstore_listing`), not base baggage. Subclasses supply `generate_source_file_coords`, `file_refs`, a one-line `discover_available`, `operational_update_jobs` (per-subclass, like materialized), optional `representative_var`/`filter_already_present`; the data→index relationship is `SourceFileCoord.get_index_url()`. Drew the seam from GEFS + ECMWF; each subclass `region_job.py` dropped ~100 lines. See "Extracting common patterns (PR 7) — as built" below. |
-| PR 8 — validation phase | not started | Spatial-chunk validators + offline tooling. |
+| PR 8 — operational validation | not started | Lag + manifest-completeness + bounded sample-decode validators for the `-validate` CronJob. |
+| PR 11 — offline / backfill validation | not started | `src/scripts/validation/` + `docs/validation.md` made feasible on a virtual store. |
 
 PR 3 was originally one combined PR (#648) but was resequenced into 3a + 3b after
 the [B-method](#decision-b-method) design review; #648 is closed/superseded by #650.

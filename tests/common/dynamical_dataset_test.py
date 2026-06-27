@@ -73,20 +73,39 @@ def assert_configured_validators(dataset: DynamicalDataset) -> None:
     (manifest-aware validators for them are a separate planned phase).
     """
     store = dataset.store_factory.primary_store()
-    ds = xr.open_zarr(
+    ds = validation.open_validation_dataset(
         store,
-        chunks=None,
         consolidated=not isinstance(store, icechunk.store.IcechunkStore),
     )
-    latest = pd.Timestamp(ds[dataset.template_config.append_dim].max().values)
+    latest = pd.Timestamp(ds[dataset.template_config.append_dim].max().item())
 
     validators = list(dataset.validators())
     if not issubclass(dataset.region_job_class, VirtualRegionJob):
         validators.append(partial(validation.check_for_expected_shards, store))
 
+    # Mirror validate_dataset: VirtualDataValidators get a context (region job + store),
+    # the rest get the opened dataset.
+    region_job = None
+    if any(isinstance(v, validation.VirtualDataValidator) for v in validators):
+        jobs, _ = dataset.region_job_class.operational_update_jobs(
+            primary_store=store,
+            tmp_store=dataset._tmp_store(),
+            get_template_fn=dataset._get_template,
+            append_dim=dataset.template_config.append_dim,
+            all_data_vars=dataset.template_config.data_vars,
+            reformat_job_name="test",
+        )
+        region_job = jobs[0]
+        assert isinstance(region_job, VirtualRegionJob)
+
     with patch.object(pd.Timestamp, "now", classmethod(lambda cls, *a, **k: latest)):
         for validator in validators:
-            result = validator(ds)
+            if isinstance(validator, validation.VirtualDataValidator):
+                assert region_job is not None
+                assert isinstance(store, icechunk.store.IcechunkStore)
+                result = validator(region_job, store, ds)
+            else:
+                result = validator(ds)
             assert isinstance(result, validation.ValidationResult), (
                 f"Validator {getattr(validator, 'func', validator)!r} returned "
                 f"{type(result)!r}, expected ValidationResult"
@@ -493,9 +512,9 @@ def test_validate_dataset_calls_validators(
 
     mock_replica_store_ds = Mock()
     monkeypatch.setattr(
-        xr,
-        "open_zarr",
-        lambda store, chunks=None, consolidated=None: mock_replica_store_ds,
+        validation,
+        "open_validation_dataset",
+        lambda store, *, consolidated: mock_replica_store_ds,
     )
 
     dataset.validate_dataset("example-job-name")

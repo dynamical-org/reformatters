@@ -1,9 +1,20 @@
+from __future__ import annotations
+
+import abc
 import itertools
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import timedelta
 from functools import partial
-from typing import Literal, Protocol, assert_never, runtime_checkable
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    Protocol,
+    assert_never,
+    runtime_checkable,
+)
 
 import numpy as np
 import pandas as pd
@@ -18,6 +29,9 @@ from zarr.abc.store import Store
 from reformatters.common import iterating
 from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
+
+if TYPE_CHECKING:
+    from reformatters.common.virtual_region_job import VirtualRegionJob
 
 log = get_logger(__name__)
 
@@ -43,21 +57,77 @@ class ValidationResult(pydantic.BaseModel):
 
 
 @runtime_checkable
-class DataValidator(Protocol):
-    """Protocol for validation functions."""
+class XarrayDataValidator(Protocol):
+    """A validator that runs on an opened xarray Dataset.
+
+    The common, generic kind — works on any dataset (materialized or virtual) and
+    needs nothing beyond the data it reads (lag, NaN-fraction, ...).
+    """
 
     def __call__(self, ds: xr.Dataset) -> ValidationResult: ...
 
 
+class VirtualDataValidator(abc.ABC):
+    """A validator that needs manifest/store access, not just an opened Dataset.
+
+    Virtual datasets list these in DynamicalDataset.validators() alongside the plain
+    XarrayDataValidator functions; validate_dataset dispatches by type, handing these the
+    operational-window region job (to regenerate source-file coords and probe the
+    manifest), the icechunk store, and the opened dataset — each validator uses the subset
+    it needs. Tuning (e.g. how many newest positions to skip) is a field on the concrete
+    validator, set where it is listed in validators() — one place.
+    """
+
+    @abc.abstractmethod
+    def __call__(
+        self,
+        region_job: VirtualRegionJob[Any, Any],
+        store: IcechunkStore,
+        ds: xr.Dataset,
+    ) -> ValidationResult: ...
+
+
+# A dataset's validators() may mix the two kinds; validate_dataset dispatches on type.
+DataValidator = XarrayDataValidator | VirtualDataValidator
+
+
+def open_validation_dataset(
+    store: zarr.storage.StoreLike, *, consolidated: bool
+) -> xr.Dataset:
+    """Open a store as one flat Dataset covering every group.
+
+    xr.open_zarr reads only the root group, so a multi-group dataset's vertical-group
+    variables (e.g. ``pressure_level/temperature``) would be invisible to validators —
+    silently shrinking coverage to root-only. Opening the whole DataTree and flattening
+    it (iterating.flatten_groups) exposes every group var keyed by its store path; root
+    vars keep their bare names. Validators key variables — and their include/exclude
+    filters — by that path, which is unique across groups. A single-group store flattens
+    to exactly its root dataset.
+    """
+    tree = xr.open_datatree(
+        store,  # ty: ignore[invalid-argument-type]
+        engine="zarr",
+        chunks=None,
+        consolidated=consolidated,
+    )
+    return iterating.flatten_groups(tree)
+
+
 def validate_dataset(
-    store: zarr.storage.StoreLike, validators: Sequence[DataValidator]
+    store: zarr.storage.StoreLike,
+    validators: Sequence[DataValidator],
+    *,
+    region_job: VirtualRegionJob[Any, Any] | None = None,
 ) -> None:
     """
     Validate a zarr dataset by running a series of quality checks.
 
     Args:
-        zarr_path: Path to zarr store
-        validators: List of validation functions to run.
+        store: the zarr/icechunk store to validate.
+        validators: the checks to run; XarrayDataValidators receive the opened dataset,
+            VirtualDataValidators receive (region_job, store, ds).
+        region_job: the operational-window job, required when any validator is a
+            VirtualDataValidator (it supplies the source-file coords + manifest probe).
 
     Raises:
         ValueError: If any validation checks fail
@@ -69,9 +139,18 @@ def validate_dataset(
     # Run all validators
     failed_validations = []
     for validator in validators:
-        ds = xr.open_zarr(store, chunks=None, consolidated=consolidated)
+        ds = open_validation_dataset(store, consolidated=consolidated)
 
-        result = validator(ds)
+        if isinstance(validator, VirtualDataValidator):
+            assert region_job is not None, (
+                f"{type(validator).__name__} needs a region_job but validate_dataset "
+                "was called without one"
+            )
+            assert isinstance(store, IcechunkStore)
+            result = validator(region_job, store, ds)
+        else:
+            result = validator(ds)
+
         if not result.passed:
             log.error(f"Failed validation: {result.message}")
             failed_validations.append(result.message)
@@ -512,3 +591,164 @@ def _sync_list_shards(store: Store, var: str) -> set[str]:
 
 async def _list_shards(store: Store, var: str) -> set[str]:
     return {key.split(f"{var}/c/")[-1] async for key in store.list_prefix(f"{var}")}
+
+
+@dataclass(frozen=True)
+class CheckVirtualManifestCompleteness(VirtualDataValidator):
+    """Assert every source file that should already be ingested is in the manifest.
+
+    Re-runs the operational filter (the region job's own source_file_coords +
+    filter_already_present) over the recent window, excluding the newest
+    `skip_newest_positions` append-dim positions, which may still be mid-publication.
+    Anything still missing is a real hole — a source file that failed to ingest.
+    Cheap: one ref-existence probe per source file, no decode. Because it reuses the
+    dataset's coord generation, structural absences (hour-0 accumulated vars, etc.) are
+    already excluded, so there are no false positives. The virtual analog of
+    check_for_expected_shards.
+    """
+
+    skip_newest_positions: int = 1
+
+    def __call__(
+        self,
+        region_job: VirtualRegionJob[Any, Any],
+        store: IcechunkStore,
+        ds: xr.Dataset,  # noqa: ARG002 - completeness reads the manifest, not the dataset
+    ) -> ValidationResult:
+        append_dim = region_job.append_dim
+        candidates = region_job.source_file_coords()
+        positions = sorted({c.out_loc()[append_dim] for c in candidates})
+        if len(positions) <= self.skip_newest_positions:
+            return ValidationResult(
+                passed=True,
+                message=f"Too few {append_dim} positions ({len(positions)}) to check completeness",
+            )
+
+        cutoff = positions[-1 - self.skip_newest_positions]
+        expected = [c for c in candidates if c.out_loc()[append_dim] <= cutoff]
+        missing = region_job.filter_already_present(expected, store)
+        if missing:
+            missing_positions = sorted({str(c.out_loc()[append_dim]) for c in missing})
+            return ValidationResult(
+                passed=False,
+                message=(
+                    f"{len(missing)} of {len(expected)} expected source files missing from "
+                    f"the manifest (through {append_dim}={cutoff}); "
+                    f"affected {append_dim}: {missing_positions}"
+                ),
+            )
+        return ValidationResult(
+            passed=True,
+            message=f"All {len(expected)} expected source files present through {append_dim}={cutoff}",
+        )
+
+
+@dataclass(frozen=True)
+class CheckVirtualDecodeHealth(VirtualDataValidator):
+    """Decode a bounded sample of the latest complete position and assert every variable
+    decodes without error and isn't entirely NaN.
+
+    Exercises the live read path — the per-variable serializer (e.g. GribberishCodec) and
+    virtual-container authorization — end to end, catching a regression that leaves refs
+    present but unreadable. Bounded by sampling: `sampled_leads` lead times (first + last
+    + evenly spaced interior) across every ensemble member of one position, decoded
+    concurrently. The whole-archive NaN/coverage scan stays offline (it is one full-message
+    decode per chunk across all leads x members — hours).
+    """
+
+    skip_newest_positions: int = 1
+    sampled_leads: int = 5
+    max_workers: int = 32
+
+    def __call__(
+        self,
+        region_job: VirtualRegionJob[Any, Any],
+        store: IcechunkStore,  # noqa: ARG002 - decode health reads through the opened dataset
+        ds: xr.Dataset,
+    ) -> ValidationResult:
+        append_dim = region_job.append_dim
+        positions = sorted(
+            {c.out_loc()[append_dim] for c in region_job.source_file_coords()}
+        )
+        if len(positions) <= self.skip_newest_positions:
+            return ValidationResult(
+                passed=True,
+                message=f"Too few {append_dim} positions ({len(positions)}) to sample-decode",
+            )
+
+        target = positions[-1 - self.skip_newest_positions]
+        target_index = int(ds.get_index(append_dim).get_indexer(pd.Index([target]))[0])
+
+        base_selection: dict[str, Any] = {append_dim: target_index}
+        lead_indexes: list[int] | None = None
+        if "lead_time" in ds.dims:
+            n_leads = ds.sizes["lead_time"]
+            lead_indexes = sorted(
+                set(
+                    np.linspace(0, n_leads - 1, min(self.sampled_leads, n_leads))
+                    .round()
+                    .astype(int)
+                    .tolist()
+                )
+            )
+        members: list[int | None] = (
+            list(range(ds.sizes["ensemble_member"]))
+            if "ensemble_member" in ds.dims
+            else [None]
+        )
+        var_names = [str(v) for v in ds.data_vars]
+
+        def decode(task: tuple[str, int | None]) -> tuple[str, float, str | None]:
+            var_name, member = task
+            selection = dict(base_selection)
+            if member is not None:
+                selection["ensemble_member"] = member
+            if lead_indexes is not None:
+                selection["lead_time"] = lead_indexes
+            da = ds[var_name].isel(selection)
+            # Accumulated/non-instant vars have no valid hour-0 data; drop it before
+            # judging NaN-ness (matches _compute_var_nan_fraction).
+            if (
+                lead_indexes is not None
+                and lead_indexes[0] == 0
+                and da.attrs.get("step_type", "instant") != "instant"
+            ):
+                da = da.isel(lead_time=slice(1, None))
+            try:
+                values = da.copy(deep=True).load().values
+                return var_name, float(np.isnan(values).mean()), None
+            except Exception as e:  # noqa: BLE001 - any decode failure is a validation failure
+                return var_name, 1.0, f"{type(e).__name__}: {e}"
+
+        tasks = [(var_name, member) for var_name in var_names for member in members]
+        min_nan_fraction: dict[str, float] = dict.fromkeys(var_names, 1.0)
+        first_error: dict[str, str] = {}
+        with ThreadPoolExecutor(self.max_workers) as pool:
+            for var_name, nan_fraction, error in pool.map(decode, tasks):
+                min_nan_fraction[var_name] = min(
+                    min_nan_fraction[var_name], nan_fraction
+                )
+                if error is not None and var_name not in first_error:
+                    first_error[var_name] = error
+
+        problems = []
+        for var_name in var_names:
+            if var_name in first_error:
+                problems.append(f"{var_name}: decode error ({first_error[var_name]})")
+            elif min_nan_fraction[var_name] >= 1.0:
+                problems.append(f"{var_name}: every sampled chunk decoded entirely NaN")
+
+        if problems:
+            return ValidationResult(
+                passed=False,
+                message=f"Decode health failures at {append_dim}={target}:\n"
+                + "\n".join(f"- {p}" for p in problems),
+            )
+        n_decodes = len(tasks) * (len(lead_indexes) if lead_indexes else 1)
+        return ValidationResult(
+            passed=True,
+            message=(
+                f"All {len(var_names)} variables decoded with data at "
+                f"{append_dim}={target} ({n_decodes} chunk decodes)"
+            ),
+        )

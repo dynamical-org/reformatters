@@ -80,6 +80,20 @@ What is already ingested is derived from ref existence in the icechunk manifest 
 
 The loop opens sessions on all stores and commits replicas-then-primary. "Committed" is defined by the primary (the filter probes the primary's manifest), so a crash between replica and primary commits is replayed idempotently on the next fire; replicas may briefly be a commit ahead, never behind.
 
+## Operational validation
+
+The `-validate` CronJob runs after each operational update. A dataset lists every check in its `validators()`, mixing two kinds (`validation.DataValidator = XarrayDataValidator | VirtualDataValidator`); `validate_dataset` dispatches by type:
+
+- **`XarrayDataValidator`** — the common kind, `(ds) -> ValidationResult`, run on the opened dataset (e.g. `check_forecast_current_data` for lag). Unchanged across materialized and virtual.
+- **`VirtualDataValidator`** — needs manifest/store access, so `validate_dataset` hands it the operational-window region job, the icechunk store, and the opened dataset (each validator uses the subset it needs). The region job is built once (via `operational_update_jobs`) and shared across primary + replica.
+
+Two virtual validators ship in `validation.py`; both are bounded so the whole validation stays well under a couple of minutes even on a large ensemble dataset:
+
+- **`CheckVirtualManifestCompleteness`** — the virtual analog of the materialized `check_for_expected_shards`. Re-runs the operational filter (`region_job.source_file_coords()` + `filter_already_present`) over the recent window, excluding the newest `skip_newest_positions` append-dim positions (still possibly mid-publication), and asserts nothing is missing. Reusing the dataset's own coord generation means structural absences (e.g. hour-0 accumulated vars) are already excluded — no false positives. Cheap: one ref-existence probe per file, no decode.
+- **`CheckVirtualDecodeHealth`** — decodes a bounded sample of the latest complete position (first + last + interior lead times across every ensemble member) and asserts each variable decodes without error and isn't entirely NaN. This exercises the live read path — the per-variable serializer and virtual-container authorization — end to end. The full-archive NaN/coverage scan stays offline (one full-message decode per chunk across all leads × members is hours).
+
+Tuning (`skip_newest_positions`, `sampled_leads`, `max_workers`) is set where the validator is listed in `validators()` — one place. The materialized `check_for_expected_shards` / `compare_replica_and_primary` do not carry over: virtual stores have no shards, and virtual replicas point at the same source bytes so a value compare adds nothing.
+
 ## Storage and reading
 
 A virtual dataset requires every storage config to use the `ICECHUNK` format and an `icechunk_virtual_config` registering the source buckets as virtual chunk containers (`DynamicalDataset` validates this). Container definitions are stored in the repo's persistent config; readers supply an (anonymous) credentials map via `authorize_virtual_chunk_access` when opening the store.

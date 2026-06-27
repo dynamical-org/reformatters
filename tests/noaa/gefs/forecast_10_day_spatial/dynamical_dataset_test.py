@@ -165,7 +165,9 @@ def test_operational_kubernetes_resources(
 
 
 def test_validators(dataset: GefsForecast10DaySpatialDataset) -> None:
-    [validator] = dataset.validators()
-    assert isinstance(validator, partial)
-    assert validator.func is validation.check_forecast_current_data
-    assert validator.keywords == {"max_latest_init_time_age": timedelta(hours=10)}
+    lag, completeness, decode_health = dataset.validators()
+    assert isinstance(lag, partial)
+    assert lag.func is validation.check_forecast_current_data
+    assert lag.keywords == {"max_latest_init_time_age": timedelta(hours=10)}
+    assert isinstance(completeness, validation.CheckVirtualManifestCompleteness)
+    assert isinstance(decode_health, validation.CheckVirtualDecodeHealth)
