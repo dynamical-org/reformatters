@@ -297,6 +297,113 @@ def test_source_file_coord_append_dim_coord() -> None:
     assert coord.append_dim_coord == pd.Timestamp("2025-01-01T00")
 
 
+def _multi_group_template_and_vars() -> tuple[xr.DataTree, list[ExampleDataVar]]:
+    """Root temperature_2m + pressure_level/temperature + model_level/temperature,
+    one chunk per init_time, so get_jobs produces one region per var group."""
+    num_time = 2
+    init_times = pd.date_range("2025-01-01", freq="6h", periods=num_time)
+
+    def _root_var() -> xr.Variable:
+        return xr.Variable(
+            data=dask.array.full(
+                (num_time, _LAT_SIZE, _LON_SIZE), np.nan, dtype=np.float32, chunks=-1
+            ),
+            dims=["init_time", "latitude", "longitude"],
+            encoding={
+                "dtype": "float32",
+                "chunks": (1, _LAT_SIZE, _LON_SIZE),
+                "shards": None,
+                "fill_value": np.nan,
+            },
+        )
+
+    def _vertical_var(level_dim: str, n_levels: int) -> xr.Variable:
+        return xr.Variable(
+            data=dask.array.full(
+                (num_time, _LAT_SIZE, _LON_SIZE, n_levels),
+                np.nan,
+                dtype=np.float32,
+                chunks=-1,
+            ),
+            dims=["init_time", "latitude", "longitude", level_dim],
+            encoding={
+                "dtype": "float32",
+                "chunks": (1, _LAT_SIZE, _LON_SIZE, 1),
+                "shards": None,
+                "fill_value": np.nan,
+            },
+        )
+
+    shared_coords = {
+        "init_time": init_times,
+        "latitude": np.linspace(0, 90, _LAT_SIZE),
+        "longitude": np.linspace(0, 140, _LON_SIZE),
+    }
+    root = xr.Dataset(
+        {"temperature_2m": _root_var()},
+        coords=shared_coords,
+        attrs={"dataset_id": "test-multi-group"},
+    )
+    pressure = xr.Dataset(
+        {"temperature": _vertical_var("pressure_level", 2)},
+        coords={**shared_coords, "pressure_level": [1000.0, 850.0]},
+    )
+    model = xr.Dataset(
+        {"temperature": _vertical_var("model_level", 3)},
+        coords={**shared_coords, "model_level": [1, 2, 3]},
+    )
+    for ds in (root, pressure, model):
+        ds["init_time"].encoding["fill_value"] = -1
+        ds["latitude"].encoding["fill_value"] = np.nan
+        ds["longitude"].encoding["fill_value"] = np.nan
+    pressure["pressure_level"].encoding["fill_value"] = np.nan
+    model["model_level"].encoding["fill_value"] = -1
+    tree = xr.DataTree.from_dict(
+        {"/": root, "/pressure_level": pressure, "/model_level": model}
+    )
+    data_vars = [
+        ExampleDataVar(name="temperature_2m"),
+        ExampleDataVar(name="temperature", group="pressure_level"),
+        ExampleDataVar(name="temperature", group="model_level"),
+    ]
+    return tree, data_vars
+
+
+def _job_var_paths(jobs: Sequence[ExampleRegionJob]) -> set[str]:
+    return {var.path for job in jobs for var in job.data_vars}
+
+
+def test_get_jobs_bare_name_filter_selects_var_in_every_group() -> None:
+    template_ds, data_vars = _multi_group_template_and_vars()
+    jobs = ExampleRegionJob.get_jobs(
+        tmp_store=get_local_tmp_store(),
+        template_ds=template_ds,
+        append_dim="init_time",
+        all_data_vars=data_vars,
+        reformat_job_name="test-job",
+        filter_variable_names=["temperature"],
+    )
+    # "temperature" is the leaf name in both vertical groups (and not the root var),
+    # so the bare name keeps both grouped vars and excludes temperature_2m.
+    assert _job_var_paths(jobs) == {
+        "pressure_level/temperature",
+        "model_level/temperature",
+    }
+
+
+def test_get_jobs_path_filter_selects_single_group() -> None:
+    template_ds, data_vars = _multi_group_template_and_vars()
+    jobs = ExampleRegionJob.get_jobs(
+        tmp_store=get_local_tmp_store(),
+        template_ds=template_ds,
+        append_dim="init_time",
+        all_data_vars=data_vars,
+        reformat_job_name="test-job",
+        filter_variable_names=["pressure_level/temperature"],
+    )
+    assert _job_var_paths(jobs) == {"pressure_level/temperature"}
+
+
 def test_get_jobs_grouping_no_filters(template_ds: xr.DataTree) -> None:
     data_vars = [ExampleDataVar(name=str(name)) for name in template_ds.data_vars]
     tmp_store = get_local_tmp_store()

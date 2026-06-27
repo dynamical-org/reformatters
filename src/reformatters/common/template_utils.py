@@ -26,10 +26,9 @@ log = get_logger(__name__)
 def _to_zarr_metadata(
     template: xr.DataTree, store: Store | Path, mode: Literal["w", "w-"]
 ) -> None:
-    # safe_chunks=False: with compute=False no dask chunks are written, so alignment
-    # is irrelevant; aligning instead builds a per-chunk dask graph that OOMs large arrays.
-    # write_inherited_coords=True writes each group's own copy of the shared coords so
-    # groups open standalone; see docs/plans/vertical_dimension_structure.md.
+    # safe_chunks=False avoids a per-chunk dask graph that OOMs large arrays (compute=False
+    # writes no data chunks anyway). write_inherited_coords=True duplicates shared coords
+    # into each group so groups open standalone; see docs/plans/vertical_dimension_structure.md.
     template.to_zarr(
         store,
         mode=mode,
@@ -159,6 +158,21 @@ def _structural_signature(
     }
 
 
+def _non_append_dimension_coords(
+    tree: xr.DataTree, append_dim: str
+) -> dict[str, xr.DataArray]:
+    """Dimension coordinates (across all groups) other than the append dim, by name —
+    the 1D axis labels (latitude/longitude, pressure_level, model_level, …). Reordering
+    one relabels existing chunks. Excludes the growing append dim, 2D auxiliary coords
+    (projected lat/lon, valid_time), and scalars (spatial_ref), which need not match."""
+    coords: dict[str, xr.DataArray] = {}
+    for node in tree.subtree:
+        for name, coord in node.to_dataset().coords.items():
+            if coord.dims == (name,) and name != append_dim:
+                coords[str(name)] = coord
+    return coords
+
+
 def assert_no_structural_drift_from_existing_store(
     template_ds: xr.DataTree, existing_ds: xr.DataTree, append_dim: str
 ) -> None:
@@ -171,10 +185,11 @@ def assert_no_structural_drift_from_existing_store(
     shards — the update would corrupt the archive or break readers. This guard runs on
     worker 0 before any data is written and raises before damage is done.
 
-    Compares every variable across all groups (by var.path). Only variables present in
-    `existing_ds` are checked, so the template may freely add new variables. Backfills
-    are exempt (they rewrite the whole store and may legitimately change structure), so
-    callers only run this for operational updates.
+    Compares every variable across all groups (by var.path) and every non-append
+    dimension coordinate's values (a reordered vertical level or moved lat/lon would
+    relabel existing chunks). Only variables/coords present in `existing_ds` are checked, so the
+    template may freely add new ones. Backfills are exempt (they rewrite the whole store
+    and may legitimately change structure), so callers only run this for operational updates.
 
     The append dimension's chunk/shard size is compared in dev/prod but skipped under
     Config.env == test, where the integration auto-shrink helper sizes append-dim chunks
@@ -204,6 +219,17 @@ def assert_no_structural_drift_from_existing_store(
                     f"{path}.{field}: existing store has {existing_value!r}, "
                     f"update template has {template_value!r}"
                 )
+
+    template_coords = _non_append_dimension_coords(template_ds, append_dim)
+    for name, existing_coord in _non_append_dimension_coords(
+        existing_ds, append_dim
+    ).items():
+        if name not in template_coords:
+            mismatches.append(
+                f"coord {name}: in existing store but missing from update template"
+            )
+        elif not existing_coord.equals(template_coords[name]):
+            mismatches.append(f"coord {name}: values differ from the existing store")
 
     if mismatches:
         raise ValueError(

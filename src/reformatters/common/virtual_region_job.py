@@ -243,7 +243,12 @@ class VirtualRegionJob(
             self._processing_region_ds(), self.data_vars
         )
         remaining = self.filter_already_present(candidates, readonly_store)
-        current_size = self._append_dim_size(readonly_store)
+        # The smallest group, so the sync_dims_to shortcut below can never skip a group
+        # that lags root (e.g. after a partially-applied prior grow).
+        current_size = min(
+            self._append_dim_size(readonly_store, node_group_name(node))
+            for node in self.template_ds.subtree
+        )
 
         for file_refs_batch in self.process_virtual_refs(remaining):
             assert file_refs_batch, "process_virtual_refs yielded an empty batch"

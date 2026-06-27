@@ -165,6 +165,92 @@ def test_copy_zarr_metadata_noops_when_icechunk_only_and_no_icechunk_store(
     assert mock_copy_metadata_files.call_count == 0
 
 
+@pytest.fixture
+def multi_group_template_ds() -> xr.DataTree:
+    root = xr.Dataset(
+        coords={"time": ["2000-01-01", "2000-01-02"], "lat": [10, 20, 30]}
+    )
+    pressure = xr.Dataset(
+        coords={
+            "time": ["2000-01-01", "2000-01-02"],
+            "lat": [10, 20, 30],
+            "pressure_level": [1000.0, 850.0],
+        }
+    )
+    return xr.DataTree.from_dict({"/": root, "/pressure_level": pressure})
+
+
+@pytest.fixture
+def multi_group_store(tmp_path: Path) -> Path:
+    """A tmp store with a root node and a pressure_level child group, each carrying
+    coord chunks and a zarr.json (mirrors what to_zarr writes for a DataTree)."""
+    store_path = tmp_path / "tmp_store"
+
+    (store_path / "zarr.json").parent.mkdir(parents=True)
+    (store_path / "zarr.json").touch()
+    for coord in ("time", "lat"):
+        chunk_dir = store_path / coord / "c"
+        chunk_dir.mkdir(parents=True)
+        (chunk_dir / "0").touch()
+        (store_path / coord / "zarr.json").touch()
+
+    group = store_path / "pressure_level"
+    (group / "zarr.json").parent.mkdir(parents=True)
+    (group / "zarr.json").touch()
+    for coord in ("time", "lat", "pressure_level"):
+        chunk_dir = group / coord / "c"
+        chunk_dir.mkdir(parents=True)
+        (chunk_dir / "0").touch()
+        (group / coord / "zarr.json").touch()
+
+    return store_path
+
+
+def test_coord_chunk_globs_collects_group_nested_coord_chunk(
+    monkeypatch: pytest.MonkeyPatch,
+    multi_group_template_ds: xr.DataTree,
+    multi_group_store: Path,
+) -> None:
+    captured: dict[str, list[Path]] = {}
+
+    def fake_copy_metadata_files(
+        files: list[Path], _store_path: Path, _store: Store
+    ) -> None:
+        captured["files"] = files
+
+    monkeypatch.setattr(zarr_module, "_copy_metadata_files", fake_copy_metadata_files)
+
+    copy_zarr_metadata(multi_group_template_ds, multi_group_store, Mock(spec=Store))
+
+    relative = {f.relative_to(multi_group_store).as_posix() for f in captured["files"]}
+    # The group's own vertical coord chunk lives under the group prefix and must be collected.
+    assert "pressure_level/pressure_level/c/0" in relative
+
+
+def test_copy_zarr_metadata_icechunk_writes_root_zarr_json_before_group(
+    monkeypatch: pytest.MonkeyPatch,
+    multi_group_template_ds: xr.DataTree,
+    multi_group_store: Path,
+) -> None:
+    captured: dict[str, list[Path]] = {}
+
+    def fake_copy_metadata_files(
+        files: list[Path], _store_path: Path, _store: Store
+    ) -> None:
+        captured["files"] = files
+
+    monkeypatch.setattr(zarr_module, "_copy_metadata_files", fake_copy_metadata_files)
+
+    copy_zarr_metadata(
+        multi_group_template_ds, multi_group_store, Mock(spec=IcechunkStore)
+    )
+
+    order = [f.relative_to(multi_group_store).as_posix() for f in captured["files"]]
+    # Shallowest-first: a parent group's metadata is written before its child's, so
+    # icechunk never rejects a child array whose parent group does not yet exist.
+    assert order.index("zarr.json") < order.index("pressure_level/zarr.json")
+
+
 # --- sync_to_store tests ---
 
 

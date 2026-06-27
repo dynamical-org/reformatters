@@ -255,6 +255,32 @@ class TestIcechunkVirtualConfigValidation:
         assert dataset.store_factory.icechunk_virtual_config is None
 
 
+class GroupedVarConfig(ExampleConfig):
+    @computed_field
+    @property
+    def data_vars(self) -> list[ExampleDataVar]:
+        return [ExampleDataVar(name="temperature", group="pressure_level")]
+
+
+class GroupedVarDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
+    template_config: GroupedVarConfig = GroupedVarConfig()
+    region_job_class: type[ExampleRegionJob] = ExampleRegionJob
+    primary_storage_config: ExampleDatasetStorageConfig = ExampleDatasetStorageConfig()
+
+    def operational_kubernetes_resources(
+        self,
+        image_tag: str,  # noqa: ARG002
+    ) -> Sequence[CronJob]:
+        return ()
+
+
+def test_materialized_dataset_rejects_vertical_group_var() -> None:
+    # The materialized chunk-write path is not group-aware, so DynamicalDataset's
+    # _validate_virtual_storage rejects a materialized dataset with any non-root var.
+    with pytest.raises(ValidationError, match="do not yet support vertical groups"):
+        GroupedVarDataset()
+
+
 def test_update_template(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_update_template = Mock()
     monkeypatch.setattr(ExampleConfig, "update_template", mock_update_template)

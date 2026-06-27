@@ -184,6 +184,76 @@ def test_get_template_returns_reindexed_tree(config: MultiGroupConfig) -> None:
     assert tree["pressure_level/temperature"].encoding["fill_value"] is not None
 
 
+class OnlyVerticalConfig(MultiGroupConfig):
+    dims: dict[Group, tuple[Dim, ...]] = {
+        ROOT: ("init_time", "latitude", "longitude"),
+        "pressure_level": ("init_time", "latitude", "longitude", "pressure_level"),
+    }
+
+    def dimension_coordinates(self) -> dict[str, Any]:
+        return {
+            "init_time": self.append_dim_coordinates(
+                self.append_dim_start + self.append_dim_frequency
+            ),
+            "latitude": _LAT,
+            "longitude": _LON,
+            "pressure_level": _PRESSURE_LEVELS,
+        }
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def coords(self) -> Sequence[Coordinate]:
+        return [
+            _coord("init_time", "int64"),
+            _coord("latitude"),
+            _coord("longitude"),
+            _coord("pressure_level"),
+            Coordinate(
+                name="spatial_ref",
+                encoding=Encoding(dtype="int64", chunks=(), shards=None, fill_value=0),
+                attrs=CoordinateAttrs(units=None, statistics_approximate=None),
+            ),
+        ]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def data_vars(self) -> Sequence[_DV]:
+        # No root data var: every data var lives in the pressure_level group.
+        return [_data_var("temperature", "pressure_level", 4)]
+
+
+@pytest.fixture
+def only_vertical_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> OnlyVerticalConfig:
+    template_path = tmp_path / "templates" / "latest.zarr"
+    monkeypatch.setattr(OnlyVerticalConfig, "template_path", lambda self: template_path)
+    return OnlyVerticalConfig()
+
+
+def test_only_vertical_vars_dataset_round_trips(
+    only_vertical_config: OnlyVerticalConfig,
+) -> None:
+    only_vertical_config.update_template()
+    tree = xr.open_datatree(only_vertical_config.template_path(), consolidated=False)
+
+    # The root node carries the shared coords but has no data vars of its own.
+    root = tree["/"]
+    assert dict(root.data_vars) == {}
+    assert {"init_time", "latitude", "longitude"} <= set(root.coords)
+
+    # The pressure_level group still opens standalone with its var + shared coords.
+    pressure = xr.open_zarr(
+        only_vertical_config.template_path(),
+        group="pressure_level",
+        consolidated=False,
+    )
+    assert "temperature" in pressure.data_vars
+    assert {"init_time", "latitude", "longitude", "pressure_level"} <= set(
+        pressure.coords
+    )
+
+
 def test_validator_rejects_orphan_vertical_group() -> None:
     class OrphanGroup(MultiGroupConfig):
         @computed_field  # type: ignore[prop-decorator]
@@ -261,3 +331,71 @@ def test_validator_uniform_append_dim_chunk_size() -> None:
 
     with pytest.raises(AssertionError, match="append-dim chunk size"):
         NonUniformAppendChunk()._assert_valid_structure()
+
+
+def test_validator_encoding_chunk_length_must_match_group_dims() -> None:
+    class WrongChunkLength(MultiGroupConfig):
+        dims: dict[Group, tuple[Dim, ...]] = {
+            ROOT: ("init_time", "latitude", "longitude"),
+            "pressure_level": ("init_time", "latitude", "longitude", "pressure_level"),
+        }
+
+        @computed_field  # type: ignore[prop-decorator]
+        @property
+        def data_vars(self) -> Sequence[_DV]:
+            # pressure_level group has 4 dims, but this var declares a 3-tuple chunks.
+            short = _DV(
+                name="temperature",
+                group="pressure_level",
+                encoding=Encoding(
+                    dtype="float32",
+                    chunks=(1, 1, 1),  # 3 entries, expected 4
+                    shards=None,
+                    fill_value=np.nan,
+                    compressors=(),
+                ),
+                attrs=_data_var("temperature_2m", ROOT, 3).attrs,
+                internal_attrs=_IA(keep_mantissa_bits="no-rounding"),
+            )
+            return [_data_var("temperature_2m", ROOT, 3), short]
+
+    with pytest.raises(AssertionError, match="encoding chunks has 3 entries"):
+        WrongChunkLength()._assert_valid_structure()
+
+
+def test_validator_rejects_duplicate_group_name() -> None:
+    class DuplicateVar(MultiGroupConfig):
+        @computed_field  # type: ignore[prop-decorator]
+        @property
+        def data_vars(self) -> Sequence[_DV]:
+            return [
+                _data_var("temperature_2m", ROOT, 3),
+                _data_var("temperature", "pressure_level", 4),
+                _data_var("temperature", "model_level", 4),
+                # Second pressure_level/temperature -> duplicate (group, name).
+                _data_var("temperature", "pressure_level", 4),
+            ]
+
+    with pytest.raises(AssertionError, match=r"duplicate \(group, name\)"):
+        DuplicateVar()._assert_valid_structure()
+
+
+def test_validator_var_group_must_be_declared_in_dims() -> None:
+    class UndeclaredGroup(MultiGroupConfig):
+        dims: dict[Group, tuple[Dim, ...]] = {
+            ROOT: ("init_time", "latitude", "longitude"),
+            "pressure_level": ("init_time", "latitude", "longitude", "pressure_level"),
+        }
+
+        @computed_field  # type: ignore[prop-decorator]
+        @property
+        def data_vars(self) -> Sequence[_DV]:
+            # model_level is never declared in dims above.
+            return [
+                _data_var("temperature_2m", ROOT, 3),
+                _data_var("temperature", "pressure_level", 4),
+                _data_var("temperature", "model_level", 4),
+            ]
+
+    with pytest.raises(AssertionError, match="not declared in dims"):
+        UndeclaredGroup()._assert_valid_structure()

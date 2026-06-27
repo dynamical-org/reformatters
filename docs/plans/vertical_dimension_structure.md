@@ -383,9 +383,10 @@ Decisions made during implementation (the plan above left some open):
   `VerticalGroup`.
 - **`source_groups` → `source_file_var_groups`** to disambiguate "vars sharing a source
   file" from a dataset's vertical groups.
-- **Per-job geometry** is read via `RegionJob._flat_job_dataset()` — the job's vars
-  gathered from the tree into one flat Dataset (keyed by bare name, unique within a job).
-  Used by `generate_source_file_coords` (coords) and materialized writes.
+- **Per-job geometry**: `generate_source_file_coords` gets a coords-only Dataset (the
+  region's coords merged across all groups — collision-free, since data var names can
+  repeat across vertical groups). Virtual ref/chunk geometry comes from `template_ds[var.path]`
+  directly; materialized jobs (single-level) subset the root Dataset by name.
 - DataTree API gaps to know: it supports `isel`/`sel`/`data_vars`/`coords`/`sizes`/`[name]`
   but NOT `assign_coords`/`get_index` and not attribute-style coord access — go through
   `tree.to_dataset()` for those (matters mostly in tests).

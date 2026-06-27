@@ -382,3 +382,62 @@ def test_structural_drift_detects_dims_change() -> None:
     )
     with pytest.raises(ValueError, match=r"var0\.dims"):
         assert_no_structural_drift_from_existing_store(template, existing, "time")
+
+
+# --- multi-group (root + vertical group) structural drift ---
+
+
+def _pressure_var(
+    *,
+    chunks: tuple[int, ...] = (1, 3, 4, 2),
+    pressure_levels: tuple[float, ...] = (1000.0, 850.0),
+) -> xr.DataArray:
+    # A pressure_level group var: (time, latitude, longitude, pressure_level).
+    dims = ("time", "latitude", "longitude", "pressure_level")
+    sizes = {"time": 4, "latitude": 3, "longitude": 4, "pressure_level": 2}
+    da = xr.DataArray(
+        np.zeros(tuple(sizes[d] for d in dims), dtype=np.float32),
+        dims=dims,
+        coords={"pressure_level": list(pressure_levels)},
+    )
+    da.encoding = {"dtype": "float32", "chunks": chunks, "shards": None}
+    return da
+
+
+def _two_node_ds(
+    *,
+    root: xr.DataArray | None = None,
+    pressure: xr.DataArray | None = None,
+) -> xr.DataTree:
+    root_ds = xr.Dataset({"var0": root if root is not None else _structured_var()})
+    nodes: dict[str, xr.Dataset] = {"/": root_ds}
+    if pressure is not None:
+        nodes["/pressure_level"] = xr.Dataset({"temperature": pressure})
+    return xr.DataTree.from_dict(nodes)
+
+
+def test_structural_drift_detects_group_var_non_append_chunk_change() -> None:
+    # Drift a non-append axis (pressure_level chunk 1 -> 2) on the GROUP var; the
+    # mismatch must be reported against the group-qualified path.
+    existing = _two_node_ds(pressure=_pressure_var(chunks=(1, 3, 4, 1)))
+    template = _two_node_ds(pressure=_pressure_var(chunks=(1, 3, 4, 2)))
+    with pytest.raises(ValueError, match=r"pressure_level/temperature\.chunks"):
+        assert_no_structural_drift_from_existing_store(template, existing, "time")
+
+
+def test_structural_drift_detects_group_var_missing_from_template() -> None:
+    existing = _two_node_ds(pressure=_pressure_var())
+    template = _two_node_ds()  # pressure_level group dropped
+    with pytest.raises(
+        ValueError, match=r"pressure_level/temperature: in existing store but missing"
+    ):
+        assert_no_structural_drift_from_existing_store(template, existing, "time")
+
+
+def test_structural_drift_detects_group_coord_value_change() -> None:
+    # Same vars/chunks, but the template reorders the pressure_level coord values.
+    # A reordered vertical level would relabel existing chunks, so the guard fails.
+    existing = _two_node_ds(pressure=_pressure_var(pressure_levels=(1000.0, 850.0)))
+    template = _two_node_ds(pressure=_pressure_var(pressure_levels=(850.0, 1000.0)))
+    with pytest.raises(ValueError, match=r"coord pressure_level"):
+        assert_no_structural_drift_from_existing_store(template, existing, "time")

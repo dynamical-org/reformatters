@@ -9,7 +9,7 @@ from icechunk.store import IcechunkStore
 from zarr.abc.store import Store
 from zarr.codecs import BloscCodec
 
-from reformatters.common.iterating import node_group_name
+from reformatters.common.iterating import node_path_prefix
 from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
 
@@ -102,7 +102,7 @@ def _coord_chunk_globs(template_ds: xr.DataTree) -> list[str]:
     """Glob patterns for every coordinate's chunk files, group-prefixed."""
     globs = []
     for node in template_ds.subtree:
-        prefix = f"{group}/" if (group := node_group_name(node)) else ""
+        prefix = node_path_prefix(node)
         globs.extend(f"{prefix}{coord}/c/**/*" for coord in node.to_dataset().coords)
     return globs
 

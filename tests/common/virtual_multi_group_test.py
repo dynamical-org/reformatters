@@ -539,6 +539,66 @@ def test_two_worker_backfill_disjoint(tmp_path: Path) -> None:
     assert list(_primary_repo(dataset.store_factory).list_branches()) == ["main"]
 
 
+class _PressureProbeCoord(MultiGroupSourceFileCoord):
+    pressure_level: float
+
+    def get_url(self) -> str:
+        return MultiGroupRegionJob.messages_url
+
+
+class _PressureProbeRegionJob(MultiGroupRegionJob):
+    def representative_var(
+        self,
+        coord: MultiGroupSourceFileCoord,  # noqa: ARG002
+    ) -> DataVar[BaseInternalAttrs]:
+        # Probe the pressure_level group array, not the root var.
+        return next(v for v in self.data_vars if v.group == "pressure_level")
+
+
+def test_filter_already_present_probes_group_array(tmp_path: Path) -> None:
+    # A backfill over init 0 only writes pressure_level/temperature chunks for init 0.
+    dataset = _make_dataset(tmp_path, n_inits=2)
+    template_ds = _create_template_ds(2)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    job = _make_region_job(template_ds, region=slice(0, 1))
+    job.process_virtual(repo, [], "main")
+
+    probe_job = _PressureProbeRegionJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=template_ds,
+        data_vars=_data_vars(),
+        append_dim="init_time",
+        region=slice(0, 2),
+        reformat_job_name="test",
+        processing_mode="backfill",
+    )
+    present = _PressureProbeCoord(
+        init_time=APPEND_DIM_START,
+        lead_time=LEAD_TIMES[0],
+        pressure_level=float(PRESSURE_LEVELS[0]),  # written by the init-0 backfill
+    )
+    absent = _PressureProbeCoord(
+        init_time=APPEND_DIM_START + APPEND_DIM_FREQ,  # init 1, not backfilled
+        lead_time=LEAD_TIMES[0],
+        pressure_level=float(PRESSURE_LEVELS[0]),
+    )
+    out_of_coords = _PressureProbeCoord(
+        init_time=APPEND_DIM_START,
+        lead_time=LEAD_TIMES[0],
+        pressure_level=123.0,  # not in PRESSURE_LEVELS -> chunk_key None -> remaining
+    )
+
+    readonly_store = repo.readonly_session("main").store
+    remaining = probe_job.filter_already_present(
+        [present, absent, out_of_coords], readonly_store
+    )
+
+    assert present not in remaining  # already in the manifest
+    assert absent in remaining  # not yet written
+    assert out_of_coords in remaining  # not a position in the dataset
+
+
 def test_virtual_operational_expands_both_groups(tmp_path: Path) -> None:
     # Per-group append-dim growth via sync_dims_to: start with empty main (0 inits),
     # then operationally expand both groups to 2 inits.

@@ -174,6 +174,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
             if issubclass(self.region_job_class, VirtualRegionJob):
                 # Virtual operational updates are single-writer streaming (see docs/parallel_processing.md)
+                if is_first:
+                    self._assert_no_structural_drift(template_ds)
                 self._run_virtual_operational_update(
                     all_jobs, worker_index, workers_total
                 )
@@ -410,15 +412,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         # already-published store. Worker 0 checks before any writes; failing here
         # leaves the live archive untouched.
         if is_first and update_template_with_results:
-            existing_ds = xr.open_datatree(
-                self.store_factory.primary_store(),  # ty: ignore[invalid-argument-type]
-                engine="zarr",
-                decode_timedelta=True,
-                chunks=None,
-            )
-            template_utils.assert_no_structural_drift_from_existing_store(
-                template_ds, existing_ds, self.template_config.append_dim
-            )
+            self._assert_no_structural_drift(template_ds)
 
         # 1. Set up / wait for setup
         setup_info = parallel_coordination.parallel_setup(
@@ -599,6 +593,17 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def _get_template(self, append_dim_end: DatetimeLike) -> xr.DataTree:
         return self.template_config.get_template(pd.Timestamp(append_dim_end))
+
+    def _assert_no_structural_drift(self, template_ds: xr.DataTree) -> None:
+        existing_ds = xr.open_datatree(
+            self.store_factory.primary_store(),  # ty: ignore[invalid-argument-type]
+            engine="zarr",
+            decode_timedelta=True,
+            chunks=None,
+        )
+        template_utils.assert_no_structural_drift_from_existing_store(
+            template_ds, existing_ds, self.template_config.append_dim
+        )
 
     def _can_run_in_kubernetes(self) -> bool:
         # This is a method to support testing without changing the Config.env
