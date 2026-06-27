@@ -596,6 +596,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def _assert_no_structural_drift(self, template_ds: xr.DataTree) -> None:
         existing_ds = xr.open_datatree(
+            # open_datatree's stub omits zarr Store (open_zarr accepts it); fine at runtime.
             self.store_factory.primary_store(),  # ty: ignore[invalid-argument-type]
             engine="zarr",
             decode_timedelta=True,
