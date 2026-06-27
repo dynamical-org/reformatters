@@ -99,11 +99,16 @@ def _copy_data_var_chunks(
 
 
 def _coord_chunk_globs(template_ds: xr.DataTree) -> list[str]:
-    """Glob patterns for every coordinate's chunk files, group-prefixed."""
+    """Glob patterns for every coordinate's chunk files, group-prefixed. The `c/**/*`
+    pattern catches chunked coords (`<coord>/c/0`, `<coord>/c/0/0`); the bare `c` catches
+    a scalar coord whose single chunk is the file `<coord>/c` (the caller's is_file filter
+    drops the `c/` directory matched by the bare pattern for non-scalar coords)."""
     globs = []
     for node in template_ds.subtree:
         prefix = node_path_prefix(node)
-        globs.extend(f"{prefix}{coord}/c/**/*" for coord in node.to_dataset().coords)
+        for coord in node.to_dataset().coords:
+            globs.append(f"{prefix}{coord}/c/**/*")
+            globs.append(f"{prefix}{coord}/c")
     return globs
 
 

@@ -227,6 +227,35 @@ def test_coord_chunk_globs_collects_group_nested_coord_chunk(
     assert "pressure_level/pressure_level/c/0" in relative
 
 
+def test_coord_chunk_globs_collects_scalar_coord_chunk(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A scalar coord (e.g. spatial_ref) stores its single chunk as the file
+    # `spatial_ref/c`, not `spatial_ref/c/0`; the `c/**/*` glob alone would miss it.
+    template = xr.DataTree.from_dict(
+        {"/": xr.Dataset(coords={"lat": [10, 20], "spatial_ref": ((), np.array(0))})}
+    )
+    store = tmp_path / "store"
+    (store / "zarr.json").parent.mkdir(parents=True)
+    (store / "zarr.json").touch()
+    (store / "lat" / "c").mkdir(parents=True)
+    (store / "lat" / "c" / "0").touch()
+    (store / "spatial_ref").mkdir()
+    (store / "spatial_ref" / "c").touch()  # scalar chunk is a file named "c"
+
+    captured: dict[str, list[Path]] = {}
+    monkeypatch.setattr(
+        zarr_module,
+        "_copy_metadata_files",
+        lambda files, _store_path, _store: captured.__setitem__("files", files),
+    )
+    copy_zarr_metadata(template, store, Mock(spec=Store))
+
+    relative = {f.relative_to(store).as_posix() for f in captured["files"]}
+    assert "spatial_ref/c" in relative  # the scalar chunk file is collected
+    assert "lat/c/0" in relative  # and chunked coords still are
+
+
 def test_copy_zarr_metadata_icechunk_writes_root_zarr_json_before_group(
     monkeypatch: pytest.MonkeyPatch,
     multi_group_template_ds: xr.DataTree,
