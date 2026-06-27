@@ -26,6 +26,7 @@ def _two_node_tree() -> xr.DataTree:
     root = xr.Dataset(
         {"temperature_2m": xr.Variable(("time",), np.zeros(2, dtype=np.float32))},
         coords={"time": [0, 1]},
+        attrs={"dataset_id": "test-dataset"},
     )
     pressure = xr.Dataset(
         {
@@ -62,10 +63,11 @@ def test_flatten_groups_single_node_returns_root() -> None:
     root = xr.Dataset(
         {"temperature_2m": xr.Variable(("time",), np.zeros(2, dtype=np.float32))},
         coords={"time": [0, 1]},
+        attrs={"dataset_id": "x"},
     )
     flat = flatten_groups(xr.DataTree.from_dict({"/": root}))
     assert list(flat.data_vars) == ["temperature_2m"]
-    assert flat.equals(root)
+    assert flat.identical(root)  # identical (not equals) also checks attrs
 
 
 def test_flatten_groups_keys_group_vars_by_path() -> None:
@@ -74,6 +76,8 @@ def test_flatten_groups_keys_group_vars_by_path() -> None:
     # The group var keeps its vertical dim and that group's own coord is merged in.
     assert flat["pressure_level/temperature"].dims == ("time", "pressure_level")
     assert "pressure_level" in flat.coords
+    # Root attrs (read by check_for_expected_shards) survive the flatten/merge.
+    assert flat.attrs["dataset_id"] == "test-dataset"
 
 
 def test_flatten_groups_handles_arbitrary_nesting() -> None:
