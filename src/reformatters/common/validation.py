@@ -1,9 +1,21 @@
+from __future__ import annotations
+
+import abc
 import itertools
+from collections import Counter
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import timedelta
 from functools import partial
-from typing import Literal, Protocol, assert_never, runtime_checkable
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    Protocol,
+    assert_never,
+    runtime_checkable,
+)
 
 import numpy as np
 import pandas as pd
@@ -18,6 +30,10 @@ from zarr.abc.store import Store
 from reformatters.common import iterating
 from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
+
+if TYPE_CHECKING:
+    from reformatters.common.region_job import SourceFileCoord
+    from reformatters.common.virtual_region_job import VirtualRegionJob
 
 log = get_logger(__name__)
 
@@ -43,21 +59,78 @@ class ValidationResult(pydantic.BaseModel):
 
 
 @runtime_checkable
-class DataValidator(Protocol):
-    """Protocol for validation functions."""
+class XarrayDataValidator(Protocol):
+    """A validator that runs on an opened xarray Dataset.
+
+    The common, generic kind — works on any dataset (materialized or virtual) and
+    needs nothing beyond the data it reads (lag, NaN-fraction, ...).
+    """
 
     def __call__(self, ds: xr.Dataset) -> ValidationResult: ...
 
 
+class VirtualDataValidator(abc.ABC):
+    """A validator that needs manifest/store access, not just an opened Dataset.
+
+    Virtual datasets list these in DynamicalDataset.validators() alongside the plain
+    XarrayDataValidator functions; validate_dataset dispatches by type, handing these the
+    operational-window region job (to regenerate source-file coords and probe the
+    manifest), the icechunk store, and the opened dataset — each validator uses the subset
+    it needs. Tuning (e.g. the per-position completeness thresholds) is a field on the
+    concrete validator, set where it is listed in validators() — one place.
+    """
+
+    @abc.abstractmethod
+    def __call__(
+        self,
+        region_job: VirtualRegionJob[Any, Any],
+        store: IcechunkStore,
+        ds: xr.Dataset,
+    ) -> ValidationResult: ...
+
+
+# A dataset's validators() may mix the two kinds; validate_dataset dispatches on type.
+DataValidator = XarrayDataValidator | VirtualDataValidator
+
+
+def open_validation_dataset(
+    store: zarr.storage.StoreLike, *, consolidated: bool
+) -> xr.Dataset:
+    """Open a store as one flat Dataset covering every group.
+
+    xr.open_zarr reads only the root group, so a multi-group dataset's vertical-group
+    variables (e.g. ``pressure_level/temperature``) would be invisible to validators —
+    silently shrinking coverage to root-only. Opening the whole DataTree and flattening
+    it (iterating.flatten_groups) exposes every group var keyed by its store path; root
+    vars keep their bare names. Validators key variables — and their include/exclude
+    filters — by that path, which is unique across groups. A single-group store flattens
+    to exactly its root dataset.
+    """
+    tree = xr.open_datatree(
+        store,  # ty: ignore[invalid-argument-type]
+        engine="zarr",
+        chunks=None,
+        consolidated=consolidated,
+        decode_timedelta=True,  # so lead_time selects by pd.Timedelta label
+    )
+    return iterating.flatten_groups(tree)
+
+
 def validate_dataset(
-    store: zarr.storage.StoreLike, validators: Sequence[DataValidator]
+    store: zarr.storage.StoreLike,
+    validators: Sequence[DataValidator],
+    *,
+    region_job: VirtualRegionJob[Any, Any] | None = None,
 ) -> None:
     """
     Validate a zarr dataset by running a series of quality checks.
 
     Args:
-        zarr_path: Path to zarr store
-        validators: List of validation functions to run.
+        store: the zarr/icechunk store to validate.
+        validators: the checks to run; XarrayDataValidators receive the opened dataset,
+            VirtualDataValidators receive (region_job, store, ds).
+        region_job: the operational-window job, required when any validator is a
+            VirtualDataValidator (it supplies the source-file coords + manifest probe).
 
     Raises:
         ValueError: If any validation checks fail
@@ -69,9 +142,18 @@ def validate_dataset(
     # Run all validators
     failed_validations = []
     for validator in validators:
-        ds = xr.open_zarr(store, chunks=None, consolidated=consolidated)
+        ds = open_validation_dataset(store, consolidated=consolidated)
 
-        result = validator(ds)
+        if isinstance(validator, VirtualDataValidator):
+            assert region_job is not None, (
+                f"{type(validator).__name__} needs a region_job but validate_dataset "
+                "was called without one"
+            )
+            assert isinstance(store, IcechunkStore)
+            result = validator(region_job, store, ds)
+        else:
+            result = validator(ds)
+
         if not result.passed:
             log.error(f"Failed validation: {result.message}")
             failed_validations.append(result.message)
@@ -512,3 +594,201 @@ def _sync_list_shards(store: Store, var: str) -> set[str]:
 
 async def _list_shards(store: Store, var: str) -> set[str]:
     return {key.split(f"{var}/c/")[-1] async for key in store.list_prefix(f"{var}")}
+
+
+@dataclass(frozen=True)
+class CheckVirtualManifestCompleteness(VirtualDataValidator):
+    """Assert recent append-dim positions are sufficiently ingested in the manifest.
+
+    Re-runs the operational filter (the region job's own source_file_coords +
+    filter_already_present) over the recent window and checks, per position, the fraction
+    of expected source files present against `min_present_fraction` — indexed newest-first,
+    with positions older than the tuple held to its last value. Cheap: one ref-existence
+    probe per source file, no decode. Reusing the dataset's own coord generation means
+    structural absences (hour-0 accumulated vars, etc.) are not in the expected set. The
+    virtual analog of check_for_expected_shards.
+
+    Examples (validation typically runs once each recent position should be ingested):
+      (1.0,)      every position in the window must be fully ingested (default).
+      (0.5, 1.0)  the newest position may be half-published (e.g. GEFS 35-day's slow long
+                  lead times); every older position must be complete.
+      (0.0, 1.0)  ignore the newest (still publishing); require the rest complete.
+      (0.8,)      every position at least 80% present (a source that trickles in).
+    """
+
+    min_present_fraction: tuple[float, ...] = (1.0,)
+
+    def __post_init__(self) -> None:
+        assert self.min_present_fraction, "min_present_fraction must be non-empty"
+
+    def __call__(
+        self,
+        region_job: VirtualRegionJob[Any, Any],
+        store: IcechunkStore,
+        ds: xr.Dataset,  # noqa: ARG002 - completeness reads the manifest, not the dataset
+    ) -> ValidationResult:
+        append_dim = region_job.append_dim
+        candidates = region_job.source_file_coords()
+        expected_per_position = Counter(c.out_loc()[append_dim] for c in candidates)
+        positions = sorted(expected_per_position, reverse=True)  # newest first
+        if len(positions) < len(self.min_present_fraction):
+            return ValidationResult(
+                passed=False,
+                message=(
+                    f"Only {len(positions)} {append_dim} position(s) in the validation "
+                    f"window, need at least {len(self.min_present_fraction)} to check the "
+                    f"{self.min_present_fraction} completeness thresholds"
+                ),
+            )
+
+        missing_per_position = Counter(
+            c.out_loc()[append_dim]
+            for c in region_job.filter_already_present(candidates, store)
+        )
+        problems = []
+        for recency, position in enumerate(positions):
+            required = self.min_present_fraction[
+                min(recency, len(self.min_present_fraction) - 1)
+            ]
+            expected = expected_per_position[position]
+            present = expected - missing_per_position[position]
+            if present / expected < required:
+                problems.append(
+                    f"{append_dim}={position}: {present}/{expected} present "
+                    f"({present / expected:.1%} < required {required:.0%})"
+                )
+        if problems:
+            return ValidationResult(
+                passed=False,
+                message="Incomplete manifest:\n"
+                + "\n".join(f"- {p}" for p in problems),
+            )
+        return ValidationResult(
+            passed=True,
+            message=(
+                f"All {len(positions)} {append_dim} positions meet completeness "
+                f"thresholds {self.min_present_fraction}"
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class CheckVirtualDecodeHealth(VirtualDataValidator):
+    """Decode the references that are present and assert they are readable.
+
+    Completeness checks that references *exist*; this checks the ones that exist actually
+    decode — the per-variable serializer (e.g. GribberishCodec) and virtual-container
+    authorization, end to end. Over the recent window it keeps only the source files
+    present in the manifest (filter_already_present), so a not-yet-published ref is never
+    mistaken for a decode failure, then decodes a bounded sample of them. `positions`
+    selects which append-dim positions to check: "latest" (default) targets the newest
+    position with data — so a broken newest reference is caught at the next validation, not
+    a cycle later — while "all" covers the whole window. Within a position it samples
+    `sampled_leads` lead times (first + last + evenly spaced interior) across every member.
+    A variable fails if any sampled chunk errors or all of its sampled chunks decode
+    entirely NaN. Fails — never silently passes — when no references are present to decode.
+    """
+
+    positions: Literal["latest", "all"] = "latest"
+    sampled_leads: int = 5
+    max_workers: int = 32
+
+    def __call__(
+        self,
+        region_job: VirtualRegionJob[Any, Any],
+        store: IcechunkStore,
+        ds: xr.Dataset,
+    ) -> ValidationResult:
+        append_dim = region_job.append_dim
+        candidates = region_job.source_file_coords()
+        if not candidates:
+            return ValidationResult(
+                passed=False,
+                message=f"No source files in the {append_dim} window to decode-check",
+            )
+        absent = {id(c) for c in region_job.filter_already_present(candidates, store)}
+        present = [c for c in candidates if id(c) not in absent]
+        if not present:
+            return ValidationResult(
+                passed=False,
+                message=f"No present references in the {append_dim} window to decode",
+            )
+
+        present_positions = sorted({c.out_loc()[append_dim] for c in present})
+        targets = (
+            {present_positions[-1]}
+            if self.positions == "latest"
+            else set(present_positions)
+        )
+        to_decode = self._sample_leads(
+            [c for c in present if c.out_loc()[append_dim] in targets]
+        )
+
+        def decode(coord: SourceFileCoord) -> list[tuple[str, float, str | None]]:
+            loc = coord.out_loc()
+            # A coord's data_vars are exactly the variables its file carries (e.g. no
+            # accumulated vars at hour 0), so every one should decode to data.
+            file_vars = getattr(coord, "data_vars", None) or region_job.data_vars
+            results = []
+            for var in file_vars:
+                da = ds[var.path]
+                selection = {dim: value for dim, value in loc.items() if dim in da.dims}
+                try:
+                    values = da.sel(selection).copy(deep=True).load().values
+                    results.append((var.path, float(np.isnan(values).mean()), None))
+                except Exception as e:  # noqa: BLE001 - any decode failure is a validation failure
+                    results.append((var.path, 1.0, f"{type(e).__name__}: {e}"))
+            return results
+
+        min_nan_fraction: dict[str, float] = {}
+        first_error: dict[str, str] = {}
+        with ThreadPoolExecutor(self.max_workers) as pool:
+            for results in pool.map(decode, to_decode):
+                for var_path, nan_fraction, error in results:
+                    min_nan_fraction[var_path] = min(
+                        min_nan_fraction.get(var_path, float("inf")), nan_fraction
+                    )
+                    if error is not None and var_path not in first_error:
+                        first_error[var_path] = error
+
+        problems = []
+        for var_path in sorted(min_nan_fraction):
+            if var_path in first_error:
+                problems.append(f"{var_path}: decode error ({first_error[var_path]})")
+            elif min_nan_fraction[var_path] >= 1.0:
+                problems.append(f"{var_path}: every sampled chunk decoded entirely NaN")
+
+        target_label = ", ".join(str(p) for p in sorted(targets))
+        if problems:
+            return ValidationResult(
+                passed=False,
+                message=f"Decode health failures at {append_dim}={target_label}:\n"
+                + "\n".join(f"- {p}" for p in problems),
+            )
+        return ValidationResult(
+            passed=True,
+            message=(
+                f"Decoded {len(to_decode)} present source files across "
+                f"{len(min_nan_fraction)} variables at {append_dim}={target_label} "
+                "— all readable"
+            ),
+        )
+
+    def _sample_leads(
+        self, coords: Sequence[SourceFileCoord]
+    ) -> Sequence[SourceFileCoord]:
+        """Down-sample to `sampled_leads` lead times (first + last + evenly spaced
+        interior), keeping every other coordinate (e.g. all members). Coords without a
+        lead_time (analysis) are returned unchanged."""
+        leads = sorted(
+            {c.out_loc()["lead_time"] for c in coords if "lead_time" in c.out_loc()}
+        )
+        if len(leads) <= self.sampled_leads:
+            return coords
+        keep = {
+            leads[i]
+            for i in np.linspace(0, len(leads) - 1, self.sampled_leads)
+            .round()
+            .astype(int)
+        }
+        return [c for c in coords if c.out_loc().get("lead_time") in keep]

@@ -868,6 +868,192 @@ def test_validate_dataset_on_virtual_skips_shard_check(tmp_path: Path) -> None:
     dataset.validate_dataset("test")  # must not raise
 
 
+# --- virtual operational validators (completeness + decode health) ---
+
+
+def _backfilled_store(
+    dataset: VirtualTestDataset, template_ds: xr.DataTree, *, emit: slice
+) -> icechunk.IcechunkStore:
+    """Pre-size main to the template, emit refs for `emit`, return the readonly store."""
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    _make_region_job(template_ds, region=emit).process_virtual(repo, [], "main")
+    return repo.readonly_session("main").store
+
+
+def test_check_virtual_manifest_completeness_passes(tmp_path: Path) -> None:
+    # Default (1.0,): every position in the window must be fully present.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 4))
+    job = _make_region_job(template_ds, region=slice(0, 4))
+
+    result = validation.CheckVirtualManifestCompleteness()(
+        job, store, xr.open_zarr(store, decode_timedelta=True)
+    )
+    assert result.passed, result.message
+
+
+def test_check_virtual_manifest_completeness_detects_hole(tmp_path: Path) -> None:
+    # Emit inits 0-1 of a 4-init window; with the default (1.0,) the missing inits 2-3
+    # are real holes.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 2))
+    job = _make_region_job(template_ds, region=slice(0, 4))
+
+    result = validation.CheckVirtualManifestCompleteness()(
+        job, store, xr.open_zarr(store, decode_timedelta=True)
+    )
+    assert not result.passed
+    assert "Incomplete" in result.message
+
+
+def test_check_virtual_manifest_completeness_tolerates_partial_newest(
+    tmp_path: Path,
+) -> None:
+    # Emit inits 0-2 but not the newest (init 3). (0.0, 1.0): the newest may be absent,
+    # every older position must be complete -> passes.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 3))
+    job = _make_region_job(template_ds, region=slice(0, 4))
+    ds = xr.open_zarr(store, decode_timedelta=True)
+
+    tolerant = validation.CheckVirtualManifestCompleteness(
+        min_present_fraction=(0.0, 1.0)
+    )
+    assert tolerant(job, store, ds).passed
+    # But a fraction floor the absent newest can't meet still fails on it.
+    strict = validation.CheckVirtualManifestCompleteness(
+        min_present_fraction=(0.5, 1.0)
+    )
+    result = strict(job, store, ds)
+    assert not result.passed
+    assert "Incomplete" in result.message
+
+
+def test_check_virtual_manifest_completeness_fails_when_window_too_short(
+    tmp_path: Path,
+) -> None:
+    # A 1-position window can't satisfy a 2-tier threshold: fail loudly, never silently pass.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 1))
+    job = _make_region_job(template_ds, region=slice(0, 1))
+
+    result = validation.CheckVirtualManifestCompleteness(
+        min_present_fraction=(0.5, 1.0)
+    )(job, store, xr.open_zarr(store, decode_timedelta=True))
+    assert not result.passed
+    assert "need at least 2" in result.message
+
+
+def test_check_virtual_decode_health_passes(tmp_path: Path) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 4))
+    job = _make_region_job(template_ds, region=slice(0, 4))
+    ds = xr.open_zarr(store, decode_timedelta=True)
+
+    result = validation.CheckVirtualDecodeHealth()(job, store, ds)
+    assert result.passed, result.message
+    assert "all readable" in result.message
+    # "latest": targets the newest present position, not an older one.
+    assert str(ds.get_index("init_time")[-1]) in result.message
+
+
+def test_check_virtual_decode_health_only_decodes_present_refs(tmp_path: Path) -> None:
+    # Emit inits 0-1 of a 4-init window. The absent inits 2-3 must NOT be decoded (which
+    # would read fill-value NaN and false-fail); decode-health checks the latest *present*
+    # init (1), whose refs decode to real data -> passes.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 2))
+    job = _make_region_job(template_ds, region=slice(0, 4))
+    ds = xr.open_zarr(store, decode_timedelta=True)
+
+    result = validation.CheckVirtualDecodeHealth()(job, store, ds)
+    assert result.passed, result.message
+    assert str(ds.get_index("init_time")[1]) in result.message
+
+
+def test_check_virtual_decode_health_fails_when_no_present_refs(tmp_path: Path) -> None:
+    # Pre-sized but empty store: source files are expected but none are ingested, so there
+    # is nothing to decode -> fail loudly rather than silently pass.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    store = _primary_repo(dataset.store_factory).readonly_session("main").store
+    job = _make_region_job(template_ds, region=slice(0, 4))
+
+    result = validation.CheckVirtualDecodeHealth()(
+        job, store, xr.open_zarr(store, decode_timedelta=True)
+    )
+    assert not result.passed
+    assert "No present references" in result.message
+
+
+def test_check_virtual_decode_health_detects_unreadable_ref(tmp_path: Path) -> None:
+    # A present ref whose bytes decode to all-NaN is unreadable data. Overwrite init 0's
+    # message blocks with NaN, emit only init 0, and assert decode-health flags the var.
+    dataset = _make_dataset(tmp_path)
+    messages = tmp_path / "messages.bin"
+    data = bytearray(messages.read_bytes())
+    nan_block = np.full(N_LAT * N_LON, np.nan, dtype="<f8").tobytes()
+    for lead_idx in range(N_LEADS):
+        offset, length = _message_offset_length(0, lead_idx)
+        data[offset : offset + length] = nan_block
+    messages.write_bytes(bytes(data))
+
+    template_ds = _create_template_ds(1)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 1))
+    job = _make_region_job(template_ds, region=slice(0, 1))
+
+    result = validation.CheckVirtualDecodeHealth()(
+        job, store, xr.open_zarr(store, decode_timedelta=True)
+    )
+    assert not result.passed
+    assert "entirely NaN" in result.message
+
+
+def test_validate_dataset_requires_region_job_for_virtual_validator(
+    tmp_path: Path,
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    store = _backfilled_store(dataset, _create_template_ds(4), emit=slice(0, 4))
+    with pytest.raises(AssertionError, match="needs a region_job"):
+        validation.validate_dataset(
+            store, [validation.CheckVirtualManifestCompleteness()]
+        )
+
+
+def test_validate_dataset_wires_virtual_validators(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The dataset lists the virtual validators in validators(); validate_dataset must
+    # build the operational-window region job and dispatch the context to them.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    _backfilled_store(dataset, template_ds, emit=slice(0, 4))
+    job = _make_region_job(template_ds, region=slice(0, 4), processing_mode="update")
+
+    monkeypatch.setattr(
+        VirtualTestRegionJob,
+        "operational_update_jobs",
+        classmethod(lambda cls, **kwargs: ([job], template_ds)),
+    )
+    monkeypatch.setattr(
+        VirtualTestDataset,
+        "validators",
+        lambda self: (
+            validation.CheckVirtualManifestCompleteness(),
+            validation.CheckVirtualDecodeHealth(),
+        ),
+    )
+    dataset.validate_dataset("test")  # must not raise
+
+
 def test_process_virtual_writes_refs_to_replica(tmp_path: Path) -> None:
     # Replica emit path + replicas-then-primary commit: both stores get every ref.
     dataset = _make_dataset(tmp_path)

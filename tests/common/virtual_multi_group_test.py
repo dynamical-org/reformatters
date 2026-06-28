@@ -489,6 +489,65 @@ def test_backfill_emits_refs_to_both_groups_and_reads_back(tmp_path: Path) -> No
     _assert_all_values(dataset, n_inits=2)
 
 
+def test_open_validation_dataset_includes_group_vars(tmp_path: Path) -> None:
+    # The validation gap: xr.open_zarr reads only the root group, hiding group vars.
+    # open_validation_dataset must surface pressure_level/temperature (path-keyed)
+    # alongside the root temperature_2m, with the group var carrying its vertical dim.
+    dataset = _make_dataset(tmp_path, n_inits=2)
+    template_ds = _create_template_ds(2)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    _make_region_job(template_ds, region=slice(0, 2)).process_virtual(repo, [], "main")
+
+    store = repo.readonly_session("main").store
+    root_only = xr.open_zarr(store, consolidated=False, decode_timedelta=True)
+    assert "pressure_level/temperature" not in root_only.data_vars
+
+    flat = validation.open_validation_dataset(store, consolidated=False)
+    assert "temperature_2m" in flat.data_vars
+    assert "pressure_level/temperature" in flat.data_vars
+    assert "pressure_level" in flat["pressure_level/temperature"].dims
+
+
+def test_nan_check_covers_group_vars(tmp_path: Path) -> None:
+    # The most safety-critical case: a NaN/coverage validator must evaluate group vars,
+    # not silently drop to root-only. Running it over the flat dataset with the group var
+    # explicitly included reports "1 variable" (it was found and checked), not "0".
+    dataset = _make_dataset(tmp_path, n_inits=2)
+    template_ds = _create_template_ds(2)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    _make_region_job(template_ds, region=slice(0, 2)).process_virtual(repo, [], "main")
+    store = repo.readonly_session("main").store
+
+    flat = validation.open_validation_dataset(store, consolidated=False)
+    result = validation.check_forecast_recent_nans(
+        flat,
+        include_vars=["pressure_level/temperature"],
+        spatial_sampling="all",
+    )
+    assert result.passed, result.message
+    assert "All 1 variables" in result.message
+
+
+def test_decode_health_covers_group_vars(tmp_path: Path) -> None:
+    # Decode health over a flattened multi-group store: the group var carries an extra
+    # vertical dim (pressure_level) absent from the per-position selection, so per-var
+    # dim handling must decode it without error rather than crashing on a missing/extra dim.
+    dataset = _make_dataset(tmp_path, n_inits=2)
+    template_ds = _create_template_ds(2)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    _make_region_job(template_ds, region=slice(0, 2)).process_virtual(repo, [], "main")
+    store = repo.readonly_session("main").store
+    job = _make_region_job(template_ds, region=slice(0, 2))
+
+    ds = validation.open_validation_dataset(store, consolidated=False)
+    assert "pressure_level/temperature" in ds.data_vars
+    result = validation.CheckVirtualDecodeHealth()(job, store, ds)
+    assert result.passed, result.message
+
+
 def test_per_file_commit_contains_both_groups(tmp_path: Path) -> None:
     # Per-file atomicity across groups: each source file is one commit, and that
     # commit writes both a root chunk and a pressure_level chunk for the same file.
