@@ -89,9 +89,6 @@ class GefsForecast10DaySpatialDataset(
                 validation.check_forecast_current_data,
                 max_latest_init_time_age=timedelta(hours=10),
             ),
-            # Manifest completeness (missing steps) + a bounded sample-decode of the
-            # latest complete init. Both probe the recent window via the operational
-            # region job; see docs/virtual_datasets.md. The full NaN scan stays offline.
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
         )

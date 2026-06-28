@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import itertools
+from collections import Counter
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -595,18 +596,28 @@ async def _list_shards(store: Store, var: str) -> set[str]:
 
 @dataclass(frozen=True)
 class CheckVirtualManifestCompleteness(VirtualDataValidator):
-    """Assert every source file that should already be ingested is in the manifest.
+    """Assert recent append-dim positions are sufficiently ingested in the manifest.
 
     Re-runs the operational filter (the region job's own source_file_coords +
-    filter_already_present) over the recent window, excluding the newest
-    `skip_newest_positions` append-dim positions, which may still be mid-publication.
-    Anything still missing is a real hole — a source file that failed to ingest.
-    Cheap: one ref-existence probe per source file, no decode. Reusing the dataset's own
-    coord generation means structural absences (hour-0 accumulated vars, etc.) are not in
-    the expected set. The virtual analog of check_for_expected_shards.
+    filter_already_present) over the recent window and checks, per position, the fraction
+    of expected source files present against `min_present_fraction` — indexed newest-first,
+    with positions older than the tuple held to its last value. Cheap: one ref-existence
+    probe per source file, no decode. Reusing the dataset's own coord generation means
+    structural absences (hour-0 accumulated vars, etc.) are not in the expected set. The
+    virtual analog of check_for_expected_shards.
+
+    Examples (validation typically runs once each recent position should be ingested):
+      (1.0,)      every position in the window must be fully ingested (default).
+      (0.5, 1.0)  the newest position may be half-published (e.g. GEFS 35-day's slow long
+                  lead times); every older position must be complete.
+      (0.0, 1.0)  ignore the newest (still publishing); require the rest complete.
+      (0.8,)      every position at least 80% present (a source that trickles in).
     """
 
-    skip_newest_positions: int = 1
+    min_present_fraction: tuple[float, ...] = (1.0,)
+
+    def __post_init__(self) -> None:
+        assert self.min_present_fraction, "min_present_fraction must be non-empty"
 
     def __call__(
         self,
@@ -616,29 +627,46 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
     ) -> ValidationResult:
         append_dim = region_job.append_dim
         candidates = region_job.source_file_coords()
-        positions = sorted({c.out_loc()[append_dim] for c in candidates})
-        if len(positions) <= self.skip_newest_positions:
-            return ValidationResult(
-                passed=True,
-                message=f"Too few {append_dim} positions ({len(positions)}) to check completeness",
-            )
-
-        cutoff = positions[-1 - self.skip_newest_positions]
-        expected = [c for c in candidates if c.out_loc()[append_dim] <= cutoff]
-        missing = region_job.filter_already_present(expected, store)
-        if missing:
-            missing_positions = sorted({str(c.out_loc()[append_dim]) for c in missing})
+        expected_per_position = Counter(c.out_loc()[append_dim] for c in candidates)
+        positions = sorted(expected_per_position, reverse=True)  # newest first
+        if len(positions) < len(self.min_present_fraction):
             return ValidationResult(
                 passed=False,
                 message=(
-                    f"{len(missing)} of {len(expected)} expected source files missing from "
-                    f"the manifest (through {append_dim}={cutoff}); "
-                    f"affected {append_dim}: {missing_positions}"
+                    f"Only {len(positions)} {append_dim} position(s) in the validation "
+                    f"window, need at least {len(self.min_present_fraction)} to check the "
+                    f"{self.min_present_fraction} completeness thresholds"
                 ),
+            )
+
+        missing_per_position = Counter(
+            c.out_loc()[append_dim]
+            for c in region_job.filter_already_present(candidates, store)
+        )
+        problems = []
+        for recency, position in enumerate(positions):
+            required = self.min_present_fraction[
+                min(recency, len(self.min_present_fraction) - 1)
+            ]
+            expected = expected_per_position[position]
+            present = expected - missing_per_position[position]
+            if present / expected < required:
+                problems.append(
+                    f"{append_dim}={position}: {present}/{expected} present "
+                    f"({present / expected:.1%} < required {required:.0%})"
+                )
+        if problems:
+            return ValidationResult(
+                passed=False,
+                message="Incomplete manifest:\n"
+                + "\n".join(f"- {p}" for p in problems),
             )
         return ValidationResult(
             passed=True,
-            message=f"All {len(expected)} expected source files present through {append_dim}={cutoff}",
+            message=(
+                f"All {len(positions)} {append_dim} positions meet completeness "
+                f"thresholds {self.min_present_fraction}"
+            ),
         )
 
 

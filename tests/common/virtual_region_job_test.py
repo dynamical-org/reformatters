@@ -882,6 +882,7 @@ def _backfilled_store(
 
 
 def test_check_virtual_manifest_completeness_passes(tmp_path: Path) -> None:
+    # Default (1.0,): every position in the window must be fully present.
     dataset = _make_dataset(tmp_path)
     template_ds = _create_template_ds(4)
     store = _backfilled_store(dataset, template_ds, emit=slice(0, 4))
@@ -894,8 +895,8 @@ def test_check_virtual_manifest_completeness_passes(tmp_path: Path) -> None:
 
 
 def test_check_virtual_manifest_completeness_detects_hole(tmp_path: Path) -> None:
-    # Emit inits 0-1 of a 4-init window. With skip_newest_positions=1 the newest
-    # (init 3) is excluded, but init 2 is expected and missing -> a real hole.
+    # Emit inits 0-1 of a 4-init window; with the default (1.0,) the missing inits 2-3
+    # are real holes.
     dataset = _make_dataset(tmp_path)
     template_ds = _create_template_ds(4)
     store = _backfilled_store(dataset, template_ds, emit=slice(0, 2))
@@ -905,23 +906,47 @@ def test_check_virtual_manifest_completeness_detects_hole(tmp_path: Path) -> Non
         job, store, xr.open_zarr(store, decode_timedelta=True)
     )
     assert not result.passed
-    assert "missing" in result.message
+    assert "Incomplete" in result.message
 
 
-def test_check_virtual_manifest_completeness_excludes_newest_positions(
+def test_check_virtual_manifest_completeness_tolerates_partial_newest(
     tmp_path: Path,
 ) -> None:
-    # Emit inits 0-2 but not the newest (init 3). skip_newest_positions=1 excludes
-    # init 3 from the check, so completeness passes despite its absence.
+    # Emit inits 0-2 but not the newest (init 3). (0.0, 1.0): the newest may be absent,
+    # every older position must be complete -> passes.
     dataset = _make_dataset(tmp_path)
     template_ds = _create_template_ds(4)
     store = _backfilled_store(dataset, template_ds, emit=slice(0, 3))
     job = _make_region_job(template_ds, region=slice(0, 4))
+    ds = xr.open_zarr(store, decode_timedelta=True)
 
-    result = validation.CheckVirtualManifestCompleteness()(
-        job, store, xr.open_zarr(store, decode_timedelta=True)
+    tolerant = validation.CheckVirtualManifestCompleteness(
+        min_present_fraction=(0.0, 1.0)
     )
-    assert result.passed, result.message
+    assert tolerant(job, store, ds).passed
+    # But a fraction floor the absent newest can't meet still fails on it.
+    strict = validation.CheckVirtualManifestCompleteness(
+        min_present_fraction=(0.5, 1.0)
+    )
+    result = strict(job, store, ds)
+    assert not result.passed
+    assert "Incomplete" in result.message
+
+
+def test_check_virtual_manifest_completeness_fails_when_window_too_short(
+    tmp_path: Path,
+) -> None:
+    # A 1-position window can't satisfy a 2-tier threshold: fail loudly, never silently pass.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 1))
+    job = _make_region_job(template_ds, region=slice(0, 1))
+
+    result = validation.CheckVirtualManifestCompleteness(
+        min_present_fraction=(0.5, 1.0)
+    )(job, store, xr.open_zarr(store, decode_timedelta=True))
+    assert not result.passed
+    assert "need at least 2" in result.message
 
 
 def test_check_virtual_decode_health_passes(tmp_path: Path) -> None:
