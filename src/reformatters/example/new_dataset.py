@@ -1,9 +1,29 @@
 import re
 import shutil
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
 import typer
+
+
+class DatasetKind(StrEnum):
+    """Which teaching template to scaffold from.
+
+    materialized: download, rechunk, and rewrite the bytes into a new zarr/icechunk
+        store (the common case).
+    virtual: an icechunk store of chunk references that point at source files in
+        place, decoded at read time. See docs/virtual_datasets.md.
+    """
+
+    materialized = "materialized"
+    virtual = "virtual"
+
+
+_EXAMPLE_DIRS: dict[DatasetKind, str] = {
+    DatasetKind.materialized: "example",
+    DatasetKind.virtual: "example_virtual",
+}
 
 
 def initialize_new_integration(
@@ -16,8 +36,15 @@ def initialize_new_integration(
     variant: Annotated[
         str, typer.Argument(help="The variant name in lowercase (e.g. 'forecast')")
     ],
+    kind: Annotated[
+        DatasetKind,
+        typer.Option(
+            help="Dataset kind to scaffold: 'materialized' (rechunk and rewrite the "
+            "bytes) or 'virtual' (reference source files in place, decode at read time)."
+        ),
+    ],
 ) -> None:
-    """Create a new dataset integration from the example template."""
+    """Create a new dataset integration from a teaching template (materialized or virtual)."""
     # Sanitize inputs
     provider = _sanitize_identifier(provider)
     model = _sanitize_identifier(model)
@@ -37,9 +64,10 @@ def initialize_new_integration(
     src_path.mkdir(parents=True, exist_ok=True)
     test_path.mkdir(parents=True, exist_ok=True)
 
-    # Copy example files
-    example_src = Path("src/reformatters/example")
-    example_test = Path("tests/example")
+    # Copy from the chosen example template
+    example_dirname = _EXAMPLE_DIRS[kind]
+    example_src = Path("src/reformatters") / example_dirname
+    example_test = Path("tests") / example_dirname
 
     for file in example_src.glob("*"):
         if file.is_file() and file.name != "new_dataset.py":  # Skip this file
@@ -53,7 +81,9 @@ def initialize_new_integration(
     (src_path / "__init__.py").touch()
     (test_path / "__init__.py").touch()
 
-    # Perform renames in copied files
+    # Perform renames in copied files. The import-prefix key is the chosen example
+    # package (reformatters.example or reformatters.example_virtual) so virtual copies
+    # aren't half-renamed by a "reformatters.example" prefix match.
     example_to_actual_mappings = {
         "ExampleDataset": f"{provider_pascal}{model_pascal}{variant_pascal}Dataset",
         "ExampleTemplateConfig": f"{provider_pascal}{model_pascal}{variant_pascal}TemplateConfig",
@@ -61,7 +91,7 @@ def initialize_new_integration(
         "ExampleDataVar": f"{provider_pascal}{model_pascal}DataVar",
         "ExampleInternalAttrs": f"{provider_pascal}{model_pascal}InternalAttrs",
         "ExampleSourceFileCoord": f"{provider_pascal}{model_pascal}{variant_pascal}SourceFileCoord",
-        "reformatters.example": f"reformatters.{provider}.{model}.{variant}",
+        f"reformatters.{example_dirname}": f"reformatters.{provider}.{model}.{variant}",
     }
 
     # Process all Python files in both src and test directories
@@ -77,13 +107,21 @@ def initialize_new_integration(
         f"from .dynamical_dataset import {dataset_class_name} as {dataset_class_name}\n"
     )
 
+    kind_specific_step = (
+        "5. Set `icechunk_virtual_config` and use an ICECHUNK primary store "
+        "(see docs/virtual_datasets.md)"
+        if kind == DatasetKind.virtual
+        else "5. Run `uv run main <dataset-id> update-template` to generate "
+        "templates/latest.zarr"
+    )
     print(  # noqa: T201
-        f"Created new dataset integration at {src_path} and {test_path}\n\n"
+        f"Created new {kind.value} dataset integration at {src_path} and {test_path}\n\n"
         "Next steps:\n"
         "1. Register your dataset in src/reformatters/__main__.py\n"
         f"2. Implement your {example_to_actual_mappings['ExampleTemplateConfig']} subclass\n"
         f"3. Implement your {example_to_actual_mappings['ExampleRegionJob']} subclass\n"
-        f"4. Implement your {example_to_actual_mappings['ExampleDataset']} subclass"
+        f"4. Implement your {example_to_actual_mappings['ExampleDataset']} subclass\n"
+        f"{kind_specific_step}"
     )
 
 

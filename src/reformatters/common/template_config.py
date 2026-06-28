@@ -225,7 +225,7 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         return ds
 
     def _assert_valid_structure(self) -> None:
-        """Enforce the group invariants (see docs/plans/vertical_dimension_structure.md)."""
+        """Enforce the group invariants."""
         root_dims = self.dims[ROOT]
         for group, group_dims in self.dims.items():
             if group is ROOT:

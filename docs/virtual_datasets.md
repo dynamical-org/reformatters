@@ -4,6 +4,21 @@ A virtual dataset is an Icechunk store whose chunks are references — `(locatio
 
 How virtual jobs plug into worker parallelism and coordination is covered in [parallel_processing.md](parallel_processing.md); this doc covers what is specific to writing and reading virtual datasets.
 
+## Why virtual
+
+A virtual dataset complements the materialized (rechunked) time-series dataset over the same source data:
+
+- **Spatial / map-optimized chunking.** Chunks follow the native GRIB message shape — one time step, full spatial grid — so a virtual `-spatial` dataset serves map and spatial queries efficiently, while the materialized dataset stays tuned for time-series extraction.
+- **Every curated source variable, cheaply.** A variable costs only a handful of byte-range refs, not a rechunked copy, so a virtual dataset can include every variable we have metadata for rather than just the materialized subset.
+- **Very low latency updates.** Writing refs records byte offsets without moving data, so a new source file's data is visible within seconds of publication (target ≤ 5 s end to end). See [Operational updates](#operational-updates-single-writer).
+
+## Scale
+
+Virtual datasets are *metadata-heavy*, not storage-heavy. One GRIB message — one `(variable, …, lead/time)` field — becomes one virtual chunk, so ref counts track the full Cartesian product of the dataset's dimensions *including the variable axis*. A multi-year ensemble dataset reaches order 10⁹ refs and tens of millions of source index files. Two consequences shape the design:
+
+- **Manifests must be split** (see [Storage](#storage-and-reading)) — a single per-array manifest at this ref count is too large to rewrite on every commit.
+- **Backfills must run in parallel** — backfill is bounded by index-file *count*, not ref count, and tens of millions of index downloads is hours of work even at high concurrency. Operational updates touch a handful of files per fire and run single-writer.
+
 ## The write loop
 
 `VirtualRegionJob.process_virtual` runs the same loop for backfills and operational updates; only the branch differs (a temp branch for backfill, `main` for operational):
@@ -34,7 +49,7 @@ How virtual jobs plug into worker parallelism and coordination is covered in [pa
 **On the `SourceFileCoord` subclass** (identifies one source file):
 
 - `get_url() -> str` — the canonical data-file URL refs point at (must match the virtual chunk container prefix).
-- `out_loc() -> {dim: label}` — the output cell the file fills. The inherited default works when the coord's fields are all dim names; override otherwise (e.g. a representative ensemble member for a multi-member file).
+- `out_loc() -> {dim: label}` — the output cell the file fills. The inherited default works when the coord's fields are all dim names; override otherwise (e.g. a representative ensemble member for a multi-member file). A file holding *only* vertical-group variables (no root var) must include a representative level (e.g. `pressure_level: <a real level>`) so the per-file manifest probe — which resolves `out_loc` to a single chunk — has a concrete level to probe; per-file commit atomicity makes that one level's presence imply the whole file's. The per-ref `out_loc` overrides this representative level with the ref's actual level. (HRRR `wrfprs`/`wrfnat` files are group-only; see `noaa/hrrr/forecast_48_hour_spatial`.)
 - `get_index_url() -> str` — *optional*, only if the files have a sidecar byte-range index; used by the obstore-listing discovery util and by index-based `file_refs`. Nothing on the base calls it.
 
 **Optional overrides (working defaults):** `filter_already_present` (manifest probe), `representative_var` (first instant var among the coord's own `data_vars` — only override for a packing that rule misses), the `tick_interval` (1s) / `download_concurrency` (32) class attrs, and `process_virtual_refs` itself (only for a fundamentally different batching policy).
@@ -94,6 +109,55 @@ Two virtual validators ship in `validation.py`; both are bounded so the whole va
 
 Tuning (completeness's `min_present_fraction`; decode health's `positions`, `sampled_leads`, `max_workers`) is set where the validator is listed in `validators()` — one place. The materialized `check_for_expected_shards` / `compare_replica_and_primary` do not carry over: virtual stores have no shards, and virtual replicas point at the same source bytes so a value compare adds nothing.
 
+## Multi-group (vertical) datasets
+
+A dataset that mixes single-level variables with variables on a dense vertical dimension is structured as a zarr group hierarchy (see "Vertical levels" in [AGENTS.md](../AGENTS.md) for the user-facing rules). Multi-group is currently exercised only by virtual datasets, so its design lives here.
+
+### Design principles
+
+- **Declarative, group-keyed.** There is one declarative place to find a group's dims, keyed by group; core never hard-codes vertical dim names — each config declares them.
+- **Group is a per-variable property, not a job boundary.** A source file can span groups (HRRR `wrfprs` → root single-level *and* `pressure_level`) or be finer than a group (one file per `(var, level)`). Jobs stay scoped as region × source-file var group; a variable's group determines only its zarr path, its dims, and that its refs carry the vertical level.
+- **Coordination stays dataset-wide.** Reader-safety (deferred metadata; the icechunk temp-branch merge) is whole-dataset; group structure does not change worker setup/finalize counting.
+
+### Type scheme
+
+In `common/config_models.py`:
+
+- `ROOT` (a `RootGroup` enum sentinel, *not* a `str`) keys the root / single-level group; `DataVar.group: Group = ROOT` is the default.
+- `VerticalGroup` is a closed `Literal["pressure_level", "model_level"]` (extend as new dense vertical types are supported); `Group = VerticalGroup | RootGroup`.
+- `var_path(group, name)` is the zarr path / identity: `name` at root, else `f"{group}/{name}"`. Because `ROOT` is not a `str` it cannot leak into a path — `ty` narrows `group` to `VerticalGroup` after `if group is ROOT`. A typo'd group key is rejected by both pydantic and `ty`.
+
+A vertical group's name **equals** its dimension name (the `group == dim` invariant): `dims[g]` for a vertical group contains the dim `g`, and there is a `Coordinate(name=g, …)` for it.
+
+### TemplateConfig encoding
+
+- `dims` is group-keyed: `dims: dict[Group, tuple[Dim, ...]]`. A single-level config is `dims = {ROOT: (...)}`; a pressure group is `dims["pressure_level"] = (..., "pressure_level")`. `all_dims` returns the de-duplicated union.
+- `DataVar` carries `group`; `var.path = var_path(var.group, var.name)` is its identity. A variable's dims are `dims[var.group]` — never stored on the DataVar, so nothing can disagree.
+- `_assert_valid_structure` enforces the invariants (each a self-describing assert): a vertical group adds exactly its own dim to the root dims; every declared group is used and every var's group is declared; `(group, name)` is unique; no root var name collides with a group name; one shared append-dim chunk size across vars; and each var's encoding `chunks`/`shards` length equals `len(dims[var.group])`.
+
+### DataTree representation
+
+The template *is* an `xarray.DataTree` — one node per group (a single-level dataset is a one-node tree, which writes byte-identically to the previous flat-Dataset path). `get_template()` returns the DataTree and `RegionJob.template_ds` is a DataTree.
+
+- `write_metadata` writes the whole tree in one `to_zarr(write_inherited_coords=True)` call. That flag duplicates the shared coords (time/lead time, lat/lon, ensemble_member, spatial_ref) into each child group so a group opens standalone via `open_zarr(group=…)`.
+- `DataTree.to_zarr` does not support `append_dim`, so `sync_dims_to` grows the append dim by writing each node's slice with `to_zarr(group=…, append_dim=…)`, sizing each (store, group) from its *own* committed size. Groups may sit at different append-dim lengths transiently under operational lazy growth — acceptable and eventually consistent.
+- Virtual refs route by `var.path`: `chunk_key` reads geometry from `template_ds[var.path]` (a vertical-group var resolves to its group node, whose DataArray carries the vertical coord), and `_emit_refs` calls `set_virtual_refs(var.path, …)` on the group-qualified array. A source file spanning groups still commits all its refs together, so per-file atomicity holds across groups.
+
+The materialized chunk-write path is not yet group-aware; a `DynamicalDataset` guard rejects a materialized dataset that declares any non-root variable, so this fails loudly rather than miswriting.
+
 ## Storage and reading
 
-A virtual dataset requires every storage config to use the `ICECHUNK` format and an `icechunk_virtual_config` registering the source buckets as virtual chunk containers (`DynamicalDataset` validates this). Container definitions are stored in the repo's persistent config; readers supply an (anonymous) credentials map via `authorize_virtual_chunk_access` when opening the store.
+A virtual dataset requires every storage config to use the `ICECHUNK` format and an `icechunk_virtual_config` (`IcechunkVirtualConfig` on the `DynamicalDataset`, validated at construction). It holds the real icechunk objects directly — the `VirtualChunkContainer`s registering each source bucket and a `ManifestSplittingConfig` — rather than plain fields, because plain fields would be a lossy subset (no Source Coop S3-compatible endpoint, no GCS mirror, no per-array / multi-dim manifest splits). Nothing serializes the config: workers rebuild the whole dataset from the in-code registry by `dataset_id`, and `StoreFactory` consumes the config directly to register containers and build the (anonymous) `authorize_virtual_chunk_access` map.
+
+### Containers as indirection
+
+A virtual chunk container is more than anonymous credentials — refs are stored *relative* to the registered container prefix:
+
+- **Dedup.** The repeated `s3://bucket/prefix` is not copied into every ref; on an all-virtual store this is most of the on-disk footprint.
+- **En-masse repoint.** Swapping a container registration (e.g. NODD-on-AWS → a GCS mirror, or a Source Coop move) repoints every ref at once, with no manifest rewrite.
+
+Container *definitions* are persisted into the repo's config (recovered by `Repository.fetch_config`), so a reader supplies only the (anonymous) credentials map via `authorize_virtual_chunk_access` at open. Credentials are never persisted — a read without them raises.
+
+### Manifest splitting
+
+icechunk manifests are per-array, immutable, and content-addressed; a commit rewrites only the split file(s) whose chunk-index range changed. Each array's manifest is split along the append dimension (`manifest_append_dim_split`), so an operational append lands only in the current (highest-index) split while every historical split is carried over unchanged. **Commit cost is the size of the active split, not the whole array** — this is what keeps the operational ≤ 5 s latency budget real at order-10⁹-ref scale. Size the split by the operational commit-cost ceiling (small enough to rewrite the active split well under a second); for a large ensemble dataset that lands around 1–3 weeks of appends per split.

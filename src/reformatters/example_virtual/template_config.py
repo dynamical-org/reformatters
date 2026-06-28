@@ -24,9 +24,16 @@ from reformatters.common.template_config import (
 )
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 from reformatters.common.zarr import (
-    BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,  # noqa: F401
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,  # noqa: F401
 )
+
+# A virtual dataset's chunks are *references* to messages in source files (decoded
+# at read time), not bytes we rechunk and rewrite. That changes only the DATA
+# VARIABLE encoding (see `data_vars` below); the coordinates are small arrays we
+# materialize normally, so this template's coords are identical to a materialized
+# dataset's. The per-variable serializer that decodes a raw GRIB message lives in
+# the data var encoding, e.g.:
+# from gribberish.zarr import GribberishCodec
 
 
 class ExampleInternalAttrs(BaseInternalAttrs):
@@ -35,6 +42,7 @@ class ExampleInternalAttrs(BaseInternalAttrs):
     Not written to the dataset.
     """
 
+    # The serializer needs to know which GRIB message to decode out of each file.
     # For example,
     # grib_element: str
 
@@ -47,8 +55,9 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
     # Single-level dataset: all vars live at the root. To add a vertical group, add an
     # entry whose key is the group/dimension name and whose dims are the root dims plus
     # that dimension, then set group=... on the group's DataVars (their zarr path becomes
-    # "<group>/<name>"). E.g.:
+    # "<group>/<name>"); each ref then routes to its group array by var.path. E.g.:
     #   "pressure_level": ("init_time", "lead_time", "latitude", "longitude", "pressure_level"),
+    # See tests/common/virtual_multi_group_test.py for a worked multi-group virtual dataset.
     dims: dict[Group, tuple[Dim, ...]] = {
         ROOT: ("init_time", "lead_time", "latitude", "longitude")
     }
@@ -70,8 +79,8 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #     spatial_resolution="0.25 degrees (~20km)",
         #     time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
         #     time_resolution=f"Forecasts initialized every {self.append_dim_frequency.total_seconds() / 3600:.0f} hours",
-        #     forecast_domain="Forecast lead time 0-384 hours (0-16 days) ahead",
-        #     forecast_resolution="Forecast step 0-120 hours: hourly, 123-384 hours: 3 hourly",
+        #     forecast_domain="Forecast lead time 0-240 hours (0-10 days) ahead",
+        #     forecast_resolution="Forecast step 3 hourly",
         # )
         raise NotImplementedError("Subclasses implement `dataset_attributes`")
 
@@ -79,17 +88,16 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         """
         Returns a dictionary of dimension names to coordinates for the dataset.
         """
+        # Virtual chunks decode the raw source message, so the grid here must be the
+        # source file's NATIVE grid - one chunk per message means no regridding is
+        # possible. (A materialized dataset is free to choose any output grid.)
         # return {
         #     self.append_dim: self.append_dim_coordinates(
         #         self.append_dim_start + self.append_dim_frequency
         #     ),
-        #     "lead_time": (
-        #         pd.timedelta_range("0h", "120h", freq="1h").union(
-        #             pd.timedelta_range("123h", "384h", freq="3h")
-        #         )
-        #     ),
+        #     "lead_time": pd.timedelta_range("0h", "240h", freq="3h"),
         #     "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
-        #     "longitude": np.arange(-180, 180, 0.25),
+        #     "longitude": np.arange(0, 360, 0.25),
         # }
         raise NotImplementedError("Subclasses implement `dimension_coordinates`")
 
@@ -105,9 +113,9 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         # understand your dataset.
         # return {
         #     "valid_time": ds["init_time"] + ds["lead_time"],
-        #     "ingested_forecast_length": (
-        #         (self.append_dim,),
-        #         np.full(ds[self.append_dim].size, np.timedelta64("NaT", "us")),
+        #     "expected_forecast_length": (
+        #         ("init_time",),
+        #         np.full(ds["init_time"].size, np.timedelta64(240, "h")),
         #     ),
         #     "spatial_ref": SPATIAL_REF_COORDS,
         # }
@@ -116,7 +124,12 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
     @computed_field
     @property
     def coords(self) -> Sequence[Coordinate]:
-        """Define metadata and encoding for each coordinate."""
+        """Define metadata and encoding for each coordinate.
+
+        Coordinates are small materialized arrays - their encoding is the same as in
+        a materialized dataset. Only the data variable encoding differs for a virtual
+        dataset (see `data_vars`).
+        """
         # dim_coords = self.dimension_coordinates()
         # append_dim_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
 
@@ -221,12 +234,12 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #             units="seconds since 1970-01-01 00:00:00",
         #             statistics_approximate=StatisticsApproximate(
         #                 min=self.append_dim_start.isoformat(),
-        #                 max="Present + 16 days",
+        #                 max="Present + 10 days",
         #             ),
         #         ),
         #     ),
         #     Coordinate(
-        #         name="ingested_forecast_length",
+        #         name="expected_forecast_length",
         #         encoding=Encoding(
         #             dtype="float64",
         #             fill_value=float("nan"),
@@ -236,10 +249,10 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #             shards=None,
         #         ),
         #         attrs=CoordinateAttrs(
-        #             long_name="Ingested forecast length",
+        #             long_name="Expected forecast length",
         #             units="seconds",
         #             statistics_approximate=StatisticsApproximate(
-        #                 min=str(dim_coords["lead_time"].min()),
+        #                 min=str(dim_coords["lead_time"].max()),
         #                 max=str(dim_coords["lead_time"].max()),
         #             ),
         #         ),
@@ -255,7 +268,7 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #         attrs=CoordinateAttrs(
         #             units=None,
         #             statistics_approximate=None,
-        #             # Deterived by running `ds.rio.write_crs("+proj=longlat +a=6371229 +b=6371229 +no_defs +type=crs")["spatial_ref"].attrs
+        #             # Derived by running `ds.rio.write_crs("+proj=longlat +a=6371229 +b=6371229 +no_defs +type=crs")["spatial_ref"].attrs
         #             crs_wkt='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
         #             semi_major_axis=6371229.0,
         #             semi_minor_axis=6371229.0,
@@ -276,80 +289,67 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
     @computed_field
     @property
     def data_vars(self) -> Sequence[ExampleDataVar]:
-        """Define metadata and encoding for each data variable."""
-        # # Data variable chunking and sharding
-        # # see docs/chunk_shard_layout_tool.md to find good chunk and shard sizes
-        #
-        # # XXMB uncompressed, XXMB compressed
-        # var_chunks: dict[Dim, int] = {
-        #     "init_time": 1,
-        #     "lead_time": 105,
-        #     "latitude": 121,
-        #     "longitude": 121,
-        # }
-        #
-        # # XXMB uncompressed, XXMB compressed
-        # var_shards: dict[Dim, int] = {
-        #     "init_time": 1,
-        #     "lead_time": 105 * 2,
-        #     "latitude": 121 * 6,
-        #     "longitude": 121 * 6,
-        # }
+        """Define metadata and encoding for each data variable.
 
-        # encoding_float32_default = Encoding(
-        #     dtype="float32",
+        This is THE method that diverges from a materialized dataset. Two virtual rules:
+
+        1. One chunk per source message. Each virtual chunk is exactly one GRIB message,
+           so chunk size is 1 along every per-message dim (init_time, lead_time, and
+           ensemble_member if present) and full-width along the message's spatial dims,
+           with shards=None. The geometry of these chunks is what the write loop uses to
+           place each reference, so it must match the source file layout exactly.
+
+        2. We never re-encode the bytes. There are no compressors or filters of our own;
+           instead a per-variable `serializer` (a zarr v3 ArrayBytesCodec, e.g.
+           GribberishCodec) decodes the raw GRIB message at read time. Declare `dtype` as
+           whatever that codec produces (GribberishCodec decodes to float64) to avoid a
+           cast.
+
+        Because the served values are the RAW source values, a variable the materialized
+        pipeline would transform (deaccumulate precip to a rate, convert K -> degC)
+        appears here untransformed - give it the name/units of the raw quantity (see the
+        raw-value overrides in noaa/gefs/forecast_10_day_spatial/template_config.py).
+        """
+        # dim_coords = self.dimension_coordinates()
+        #
+        # # One chunk per GRIB message: 1 along init_time and lead_time, full spatial extent.
+        # message_chunks: tuple[int, ...] = (
+        #     1,  # init_time
+        #     1,  # lead_time
+        #     len(dim_coords["latitude"]),
+        #     len(dim_coords["longitude"]),
+        # )
+        #
+        # virtual_encoding = Encoding(
+        #     dtype="float64",  # GribberishCodec decodes to float64 natively
         #     fill_value=np.nan,
-        #     chunks=tuple(var_chunks[d] for d in self.dims[ROOT]),
-        #     shards=tuple(var_shards[d] for d in self.dims[ROOT]),
-        #     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
+        #     chunks=message_chunks,
+        #     shards=None,
+        #     compressors=(),  # no compression of our own; bytes stay as the source wrote them
+        #     filters=(),
+        #     serializer=GribberishCodec(var="TMP").to_dict(),  # decodes the raw message
         # )
 
-        # default_keep_mantissa_bits = 7
-
-        # # return [
+        # return [
         #     ExampleDataVar(
         #         name="temperature_2m",
-        #         encoding=encoding_float32_default,
+        #         encoding=virtual_encoding,
         #         attrs=DataVarAttrs(
-        #             short_name="t2m",
+        #             short_name="2t",
         #             long_name="2 metre temperature",
-        #             units="degree_Celsius",
+        #             # Raw GRIB temperature is Kelvin; the materialized dataset converts
+        #             # to degree_Celsius on read, but a virtual chunk serves it untouched.
+        #             units="K",
         #             step_type="instant",
         #             standard_name="air_temperature",
         #         ),
         #         internal_attrs=ExampleInternalAttrs(
         #             grib_element="TMP",
-        #             grib_comment='2[m] HTGL="Specified height level above ground"',
-        #             grib_index_level="2 m above ground",
-        #             index_position=580,
-        #             keep_mantissa_bits=default_keep_mantissa_bits,
-        #         ),
-        #     ),
-        #     ExampleDataVar(
-        #         name="precipitation_surface",
-        #         encoding=encoding_float32_default,
-        #         attrs=DataVarAttrs(
-        #             short_name="prate",
-        #             standard_name="precipitation_flux",
-        #             long_name="Precipitation rate",
-        #             units="kg m-2 s-1",
-        #             comment="Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",
-        #             step_type="avg",
-        #         ),
-        #         internal_attrs=ExampleInternalAttrs(
-        #             grib_element="APCP",
-        #             grib_comment='0[-] SFC="Ground or water surface"',
-        #             grib_index_level="surface",
-        #             index_position=595,
-        #             include_lead_time_suffix=True,
-        #             deaccumulate_to_rate=True,
-        #             window_reset_frequency=pd.Timedelta("6h"),
-        #             keep_mantissa_bits=default_keep_mantissa_bits,
         #         ),
         #     ),
         #     ExampleDataVar(
         #         name="pressure_surface",
-        #         encoding=encoding_float32_default,
+        #         encoding=virtual_encoding,
         #         attrs=DataVarAttrs(
         #             short_name="sp",
         #             long_name="Surface pressure",
@@ -359,47 +359,6 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #         ),
         #         internal_attrs=ExampleInternalAttrs(
         #             grib_element="PRES",
-        #             grib_comment='0[-] SFC="Ground or water surface"',
-        #             grib_index_level="surface",
-        #             index_position=560,
-        #             keep_mantissa_bits=10,
-        #         ),
-        #     ),
-        #     ExampleDataVar(
-        #         name="categorical_snow_surface",
-        #         encoding=encoding_float32_default,
-        #         attrs=DataVarAttrs(
-        #             short_name="csnow",
-        #             long_name="Categorical snow",
-        #             units="0=no; 1=yes",
-        #             step_type="avg",
-        #         ),
-        #         internal_attrs=ExampleInternalAttrs(
-        #             grib_element="CSNOW",
-        #             grib_comment='0[-] SFC="Ground or water surface"',
-        #             grib_index_level="surface",
-        #             index_position=604,
-        #             window_reset_frequency=pd.Timedelta("6h"),
-        #             keep_mantissa_bits="no-rounding",
-        #         ),
-        #     ),
-        #     ExampleDataVar(
-        #         name="total_cloud_cover_atmosphere",
-        #         encoding=encoding_float32_default,
-        #         attrs=DataVarAttrs(
-        #             short_name="tcc",
-        #             standard_name="cloud_area_fraction",
-        #             long_name="Total cloud cover",
-        #             units="percent",
-        #             step_type="avg",
-        #         ),
-        #         internal_attrs=ExampleInternalAttrs(
-        #             grib_element="TCDC",
-        #             grib_comment='0[-] EATM="Entire Atmosphere"',
-        #             grib_index_level="entire atmosphere",
-        #             index_position=635,
-        #             window_reset_frequency=pd.Timedelta("6h"),
-        #             keep_mantissa_bits=default_keep_mantissa_bits,
         #         ),
         #     ),
         # ]

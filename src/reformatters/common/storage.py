@@ -551,7 +551,9 @@ def _virtual_repository_config_and_credentials(
     for container in virtual_config.containers:
         config.set_virtual_chunk_container(container)
     config.manifest = icechunk.ManifestConfig(splitting=virtual_config.manifest_split)
-    # Cap the chunk-ref cache; the default OOMs streaming-commit writers, see "Chunk-ref cache OOM" in docs/plans/virtual_icechunk_datasets.md.
+    # Cap the chunk-ref cache: streaming commits each rewrite the active manifest split
+    # and never read old versions, so icechunk's default 5M-entry cache fills with dead
+    # manifest versions (multi-GB OOM). A virtual ref is ~180 B, so 1M refs ≈ 200 MB.
     config.caching = icechunk.CachingConfig(num_chunk_refs=1_000_000)
 
     # Every production source is S3 or S3-compatible (NOAA NODD, ECMWF, Source
