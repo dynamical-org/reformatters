@@ -952,6 +952,23 @@ def test_check_virtual_decode_health_detects_all_nan(tmp_path: Path) -> None:
     assert "entirely NaN" in result.message
 
 
+def test_check_virtual_decode_health_targets_a_store_position(tmp_path: Path) -> None:
+    # The store grows lazily, so decode-health must pick its target from the positions
+    # the store actually holds — not a (longer) template position that would index-miss
+    # and silently decode the newest-present position instead.
+    dataset = _make_dataset(tmp_path)
+    store = _backfilled_store(dataset, _create_template_ds(3), emit=slice(0, 3))
+    ds = xr.open_zarr(store, decode_timedelta=True)
+    # Region job built from a longer 5-init template; its extra positions are not in
+    # the 3-init store and must not be chosen as the decode target.
+    job = _make_region_job(_create_template_ds(5), region=slice(0, 5))
+
+    result = validation.CheckVirtualDecodeHealth()(job, store, ds)
+    assert result.passed, result.message
+    # n=3 store positions, skip newest 1 -> index 1 (not the 5-template's index 3).
+    assert str(ds.get_index("init_time")[1]) in result.message
+
+
 def test_validate_dataset_requires_region_job_for_virtual_validator(
     tmp_path: Path,
 ) -> None:

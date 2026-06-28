@@ -35,8 +35,7 @@ def flatten_groups(tree: xr.DataTree) -> xr.Dataset:
 
     Recursing over ``tree.subtree`` means arbitrarily nested groups flatten with no
     special-casing — the node path is the var-name prefix."""
-    # Start from the root dataset so its attrs (dataset_id, ...) carry through; merging
-    # into a fresh Dataset would drop them.
+    # Start from the root dataset so its attrs (dataset_id, ...) survive the merge.
     flat = tree.to_dataset()
     for node in tree.subtree:
         prefix = node_path_prefix(node)

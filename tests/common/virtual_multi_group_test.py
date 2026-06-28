@@ -530,6 +530,26 @@ def test_nan_check_covers_group_vars(tmp_path: Path) -> None:
     assert "All 1 variables" in result.message
 
 
+def test_decode_health_covers_group_vars(tmp_path: Path) -> None:
+    # Decode health over a flattened multi-group store: the group var carries an extra
+    # vertical dim (pressure_level) absent from the per-position selection, so per-var
+    # dim handling must decode it without error rather than crashing on a missing/extra dim.
+    dataset = _make_dataset(tmp_path, n_inits=2)
+    template_ds = _create_template_ds(2)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    _make_region_job(template_ds, region=slice(0, 2)).process_virtual(repo, [], "main")
+    store = repo.readonly_session("main").store
+    job = _make_region_job(template_ds, region=slice(0, 2))
+
+    ds = validation.open_validation_dataset(store, consolidated=False)
+    assert "pressure_level/temperature" in ds.data_vars
+    result = validation.CheckVirtualDecodeHealth(skip_newest_positions=0)(
+        job, store, ds
+    )
+    assert result.passed, result.message
+
+
 def test_per_file_commit_contains_both_groups(tmp_path: Path) -> None:
     # Per-file atomicity across groups: each source file is one commit, and that
     # commit writes both a root chunk and a pressure_level chunk for the same file.

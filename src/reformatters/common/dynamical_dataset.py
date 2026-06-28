@@ -502,10 +502,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
-        # A dataset's validators() lists every check, mixing plain XarrayDataValidators
-        # with VirtualDataValidators (which need the region job + manifest). The
-        # materialized-only check_for_expected_shards / compare_replica_and_primary are
-        # appended below since every materialized dataset wants them.
+        # validators() lists both validator kinds; validate_dataset dispatches by type.
+        # check_for_expected_shards / compare_replica_and_primary are materialized-only
+        # and appended below.
         is_virtual = issubclass(self.region_job_class, VirtualRegionJob)
         base_validators = list(self.validators())
         with self._monitor(ValidationCronJob, reformat_job_name):
@@ -560,7 +559,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> VirtualRegionJob[DATA_VAR, SOURCE_FILE_COORD] | None:
         """The operational-window job a VirtualDataValidator probes against, or None if
         none of the validators need it. Built once and shared across primary + replica
-        (the job is store-independent; each validator's context binds the store)."""
+        (the job is store-independent; validate_dataset passes each validator the store)."""
         if not any(isinstance(v, validation.VirtualDataValidator) for v in validators):
             return None
         jobs, _template_ds = self.region_job_class.operational_update_jobs(

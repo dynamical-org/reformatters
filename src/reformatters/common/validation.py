@@ -601,10 +601,9 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
     filter_already_present) over the recent window, excluding the newest
     `skip_newest_positions` append-dim positions, which may still be mid-publication.
     Anything still missing is a real hole — a source file that failed to ingest.
-    Cheap: one ref-existence probe per source file, no decode. Because it reuses the
-    dataset's coord generation, structural absences (hour-0 accumulated vars, etc.) are
-    already excluded, so there are no false positives. The virtual analog of
-    check_for_expected_shards.
+    Cheap: one ref-existence probe per source file, no decode. Reusing the dataset's own
+    coord generation means structural absences (hour-0 accumulated vars, etc.) are not in
+    the expected set. The virtual analog of check_for_expected_shards.
     """
 
     skip_newest_positions: int = 1
@@ -666,20 +665,19 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
         store: IcechunkStore,  # noqa: ARG002 - decode health reads through the opened dataset
         ds: xr.Dataset,
     ) -> ValidationResult:
+        # Decode a position the store actually holds (the append dim grows lazily as refs
+        # arrive), skipping the newest still-publishing ones — not a template position
+        # that may not be ingested yet (which would index-miss and silently decode another).
         append_dim = region_job.append_dim
-        positions = sorted(
-            {c.out_loc()[append_dim] for c in region_job.source_file_coords()}
-        )
-        if len(positions) <= self.skip_newest_positions:
+        n_positions = ds.sizes.get(append_dim, 0)
+        if n_positions <= self.skip_newest_positions:
             return ValidationResult(
                 passed=True,
-                message=f"Too few {append_dim} positions ({len(positions)}) to sample-decode",
+                message=f"Too few {append_dim} positions ({n_positions}) to sample-decode",
             )
+        target_index = n_positions - 1 - self.skip_newest_positions
+        target = ds.get_index(append_dim)[target_index]
 
-        target = positions[-1 - self.skip_newest_positions]
-        target_index = int(ds.get_index(append_dim).get_indexer(pd.Index([target]))[0])
-
-        base_selection: dict[str, Any] = {append_dim: target_index}
         lead_indexes: list[int] | None = None
         if "lead_time" in ds.dims:
             n_leads = ds.sizes["lead_time"]
@@ -700,20 +698,27 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
 
         def decode(task: tuple[str, int | None]) -> tuple[str, float, str | None]:
             var_name, member = task
-            selection = dict(base_selection)
-            if member is not None:
+            da = ds[var_name]
+            # Sample only along dims this var has — group vars carry an extra vertical
+            # dim, others may lack lead_time/ensemble_member — so isel never hits a
+            # missing dim.
+            selection: dict[str, Any] = {append_dim: target_index}
+            if member is not None and "ensemble_member" in da.dims:
                 selection["ensemble_member"] = member
-            if lead_indexes is not None:
+            if lead_indexes is not None and "lead_time" in da.dims:
                 selection["lead_time"] = lead_indexes
-            da = ds[var_name].isel(selection)
+            da = da.isel(selection)
             # Accumulated/non-instant vars have no valid hour-0 data; drop it before
             # judging NaN-ness (matches _compute_var_nan_fraction).
             if (
-                lead_indexes is not None
+                "lead_time" in da.dims
+                and lead_indexes is not None
                 and lead_indexes[0] == 0
                 and da.attrs.get("step_type", "instant") != "instant"
             ):
                 da = da.isel(lead_time=slice(1, None))
+            if da.size == 0:
+                return var_name, float("nan"), None  # nothing left to judge
             try:
                 values = da.copy(deep=True).load().values
                 return var_name, float(np.isnan(values).mean()), None
@@ -721,13 +726,16 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
                 return var_name, 1.0, f"{type(e).__name__}: {e}"
 
         tasks = [(var_name, member) for var_name in var_names for member in members]
-        min_nan_fraction: dict[str, float] = dict.fromkeys(var_names, 1.0)
+        # inf until a non-empty chunk is judged; NaN fractions (empty slices) are skipped
+        # so a var with nothing to judge is not mistaken for entirely-NaN.
+        min_nan_fraction: dict[str, float] = dict.fromkeys(var_names, float("inf"))
         first_error: dict[str, str] = {}
         with ThreadPoolExecutor(self.max_workers) as pool:
             for var_name, nan_fraction, error in pool.map(decode, tasks):
-                min_nan_fraction[var_name] = min(
-                    min_nan_fraction[var_name], nan_fraction
-                )
+                if not np.isnan(nan_fraction):
+                    min_nan_fraction[var_name] = min(
+                        min_nan_fraction[var_name], nan_fraction
+                    )
                 if error is not None and var_name not in first_error:
                     first_error[var_name] = error
 
@@ -735,7 +743,9 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
         for var_name in var_names:
             if var_name in first_error:
                 problems.append(f"{var_name}: decode error ({first_error[var_name]})")
-            elif min_nan_fraction[var_name] >= 1.0:
+            elif np.isfinite(min_nan_fraction[var_name]) and (
+                min_nan_fraction[var_name] >= 1.0
+            ):
                 problems.append(f"{var_name}: every sampled chunk decoded entirely NaN")
 
         if problems:
