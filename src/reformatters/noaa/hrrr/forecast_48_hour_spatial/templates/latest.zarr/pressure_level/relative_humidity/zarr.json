@@ -1,0 +1,57 @@
+{
+  "shape": [
+    1,
+    49,
+    1059,
+    1799,
+    39
+  ],
+  "data_type": "float64",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        1,
+        1059,
+        1799,
+        1
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "gribberish",
+      "configuration": {
+        "var": "RH",
+        "adjust_longitude_range": true
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Relative humidity",
+    "short_name": "r",
+    "standard_name": "relative_humidity",
+    "units": "percent",
+    "step_type": "instant",
+    "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "init_time",
+    "lead_time",
+    "y",
+    "x",
+    "pressure_level"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}

@@ -27,6 +27,9 @@ def _lead_time_str(var: DataVar[NoaaInternalAttrs], lead_hours: int) -> str:
 
         if var.internal_attrs.deaccumulate_to_rate:
             step_type = "acc"
+        elif var.attrs.step_type == "accum":
+            # Raw accumulation (virtual datasets serve the window total un-rated).
+            step_type = "acc"
         elif var.attrs.step_type == "avg":
             step_type = "ave"  # yep
         else:
