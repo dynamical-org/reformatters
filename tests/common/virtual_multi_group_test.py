@@ -544,9 +544,7 @@ def test_decode_health_covers_group_vars(tmp_path: Path) -> None:
 
     ds = validation.open_validation_dataset(store, consolidated=False)
     assert "pressure_level/temperature" in ds.data_vars
-    result = validation.CheckVirtualDecodeHealth(skip_newest_positions=0)(
-        job, store, ds
-    )
+    result = validation.CheckVirtualDecodeHealth()(job, store, ds)
     assert result.passed, result.message
 
 

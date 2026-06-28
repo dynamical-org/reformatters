@@ -954,44 +954,67 @@ def test_check_virtual_decode_health_passes(tmp_path: Path) -> None:
     template_ds = _create_template_ds(4)
     store = _backfilled_store(dataset, template_ds, emit=slice(0, 4))
     job = _make_region_job(template_ds, region=slice(0, 4))
+    ds = xr.open_zarr(store, decode_timedelta=True)
 
-    result = validation.CheckVirtualDecodeHealth()(
-        job, store, xr.open_zarr(store, decode_timedelta=True)
-    )
+    result = validation.CheckVirtualDecodeHealth()(job, store, ds)
     assert result.passed, result.message
-    assert "decoded with data" in result.message
+    assert "all readable" in result.message
+    # "latest": targets the newest present position, not an older one.
+    assert str(ds.get_index("init_time")[-1]) in result.message
 
 
-def test_check_virtual_decode_health_detects_all_nan(tmp_path: Path) -> None:
-    # The target position (init 2, the newest after skip_newest_positions=1) has no
-    # emitted refs, so every sampled chunk reads back fill-value NaN.
+def test_check_virtual_decode_health_only_decodes_present_refs(tmp_path: Path) -> None:
+    # Emit inits 0-1 of a 4-init window. The absent inits 2-3 must NOT be decoded (which
+    # would read fill-value NaN and false-fail); decode-health checks the latest *present*
+    # init (1), whose refs decode to real data -> passes.
     dataset = _make_dataset(tmp_path)
     template_ds = _create_template_ds(4)
     store = _backfilled_store(dataset, template_ds, emit=slice(0, 2))
+    job = _make_region_job(template_ds, region=slice(0, 4))
+    ds = xr.open_zarr(store, decode_timedelta=True)
+
+    result = validation.CheckVirtualDecodeHealth()(job, store, ds)
+    assert result.passed, result.message
+    assert str(ds.get_index("init_time")[1]) in result.message
+
+
+def test_check_virtual_decode_health_fails_when_no_present_refs(tmp_path: Path) -> None:
+    # Pre-sized but empty store: source files are expected but none are ingested, so there
+    # is nothing to decode -> fail loudly rather than silently pass.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    store = _primary_repo(dataset.store_factory).readonly_session("main").store
     job = _make_region_job(template_ds, region=slice(0, 4))
 
     result = validation.CheckVirtualDecodeHealth()(
         job, store, xr.open_zarr(store, decode_timedelta=True)
     )
     assert not result.passed
-    assert "entirely NaN" in result.message
+    assert "No present references" in result.message
 
 
-def test_check_virtual_decode_health_targets_a_store_position(tmp_path: Path) -> None:
-    # The store grows lazily, so decode-health must pick its target from the positions
-    # the store actually holds — not a (longer) template position that would index-miss
-    # and silently decode the newest-present position instead.
+def test_check_virtual_decode_health_detects_unreadable_ref(tmp_path: Path) -> None:
+    # A present ref whose bytes decode to all-NaN is unreadable data. Overwrite init 0's
+    # message blocks with NaN, emit only init 0, and assert decode-health flags the var.
     dataset = _make_dataset(tmp_path)
-    store = _backfilled_store(dataset, _create_template_ds(3), emit=slice(0, 3))
-    ds = xr.open_zarr(store, decode_timedelta=True)
-    # Region job built from a longer 5-init template; its extra positions are not in
-    # the 3-init store and must not be chosen as the decode target.
-    job = _make_region_job(_create_template_ds(5), region=slice(0, 5))
+    messages = tmp_path / "messages.bin"
+    data = bytearray(messages.read_bytes())
+    nan_block = np.full(N_LAT * N_LON, np.nan, dtype="<f8").tobytes()
+    for lead_idx in range(N_LEADS):
+        offset, length = _message_offset_length(0, lead_idx)
+        data[offset : offset + length] = nan_block
+    messages.write_bytes(bytes(data))
 
-    result = validation.CheckVirtualDecodeHealth()(job, store, ds)
-    assert result.passed, result.message
-    # n=3 store positions, skip newest 1 -> index 1 (not the 5-template's index 3).
-    assert str(ds.get_index("init_time")[1]) in result.message
+    template_ds = _create_template_ds(1)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 1))
+    job = _make_region_job(template_ds, region=slice(0, 1))
+
+    result = validation.CheckVirtualDecodeHealth()(
+        job, store, xr.open_zarr(store, decode_timedelta=True)
+    )
+    assert not result.passed
+    assert "entirely NaN" in result.message
 
 
 def test_validate_dataset_requires_region_job_for_virtual_validator(

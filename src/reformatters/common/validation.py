@@ -32,6 +32,7 @@ from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
 
 if TYPE_CHECKING:
+    from reformatters.common.region_job import SourceFileCoord
     from reformatters.common.virtual_region_job import VirtualRegionJob
 
 log = get_logger(__name__)
@@ -75,8 +76,8 @@ class VirtualDataValidator(abc.ABC):
     XarrayDataValidator functions; validate_dataset dispatches by type, handing these the
     operational-window region job (to regenerate source-file coords and probe the
     manifest), the icechunk store, and the opened dataset — each validator uses the subset
-    it needs. Tuning (e.g. how many newest positions to skip) is a field on the concrete
-    validator, set where it is listed in validators() — one place.
+    it needs. Tuning (e.g. the per-position completeness thresholds) is a field on the
+    concrete validator, set where it is listed in validators() — one place.
     """
 
     @abc.abstractmethod
@@ -110,6 +111,7 @@ def open_validation_dataset(
         engine="zarr",
         chunks=None,
         consolidated=consolidated,
+        decode_timedelta=True,  # so lead_time selects by pd.Timedelta label
     )
     return iterating.flatten_groups(tree)
 
@@ -672,121 +674,121 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
 
 @dataclass(frozen=True)
 class CheckVirtualDecodeHealth(VirtualDataValidator):
-    """Decode a bounded sample of the latest complete position and assert every variable
-    decodes without error and isn't entirely NaN.
+    """Decode the references that are present and assert they are readable.
 
-    Exercises the live read path — the per-variable serializer (e.g. GribberishCodec) and
-    virtual-container authorization — end to end, catching a regression that leaves refs
-    present but unreadable. Bounded by sampling: `sampled_leads` lead times (first + last
-    + evenly spaced interior) across every ensemble member of one position, decoded
-    concurrently. The whole-archive NaN/coverage scan stays offline (it is one full-message
-    decode per chunk across all leads x members — hours).
+    Completeness checks that references *exist*; this checks the ones that exist actually
+    decode — the per-variable serializer (e.g. GribberishCodec) and virtual-container
+    authorization, end to end. Over the recent window it keeps only the source files
+    present in the manifest (filter_already_present), so a not-yet-published ref is never
+    mistaken for a decode failure, then decodes a bounded sample of them. `positions`
+    selects which append-dim positions to check: "latest" (default) targets the newest
+    position with data — so a broken newest reference is caught at the next validation, not
+    a cycle later — while "all" covers the whole window. Within a position it samples
+    `sampled_leads` lead times (first + last + evenly spaced interior) across every member.
+    A variable fails if any sampled chunk errors or all of its sampled chunks decode
+    entirely NaN. Fails — never silently passes — when no references are present to decode.
     """
 
-    skip_newest_positions: int = 1
+    positions: Literal["latest", "all"] = "latest"
     sampled_leads: int = 5
     max_workers: int = 32
 
     def __call__(
         self,
         region_job: VirtualRegionJob[Any, Any],
-        store: IcechunkStore,  # noqa: ARG002 - decode health reads through the opened dataset
+        store: IcechunkStore,
         ds: xr.Dataset,
     ) -> ValidationResult:
-        # Decode a position the store actually holds (the append dim grows lazily as refs
-        # arrive), skipping the newest still-publishing ones — not a template position
-        # that may not be ingested yet (which would index-miss and silently decode another).
         append_dim = region_job.append_dim
-        n_positions = ds.sizes.get(append_dim, 0)
-        if n_positions <= self.skip_newest_positions:
+        candidates = region_job.source_file_coords()
+        if not candidates:
             return ValidationResult(
-                passed=True,
-                message=f"Too few {append_dim} positions ({n_positions}) to sample-decode",
+                passed=False,
+                message=f"No source files in the {append_dim} window to decode-check",
             )
-        target_index = n_positions - 1 - self.skip_newest_positions
-        target = ds.get_index(append_dim)[target_index]
+        absent = {id(c) for c in region_job.filter_already_present(candidates, store)}
+        present = [c for c in candidates if id(c) not in absent]
+        if not present:
+            return ValidationResult(
+                passed=False,
+                message=f"No present references in the {append_dim} window to decode",
+            )
 
-        lead_indexes: list[int] | None = None
-        if "lead_time" in ds.dims:
-            n_leads = ds.sizes["lead_time"]
-            lead_indexes = sorted(
-                set(
-                    np.linspace(0, n_leads - 1, min(self.sampled_leads, n_leads))
-                    .round()
-                    .astype(int)
-                    .tolist()
-                )
-            )
-        members: list[int | None] = (
-            list(range(ds.sizes["ensemble_member"]))
-            if "ensemble_member" in ds.dims
-            else [None]
+        present_positions = sorted({c.out_loc()[append_dim] for c in present})
+        targets = (
+            {present_positions[-1]}
+            if self.positions == "latest"
+            else set(present_positions)
         )
-        var_names = [str(v) for v in ds.data_vars]
+        to_decode = self._sample_leads(
+            [c for c in present if c.out_loc()[append_dim] in targets]
+        )
 
-        def decode(task: tuple[str, int | None]) -> tuple[str, float, str | None]:
-            var_name, member = task
-            da = ds[var_name]
-            # Sample only along dims this var has — group vars carry an extra vertical
-            # dim, others may lack lead_time/ensemble_member — so isel never hits a
-            # missing dim.
-            selection: dict[str, Any] = {append_dim: target_index}
-            if member is not None and "ensemble_member" in da.dims:
-                selection["ensemble_member"] = member
-            if lead_indexes is not None and "lead_time" in da.dims:
-                selection["lead_time"] = lead_indexes
-            da = da.isel(selection)
-            # Accumulated/non-instant vars have no valid hour-0 data; drop it before
-            # judging NaN-ness (matches _compute_var_nan_fraction).
-            if (
-                "lead_time" in da.dims
-                and lead_indexes is not None
-                and lead_indexes[0] == 0
-                and da.attrs.get("step_type", "instant") != "instant"
-            ):
-                da = da.isel(lead_time=slice(1, None))
-            if da.size == 0:
-                return var_name, float("nan"), None  # nothing left to judge
-            try:
-                values = da.copy(deep=True).load().values
-                return var_name, float(np.isnan(values).mean()), None
-            except Exception as e:  # noqa: BLE001 - any decode failure is a validation failure
-                return var_name, 1.0, f"{type(e).__name__}: {e}"
+        def decode(coord: SourceFileCoord) -> list[tuple[str, float, str | None]]:
+            loc = coord.out_loc()
+            # A coord's data_vars are exactly the variables its file carries (e.g. no
+            # accumulated vars at hour 0), so every one should decode to data.
+            file_vars = getattr(coord, "data_vars", None) or region_job.data_vars
+            results = []
+            for var in file_vars:
+                da = ds[var.path]
+                selection = {dim: value for dim, value in loc.items() if dim in da.dims}
+                try:
+                    values = da.sel(selection).copy(deep=True).load().values
+                    results.append((var.path, float(np.isnan(values).mean()), None))
+                except Exception as e:  # noqa: BLE001 - any decode failure is a validation failure
+                    results.append((var.path, 1.0, f"{type(e).__name__}: {e}"))
+            return results
 
-        tasks = [(var_name, member) for var_name in var_names for member in members]
-        # inf until a non-empty chunk is judged; NaN fractions (empty slices) are skipped
-        # so a var with nothing to judge is not mistaken for entirely-NaN.
-        min_nan_fraction: dict[str, float] = dict.fromkeys(var_names, float("inf"))
+        min_nan_fraction: dict[str, float] = {}
         first_error: dict[str, str] = {}
         with ThreadPoolExecutor(self.max_workers) as pool:
-            for var_name, nan_fraction, error in pool.map(decode, tasks):
-                if not np.isnan(nan_fraction):
-                    min_nan_fraction[var_name] = min(
-                        min_nan_fraction[var_name], nan_fraction
+            for results in pool.map(decode, to_decode):
+                for var_path, nan_fraction, error in results:
+                    min_nan_fraction[var_path] = min(
+                        min_nan_fraction.get(var_path, float("inf")), nan_fraction
                     )
-                if error is not None and var_name not in first_error:
-                    first_error[var_name] = error
+                    if error is not None and var_path not in first_error:
+                        first_error[var_path] = error
 
         problems = []
-        for var_name in var_names:
-            if var_name in first_error:
-                problems.append(f"{var_name}: decode error ({first_error[var_name]})")
-            elif np.isfinite(min_nan_fraction[var_name]) and (
-                min_nan_fraction[var_name] >= 1.0
-            ):
-                problems.append(f"{var_name}: every sampled chunk decoded entirely NaN")
+        for var_path in sorted(min_nan_fraction):
+            if var_path in first_error:
+                problems.append(f"{var_path}: decode error ({first_error[var_path]})")
+            elif min_nan_fraction[var_path] >= 1.0:
+                problems.append(f"{var_path}: every sampled chunk decoded entirely NaN")
 
+        target_label = ", ".join(str(p) for p in sorted(targets))
         if problems:
             return ValidationResult(
                 passed=False,
-                message=f"Decode health failures at {append_dim}={target}:\n"
+                message=f"Decode health failures at {append_dim}={target_label}:\n"
                 + "\n".join(f"- {p}" for p in problems),
             )
-        n_decodes = len(tasks) * (len(lead_indexes) if lead_indexes else 1)
         return ValidationResult(
             passed=True,
             message=(
-                f"All {len(var_names)} variables decoded with data at "
-                f"{append_dim}={target} ({n_decodes} chunk decodes)"
+                f"Decoded {len(to_decode)} present source files across "
+                f"{len(min_nan_fraction)} variables at {append_dim}={target_label} "
+                "— all readable"
             ),
         )
+
+    def _sample_leads(
+        self, coords: Sequence[SourceFileCoord]
+    ) -> Sequence[SourceFileCoord]:
+        """Down-sample to `sampled_leads` lead times (first + last + evenly spaced
+        interior), keeping every other coordinate (e.g. all members). Coords without a
+        lead_time (analysis) are returned unchanged."""
+        leads = sorted(
+            {c.out_loc()["lead_time"] for c in coords if "lead_time" in c.out_loc()}
+        )
+        if len(leads) <= self.sampled_leads:
+            return coords
+        keep = {
+            leads[i]
+            for i in np.linspace(0, len(leads) - 1, self.sampled_leads)
+            .round()
+            .astype(int)
+        }
+        return [c for c in coords if c.out_loc().get("lead_time") in keep]
