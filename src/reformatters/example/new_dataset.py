@@ -121,7 +121,12 @@ def initialize_new_integration(
         f"2. Implement your {example_to_actual_mappings['ExampleTemplateConfig']} subclass\n"
         f"3. Implement your {example_to_actual_mappings['ExampleRegionJob']} subclass\n"
         f"4. Implement your {example_to_actual_mappings['ExampleDataset']} subclass\n"
-        f"{kind_specific_step}"
+        f"{kind_specific_step}\n\n"
+        f"Note: if shared config models already exist for this provider/model (e.g. a "
+        f"<provider>/<model>_config_models.py defining "
+        f"{example_to_actual_mappings['ExampleDataVar']} / "
+        f"{example_to_actual_mappings['ExampleInternalAttrs']}), delete the scaffolded "
+        f"copies and import the shared types instead."
     )
 
 

@@ -299,16 +299,20 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
            with shards=None. The geometry of these chunks is what the write loop uses to
            place each reference, so it must match the source file layout exactly.
 
-        2. We never re-encode the bytes. There are no compressors or filters of our own;
-           instead a per-variable `serializer` (a zarr v3 ArrayBytesCodec, e.g.
-           GribberishCodec) decodes the raw GRIB message at read time. Declare `dtype` as
-           whatever that codec produces (GribberishCodec decodes to float64) to avoid a
-           cast.
+        2. We never re-encode the bytes for storage (no compressors of our own); a
+           per-variable `serializer` (a zarr v3 ArrayBytesCodec, e.g. GribberishCodec)
+           decodes the raw GRIB message at read time. Declare `dtype` as whatever that
+           codec produces (GribberishCodec decodes to float64) to avoid a cast.
 
-        Because the served values are the RAW source values, a variable the materialized
-        pipeline would transform (deaccumulate precip to a rate, convert K -> degC)
-        appears here untransformed - give it the name/units of the raw quantity (see the
-        raw-value overrides in noaa/gefs/forecast_10_day_spatial/template_config.py).
+        Served values are otherwise the RAW source values. A transform the materialized
+        pipeline applies splits two ways here:
+        - Pointwise (per-cell) conversions - e.g. K -> degC, a unit rescale - CAN be done
+          on read by chaining a zarr ScaleOffset array->array codec in `filters`; keep the
+          materialized variable's name/units so it stays a drop-in (see the ScaleOffset
+          filters in noaa/hrrr/forecast_48_hour_spatial/template_config.py).
+        - Cross-chunk transforms (deaccumulating precip to a rate, temporal differencing)
+          cannot be done on read - serve the raw quantity under its own name/units instead
+          (see the raw-value overrides in noaa/gefs/forecast_10_day_spatial/template_config.py).
         """
         # dim_coords = self.dimension_coordinates()
         #
@@ -326,7 +330,7 @@ class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
         #     chunks=message_chunks,
         #     shards=None,
         #     compressors=(),  # no compression of our own; bytes stay as the source wrote them
-        #     filters=(),
+        #     filters=(),  # or e.g. (ScaleOffset(offset=-273.15, scale=1.0).to_dict(),) to serve degC
         #     serializer=GribberishCodec(var="TMP").to_dict(),  # decodes the raw message
         # )
 
