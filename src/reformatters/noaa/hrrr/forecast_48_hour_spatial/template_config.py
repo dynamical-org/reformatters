@@ -547,7 +547,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             standard_name="wind_speed_of_gust",
         ),
         _root_var(
-            "max_upward_vertical_velocity_1000_100mb",
+            "maximum_upward_vertical_velocity_100_1000mb",
             element="MAXUVV",
             level="100-1000 mb above ground",
             window="max",
@@ -557,7 +557,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             standard_name="upward_air_velocity",
         ),
         _root_var(
-            "max_downward_vertical_velocity_1000_100mb",
+            "maximum_downward_vertical_velocity_100_1000mb",
             element="MAXDVV",
             level="100-1000 mb above ground",
             window="max",
@@ -595,7 +595,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             standard_name="equivalent_reflectivity_factor",
         ),
         _root_var(
-            "derived_radar_reflectivity_263k_max",
+            "maximum_derived_radar_reflectivity_263k",
             element="REFD",
             level="263 K level",
             window="max",
@@ -605,7 +605,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             standard_name="equivalent_reflectivity_factor",
         ),
         _root_var(
-            "max_updraft_helicity_5000_2000m",
+            "maximum_updraft_helicity_5000_2000m",
             element="MXUPHL",
             level="5000-2000 m above ground",
             window="max",
@@ -614,7 +614,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m2 s-2",
         ),
         _root_var(
-            "min_updraft_helicity_5000_2000m",
+            "minimum_updraft_helicity_5000_2000m",
             element="MNUPHL",
             level="5000-2000 m above ground",
             window="min",
@@ -623,7 +623,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m2 s-2",
         ),
         _root_var(
-            "max_updraft_helicity_2000_0m",
+            "maximum_updraft_helicity_2000_0m",
             element="MXUPHL",
             level="2000-0 m above ground",
             window="max",
@@ -632,7 +632,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m2 s-2",
         ),
         _root_var(
-            "min_updraft_helicity_2000_0m",
+            "minimum_updraft_helicity_2000_0m",
             element="MNUPHL",
             level="2000-0 m above ground",
             window="min",
@@ -641,7 +641,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m2 s-2",
         ),
         _root_var(
-            "max_updraft_helicity_3000_0m",
+            "maximum_updraft_helicity_3000_0m",
             element="MXUPHL",
             level="3000-0 m above ground",
             window="max",
@@ -650,7 +650,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m2 s-2",
         ),
         _root_var(
-            "min_updraft_helicity_3000_0m",
+            "minimum_updraft_helicity_3000_0m",
             element="MNUPHL",
             level="3000-0 m above ground",
             window="min",
@@ -659,7 +659,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m2 s-2",
         ),
         _root_var(
-            "max_relative_vorticity_2000_0m",
+            "maximum_relative_vorticity_2000_0m",
             element="RELV",
             level="2000-0 m above ground",
             window="max",
@@ -669,7 +669,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             standard_name="atmosphere_upward_relative_vorticity",
         ),
         _root_var(
-            "max_relative_vorticity_1000_0m",
+            "maximum_relative_vorticity_1000_0m",
             element="RELV",
             level="1000-0 m above ground",
             window="max",
@@ -679,7 +679,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             standard_name="atmosphere_upward_relative_vorticity",
         ),
         _root_var(
-            "max_hail_diameter_atmosphere",
+            "maximum_hail_diameter_atmosphere",
             element="HAIL",
             level="entire atmosphere",
             window="max",
@@ -688,7 +688,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
         ),
         _root_var(
-            "max_hail_diameter_0p1sigma",
+            "maximum_hail_diameter_0p1sigma",
             element="HAIL",
             level="0.1 sigma level",
             window="max",
@@ -697,7 +697,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
         ),
         _root_var(
-            "max_hail_diameter_surface",
+            "maximum_hail_diameter_surface",
             element="HAIL",
             level="surface",
             window="max",
@@ -706,7 +706,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
         ),
         _root_var(
-            "max_column_integrated_graupel_atmosphere",
+            "maximum_column_integrated_graupel_atmosphere",
             element="TCOLG",
             level="entire atmosphere (considered as a single layer)",
             window="max",
@@ -912,7 +912,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             standard_name="northward_wind",
         ),
         _root_var(
-            "max_wind_speed_10m",
+            "maximum_wind_speed_10m",
             element="WIND",
             level="10 m above ground",
             window="max",
@@ -922,7 +922,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             standard_name="wind_speed",
         ),
         _root_var(
-            "max_wind_u_component_10m",
+            "maximum_wind_u_component_10m",
             element="MAXUW",
             level="10 m above ground",
             window="max",
@@ -931,7 +931,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m s-1",
         ),
         _root_var(
-            "max_wind_v_component_10m",
+            "maximum_wind_v_component_10m",
             element="MAXVW",
             level="10 m above ground",
             window="max",

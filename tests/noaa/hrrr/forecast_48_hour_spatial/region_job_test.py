@@ -297,5 +297,5 @@ def test_operational_update_jobs_single_polling_job(
     assert isinstance(job, NoaaHrrrForecast48HourSpatialRegionJob)
     assert job.processing_mode == "update"
     init_times = template_ds.to_dataset().get_index("init_time")
-    # 24h window at the 6h cadence = the last 4 cycles.
-    assert job.region == slice(len(init_times) - 4, len(init_times))
+    # 14h window at the 6h cadence = the current + 2 prior cycles.
+    assert job.region == slice(len(init_times) - 3, len(init_times))

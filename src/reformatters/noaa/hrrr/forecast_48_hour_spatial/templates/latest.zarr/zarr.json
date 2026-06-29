@@ -1419,60 +1419,6 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "derived_radar_reflectivity_263k_max": {
-        "shape": [
-          1,
-          49,
-          1059,
-          1799
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              1059,
-              1799
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "gribberish",
-            "configuration": {
-              "var": "REFD",
-              "adjust_longitude_range": true
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Derived radar reflectivity",
-          "short_name": "refd",
-          "standard_name": "equivalent_reflectivity_factor",
-          "units": "dBZ",
-          "step_type": "max",
-          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "lead_time",
-          "y",
-          "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
       "derived_radar_reflectivity_4000m": {
         "shape": [
           1,
@@ -3640,7 +3586,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "max_column_integrated_graupel_atmosphere": {
+      "maximum_column_integrated_graupel_atmosphere": {
         "shape": [
           1,
           49,
@@ -3694,7 +3640,61 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "max_downward_vertical_velocity_1000_100mb": {
+      "maximum_derived_radar_reflectivity_263k": {
+        "shape": [
+          1,
+          49,
+          1059,
+          1799
+        ],
+        "data_type": "float64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              1,
+              1059,
+              1799
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "gribberish",
+            "configuration": {
+              "var": "REFD",
+              "adjust_longitude_range": true
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Derived radar reflectivity",
+          "short_name": "refd",
+          "standard_name": "equivalent_reflectivity_factor",
+          "units": "dBZ",
+          "step_type": "max",
+          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "maximum_downward_vertical_velocity_100_1000mb": {
         "shape": [
           1,
           49,
@@ -3747,7 +3747,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "max_hail_diameter_0p1sigma": {
+      "maximum_hail_diameter_0p1sigma": {
         "shape": [
           1,
           49,
@@ -3800,7 +3800,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "max_hail_diameter_atmosphere": {
+      "maximum_hail_diameter_atmosphere": {
         "shape": [
           1,
           49,
@@ -3853,7 +3853,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "max_hail_diameter_surface": {
+      "maximum_hail_diameter_surface": {
         "shape": [
           1,
           49,
@@ -3906,7 +3906,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "max_relative_vorticity_1000_0m": {
+      "maximum_relative_vorticity_1000_0m": {
         "shape": [
           1,
           49,
@@ -3960,7 +3960,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "max_relative_vorticity_2000_0m": {
+      "maximum_relative_vorticity_2000_0m": {
         "shape": [
           1,
           49,
@@ -4014,7 +4014,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "max_updraft_helicity_2000_0m": {
+      "maximum_updraft_helicity_2000_0m": {
         "shape": [
           1,
           49,
@@ -4067,7 +4067,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "max_updraft_helicity_3000_0m": {
+      "maximum_updraft_helicity_3000_0m": {
         "shape": [
           1,
           49,
@@ -4120,7 +4120,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "max_updraft_helicity_5000_2000m": {
+      "maximum_updraft_helicity_5000_2000m": {
         "shape": [
           1,
           49,
@@ -4173,7 +4173,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "max_upward_vertical_velocity_1000_100mb": {
+      "maximum_upward_vertical_velocity_100_1000mb": {
         "shape": [
           1,
           49,
@@ -4212,166 +4212,6 @@
           "long_name": "Maximum upward vertical velocity",
           "short_name": "maxuvv",
           "standard_name": "upward_air_velocity",
-          "units": "m s-1",
-          "step_type": "max",
-          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "lead_time",
-          "y",
-          "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "max_wind_speed_10m": {
-        "shape": [
-          1,
-          49,
-          1059,
-          1799
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              1059,
-              1799
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "gribberish",
-            "configuration": {
-              "var": "WIND",
-              "adjust_longitude_range": true
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "10 metre wind speed",
-          "short_name": "10si",
-          "standard_name": "wind_speed",
-          "units": "m s-1",
-          "step_type": "max",
-          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "lead_time",
-          "y",
-          "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "max_wind_u_component_10m": {
-        "shape": [
-          1,
-          49,
-          1059,
-          1799
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              1059,
-              1799
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "gribberish",
-            "configuration": {
-              "var": "MAXUW",
-              "adjust_longitude_range": true
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Maximum 10 metre wind speed u component",
-          "short_name": "maxuw",
-          "units": "m s-1",
-          "step_type": "max",
-          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "lead_time",
-          "y",
-          "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "max_wind_v_component_10m": {
-        "shape": [
-          1,
-          49,
-          1059,
-          1799
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              1059,
-              1799
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "gribberish",
-            "configuration": {
-              "var": "MAXVW",
-              "adjust_longitude_range": true
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Maximum 10 metre wind speed v component",
-          "short_name": "maxvw",
           "units": "m s-1",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -4441,6 +4281,166 @@
         "node_type": "array",
         "storage_transformers": []
       },
+      "maximum_wind_speed_10m": {
+        "shape": [
+          1,
+          49,
+          1059,
+          1799
+        ],
+        "data_type": "float64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              1,
+              1059,
+              1799
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "gribberish",
+            "configuration": {
+              "var": "WIND",
+              "adjust_longitude_range": true
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "10 metre wind speed",
+          "short_name": "10si",
+          "standard_name": "wind_speed",
+          "units": "m s-1",
+          "step_type": "max",
+          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "maximum_wind_u_component_10m": {
+        "shape": [
+          1,
+          49,
+          1059,
+          1799
+        ],
+        "data_type": "float64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              1,
+              1059,
+              1799
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "gribberish",
+            "configuration": {
+              "var": "MAXUW",
+              "adjust_longitude_range": true
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Maximum 10 metre wind speed u component",
+          "short_name": "maxuw",
+          "units": "m s-1",
+          "step_type": "max",
+          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "maximum_wind_v_component_10m": {
+        "shape": [
+          1,
+          49,
+          1059,
+          1799
+        ],
+        "data_type": "float64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              1,
+              1059,
+              1799
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "gribberish",
+            "configuration": {
+              "var": "MAXVW",
+              "adjust_longitude_range": true
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Maximum 10 metre wind speed v component",
+          "short_name": "maxvw",
+          "units": "m s-1",
+          "step_type": "max",
+          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
       "medium_cloud_cover": {
         "shape": [
           1,
@@ -4495,7 +4495,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "min_updraft_helicity_2000_0m": {
+      "minimum_updraft_helicity_2000_0m": {
         "shape": [
           1,
           49,
@@ -4548,7 +4548,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "min_updraft_helicity_3000_0m": {
+      "minimum_updraft_helicity_3000_0m": {
         "shape": [
           1,
           49,
@@ -4601,7 +4601,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "min_updraft_helicity_5000_2000m": {
+      "minimum_updraft_helicity_5000_2000m": {
         "shape": [
           1,
           49,
