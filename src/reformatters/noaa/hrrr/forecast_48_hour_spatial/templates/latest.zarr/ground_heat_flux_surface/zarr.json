@@ -36,6 +36,7 @@
   "attributes": {
     "long_name": "Ground heat flux",
     "short_name": "gflux",
+    "standard_name": "downward_heat_flux_in_soil",
     "units": "W m-2",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",

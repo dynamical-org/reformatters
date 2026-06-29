@@ -36,6 +36,7 @@
   "attributes": {
     "long_name": "Maximum upward vertical velocity",
     "short_name": "maxuvv",
+    "standard_name": "upward_air_velocity",
     "units": "m s-1",
     "step_type": "max",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",

@@ -36,6 +36,7 @@
   "attributes": {
     "long_name": "Hourly maximum of simulated reflectivity",
     "short_name": "maxref",
+    "standard_name": "equivalent_reflectivity_factor",
     "units": "dBZ",
     "step_type": "max",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",

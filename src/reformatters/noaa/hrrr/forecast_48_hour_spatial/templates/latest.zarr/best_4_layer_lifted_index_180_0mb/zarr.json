@@ -36,6 +36,7 @@
   "attributes": {
     "long_name": "Best (4-layer) lifted index",
     "short_name": "4lftx",
+    "standard_name": "temperature_difference_between_ambient_air_and_air_lifted_adiabatically",
     "units": "K",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",

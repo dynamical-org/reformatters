@@ -36,6 +36,7 @@
   "attributes": {
     "long_name": "Pressure of level from which parcel was lifted",
     "short_name": "plpl",
+    "standard_name": "original_air_pressure_of_lifted_parcel",
     "units": "Pa",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",

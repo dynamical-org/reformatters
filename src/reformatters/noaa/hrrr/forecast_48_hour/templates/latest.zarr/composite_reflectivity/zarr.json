@@ -70,6 +70,7 @@
   "attributes": {
     "long_name": "Maximum/Composite radar reflectivity",
     "short_name": "refc",
+    "standard_name": "equivalent_reflectivity_factor",
     "units": "dBZ",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",

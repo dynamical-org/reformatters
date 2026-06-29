@@ -37,7 +37,7 @@
   ],
   "attributes": {
     "long_name": "Cloud ice mixing ratio",
-    "short_name": "icmr",
+    "short_name": "cdcimr",
     "standard_name": "cloud_ice_mixing_ratio",
     "units": "kg kg-1",
     "step_type": "instant",

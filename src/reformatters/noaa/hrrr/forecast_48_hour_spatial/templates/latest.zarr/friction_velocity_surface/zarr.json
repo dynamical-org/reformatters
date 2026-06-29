@@ -36,6 +36,7 @@
   "attributes": {
     "long_name": "Friction velocity",
     "short_name": "zust",
+    "standard_name": "magnitude_of_surface_friction_velocity_in_air",
     "units": "m s-1",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",

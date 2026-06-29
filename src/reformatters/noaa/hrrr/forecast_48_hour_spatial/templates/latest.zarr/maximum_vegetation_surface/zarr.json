@@ -36,6 +36,7 @@
   "attributes": {
     "long_name": "Maximum vegetation fraction",
     "short_name": "vegmax",
+    "standard_name": "vegetation_area_fraction",
     "units": "percent",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",

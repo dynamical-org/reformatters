@@ -38,6 +38,7 @@
   "attributes": {
     "long_name": "Cloud cover",
     "short_name": "ccl",
+    "standard_name": "cloud_area_fraction_in_atmosphere_layer",
     "units": "percent",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",

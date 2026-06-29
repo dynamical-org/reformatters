@@ -36,6 +36,7 @@
   "attributes": {
     "long_name": "Vorticity (relative)",
     "short_name": "vo",
+    "standard_name": "atmosphere_upward_relative_vorticity",
     "units": "s-1",
     "step_type": "max",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",

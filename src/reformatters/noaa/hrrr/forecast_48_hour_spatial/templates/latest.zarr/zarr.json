@@ -164,6 +164,7 @@
         "attributes": {
           "long_name": "Best (4-layer) lifted index",
           "short_name": "4lftx",
+          "standard_name": "temperature_difference_between_ambient_air_and_air_lifted_adiabatically",
           "units": "K",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -755,6 +756,7 @@
         "attributes": {
           "long_name": "Maximum/Composite radar reflectivity",
           "short_name": "refc",
+          "standard_name": "equivalent_reflectivity_factor",
           "units": "dBZ",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -1347,6 +1349,7 @@
         "attributes": {
           "long_name": "Derived radar reflectivity",
           "short_name": "refd",
+          "standard_name": "equivalent_reflectivity_factor",
           "units": "dBZ",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -1400,6 +1403,7 @@
         "attributes": {
           "long_name": "Derived radar reflectivity",
           "short_name": "refd",
+          "standard_name": "equivalent_reflectivity_factor",
           "units": "dBZ",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -1453,6 +1457,7 @@
         "attributes": {
           "long_name": "Derived radar reflectivity",
           "short_name": "refd",
+          "standard_name": "equivalent_reflectivity_factor",
           "units": "dBZ",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -1506,6 +1511,7 @@
         "attributes": {
           "long_name": "Derived radar reflectivity",
           "short_name": "refd",
+          "standard_name": "equivalent_reflectivity_factor",
           "units": "dBZ",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -1994,6 +2000,7 @@
         "attributes": {
           "long_name": "Friction velocity",
           "short_name": "zust",
+          "standard_name": "magnitude_of_surface_friction_velocity_in_air",
           "units": "m s-1",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -2747,6 +2754,7 @@
         "attributes": {
           "long_name": "Ground heat flux",
           "short_name": "gflux",
+          "standard_name": "downward_heat_flux_in_soil",
           "units": "W m-2",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -2854,6 +2862,7 @@
         "attributes": {
           "long_name": "Hourly maximum of simulated reflectivity",
           "short_name": "maxref",
+          "standard_name": "equivalent_reflectivity_factor",
           "units": "dBZ",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -3935,6 +3944,7 @@
         "attributes": {
           "long_name": "Vorticity (relative)",
           "short_name": "vo",
+          "standard_name": "atmosphere_upward_relative_vorticity",
           "units": "s-1",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -3988,6 +3998,7 @@
         "attributes": {
           "long_name": "Vorticity (relative)",
           "short_name": "vo",
+          "standard_name": "atmosphere_upward_relative_vorticity",
           "units": "s-1",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -4200,6 +4211,7 @@
         "attributes": {
           "long_name": "Maximum upward vertical velocity",
           "short_name": "maxuvv",
+          "standard_name": "upward_air_velocity",
           "units": "m s-1",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -4413,6 +4425,7 @@
         "attributes": {
           "long_name": "Maximum vegetation fraction",
           "short_name": "vegmax",
+          "standard_name": "vegetation_area_fraction",
           "units": "percent",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -4679,6 +4692,7 @@
         "attributes": {
           "long_name": "Minimum vegetation fraction",
           "short_name": "vegmin",
+          "standard_name": "vegetation_area_fraction",
           "units": "percent",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -4756,7 +4770,7 @@
         ],
         "attributes": {
           "long_name": "Cloud ice mixing ratio",
-          "short_name": "icmr",
+          "short_name": "cdcimr",
           "standard_name": "cloud_ice_mixing_ratio",
           "units": "kg kg-1",
           "step_type": "instant",
@@ -4926,6 +4940,7 @@
         "attributes": {
           "long_name": "Cloud cover",
           "short_name": "ccl",
+          "standard_name": "cloud_area_fraction_in_atmosphere_layer",
           "units": "percent",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -6059,6 +6074,7 @@
         "attributes": {
           "long_name": "Turbulent kinetic energy",
           "short_name": "tke",
+          "standard_name": "specific_turbulent_kinetic_energy_of_air",
           "units": "J kg-1",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -7127,7 +7143,7 @@
         ],
         "attributes": {
           "long_name": "Cloud ice mixing ratio",
-          "short_name": "icmr",
+          "short_name": "cdcimr",
           "standard_name": "cloud_ice_mixing_ratio",
           "units": "kg kg-1",
           "step_type": "instant",
@@ -8441,6 +8457,7 @@
         "attributes": {
           "long_name": "Pressure of level from which parcel was lifted",
           "short_name": "plpl",
+          "standard_name": "original_air_pressure_of_lifted_parcel",
           "units": "Pa",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -9425,6 +9442,7 @@
         "attributes": {
           "long_name": "Surface lifted index",
           "short_name": "lftx",
+          "standard_name": "temperature_difference_between_ambient_air_and_air_lifted_adiabatically_from_the_surface",
           "units": "K",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -10410,6 +10428,7 @@
         "attributes": {
           "long_name": "Vegetation fraction",
           "short_name": "veg",
+          "standard_name": "vegetation_area_fraction",
           "units": "percent",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -10728,6 +10747,7 @@
         "attributes": {
           "long_name": "Vertical velocity (geometric)",
           "short_name": "dzdt",
+          "standard_name": "upward_air_velocity",
           "units": "m s-1",
           "step_type": "avg",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",

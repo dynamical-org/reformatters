@@ -159,6 +159,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     short_name="refc",
                     long_name="Maximum/Composite radar reflectivity",
                     units="dBZ",
+                    standard_name="equivalent_reflectivity_factor",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(

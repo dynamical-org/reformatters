@@ -473,6 +473,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="refc",
             long_name="Maximum/Composite radar reflectivity",
             units="dBZ",
+            standard_name="equivalent_reflectivity_factor",
         ),
         _root(
             "echo_top",
@@ -506,6 +507,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="refd",
             long_name="Derived radar reflectivity",
             units="dBZ",
+            standard_name="equivalent_reflectivity_factor",
         ),
         _root(
             "derived_radar_reflectivity_4000m",
@@ -514,6 +516,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="refd",
             long_name="Derived radar reflectivity",
             units="dBZ",
+            standard_name="equivalent_reflectivity_factor",
         ),
         _root(
             "derived_radar_reflectivity_263k",
@@ -522,6 +525,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="refd",
             long_name="Derived radar reflectivity",
             units="dBZ",
+            standard_name="equivalent_reflectivity_factor",
         ),
         _root(
             "wind_gust_surface",
@@ -540,6 +544,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="maxuvv",
             long_name="Maximum upward vertical velocity",
             units="m s-1",
+            standard_name="upward_air_velocity",
         ),
         _root(
             "max_downward_vertical_velocity_1000_100mb",
@@ -558,6 +563,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="dzdt",
             long_name="Vertical velocity (geometric)",
             units="m s-1",
+            standard_name="upward_air_velocity",
         ),
         _root(
             "pressure_reduced_to_mean_sea_level",
@@ -576,6 +582,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="maxref",
             long_name="Hourly maximum of simulated reflectivity",
             units="dBZ",
+            standard_name="equivalent_reflectivity_factor",
         ),
         _root(
             "derived_radar_reflectivity_263k_max",
@@ -585,6 +592,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="refd",
             long_name="Derived radar reflectivity",
             units="dBZ",
+            standard_name="equivalent_reflectivity_factor",
         ),
         _root(
             "max_updraft_helicity_5000_2000m",
@@ -648,6 +656,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="vo",
             long_name="Vorticity (relative)",
             units="s-1",
+            standard_name="atmosphere_upward_relative_vorticity",
         ),
         _root(
             "max_relative_vorticity_1000_0m",
@@ -657,6 +666,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="vo",
             long_name="Vorticity (relative)",
             units="s-1",
+            standard_name="atmosphere_upward_relative_vorticity",
         ),
         _root(
             "max_hail_diameter_atmosphere",
@@ -1080,6 +1090,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="zust",
             long_name="Friction velocity",
             units="m s-1",
+            standard_name="magnitude_of_surface_friction_velocity_in_air",
         ),
         _root(
             "sensible_heat_flux_surface",
@@ -1106,6 +1117,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="veg",
             long_name="Vegetation fraction",
             units="percent",
+            standard_name="vegetation_area_fraction",
         ),
         _root(
             "minimum_vegetation_surface",
@@ -1114,6 +1126,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="vegmin",
             long_name="Minimum vegetation fraction",
             units="percent",
+            standard_name="vegetation_area_fraction",
         ),
         _root(
             "maximum_vegetation_surface",
@@ -1122,6 +1135,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="vegmax",
             long_name="Maximum vegetation fraction",
             units="percent",
+            standard_name="vegetation_area_fraction",
         ),
         _root(
             "leaf_area_index_surface",
@@ -1139,6 +1153,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="gflux",
             long_name="Ground heat flux",
             units="W m-2",
+            standard_name="downward_heat_flux_in_soil",
         ),
         _root(
             "vegetation_type_surface",
@@ -1155,6 +1170,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="lftx",
             long_name="Surface lifted index",
             units="K",
+            standard_name="temperature_difference_between_ambient_air_and_air_lifted_adiabatically_from_the_surface",
         ),
         _root(
             "convective_available_potential_energy_surface",
@@ -1529,6 +1545,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="4lftx",
             long_name="Best (4-layer) lifted index",
             units="K",
+            standard_name="temperature_difference_between_ambient_air_and_air_lifted_adiabatically",
         ),
         _root(
             "convective_available_potential_energy_180_0mb",
@@ -1618,6 +1635,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="plpl",
             long_name="Pressure of level from which parcel was lifted",
             units="Pa",
+            standard_name="original_air_pressure_of_lifted_parcel",
         ),
         _root(
             "convective_available_potential_energy_0_3000m",
@@ -1747,7 +1765,7 @@ def _pressure_data_vars() -> list[NoaaHrrrDataVar]:
         _pressure(
             "cloud_ice_mixing_ratio",
             element="CIMIXR",
-            short_name="icmr",
+            short_name="cdcimr",
             long_name="Cloud ice mixing ratio",
             units="kg kg-1",
             standard_name="cloud_ice_mixing_ratio",
@@ -1912,6 +1930,7 @@ def _model_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="tke",
             long_name="Turbulent kinetic energy",
             units="J kg-1",
+            standard_name="specific_turbulent_kinetic_energy_of_air",
         ),
         _model(
             "cloud_mixing_ratio",
@@ -1924,7 +1943,7 @@ def _model_data_vars() -> list[NoaaHrrrDataVar]:
         _model(
             "cloud_ice_mixing_ratio",
             element="CIMIXR",
-            short_name="icmr",
+            short_name="cdcimr",
             long_name="Cloud ice mixing ratio",
             units="kg kg-1",
             standard_name="cloud_ice_mixing_ratio",
@@ -1963,6 +1982,7 @@ def _model_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="ccl",
             long_name="Cloud cover",
             units="percent",
+            standard_name="cloud_area_fraction_in_atmosphere_layer",
         ),
         _model(
             "number_concentration_cloud_ice",

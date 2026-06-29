@@ -36,6 +36,7 @@
   "attributes": {
     "long_name": "Surface lifted index",
     "short_name": "lftx",
+    "standard_name": "temperature_difference_between_ambient_air_and_air_lifted_adiabatically_from_the_surface",
     "units": "K",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",

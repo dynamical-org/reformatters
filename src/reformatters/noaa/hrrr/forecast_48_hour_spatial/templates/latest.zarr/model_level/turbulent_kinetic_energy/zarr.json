@@ -38,6 +38,7 @@
   "attributes": {
     "long_name": "Turbulent kinetic energy",
     "short_name": "tke",
+    "standard_name": "specific_turbulent_kinetic_energy_of_air",
     "units": "J kg-1",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
