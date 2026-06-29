@@ -52,6 +52,9 @@ class NoaaHrrrForecast48HourSpatialDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
+        # Suspended until the initial backfill completes: operational updates would
+        # race the backfill writing the same store. Unsuspend once the archive is filled.
+        suspend_until_backfilled = True
         # Run once per 6h cycle just before the first lead times publish
         # (~init+50m), polling through f48 (~init+2h on S3). The pod exits when the
         # window is fully ingested; the deadline bounds waiting on a file that never
@@ -65,6 +68,7 @@ class NoaaHrrrForecast48HourSpatialDataset(
             cpu="1.5",
             memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
+            suspend=suspend_until_backfilled,
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
@@ -76,6 +80,7 @@ class NoaaHrrrForecast48HourSpatialDataset(
             cpu="1.5",
             memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
+            suspend=suspend_until_backfilled,
         )
 
         return [operational_update_cron_job, validation_cron_job]
