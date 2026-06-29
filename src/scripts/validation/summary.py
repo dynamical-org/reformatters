@@ -66,7 +66,7 @@ def _stats_row(
 
 
 def _metadata_table(stats: VariableStats) -> list[str]:
-    return [
+    rows = [
         "**Metadata**",
         "",
         "| Field | Value |",
@@ -76,8 +76,11 @@ def _metadata_table(stats: VariableStats) -> list[str]:
         f"| short_name | {stats.short_name or 'n/a'} |",
         f"| standard_name | {stats.standard_name or 'n/a'} |",
         f"| step_type | {stats.step_type or 'n/a'} |",
-        "",
     ]
+    if stats.level_dim is not None:
+        rows.append(f"| sampled level | {stats.level_dim}={stats.level_value:g} |")
+    rows.append("")
+    return rows
 
 
 def _spatial_table(stats: VariableStats, ctx: RunContext) -> list[str]:
@@ -112,8 +115,9 @@ def _spatial_table(stats: VariableStats, ctx: RunContext) -> list[str]:
 
 def _value_ts_table(stats: VariableStats, ctx: RunContext) -> list[str]:
     lo, hi = _append_dim_range(ctx)
+    sampled = " — sampled (pinned lead/level/member)" if ctx.is_virtual else ""
     return [
-        f"**Point time series statistics for the full period ({lo} - {hi})**",
+        f"**Point time series statistics for the full period ({lo} - {hi}){sampled}**",
         "",
         "| Point | min | mean | std | max |",
         "|---|---|---|---|---|",
@@ -210,7 +214,20 @@ def _run_parameters_table(ctx: RunContext) -> list[str]:
     rows += [
         ("Spatial comparison time", spatial_time),
         ("Timeseries period", ctx.temporal_period_label or "n/a"),
+        (
+            "Vertical level",
+            f"override {ctx.level_override:g}"
+            if ctx.level_override is not None
+            else "middle level per vertical dim",
+        ),
     ]
+    if ctx.is_virtual:
+        rows.append(
+            (
+                "Store type",
+                "virtual — availability via manifest_scan.py; value series sampled",
+            )
+        )
 
     lines = ["| Parameter | Value |", "|---|---|"]
     lines += [f"| {label} | {value} |" for label, value in rows]

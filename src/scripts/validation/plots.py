@@ -22,6 +22,8 @@ from scripts.validation.utils import (
     end_date_option,
     get_two_random_points,
     is_forecast_dataset,
+    is_virtual_store,
+    level_option,
     load_zarr_dataset,
     output_dir_option,
     reference_url_option,
@@ -86,6 +88,7 @@ def run_all(
     time: str | None = typer.Option(
         None, "--time", help="Analysis time for spatial plots (default: random)"
     ),
+    level: float | None = level_option,
     output_dir: Path | None = output_dir_option,
 ) -> None:
     """Produce nulls / spatial / temporal plots, one per variable, in one directory + validation_summary.md."""
@@ -102,6 +105,13 @@ def run_all(
 
     is_forecast = is_forecast_dataset(validation_ds)
     log.info(f"Validation dataset type: {'forecast' if is_forecast else 'analysis'}")
+
+    is_virtual = is_virtual_store(dataset_url)
+    if is_virtual:
+        log.info(
+            "Virtual store: availability is covered whole-archive by manifest_scan.py "
+            "(value-based null scan skipped); value time series are sampled."
+        )
 
     selected_vars = select_variables_for_plotting(validation_ds, variables)
     log.info(f"Variables ({len(selected_vars)}): {', '.join(selected_vars)}")
@@ -138,6 +148,8 @@ def run_all(
         variables=selected_vars,
         start_date=start_date,
         end_date=end_date,
+        is_virtual=is_virtual,
+        level_override=level,
     )
 
     run_report_nulls(ctx)

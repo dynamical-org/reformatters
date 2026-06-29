@@ -28,8 +28,41 @@ When the run completes, stdout prints the path of `validation_summary.md` (relat
 - `--start-date <YYYY-MM-DD>` / `--end-date <YYYY-MM-DD>` Restrict the append dimension. Useful for reproducing an issue in a specific window.
 - `--init-time` / `--lead-time` (forecast) or `--time` (analysis) Pick the exact spatial snapshot instead of a random one. Use this to reproduce a spatial anomaly deterministically.
 - `--output-dir <path>` Write into an existing directory instead of a new one (useful if rerunning a single plot type into an existing run dir).
+- `--level <value>` For datasets with vertical-level groups, the level value to sample (e.g. `500` for 500 mb). Selects the nearest level on each variable's own vertical dim; the default is the middle level. Single-level variables ignore it.
 
 You can also run a single plot type with `compare-spatial`, `compare-timeseries`, `report-nulls`, or `value-timeseries`. The primary entry point `run-all` runs all of those steps and is the only command that produces the `validation_summary.md` index.
+
+## Virtual and multi-level datasets
+
+Two structural differences change how these tools behave; both are detected automatically from the store URL, but it helps to know what's happening.
+
+### Virtual stores invert the read-cost model
+
+A [virtual dataset](virtual_datasets.md) stores chunks as references into source GRIB files, decoding on read. One chunk is one GRIB message — a whole spatial field at a single (init, lead, member, level). So the cost model is the **opposite** of a materialized store: a spatial snapshot is cheap (one decode), while a point time series across the append dimension is catastrophic (one decode per position — millions for a full archive). `run-all` adapts:
+
+- **Availability ("nulls") is not value-scanned.** On a materialized store `report-nulls` reads `.isnull()` at two points across all time. On a virtual store that would decode every chunk it touches, and presence is anyway a *manifest* question (does the reference exist?), not a value question. So the value-based null scan is skipped, and whole-archive availability comes from `manifest_scan.py` (below).
+- **`value-timeseries` is sampled.** Instead of reducing mean ± std over lead × member at every position (which decodes the whole column), it pins one mid lead, one member, and the sampled level, and strides the append dimension. This still surfaces drift and unit step-changes. The summary marks the series "sampled".
+- **Spatial and time series comparisons are unchanged** — both already scope to a single snapshot / single init, the cheap access pattern.
+
+Note that spatial downsampling (`_downsample_for_plot`) only shrinks the plot, not the read: gribberish decodes the full message regardless.
+
+### Whole-archive scans (`manifest_scan.py`, `decode_scan.py`)
+
+These are the thorough, post-backfill correctness pass for a virtual dataset, distinct from the cheap operational `-validate` checks. They take a **dataset id** (not a URL), because they reach the dataset's own region job to reuse its manifest chunk-key logic.
+
+```bash
+uv run src/scripts/validation/manifest_scan.py <dataset-id> [--start <date>] [--end <date>] [--min-fraction 1.0]
+uv run src/scripts/validation/decode_scan.py  <dataset-id> [--start <date>] [--end <date>] [--max-samples 20]
+```
+
+- **`manifest_scan`** — the strict completeness gate. Probes every expected source file across the archive for ref existence (no decode), writes a per-position availability plot, and for any incomplete position emits a `--filter-contains` retry filter for a targeted backfill (`missing_source_files.txt`). Covers **all** levels and members — a level that never ingested is exactly the gap this catches. Exits non-zero if any position is below `--min-fraction`. For a post-backfill run pass `--end` = the backfill's published end so not-yet-published positions aren't flagged.
+- **`decode_scan`** — sampled decode health. Decodes a bounded sample of present references — across positions, lead times, members, and levels — and fails if any sampled chunk errors or decodes entirely NaN. **This is a sample, not an exhaustive sweep**: a reference that decodes to garbage outside the sample is not caught (a literal every-chunk decode across all leads × members × levels is hours).
+
+The guarantee split is the thing to keep straight: **completeness is exhaustive** (every expected ref exists), **decode health is sampled**. "Validated" therefore means every reference is present and a representative sample decodes cleanly — not that every value in the archive was decoded and checked. State this in the published summary so users read it correctly.
+
+### Vertical-level groups
+
+A dataset with vertical groups (e.g. `pressure_level`, `model_level`) exposes group variables by store path, like `pressure_level/temperature`, each carrying its level dimension. The plots **sample one representative level per variable** (the middle level by default), recorded in the summary and the plot title — the same philosophy as sampling one ensemble member and one spatial snapshot. Use `--level <value>` to inspect a specific level deterministically. Different groups have different level dims and lengths; each variable is sampled on its own dim. `manifest_scan` is the exception — it covers every level.
 
 ## 2. Output layout
 

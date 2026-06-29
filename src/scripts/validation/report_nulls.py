@@ -11,12 +11,16 @@ from scripts.validation.utils import (
     RunContext,
     end_date_option,
     get_two_random_points,
+    is_virtual_store,
+    level_option,
     load_zarr_dataset,
     output_dir_option,
     resolve_output_dir,
     scope_time_period,
+    select_var_level,
     select_variables_for_plotting,
     start_date_option,
+    var_slug,
     variables_option,
 )
 
@@ -133,8 +137,18 @@ def write_unavailable_timestamps_file(output_dir: Path, ctx: RunContext) -> str 
     return filename
 
 
-def run_report_nulls(ctx: RunContext) -> None:
+def run_report_nulls(ctx: RunContext) -> None:  # noqa: PLR0915
     """Produce per-variable null plots + a combined plot in ctx.output_dir and update ctx.stats."""
+    if ctx.is_virtual:
+        # Null detection here reads values (.isnull()), which on a virtual store decodes
+        # every chunk it touches. Availability for virtual stores is a manifest-existence
+        # question, covered whole-archive by manifest_scan.py — see docs/validation.md.
+        log.warning(
+            "Skipping value-based null scan on a virtual store (it would decode every "
+            "chunk). Run manifest_scan.py for whole-archive availability."
+        )
+        return
+
     ds_p1 = ctx.validation_ds.isel(ctx.point1_sel)
     ds_p2 = ctx.validation_ds.isel(ctx.point2_sel)
 
@@ -148,11 +162,17 @@ def run_report_nulls(ctx: RunContext) -> None:
 
     for i, var in enumerate(ctx.variables):
         stats = ctx.stats_for(var)
+        level_sel = select_var_level(ctx, var, stats)
 
         # Load each point's values once and cache them so run_value_timeseries can
         # reuse the same read instead of loading the point data a second time.
-        da_p1 = ds_p1[var].load()
-        da_p2 = ds_p2[var].load()
+        da_p1 = ds_p1[var]
+        da_p2 = ds_p2[var]
+        if level_sel:
+            da_p1 = da_p1.sel(level_sel)
+            da_p2 = da_p2.sel(level_sel)
+        da_p1 = da_p1.load()
+        da_p2 = da_p2.load()
         ctx.loaded_point_data[var] = (da_p1, da_p2)
 
         null_p1, unavailable_p1, n_p1, total_p1 = _compute_nulls_for_point(da_p1)
@@ -171,7 +191,7 @@ def run_report_nulls(ctx: RunContext) -> None:
         _draw_null_trace(axes_v[0, 1], null_p2, "orange", p2_label)
         fig_v.suptitle(var, fontsize=11)
         fig_v.tight_layout()
-        out_path = ctx.output_dir / f"nulls_{var}.png"
+        out_path = ctx.output_dir / f"nulls_{var_slug(var)}.png"
         fig_v.savefig(out_path, dpi=80, bbox_inches="tight")
         plt.close(fig_v)
         stats.null_plot = out_path.name
@@ -203,6 +223,7 @@ def report_nulls(
     show_plot: bool = False,
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
+    level: float | None = level_option,
     output_dir: Path | None = output_dir_option,
 ) -> None:
     """Analyze null values for each data variable at two spatial points across time."""
@@ -231,6 +252,8 @@ def report_nulls(
         point2_lon=lon2,
         ensemble_member=None,
         variables=selected_vars,
+        is_virtual=is_virtual_store(dataset_url),
+        level_override=level,
     )
     run_report_nulls(ctx)
 

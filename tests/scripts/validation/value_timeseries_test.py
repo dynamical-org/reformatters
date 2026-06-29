@@ -59,7 +59,34 @@ def test_compute_value_series_forecast_has_nonzero_band() -> None:
     assert (std_series.values > 0).all()
 
 
-def _ctx(ds: xr.Dataset, output_dir: Path) -> RunContext:
+def _grouped_forecast_dataset() -> xr.Dataset:
+    init_time = pd.date_range("2020-01-01", periods=4, freq="D")
+    lead_time = pd.to_timedelta([0, 6, 12], unit="h")
+    lat = np.array([10.0, 20.0])
+    lon = np.array([30.0, 40.0])
+    pressure_level = np.array([1000, 500, 100])
+    rng = np.random.default_rng(2)
+    data = rng.standard_normal((4, 3, 2, 2, 3))
+    return xr.Dataset(
+        {
+            "pressure_level/temperature": (
+                ("init_time", "lead_time", "latitude", "longitude", "pressure_level"),
+                data,
+            )
+        },
+        coords={
+            "init_time": init_time,
+            "lead_time": lead_time,
+            "latitude": lat,
+            "longitude": lon,
+            "pressure_level": pressure_level,
+        },
+    )
+
+
+def _ctx(
+    ds: xr.Dataset, output_dir: Path, variables: list[str] | None = None
+) -> RunContext:
     return RunContext(
         output_dir=output_dir,
         validation_url="s3://bucket/noaa-test/v1.zarr",
@@ -74,7 +101,7 @@ def _ctx(ds: xr.Dataset, output_dir: Path) -> RunContext:
         point2_lat=20.0,
         point2_lon=40.0,
         ensemble_member=None,
-        variables=["temperature_2m"],
+        variables=variables or ["temperature_2m"],
     )
 
 
@@ -102,3 +129,30 @@ def test_run_value_timeseries_forecast_draws_std(tmp_path: Path) -> None:
     stats = ctx.stats["temperature_2m"]
     assert stats.value_std_p1 is not None
     assert stats.value_std_p1 > 0.0
+
+
+def test_run_value_timeseries_selects_and_records_level(tmp_path: Path) -> None:
+    ds = _grouped_forecast_dataset()
+    ctx = _ctx(ds, tmp_path, variables=["pressure_level/temperature"])
+    run_value_timeseries(ctx)
+
+    # Filename slugs the '/'; the middle of [1000, 500, 100] is recorded as the level.
+    assert (tmp_path / "value_timeseries_pressure_level__temperature.png").exists()
+    stats = ctx.stats["pressure_level/temperature"]
+    assert stats.level_dim == "pressure_level"
+    assert stats.level_value == 500
+    # The level is pinned, so the band still spans lead time -> non-zero std.
+    assert stats.value_std_p1 is not None
+    assert stats.value_std_p1 > 0.0
+
+
+def test_run_value_timeseries_virtual_pins_to_single_value(tmp_path: Path) -> None:
+    ds = _grouped_forecast_dataset()
+    ctx = _ctx(ds, tmp_path, variables=["pressure_level/temperature"])
+    ctx.is_virtual = True
+    run_value_timeseries(ctx)
+
+    stats = ctx.stats["pressure_level/temperature"]
+    assert stats.level_dim == "pressure_level"
+    # Virtual pins one (lead, member, level), so each timestep is a single value: std 0.
+    assert stats.value_std_p1 == 0.0

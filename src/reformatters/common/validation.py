@@ -684,13 +684,18 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
     selects which append-dim positions to check: "latest" (default) targets the newest
     position with data — so a broken newest reference is caught at the next validation, not
     a cycle later — while "all" covers the whole window. Within a position it samples
-    `sampled_leads` lead times (first + last + evenly spaced interior) across every member.
-    A variable fails if any sampled chunk errors or all of its sampled chunks decode
-    entirely NaN. Fails — never silently passes — when no references are present to decode.
+    `sampled_leads` lead times (first + last + evenly spaced interior) across every member,
+    and `sampled_levels` levels of any vertical dim (e.g. pressure_level) so a group var is
+    decode-checked at a bounded set of levels rather than every one. `max_positions`
+    optionally caps "all" to an evenly spaced subset of positions for a whole-archive
+    offline sweep. A variable fails if any sampled chunk errors or all of its sampled chunks
+    decode entirely NaN. Fails — never silently passes — when no references are present.
     """
 
     positions: Literal["latest", "all"] = "latest"
     sampled_leads: int = 5
+    sampled_levels: int = 3
+    max_positions: int | None = None
     max_workers: int = 32
 
     def __call__(
@@ -715,11 +720,19 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
             )
 
         present_positions = sorted({c.out_loc()[append_dim] for c in present})
-        targets = (
-            {present_positions[-1]}
-            if self.positions == "latest"
-            else set(present_positions)
-        )
+        if self.positions == "latest":
+            targets = {present_positions[-1]}
+        elif self.max_positions and len(present_positions) > self.max_positions:
+            targets = {
+                present_positions[i]
+                for i in np.unique(
+                    np.linspace(0, len(present_positions) - 1, self.max_positions)
+                    .round()
+                    .astype(int)
+                )
+            }
+        else:
+            targets = set(present_positions)
         to_decode = self._sample_leads(
             [c for c in present if c.out_loc()[append_dim] in targets]
         )
@@ -733,8 +746,9 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
             for var in file_vars:
                 da = ds[var.path]
                 selection = {dim: value for dim, value in loc.items() if dim in da.dims}
+                da = self._sample_levels(da.sel(selection))
                 try:
-                    values = da.sel(selection).copy(deep=True).load().values
+                    values = da.copy(deep=True).load().values
                     results.append((var.path, float(np.isnan(values).mean()), None))
                 except Exception as e:  # noqa: BLE001 - any decode failure is a validation failure
                     results.append((var.path, 1.0, f"{type(e).__name__}: {e}"))
@@ -792,3 +806,19 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
             .astype(int)
         }
         return [c for c in coords if c.out_loc().get("lead_time") in keep]
+
+    def _sample_levels(self, da: xr.DataArray) -> xr.DataArray:
+        """Down-sample any vertical (non-spatial) dim to `sampled_levels` evenly spaced
+        levels, so a group var is decode-checked at a bounded set of levels rather than
+        all of them. Single-level vars (only spatial dims left) are returned unchanged."""
+        spatial = ("y", "x", "latitude", "longitude")
+        isel: dict[Any, Any] = {}
+        for dim in da.dims:
+            if dim in spatial:
+                continue
+            size = da.sizes[dim]
+            if size > self.sampled_levels:
+                isel[dim] = np.unique(
+                    np.linspace(0, size - 1, self.sampled_levels).round().astype(int)
+                )
+        return da.isel(isel) if isel else da

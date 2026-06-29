@@ -5,6 +5,7 @@ import typer
 from markdown_it import MarkdownIt
 
 from reformatters.common.logging import get_logger
+from scripts.validation.utils import var_slug
 
 log = get_logger(__name__)
 
@@ -29,20 +30,21 @@ def _wrap_variable_sections(html: str) -> str:
     def replace(m: re.Match[str]) -> str:
         var = m.group("var")
         body = m.group("body")
+        slug = var_slug(var)
         plots = (
             '<div class="plots">'
-            f'<a href="nulls_{var}.png" target="_blank">'
-            f'<img src="nulls_{var}.png" alt="{var} — null fraction"></a>'
-            f'<a href="value_timeseries_{var}.png" target="_blank">'
-            f'<img src="value_timeseries_{var}.png" alt="{var} — full-period value time series"></a>'
-            f'<a href="spatial_{var}.png" target="_blank">'
-            f'<img src="spatial_{var}.png" alt="{var} — spatial comparison"></a>'
-            f'<a href="temporal_{var}.png" target="_blank">'
-            f'<img src="temporal_{var}.png" alt="{var} — time series comparison"></a>'
+            f'<a href="nulls_{slug}.png" target="_blank">'
+            f'<img src="nulls_{slug}.png" alt="{var} — null fraction"></a>'
+            f'<a href="value_timeseries_{slug}.png" target="_blank">'
+            f'<img src="value_timeseries_{slug}.png" alt="{var} — full-period value time series"></a>'
+            f'<a href="spatial_{slug}.png" target="_blank">'
+            f'<img src="spatial_{slug}.png" alt="{var} — spatial comparison"></a>'
+            f'<a href="temporal_{slug}.png" target="_blank">'
+            f'<img src="temporal_{slug}.png" alt="{var} — time series comparison"></a>'
             "</div>"
         )
         return (
-            f'<section class="variable" id="var-{var}" data-var="{var}">'
+            f'<section class="variable" id="var-{slug}" data-var="{slug}">'
             f'<h3 class="var-heading"><code>{var}</code></h3>'
             f"{body}{plots}</section>"
         )
@@ -290,8 +292,8 @@ def _build_toc(
         f'<li><a href="#{slug}">{title}</a></li>' for slug, title in sections
     )
     var_items = "".join(
-        f'<li class="var-row"><input type="checkbox" checked data-var="{v}" '
-        f'id="cb-{v}"><a href="#var-{v}">{v}</a></li>'
+        f'<li class="var-row"><input type="checkbox" checked data-var="{var_slug(v)}" '
+        f'id="cb-{var_slug(v)}"><a href="#var-{var_slug(v)}">{v}</a></li>'
         for v in variables
     )
     return f"""

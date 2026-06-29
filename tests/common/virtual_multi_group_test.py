@@ -548,6 +548,30 @@ def test_decode_health_covers_group_vars(tmp_path: Path) -> None:
     assert result.passed, result.message
 
 
+def test_decode_health_samples_levels_and_positions(tmp_path: Path) -> None:
+    # The offline decode scan tunes these knobs: sampling a subset of the group var's
+    # levels and capping how many positions get decoded keep a whole-archive sweep bounded.
+    dataset = _make_dataset(tmp_path, n_inits=2)
+    template_ds = _create_template_ds(2)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    _make_region_job(template_ds, region=slice(0, 2)).process_virtual(repo, [], "main")
+    store = repo.readonly_session("main").store
+    job = _make_region_job(template_ds, region=slice(0, 2))
+    ds = validation.open_flattened_dataset(store, consolidated=False)
+
+    # Sampling one of the two pressure levels still exercises the group var and passes.
+    sampled = validation.CheckVirtualDecodeHealth(sampled_levels=1)(job, store, ds)
+    assert sampled.passed, sampled.message
+
+    # positions="all" capped to a single position decode-checks just one init.
+    capped = validation.CheckVirtualDecodeHealth(positions="all", max_positions=1)(
+        job, store, ds
+    )
+    assert capped.passed, capped.message
+    assert capped.message.count("init_time=") == 1
+
+
 def test_per_file_commit_contains_both_groups(tmp_path: Path) -> None:
     # Per-file atomicity across groups: each source file is one commit, and that
     # commit writes both a root chunk and a pressure_level chunk for the same file.
