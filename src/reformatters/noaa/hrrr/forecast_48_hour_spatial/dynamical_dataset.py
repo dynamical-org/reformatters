@@ -42,11 +42,13 @@ class NoaaHrrrForecast48HourSpatialDataset(
                     _S3_LOCATION_PREFIX, icechunk.s3_store(region=_S3_BUCKET_REGION)
                 ),
             ),
-            # One week of inits (4 cycles/day) per manifest split. Each commit rewrites
+            # One month of inits (4 cycles/day) per manifest split. Each commit rewrites
             # only the touched array's active split, so this caps commit cost: the
             # largest array (a model_level var, 49 leads x 50 levels = 2450 refs/init)
-            # reaches ~68.6k refs per split (28 inits) at week end.
-            manifest_split=manifest_append_dim_split(split_size=7 * 4, dim="init_time"),
+            # reaches ~294k refs (~4.7 MiB) per split (120 inits) at month end.
+            manifest_split=manifest_append_dim_split(
+                split_size=30 * 4, dim="init_time"
+            ),
         )
     )
 
@@ -61,8 +63,9 @@ class NoaaHrrrForecast48HourSpatialDataset(
             pod_active_deadline=timedelta(hours=1, minutes=40),
             image=image_tag,
             dataset_id=self.dataset_id,
-            cpu="1.7",
-            memory="7G",
+            # Single-threaded ingest, ~0.7 GiB peak per init measured locally.
+            cpu="1.5",
+            memory="2G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
         validation_cron_job = ValidationCronJob(
