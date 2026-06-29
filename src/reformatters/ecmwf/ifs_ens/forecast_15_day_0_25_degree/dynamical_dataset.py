@@ -29,9 +29,10 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            # ECMWF uploads the first file at 07:40 UTC and the last one by ~07:45 UTC.
-            # (Ensemble stats get uploaded 15-20 mins later, but we don't process those.)
-            schedule="50 7 * * *",
+            # Gating lead group f360 typically lands ~08:00-08:09 UTC (recent days;
+            # wxopticon external-ecmwf-ifs-ens-long-aws p99 08:26); pod spin-up adds
+            # a head start before late-lead downloads, so fire at 08:05.
+            schedule="5 8 * * *",
             suspend=False,
             pod_active_deadline=timedelta(minutes=35),  # runs take <26 min
             image=image_tag,
@@ -46,7 +47,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="25 8 * * *",  # 35m (pod_active_deadline) after reformat at 07:50
+            schedule="40 8 * * *",  # 35m (pod_active_deadline) after reformat at 08:05
             suspend=False,
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
