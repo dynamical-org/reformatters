@@ -63,10 +63,8 @@ class NoaaHrrrForecast48HourSpatialDataset(
             pod_active_deadline=timedelta(hours=1, minutes=40),
             image=image_tag,
             dataset_id=self.dataset_id,
-            # Builds chunk refs (no data decode); peak scales with download_concurrency.
-            # 4G is headroom over the bounded working set.
             cpu="1.5",
-            memory="4G",
+            memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
         validation_cron_job = ValidationCronJob(
@@ -76,9 +74,8 @@ class NoaaHrrrForecast48HourSpatialDataset(
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
-            # Decodes GRIB to probe health, so heavier than the ref-building update.
             cpu="1.5",
-            memory="4G",
+            memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
 

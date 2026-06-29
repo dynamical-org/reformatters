@@ -60,9 +60,6 @@ class VirtualRegionJob(
     # When polling, pace each discovery sweep to at most one per tick.
     tick_interval: ClassVar[Timedelta] = pd.Timedelta("1s")
     # Concurrent file downloads while building refs; small .idx files, so IO-bound.
-    # Hardcoded, not scaled from os.cpu_count(): under a cgroup CPU limit that returns the
-    # node's core count rather than the pod's allocation, oversubscribing threads on a
-    # large shared node exhausts pod memory.
     download_concurrency: ClassVar[int] = 64
 
     # ----- Overridable methods -----
