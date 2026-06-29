@@ -61,7 +61,7 @@ class VirtualRegionJob(
     # When polling, pace each discovery sweep to at most one per tick.
     tick_interval: ClassVar[Timedelta] = pd.Timedelta("1s")
     # Concurrent file downloads while building refs. High concurrency for small .idx files.
-    download_concurrency: ClassVar[int] = (os.cpu_count() or 1) * 6
+    download_concurrency: ClassVar[int] = (os.cpu_count() or 1) * 16
 
     # ----- Overridable methods -----
     # A dataset implements file_refs and generate_source_file_coords (from

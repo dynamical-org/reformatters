@@ -201,17 +201,18 @@ class NoaaHrrrForecast48HourSpatialRegionJob(
         ],
         xr.DataTree,
     ]:
-        """A single polling job over the recent inits (24h window = the last 4 cycles).
+        """A single polling job over the recent inits (14h window = current + 2 prior).
 
-        Polls until every expected file is ingested; filter_already_present derives the
-        remaining work from the manifest. See "Operational updates" in
-        docs/virtual_datasets.md.
+        14h = two 6h cycles back + ~2h publication slack, so a couple of missed runs
+        still self-heal. Polls until every expected file is ingested;
+        filter_already_present derives the remaining work from the manifest. See
+        "Operational updates" in docs/virtual_datasets.md.
         """
         append_dim_end = pd.Timestamp.now()
         template_ds = get_template_fn(append_dim_end)
         init_times = template_ds.to_dataset().get_index(append_dim)
         window_start = int(
-            init_times.searchsorted(append_dim_end - pd.Timedelta("24h"))
+            init_times.searchsorted(append_dim_end - pd.Timedelta("14h"))
         )
         job = cls(
             tmp_store=tmp_store,
