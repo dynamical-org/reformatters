@@ -163,7 +163,7 @@ class ExampleRegionJob(VirtualRegionJob[ExampleDataVar, ExampleSourceFileCoord])
         #         index_path, coord.data_vars, coord.init_time, coord.lead_time
         #     )
         # finally:
-        #     index_path.unlink()  # .idx files pile up by the millions in a backfill
+        #     index_path.unlink()
         #
         # out_loc = coord.out_loc()
         # location = coord.get_url()
