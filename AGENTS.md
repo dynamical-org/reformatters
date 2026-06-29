@@ -73,6 +73,7 @@ Run these tests after updating a template: `uv run pytest tests/common/common_te
 Metadata attributes for variables and coordinates must follow CF Conventions.
 The `standard_name` and `units` fields must match CF definitions if one exists for that variable; if one doesn't, use SI `units` and leave `standard_name` unset.
 Use ECMWF variable name for `long_name` and ECMWF short name for `short_name`.  When adding a variable, search to see if another dataset already has an equivalent variable (e.g. `temperature_2m`), match those names and metadata exactly.
+Categorical / flag variables set `flag_values` (the coded values) and `flag_meanings` (a blank separated label per value) per CF Conventions section 3.5. Verify the codes against the authoritative source table for that product (e.g. GRIB2 code table 4.201/4.222, the NSSL MRMS flag tables) rather than guessing.
 
 
 ### RegionJob
