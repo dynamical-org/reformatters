@@ -83,6 +83,27 @@ def test_render_html_structure() -> None:
     assert "<title>" in html
 
 
+def test_render_html_slugs_group_pathed_variables() -> None:
+    md = (
+        "## Per-variable details\n\n"
+        "### `pressure_level/temperature`\n\n"
+        "**Metadata**\n\n- units: `degree_Celsius`\n"
+    )
+    html = render_html(md, "noaa-test")
+
+    # Display text keeps the '/'; ids and filenames replace it so they stay path-safe.
+    assert "<code>pressure_level/temperature</code>" in html
+    assert (
+        '<section class="variable" id="var-pressure_level__temperature" '
+        'data-var="pressure_level__temperature">'
+    ) in html
+    for plot_type in ("nulls", "value_timeseries", "spatial", "temporal"):
+        assert f'<img src="{plot_type}_pressure_level__temperature.png"' in html
+    assert (
+        "pressure_level/temperature.png" not in html
+    )  # raw '/' never reaches a filename
+
+
 def test_render_report_writes_file(tmp_path: Path) -> None:
     run_dir = tmp_path / "noaa-test" / "v9.9.9_2026-01-01T00-00"
     run_dir.mkdir(parents=True)

@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,14 +14,24 @@ from scripts.validation.utils import (
     VariableStats,
     end_date_option,
     get_two_random_points,
+    is_virtual_store,
+    level_label,
+    level_option,
     load_zarr_dataset,
     output_dir_option,
     resolve_output_dir,
     scope_time_period,
+    select_var_level,
     select_variables_for_plotting,
     start_date_option,
+    var_slug,
     variables_option,
+    virtual_message_count,
 )
+
+# Target number of append-dim points to sample on a virtual store, where each point at a
+# pinned (lead, member, level) is one source-file decode.
+VIRTUAL_VALUE_TS_SAMPLES = 200
 
 log = get_logger(__name__)
 
@@ -103,13 +114,46 @@ def _store_value_stats(
         stats.value_max_p2 = overall_max
 
 
-def _point_arrays(ctx: RunContext, var: str) -> tuple[xr.DataArray, xr.DataArray]:
-    """Reuse arrays loaded by run_report_nulls, else load them (standalone command)."""
+def _pin_and_sample(da: xr.DataArray) -> xr.DataArray:
+    """Pin lead/member to one each and stride the append dim for a tractable virtual read.
+
+    Reducing mean +/- std over lead x member at every init would decode every message in the
+    point column. Pinning a single (mid) lead and member and sampling the append dim leaves
+    one decode per sampled position — enough to surface drift and unit step-changes.
+    """
+    sel: dict[str, Any] = {}
+    if "lead_time" in da.dims:
+        # A mid lead avoids the hour-0 structural NaN of accumulated variables.
+        sel["lead_time"] = da["lead_time"].values[da.sizes["lead_time"] // 2]
+    if "ensemble_member" in da.dims:
+        sel["ensemble_member"] = da["ensemble_member"].values[0]
+    if sel:
+        da = da.sel(sel)
+    append_dim = "init_time" if "init_time" in da.dims else "time"
+    stride = max(1, da.sizes[append_dim] // VIRTUAL_VALUE_TS_SAMPLES)
+    return da.isel({append_dim: slice(None, None, stride)})
+
+
+def _point_arrays(
+    ctx: RunContext, var: str, stats: VariableStats
+) -> tuple[xr.DataArray, xr.DataArray]:
+    """Reuse arrays loaded by run_report_nulls, else load them (standalone / virtual)."""
     if var in ctx.loaded_point_data:
         return ctx.loaded_point_data[var]
-    da_p1 = ctx.validation_ds.isel(ctx.point1_sel)[var].load()
-    da_p2 = ctx.validation_ds.isel(ctx.point2_sel)[var].load()
-    return da_p1, da_p2
+    level_sel = select_var_level(ctx, var, stats)
+    da_p1 = ctx.validation_ds.isel(ctx.point1_sel)[var]
+    da_p2 = ctx.validation_ds.isel(ctx.point2_sel)[var]
+    if level_sel:
+        da_p1 = da_p1.sel(level_sel)
+        da_p2 = da_p2.sel(level_sel)
+    if ctx.is_virtual:
+        da_p1 = _pin_and_sample(da_p1)
+        da_p2 = _pin_and_sample(da_p2)
+        log.info(
+            f"  value-timeseries {var}: virtual sampled read "
+            f"~{virtual_message_count(da_p1) + virtual_message_count(da_p2)} decodes"
+        )
+    return da_p1.load(), da_p2.load()
 
 
 def run_value_timeseries(ctx: RunContext) -> None:
@@ -126,7 +170,7 @@ def run_value_timeseries(ctx: RunContext) -> None:
         stats = ctx.stats_for(var)
         units = stats.units or ""
 
-        da_p1, da_p2 = _point_arrays(ctx, var)
+        da_p1, da_p2 = _point_arrays(ctx, var, stats)
         mean_p1, std_p1 = _compute_value_series(da_p1)
         mean_p2, std_p2 = _compute_value_series(da_p2)
         _store_value_stats(stats, mean_p1, std_p1, 1)
@@ -144,11 +188,12 @@ def run_value_timeseries(ctx: RunContext) -> None:
         _draw_value_trace(
             axes_v[0, 1], mean_p2, std_p2, "orange", "red", p2_label, units, has_std
         )
+        title = f"{var}{level_label(stats)}"
         fig_v.suptitle(
-            f"{var} — full-period mean ± std" if has_std else var, fontsize=11
+            f"{title} — full-period mean ± std" if has_std else title, fontsize=11
         )
         fig_v.tight_layout()
-        out_path = ctx.output_dir / f"value_timeseries_{var}.png"
+        out_path = ctx.output_dir / f"value_timeseries_{var_slug(var)}.png"
         fig_v.savefig(out_path, dpi=80, bbox_inches="tight")
         plt.close(fig_v)
         stats.value_ts_plot = out_path.name
@@ -189,6 +234,7 @@ def value_timeseries(
     show_plot: bool = False,
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
+    level: float | None = level_option,
     output_dir: Path | None = output_dir_option,
 ) -> None:
     """Plot per-timestep mean ± std of each variable at two spatial points over all time."""
@@ -217,6 +263,8 @@ def value_timeseries(
         point2_lon=lon2,
         ensemble_member=None,
         variables=selected_vars,
+        is_virtual=is_virtual_store(dataset_url),
+        level_override=level,
     )
     run_value_timeseries(ctx)
 

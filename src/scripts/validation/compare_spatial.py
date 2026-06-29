@@ -16,6 +16,9 @@ from scripts.validation.utils import (
     end_date_option,
     get_two_random_points,
     is_forecast_dataset,
+    is_virtual_store,
+    level_label,
+    level_option,
     load_zarr_dataset,
     output_dir_option,
     reference_url_option,
@@ -23,8 +26,10 @@ from scripts.validation.utils import (
     resolve_reference_url,
     scope_time_period,
     select_random_ensemble_member,
+    select_var_level,
     select_variables_for_plotting,
     start_date_option,
+    var_slug,
     variables_option,
 )
 
@@ -236,7 +241,22 @@ def _draw_spatial_triplet(
     ax_hist.grid(True, alpha=0.3)
 
 
-def run_compare_spatial(
+def _reference_data(
+    ref_ds: xr.Dataset, var: str, level_sel: dict[str, object]
+) -> xr.DataArray | None:
+    """Reference field for `var` at the sampled level, or None if not comparable."""
+    if var not in ref_ds.data_vars:
+        return None
+    ref_data = ref_ds[var]
+    if level_sel:
+        dim = next(iter(level_sel))
+        if dim not in ref_data.dims:
+            return None  # reference lacks this level dim; nothing to compare against
+        ref_data = ref_data.sel(level_sel, method="nearest")
+    return ref_data.load()
+
+
+def run_compare_spatial(  # noqa: PLR0915
     ctx: RunContext,
     init_time: str | None = None,
     lead_time: str | None = None,
@@ -287,22 +307,27 @@ def run_compare_spatial(
 
     for i, var in enumerate(ctx.variables):
         stats = ctx.stats_for(var)
+        level_sel = select_var_level(ctx, var, stats)
+        level_note = level_label(stats)
 
-        data = ds[var].load()
-        ref_data = ref_ds[var].load() if var in ref_ds.data_vars else None
+        data = ds[var]
+        if level_sel:
+            data = data.sel(level_sel)
+        data = data.load()
+        ref_data = _reference_data(ref_ds, var, level_sel)
         data_clean, ref_clean = _compute_spatial_stats(data, ref_data, stats)
 
         stats.spatial_time_label = val_time_label
-        stats.spatial_plot = f"spatial_{var}.png"
+        stats.spatial_plot = f"spatial_{var_slug(var)}.png"
 
         ds_title = val_label
         if ctx.ensemble_member is not None:
             ds_title += f" (ensemble {ctx.ensemble_member})"
-        ds_title += f"\n{var} @ {val_time_label}"
+        ds_title += f"\n{var}{level_note} @ {val_time_label}"
         ref_title = (
-            f"{ref_label}\n{var} @ {ref_time_label}"
+            f"{ref_label}\n{var}{level_note} @ {ref_time_label}"
             if ref_data is not None
-            else f"{ref_label}\n{var} (not available)"
+            else f"{ref_label}\n{var}{level_note} (not available)"
         )
 
         # Per-variable figure
@@ -371,6 +396,7 @@ def compare_spatial(
     time: str | None = None,
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
+    level: float | None = level_option,
     output_dir: Path | None = output_dir_option,
 ) -> None:
     """Create per-variable + combined spatial comparison plots between two zarr datasets."""
@@ -420,6 +446,8 @@ def compare_spatial(
         point2_lon=lon2,
         ensemble_member=None,
         variables=selected_vars,
+        is_virtual=is_virtual_store(validation_url),
+        level_override=level,
     )
     run_compare_spatial(ctx, init_time=init_time, lead_time=lead_time, time=time)
 

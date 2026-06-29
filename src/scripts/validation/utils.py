@@ -13,6 +13,8 @@ import typer
 import xarray as xr
 from zarr.storage import ObjectStore, StoreLike
 
+from reformatters.common.validation import open_flattened_dataset
+
 OUTPUT_DIR = "data/output"
 
 STAC_CATALOG_URL = "https://stac.dynamical.org/catalog.json"
@@ -75,6 +77,14 @@ output_dir_option = typer.Option(
     help="Write outputs into this directory instead of creating a new run directory.",
 )
 
+level_option = typer.Option(
+    None,
+    "--level",
+    help="Vertical level value to sample for variables on a level dim (e.g. 500 for "
+    "500 mb). Selects the nearest level on each variable's own vertical dim. "
+    "Default: the middle level. Single-level variables ignore this.",
+)
+
 
 @dataclass
 class VariableStats:
@@ -86,6 +96,10 @@ class VariableStats:
     short_name: str | None = None
     standard_name: str | None = None
     step_type: str | None = None
+
+    # Vertical level sampled for this variable (None for single-level variables)
+    level_dim: str | None = None
+    level_value: float | None = None
 
     # Null analysis
     null_plot: str | None = None
@@ -156,6 +170,11 @@ class RunContext:
     variables: list[str]
     start_date: str | None = None
     end_date: str | None = None
+    # Virtual stores decode source files on read, inverting the cost model: a spatial
+    # snapshot is cheap, an append-dim point column is expensive. Routes report_nulls /
+    # value_timeseries to manifest- and sample-based paths instead of full reads.
+    is_virtual: bool = False
+    level_override: float | None = None
     spatial_time_label: str | None = None
     ref_spatial_time_label: str | None = None
     temporal_period_label: str | None = None
@@ -193,43 +212,78 @@ def scope_time_period(
     return ds
 
 
+def var_slug(var: str) -> str:
+    """Filesystem/anchor-safe form of a (possibly group-pathed) variable name.
+
+    Flattened group vars are keyed by store path (e.g. `pressure_level/temperature`); the
+    `/` would otherwise be read as a directory separator in plot filenames. Display text
+    keeps the original name; only filenames and HTML ids go through here.
+    """
+    return var.replace("/", "__")
+
+
+def _anonymous_virtual_credentials(
+    storage: icechunk.Storage,
+) -> dict[str, Any] | None:
+    """Anonymous read credentials for a virtual store's persisted chunk containers.
+
+    A virtual icechunk store decodes chunks from source files, which requires authorizing
+    access to the source buckets. The container set is persisted in the repo config (see
+    docs/virtual_datasets.md); every dynamical source is public S3, so anonymous S3
+    credentials per container prefix suffice. Returns None for a materialized store.
+    """
+    config = icechunk.Repository.fetch_config(storage)
+    containers = config.virtual_chunk_containers if config is not None else None
+    if not containers:
+        return None
+    items = containers.values() if isinstance(containers, dict) else containers
+    prefixes = [c.url_prefix if hasattr(c, "url_prefix") else c for c in items]
+    return icechunk.containers_credentials(
+        {prefix: icechunk.s3_anonymous_credentials() for prefix in prefixes}
+    )
+
+
 def load_zarr_dataset(url: str) -> xr.Dataset:
     url = url.removesuffix("/")
-    if url.startswith("s3://"):
-        if url.endswith(".icechunk"):
-            path = url.removeprefix("s3://")
-            assert "/" in path
-            i = path.index("/")
-            bucket = path[:i]
-            prefix = path[i + 1 :]
-            storage = icechunk.s3_storage(
-                bucket=bucket, prefix=prefix, anonymous=True, region="us-west-2"
-            )
-            repo = icechunk.Repository.open(storage)
-            session = repo.readonly_session("main")
-            store: StoreLike = session.store
-        else:
-            store = ObjectStore(
-                obstore.store.from_url(
-                    url,
-                    region="us-west-2",
-                    skip_signature=True,
-                    retry_config={
-                        "max_retries": 16,
-                        "backoff": {
-                            "base": 2,
-                            "init_backoff": timedelta(seconds=1),
-                            "max_backoff": timedelta(seconds=16),
-                        },
-                        # A backstop, shouldn't hit this with the above backoff settings
-                        "retry_timeout": timedelta(minutes=5),
+    if url.startswith("s3://") and url.endswith(".icechunk"):
+        path = url.removeprefix("s3://")
+        assert "/" in path
+        bucket, prefix = path.split("/", 1)
+        storage = icechunk.s3_storage(
+            bucket=bucket, prefix=prefix, anonymous=True, region="us-west-2"
+        )
+        repo = icechunk.Repository.open(
+            storage,
+            authorize_virtual_chunk_access=_anonymous_virtual_credentials(storage),
+        )
+        store: StoreLike = repo.readonly_session("main").store
+        consolidated = False
+    elif url.startswith("s3://"):
+        store = ObjectStore(
+            obstore.store.from_url(
+                url,
+                region="us-west-2",
+                skip_signature=True,
+                retry_config={
+                    "max_retries": 16,
+                    "backoff": {
+                        "base": 2,
+                        "init_backoff": timedelta(seconds=1),
+                        "max_backoff": timedelta(seconds=16),
                     },
-                )
+                    # A backstop, shouldn't hit this with the above backoff settings
+                    "retry_timeout": timedelta(minutes=5),
+                },
             )
+        )
+        consolidated = True
     else:
         store = url
+        consolidated = True
 
-    ds: xr.Dataset = xr.open_zarr(store, chunks=None, decode_timedelta=True)
+    # open_flattened_dataset exposes every vertical group's vars (e.g.
+    # pressure_level/temperature) keyed by store path, not just the root group.
+    ds = open_flattened_dataset(store, consolidated=consolidated)
     if "longitude" in ds.coords and "latitude" in ds.coords:
         ds.longitude.load()
         ds.latitude.load()
@@ -313,6 +367,93 @@ def select_random_ensemble_member(ds: xr.Dataset) -> tuple[xr.Dataset, int | Non
         ds.sel(ensemble_member=ensemble_member),
         ensemble_member,
     )
+
+
+_SPATIAL_DIMS = ("y", "x", "latitude", "longitude")
+_NON_VERTICAL_DIMS = (
+    "init_time",
+    "time",
+    "valid_time",
+    "lead_time",
+    "ensemble_member",
+    *_SPATIAL_DIMS,
+)
+
+
+def vertical_dims(ds: xr.Dataset, var: str) -> list[str]:
+    """Vertical (level) dims of a variable — anything that isn't time/lead/member/spatial.
+
+    A var in a vertical group (e.g. ``pressure_level/temperature``) keeps its level dim
+    after flattening; single-level vars (``temperature_2m``) have none. Generic across
+    level types (pressure_level, model_level, …) — no level name is hard-coded.
+    """
+    return [str(d) for d in ds[var].dims if d not in _NON_VERTICAL_DIMS]
+
+
+def choose_level(ds: xr.Dataset, var: str, override: float | None) -> dict[str, Any]:
+    """Pick one representative level for a vertical var, or ``{}`` for a single-level var.
+
+    The report samples a single level per vertical variable (like it samples one ensemble
+    member and one spatial snapshot); use ``override`` to inspect a specific level. Default
+    is the middle level of the var's own vertical dim; override selects the nearest. Returns
+    a ``{level_dim: label}`` mapping ready for ``.sel()``.
+    """
+    vdims = vertical_dims(ds, var)
+    if not vdims:
+        return {}
+    assert len(vdims) == 1, f"{var} has multiple vertical dims {vdims}, not supported"
+    dim = vdims[0]
+    coord = ds[dim].values
+    if override is not None:
+        idx = int(np.abs(coord - override).argmin())
+    else:
+        idx = len(coord) // 2
+    return {dim: coord[idx].item()}
+
+
+def select_var_level(ctx: RunContext, var: str, stats: VariableStats) -> dict[str, Any]:
+    """Resolve and record the level to plot for `var`; ``{}`` for single-level vars."""
+    sel = choose_level(ctx.validation_ds, var, ctx.level_override)
+    if sel:
+        [(dim, value)] = sel.items()
+        stats.level_dim = dim
+        stats.level_value = float(value)
+    return sel
+
+
+def level_label(stats: VariableStats) -> str:
+    """Display suffix for the sampled level, or empty string for single-level vars."""
+    if stats.level_dim is None:
+        return ""
+    return f" [{stats.level_dim}={stats.level_value:g}]"
+
+
+def virtual_message_count(da: xr.DataArray) -> int:
+    """Number of source messages (= decodes) a virtual read of `da` will trigger.
+
+    For a virtual store one chunk is one GRIB message spanning a full spatial field at a
+    single (init, lead, member, level), so the decode count is the product of every
+    non-spatial dim — independent of how the spatial dims are sliced.
+    """
+    count = 1
+    for dim, size in da.sizes.items():
+        if dim not in _SPATIAL_DIMS:
+            count *= size
+    return count
+
+
+def is_virtual_store(url: str) -> bool:
+    """True if `url` is an icechunk store with persisted virtual chunk containers."""
+    url = url.removesuffix("/")
+    if not (url.startswith("s3://") and url.endswith(".icechunk")):
+        return False
+    path = url.removeprefix("s3://")
+    assert "/" in path
+    bucket, prefix = path.split("/", 1)
+    storage = icechunk.s3_storage(
+        bucket=bucket, prefix=prefix, anonymous=True, region="us-west-2"
+    )
+    return _anonymous_virtual_credentials(storage) is not None
 
 
 def extract_variable_metadata(ds: xr.Dataset, var: str) -> dict[str, Any]:

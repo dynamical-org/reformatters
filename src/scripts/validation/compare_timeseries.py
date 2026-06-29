@@ -14,6 +14,9 @@ from scripts.validation.utils import (
     end_date_option,
     get_two_random_points,
     is_forecast_dataset,
+    is_virtual_store,
+    level_label,
+    level_option,
     load_zarr_dataset,
     output_dir_option,
     reference_url_option,
@@ -21,8 +24,10 @@ from scripts.validation.utils import (
     resolve_reference_url,
     scope_time_period,
     select_random_ensemble_member,
+    select_var_level,
     select_variables_for_plotting,
     start_date_option,
+    var_slug,
     variables_option,
 )
 
@@ -130,24 +135,29 @@ def _load_timeseries_for_var(
     ctx: RunContext,
     validation_subset: xr.Dataset,
     reference_subset: xr.Dataset,
+    level_sel: dict[str, object],
 ) -> tuple[xr.DataArray, xr.DataArray | None, xr.DataArray, xr.DataArray | None]:
-    val_p1 = validation_subset[var].isel(ctx.point1_sel).load()
-    val_p2 = validation_subset[var].isel(ctx.point2_sel).load()
+    val = validation_subset[var]
+    if level_sel:
+        val = val.sel(level_sel)
+    val_p1 = val.isel(ctx.point1_sel).load()
+    val_p2 = val.isel(ctx.point2_sel).load()
     ref_p1: xr.DataArray | None = None
     ref_p2: xr.DataArray | None = None
-    if var in reference_subset.data_vars:
+    if var in reference_subset.data_vars and (
+        not level_sel or next(iter(level_sel)) in reference_subset[var].dims
+    ):
         assert "latitude" in reference_subset.dims
         assert "longitude" in reference_subset.dims
-        ref_p1 = (
-            reference_subset[var]
-            .sel(latitude=ctx.point1_lat, longitude=ctx.point1_lon, method="nearest")
-            .load()
-        )
-        ref_p2 = (
-            reference_subset[var]
-            .sel(latitude=ctx.point2_lat, longitude=ctx.point2_lon, method="nearest")
-            .load()
-        )
+        ref = reference_subset[var]
+        if level_sel:
+            ref = ref.sel(level_sel, method="nearest")
+        ref_p1 = ref.sel(
+            latitude=ctx.point1_lat, longitude=ctx.point1_lon, method="nearest"
+        ).load()
+        ref_p2 = ref.sel(
+            latitude=ctx.point2_lat, longitude=ctx.point2_lon, method="nearest"
+        ).load()
     return val_p1, ref_p1, val_p2, ref_p2
 
 
@@ -230,8 +240,10 @@ def run_compare_timeseries(ctx: RunContext) -> None:
 
     for i, var in enumerate(ctx.variables):
         stats = ctx.stats_for(var)
+        level_sel = select_var_level(ctx, var, stats)
+        level_note = level_label(stats)
         val_p1, ref_p1, val_p2, ref_p2 = _load_timeseries_for_var(
-            var, ctx, validation_subset, reference_subset
+            var, ctx, validation_subset, reference_subset, level_sel
         )
         _store_temporal_stats(stats, val_p1, val_p2, ref_p1, ref_p2)
         units = stats.units or ""
@@ -249,7 +261,7 @@ def run_compare_timeseries(ctx: RunContext) -> None:
             val_label,
             ref_label,
             units,
-            f"{var} — {p1_title_suffix}",
+            f"{var}{level_note} — {p1_title_suffix}",
         )
         _draw_timeseries_at_point(
             axes_v[0, 1],
@@ -260,12 +272,13 @@ def run_compare_timeseries(ctx: RunContext) -> None:
             val_label,
             ref_label,
             units,
-            f"{var} — {p2_title_suffix}",
+            f"{var}{level_note} — {p2_title_suffix}",
         )
         fig_v.suptitle(
-            f"{var}\n{val_label} vs {ref_label}\n{title_suffix}", fontsize=11
+            f"{var}{level_note}\n{val_label} vs {ref_label}\n{title_suffix}",
+            fontsize=11,
         )
-        out_path = ctx.output_dir / f"temporal_{var}.png"
+        out_path = ctx.output_dir / f"temporal_{var_slug(var)}.png"
         fig_v.savefig(out_path, dpi=80, bbox_inches="tight")
         plt.close(fig_v)
         stats.temporal_plot = out_path.name
@@ -280,7 +293,7 @@ def run_compare_timeseries(ctx: RunContext) -> None:
             val_label,
             ref_label,
             units,
-            f"{var} — {p1_title_suffix}",
+            f"{var}{level_note} — {p1_title_suffix}",
         )
         _draw_timeseries_at_point(
             axes_c[i, 1],
@@ -291,7 +304,7 @@ def run_compare_timeseries(ctx: RunContext) -> None:
             val_label,
             ref_label,
             units,
-            f"{var} — {p2_title_suffix}",
+            f"{var}{level_note} — {p2_title_suffix}",
         )
 
         log.info(
@@ -317,6 +330,7 @@ def compare_timeseries(
     show_plot: bool = False,
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
+    level: float | None = level_option,
     output_dir: Path | None = output_dir_option,
 ) -> None:
     """Create per-variable + combined timeseries comparison plots."""
@@ -349,6 +363,8 @@ def compare_timeseries(
         point2_lon=lon2,
         ensemble_member=None,
         variables=selected_vars,
+        is_virtual=is_virtual_store(validation_url),
+        level_override=level,
     )
     run_compare_timeseries(ctx)
 
