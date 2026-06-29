@@ -161,8 +161,10 @@ class VirtualRegionJob(
             while pending:
                 tick_start = time.monotonic()
                 available = self.discover_available(pending)
+                discover_s = time.monotonic() - tick_start
                 if available:
                     coords, sizes = zip(*available, strict=True)
+                    build_start = time.monotonic()
                     refs_per_file = pool.map(self._file_refs_or_skip, coords, sizes)
                     # Drop files that yielded no refs (skipped as unreadable).
                     batch = [
@@ -170,13 +172,15 @@ class VirtualRegionJob(
                         for coord, refs in zip(coords, refs_per_file, strict=True)
                         if refs
                     ]
+                    build_s = time.monotonic() - build_start
                     ready = {id(coord) for coord in coords}
                     pending = [coord for coord in pending if id(coord) not in ready]
                     skipped = len(coords) - len(batch)
                     log.info(
                         f"Ingesting {len(batch)} files"
                         f"{f' ({skipped} skipped)' if skipped else ''}, "
-                        f"{len(pending)} still pending"
+                        f"{len(pending)} still pending "
+                        f"(discover {discover_s:.1f}s, build {build_s:.1f}s)"
                     )
                     if batch:
                         yield batch
@@ -262,13 +266,20 @@ class VirtualRegionJob(
                 self.sync_dims_to(stores, needed_size)
                 current_size = needed_size
 
+            emit_start = time.monotonic()
             self._emit_refs(stores, refs)
+            emit_s = time.monotonic() - emit_start
 
             now = pd.Timestamp.now(tz="UTC")
+            commit_start = time.monotonic()
             storage.commit_if_icechunk(
                 f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
                 primary_session.store,
                 [s.store for s in replica_sessions],
+            )
+            log.info(
+                f"Committed {len(refs)} refs "
+                f"(emit {emit_s:.1f}s, commit {time.monotonic() - commit_start:.1f}s)"
             )
 
     def _assert_probe_chunk_covered(
