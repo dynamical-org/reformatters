@@ -1,5 +1,4 @@
 import asyncio
-import os
 import time
 from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -60,8 +59,8 @@ class VirtualRegionJob(
 
     # When polling, pace each discovery sweep to at most one per tick.
     tick_interval: ClassVar[Timedelta] = pd.Timedelta("1s")
-    # Concurrent file downloads while building refs. High concurrency for small .idx files.
-    download_concurrency: ClassVar[int] = (os.cpu_count() or 1) * 16
+    # Concurrent file downloads while building refs; small .idx files, so IO-bound.
+    download_concurrency: ClassVar[int] = 64
 
     # ----- Overridable methods -----
     # A dataset implements file_refs and generate_source_file_coords (from

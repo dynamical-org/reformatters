@@ -63,9 +63,8 @@ class NoaaHrrrForecast48HourSpatialDataset(
             pod_active_deadline=timedelta(hours=1, minutes=40),
             image=image_tag,
             dataset_id=self.dataset_id,
-            # Single-threaded ingest, ~0.7 GiB peak per init measured locally.
             cpu="1.5",
-            memory="2G",
+            memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
         validation_cron_job = ValidationCronJob(
@@ -76,7 +75,7 @@ class NoaaHrrrForecast48HourSpatialDataset(
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="1.5",
-            memory="2G",
+            memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
 
