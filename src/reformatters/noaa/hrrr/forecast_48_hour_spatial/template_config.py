@@ -120,6 +120,9 @@ class NoaaHrrrForecast48HourSpatialTemplateConfig(NoaaHrrrCommonTemplateConfig):
         # gribberish decodes the HRRR grid south-first (row 0 = southernmost), the
         # opposite of GDAL's north-first order the materialized config uses. Order y
         # ascending so the virtual chunk data aligns with its coordinates. x is unaffected.
+        # Interim: the catalog convention is north-first/descending (see AGENTS.md); this
+        # dataset stays south-first until gribberish can flip latitude on decode, then
+        # re-orients to match. It is not published until then.
         y_north_first, x_coords = super()._y_x_coordinates()
         return np.ascontiguousarray(y_north_first[::-1]), x_coords
 
