@@ -25,10 +25,7 @@ def _lead_time_str(var: DataVar[NoaaInternalAttrs], lead_hours: int) -> str:
             diff = lead_hours % reset_hours
             reset_hour = lead_hours - diff if diff != 0 else lead_hours - reset_hours
 
-        if var.internal_attrs.deaccumulate_to_rate:
-            step_type = "acc"
-        elif var.attrs.step_type == "accum":
-            # Raw accumulation (virtual datasets serve the window total un-rated).
+        if var.internal_attrs.deaccumulate_to_rate or var.attrs.step_type == "accum":
             step_type = "acc"
         elif var.attrs.step_type == "avg":
             step_type = "ave"  # yep
@@ -47,6 +44,26 @@ def _lead_time_str(var: DataVar[NoaaInternalAttrs], lead_hours: int) -> str:
     if var.attrs.step_type == "instant":
         return f"{lead_hours} hour fcst"
     raise ValueError(f"Unhandled grib lead/accumulation hours: {var.name}")
+
+
+def parse_grib_index_lines(
+    index_path: PathLike[str],
+) -> list[tuple[int, str, str, str]]:
+    """Parse a NOAA .idx into (start_byte, element, level, window) per message.
+
+    Line format: `<msg#>:<start>:d=<YYYYMMDDHH>:<ELEMENT>:<LEVEL>:<WINDOW>:`. The
+    element field never contains a colon (even the unnamed `var discipline=...`
+    message), so a plain split is safe.
+    """
+    lines = []
+    with open(index_path) as f:
+        for raw_line in f:
+            line = raw_line.rstrip("\n")
+            if not line:
+                continue
+            fields = line.split(":")
+            lines.append((int(fields[1]), fields[3], fields[4], fields[5]))
+    return lines
 
 
 def grib_message_byte_ranges_from_index(

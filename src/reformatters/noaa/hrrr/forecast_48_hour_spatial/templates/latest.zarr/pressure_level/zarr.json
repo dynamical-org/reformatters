@@ -3,7 +3,7 @@
     "dataset_id": "noaa-hrrr-forecast-48-hour-spatial",
     "dataset_version": "0.1.0",
     "name": "NOAA HRRR forecast, 48 hour, spatial",
-    "description": "Weather forecasts from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP, optimized for spatial (map) access patterns.",
+    "description": "Weather forecasts from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
     "attribution": "NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
     "license": "CC-BY-4.0",
     "spatial_domain": "Continental United States",

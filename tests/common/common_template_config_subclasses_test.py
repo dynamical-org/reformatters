@@ -136,7 +136,7 @@ def test_update_template_fill_values_are_correct(
 
     # Flattened so vertical-group vars (keyed by path) are visible; xr.open_zarr
     # would expose only the root group.
-    ds = validation.open_validation_dataset(
+    ds = validation.open_flattened_dataset(
         template_setup.roundtrip_template_path, consolidated=False
     )
     for var in template_config.data_vars:

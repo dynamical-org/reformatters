@@ -73,7 +73,7 @@ def assert_configured_validators(dataset: DynamicalDataset) -> None:
     (manifest-aware validators for them are a separate planned phase).
     """
     store = dataset.store_factory.primary_store()
-    ds = validation.open_validation_dataset(
+    ds = validation.open_flattened_dataset(
         store,
         consolidated=not isinstance(store, icechunk.store.IcechunkStore),
     )
@@ -513,7 +513,7 @@ def test_validate_dataset_calls_validators(
     mock_replica_store_ds = Mock()
     monkeypatch.setattr(
         validation,
-        "open_validation_dataset",
+        "open_flattened_dataset",
         lambda store, *, consolidated: mock_replica_store_ds,
     )
 

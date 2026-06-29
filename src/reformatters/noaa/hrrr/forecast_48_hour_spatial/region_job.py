@@ -1,7 +1,5 @@
 from collections.abc import Callable, Mapping, Sequence
-from os import PathLike
 from pathlib import Path
-from typing import ClassVar
 
 import pandas as pd
 import xarray as xr
@@ -23,7 +21,7 @@ from reformatters.noaa.hrrr.forecast_48_hour_spatial.template_config import (
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 from reformatters.noaa.hrrr.region_job import DownloadSource, NoaaHrrrSourceFileCoord
-from reformatters.noaa.noaa_grib_index import _lead_time_str
+from reformatters.noaa.noaa_grib_index import _lead_time_str, parse_grib_index_lines
 from reformatters.noaa.noaa_utils import has_hour_0_values
 
 log = get_logger(__name__)
@@ -69,9 +67,6 @@ class NoaaHrrrForecast48HourSpatialRegionJob(
     VirtualRegionJob[NoaaHrrrDataVar, NoaaHrrrForecast48HourSpatialSourceFileCoord]
 ):
     """RegionJob for the virtual HRRR 48-hour spatial forecast dataset."""
-
-    # .idx sidecars are small latency-bound requests; widen the pool like GEFS.
-    download_concurrency: ClassVar[int] = 64
 
     def generate_source_file_coords(
         self,
@@ -124,7 +119,7 @@ class NoaaHrrrForecast48HourSpatialRegionJob(
             coord.get_index_url(), self.dataset_id, region=_S3_BUCKET_REGION
         )
         try:
-            index_lines = _parse_index_lines(index_path)
+            index_lines = parse_grib_index_lines(index_path)
         finally:
             # Index files accumulate by the millions in backfills; never keep them.
             index_path.unlink()
@@ -229,21 +224,3 @@ class NoaaHrrrForecast48HourSpatialRegionJob(
             processing_mode="update",
         )
         return [job], template_ds
-
-
-def _parse_index_lines(index_path: PathLike[str]) -> list[tuple[int, str, str, str]]:
-    """Parse a NOAA .idx into (start_byte, element, level, window) per message.
-
-    Line format: `<msg#>:<start>:d=<YYYYMMDDHH>:<ELEMENT>:<LEVEL>:<WINDOW>:`. The
-    element field never contains a colon (even the unnamed `var discipline=...`
-    message), so a plain split is safe.
-    """
-    lines = []
-    with open(index_path) as f:
-        for raw_line in f:
-            line = raw_line.rstrip("\n")
-            if not line:
-                continue
-            fields = line.split(":")
-            lines.append((int(fields[1]), fields[3], fields[4], fields[5]))
-    return lines

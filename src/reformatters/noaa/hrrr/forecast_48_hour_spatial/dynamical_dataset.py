@@ -35,8 +35,6 @@ class NoaaHrrrForecast48HourSpatialDataset(
         NoaaHrrrForecast48HourSpatialRegionJob
     )
 
-    # default_factory because icechunk's container objects can't be deep-copied
-    # as a plain pydantic default would be.
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=(
@@ -46,14 +44,14 @@ class NoaaHrrrForecast48HourSpatialDataset(
             ),
             # One week of inits (4 cycles/day) per manifest split. Each commit rewrites
             # only the touched array's active split, so this caps commit cost: the
-            # largest arrays (model_level vars, 49 leads x 50 levels per init) reach
-            # ~70k refs (~12 MB) at week end - comparable to the GEFS spatial split.
+            # largest array (a model_level var, 49 leads x 50 levels = 2450 refs/init)
+            # reaches ~68.6k refs per split (28 inits) at week end.
             manifest_split=manifest_append_dim_split(split_size=7 * 4, dim="init_time"),
         )
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        # Single-writer; one fire per 6h cycle just before the lower leads publish
+        # Run once per 6h cycle just before the first lead times publish
         # (~init+50m), polling through f48 (~init+2h on S3). The pod exits when the
         # window is fully ingested; the deadline bounds waiting on a file that never
         # publishes and stays well under the 6h gap so fires never overlap.
@@ -69,7 +67,7 @@ class NoaaHrrrForecast48HourSpatialDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            # After each update's fire (:50) + its 1h40m deadline.
+            # After each update (:50) + its 1h40m deadline.
             schedule="40 2,8,14,20 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,

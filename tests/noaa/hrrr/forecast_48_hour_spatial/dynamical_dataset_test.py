@@ -74,7 +74,7 @@ def test_backfill_local_and_operational_update(
         filter_variable_names=_FILTER_VARS,
     )
 
-    ds = validation.open_validation_dataset(
+    ds = validation.open_flattened_dataset(
         dataset.store_factory.primary_store(), consolidated=False
     )
     assert ds.init_time.values[-1] == np.datetime64("2024-06-01T00:00")
@@ -131,7 +131,7 @@ def test_backfill_local_and_operational_update(
 
     dataset.update("test-update")
 
-    updated = validation.open_validation_dataset(
+    updated = validation.open_flattened_dataset(
         dataset.store_factory.primary_store(), consolidated=False
     )
     # The update window (24h before 08:00) ingests the 06z init too.
@@ -174,7 +174,7 @@ def test_dropin_matches_materialized(
             "snow_area_fraction_surface",
         ],
     )
-    v = validation.open_validation_dataset(
+    v = validation.open_flattened_dataset(
         vds.store_factory.primary_store(), consolidated=False
     )
     y_value = float(v.y.values[_Y])

@@ -437,7 +437,7 @@ def test_cf_standard_name_and_units(
 
     # Flattened so vertical-group vars (keyed by path, e.g. pressure_level/temperature)
     # are visible; xr.open_zarr would expose only the root group.
-    ds = validation.open_validation_dataset(template_path, consolidated=False)
+    ds = validation.open_flattened_dataset(template_path, consolidated=False)
     recognized_standard_names = ds.cf.standard_names
 
     errors: list[str] = []

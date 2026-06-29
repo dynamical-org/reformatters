@@ -6,7 +6,13 @@ import numcodecs.abc
 import pydantic
 
 from reformatters.common.pydantic import FrozenBaseModel
-from reformatters.common.types import ROOT, Group, TimedeltaUnits, TimestampUnits
+from reformatters.common.types import (
+    ROOT,
+    CodecConfig,
+    Group,
+    TimedeltaUnits,
+    TimestampUnits,
+)
 
 
 def var_path(group: Group, name: str) -> str:
@@ -164,14 +170,14 @@ class Encoding(pydantic.BaseModel):
     fill_value: float | int | bool
 
     filters: Annotated[
-        Sequence[dict[str, Any]] | None,
+        Sequence[CodecConfig] | None,
         pydantic.BeforeValidator(codecs_to_dicts),
     ] = None
-    compressors: Sequence[dict[str, Any]] | None = None
+    compressors: Sequence[CodecConfig] | None = None
     # zarr v3 ArrayBytesCodec serializer (the single slot between filters and
     # compressors). None means zarr's default BytesCodec. Virtual datasets set
     # this to a per-variable GribberishCodec dict.
-    serializer: dict[str, Any] | None = None
+    serializer: CodecConfig | None = None
 
     calendar: Literal["proleptic_gregorian"] | None = None  # For timestamps only
     # The _encoded_ units, for timestamps and timedeltas only

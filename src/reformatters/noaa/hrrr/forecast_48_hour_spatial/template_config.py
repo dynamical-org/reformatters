@@ -20,7 +20,14 @@ from reformatters.common.config_models import (
 )
 from reformatters.common.pydantic import replace
 from reformatters.common.template_config import SPATIAL_REF_COORDS
-from reformatters.common.types import AppendDim, Array1D, Dim, Timedelta, Timestamp
+from reformatters.common.types import (
+    AppendDim,
+    Array1D,
+    CodecConfig,
+    Dim,
+    Timedelta,
+    Timestamp,
+)
 from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
 from reformatters.noaa.hrrr.hrrr_config_models import (
     NoaaHrrrDataVar,
@@ -72,162 +79,6 @@ _WINDOW_ATTRS: dict[WindowKind, tuple[str, Timedelta | None]] = {
 }
 
 
-def _virtual_encoding(element: str, group: Group, filters: Sequence[Any]) -> Encoding:
-    """One chunk per GRIB message: chunk 1 along init_time/lead_time/vertical, full
-    y/x, no shards, no compressors. GribberishCodec decodes the raw message and any
-    array->array filters (K->C, unit scaling) are chained on read."""
-    if group is ROOT:
-        chunks: tuple[int, ...] = (1, 1, _GRID_NY, _GRID_NX)
-    else:
-        chunks = (1, 1, _GRID_NY, _GRID_NX, 1)
-    return Encoding(
-        # GribberishCodec decodes to float64 natively; declaring float64 avoids a cast.
-        dtype="float64",
-        fill_value=np.nan,
-        chunks=chunks,
-        shards=None,
-        compressors=(),
-        filters=filters,
-        # adjust_longitude_range is a no-op on HRRR's projected grid (verified by a
-        # real-message decode); applied uniformly per the drop-in codec strategy.
-        serializer=GribberishCodec(var=element, adjust_longitude_range=True).to_dict(),
-    )
-
-
-def _data_var(
-    name: str,
-    *,
-    element: str,
-    grib_index_level: str,
-    file_type: NoaaHrrrFileType,
-    group: Group,
-    window: WindowKind,
-    short_name: str,
-    long_name: str,
-    units: str,
-    standard_name: str | None,
-    comment: str | None,
-    hour_0: bool | None,
-    filters: Sequence[Any] | None = None,
-) -> NoaaHrrrDataVar:
-    step_type, window_reset_frequency = _WINDOW_ATTRS[window]
-    # Default to the K->C filter for temperature/dew point; a var may override with an
-    # explicit unit-scaling filter (e.g. WEASD kg m-2 -> m, SNOWC percent -> fraction).
-    resolved_filters: Sequence[Any] = (
-        filters
-        if filters is not None
-        else ([_KELVIN_TO_CELSIUS] if element in _CELSIUS_ELEMENTS else ())
-    )
-    return NoaaHrrrDataVar(
-        name=name,
-        group=group,
-        encoding=_virtual_encoding(element, group, resolved_filters),
-        attrs=DataVarAttrs(
-            short_name=short_name,
-            long_name=long_name,
-            units=units,
-            standard_name=standard_name,
-            step_type=step_type,  # ty: ignore[invalid-argument-type]
-            comment=comment,
-        ),
-        internal_attrs=NoaaHrrrInternalAttrs(
-            grib_element=element,
-            # Group vars carry a "{level} ..." format string the region job fills per
-            # level; root vars carry the literal idx level string.
-            grib_index_level=grib_index_level,
-            hrrr_file_type=file_type,
-            window_reset_frequency=window_reset_frequency,
-            hour_0_values_override=hour_0,
-            # Virtual chunks are never rewritten, so no rounding and no rasterio band
-            # description / index position (unused fields the base model requires).
-            keep_mantissa_bits="no-rounding",
-            grib_description="",
-            index_position=0,
-        ),
-    )
-
-
-def _root(
-    name: str,
-    *,
-    element: str,
-    level: str,
-    window: WindowKind = "instant",
-    short_name: str,
-    long_name: str,
-    units: str,
-    standard_name: str | None = None,
-    comment: str | None = None,
-    hour_0: bool | None = None,
-    filters: Sequence[Any] | None = None,
-) -> NoaaHrrrDataVar:
-    return _data_var(
-        name,
-        element=element,
-        grib_index_level=level,
-        file_type="sfc",
-        group=ROOT,
-        window=window,
-        short_name=short_name,
-        long_name=long_name,
-        units=units,
-        standard_name=standard_name,
-        comment=comment,
-        hour_0=hour_0,
-        filters=filters,
-    )
-
-
-def _pressure(
-    name: str,
-    *,
-    element: str,
-    short_name: str,
-    long_name: str,
-    units: str,
-    standard_name: str | None = None,
-) -> NoaaHrrrDataVar:
-    return _data_var(
-        name,
-        element=element,
-        grib_index_level="{level} mb",
-        file_type="prs",
-        group="pressure_level",
-        window="instant",
-        short_name=short_name,
-        long_name=long_name,
-        units=units,
-        standard_name=standard_name,
-        comment=None,
-        hour_0=None,
-    )
-
-
-def _model(
-    name: str,
-    *,
-    element: str,
-    short_name: str,
-    long_name: str,
-    units: str,
-    standard_name: str | None = None,
-) -> NoaaHrrrDataVar:
-    return _data_var(
-        name,
-        element=element,
-        grib_index_level="{level} hybrid level",
-        file_type="nat",
-        group="model_level",
-        window="instant",
-        short_name=short_name,
-        long_name=long_name,
-        units=units,
-        standard_name=standard_name,
-        comment=None,
-        hour_0=None,
-    )
-
-
 class NoaaHrrrForecast48HourSpatialTemplateConfig(NoaaHrrrCommonTemplateConfig):
     """Virtual, spatially-chunked (map-optimized) HRRR 48-hour forecast.
 
@@ -254,7 +105,7 @@ class NoaaHrrrForecast48HourSpatialTemplateConfig(NoaaHrrrCommonTemplateConfig):
             dataset_id="noaa-hrrr-forecast-48-hour-spatial",
             dataset_version="0.1.0",
             name="NOAA HRRR forecast, 48 hour, spatial",
-            description="Weather forecasts from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP, optimized for spatial (map) access patterns.",
+            description="Weather forecasts from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
             attribution="NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
             license="CC-BY-4.0",
             spatial_domain="Continental United States",
@@ -268,8 +119,7 @@ class NoaaHrrrForecast48HourSpatialTemplateConfig(NoaaHrrrCommonTemplateConfig):
     def _y_x_coordinates(self) -> tuple[Array1D[np.float64], Array1D[np.float64]]:
         # gribberish decodes the HRRR grid south-first (row 0 = southernmost), the
         # opposite of GDAL's north-first order the materialized config uses. Order y
-        # ascending so the virtual chunk data aligns with its coordinates (native grid;
-        # see docs/virtual_datasets.md). x is unaffected.
+        # ascending so the virtual chunk data aligns with its coordinates. x is unaffected.
         y_north_first, x_coords = super()._y_x_coordinates()
         return np.ascontiguousarray(y_north_first[::-1]), x_coords
 
@@ -464,9 +314,166 @@ class NoaaHrrrForecast48HourSpatialTemplateConfig(NoaaHrrrCommonTemplateConfig):
         return [*_root_data_vars(), *_pressure_data_vars(), *_model_data_vars()]
 
 
+def _virtual_encoding(
+    element: str, group: Group, filters: Sequence[CodecConfig]
+) -> Encoding:
+    """One chunk per GRIB message: chunk 1 along init_time/lead_time/vertical, full
+    y/x, no shards, no compressors. GribberishCodec decodes the raw message and any
+    array->array filters (K->C, unit scaling) are chained on read."""
+    if group is ROOT:
+        chunks: tuple[int, ...] = (1, 1, _GRID_NY, _GRID_NX)
+    else:
+        chunks = (1, 1, _GRID_NY, _GRID_NX, 1)
+    return Encoding(
+        # GribberishCodec decodes to float64 natively; declaring float64 avoids a cast.
+        dtype="float64",
+        fill_value=np.nan,
+        chunks=chunks,
+        shards=None,
+        compressors=(),
+        filters=filters,
+        # adjust_longitude_range is a no-op on HRRR's projected grid; applied for cross dataset consistency.
+        serializer=GribberishCodec(var=element, adjust_longitude_range=True).to_dict(),
+    )
+
+
+def _data_var(
+    name: str,
+    *,
+    element: str,
+    grib_index_level: str,
+    file_type: NoaaHrrrFileType,
+    group: Group,
+    window: WindowKind,
+    short_name: str,
+    long_name: str,
+    units: str,
+    standard_name: str | None,
+    comment: str | None,
+    hour_0: bool | None,
+    filters: Sequence[CodecConfig] | None = None,
+) -> NoaaHrrrDataVar:
+    step_type, window_reset_frequency = _WINDOW_ATTRS[window]
+    # Default to the K->C filter for temperature/dew point; a var may override with an
+    # explicit unit-scaling filter (e.g. WEASD kg m-2 -> m, SNOWC percent -> fraction).
+    resolved_filters: Sequence[CodecConfig] = (
+        filters
+        if filters is not None
+        else ([_KELVIN_TO_CELSIUS] if element in _CELSIUS_ELEMENTS else ())
+    )
+    return NoaaHrrrDataVar(
+        name=name,
+        group=group,
+        encoding=_virtual_encoding(element, group, resolved_filters),
+        attrs=DataVarAttrs(
+            short_name=short_name,
+            long_name=long_name,
+            units=units,
+            standard_name=standard_name,
+            step_type=step_type,  # ty: ignore[invalid-argument-type]
+            comment=comment,
+        ),
+        internal_attrs=NoaaHrrrInternalAttrs(
+            grib_element=element,
+            # Group vars carry a "{level} ..." format string the region job fills per
+            # level; root vars carry the literal idx level string.
+            grib_index_level=grib_index_level,
+            hrrr_file_type=file_type,
+            window_reset_frequency=window_reset_frequency,
+            hour_0_values_override=hour_0,
+            # Virtual chunks are never rewritten, so no rounding and no rasterio band
+            # description / index position (unused fields the base model requires).
+            keep_mantissa_bits="no-rounding",
+            grib_description="",
+            index_position=0,
+        ),
+    )
+
+
+def _root_var(
+    name: str,
+    *,
+    element: str,
+    level: str,
+    window: WindowKind = "instant",
+    short_name: str,
+    long_name: str,
+    units: str,
+    standard_name: str | None = None,
+    comment: str | None = None,
+    hour_0: bool | None = None,
+    filters: Sequence[CodecConfig] | None = None,
+) -> NoaaHrrrDataVar:
+    return _data_var(
+        name,
+        element=element,
+        grib_index_level=level,
+        file_type="sfc",
+        group=ROOT,
+        window=window,
+        short_name=short_name,
+        long_name=long_name,
+        units=units,
+        standard_name=standard_name,
+        comment=comment,
+        hour_0=hour_0,
+        filters=filters,
+    )
+
+
+def _pressure_var(
+    name: str,
+    *,
+    element: str,
+    short_name: str,
+    long_name: str,
+    units: str,
+    standard_name: str | None = None,
+) -> NoaaHrrrDataVar:
+    return _data_var(
+        name,
+        element=element,
+        grib_index_level="{level} mb",
+        file_type="prs",
+        group="pressure_level",
+        window="instant",
+        short_name=short_name,
+        long_name=long_name,
+        units=units,
+        standard_name=standard_name,
+        comment=None,
+        hour_0=None,
+    )
+
+
+def _model_var(
+    name: str,
+    *,
+    element: str,
+    short_name: str,
+    long_name: str,
+    units: str,
+    standard_name: str | None = None,
+) -> NoaaHrrrDataVar:
+    return _data_var(
+        name,
+        element=element,
+        grib_index_level="{level} hybrid level",
+        file_type="nat",
+        group="model_level",
+        window="instant",
+        short_name=short_name,
+        long_name=long_name,
+        units=units,
+        standard_name=standard_name,
+        comment=None,
+        hour_0=None,
+    )
+
+
 def _root_data_vars() -> list[NoaaHrrrDataVar]:
     return [
-        _root(
+        _root_var(
             "composite_reflectivity",
             element="REFC",
             level="entire atmosphere",
@@ -475,7 +482,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
         ),
-        _root(
+        _root_var(
             "echo_top",
             element="RETOP",
             level="cloud top",
@@ -483,7 +490,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Echo top",
             units="m",
         ),
-        _root(
+        _root_var(
             "vertically_integrated_liquid_atmosphere",
             element="VIL",
             level="entire atmosphere",
@@ -491,7 +498,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Vertically-integrated liquid",
             units="kg m-2",
         ),
-        _root(
+        _root_var(
             "visibility_surface",
             element="VIS",
             level="surface",
@@ -500,7 +507,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
             standard_name="visibility_in_air",
         ),
-        _root(
+        _root_var(
             "derived_radar_reflectivity_1000m",
             element="REFD",
             level="1000 m above ground",
@@ -509,7 +516,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
         ),
-        _root(
+        _root_var(
             "derived_radar_reflectivity_4000m",
             element="REFD",
             level="4000 m above ground",
@@ -518,7 +525,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
         ),
-        _root(
+        _root_var(
             "derived_radar_reflectivity_263k",
             element="REFD",
             level="263 K level",
@@ -527,7 +534,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
         ),
-        _root(
+        _root_var(
             "wind_gust_surface",
             element="GUST",
             level="surface",
@@ -536,7 +543,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m s-1",
             standard_name="wind_speed_of_gust",
         ),
-        _root(
+        _root_var(
             "max_upward_vertical_velocity_1000_100mb",
             element="MAXUVV",
             level="100-1000 mb above ground",
@@ -546,7 +553,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m s-1",
             standard_name="upward_air_velocity",
         ),
-        _root(
+        _root_var(
             "max_downward_vertical_velocity_1000_100mb",
             element="MAXDVV",
             level="100-1000 mb above ground",
@@ -555,7 +562,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Maximum downward vertical velocity",
             units="m s-1",
         ),
-        _root(
+        _root_var(
             "vertical_velocity_geometric_0p5_0p8_sigma",
             element="DZDT",
             level="0.5-0.8 sigma layer",
@@ -565,7 +572,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m s-1",
             standard_name="upward_air_velocity",
         ),
-        _root(
+        _root_var(
             "pressure_reduced_to_mean_sea_level",
             element="MSLMA",
             level="mean sea level",
@@ -574,7 +581,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="Pa",
             standard_name="air_pressure_at_mean_sea_level",
         ),
-        _root(
+        _root_var(
             "hourly_maximum_radar_reflectivity_1000m",
             element="MAXREF",
             level="1000 m above ground",
@@ -584,7 +591,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
         ),
-        _root(
+        _root_var(
             "derived_radar_reflectivity_263k_max",
             element="REFD",
             level="263 K level",
@@ -594,7 +601,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
         ),
-        _root(
+        _root_var(
             "max_updraft_helicity_5000_2000m",
             element="MXUPHL",
             level="5000-2000 m above ground",
@@ -603,7 +610,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Updraft Helicity",
             units="m2 s-2",
         ),
-        _root(
+        _root_var(
             "min_updraft_helicity_5000_2000m",
             element="MNUPHL",
             level="5000-2000 m above ground",
@@ -612,7 +619,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Minimum updraft helicity",
             units="m2 s-2",
         ),
-        _root(
+        _root_var(
             "max_updraft_helicity_2000_0m",
             element="MXUPHL",
             level="2000-0 m above ground",
@@ -621,7 +628,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Updraft Helicity",
             units="m2 s-2",
         ),
-        _root(
+        _root_var(
             "min_updraft_helicity_2000_0m",
             element="MNUPHL",
             level="2000-0 m above ground",
@@ -630,7 +637,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Minimum updraft helicity",
             units="m2 s-2",
         ),
-        _root(
+        _root_var(
             "max_updraft_helicity_3000_0m",
             element="MXUPHL",
             level="3000-0 m above ground",
@@ -639,7 +646,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Updraft Helicity",
             units="m2 s-2",
         ),
-        _root(
+        _root_var(
             "min_updraft_helicity_3000_0m",
             element="MNUPHL",
             level="3000-0 m above ground",
@@ -648,7 +655,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Minimum updraft helicity",
             units="m2 s-2",
         ),
-        _root(
+        _root_var(
             "max_relative_vorticity_2000_0m",
             element="RELV",
             level="2000-0 m above ground",
@@ -658,7 +665,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="s-1",
             standard_name="atmosphere_upward_relative_vorticity",
         ),
-        _root(
+        _root_var(
             "max_relative_vorticity_1000_0m",
             element="RELV",
             level="1000-0 m above ground",
@@ -668,7 +675,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="s-1",
             standard_name="atmosphere_upward_relative_vorticity",
         ),
-        _root(
+        _root_var(
             "max_hail_diameter_atmosphere",
             element="HAIL",
             level="entire atmosphere",
@@ -677,7 +684,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Hail",
             units="m",
         ),
-        _root(
+        _root_var(
             "max_hail_diameter_0p1sigma",
             element="HAIL",
             level="0.1 sigma level",
@@ -686,7 +693,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Hail",
             units="m",
         ),
-        _root(
+        _root_var(
             "max_hail_diameter_surface",
             element="HAIL",
             level="surface",
@@ -695,7 +702,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Hail",
             units="m",
         ),
-        _root(
+        _root_var(
             "max_column_integrated_graupel_atmosphere",
             element="TCOLG",
             level="entire atmosphere (considered as a single layer)",
@@ -705,7 +712,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="kg m-2",
             standard_name="atmosphere_mass_content_of_graupel",
         ),
-        _root(
+        _root_var(
             "lightning_standard_deviation_1m",
             element="LTNGSD",
             level="1 m above ground",
@@ -713,7 +720,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Lightning standard deviation",
             units="1",
         ),
-        _root(
+        _root_var(
             "lightning_standard_deviation_2m",
             element="LTNGSD",
             level="2 m above ground",
@@ -721,7 +728,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Lightning standard deviation",
             units="1",
         ),
-        _root(
+        _root_var(
             "lightning_atmosphere",
             element="LTNG",
             level="entire atmosphere",
@@ -729,7 +736,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Lightning",
             units="1",
         ),
-        _root(
+        _root_var(
             "wind_u_80m",
             element="UGRD",
             level="80 m above ground",
@@ -738,7 +745,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m s-1",
             standard_name="eastward_wind",
         ),
-        _root(
+        _root_var(
             "wind_v_80m",
             element="VGRD",
             level="80 m above ground",
@@ -747,7 +754,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m s-1",
             standard_name="northward_wind",
         ),
-        _root(
+        _root_var(
             "pressure_surface",
             element="PRES",
             level="surface",
@@ -756,7 +763,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="Pa",
             standard_name="surface_air_pressure",
         ),
-        _root(
+        _root_var(
             "geopotential_height_surface",
             element="HGT",
             level="surface",
@@ -765,7 +772,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
             standard_name="geopotential_height",
         ),
-        _root(
+        _root_var(
             "temperature_surface",
             element="TMP",
             level="surface",
@@ -774,7 +781,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="degree_Celsius",
             standard_name="air_temperature",
         ),
-        _root(
+        _root_var(
             "total_snowfall_run_total_surface",
             element="ASNOW",
             level="surface",
@@ -784,7 +791,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
             standard_name="thickness_of_snowfall_amount",
         ),
-        _root(
+        _root_var(
             "moisture_availability_0m_underground",
             element="MSTAV",
             level="0 m underground",
@@ -792,7 +799,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Moisture availability",
             units="percent",
         ),
-        _root(
+        _root_var(
             "plant_canopy_surface_water_surface",
             element="CNWAT",
             level="surface",
@@ -801,7 +808,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="kg m-2",
             standard_name="canopy_water_amount",
         ),
-        _root(
+        _root_var(
             "snow_water_equivalent_surface",
             element="WEASD",
             level="surface",
@@ -811,7 +818,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             standard_name="lwe_thickness_of_surface_snow_amount",
             filters=[_WATER_KG_M2_TO_M_LWE],
         ),
-        _root(
+        _root_var(
             "snow_area_fraction_surface",
             element="SNOWC",
             level="surface",
@@ -821,7 +828,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             standard_name="surface_snow_area_fraction",
             filters=[_PERCENT_TO_FRACTION],
         ),
-        _root(
+        _root_var(
             "snow_thickness_surface",
             element="SNOD",
             level="surface",
@@ -830,7 +837,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
             standard_name="surface_snow_thickness",
         ),
-        _root(
+        _root_var(
             "temperature_2m",
             element="TMP",
             level="2 m above ground",
@@ -839,7 +846,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="degree_Celsius",
             standard_name="air_temperature",
         ),
-        _root(
+        _root_var(
             "potential_temperature_2m",
             element="POT",
             level="2 m above ground",
@@ -848,7 +855,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="K",
             standard_name="air_potential_temperature",
         ),
-        _root(
+        _root_var(
             "specific_humidity_2m",
             element="SPFH",
             level="2 m above ground",
@@ -857,7 +864,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="1",
             standard_name="specific_humidity",
         ),
-        _root(
+        _root_var(
             "dew_point_temperature_2m",
             element="DPT",
             level="2 m above ground",
@@ -866,7 +873,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="degree_Celsius",
             standard_name="dew_point_temperature",
         ),
-        _root(
+        _root_var(
             "relative_humidity_2m",
             element="RH",
             level="2 m above ground",
@@ -875,7 +882,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="percent",
             standard_name="relative_humidity",
         ),
-        _root(
+        _root_var(
             "mass_density_8m",
             element="MASSDEN",
             level="8 m above ground",
@@ -883,7 +890,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Mass density",
             units="kg m-3",
         ),
-        _root(
+        _root_var(
             "wind_u_10m",
             element="UGRD",
             level="10 m above ground",
@@ -892,7 +899,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m s-1",
             standard_name="eastward_wind",
         ),
-        _root(
+        _root_var(
             "wind_v_10m",
             element="VGRD",
             level="10 m above ground",
@@ -901,7 +908,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m s-1",
             standard_name="northward_wind",
         ),
-        _root(
+        _root_var(
             "max_wind_speed_10m",
             element="WIND",
             level="10 m above ground",
@@ -911,7 +918,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m s-1",
             standard_name="wind_speed",
         ),
-        _root(
+        _root_var(
             "max_wind_u_component_10m",
             element="MAXUW",
             level="10 m above ground",
@@ -920,7 +927,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Maximum 10 metre wind speed u component",
             units="m s-1",
         ),
-        _root(
+        _root_var(
             "max_wind_v_component_10m",
             element="MAXVW",
             level="10 m above ground",
@@ -929,7 +936,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Maximum 10 metre wind speed v component",
             units="m s-1",
         ),
-        _root(
+        _root_var(
             "percent_frozen_precipitation_surface",
             element="CPOFP",
             level="surface",
@@ -938,7 +945,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="percent",
             hour_0=False,
         ),
-        _root(
+        _root_var(
             "precipitation_rate_surface",
             element="PRATE",
             level="surface",
@@ -947,7 +954,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="kg m-2 s-1",
             standard_name="precipitation_flux",
         ),
-        _root(
+        _root_var(
             "total_precipitation_run_total_surface",
             element="APCP",
             level="surface",
@@ -957,7 +964,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="kg m-2",
             standard_name="precipitation_amount",
         ),
-        _root(
+        _root_var(
             "snowfall_water_equivalent_run_total_surface",
             element="WEASD",
             level="surface",
@@ -967,7 +974,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="kg m-2",
             standard_name="snowfall_amount",
         ),
-        _root(
+        _root_var(
             "frozen_precipitation_run_total_surface",
             element="FROZR",
             level="surface",
@@ -976,7 +983,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Frozen precipitation",
             units="kg m-2",
         ),
-        _root(
+        _root_var(
             "freezing_rain_run_total_surface",
             element="FRZR",
             level="surface",
@@ -985,7 +992,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Freezing Rain",
             units="kg m-2",
         ),
-        _root(
+        _root_var(
             "storm_surface_runoff_surface",
             element="SSRUN",
             level="surface",
@@ -995,7 +1002,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="kg m-2",
             standard_name="surface_runoff_amount",
         ),
-        _root(
+        _root_var(
             "baseflow_groundwater_runoff_surface",
             element="BGRUN",
             level="surface",
@@ -1005,7 +1012,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="kg m-2",
             standard_name="subsurface_runoff_amount",
         ),
-        _root(
+        _root_var(
             "total_precipitation_surface",
             element="APCP",
             level="surface",
@@ -1015,7 +1022,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="kg m-2",
             standard_name="precipitation_amount",
         ),
-        _root(
+        _root_var(
             "snowfall_water_equivalent_surface",
             element="WEASD",
             level="surface",
@@ -1025,7 +1032,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="kg m-2",
             standard_name="snowfall_amount",
         ),
-        _root(
+        _root_var(
             "frozen_precipitation_surface",
             element="FROZR",
             level="surface",
@@ -1034,7 +1041,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Frozen precipitation",
             units="kg m-2",
         ),
-        _root(
+        _root_var(
             "categorical_snow_surface",
             element="CSNOW",
             level="surface",
@@ -1044,7 +1051,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             comment="0=no; 1=yes",
             hour_0=False,
         ),
-        _root(
+        _root_var(
             "categorical_ice_pellets_surface",
             element="CICEP",
             level="surface",
@@ -1054,7 +1061,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             comment="0=no; 1=yes",
             hour_0=False,
         ),
-        _root(
+        _root_var(
             "categorical_freezing_rain_surface",
             element="CFRZR",
             level="surface",
@@ -1064,7 +1071,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             comment="0=no; 1=yes",
             hour_0=False,
         ),
-        _root(
+        _root_var(
             "categorical_rain_surface",
             element="CRAIN",
             level="surface",
@@ -1074,7 +1081,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             comment="0=no; 1=yes",
             hour_0=False,
         ),
-        _root(
+        _root_var(
             "surface_roughness_surface",
             element="SFCR",
             level="surface",
@@ -1083,7 +1090,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
             standard_name="surface_roughness_length",
         ),
-        _root(
+        _root_var(
             "friction_velocity_surface",
             element="FRICV",
             level="surface",
@@ -1092,7 +1099,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m s-1",
             standard_name="magnitude_of_surface_friction_velocity_in_air",
         ),
-        _root(
+        _root_var(
             "sensible_heat_flux_surface",
             element="SHTFL",
             level="surface",
@@ -1101,7 +1108,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="W m-2",
             standard_name="surface_upward_sensible_heat_flux",
         ),
-        _root(
+        _root_var(
             "latent_heat_flux_surface",
             element="LHTFL",
             level="surface",
@@ -1110,7 +1117,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="W m-2",
             standard_name="surface_upward_latent_heat_flux",
         ),
-        _root(
+        _root_var(
             "vegetation_surface",
             element="VEG",
             level="surface",
@@ -1119,7 +1126,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="percent",
             standard_name="vegetation_area_fraction",
         ),
-        _root(
+        _root_var(
             "minimum_vegetation_surface",
             element="VEGMIN",
             level="surface",
@@ -1128,7 +1135,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="percent",
             standard_name="vegetation_area_fraction",
         ),
-        _root(
+        _root_var(
             "maximum_vegetation_surface",
             element="VEGMAX",
             level="surface",
@@ -1137,7 +1144,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="percent",
             standard_name="vegetation_area_fraction",
         ),
-        _root(
+        _root_var(
             "leaf_area_index_surface",
             element="LAI",
             level="surface",
@@ -1146,7 +1153,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="1",
             standard_name="leaf_area_index",
         ),
-        _root(
+        _root_var(
             "ground_heat_flux_surface",
             element="GFLUX",
             level="surface",
@@ -1155,7 +1162,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="W m-2",
             standard_name="downward_heat_flux_in_soil",
         ),
-        _root(
+        _root_var(
             "vegetation_type_surface",
             element="VGTYP",
             level="surface",
@@ -1163,7 +1170,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Vegetation Type",
             units="1",
         ),
-        _root(
+        _root_var(
             "surface_lifted_index_500_1000mb",
             element="LFTX",
             level="500-1000 mb",
@@ -1172,7 +1179,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="K",
             standard_name="temperature_difference_between_ambient_air_and_air_lifted_adiabatically_from_the_surface",
         ),
-        _root(
+        _root_var(
             "convective_available_potential_energy_surface",
             element="CAPE",
             level="surface",
@@ -1181,7 +1188,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="J kg-1",
             standard_name="atmosphere_convective_available_potential_energy",
         ),
-        _root(
+        _root_var(
             "convective_inhibition_surface",
             element="CIN",
             level="surface",
@@ -1190,7 +1197,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="J kg-1",
             standard_name="atmosphere_convective_inhibition",
         ),
-        _root(
+        _root_var(
             "precipitable_water_atmosphere",
             element="PWAT",
             level="entire atmosphere (considered as a single layer)",
@@ -1199,7 +1206,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="kg m-2",
             standard_name="atmosphere_mass_content_of_water_vapor",
         ),
-        _root(
+        _root_var(
             "aerosol_optical_thickness_atmosphere",
             element="AOTK",
             level="entire atmosphere (considered as a single layer)",
@@ -1208,7 +1215,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="1",
             standard_name="atmosphere_optical_thickness_due_to_ambient_aerosol_particles",
         ),
-        _root(
+        _root_var(
             "column_integrated_mass_density_atmosphere",
             element="COLMD",
             level="entire atmosphere (considered as a single layer)",
@@ -1216,7 +1223,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Column-integrated mass density",
             units="kg m-2",
         ),
-        _root(
+        _root_var(
             "total_column_cloud_water_atmosphere",
             element="TCOLW",
             level="entire atmosphere",
@@ -1225,7 +1232,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="kg m-2",
             standard_name="atmosphere_mass_content_of_cloud_liquid_water",
         ),
-        _root(
+        _root_var(
             "total_column_cloud_ice_atmosphere",
             element="TCOLI",
             level="entire atmosphere",
@@ -1234,7 +1241,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="kg m-2",
             standard_name="atmosphere_mass_content_of_cloud_ice",
         ),
-        _root(
+        _root_var(
             "total_cloud_cover_boundary_layer",
             element="TCDC",
             level="boundary layer cloud layer",
@@ -1243,7 +1250,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="percent",
             standard_name="cloud_area_fraction_in_atmosphere_layer",
         ),
-        _root(
+        _root_var(
             "low_cloud_cover",
             element="LCDC",
             level="low cloud layer",
@@ -1252,7 +1259,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="percent",
             standard_name="cloud_area_fraction_in_atmosphere_layer",
         ),
-        _root(
+        _root_var(
             "medium_cloud_cover",
             element="MCDC",
             level="middle cloud layer",
@@ -1261,7 +1268,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="percent",
             standard_name="cloud_area_fraction_in_atmosphere_layer",
         ),
-        _root(
+        _root_var(
             "high_cloud_cover",
             element="HCDC",
             level="high cloud layer",
@@ -1270,7 +1277,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="percent",
             standard_name="cloud_area_fraction_in_atmosphere_layer",
         ),
-        _root(
+        _root_var(
             "total_cloud_cover_atmosphere",
             element="TCDC",
             level="entire atmosphere",
@@ -1279,7 +1286,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="percent",
             standard_name="cloud_area_fraction",
         ),
-        _root(
+        _root_var(
             "geopotential_height_cloud_ceiling",
             element="HGT",
             level="cloud ceiling",
@@ -1288,7 +1295,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
             standard_name="geopotential_height",
         ),
-        _root(
+        _root_var(
             "geopotential_height_cloud_base",
             element="HGT",
             level="cloud base",
@@ -1297,7 +1304,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
             standard_name="geopotential_height",
         ),
-        _root(
+        _root_var(
             "pressure_cloud_base",
             element="PRES",
             level="cloud base",
@@ -1306,7 +1313,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="Pa",
             standard_name="air_pressure_at_cloud_base",
         ),
-        _root(
+        _root_var(
             "pressure_cloud_top",
             element="PRES",
             level="cloud top",
@@ -1315,7 +1322,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="Pa",
             standard_name="air_pressure_at_cloud_top",
         ),
-        _root(
+        _root_var(
             "geopotential_height_cloud_top",
             element="HGT",
             level="cloud top",
@@ -1324,7 +1331,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
             standard_name="geopotential_height_at_cloud_top",
         ),
-        _root(
+        _root_var(
             "upward_long_wave_radiation_flux_top_of_atmosphere",
             element="ULWRF",
             level="top of atmosphere",
@@ -1333,7 +1340,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="W m-2",
             standard_name="toa_outgoing_longwave_flux",
         ),
-        _root(
+        _root_var(
             "downward_short_wave_radiation_flux_surface",
             element="DSWRF",
             level="surface",
@@ -1342,7 +1349,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="W m-2",
             standard_name="surface_downwelling_shortwave_flux_in_air",
         ),
-        _root(
+        _root_var(
             "downward_long_wave_radiation_flux_surface",
             element="DLWRF",
             level="surface",
@@ -1351,7 +1358,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="W m-2",
             standard_name="surface_downwelling_longwave_flux_in_air",
         ),
-        _root(
+        _root_var(
             "upward_short_wave_radiation_flux_surface",
             element="USWRF",
             level="surface",
@@ -1360,7 +1367,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="W m-2",
             standard_name="surface_upwelling_shortwave_flux_in_air",
         ),
-        _root(
+        _root_var(
             "upward_long_wave_radiation_flux_surface",
             element="ULWRF",
             level="surface",
@@ -1369,7 +1376,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="W m-2",
             standard_name="surface_upwelling_longwave_flux_in_air",
         ),
-        _root(
+        _root_var(
             "cloud_forcing_net_solar_flux_surface",
             element="CFNSF",
             level="surface",
@@ -1377,7 +1384,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Cloud Forcing Net Solar Flux",
             units="W m-2",
         ),
-        _root(
+        _root_var(
             "visible_beam_downward_solar_flux_surface",
             element="VBDSF",
             level="surface",
@@ -1385,7 +1392,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Visible Beam Downward Solar Flux",
             units="W m-2",
         ),
-        _root(
+        _root_var(
             "visible_diffuse_downward_solar_flux_surface",
             element="VDDSF",
             level="surface",
@@ -1393,7 +1400,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Visible Diffuse Downward Solar Flux",
             units="W m-2",
         ),
-        _root(
+        _root_var(
             "upward_short_wave_radiation_flux_top_of_atmosphere",
             element="USWRF",
             level="top of atmosphere",
@@ -1402,7 +1409,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="W m-2",
             standard_name="toa_outgoing_shortwave_flux",
         ),
-        _root(
+        _root_var(
             "storm_relative_helicity_3000_0m",
             element="HLCY",
             level="3000-0 m above ground",
@@ -1410,7 +1417,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Storm relative helicity",
             units="m2 s-2",
         ),
-        _root(
+        _root_var(
             "storm_relative_helicity_1000_0m",
             element="HLCY",
             level="1000-0 m above ground",
@@ -1418,7 +1425,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Storm relative helicity",
             units="m2 s-2",
         ),
-        _root(
+        _root_var(
             "u_component_storm_motion_0_6000m",
             element="USTM",
             level="0-6000 m above ground",
@@ -1426,7 +1433,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="U-component storm motion",
             units="m s-1",
         ),
-        _root(
+        _root_var(
             "v_component_storm_motion_0_6000m",
             element="VSTM",
             level="0-6000 m above ground",
@@ -1434,7 +1441,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="V-component storm motion",
             units="m s-1",
         ),
-        _root(
+        _root_var(
             "vertical_u_component_shear_0_1000m",
             element="VUCSH",
             level="0-1000 m above ground",
@@ -1442,7 +1449,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Vertical u-component shear",
             units="s-1",
         ),
-        _root(
+        _root_var(
             "vertical_v_component_shear_0_1000m",
             element="VVCSH",
             level="0-1000 m above ground",
@@ -1450,7 +1457,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Vertical v-component shear",
             units="s-1",
         ),
-        _root(
+        _root_var(
             "vertical_u_component_shear_0_6000m",
             element="VUCSH",
             level="0-6000 m above ground",
@@ -1458,7 +1465,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Vertical u-component shear",
             units="s-1",
         ),
-        _root(
+        _root_var(
             "vertical_v_component_shear_0_6000m",
             element="VVCSH",
             level="0-6000 m above ground",
@@ -1466,7 +1473,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Vertical v-component shear",
             units="s-1",
         ),
-        _root(
+        _root_var(
             "geopotential_height_0c_isotherm",
             element="HGT",
             level="0C isotherm",
@@ -1475,7 +1482,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
             standard_name="geopotential_height",
         ),
-        _root(
+        _root_var(
             "relative_humidity_0c_isotherm",
             element="RH",
             level="0C isotherm",
@@ -1484,7 +1491,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="percent",
             standard_name="relative_humidity",
         ),
-        _root(
+        _root_var(
             "pressure_0c_isotherm",
             element="PRES",
             level="0C isotherm",
@@ -1493,7 +1500,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="Pa",
             standard_name="air_pressure",
         ),
-        _root(
+        _root_var(
             "geopotential_height_highest_tropospheric_freezing_level",
             element="HGT",
             level="highest tropospheric freezing level",
@@ -1502,7 +1509,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
             standard_name="geopotential_height",
         ),
-        _root(
+        _root_var(
             "relative_humidity_highest_tropospheric_freezing_level",
             element="RH",
             level="highest tropospheric freezing level",
@@ -1511,7 +1518,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="percent",
             standard_name="relative_humidity",
         ),
-        _root(
+        _root_var(
             "pressure_highest_tropospheric_freezing_level",
             element="PRES",
             level="highest tropospheric freezing level",
@@ -1520,7 +1527,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="Pa",
             standard_name="air_pressure",
         ),
-        _root(
+        _root_var(
             "geopotential_height_263k",
             element="HGT",
             level="263 K level",
@@ -1529,7 +1536,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
             standard_name="geopotential_height",
         ),
-        _root(
+        _root_var(
             "geopotential_height_253k",
             element="HGT",
             level="253 K level",
@@ -1538,7 +1545,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
             standard_name="geopotential_height",
         ),
-        _root(
+        _root_var(
             "best_4_layer_lifted_index_180_0mb",
             element="4LFTX",
             level="180-0 mb above ground",
@@ -1547,7 +1554,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="K",
             standard_name="temperature_difference_between_ambient_air_and_air_lifted_adiabatically",
         ),
-        _root(
+        _root_var(
             "convective_available_potential_energy_180_0mb",
             element="CAPE",
             level="180-0 mb above ground",
@@ -1556,7 +1563,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="J kg-1",
             standard_name="atmosphere_convective_available_potential_energy",
         ),
-        _root(
+        _root_var(
             "convective_inhibition_180_0mb",
             element="CIN",
             level="180-0 mb above ground",
@@ -1565,7 +1572,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="J kg-1",
             standard_name="atmosphere_convective_inhibition",
         ),
-        _root(
+        _root_var(
             "planetary_boundary_layer_height_surface",
             element="HPBL",
             level="surface",
@@ -1574,7 +1581,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
             standard_name="atmosphere_boundary_layer_thickness",
         ),
-        _root(
+        _root_var(
             "geopotential_height_adiabatic_condensation_level",
             element="HGT",
             level="level of adiabatic condensation from sfc",
@@ -1583,7 +1590,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
             standard_name="geopotential_height",
         ),
-        _root(
+        _root_var(
             "convective_available_potential_energy_90_0mb",
             element="CAPE",
             level="90-0 mb above ground",
@@ -1592,7 +1599,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="J kg-1",
             standard_name="atmosphere_convective_available_potential_energy",
         ),
-        _root(
+        _root_var(
             "convective_inhibition_90_0mb",
             element="CIN",
             level="90-0 mb above ground",
@@ -1601,7 +1608,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="J kg-1",
             standard_name="atmosphere_convective_inhibition",
         ),
-        _root(
+        _root_var(
             "convective_available_potential_energy_255_0mb",
             element="CAPE",
             level="255-0 mb above ground",
@@ -1610,7 +1617,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="J kg-1",
             standard_name="atmosphere_convective_available_potential_energy",
         ),
-        _root(
+        _root_var(
             "convective_inhibition_255_0mb",
             element="CIN",
             level="255-0 mb above ground",
@@ -1619,7 +1626,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="J kg-1",
             standard_name="atmosphere_convective_inhibition",
         ),
-        _root(
+        _root_var(
             "geopotential_height_equilibrium_level",
             element="HGT",
             level="equilibrium level",
@@ -1628,7 +1635,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
             standard_name="geopotential_height",
         ),
-        _root(
+        _root_var(
             "pressure_of_lifted_parcel_level_255_0mb",
             element="PLPL",
             level="255-0 mb above ground",
@@ -1637,7 +1644,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="Pa",
             standard_name="original_air_pressure_of_lifted_parcel",
         ),
-        _root(
+        _root_var(
             "convective_available_potential_energy_0_3000m",
             element="CAPE",
             level="0-3000 m above ground",
@@ -1646,7 +1653,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="J kg-1",
             standard_name="atmosphere_convective_available_potential_energy",
         ),
-        _root(
+        _root_var(
             "geopotential_height_level_of_free_convection",
             element="HGT",
             level="level of free convection",
@@ -1655,7 +1662,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
             standard_name="geopotential_height",
         ),
-        _root(
+        _root_var(
             "effective_layer_helicity_surface",
             element="EFHL",
             level="surface",
@@ -1663,7 +1670,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Effective layer helicity",
             units="m2 s-2",
         ),
-        _root(
+        _root_var(
             "critical_angle_0_500m",
             element="CANGLE",
             level="0-500 m above ground",
@@ -1671,7 +1678,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Critical angle",
             units="degree",
         ),
-        _root(
+        _root_var(
             "layer_thickness_261k_256k",
             element="LAYTH",
             level="261 K level - 256 K level",
@@ -1679,7 +1686,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Layer Thickness",
             units="m",
         ),
-        _root(
+        _root_var(
             "enhanced_stretching_potential_0_3000m",
             element="ESP",
             level="0-3000 m above ground",
@@ -1687,7 +1694,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Enhanced stretching potential",
             units="1",
         ),
-        _root(
+        _root_var(
             "relative_humidity_with_respect_to_precipitable_water_atmosphere",
             element="RHPW",
             level="entire atmosphere",
@@ -1695,7 +1702,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Relative humidity with respect to precipitable water",
             units="percent",
         ),
-        _root(
+        _root_var(
             "land_sea_mask_surface",
             element="LAND",
             level="surface",
@@ -1704,7 +1711,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="1",
             standard_name="land_binary_mask",
         ),
-        _root(
+        _root_var(
             "ice_cover_surface",
             element="ICEC",
             level="surface",
@@ -1713,7 +1720,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="1",
             standard_name="sea_ice_area_fraction",
         ),
-        _root(
+        _root_var(
             "brightness_temperature_channel_123",
             element="SBT123",
             level="top of atmosphere",
@@ -1722,7 +1729,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="K",
             standard_name="toa_brightness_temperature",
         ),
-        _root(
+        _root_var(
             "brightness_temperature_channel_124",
             element="SBT124",
             level="top of atmosphere",
@@ -1731,7 +1738,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="K",
             standard_name="toa_brightness_temperature",
         ),
-        _root(
+        _root_var(
             "brightness_temperature_channel_113",
             element="SBT113",
             level="top of atmosphere",
@@ -1740,7 +1747,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="K",
             standard_name="toa_brightness_temperature",
         ),
-        _root(
+        _root_var(
             "brightness_temperature_channel_114",
             element="SBT114",
             level="top of atmosphere",
@@ -1754,7 +1761,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
 
 def _pressure_data_vars() -> list[NoaaHrrrDataVar]:
     return [
-        _pressure(
+        _pressure_var(
             "absolute_vorticity",
             element="ABSV",
             short_name="absv",
@@ -1762,7 +1769,7 @@ def _pressure_data_vars() -> list[NoaaHrrrDataVar]:
             units="s-1",
             standard_name="atmosphere_upward_absolute_vorticity",
         ),
-        _pressure(
+        _pressure_var(
             "cloud_ice_mixing_ratio",
             element="CIMIXR",
             short_name="cdcimr",
@@ -1770,7 +1777,7 @@ def _pressure_data_vars() -> list[NoaaHrrrDataVar]:
             units="kg kg-1",
             standard_name="cloud_ice_mixing_ratio",
         ),
-        _pressure(
+        _pressure_var(
             "cloud_mixing_ratio",
             element="CLMR",
             short_name="clwmr",
@@ -1778,7 +1785,7 @@ def _pressure_data_vars() -> list[NoaaHrrrDataVar]:
             units="kg kg-1",
             standard_name="cloud_liquid_water_mixing_ratio",
         ),
-        _pressure(
+        _pressure_var(
             "dew_point_temperature",
             element="DPT",
             short_name="dpt",
@@ -1786,14 +1793,14 @@ def _pressure_data_vars() -> list[NoaaHrrrDataVar]:
             units="degree_Celsius",
             standard_name="dew_point_temperature",
         ),
-        _pressure(
+        _pressure_var(
             "graupel",
             element="GRLE",
             short_name="grle",
             long_name="Graupel (snow pellets)",
             units="kg kg-1",
         ),
-        _pressure(
+        _pressure_var(
             "geopotential_height",
             element="HGT",
             short_name="gh",
@@ -1801,7 +1808,7 @@ def _pressure_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
             standard_name="geopotential_height",
         ),
-        _pressure(
+        _pressure_var(
             "relative_humidity",
             element="RH",
             short_name="r",
@@ -1809,21 +1816,21 @@ def _pressure_data_vars() -> list[NoaaHrrrDataVar]:
             units="percent",
             standard_name="relative_humidity",
         ),
-        _pressure(
+        _pressure_var(
             "rain_mixing_ratio",
             element="RWMR",
             short_name="rwmr",
             long_name="Rain mixing ratio",
             units="kg kg-1",
         ),
-        _pressure(
+        _pressure_var(
             "snow_mixing_ratio",
             element="SNMR",
             short_name="snmr",
             long_name="Snow mixing ratio",
             units="kg kg-1",
         ),
-        _pressure(
+        _pressure_var(
             "specific_humidity",
             element="SPFH",
             short_name="q",
@@ -1831,7 +1838,7 @@ def _pressure_data_vars() -> list[NoaaHrrrDataVar]:
             units="1",
             standard_name="specific_humidity",
         ),
-        _pressure(
+        _pressure_var(
             "temperature",
             element="TMP",
             short_name="t",
@@ -1839,7 +1846,7 @@ def _pressure_data_vars() -> list[NoaaHrrrDataVar]:
             units="degree_Celsius",
             standard_name="air_temperature",
         ),
-        _pressure(
+        _pressure_var(
             "wind_u",
             element="UGRD",
             short_name="u",
@@ -1847,7 +1854,7 @@ def _pressure_data_vars() -> list[NoaaHrrrDataVar]:
             units="m s-1",
             standard_name="eastward_wind",
         ),
-        _pressure(
+        _pressure_var(
             "wind_v",
             element="VGRD",
             short_name="v",
@@ -1855,7 +1862,7 @@ def _pressure_data_vars() -> list[NoaaHrrrDataVar]:
             units="m s-1",
             standard_name="northward_wind",
         ),
-        _pressure(
+        _pressure_var(
             "vertical_velocity",
             element="VVEL",
             short_name="w",
@@ -1868,7 +1875,7 @@ def _pressure_data_vars() -> list[NoaaHrrrDataVar]:
 
 def _model_data_vars() -> list[NoaaHrrrDataVar]:
     return [
-        _model(
+        _model_var(
             "temperature",
             element="TMP",
             short_name="t",
@@ -1876,7 +1883,7 @@ def _model_data_vars() -> list[NoaaHrrrDataVar]:
             units="degree_Celsius",
             standard_name="air_temperature",
         ),
-        _model(
+        _model_var(
             "specific_humidity",
             element="SPFH",
             short_name="q",
@@ -1884,7 +1891,7 @@ def _model_data_vars() -> list[NoaaHrrrDataVar]:
             units="1",
             standard_name="specific_humidity",
         ),
-        _model(
+        _model_var(
             "wind_u",
             element="UGRD",
             short_name="u",
@@ -1892,7 +1899,7 @@ def _model_data_vars() -> list[NoaaHrrrDataVar]:
             units="m s-1",
             standard_name="eastward_wind",
         ),
-        _model(
+        _model_var(
             "wind_v",
             element="VGRD",
             short_name="v",
@@ -1900,7 +1907,7 @@ def _model_data_vars() -> list[NoaaHrrrDataVar]:
             units="m s-1",
             standard_name="northward_wind",
         ),
-        _model(
+        _model_var(
             "vertical_velocity",
             element="VVEL",
             short_name="w",
@@ -1908,7 +1915,7 @@ def _model_data_vars() -> list[NoaaHrrrDataVar]:
             units="Pa s-1",
             standard_name="lagrangian_tendency_of_air_pressure",
         ),
-        _model(
+        _model_var(
             "geopotential_height",
             element="HGT",
             short_name="gh",
@@ -1916,7 +1923,7 @@ def _model_data_vars() -> list[NoaaHrrrDataVar]:
             units="m",
             standard_name="geopotential_height",
         ),
-        _model(
+        _model_var(
             "pressure",
             element="PRES",
             short_name="pres",
@@ -1924,7 +1931,7 @@ def _model_data_vars() -> list[NoaaHrrrDataVar]:
             units="Pa",
             standard_name="air_pressure",
         ),
-        _model(
+        _model_var(
             "turbulent_kinetic_energy",
             element="TKE",
             short_name="tke",
@@ -1932,7 +1939,7 @@ def _model_data_vars() -> list[NoaaHrrrDataVar]:
             units="J kg-1",
             standard_name="specific_turbulent_kinetic_energy_of_air",
         ),
-        _model(
+        _model_var(
             "cloud_mixing_ratio",
             element="CLMR",
             short_name="clwmr",
@@ -1940,7 +1947,7 @@ def _model_data_vars() -> list[NoaaHrrrDataVar]:
             units="kg kg-1",
             standard_name="cloud_liquid_water_mixing_ratio",
         ),
-        _model(
+        _model_var(
             "cloud_ice_mixing_ratio",
             element="CIMIXR",
             short_name="cdcimr",
@@ -1948,35 +1955,35 @@ def _model_data_vars() -> list[NoaaHrrrDataVar]:
             units="kg kg-1",
             standard_name="cloud_ice_mixing_ratio",
         ),
-        _model(
+        _model_var(
             "rain_mixing_ratio",
             element="RWMR",
             short_name="rwmr",
             long_name="Rain mixing ratio",
             units="kg kg-1",
         ),
-        _model(
+        _model_var(
             "snow_mixing_ratio",
             element="SNMR",
             short_name="snmr",
             long_name="Snow mixing ratio",
             units="kg kg-1",
         ),
-        _model(
+        _model_var(
             "graupel",
             element="GRLE",
             short_name="grle",
             long_name="Graupel (snow pellets)",
             units="kg kg-1",
         ),
-        _model(
+        _model_var(
             "mass_density",
             element="MASSDEN",
             short_name="mdens",
             long_name="Mass density",
             units="kg m-3",
         ),
-        _model(
+        _model_var(
             "fraction_of_cloud_cover",
             element="FRACCC",
             short_name="ccl",
@@ -1984,35 +1991,35 @@ def _model_data_vars() -> list[NoaaHrrrDataVar]:
             units="percent",
             standard_name="cloud_area_fraction_in_atmosphere_layer",
         ),
-        _model(
+        _model_var(
             "number_concentration_cloud_ice",
             element="NCCICE",
             short_name="nccice",
             long_name="Number concentration of cloud ice",
             units="kg-1",
         ),
-        _model(
+        _model_var(
             "number_concentration_cloud_droplets",
             element="NCONCD",
             short_name="nconcd",
             long_name="Number concentration of cloud droplets",
             units="kg-1",
         ),
-        _model(
+        _model_var(
             "number_concentration_rain",
             element="SPNCR",
             short_name="spncr",
             long_name="Number concentration of rain",
             units="kg-1",
         ),
-        _model(
+        _model_var(
             "particulate_matter_fine",
             element="PMTF",
             short_name="pmtf",
             long_name="Particulate matter (fine)",
             units="kg m-3",
         ),
-        _model(
+        _model_var(
             "particulate_matter_coarse",
             element="PMTC",
             short_name="pmtc",

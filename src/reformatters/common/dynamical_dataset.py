@@ -536,7 +536,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         partial(  # ty: ignore[invalid-argument-type]
                             validation.compare_replica_and_primary,
                             self.template_config.append_dim,
-                            validation.open_validation_dataset(
+                            validation.open_flattened_dataset(
                                 replica_store,
                                 consolidated=not isinstance(
                                     replica_store, IcechunkStore
