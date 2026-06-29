@@ -93,7 +93,7 @@ class VirtualDataValidator(abc.ABC):
 DataValidator = XarrayDataValidator | VirtualDataValidator
 
 
-def open_validation_dataset(
+def open_flattened_dataset(
     store: zarr.storage.StoreLike, *, consolidated: bool
 ) -> xr.Dataset:
     """Open a store as one flat Dataset covering every group.
@@ -142,7 +142,7 @@ def validate_dataset(
     # Run all validators
     failed_validations = []
     for validator in validators:
-        ds = open_validation_dataset(store, consolidated=consolidated)
+        ds = open_flattened_dataset(store, consolidated=consolidated)
 
         if isinstance(validator, VirtualDataValidator):
             assert region_job is not None, (

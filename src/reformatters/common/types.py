@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum, auto
-from typing import Annotated, Literal, get_args
+from typing import Annotated, Any, Literal, get_args
 
 import numpy as np
 import pandas as pd
@@ -20,6 +20,10 @@ type ArrayInt16 = np.ndarray[tuple[int, ...], np.dtype[np.int16]]
 type ArrayND[D: np.generic] = np.ndarray[tuple[int, ...], np.dtype[D]]
 type Array1D[D: np.generic] = np.ndarray[tuple[int], np.dtype[D]]
 type Array2D[D: np.generic] = np.ndarray[tuple[int, int], np.dtype[D]]
+
+# A numcodecs/zarr codec serialized to its config dict (Codec.to_dict()); an
+# Encoding filter, compressor, or serializer.
+type CodecConfig = dict[str, Any]
 
 type TimestampUnits = Literal["seconds"]
 type TimedeltaUnits = Literal["seconds since 1970-01-01 00:00:00"]

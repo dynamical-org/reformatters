@@ -489,9 +489,9 @@ def test_backfill_emits_refs_to_both_groups_and_reads_back(tmp_path: Path) -> No
     _assert_all_values(dataset, n_inits=2)
 
 
-def test_open_validation_dataset_includes_group_vars(tmp_path: Path) -> None:
+def test_open_flattened_dataset_includes_group_vars(tmp_path: Path) -> None:
     # The validation gap: xr.open_zarr reads only the root group, hiding group vars.
-    # open_validation_dataset must surface pressure_level/temperature (path-keyed)
+    # open_flattened_dataset must surface pressure_level/temperature (path-keyed)
     # alongside the root temperature_2m, with the group var carrying its vertical dim.
     dataset = _make_dataset(tmp_path, n_inits=2)
     template_ds = _create_template_ds(2)
@@ -503,7 +503,7 @@ def test_open_validation_dataset_includes_group_vars(tmp_path: Path) -> None:
     root_only = xr.open_zarr(store, consolidated=False, decode_timedelta=True)
     assert "pressure_level/temperature" not in root_only.data_vars
 
-    flat = validation.open_validation_dataset(store, consolidated=False)
+    flat = validation.open_flattened_dataset(store, consolidated=False)
     assert "temperature_2m" in flat.data_vars
     assert "pressure_level/temperature" in flat.data_vars
     assert "pressure_level" in flat["pressure_level/temperature"].dims
@@ -520,7 +520,7 @@ def test_nan_check_covers_group_vars(tmp_path: Path) -> None:
     _make_region_job(template_ds, region=slice(0, 2)).process_virtual(repo, [], "main")
     store = repo.readonly_session("main").store
 
-    flat = validation.open_validation_dataset(store, consolidated=False)
+    flat = validation.open_flattened_dataset(store, consolidated=False)
     result = validation.check_forecast_recent_nans(
         flat,
         include_vars=["pressure_level/temperature"],
@@ -542,7 +542,7 @@ def test_decode_health_covers_group_vars(tmp_path: Path) -> None:
     store = repo.readonly_session("main").store
     job = _make_region_job(template_ds, region=slice(0, 2))
 
-    ds = validation.open_validation_dataset(store, consolidated=False)
+    ds = validation.open_flattened_dataset(store, consolidated=False)
     assert "pressure_level/temperature" in ds.data_vars
     result = validation.CheckVirtualDecodeHealth()(job, store, ds)
     assert result.passed, result.message

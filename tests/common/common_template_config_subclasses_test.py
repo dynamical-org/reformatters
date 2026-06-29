@@ -9,7 +9,7 @@ import pytest
 import xarray as xr
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
-from reformatters.common import template_utils
+from reformatters.common import template_utils, validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 
 
@@ -134,9 +134,13 @@ def test_update_template_fill_values_are_correct(
     """
     template_config = template_setup.dataset.template_config
 
-    ds = xr.open_zarr(template_setup.roundtrip_template_path, chunks=None)
+    # Flattened so vertical-group vars (keyed by path) are visible; xr.open_zarr
+    # would expose only the root group.
+    ds = validation.open_flattened_dataset(
+        template_setup.roundtrip_template_path, consolidated=False
+    )
     for var in template_config.data_vars:
-        var_da = ds[var.name]
+        var_da = ds[var.path]
         np.testing.assert_array_equal(
             var_da.isel(dict.fromkeys(var_da.dims, 0)).values, var.encoding.fill_value
         )
