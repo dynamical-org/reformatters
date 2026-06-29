@@ -106,6 +106,8 @@ Vertical levels: Single-level and surface variables live at the dataset root wit
 
 Spatial dimensions: If the source data uses a geographic projection we use dimensions latitude and longitude, else y and x are used for projected datasets.
 
+Latitude ordering: latitude/y is stored north-first — descending latitude, index 0 is the northernmost row — matching GDAL/GIS and the common analysis-ready convention (ERA5, GFS). Raw GRIB scan direction is not consistent across sources (it is set per message; e.g. GFS scans north-first, HRRR south-first), so a source whose native scan is south-first is flipped on decode to conform. For a virtual (byte-reference) dataset that flip lives in the per-variable serializer — the only place its data can be reordered — so it requires decoder support; a virtual dataset from a south-first source must not be published until it conforms.
+
 ## CLI commands
 
 Run via `uv run main`.
