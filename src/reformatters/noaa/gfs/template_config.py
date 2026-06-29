@@ -317,6 +317,8 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                     units="1",
                     step_type="avg",
                     comment="Presence/absence over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z). 0=no; 1=yes.",
+                    flag_values=(0, 1),
+                    flag_meanings="no yes",
                 ),
                 internal_attrs=NoaaInternalAttrs(
                     grib_element="CSNOW",
@@ -336,6 +338,8 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                     units="1",
                     step_type="avg",
                     comment="Presence/absence over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z). 0=no; 1=yes.",
+                    flag_values=(0, 1),
+                    flag_meanings="no yes",
                 ),
                 internal_attrs=NoaaInternalAttrs(
                     grib_element="CICEP",
@@ -355,6 +359,8 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                     units="1",
                     step_type="avg",
                     comment="Presence/absence over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z). 0=no; 1=yes.",
+                    flag_values=(0, 1),
+                    flag_meanings="no yes",
                 ),
                 internal_attrs=NoaaInternalAttrs(
                     grib_element="CFRZR",
@@ -374,6 +380,8 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                     units="1",
                     step_type="avg",
                     comment="Presence/absence over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z). 0=no; 1=yes.",
+                    flag_values=(0, 1),
+                    flag_meanings="no yes",
                 ),
                 internal_attrs=NoaaInternalAttrs(
                     grib_element="CRAIN",

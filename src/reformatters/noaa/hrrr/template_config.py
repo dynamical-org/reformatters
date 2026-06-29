@@ -394,6 +394,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     units="1",
                     comment="0=no; 1=yes",
                     step_type="instant",
+                    flag_values=(0, 1),
+                    flag_meanings="no yes",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CICEP",
@@ -414,6 +416,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     units="1",
                     comment="0=no; 1=yes",
                     step_type="instant",
+                    flag_values=(0, 1),
+                    flag_meanings="no yes",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CSNOW",
@@ -434,6 +438,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     units="1",
                     comment="0=no; 1=yes",
                     step_type="instant",
+                    flag_values=(0, 1),
+                    flag_meanings="no yes",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CFRZR",
@@ -454,6 +460,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     units="1",
                     comment="0=no; 1=yes",
                     step_type="instant",
+                    flag_values=(0, 1),
+                    flag_meanings="no yes",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CRAIN",
