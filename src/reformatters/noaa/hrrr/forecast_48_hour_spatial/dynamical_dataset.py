@@ -75,8 +75,8 @@ class NoaaHrrrForecast48HourSpatialDataset(
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
-            cpu="1.3",
-            memory="7G",
+            cpu="1.5",
+            memory="2G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
 

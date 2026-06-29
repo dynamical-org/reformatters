@@ -121,7 +121,6 @@ class NoaaHrrrForecast48HourSpatialRegionJob(
         try:
             index_lines = parse_grib_index_lines(index_path)
         finally:
-            # Index files accumulate by the millions in backfills; never keep them.
             index_path.unlink()
 
         lookup = self._message_lookup(coord.data_vars, whole_hours(coord.lead_time))
