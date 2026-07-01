@@ -6,14 +6,14 @@ How virtual jobs plug into worker parallelism and coordination is covered in [pa
 
 ## The write loop
 
-`VirtualRegionJob.process_virtual` runs the same loop for backfills and operational updates; only the branch differs (a temp branch for backfill, `main` for operational):
+`process_worker_jobs` gathers the not-already-present source files across all of a worker's region jobs (one readonly view, one filter pass) into `remaining`, then `VirtualRegionJob.process_virtual` runs the same write loop over that union for both backfills and operational updates; only the branch differs (a temp branch for backfill, `main` for operational):
 
-1. `generate_source_file_coords` lists candidate source files for the region.
-2. `filter_already_present` drops files whose refs are already in the manifest.
+1. `generate_source_file_coords` lists candidate source files for each of the worker's region jobs.
+2. `filter_already_present` drops files whose refs are already in the manifest; the survivors across the worker's jobs are unioned into `remaining`.
 3. `process_virtual_refs(remaining)` — a concrete `VirtualRegionJob` generator — each tick asks `discover_available` which files are ready, builds their refs with `file_refs`, and yields batches of `(source file coord, its VirtualRefs)` pairs.
 4. Each yield is committed atomically: open fresh writable sessions (a committed icechunk session is read-only), grow the append dim if needed (`sync_dims_to`), `set_virtual_refs`, commit.
 
-**The yield is the commit unit.** The loop's batching policy: operational updates yield everything that arrived since the last poll tick (typically ~one file) for per-file visibility; backfills yield everything available. A yield contains *whole* source files — never split a file across yields — and is never empty (an empty icechunk commit raises). The loop asserts each file's refs cover the representative cell `filter_already_present` probes, so a file the filter could never see as ingested fails loudly instead of being re-ingested forever.
+**The yield is the commit unit.** The loop's batching policy: a backfill sweeps once and yields everything available across the worker's jobs, so the whole worker is **one commit** — this keeps the commit count at `workers_total` rather than one-per-init, relieving shared-branch CAS contention (`jobs_per_pod` sets the batch = inits per commit, mirroring `MaterializedRegionJob`). An operational update yields everything that arrived since the last poll tick (typically ~one file) for per-file visibility. A yield contains *whole* source files — never split a file across yields — and is never empty (an empty icechunk commit raises). The loop asserts each file's refs cover the representative cell `filter_already_present` probes, so a file the filter could never see as ingested fails loudly instead of being re-ingested forever.
 
 `processing_mode` on the job selects the generator's stopping rule: `"backfill"` sweeps what exists once and exits; `"update"` polls until everything expected is ingested, with the pod's active deadline bounding how long it waits on a file that never publishes. `operational_update_jobs` implementations must construct jobs with `processing_mode="update"` (asserted by the driver).
 
@@ -41,9 +41,9 @@ How virtual jobs plug into worker parallelism and coordination is covered in [pa
 
 **Discovery utilities** (opt-in, off the base, in `virtual_source_listing.py`): `discover_available_by_obstore_listing(pending, *, store, location_prefix)` works for any obstore backend (S3, GCS, Azure, local) — a file is ready once `store` lists both its data object and its index; the caller passes the built store. A source obstore can't list (an HTTP file server whose directory index is HTML, a frontier that must be probed) gets its own discovery util in the same module and a custom `discover_available`.
 
-## Reader safety: one source file → one atomic commit
+## Reader safety: whole files, atomic commits
 
-All refs from a single source file, plus any append-dim expansion their positions require, land in one icechunk commit. A reader on `main` sees either none of a file's data or all of it. Atomicity is per *file*, not per init — readers see each lead time's data as its file is ingested, within seconds.
+Every ref from a source file, plus any append-dim expansion its positions require, lands in the same icechunk commit as the rest of that file — a reader on `main` sees either none of a file's data or all of it, never a partially-ingested file. A commit may hold one file (an operational tick) or many (a backfill worker's whole batch); atomicity is per *commit*, and each file is wholly inside one. Operational updates commit per tick, so readers see each lead time's data within seconds of its file publishing.
 
 This invariant is also what lets the filter probe a single representative cell per file: if one cell a file covers is present, the whole file is present.
 

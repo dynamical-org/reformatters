@@ -3,7 +3,7 @@ import time
 from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from itertools import groupby
-from typing import Any, ClassVar, Final, Generic, Literal, NamedTuple
+from typing import Any, ClassVar, Final, Generic, Literal, NamedTuple, cast
 
 import icechunk
 import numpy as np
@@ -221,18 +221,41 @@ class VirtualRegionJob(
         worker_jobs: Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]],
         store_factory: storage.StoreFactory,
         branch_name: str,
-        worker_index: int,  # noqa: ARG003 - virtual jobs commit per batch with their own messages
+        worker_index: int,  # noqa: ARG003 - per-batch commit messages don't carry it
     ) -> dict[str, list[SourceFileResult]]:
-        """Drive each job's per-batch virtual write loop on ``branch_name``.
+        """Drive the whole worker's virtual write loop on ``branch_name``.
 
-        Always returns an empty dict of results: virtual refs live in the icechunk
-        manifest, so there is nothing to thread back to finalize.
+        Gathers the not-already-present source files across all the worker's jobs
+        against a single readonly view, then runs one write loop over their union:
+        a backfill worker's generator yields a single batch (one commit for the
+        whole worker), an update job's generator polls and commits per tick.
+        Always returns an empty dict: virtual refs live in the icechunk manifest,
+        so there is nothing to thread back to finalize.
         """
         assert worker_jobs, "process_worker_jobs requires at least one job"
+        assert all(isinstance(job, VirtualRegionJob) for job in worker_jobs)
+        jobs = cast(
+            "Sequence[VirtualRegionJob[DATA_VAR, SOURCE_FILE_COORD]]", worker_jobs
+        )
+        del worker_jobs
+
         primary_repo, replica_repos = store_factory.icechunk_primary_and_replica_repos()
-        for job in worker_jobs:
-            assert isinstance(job, VirtualRegionJob)
-            job.process_virtual(primary_repo, replica_repos, branch_name)
+        readonly_store = primary_repo.readonly_session(branch_name).store
+        remaining = [
+            coord
+            for job in jobs
+            for coord in job.filter_already_present(
+                job.source_file_coords(), readonly_store
+            )
+        ]
+        # An all-already-present worker writes nothing; an empty icechunk commit
+        # would raise, so skip the write loop entirely.
+        if remaining:
+            # A worker's jobs share template_ds/processing_mode/tick_interval, so any
+            # one drives the write loop over the union of their coords.
+            jobs[0].process_virtual(
+                primary_repo, list(replica_repos), branch_name, remaining
+            )
         return {}
 
     def process_virtual(
@@ -240,18 +263,20 @@ class VirtualRegionJob(
         primary_repo: icechunk.Repository,
         replica_repos: Sequence[icechunk.Repository],
         branch: str,
+        remaining: Sequence[SOURCE_FILE_COORD],
     ) -> None:
-        """Run the virtual write loop, committing each yielded batch atomically.
+        """Run the virtual write loop over `remaining`, committing each yielded batch atomically.
 
-        The same loop serves backfill (temp branch) and the single-writer
-        operational update ("main"); see "The write loop" in docs/virtual_datasets.md.
+        `remaining` is the pre-filtered union of the worker's not-already-present
+        source files (gathered by process_worker_jobs). The same loop serves
+        backfill (temp branch, one batch -> one commit) and the single-writer
+        operational update ("main", per-tick commits); see "The write loop" in
+        docs/virtual_datasets.md.
         """
         # A fresh writable session is opened per batch because an icechunk
         # session becomes read-only after commit. sync_dims_to grows the store
         # lazily (a no-op on the pre-sized backfill branch).
         readonly_store = primary_repo.readonly_session(branch).store
-        candidates = self.source_file_coords()
-        remaining = self.filter_already_present(candidates, readonly_store)
         # The smallest group, so the sync_dims_to shortcut below can never skip a group
         # that lags root (e.g. after a partially-applied prior grow).
         current_size = min(
