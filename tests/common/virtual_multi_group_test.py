@@ -424,6 +424,18 @@ def _primary_repo(factory: StoreFactory) -> icechunk.Repository:
     return factory.icechunk_repos(sort="primary-first")[0][1]
 
 
+def _process_virtual(
+    job: MultiGroupRegionJob,
+    primary_repo: icechunk.Repository,
+    replica_repos: Sequence[icechunk.Repository] = (),
+    branch: str = "main",
+) -> None:
+    """Gather remaining coords (as process_worker_jobs does), then drive the write loop."""
+    readonly = primary_repo.readonly_session(branch).store
+    remaining = job.filter_already_present(job.source_file_coords(), readonly)
+    job.process_virtual(primary_repo, list(replica_repos), branch, remaining)
+
+
 def _assert_all_values(dataset: MultiGroupDataset, n_inits: int) -> None:
     """Read back via DataTree and assert both groups carry their deterministic values
     at the correct (init, lead[, level]) positions."""
@@ -482,7 +494,7 @@ def test_backfill_emits_refs_to_both_groups_and_reads_back(tmp_path: Path) -> No
 
     repo = _primary_repo(dataset.store_factory)
     job = _make_region_job(template_ds, region=slice(0, 2))
-    job.process_virtual(repo, [], "main")
+    _process_virtual(job, repo)
 
     # (1) Refs landed at the right group/name chunk keys and byte ranges; (2) both
     # the root and pressure_level groups grew to the expected init_time length.
@@ -497,7 +509,7 @@ def test_open_flattened_dataset_includes_group_vars(tmp_path: Path) -> None:
     template_ds = _create_template_ds(2)
     template_utils.write_metadata(template_ds, dataset.store_factory)
     repo = _primary_repo(dataset.store_factory)
-    _make_region_job(template_ds, region=slice(0, 2)).process_virtual(repo, [], "main")
+    _process_virtual(_make_region_job(template_ds, region=slice(0, 2)), repo)
 
     store = repo.readonly_session("main").store
     root_only = xr.open_zarr(store, consolidated=False, decode_timedelta=True)
@@ -517,7 +529,7 @@ def test_nan_check_covers_group_vars(tmp_path: Path) -> None:
     template_ds = _create_template_ds(2)
     template_utils.write_metadata(template_ds, dataset.store_factory)
     repo = _primary_repo(dataset.store_factory)
-    _make_region_job(template_ds, region=slice(0, 2)).process_virtual(repo, [], "main")
+    _process_virtual(_make_region_job(template_ds, region=slice(0, 2)), repo)
     store = repo.readonly_session("main").store
 
     flat = validation.open_flattened_dataset(store, consolidated=False)
@@ -538,7 +550,7 @@ def test_decode_health_covers_group_vars(tmp_path: Path) -> None:
     template_ds = _create_template_ds(2)
     template_utils.write_metadata(template_ds, dataset.store_factory)
     repo = _primary_repo(dataset.store_factory)
-    _make_region_job(template_ds, region=slice(0, 2)).process_virtual(repo, [], "main")
+    _process_virtual(_make_region_job(template_ds, region=slice(0, 2)), repo)
     store = repo.readonly_session("main").store
     job = _make_region_job(template_ds, region=slice(0, 2))
 
@@ -557,7 +569,7 @@ def test_per_file_commit_contains_both_groups(tmp_path: Path) -> None:
     repo = _primary_repo(dataset.store_factory)
 
     job = _make_region_job(template_ds, region=slice(0, 1))
-    job.process_virtual(repo, [], "main")
+    _process_virtual(job, repo)
 
     # One file (init 0, lead 0) -> exactly one new commit holding both groups' chunks.
     snapshots = list(repo.ancestry(branch="main"))
@@ -621,7 +633,7 @@ def test_filter_already_present_probes_group_array(tmp_path: Path) -> None:
     template_utils.write_metadata(template_ds, dataset.store_factory)
     repo = _primary_repo(dataset.store_factory)
     job = _make_region_job(template_ds, region=slice(0, 1))
-    job.process_virtual(repo, [], "main")
+    _process_virtual(job, repo)
 
     probe_job = _PressureProbeRegionJob(
         tmp_store=Path("unused-tmp.zarr"),

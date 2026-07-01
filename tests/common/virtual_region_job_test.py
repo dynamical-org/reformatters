@@ -337,6 +337,18 @@ def _snapshot_count(repo: icechunk.Repository, branch: str = "main") -> int:
     return sum(1 for _ in repo.ancestry(branch=branch))
 
 
+def _process_virtual(
+    job: VirtualTestRegionJob,
+    primary_repo: icechunk.Repository,
+    replica_repos: Sequence[icechunk.Repository] = (),
+    branch: str = "main",
+) -> None:
+    """Gather remaining coords (as process_worker_jobs does), then drive the write loop."""
+    readonly = primary_repo.readonly_session(branch).store
+    remaining = job.filter_already_present(job.source_file_coords(), readonly)
+    job.process_virtual(primary_repo, list(replica_repos), branch, remaining)
+
+
 def _assert_store_values(store: object, n_inits: int) -> None:
     result = xr.open_zarr(store, decode_timedelta=True)
     assert result.sizes["init_time"] == n_inits
@@ -775,7 +787,7 @@ def test_process_virtual_rejects_empty_batch(tmp_path: Path) -> None:
         reformat_job_name="test",
     )
     with pytest.raises(AssertionError, match="empty batch"):
-        job.process_virtual(repo, [], "main")
+        _process_virtual(job, repo)
 
 
 def test_process_virtual_rejects_refs_missing_probe_chunk(tmp_path: Path) -> None:
@@ -813,7 +825,7 @@ def test_process_virtual_rejects_refs_missing_probe_chunk(tmp_path: Path) -> Non
         reformat_job_name="test",
     )
     with pytest.raises(AssertionError, match="do not cover representative chunk"):
-        job.process_virtual(repo, [], "main")
+        _process_virtual(job, repo)
 
 
 def test_virtual_operational_rejects_backfill_mode_job(tmp_path: Path) -> None:
@@ -904,7 +916,7 @@ def test_backfill_emits_refs_and_reads_back_values(tmp_path: Path) -> None:
 
     repo = _primary_repo(dataset.store_factory)
     job = _make_region_job(template_ds, region=slice(0, 4))
-    job.process_virtual(repo, [], "main")
+    _process_virtual(job, repo)
 
     _assert_all_values(dataset, n_inits=4)
 
@@ -916,12 +928,12 @@ def test_filter_skips_already_present_refs(tmp_path: Path) -> None:
     repo = _primary_repo(dataset.store_factory)
     job = _make_region_job(template_ds, region=slice(0, 4))
 
-    job.process_virtual(repo, [], "main")
+    _process_virtual(job, repo)
     snapshots_after_first = _snapshot_count(repo)
 
     # Second run: every candidate is already present, so the filter drops them
     # all, the generator yields nothing, and no new commit is made.
-    job.process_virtual(repo, [], "main")
+    _process_virtual(job, repo)
     assert _snapshot_count(repo) == snapshots_after_first
 
     candidates = job.generate_source_file_coords(
@@ -939,7 +951,7 @@ def test_filter_already_present_mixed_candidates(tmp_path: Path) -> None:
     template_utils.write_metadata(template_ds, dataset.store_factory)
     repo = _primary_repo(dataset.store_factory)
     # Emit only init 0's files.
-    _make_region_job(template_ds, region=slice(0, 1)).process_virtual(repo, [], "main")
+    _process_virtual(_make_region_job(template_ds, region=slice(0, 1)), repo)
 
     present = VirtualTestSourceFileCoord(
         init_time=APPEND_DIM_START, lead_time=LEAD_TIMES[0]
@@ -1039,8 +1051,93 @@ def test_yield_is_the_commit_unit(tmp_path: Path) -> None:
     VirtualTestRegionJob.backfill_batch_files = 2
     job = _make_region_job(template_ds, region=slice(0, 4))
     before = _snapshot_count(repo)
-    job.process_virtual(repo, [], "main")
+    _process_virtual(job, repo)
     assert _snapshot_count(repo) - before == 4
+
+
+def test_backfill_worker_commits_once_across_multiple_jobs(tmp_path: Path) -> None:
+    # The core of the batching change: a worker handed several region jobs (one per
+    # init, as get_jobs partitions a backfill) makes exactly ONE icechunk commit for
+    # the whole worker, not one per job, and every init reads back.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+
+    # A single sweep over the union of all jobs' coords (as the base generator does
+    # for a backfill), so the whole worker is one commit.
+    VirtualTestRegionJob.backfill_batch_files = 4 * N_LEADS
+    worker_jobs = [
+        _make_region_job(template_ds, region=slice(i, i + 1)) for i in range(4)
+    ]
+
+    before = _snapshot_count(repo)
+    results = VirtualTestRegionJob.process_worker_jobs(
+        worker_jobs, dataset.store_factory, "main", worker_index=0
+    )
+    assert results == {}
+    assert _snapshot_count(repo) - before == 1
+    _assert_all_values(dataset, n_inits=4)
+
+
+def test_all_present_worker_makes_no_commit(tmp_path: Path) -> None:
+    # A worker whose jobs are all already present yields no remaining coords; it must
+    # skip the write loop (an empty icechunk commit would raise).
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+
+    VirtualTestRegionJob.backfill_batch_files = 4 * N_LEADS
+    worker_jobs = [
+        _make_region_job(template_ds, region=slice(i, i + 1)) for i in range(4)
+    ]
+    VirtualTestRegionJob.process_worker_jobs(
+        worker_jobs, dataset.store_factory, "main", worker_index=0
+    )
+    after_first = _snapshot_count(repo)
+
+    VirtualTestRegionJob.process_worker_jobs(
+        worker_jobs, dataset.store_factory, "main", worker_index=0
+    )
+    assert _snapshot_count(repo) == after_first
+
+
+def test_batched_driver_region_is_poisoned(tmp_path: Path) -> None:
+    # The batched write loop spans every job's region, so a method that reads
+    # self.region would silently narrow the batch to jobs[0]. The driver's region is
+    # poisoned, so such a leak raises loudly instead of corrupting the write set.
+    class RegionReadingJob(VirtualTestRegionJob):
+        def process_virtual_refs(
+            self,
+            remaining: Sequence[VirtualTestSourceFileCoord],
+        ) -> Iterator[
+            Sequence[tuple[VirtualTestSourceFileCoord, Sequence[VirtualRef]]]
+        ]:
+            _ = self.region.start  # the leak the poison guards against
+            yield from super().process_virtual_refs(remaining)
+
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+
+    RegionReadingJob.backfill_batch_files = 4 * N_LEADS
+    worker_jobs = [
+        RegionReadingJob(
+            tmp_store=Path("unused-tmp.zarr"),
+            template_ds=template_ds,
+            data_vars=[VirtualTestDataVar(name="temperature_2m")],
+            append_dim="init_time",
+            region=slice(i, i + 1),
+            reformat_job_name="test",
+            processing_mode="backfill",
+        )
+        for i in range(4)
+    ]
+    with pytest.raises(AssertionError, match=r"self\.region"):
+        RegionReadingJob.process_worker_jobs(
+            worker_jobs, dataset.store_factory, "main", worker_index=0
+        )
 
 
 # --- driver fork integration (operational + backfill routing) ---
@@ -1101,6 +1198,25 @@ def test_virtual_operational_single_writer_expands_main(tmp_path: Path) -> None:
     _assert_all_values(dataset, n_inits=4)
 
 
+def test_update_still_commits_per_tick(tmp_path: Path) -> None:
+    # Batching commits per worker for backfill must not collapse the update cadence:
+    # the operational update still commits once per yielded tick, so readers see each
+    # tick's files within seconds rather than waiting for the whole window.
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    full_template = _create_template_ds(4)
+
+    # 4 inits x 2 leads = 8 files, yielded 2 at a time -> 4 ticks -> 4 commits.
+    VirtualTestRegionJob.backfill_batch_files = 2
+    job = _make_region_job(full_template, region=slice(0, 4), processing_mode="update")
+
+    before = _snapshot_count(repo)
+    dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
+    assert _snapshot_count(repo) - before == 4
+    _assert_all_values(dataset, n_inits=4)
+
+
 def test_update_routes_virtual_to_single_writer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1143,9 +1259,7 @@ def test_validate_dataset_on_virtual_skips_shard_check(tmp_path: Path) -> None:
     template_utils.write_metadata(_create_template_ds(4), dataset.store_factory)
     repo = _primary_repo(dataset.store_factory)
     # Emit only inits 0-1; inits 2-3 stay missing (a partially-published state).
-    _make_region_job(_create_template_ds(4), region=slice(0, 2)).process_virtual(
-        repo, [], "main"
-    )
+    _process_virtual(_make_region_job(_create_template_ds(4), region=slice(0, 2)), repo)
     dataset.validate_dataset("test")  # must not raise
 
 
@@ -1158,7 +1272,7 @@ def _backfilled_store(
     """Pre-size main to the template, emit refs for `emit`, return the readonly store."""
     template_utils.write_metadata(template_ds, dataset.store_factory)
     repo = _primary_repo(dataset.store_factory)
-    _make_region_job(template_ds, region=emit).process_virtual(repo, [], "main")
+    _process_virtual(_make_region_job(template_ds, region=emit), repo)
     return repo.readonly_session("main").store
 
 
@@ -1346,7 +1460,7 @@ def test_process_virtual_writes_refs_to_replica(tmp_path: Path) -> None:
     )
 
     job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
-    job.process_virtual(primary_repo, [replica_repo], "main")
+    _process_virtual(job, primary_repo, [replica_repo])
 
     for repo in (primary_repo, replica_repo):
         _assert_store_values(repo.readonly_session("main").store, n_inits=4)
@@ -1365,8 +1479,8 @@ def test_process_virtual_recovers_when_replica_ahead(tmp_path: Path) -> None:
     )
 
     # Partial commit: the replica committed (grew to 4 + refs); the primary did not.
-    _make_region_job(_create_template_ds(4), region=slice(0, 4)).process_virtual(
-        replica_repo, [], "main"
+    _process_virtual(
+        _make_region_job(_create_template_ds(4), region=slice(0, 4)), replica_repo
     )
     primary_now = xr.open_zarr(
         primary_repo.readonly_session("main").store, decode_timedelta=True
@@ -1375,8 +1489,10 @@ def test_process_virtual_recovers_when_replica_ahead(tmp_path: Path) -> None:
     _assert_store_values(replica_repo.readonly_session("main").store, n_inits=4)
 
     # Next fire catches the primary up and idempotently replays on the replica.
-    _make_region_job(_create_template_ds(4), region=slice(0, 4)).process_virtual(
-        primary_repo, [replica_repo], "main"
+    _process_virtual(
+        _make_region_job(_create_template_ds(4), region=slice(0, 4)),
+        primary_repo,
+        [replica_repo],
     )
     for repo in (primary_repo, replica_repo):
         _assert_store_values(repo.readonly_session("main").store, n_inits=4)
