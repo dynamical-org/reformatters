@@ -587,10 +587,10 @@ def test_chunk_key_separate_job_instances_do_not_share_cache() -> None:
     assert job_chunk1.chunk_key(out_loc_init2, var) == (2, 0, 0, 0)
 
 
-def test_resolve_chunk_indices_matches_chunk_key_and_batches_lookups(
+def test_resolve_chunk_keys_matches_chunk_key_and_batches_lookups(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # _resolve_chunk_indices (used by _emit_refs and filter_already_present) must
+    # _resolve_chunk_keys (used by _emit_refs and filter_already_present) must
     # return exactly what calling chunk_key once per item would, while touching the
     # template only once per var per call regardless of how many items (or labeled
     # dims) share that var -- not once per item.
@@ -614,7 +614,7 @@ def test_resolve_chunk_indices_matches_chunk_key_and_batches_lookups(
         return original_getitem(self, key)
 
     monkeypatch.setattr(xr.DataTree, "__getitem__", counting_getitem)
-    results = job._resolve_chunk_indices([(out_loc, var) for out_loc in out_locs])
+    results = job._resolve_chunk_keys([(out_loc, var) for out_loc in out_locs])
 
     assert results == expected
     # One template lookup for the whole group (dims/chunks/sizes and both labeled
@@ -622,7 +622,7 @@ def test_resolve_chunk_indices_matches_chunk_key_and_batches_lookups(
     assert call_count == 1
 
 
-def test_resolve_chunk_indices_rejects_inconsistent_labeled_dims() -> None:
+def test_resolve_chunk_keys_rejects_inconsistent_labeled_dims() -> None:
     # Every ref for a given var must label the same set of dims -- if it didn't,
     # peeking at the first item's labels to decide which dims to vectorize over
     # would silently miscompute the rest. Fail loudly instead.
@@ -633,11 +633,11 @@ def test_resolve_chunk_indices_rejects_inconsistent_labeled_dims() -> None:
         ({"init_time": APPEND_DIM_START + APPEND_DIM_FREQ}, var),
     ]
     with pytest.raises(AssertionError, match="must label the same set of dims"):
-        job._resolve_chunk_indices(items)
+        job._resolve_chunk_keys(items)
 
 
-def test_resolve_chunk_indices_multi_var_interleaved_preserves_order() -> None:
-    # _resolve_chunk_indices groups items by var.path internally, then must scatter
+def test_resolve_chunk_keys_multi_var_interleaved_preserves_order() -> None:
+    # _resolve_chunk_keys groups items by var.path internally, then must scatter
     # results back into the caller's original order. With items for only one var, a
     # stable sort leaves order unchanged, so a bug that swapped which item's result
     # went where (e.g. writing to the group-local index instead of the original
@@ -679,13 +679,13 @@ def test_resolve_chunk_indices_multi_var_interleaved_preserves_order() -> None:
         (out_loc(2), var_a),  # -> (2, 0, 0, 0)
         (out_loc(0), var_b),  # -> (0, 0, 0, 0)
     ]
-    results = job._resolve_chunk_indices(items)
+    results = job._resolve_chunk_keys(items)
 
     assert results == [(1, 0, 0, 0), (0, 0, 0, 0), (2, 0, 0, 0), (0, 0, 0, 0)]
     assert results == [job.chunk_key(out_loc, var) for out_loc, var in items]
 
 
-def test_resolve_chunk_indices_mixed_present_and_absent_in_one_group() -> None:
+def test_resolve_chunk_keys_mixed_present_and_absent_in_one_group() -> None:
     # Within a single var's vectorized group, an absent label must not corrupt a
     # neighboring present item's resolved index (np.where clamps the absent
     # position to 0 before divmod so it never raises, and the boundary assert only
@@ -706,7 +706,7 @@ def test_resolve_chunk_indices_mixed_present_and_absent_in_one_group() -> None:
             var,
         ),
     ]
-    results = job._resolve_chunk_indices(items)
+    results = job._resolve_chunk_keys(items)
 
     assert results == [(0, 0, 0, 0), None, (2, 1, 0, 0)]
     assert results == [job.chunk_key(out_loc, v) for out_loc, v in items]

@@ -127,7 +127,7 @@ class VirtualRegionJob(
         """
         group = zarr.open_group(store, mode="r")
         rep_vars = [self.representative_var(coord) for coord in candidates]
-        indices = self._resolve_chunk_indices(
+        indices = self._resolve_chunk_keys(
             [
                 (coord.out_loc(), var)
                 for coord, var in zip(candidates, rep_vars, strict=True)
@@ -310,7 +310,7 @@ class VirtualRegionJob(
     def _emit_refs(
         self, stores: Sequence[IcechunkStore], refs: Sequence[VirtualRef]
     ) -> None:
-        indices = self._resolve_chunk_indices(
+        indices = self._resolve_chunk_keys(
             [(ref.out_loc, ref.data_var) for ref in refs]
         )
         specs_by_var: dict[str, list[VirtualChunkSpec]] = {}
@@ -344,12 +344,12 @@ class VirtualRegionJob(
         """Map a source message's coordinate labels to its zarr chunk index.
 
         Returns None if a label is not in the template's coords (the filter treats
-        that as "remaining"). A batch of one through _resolve_chunk_indices, which
+        that as "remaining"). A batch of one through _resolve_chunk_keys, which
         holds the actual chunk-index math -- see there.
         """
-        return self._resolve_chunk_indices([(out_loc, var)])[0]
+        return self._resolve_chunk_keys([(out_loc, var)])[0]
 
-    def _resolve_chunk_indices(
+    def _resolve_chunk_keys(
         self, items: Sequence[tuple[Mapping[Dim, CoordinateValue], DataVar[Any]]]
     ) -> list[tuple[int, ...] | None]:
         """Map each (out_loc, var) pair to its zarr chunk index, or None if a label
