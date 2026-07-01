@@ -103,7 +103,7 @@ class NoaaHrrrForecast48HourSpatialTemplateConfig(NoaaHrrrCommonTemplateConfig):
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
             dataset_id="noaa-hrrr-forecast-48-hour-spatial",
-            dataset_version="0.1.0",
+            dataset_version="0.2.0",
             name="NOAA HRRR forecast, 48 hour, spatial",
             description="Weather forecasts from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
             attribution="NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
