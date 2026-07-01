@@ -357,11 +357,8 @@ class VirtualRegionJob(
 
         Groups items by var.path and, per group, resolves every labeled dim's
         position with one vectorized pandas.Index.get_indexer call over the whole
-        group, rather than one call per item. Recomputed fresh every call rather
-        than cached across calls -- profiling showed that's already fast enough
-        (microseconds per ref for a large backfill batch, tens of milliseconds for
-        a whole small operational-update poll tick), so there's no cross-call state
-        to keep consistent. chunk_key is a batch-of-one wrapper around this.
+        group, rather than one call per item. chunk_key is a batch-of-one wrapper
+        around this.
         """
         order = sorted(range(len(items)), key=lambda i: items[i][1].path)
         results: list[tuple[int, ...] | None] = [None] * len(items)
