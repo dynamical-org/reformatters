@@ -42,12 +42,13 @@ class NoaaHrrrForecast48HourSpatialDataset(
                     _S3_LOCATION_PREFIX, icechunk.s3_store(region=_S3_BUCKET_REGION)
                 ),
             ),
-            # Each commit rewrites the touched array's whole active split, and one init
-            # touches all ~177 arrays, so per-commit manifest I/O scales with
-            # split_size x array count. Keep the split small (2 days) so backfill commits
-            # stay cheap; the largest array (a model_level var, 49 leads x 50 levels =
-            # 2450 refs/init) is then ~20k refs (~0.3 MiB) per full split.
-            manifest_split=manifest_append_dim_split(split_size=2 * 4, dim="init_time"),
+            # Per-commit cost is ~O(M^2) in M = total manifest splits on the branch
+            # (array_count x ceil(appends / split_size)): every commit scans every split
+            # of every array, so a LARGE split (few splits) keeps M -- and commit cost --
+            # low as the archive fills over a long backfill.
+            manifest_split=manifest_append_dim_split(
+                split_size=30 * 4, dim="init_time"
+            ),
         )
     )
 
