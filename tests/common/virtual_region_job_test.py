@@ -636,6 +636,82 @@ def test_resolve_chunk_indices_rejects_inconsistent_labeled_dims() -> None:
         job._resolve_chunk_indices(items)
 
 
+def test_resolve_chunk_indices_multi_var_interleaved_preserves_order() -> None:
+    # _resolve_chunk_indices groups items by var.path internally, then must scatter
+    # results back into the caller's original order. With items for only one var, a
+    # stable sort leaves order unchanged, so a bug that swapped which item's result
+    # went where (e.g. writing to the group-local index instead of the original
+    # item index) wouldn't be caught. Two vars with DIFFERENT init_time chunk sizes,
+    # interleaved and queried at the SAME position, produce genuinely different
+    # correct answers -- exactly what's needed to catch a reassembly bug.
+    template_ds = _create_template_ds(4, chunks=(1, 1, N_LAT, N_LON))
+    ds = template_ds.to_dataset()
+    ds["dewpoint_2m"] = ds["temperature_2m"].copy(deep=False)
+    ds["dewpoint_2m"].encoding = {
+        **ds["temperature_2m"].encoding,
+        "chunks": (2, 1, N_LAT, N_LON),
+    }
+    template_ds = xr.DataTree.from_dict({"/": ds})
+
+    var_a = VirtualTestDataVar(name="temperature_2m")  # init_time chunk size 1
+    var_b = VirtualTestDataVar(name="dewpoint_2m")  # init_time chunk size 2
+    job = VirtualTestRegionJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=template_ds,
+        data_vars=[var_a, var_b],
+        append_dim="init_time",
+        region=slice(0, 4),
+        reformat_job_name="test",
+    )
+
+    def out_loc(init_idx: int) -> Mapping[Dim, CoordinateValue]:
+        return {
+            "init_time": APPEND_DIM_START + init_idx * APPEND_DIM_FREQ,
+            "lead_time": LEAD_TIMES[0],
+        }
+
+    # Interleaved, not grouped by var -- init index 2 lands on a chunk boundary for
+    # both vars (chunk sizes 1 and 2), so it's safe to query for both while still
+    # giving different chunk indices (2 vs. 1).
+    items = [
+        (out_loc(2), var_b),  # -> (1, 0, 0, 0)
+        (out_loc(0), var_a),  # -> (0, 0, 0, 0)
+        (out_loc(2), var_a),  # -> (2, 0, 0, 0)
+        (out_loc(0), var_b),  # -> (0, 0, 0, 0)
+    ]
+    results = job._resolve_chunk_indices(items)
+
+    assert results == [(1, 0, 0, 0), (0, 0, 0, 0), (2, 0, 0, 0), (0, 0, 0, 0)]
+    assert results == [job.chunk_key(out_loc, var) for out_loc, var in items]
+
+
+def test_resolve_chunk_indices_mixed_present_and_absent_in_one_group() -> None:
+    # Within a single var's vectorized group, an absent label must not corrupt a
+    # neighboring present item's resolved index (np.where clamps the absent
+    # position to 0 before divmod so it never raises, and the boundary assert only
+    # checks the present subset), and must land as None at exactly its own slot.
+    job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
+    var = job.data_vars[0]
+    items: list[tuple[Mapping[Dim, CoordinateValue], VirtualTestDataVar]] = [
+        ({"init_time": APPEND_DIM_START, "lead_time": LEAD_TIMES[0]}, var),
+        (
+            {"init_time": pd.Timestamp("2030-01-01"), "lead_time": LEAD_TIMES[0]},
+            var,
+        ),  # not in the template's coords
+        (
+            {
+                "init_time": APPEND_DIM_START + 2 * APPEND_DIM_FREQ,
+                "lead_time": LEAD_TIMES[1],
+            },
+            var,
+        ),
+    ]
+    results = job._resolve_chunk_indices(items)
+
+    assert results == [(0, 0, 0, 0), None, (2, 1, 0, 0)]
+    assert results == [job.chunk_key(out_loc, v) for out_loc, v in items]
+
+
 def test_needed_append_dim_size() -> None:
     job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
     refs = [
