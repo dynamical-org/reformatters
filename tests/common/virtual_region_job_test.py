@@ -431,6 +431,287 @@ def test_chunk_key_uses_template_geometry_not_datavar_encoding() -> None:
     assert job.chunk_key(out_loc, misconfigured_var) == (0, 1, 0, 0)
 
 
+def _create_ensemble_template_ds(
+    n_inits: int, *, ensemble_members: tuple[int, ...] = (0, 1, 2)
+) -> xr.DataTree:
+    """Like _create_template_ds, but with a plain-int labeled dim (ensemble_member)
+    in place of lead_time, to exercise non-Timestamp/Timedelta label lookups."""
+    init_times = pd.date_range(APPEND_DIM_START, periods=n_inits, freq=APPEND_DIM_FREQ)
+    encoding: dict[str, Any] = {
+        "dtype": "float64",
+        "chunks": (1, 1, N_LAT, N_LON),
+        "fill_value": np.nan,
+        "compressors": None,
+        "filters": None,
+    }
+    ds = xr.Dataset(
+        {
+            "temperature_2m": xr.Variable(
+                ("init_time", "ensemble_member", "latitude", "longitude"),
+                dask.array.full(
+                    (n_inits, len(ensemble_members), N_LAT, N_LON),
+                    np.nan,
+                    dtype="float64",
+                    chunks=-1,
+                ),
+                encoding=encoding,
+            )
+        },
+        coords={
+            "init_time": ("init_time", init_times),
+            "ensemble_member": ("ensemble_member", np.array(ensemble_members)),
+            "latitude": ("latitude", np.arange(N_LAT, dtype="float64")),
+            "longitude": ("longitude", np.arange(N_LON, dtype="float64")),
+        },
+        attrs={"dataset_id": DATASET_ID, "dataset_version": "v1.0"},
+    )
+    ds["init_time"].encoding.update(
+        {
+            "dtype": "int64",
+            "fill_value": -1,
+            "units": "seconds since 1970-01-01 00:00:00",
+            "calendar": "proleptic_gregorian",
+        }
+    )
+    ds["ensemble_member"].encoding["fill_value"] = -1
+    ds["latitude"].encoding["fill_value"] = np.nan
+    ds["longitude"].encoding["fill_value"] = np.nan
+    return xr.DataTree.from_dict({"/": ds})
+
+
+def test_chunk_key_int_labeled_dim_resolves_and_handles_absent_label() -> None:
+    # Non-Timestamp/Timedelta labeled dim: dict-based lookups must hash/compare
+    # int coordinate labels consistently, not just datetime-like ones.
+    template_ds = _create_ensemble_template_ds(4, ensemble_members=(0, 1, 2))
+    job = _make_region_job(template_ds, region=slice(0, 4))
+    var = job.data_vars[0]
+
+    present: Mapping[Dim, CoordinateValue] = {
+        "init_time": APPEND_DIM_START + APPEND_DIM_FREQ,
+        "ensemble_member": 2,
+    }
+    assert job.chunk_key(present, var) == (1, 2, 0, 0)
+
+    absent: Mapping[Dim, CoordinateValue] = {
+        "init_time": APPEND_DIM_START,
+        "ensemble_member": 99,  # not in the template's ensemble_member coord
+    }
+    assert job.chunk_key(absent, var) is None
+
+    # Repeat the present lookup to prove any cache built on first use is stable.
+    assert job.chunk_key(present, var) == (1, 2, 0, 0)
+
+
+def test_chunk_key_repeated_calls_same_var_different_out_loc() -> None:
+    # A cache keyed on var.path alone (ignoring out_loc) would return stale
+    # results; each distinct out_loc must resolve independently and correctly.
+    job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
+    var = job.data_vars[0]
+
+    for init_idx in range(4):
+        for lead_idx, lead in enumerate(LEAD_TIMES):
+            out_loc: Mapping[Dim, CoordinateValue] = {
+                "init_time": APPEND_DIM_START + init_idx * APPEND_DIM_FREQ,
+                "lead_time": lead,
+            }
+            assert job.chunk_key(out_loc, var) == (init_idx, lead_idx, 0, 0)
+
+    # And querying an already-seen out_loc again still gives the same answer.
+    out_loc = {
+        "init_time": APPEND_DIM_START + 2 * APPEND_DIM_FREQ,
+        "lead_time": LEAD_TIMES[1],
+    }
+    assert job.chunk_key(out_loc, var) == (2, 1, 0, 0)
+    assert job.chunk_key(out_loc, var) == (2, 1, 0, 0)
+
+
+def test_chunk_key_two_datavars_same_path_different_encoding_in_sequence() -> None:
+    # Any per-var.path geometry cache must key strictly off the template, not
+    # off whichever DataVar object happened to populate it first.
+    job = _make_region_job(
+        _create_template_ds(4, chunks=(1, 1, N_LAT, N_LON)), region=slice(0, 4)
+    )
+    correct_var = job.data_vars[0]
+    misconfigured_var = VirtualTestDataVar(
+        name="temperature_2m",
+        encoding=Encoding(
+            dtype="float64",
+            fill_value=np.nan,
+            chunks=(1, 2, N_LAT, N_LON),  # disagrees with the template's (1, 1, ...)
+            shards=None,
+            compressors=None,
+            filters=None,
+        ),
+    )
+    out_loc: Mapping[Dim, CoordinateValue] = {
+        "init_time": APPEND_DIM_START,
+        "lead_time": LEAD_TIMES[1],
+    }
+    # correct_var first (populates any cache), then misconfigured_var: both must
+    # resolve against the template's chunk size of 1, not either var's own encoding.
+    assert job.chunk_key(out_loc, correct_var) == (0, 1, 0, 0)
+    assert job.chunk_key(out_loc, misconfigured_var) == (0, 1, 0, 0)
+    # And again in the opposite order, to rule out order-dependent cache seeding.
+    job2 = _make_region_job(
+        _create_template_ds(4, chunks=(1, 1, N_LAT, N_LON)), region=slice(0, 4)
+    )
+    assert job2.chunk_key(out_loc, misconfigured_var) == (0, 1, 0, 0)
+    assert job2.chunk_key(out_loc, correct_var) == (0, 1, 0, 0)
+
+
+def test_chunk_key_separate_job_instances_do_not_share_cache() -> None:
+    # Two jobs over different templates (different init_time chunk sizes) must
+    # not cross-contaminate any var.path-keyed cache.
+    job_chunk1 = _make_region_job(
+        _create_template_ds(4, chunks=(1, 1, N_LAT, N_LON)), region=slice(0, 4)
+    )
+    job_chunk2 = _make_region_job(
+        _create_template_ds(4, chunks=(2, 1, N_LAT, N_LON)), region=slice(0, 4)
+    )
+    var = job_chunk1.data_vars[0]
+    out_loc: Mapping[Dim, CoordinateValue] = {
+        "init_time": APPEND_DIM_START,
+        "lead_time": LEAD_TIMES[0],
+    }
+    # Warm job_chunk1's cache first.
+    assert job_chunk1.chunk_key(out_loc, var) == (0, 0, 0, 0)
+    # job_chunk2's init_time chunk size is 2: init index 2 lands at the start of
+    # chunk index 1, distinct from job_chunk1's chunk index 2 for the same position.
+    out_loc_init2: Mapping[Dim, CoordinateValue] = {
+        "init_time": APPEND_DIM_START + 2 * APPEND_DIM_FREQ,
+        "lead_time": LEAD_TIMES[0],
+    }
+    assert job_chunk2.chunk_key(out_loc_init2, job_chunk2.data_vars[0]) == (1, 0, 0, 0)
+    # Re-querying job_chunk1 for the same position must still use its own
+    # (1, 1, ...) chunking, unaffected by job_chunk2's lookups in between.
+    assert job_chunk1.chunk_key(out_loc_init2, var) == (2, 0, 0, 0)
+
+
+def test_resolve_chunk_keys_matches_chunk_key_and_batches_lookups(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # _resolve_chunk_keys (used by _emit_refs and filter_already_present) must
+    # return exactly what calling chunk_key once per item would, while touching the
+    # template only once per var per call regardless of how many items (or labeled
+    # dims) share that var -- not once per item.
+    job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
+    var = job.data_vars[0]
+    out_locs: list[Mapping[Dim, CoordinateValue]] = [
+        {
+            "init_time": APPEND_DIM_START + init_idx * APPEND_DIM_FREQ,
+            "lead_time": LEAD_TIMES[0],
+        }
+        for init_idx in range(4)
+    ]
+    expected = [job.chunk_key(out_loc, var) for out_loc in out_locs]
+
+    call_count = 0
+    original_getitem = xr.DataTree.__getitem__
+
+    def counting_getitem(self: xr.DataTree, key: str) -> xr.DataTree | xr.DataArray:
+        nonlocal call_count
+        call_count += 1
+        return original_getitem(self, key)
+
+    monkeypatch.setattr(xr.DataTree, "__getitem__", counting_getitem)
+    results = job._resolve_chunk_keys([(out_loc, var) for out_loc in out_locs])
+
+    assert results == expected
+    # One template lookup for the whole group (dims/chunks/sizes and both labeled
+    # dims' positions all reuse it), not one per item (4).
+    assert call_count == 1
+
+
+def test_resolve_chunk_keys_rejects_inconsistent_labeled_dims() -> None:
+    # Every ref for a given var must label the same set of dims -- if it didn't,
+    # peeking at the first item's labels to decide which dims to vectorize over
+    # would silently miscompute the rest. Fail loudly instead.
+    job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
+    var = job.data_vars[0]
+    items: list[tuple[Mapping[Dim, CoordinateValue], VirtualTestDataVar]] = [
+        ({"init_time": APPEND_DIM_START, "lead_time": LEAD_TIMES[0]}, var),
+        ({"init_time": APPEND_DIM_START + APPEND_DIM_FREQ}, var),
+    ]
+    with pytest.raises(AssertionError, match="must label the same set of dims"):
+        job._resolve_chunk_keys(items)
+
+
+def test_resolve_chunk_keys_multi_var_interleaved_preserves_order() -> None:
+    # _resolve_chunk_keys groups items by var.path internally, then must scatter
+    # results back into the caller's original order. With items for only one var, a
+    # stable sort leaves order unchanged, so a bug that swapped which item's result
+    # went where (e.g. writing to the group-local index instead of the original
+    # item index) wouldn't be caught. Two vars with DIFFERENT init_time chunk sizes,
+    # interleaved and queried at the SAME position, produce genuinely different
+    # correct answers -- exactly what's needed to catch a reassembly bug.
+    template_ds = _create_template_ds(4, chunks=(1, 1, N_LAT, N_LON))
+    ds = template_ds.to_dataset()
+    ds["dewpoint_2m"] = ds["temperature_2m"].copy(deep=False)
+    ds["dewpoint_2m"].encoding = {
+        **ds["temperature_2m"].encoding,
+        "chunks": (2, 1, N_LAT, N_LON),
+    }
+    template_ds = xr.DataTree.from_dict({"/": ds})
+
+    var_a = VirtualTestDataVar(name="temperature_2m")  # init_time chunk size 1
+    var_b = VirtualTestDataVar(name="dewpoint_2m")  # init_time chunk size 2
+    job = VirtualTestRegionJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=template_ds,
+        data_vars=[var_a, var_b],
+        append_dim="init_time",
+        region=slice(0, 4),
+        reformat_job_name="test",
+    )
+
+    def out_loc(init_idx: int) -> Mapping[Dim, CoordinateValue]:
+        return {
+            "init_time": APPEND_DIM_START + init_idx * APPEND_DIM_FREQ,
+            "lead_time": LEAD_TIMES[0],
+        }
+
+    # Interleaved, not grouped by var -- init index 2 lands on a chunk boundary for
+    # both vars (chunk sizes 1 and 2), so it's safe to query for both while still
+    # giving different chunk indices (2 vs. 1).
+    items = [
+        (out_loc(2), var_b),  # -> (1, 0, 0, 0)
+        (out_loc(0), var_a),  # -> (0, 0, 0, 0)
+        (out_loc(2), var_a),  # -> (2, 0, 0, 0)
+        (out_loc(0), var_b),  # -> (0, 0, 0, 0)
+    ]
+    results = job._resolve_chunk_keys(items)
+
+    assert results == [(1, 0, 0, 0), (0, 0, 0, 0), (2, 0, 0, 0), (0, 0, 0, 0)]
+    assert results == [job.chunk_key(out_loc, var) for out_loc, var in items]
+
+
+def test_resolve_chunk_keys_mixed_present_and_absent_in_one_group() -> None:
+    # Within a single var's vectorized group, an absent label must not corrupt a
+    # neighboring present item's resolved index (np.where clamps the absent
+    # position to 0 before divmod so it never raises, and the boundary assert only
+    # checks the present subset), and must land as None at exactly its own slot.
+    job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
+    var = job.data_vars[0]
+    items: list[tuple[Mapping[Dim, CoordinateValue], VirtualTestDataVar]] = [
+        ({"init_time": APPEND_DIM_START, "lead_time": LEAD_TIMES[0]}, var),
+        (
+            {"init_time": pd.Timestamp("2030-01-01"), "lead_time": LEAD_TIMES[0]},
+            var,
+        ),  # not in the template's coords
+        (
+            {
+                "init_time": APPEND_DIM_START + 2 * APPEND_DIM_FREQ,
+                "lead_time": LEAD_TIMES[1],
+            },
+            var,
+        ),
+    ]
+    results = job._resolve_chunk_keys(items)
+
+    assert results == [(0, 0, 0, 0), None, (2, 1, 0, 0)]
+    assert results == [job.chunk_key(out_loc, v) for out_loc, v in items]
+
+
 def test_needed_append_dim_size() -> None:
     job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
     refs = [
