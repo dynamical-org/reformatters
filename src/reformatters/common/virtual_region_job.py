@@ -252,8 +252,11 @@ class VirtualRegionJob(
         # would raise, so skip the write loop entirely.
         if remaining:
             # A worker's jobs share template_ds/processing_mode/tick_interval, so any
-            # one drives the write loop over the union of their coords.
-            jobs[0].process_virtual(
+            # one drives the write loop over the union of their coords. Poison the
+            # driver's region: the loop spans every job's region, so reading a single
+            # job's region would be a bug (see _NoRegion).
+            driver = jobs[0].model_copy(update={"region": _NO_REGION})
+            driver.process_virtual(
                 primary_repo, list(replica_repos), branch_name, remaining
             )
         return {}
@@ -507,6 +510,26 @@ class VirtualRegionJob(
             for name, coord in node.to_dataset().coords.items()
         }
         return xr.Dataset(coords=coords).isel({self.append_dim: processing_region})
+
+
+class _NoRegion:
+    """Poison `region` for the batched write-loop driver (see process_worker_jobs).
+
+    process_worker_jobs runs one write loop over the union of all its jobs'
+    coords, so the driver's own region is meaningless. process_virtual and every
+    method it calls must act on the coords passed to them, never self.region;
+    reading it would silently narrow the batch to a single job. Any access raises
+    instead, so a future edit that reintroduces region-dependence fails loudly.
+    """
+
+    def __getattr__(self, name: str) -> Any:  # noqa: ANN401
+        raise AssertionError(
+            "the batched virtual write loop read self.region; process_virtual and "
+            "the methods it calls must use the coords passed to them, not self.region"
+        )
+
+
+_NO_REGION: Final = _NoRegion()
 
 
 def _exists_many(store: IcechunkStore, keys: Sequence[str]) -> dict[str, bool]:

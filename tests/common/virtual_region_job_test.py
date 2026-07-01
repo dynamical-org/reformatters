@@ -1103,6 +1103,43 @@ def test_all_present_worker_makes_no_commit(tmp_path: Path) -> None:
     assert _snapshot_count(repo) == after_first
 
 
+def test_batched_driver_region_is_poisoned(tmp_path: Path) -> None:
+    # The batched write loop spans every job's region, so a method that reads
+    # self.region would silently narrow the batch to jobs[0]. The driver's region is
+    # poisoned, so such a leak raises loudly instead of corrupting the write set.
+    class RegionReadingJob(VirtualTestRegionJob):
+        def process_virtual_refs(
+            self,
+            remaining: Sequence[VirtualTestSourceFileCoord],
+        ) -> Iterator[
+            Sequence[tuple[VirtualTestSourceFileCoord, Sequence[VirtualRef]]]
+        ]:
+            _ = self.region.start  # the leak the poison guards against
+            yield from super().process_virtual_refs(remaining)
+
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+
+    RegionReadingJob.backfill_batch_files = 4 * N_LEADS
+    worker_jobs = [
+        RegionReadingJob(
+            tmp_store=Path("unused-tmp.zarr"),
+            template_ds=template_ds,
+            data_vars=[VirtualTestDataVar(name="temperature_2m")],
+            append_dim="init_time",
+            region=slice(i, i + 1),
+            reformat_job_name="test",
+            processing_mode="backfill",
+        )
+        for i in range(4)
+    ]
+    with pytest.raises(AssertionError, match=r"self\.region"):
+        RegionReadingJob.process_worker_jobs(
+            worker_jobs, dataset.store_factory, "main", worker_index=0
+        )
+
+
 # --- driver fork integration (operational + backfill routing) ---
 
 
