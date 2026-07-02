@@ -33,7 +33,7 @@ class NoaaHrrrAnalysisDataset(
             # we try S3 first to spare NOMADS, but NOMADS publishes first, by ~10 min at
             # 06z). We could of course increase this to hourly.
             schedule="57 */3 * * *",
-            pod_active_deadline=timedelta(minutes=15),  # runs take <9 min
+            pod_active_deadline=timedelta(minutes=20),  # runs take <15 min
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="7",
@@ -45,9 +45,9 @@ class NoaaHrrrAnalysisDataset(
 
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            # 15m (pod_active_deadline) after reformat at :57 = :72 = :12 of the next hour.
-            # "12 1-23/3 * * *" gives 01:12, 04:12, 07:12, ... matching reformat at 00:57, 03:57, 06:57, ...
-            schedule="12 1-23/3 * * *",
+            # 20m (pod_active_deadline) after reformat at :57 = :77 = :17 of the next hour.
+            # "17 1-23/3 * * *" gives 01:17, 04:17, 07:17, ... matching reformat at 00:57, 03:57, 06:57, ...
+            schedule="17 1-23/3 * * *",
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
