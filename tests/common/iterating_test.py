@@ -1,3 +1,4 @@
+import math
 from collections.abc import Generator
 from itertools import pairwise
 
@@ -11,6 +12,7 @@ from reformatters.common.iterating import (
     digest,
     dimension_slices,
     flatten_groups,
+    get_contiguous_worker_jobs,
     get_worker_jobs,
     group_by,
     item,
@@ -194,6 +196,40 @@ def test_get_worker_jobs_zero_workers_total() -> None:
 def test_get_worker_jobs_worker_index_greater_than_workers_total() -> None:
     with pytest.raises(AssertionError):
         get_worker_jobs(range(6), 2, 2)
+
+
+def test_get_contiguous_worker_jobs() -> None:
+    assert get_contiguous_worker_jobs(list(range(6)), 0, 2) == (0, 1, 2)
+    assert get_contiguous_worker_jobs(list(range(6)), 1, 2) == (3, 4, 5)
+    assert get_contiguous_worker_jobs(list(range(7)), 2, 3) == (6,)
+
+
+def test_get_contiguous_worker_jobs_partitions_all_jobs_in_order() -> None:
+    # Callers derive workers_total = ceil(n_jobs / jobs_per_pod), which guarantees
+    # every worker's block is non-empty.
+    for n, jobs_per_pod in ((11641, 30), (7, 3), (100, 7), (5, 5), (1, 1), (30, 30)):
+        jobs = list(range(n))
+        workers_total = math.ceil(n / jobs_per_pod)
+        blocks = [
+            get_contiguous_worker_jobs(jobs, worker_index, workers_total)
+            for worker_index in range(workers_total)
+        ]
+        assert all(len(block) > 0 for block in blocks)
+        # Blocks are disjoint, cover all jobs exactly once, and preserve order.
+        assert [job for block in blocks for job in block] == jobs
+
+
+def test_get_contiguous_worker_jobs_invalid_worker_index() -> None:
+    with pytest.raises(AssertionError):
+        get_contiguous_worker_jobs(list(range(6)), -1, 2)
+    with pytest.raises(AssertionError):
+        get_contiguous_worker_jobs(list(range(6)), 2, 2)
+
+
+def test_get_contiguous_worker_jobs_empty_block_raises() -> None:
+    # 5 jobs / 4 workers -> blocks of 2; worker 3's block would be empty.
+    with pytest.raises(AssertionError, match="has no jobs"):
+        get_contiguous_worker_jobs(list(range(5)), 3, 4)
 
 
 def test_spread_evenly_is_a_permutation() -> None:

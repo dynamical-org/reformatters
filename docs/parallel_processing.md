@@ -4,17 +4,19 @@ How reformatters parallelizes work across Kubernetes indexed jobs while ensuring
 
 ## Overview
 
-Both backfills and operational updates distribute work across multiple workers using Kubernetes indexed jobs. Each worker independently computes the full list of jobs, then deterministically selects its subset via round-robin assignment — no coordinator or job queue needed.
+Both backfills and operational updates distribute work across multiple workers using Kubernetes indexed jobs. Each worker independently computes the full list of jobs, then deterministically selects its subset per its region job class's `worker_assignment` policy — no coordinator or job queue needed.
 
 Work is split along two axes:
 - **Regions** — slices along the append dimension (typically one shard each)
 - **Variable groups** — subsets of data variables, controlled by `max_vars_per_job`
 
-The Cartesian product of regions and variable groups produces the full job list. Each worker gets every Nth job.
+The Cartesian product of regions and variable groups produces the full job list. With the default `"spread"` assignment each worker gets every Nth job (`iterating.get_worker_jobs`); virtual region jobs use `"contiguous"` and each worker gets one contiguous block (`iterating.get_contiguous_worker_jobs`).
 
-### Append dim region spreading
+### Append dim region spreading and worker assignment
 
-Regions are reordered with a bit-reversal permutation (`iterating.spread_evenly`) before the job list is built. Round-robin assignment makes worker N's first job region N, so the workers running concurrently (a contiguous index window) would otherwise all hit the same narrow band of the append dim at once. For a multi-year archive that clusters source requests on a few object-store prefixes, hot-spotting partitions that throttle (e.g. S3 503 SlowDown). Spreading the regions makes any contiguous worker window cover the whole append dim, so source load stays even across the run. The permutation is deterministic (every worker recomputes the same order) and concurrency-independent, so it needs nothing beyond the region count.
+**Materialized (`worker_assignment = "spread"`).** Regions are reordered with a bit-reversal permutation (`iterating.spread_evenly`) before the job list is built. Round-robin assignment makes worker N's first job region N, so the workers running concurrently (a contiguous index window) would otherwise all hit the same narrow band of the append dim at once. For a multi-year archive that clusters source requests on a few object-store prefixes, hot-spotting partitions that throttle (e.g. S3 503 SlowDown). Spreading the regions makes any contiguous worker window cover the whole append dim, so source load stays even across the run. The permutation is deterministic (every worker recomputes the same order) and concurrency-independent, so it needs nothing beyond the region count.
+
+**Virtual (`worker_assignment = "contiguous"`).** Virtual region jobs keep regions in append-dim order and assign each worker one contiguous block. Icechunk splits each array's manifest into windows along the append dim, and manifests are immutable — a commit read-modify-writes every window its refs touch. A worker whose regions are scattered across the whole append dim touches most windows of every array on every flush (thousands of manifest rewrites, with bytes growing as the archive fills); a contiguous block touches only 1-2 windows per array and rewrite bytes stay bounded by one window. The source-hotspot rationale for spreading doesn't apply: virtual datasets never download the source data files, only tiny .idx files and prefix listings.
 
 ## The worker-processing seam
 

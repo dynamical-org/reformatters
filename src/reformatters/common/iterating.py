@@ -1,4 +1,5 @@
 import hashlib
+import math
 from collections import deque
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from itertools import batched, islice, pairwise, product, starmap
@@ -90,6 +91,24 @@ def get_worker_jobs[T](
     return tuple(islice(jobs, worker_index, None, workers_total))
 
 
+def get_contiguous_worker_jobs[T](
+    jobs: Sequence[T], worker_index: int, workers_total: int
+) -> Sequence[T]:
+    """Returns the contiguous block of `jobs` that worker_index should process if there are workers_total workers."""
+    assert worker_index >= 0
+    assert workers_total >= 1
+    assert worker_index < workers_total
+    block_size = math.ceil(len(jobs) / workers_total)
+    worker_jobs = tuple(
+        jobs[worker_index * block_size : (worker_index + 1) * block_size]
+    )
+    assert len(worker_jobs) > 0, (
+        f"Worker {worker_index} of {workers_total} has no jobs: "
+        f"{len(jobs)} jobs in blocks of {block_size} run out before this worker index"
+    )
+    return worker_jobs
+
+
 def spread_evenly[T](items: Sequence[T]) -> list[T]:
     """Reorder so any prefix samples the whole input roughly uniformly.
 
@@ -97,7 +116,7 @@ def spread_evenly[T](items: Sequence[T]) -> list[T]:
     worker-index window, so spreading the append-dim regions this way makes them
     process source files scattered across the range instead of a clustered band,
     avoiding hot-spotting a few object-store prefixes. See "Append dim region
-    spreading" in docs/parallel_processing.md.
+    spreading and worker assignment" in docs/parallel_processing.md.
     """
     n = len(items)
     bits = max(1, (n - 1).bit_length())

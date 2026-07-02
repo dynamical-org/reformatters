@@ -37,6 +37,7 @@ from reformatters.common.config_models import (
     Group,
 )
 from reformatters.common.dynamical_dataset import DynamicalDataset
+from reformatters.common.iterating import get_contiguous_worker_jobs
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.common.region_job import (
     CoordinateValue,
@@ -739,6 +740,32 @@ def test_needed_append_dim_size() -> None:
         )
     ]
     assert job._needed_append_dim_size(refs) == 3  # init index 2 -> size 3
+
+
+def test_virtual_get_jobs_regions_in_append_dim_order() -> None:
+    # Virtual jobs are not spread: contiguous worker blocks keep each flush's
+    # manifest-window rewrites bounded, see docs/parallel_processing.md.
+    assert VirtualTestRegionJob.worker_assignment == "contiguous"
+    jobs = VirtualTestRegionJob.get_jobs(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=_create_template_ds(8),
+        append_dim="init_time",
+        all_data_vars=[VirtualTestDataVar(name="temperature_2m")],
+        reformat_job_name="test",
+    )
+    assert [j.region for j in jobs] == [slice(i, i + 1) for i in range(8)]
+
+
+def test_virtual_worker_jobs_are_contiguous_along_append_dim() -> None:
+    jobs = VirtualTestRegionJob.get_jobs(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=_create_template_ds(8),
+        append_dim="init_time",
+        all_data_vars=[VirtualTestDataVar(name="temperature_2m")],
+        reformat_job_name="test",
+    )
+    worker_jobs = get_contiguous_worker_jobs(jobs, worker_index=1, workers_total=3)
+    assert [j.region for j in worker_jobs] == [slice(3, 4), slice(4, 5), slice(5, 6)]
 
 
 def test_processing_region_rejects_buffered_region() -> None:
