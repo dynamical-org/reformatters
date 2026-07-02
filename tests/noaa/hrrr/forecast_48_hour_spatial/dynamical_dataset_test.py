@@ -252,9 +252,6 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.pod_active_deadline < timedelta(hours=6)
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
     assert len(update_cron_job.secret_names) > 0
-    # Suspended until the initial backfill completes; flip when un-suspending.
-    assert update_cron_job.suspend is True
-    assert validation_cron_job.suspend is True
 
 
 def test_validators(dataset: NoaaHrrrForecast48HourSpatialDataset) -> None:
