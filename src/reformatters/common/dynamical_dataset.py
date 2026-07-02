@@ -396,7 +396,12 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         is_first = worker_index == 0
         is_last = worker_index == workers_total - 1
-        worker_jobs = get_worker_jobs(all_jobs, worker_index, workers_total)
+        worker_jobs = get_worker_jobs(
+            all_jobs,
+            worker_index,
+            workers_total,
+            worker_assignment=self.region_job_class.worker_assignment,
+        )
 
         jobs_summary = ", ".join(repr(j) for j in worker_jobs)
         log.info(

@@ -1,5 +1,7 @@
+import math
 from collections.abc import Generator
 from itertools import pairwise
+from typing import Literal
 
 import numpy as np
 import pytest
@@ -171,29 +173,81 @@ def test_chunk_slices_zero_size() -> None:
     assert chunk_slices(0, 2) == ()
 
 
-def test_get_worker_jobs() -> None:
-    assert get_worker_jobs(range(6), 0, 2) == (0, 2, 4)
-    assert get_worker_jobs(range(6), 1, 2) == (1, 3, 5)
+def test_get_worker_jobs_spread_round_robins_over_spread_order() -> None:
+    jobs = list(range(6))
+    spread_order = spread_evenly(jobs)
+    assert spread_order != jobs
+    assert get_worker_jobs(jobs, 0, 2, worker_assignment="spread") == tuple(
+        spread_order[0::2]
+    )
+    assert get_worker_jobs(jobs, 1, 2, worker_assignment="spread") == tuple(
+        spread_order[1::2]
+    )
 
 
-def test_get_worker_jobs_negative_worker_index() -> None:
-    with pytest.raises(AssertionError):
-        get_worker_jobs(range(6), -1, 2)
+def test_get_worker_jobs_spread_concurrent_window_covers_range() -> None:
+    # Concurrent workers process their w-th jobs at roughly the same time; each
+    # such window must sample the whole append-dim-ordered job list, not a
+    # clustered band. Check the workers' first jobs are within ~3x of uniform.
+    n, workers_total = 8326, 64
+    jobs = list(range(n))
+    first_jobs = sorted(
+        get_worker_jobs(jobs, worker_index, workers_total, worker_assignment="spread")[
+            0
+        ]
+        for worker_index in range(workers_total)
+    )
+    max_gap = max(b - a for a, b in pairwise(first_jobs))
+    assert max_gap < 3 * (n // workers_total)
 
 
-def test_get_worker_jobs_negative_workers_total() -> None:
-    with pytest.raises(AssertionError):
-        get_worker_jobs(range(6), 0, -1)
+@pytest.mark.parametrize("worker_assignment", ["spread", "contiguous"])
+def test_get_worker_jobs_invalid_worker_index_or_total(
+    worker_assignment: Literal["spread", "contiguous"],
+) -> None:
+    for worker_index, workers_total in ((-1, 2), (0, -1), (0, 0), (2, 2)):
+        with pytest.raises(AssertionError):
+            get_worker_jobs(
+                range(6),
+                worker_index,
+                workers_total,
+                worker_assignment=worker_assignment,
+            )
 
 
-def test_get_worker_jobs_zero_workers_total() -> None:
-    with pytest.raises(AssertionError):
-        get_worker_jobs(range(6), 0, 0)
+def test_get_worker_jobs_contiguous() -> None:
+    assert get_worker_jobs(range(6), 0, 2, worker_assignment="contiguous") == (0, 1, 2)
+    assert get_worker_jobs(range(6), 1, 2, worker_assignment="contiguous") == (3, 4, 5)
+    assert get_worker_jobs(range(7), 2, 3, worker_assignment="contiguous") == (6,)
 
 
-def test_get_worker_jobs_worker_index_greater_than_workers_total() -> None:
-    with pytest.raises(AssertionError):
-        get_worker_jobs(range(6), 2, 2)
+@pytest.mark.parametrize("worker_assignment", ["spread", "contiguous"])
+def test_get_worker_jobs_partitions_all_jobs(
+    worker_assignment: Literal["spread", "contiguous"],
+) -> None:
+    # Callers derive workers_total = ceil(n_jobs / jobs_per_pod), which guarantees
+    # every contiguous worker's block is non-empty.
+    for n, jobs_per_pod in ((11641, 30), (7, 3), (100, 7), (5, 5), (1, 1), (30, 30)):
+        jobs = list(range(n))
+        workers_total = math.ceil(n / jobs_per_pod)
+        subsets = [
+            get_worker_jobs(
+                jobs, worker_index, workers_total, worker_assignment=worker_assignment
+            )
+            for worker_index in range(workers_total)
+        ]
+        assert all(len(subset) > 0 for subset in subsets)
+        # Disjoint and complete: the workers together process each job exactly once.
+        assert sorted(job for subset in subsets for job in subset) == jobs
+        if worker_assignment == "contiguous":
+            # Blocks preserve append-dim order.
+            assert [job for subset in subsets for job in subset] == jobs
+
+
+def test_get_worker_jobs_contiguous_empty_block_raises() -> None:
+    # 5 jobs / 4 workers -> blocks of 2; worker 3's block would be empty.
+    with pytest.raises(AssertionError, match="has no jobs"):
+        get_worker_jobs(range(5), 3, 4, worker_assignment="contiguous")
 
 
 def test_spread_evenly_is_a_permutation() -> None:
@@ -221,13 +275,8 @@ def test_spread_evenly_any_prefix_covers_the_full_range() -> None:
         assert head[-1] > n - n // window
 
 
-def test_get_worker_jobs_worker_index_equal_to_workers_total() -> None:
-    with pytest.raises(AssertionError):
-        get_worker_jobs(range(6), 2, 2)
-
-
-def test_get_worker_jobs_empty() -> None:
-    assert get_worker_jobs([], 0, 1) == ()
+def test_get_worker_jobs_spread_empty() -> None:
+    assert get_worker_jobs([], 0, 1, worker_assignment="spread") == ()
 
 
 def test_shard_slice_indexers() -> None:

@@ -56,6 +56,10 @@ class VirtualRegionJob(
     # committing jobs, breaking the per-file commit atomicity readers rely on.
     max_vars_per_job: ClassVar[Final[int | None]] = None
 
+    # Contiguous blocks keep each worker's commits within 1-2 manifest windows per array
+    # (scattered regions rewrite most windows every flush), see docs/parallel_processing.md.
+    worker_assignment: ClassVar[Literal["spread", "contiguous"]] = "contiguous"
+
     # Updates wait for source files as the provider publishes them, backfills check once
     processing_mode: Literal["backfill", "update"] = "backfill"
 
