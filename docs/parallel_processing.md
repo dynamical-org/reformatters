@@ -4,17 +4,19 @@ How reformatters parallelizes work across Kubernetes indexed jobs while ensuring
 
 ## Overview
 
-Both backfills and operational updates distribute work across multiple workers using Kubernetes indexed jobs. Each worker independently computes the full list of jobs, then deterministically selects its subset via round-robin assignment — no coordinator or job queue needed.
+Both backfills and operational updates distribute work across multiple workers using Kubernetes indexed jobs. Each worker independently computes the full list of jobs, then deterministically selects its subset per its region job class's `worker_assignment` policy — no coordinator or job queue needed.
 
 Work is split along two axes:
 - **Regions** — slices along the append dimension (typically one shard each)
 - **Variable groups** — subsets of data variables, controlled by `max_vars_per_job`
 
-The Cartesian product of regions and variable groups produces the full job list. Each worker gets every Nth job.
+The Cartesian product of regions and variable groups produces the full job list, in canonical append-dim order. `iterating.get_worker_jobs` partitions it per the region job class's `worker_assignment`, each mode owning its own ordering + selection: the default `"spread"` permutes the list with `spread_evenly` then gives each worker every Nth job; virtual region jobs use `"contiguous"` and each worker gets one contiguous block in list order.
 
-### Append dim region spreading
+### Append dim region spreading and worker assignment
 
-Regions are reordered with a bit-reversal permutation (`iterating.spread_evenly`) before the job list is built. Round-robin assignment makes worker N's first job region N, so the workers running concurrently (a contiguous index window) would otherwise all hit the same narrow band of the append dim at once. For a multi-year archive that clusters source requests on a few object-store prefixes, hot-spotting partitions that throttle (e.g. S3 503 SlowDown). Spreading the regions makes any contiguous worker window cover the whole append dim, so source load stays even across the run. The permutation is deterministic (every worker recomputes the same order) and concurrency-independent, so it needs nothing beyond the region count.
+**Materialized (`worker_assignment = "spread"`).** Worker assignment reorders the append-dim-ordered job list with a bit-reversal permutation (`iterating.spread_evenly`) before round-robin selection. Round-robin over the unpermuted list would make worker N's first job region N, so the workers running concurrently (a contiguous index window) would all hit the same narrow band of the append dim at once. For a multi-year archive that clusters source requests on a few object-store prefixes, hot-spotting partitions that throttle (e.g. S3 503 SlowDown). Spreading the jobs makes any contiguous worker window cover the whole append dim, so source load stays even across the run. The permutation is deterministic (every worker recomputes the same order) and concurrency-independent, so it needs nothing beyond the job count.
+
+**Virtual (`worker_assignment = "contiguous"`).** Virtual worker assignment keeps the job list in append-dim order and gives each worker one contiguous block. Icechunk splits each array's manifest into windows along the append dim, and manifests are immutable — a commit read-modify-writes every window its refs touch. A worker whose regions are scattered across the whole append dim touches most windows of every array on every flush (thousands of manifest rewrites, with bytes growing as the archive fills); a contiguous block touches only 1-2 windows per array and rewrite bytes stay bounded by one window. Contiguous assignment concentrates .idx reads and prefix listings on adjacent source prefixes, which can still hot-spot; aligning workers with the manifest split structure matters more, since virtual workers fetch only small index files rather than the data files.
 
 ## The worker-processing seam
 

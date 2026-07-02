@@ -1,4 +1,5 @@
 import hashlib
+import math
 from collections import deque
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from itertools import batched, islice, pairwise, product, starmap
@@ -81,23 +82,60 @@ def chunk_slices(size: int, chunk_size: int) -> Sequence[slice]:
 
 
 def get_worker_jobs[T](
-    jobs: Iterable[T], worker_index: int, workers_total: int
+    jobs: Sequence[T],
+    worker_index: int,
+    workers_total: int,
+    *,
+    worker_assignment: Literal["spread", "contiguous"],
 ) -> Sequence[T]:
-    """Returns the subset of `jobs` that worker_index should process if there are workers_total workers."""
+    """Returns the subset of `jobs` that worker_index should process if there are workers_total workers.
+
+    `jobs` is expected in canonical append-dim order (RegionJob.get_jobs order);
+    each mode owns its own ordering + selection. "spread" permutes the list with
+    spread_evenly then assigns round-robin, scattering each worker's jobs across
+    the append dim; "contiguous" keeps list order and assigns each worker one
+    block. See "Append dim region spreading and worker assignment" in
+    docs/parallel_processing.md.
+    """
     assert worker_index >= 0
     assert workers_total >= 1
     assert worker_index < workers_total
-    return tuple(islice(jobs, worker_index, None, workers_total))
+    match worker_assignment:
+        case "spread":
+            return _spread_worker_jobs(jobs, worker_index, workers_total)
+        case "contiguous":
+            return _contiguous_worker_jobs(jobs, worker_index, workers_total)
+
+
+def _spread_worker_jobs[T](
+    jobs: Sequence[T], worker_index: int, workers_total: int
+) -> Sequence[T]:
+    return tuple(islice(spread_evenly(jobs), worker_index, None, workers_total))
+
+
+def _contiguous_worker_jobs[T](
+    jobs: Sequence[T], worker_index: int, workers_total: int
+) -> Sequence[T]:
+    block_size = math.ceil(len(jobs) / workers_total)
+    worker_jobs = tuple(
+        jobs[worker_index * block_size : (worker_index + 1) * block_size]
+    )
+    assert len(worker_jobs) > 0, (
+        f"Worker {worker_index} of {workers_total} has no jobs: "
+        f"{len(jobs)} jobs in blocks of {block_size} run out before this worker index"
+    )
+    return worker_jobs
 
 
 def spread_evenly[T](items: Sequence[T]) -> list[T]:
     """Reorder so any prefix samples the whole input roughly uniformly.
 
-    Bit-reversal permutation. Concurrently-running workers occupy a contiguous
-    worker-index window, so spreading the append-dim regions this way makes them
-    process source files scattered across the range instead of a clustered band,
-    avoiding hot-spotting a few object-store prefixes. See "Append dim region
-    spreading" in docs/parallel_processing.md.
+    Bit-reversal permutation, applied to the job list inside get_worker_jobs'
+    "spread" assignment. Concurrently-running workers occupy a contiguous
+    worker-index window, so spreading the append-dim-ordered jobs this way makes
+    them process source files scattered across the range instead of a clustered
+    band, avoiding hot-spotting a few object-store prefixes. See "Append dim
+    region spreading and worker assignment" in docs/parallel_processing.md.
     """
     n = len(items)
     bits = max(1, (n - 1).bit_length())

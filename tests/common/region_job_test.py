@@ -498,7 +498,9 @@ def test_get_jobs_grouping_filters_and_worker_index(template_ds: xr.DataTree) ->
     assert len(all_jobs) == 2
 
     # Partitioning is done by the caller
-    jobs = get_worker_jobs(all_jobs, worker_index=0, workers_total=2)
+    jobs = get_worker_jobs(
+        all_jobs, worker_index=0, workers_total=2, worker_assignment="spread"
+    )
 
     # jobs are sorted by region start
     assert all(a.region.start <= b.region.start for a, b in pairwise(jobs))
@@ -665,8 +667,7 @@ def test_get_jobs_many_shards_combined_filters() -> None:
     assert all(len(j.data_vars) == 2 for j in jobs)
     assert all(j.data_vars[0].name == "var0" for j in jobs)
     assert all(j.data_vars[1].name == "var1" for j in jobs)
-    # Sorted: get_jobs spreads regions across the append dim (see spread_evenly).
-    assert sorted(j.region.start for j in jobs) == expected_shard_indices
+    assert [j.region.start for j in jobs] == expected_shard_indices
 
 
 # --- Edge case tests for get_jobs filtering ---
@@ -729,9 +730,31 @@ def _get_regions(
         filter_end=filter_end,
         filter_contains=filter_contains,
     )
-    # Sort by start: get_jobs spreads regions across the append dim (see
-    # spread_evenly); these tests check which regions survive filtering, not order.
-    return sorted((j.region for j in jobs), key=lambda r: r.start)
+    return [j.region for j in jobs]
+
+
+def test_get_jobs_returns_regions_in_append_dim_order(
+    small_template_ds: xr.DataTree,
+) -> None:
+    assert ExampleRegionJob.worker_assignment == "spread"
+    data_vars = [ExampleDataVar(name=str(name)) for name in small_template_ds.data_vars]
+    jobs = ExampleRegionJob.get_jobs(
+        tmp_store=get_local_tmp_store(),
+        template_ds=small_template_ds,
+        append_dim="time",
+        all_data_vars=data_vars,
+        reformat_job_name="test-job",
+    )
+    in_order = [slice(0, 2), slice(2, 4), slice(4, 6), slice(6, 8)]
+    assert [j.region for j in jobs] == in_order
+
+    # Spreading happens in worker assignment: concurrent workers' first jobs
+    # sample across the append dim instead of hitting adjacent regions.
+    first_regions = [
+        get_worker_jobs(jobs, worker_index, 2, worker_assignment="spread")[0].region
+        for worker_index in range(2)
+    ]
+    assert first_regions == [slice(0, 2), slice(4, 6)]
 
 
 class TestFilterStartEdgeCases:
