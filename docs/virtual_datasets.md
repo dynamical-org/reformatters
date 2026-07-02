@@ -64,6 +64,15 @@ Two operational rules when backfilling a live virtual dataset:
 - **Suspend the dataset's `-update` CronJob for the duration of the backfill.** Finalize resets `main` to the temp branch only if `main` hasn't moved since setup; an operational fire committing to `main` mid-backfill would make finalize skip the reset (with a warning), discarding the backfill's work.
 - **Choose `append_dim_end` as the last *fully published* position, not "now".** Finalize resets `main` to the pre-sized branch, so positions past the published data would appear as NaN-filled slots to readers.
 
+## Manifest splitting
+
+Icechunk stores each array's chunk references in one or more manifest objects, split along a dimension via `IcechunkVirtualConfig.manifest_split` (built with `manifest_append_dim_split`). Two independent costs pull in opposite directions:
+
+- **Manifest size (bytes)** — a reader downloads a whole manifest to resolve *any* chunk in it, and a commit rewrites the active split's whole manifest each time it grows. Keep a full manifest within a reader-friendly size (roughly ≤ 5 MiB; a dense HRRR-spatial vertical manifest is ~2.5 MiB). Larger split → bigger manifests.
+- **Total split count `M`** — `M = array_count × ceil(appends / split_size)`. Every commit's cost grows with `M` (it re-serializes the snapshot's manifest list and touches every split of every array). Smaller split → more splits → larger `M`. For a many-variable dataset `M` is dominated by `array_count`, so over-splitting the *sparse* arrays is the biggest, least useful contributor.
+
+These two are set per array, so size them per array group: give sparse single-level arrays a **coarse** split (few splits, still-small manifests) and dense vertical-group arrays a **finer** split (more splits, but each manifest stays within the reader budget). `manifest_append_dim_split` takes either one `split_size` for all arrays or a `{path_regex: size, None: catch_all_size}` mapping for this per-group policy. `split_size` is fixed at store creation — changing it needs a new dataset version.
+
 ## Filtering: the manifest is the source of truth
 
 What is already ingested is derived from ref existence in the icechunk manifest (`store.exists(key)`), never from a progress coordinate or a chunk value read:

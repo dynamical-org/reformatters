@@ -399,6 +399,22 @@ class TestIcechunkVirtualConfig:
         assert "init_time" in repr(dim_condition)
         assert size == 500
 
+    def test_manifest_append_dim_split_per_group(self) -> None:
+        # A path-regex mapping produces one rule per pattern in order, with the None
+        # catch-all rendered as an AnyArray rule LAST (icechunk matches first-to-last
+        # per axis, so the catch-all must not shadow the specific patterns).
+        split = manifest_append_dim_split(
+            split_size={r"^/(model_level|pressure_level)/": 120, None: 480},
+            dim="init_time",
+        )
+        rules = split.split_sizes
+        assert len(rules) == 2
+        (first_condition, first_dims), (last_condition, last_dims) = rules
+        assert "path_matches" in repr(first_condition)
+        assert first_dims[0][1] == 120
+        assert last_condition == icechunk.ManifestSplitCondition.AnyArray()
+        assert last_dims[0][1] == 480
+
     def test_requires_at_least_one_container(self) -> None:
         with pytest.raises(ValidationError):
             IcechunkVirtualConfig(
