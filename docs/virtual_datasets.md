@@ -61,6 +61,8 @@ Virtual backfills use the standard parallel temp-branch flow (see [parallel_proc
 
 Commit latency ≈ `(1 + rebase_attempts) × flush cost`. A flush read-modify-writes every manifest window the session's refs touch (manifests are immutable), and every lost branch-HEAD CAS race re-runs the flush, so rebase attempts scale with parallelism. Keeping each worker's refs within its own few windows — contiguous append-dim assignment — is what bounds flush cost: measured on the HRRR-spatial backfill, commits held flat (~10–30s at parallelism 10) from empty to full archive, where scattered (spread) assignment touched most windows of every array per flush and commits grew ~40s → 1000s+ as windows filled. Icechunk stamps `rebase_attempts` into each snapshot's metadata (`repo.ancestry`) — read it to distinguish contention from flush cost when commits are slow.
 
+Backfill parallelism has a low ceiling: measured on HRRR-spatial, throughput peaked by ~10 concurrent workers, and doubling to 20 added contention without adding throughput. The failure mode is a starvation tail, not a slow mean — most commits land within a few rebase attempts while a few spiral to dozens (freshly started sessions repeatedly beat long-stuck ones to the branch HEAD), so watch the max `rebase_attempts`, not just the mean.
+
 Two operational rules when backfilling a live virtual dataset:
 
 - **Suspend the dataset's `-update` CronJob for the duration of the backfill.** Finalize resets `main` to the temp branch only if `main` hasn't moved since setup; an operational fire committing to `main` mid-backfill would make finalize skip the reset (with a warning), discarding the backfill's work.
