@@ -225,6 +225,16 @@ def test_file_refs_skips_stale_index_past_eof(
     assert job.file_refs(_coord("sfc", data_vars), file_size=1200) == []
 
 
+def test_file_refs_skips_empty_index(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _fake_index(monkeypatch, tmp_path, "")
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars=data_vars)
+    # empty/unparseable index -> no messages -> skip.
+    assert job.file_refs(_coord("sfc", data_vars), file_size=9000) == []
+
+
 def test_file_refs_lead_0_instant_uses_anl_window(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
