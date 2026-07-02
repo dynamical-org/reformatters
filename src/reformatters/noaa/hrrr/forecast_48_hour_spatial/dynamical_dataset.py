@@ -42,15 +42,18 @@ class NoaaHrrrForecast48HourSpatialDataset(
                     _S3_LOCATION_PREFIX, icechunk.s3_store(region=_S3_BUCKET_REGION)
                 ),
             ),
-            # Per-commit cost grows with the total manifest count M = array_count
-            # x ceil(appends / split_size). The 143 single-level arrays hold ~50x fewer
-            # refs per init than the vertical-group arrays, so splitting them as finely
-            # bloats M with tiny manifests. Split them coarser (larger split, still well
-            # under a reader-friendly manifest size); keep the higher-ref-count vertical
-            # groups at a smaller split so their manifests stay ~2.5 MiB. See
-            # docs/virtual_datasets.md.
+            # Sized per group from measured ~16.4 bytes/ref so full manifests land
+            # comfortably under the reader budgets (single-level <= 3 MiB/var, vertical
+            # 5-8 MiB) while keeping the total manifest count low; see "Manifest
+            # splitting" in docs/virtual_datasets.md. Full-window sizes: single-level
+            # 2400 x 49 refs/init ~= 1.8 MiB, pressure 180 x 1911 ~= 5.4 MiB,
+            # model 160 x 2450 ~= 6.1 MiB.
             manifest_split=manifest_append_dim_split(
-                split_size={r"^/(model_level|pressure_level)/": 120, None: 480},
+                split_size={
+                    r"^/pressure_level/": 180,
+                    r"^/model_level/": 160,
+                    None: 2400,
+                },
                 dim="init_time",
             ),
         )
