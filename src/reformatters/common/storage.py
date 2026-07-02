@@ -517,11 +517,12 @@ def manifest_append_dim_split(
 
     `split_size` is either a single int applied to every array, or a mapping of
     array-path regex -> split size for per-group policies (e.g. a coarser split for
-    sparse single-level arrays than for dense vertical-group arrays, so their manifests
-    stay a similar size and the total split count stays low). A `None` key is the
-    catch-all for arrays no regex matched and is applied last. Per-commit cost grows
-    with the total split count = array_count x appends / split_size, so over-splitting
-    sparse arrays dominates cost for many-variable datasets.
+    low-ref-count arrays like single-level fields than for high-ref-count vertical-group
+    arrays, so their manifests stay a similar size and the total split count stays low).
+    A `None` key is the catch-all for arrays no regex matched and is applied last.
+    Per-commit cost grows with the total split count = array_count x appends /
+    split_size, so over-splitting low-ref-count arrays dominates cost for
+    many-variable datasets.
 
     The common-case terse constructor for `IcechunkVirtualConfig.manifest_split`; drop
     to `icechunk.ManifestSplittingConfig.from_dict` for multi-dimensional policies.

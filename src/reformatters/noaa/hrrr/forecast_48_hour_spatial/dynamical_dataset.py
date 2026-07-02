@@ -43,11 +43,12 @@ class NoaaHrrrForecast48HourSpatialDataset(
                 ),
             ),
             # Per-commit cost grows with the total manifest split count M = array_count
-            # x ceil(appends / split_size). The 143 single-level arrays are ~50x sparser
-            # per init than the vertical-group arrays, so splitting them as finely bloats
-            # M with tiny manifests. Split them coarser (larger split, still well under a
-            # reader-friendly manifest size); keep the dense vertical groups at a smaller
-            # split so their manifests stay ~2.5 MiB. See docs/virtual_datasets.md.
+            # x ceil(appends / split_size). The 143 single-level arrays hold ~50x fewer
+            # refs per init than the vertical-group arrays, so splitting them as finely
+            # bloats M with tiny manifests. Split them coarser (larger split, still well
+            # under a reader-friendly manifest size); keep the higher-ref-count vertical
+            # groups at a smaller split so their manifests stay ~2.5 MiB. See
+            # docs/virtual_datasets.md.
             manifest_split=manifest_append_dim_split(
                 split_size={r"^/(model_level|pressure_level)/": 120, None: 480},
                 dim="init_time",
