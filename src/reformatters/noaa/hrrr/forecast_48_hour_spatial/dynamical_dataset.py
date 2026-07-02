@@ -42,7 +42,7 @@ class NoaaHrrrForecast48HourSpatialDataset(
                     _S3_LOCATION_PREFIX, icechunk.s3_store(region=_S3_BUCKET_REGION)
                 ),
             ),
-            # Per-commit cost grows with the total manifest split count M = array_count
+            # Per-commit cost grows with the total manifest count M = array_count
             # x ceil(appends / split_size). The 143 single-level arrays hold ~50x fewer
             # refs per init than the vertical-group arrays, so splitting them as finely
             # bloats M with tiny manifests. Split them coarser (larger split, still well
