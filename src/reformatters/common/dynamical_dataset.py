@@ -24,7 +24,12 @@ from reformatters.common import (
 )
 from reformatters.common.config import Config
 from reformatters.common.config_models import ROOT, DataVar
-from reformatters.common.iterating import digest, get_worker_jobs, item
+from reformatters.common.iterating import (
+    digest,
+    get_contiguous_worker_jobs,
+    get_worker_jobs,
+    item,
+)
 from reformatters.common.kubernetes import (
     CronJob,
     Job,
@@ -396,7 +401,12 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         is_first = worker_index == 0
         is_last = worker_index == workers_total - 1
-        worker_jobs = get_worker_jobs(all_jobs, worker_index, workers_total)
+        if self.region_job_class.worker_assignment == "contiguous":
+            worker_jobs = get_contiguous_worker_jobs(
+                all_jobs, worker_index, workers_total
+            )
+        else:
+            worker_jobs = get_worker_jobs(all_jobs, worker_index, workers_total)
 
         jobs_summary = ", ".join(repr(j) for j in worker_jobs)
         log.info(

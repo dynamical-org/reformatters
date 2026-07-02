@@ -118,11 +118,11 @@ Run via `uv run main`.
 
 ## Parallelization model
 
-Both backfills and operational updates distribute work across Kubernetes indexed jobs. Every worker independently computes the same ordered list of all jobs, then deterministically selects its subset via round-robin. No coordinator or job queue is needed.
+Both backfills and operational updates distribute work across Kubernetes indexed jobs. Every worker independently computes the same ordered list of all jobs, then deterministically selects its subset. No coordinator or job queue is needed.
 
 1. **Job generation**: `RegionJob.get_jobs()` creates all jobs by combining regions (shard slices along append dim) × variable groups (controlled by `max_vars_per_job`), with optional filters.
 
-2. **Worker assignment**: `get_worker_jobs(all_jobs, worker_index, workers_total)` distributes jobs round-robin.
+2. **Worker assignment**: `get_worker_jobs(all_jobs, worker_index, workers_total)` distributes jobs round-robin; virtual region jobs instead take contiguous append-dim blocks via `get_contiguous_worker_jobs` to bound icechunk manifest rewrites.
 
 3. **Coordination**: Workers coordinate via files in `_internal/{job_name}/` in object store. Worker 0 does setup, all workers process, the last worker (by index) finalizes.
 

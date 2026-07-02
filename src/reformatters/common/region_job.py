@@ -7,6 +7,7 @@ from typing import (
     Any,
     ClassVar,
     Generic,
+    Literal,
     Self,
     TypeVar,
     get_args,
@@ -129,6 +130,11 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     # Limit the number of variables processed in each job if set.
     # Rule of thumb: leave unset unless a job takes > 15 minutes.
     max_vars_per_job: ClassVar[int | None] = None
+
+    # How workers divide the job list: "spread" round-robins scattered regions to avoid
+    # source-prefix hot-spotting, "contiguous" gives each worker one append-dim block.
+    # See "Append dim region spreading and worker assignment" in docs/parallel_processing.md.
+    worker_assignment: ClassVar[Literal["spread", "contiguous"]] = "spread"
 
     @classmethod
     def source_file_var_groups(
@@ -421,9 +427,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     if i in shard_indices
                 ]
 
-        # Spread regions so any contiguous worker-index window (the workers
-        # running concurrently) covers the whole append dim, not a clustered band.
-        regions = spread_evenly(regions)
+        if cls.worker_assignment == "spread":
+            # Spread regions so any contiguous worker-index window (the workers
+            # running concurrently) covers the whole append dim, not a clustered band.
+            regions = spread_evenly(regions)
 
         all_jobs = [
             cls(

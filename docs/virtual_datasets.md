@@ -57,7 +57,7 @@ Crash recovery is automatic: committed refs are durable and the filter skips the
 
 ## Backfill: parallel on a pre-sized temp branch
 
-Virtual backfills use the standard parallel temp-branch flow (see [parallel_processing.md](parallel_processing.md#icechunk-stores)). Worker 0 pre-sizes the full template on the branch, so every worker's `sync_dims_to` is a no-op and parallel workers write disjoint refs with no resize conflicts. Jobs partition by chunks along the append dim (virtual arrays have no shards).
+Virtual backfills use the standard parallel temp-branch flow (see [parallel_processing.md](parallel_processing.md#icechunk-stores)). Worker 0 pre-sizes the full template on the branch, so every worker's `sync_dims_to` is a no-op and parallel workers write disjoint refs with no resize conflicts. Jobs partition by chunks along the append dim (virtual arrays have no shards). Workers are assigned contiguous append-dim blocks of jobs (`worker_assignment = "contiguous"`), so each flush rewrites only the manifest windows its own block covers rather than most windows of every array (see [parallel_processing.md](parallel_processing.md#append-dim-region-spreading-and-worker-assignment)).
 
 Two operational rules when backfilling a live virtual dataset:
 

@@ -20,7 +20,7 @@ from reformatters.common.config_models import (
     DataVarAttrs,
     Encoding,
 )
-from reformatters.common.iterating import get_worker_jobs
+from reformatters.common.iterating import get_worker_jobs, spread_evenly
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     SourceFileCoord,
@@ -732,6 +732,23 @@ def _get_regions(
     # Sort by start: get_jobs spreads regions across the append dim (see
     # spread_evenly); these tests check which regions survive filtering, not order.
     return sorted((j.region for j in jobs), key=lambda r: r.start)
+
+
+def test_get_jobs_materialized_regions_are_spread(
+    small_template_ds: xr.DataTree,
+) -> None:
+    assert ExampleRegionJob.worker_assignment == "spread"
+    data_vars = [ExampleDataVar(name=str(name)) for name in small_template_ds.data_vars]
+    jobs = ExampleRegionJob.get_jobs(
+        tmp_store=get_local_tmp_store(),
+        template_ds=small_template_ds,
+        append_dim="time",
+        all_data_vars=data_vars,
+        reformat_job_name="test-job",
+    )
+    in_order = [slice(0, 2), slice(2, 4), slice(4, 6), slice(6, 8)]
+    assert [j.region for j in jobs] == spread_evenly(in_order)
+    assert [j.region for j in jobs] != in_order
 
 
 class TestFilterStartEdgeCases:
