@@ -1,6 +1,6 @@
 import contextlib
 import functools
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
@@ -511,19 +511,37 @@ def commit_if_icechunk(
 
 
 def manifest_append_dim_split(
-    *, split_size: int, dim: AppendDim
+    *, split_size: int | Mapping[str | None, int], dim: AppendDim
 ) -> icechunk.ManifestSplittingConfig:
-    """Split every array's manifest along `dim` every `split_size` indices.
+    """Split arrays' manifests along `dim`.
 
-    The common-case terse constructor for `IcechunkVirtualConfig.manifest_split`;
-    drop to `icechunk.ManifestSplittingConfig.from_dict` for per-array or
-    multi-dimensional split policies.
+    `split_size` is either a single int applied to every array, or a mapping of
+    array-path regex -> split size for per-group policies (e.g. a coarser split for
+    low-ref-count arrays like single-level fields than for high-ref-count vertical-group
+    arrays, so their manifests stay a similar size and the total manifest count stays
+    low). A `None` key is the catch-all for arrays no regex matched and is applied last.
+    Per-commit cost grows with the total manifest count = array_count x appends /
+    split_size, so over-splitting low-ref-count arrays dominates cost for
+    many-variable datasets.
+
+    The common-case terse constructor for `IcechunkVirtualConfig.manifest_split`; drop
+    to `icechunk.ManifestSplittingConfig.from_dict` for multi-dimensional policies.
     """
+    sizes = {None: split_size} if isinstance(split_size, int) else split_size
+    conditions: dict[icechunk.ManifestSplitCondition, int] = {}
+    catch_all: int | None = None
+    for pattern, size in sizes.items():
+        if pattern is None:
+            catch_all = size
+        else:
+            conditions[icechunk.ManifestSplitCondition.path_matches(pattern)] = size
+    # AnyArray matches everything, so it must be inserted last to act as the catch-all.
+    if catch_all is not None:
+        conditions[icechunk.ManifestSplitCondition.AnyArray()] = catch_all
     return icechunk.ManifestSplittingConfig.from_dict(
         {
-            icechunk.ManifestSplitCondition.AnyArray(): {
-                icechunk.ManifestSplitDimCondition.DimensionName(dim): split_size
-            }
+            condition: {icechunk.ManifestSplitDimCondition.DimensionName(dim): size}
+            for condition, size in conditions.items()
         }
     )
 
